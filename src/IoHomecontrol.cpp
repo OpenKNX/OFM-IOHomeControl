@@ -66,7 +66,7 @@ namespace
             return false;
 
         oValue = lValue;
-        return lDigits == 3;
+        return true;
     }
 
     // Parse a hex string into a byte array
@@ -2682,7 +2682,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         {
             // Generate a default random stack key
             uint8_t lDefaultKey[16] = {0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x11, 0x22, 0x33,
-                                        0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB};
+                                       0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB};
             mController.setGatewayKey(lDefaultKey);
         }
         mController.setGatewayMode(true);
@@ -2695,15 +2695,16 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     }
     if (lSub == "gateway status")
     {
-        openknx.console.printf("Gateway mode: %s\n", mController.isGatewayMode() ? "ON" : "OFF");
-        openknx.console.printf("Gateway node: 0x%06X\n", mController.getGatewayNodeId());
-        openknx.console.printf("Paired devices: %d\n", mController.getGatewayPairedDeviceCount());
-        if (mController.getGatewayPairedDeviceCount() > 0)
+        const uint8_t lPairedDeviceCount = mController.getGatewayPairedDeviceCount();
+        logInfoP("Gateway mode: %s", mController.isGatewayMode() ? "ON" : "OFF");
+        logInfoP("Gateway node: 0x%06X", mController.getGatewayNodeId());
+        logInfoP("Paired devices: %u", static_cast<unsigned int>(lPairedDeviceCount));
+        if (lPairedDeviceCount > 0)
         {
-            for (uint8_t i = 0; i < mController.getGatewayPairedDeviceCount(); i++)
+            for (uint8_t i = 0; i < lPairedDeviceCount; i++)
             {
-                uint32_t lNodeId = mController.getGatewayPairedNodeId(i);
-                openknx.console.printf("  Device %d: 0x%06X\n", i + 1, lNodeId);
+                const uint32_t lNodeId = mController.getGatewayPairedNodeId(i);
+                logInfoP("  Device %u: 0x%06X", static_cast<unsigned int>(i + 1), lNodeId);
             }
         }
         return true;
@@ -2722,15 +2723,18 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             openknx.console.printHelpLine("iohc gateway node ADDR", "Set gateway node ID (hex, e.g. AABBCC)");
             return true;
         }
-        uint32_t lNodeId = 0;
-        if (parseHexBytes(lArg, lNodeId, 3))
+        uint8_t lNodeBytes[3] = {};
+        if (parseHexBytes(lArg, lNodeBytes, 3))
         {
+            const uint32_t lNodeId = (static_cast<uint32_t>(lNodeBytes[0]) << 16) |
+                                     (static_cast<uint32_t>(lNodeBytes[1]) << 8) |
+                                     static_cast<uint32_t>(lNodeBytes[2]);
             mController.setGatewayNodeId(lNodeId);
-            openknx.console.printf("Gateway node ID set to 0x%06X\n", lNodeId);
+            logInfoP("Gateway node ID set to 0x%06X", lNodeId);
         }
         else
         {
-            openknx.console.println("Invalid hex address. Use 6 hex digits (e.g. AABBCC)");
+            logInfoP("Invalid hex address. Use 6 hex digits (e.g. AABBCC)");
         }
         return true;
     }
@@ -2751,12 +2755,12 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if (parseHexBytes(lArg, lKey, 16))
         {
             mController.setGatewayKey(lKey);
-            openknx.console.printf("Gateway stack key set (first 4 bytes: %02X%02X%02X%02X)\n",
-                                   lKey[0], lKey[1], lKey[2], lKey[3]);
+            logInfoP("Gateway stack key set (first 4 bytes: %02X%02X%02X%02X)",
+                     lKey[0], lKey[1], lKey[2], lKey[3]);
         }
         else
         {
-            openknx.console.println("Invalid hex key. Use 32 hex chars (16 bytes)");
+            logInfoP("Invalid hex key. Use 32 hex chars (16 bytes)");
         }
         return true;
     }

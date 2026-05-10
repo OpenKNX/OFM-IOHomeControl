@@ -88,7 +88,10 @@ const std::string IoHomecontrolChannel::name()
 
 const std::string IoHomecontrolChannel::logPrefix()
 {
-    return "IoHC[" + std::to_string(_channelIndex + 1) + "]";
+    std::string lPrefix("IoHC[");
+    lPrefix += std::to_string(_channelIndex + 1);
+    lPrefix += "]";
+    return lPrefix;
 }
 
 void IoHomecontrolChannel::setup()
@@ -305,31 +308,32 @@ void IoHomecontrolChannel::logStatusSummary(float iCurrentPositionPercent, bool 
                                             float iTargetPositionPercent, bool iHasTargetPosition,
                                             bool iIsMoving)
 {
-    const char *lTypeLabel = iohcDeviceTypeLabel(mDeviceType);
-    const unsigned lType = static_cast<unsigned>(mDeviceType & 0xFF);
-    const unsigned lSubtype = static_cast<unsigned>(mDeviceSubtype);
-    const char *lDeletedText = mPaired ? "No" : "Yes";
-
     if (mDeviceName[0] != '\0')
     {
         if (iHasCurrentPosition && iHasTargetPosition)
         {
             logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Position %.1f / Target %.1f / Moving: %s / Deleted: %s",
-                      mNodeId, mDeviceName, lType, lSubtype,
+                      mNodeId, mDeviceName,
+                      static_cast<unsigned>(mDeviceType & 0xFF),
+                      static_cast<unsigned>(mDeviceSubtype),
                       iCurrentPositionPercent, iTargetPositionPercent,
-                      iIsMoving ? "Yes" : "No", lDeletedText);
+                      iIsMoving ? "Yes" : "No", mPaired ? "No" : "Yes");
         }
         else if (iHasCurrentPosition)
         {
             logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Position %.1f / Moving: %s / Deleted: %s",
-                      mNodeId, mDeviceName, lType, lSubtype,
-                      iCurrentPositionPercent, iIsMoving ? "Yes" : "No", lDeletedText);
+                      mNodeId, mDeviceName,
+                      static_cast<unsigned>(mDeviceType & 0xFF),
+                      static_cast<unsigned>(mDeviceSubtype),
+                      iCurrentPositionPercent, iIsMoving ? "Yes" : "No", mPaired ? "No" : "Yes");
         }
         else
         {
             logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Moving: %s / Deleted: %s",
-                      mNodeId, mDeviceName, lType, lSubtype,
-                      iIsMoving ? "Yes" : "No", lDeletedText);
+                      mNodeId, mDeviceName,
+                      static_cast<unsigned>(mDeviceType & 0xFF),
+                      static_cast<unsigned>(mDeviceSubtype),
+                      iIsMoving ? "Yes" : "No", mPaired ? "No" : "Yes");
         }
         return;
     }
@@ -337,21 +341,27 @@ void IoHomecontrolChannel::logStatusSummary(float iCurrentPositionPercent, bool 
     if (iHasCurrentPosition && iHasTargetPosition)
     {
         logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Position %.1f / Target %.1f / Moving: %s / Deleted: %s",
-                  mNodeId, lTypeLabel, lType, lSubtype,
+                  mNodeId, iohcDeviceTypeLabel(mDeviceType),
+                  static_cast<unsigned>(mDeviceType & 0xFF),
+                  static_cast<unsigned>(mDeviceSubtype),
                   iCurrentPositionPercent, iTargetPositionPercent,
-                  iIsMoving ? "Yes" : "No", lDeletedText);
+                  iIsMoving ? "Yes" : "No", mPaired ? "No" : "Yes");
     }
     else if (iHasCurrentPosition)
     {
         logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Position %.1f / Moving: %s / Deleted: %s",
-                  mNodeId, lTypeLabel, lType, lSubtype,
-                  iCurrentPositionPercent, iIsMoving ? "Yes" : "No", lDeletedText);
+                  mNodeId, iohcDeviceTypeLabel(mDeviceType),
+                  static_cast<unsigned>(mDeviceType & 0xFF),
+                  static_cast<unsigned>(mDeviceSubtype),
+                  iCurrentPositionPercent, iIsMoving ? "Yes" : "No", mPaired ? "No" : "Yes");
     }
     else
     {
         logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Moving: %s / Deleted: %s",
-                  mNodeId, lTypeLabel, lType, lSubtype,
-                  iIsMoving ? "Yes" : "No", lDeletedText);
+                  mNodeId, iohcDeviceTypeLabel(mDeviceType),
+                  static_cast<unsigned>(mDeviceType & 0xFF),
+                  static_cast<unsigned>(mDeviceSubtype),
+                  iIsMoving ? "Yes" : "No", mPaired ? "No" : "Yes");
     }
 }
 
