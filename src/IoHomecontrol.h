@@ -1,0 +1,134 @@
+#pragma once
+#include "IoHomecontrolChannel.h"
+#include "IoHomeRemoteMap.h"
+#include "OpenKNX.h"
+#include "controller/IoHomeController.h"
+#include "knxprod.h"
+
+class IoHomecontrol : public OpenKNX::Module
+{
+public:
+  enum class StatusLedMode : uint8_t
+  {
+    Unknown,
+    IdleUnpaired,
+    IdlePaired,
+    Pairing
+  };
+
+  enum class RadioDiagnosticKind : uint8_t
+  {
+    None,
+    TxTest,
+    Sweep,
+    Soak
+  };
+
+  IoHomecontrol();
+  ~IoHomecontrol();
+
+  const std::string name() override;
+  const std::string version() override;
+  void setup() override;
+  void loop() override;
+  void processInputKo(GroupObject &iKo) override;
+  bool processFunctionProperty(uint8_t objectIndex, uint8_t propertyId,
+                               uint8_t length, uint8_t *data,
+                               uint8_t *resultData, uint8_t &resultLength) override;
+  void readFlash(const uint8_t *iBuffer, const uint16_t iSize) override;
+  void writeFlash() override;
+  uint16_t flashSize() override;
+  bool processCommand(const std::string cmd, bool diagnoseKo) override;
+  void showHelp() override;
+  void processAfterStartupDelay() override;
+  void savePower() override;
+  bool restorePower() override;
+
+  IoHomeController &controller();
+  IoHomecontrolChannel *getChannel(uint8_t iIndex);
+  IoHomeRemoteMap &remoteMap();
+
+private:
+  IoHomecontrolChannel *mChannels[IOHC_ChannelCount] = {};
+  uint8_t mNumChannels = 0;
+  IoHomeController mController;
+  IoHomeRemoteMap mRemoteMap;
+
+  ControllerState mLastControllerState = ControllerState::Idle;
+  uint8_t mLastPairedCount = 0xFF;
+  StatusLedMode mStatusLedMode = StatusLedMode::Unknown;
+  uint32_t mLedEffectUntil = 0;
+  bool mLedEffectIsError = false;
+  bool mLastDiscoveryActive = false;
+  bool mLastScanActive = false;
+  uint8_t mLastObservedCount = 0;
+  bool mAutoSpeDiscoveryAfterPairing = false;
+  bool mPendingPostPairSpeDiscovery = false;
+
+  struct RadioSweepStat
+  {
+    uint32_t okCount = 0;
+    uint32_t failCount = 0;
+    uint32_t timeoutCount = 0;
+    uint32_t maxWaitMs = 0;
+    uint16_t lastIrq = 0;
+    uint8_t lastTxStatus = 0;
+    uint16_t lastDevErr = 0;
+  };
+
+  struct RadioDiagnosticState
+  {
+    RadioDiagnosticKind kind = RadioDiagnosticKind::None;
+    bool active = false;
+    bool txInProgress = false;
+    bool prevRxScanEnabled = false;
+    uint8_t restoreFreqIdx = 0xFF;
+    uint8_t currentFreqPos = 0;
+    uint8_t requestedRounds = 0;
+    uint32_t completedRounds = 0;
+    uint32_t soakBudgetMs = 0;
+    uint32_t startedAtMs = 0;
+    uint32_t txStartedAtMs = 0;
+    uint32_t busySinceMs = 0;
+    uint32_t totalOk = 0;
+    uint32_t totalFail = 0;
+    uint32_t totalTimeout = 0;
+    RadioError lastError = RadioError::None;
+    bool txDone = false;
+    uint32_t txWaitedMs = 0;
+    uint16_t devErrBefore = 0;
+    uint16_t devErrCleared = 0;
+    uint16_t devErrNow = 0;
+    uint8_t statusNow = 0;
+    uint8_t modeNow = 0;
+    uint8_t cmdNow = 0;
+    uint16_t irqNow = 0;
+    int dio1Now = 0;
+    int busyNow = 0;
+    RadioSweepStat sweepStats[3] = {};
+  };
+
+  RadioDiagnosticState mRadioDiagnostic;
+
+  void deriveOwnNodeId();
+  void initSystemKey();
+  uint8_t countPairedChannels() const;
+  bool isPairingState(ControllerState iState) const;
+  OpenKNX::Led::FunctionGroup *statusLedFunction();
+  void applyStatusLedMode(StatusLedMode iMode);
+  void updateStatusLed();
+  bool startRadioDiagnostic(RadioDiagnosticKind iKind, uint8_t iValue = 0);
+  void processRadioDiagnostic();
+  void advanceRadioDiagnosticFrequency();
+  bool deferRadioDiagnosticBusy();
+  void clearRadioDiagnosticBusy();
+  bool restoreRadioDiagnosticReceive();
+  bool forceRestoreRadioDiagnosticReceive();
+  void recordRadioDiagnosticSweepSuccess(RadioSweepStat &iStat, uint32_t iWaitedMs, uint16_t iIrq);
+  void recordRadioDiagnosticSweepFailure(RadioSweepStat &iStat, bool iTimeout);
+  void finishRadioTxTest();
+  void finishRadioSweep();
+  bool handleRadioRaw(bool iDebugKo);
+};
+
+extern IoHomecontrol openknxIoHomecontrol;

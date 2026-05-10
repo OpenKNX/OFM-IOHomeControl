@@ -1,0 +1,144 @@
+#pragma once
+
+// SX1276 FSK mode register definitions
+// Reference: Semtech SX1276 datasheet, Section 5 (FSK/OOK mode)
+// Adapted from https://github.com/nicolas5000/io-rts-esp32
+
+// Common registers
+#define REG_FIFO 0x00
+#define REG_OPMODE 0x01
+#define REG_BITRATEMSB 0x02
+#define REG_BITRATELSB 0x03
+#define REG_FDEVMSB 0x04
+#define REG_FDEVLSB 0x05
+#define REG_FRFMSB 0x06
+#define REG_FRFMID 0x07
+#define REG_FRFLSB 0x08
+#define REG_PACONFIG 0x09
+#define REG_PARAMP 0x0A
+#define REG_OCP 0x0B
+#define REG_LNA 0x0C
+
+// FSK/OOK specific registers
+#define REG_RXCONFIG 0x0D
+#define REG_RSSICONFIG 0x0E
+#define REG_RSSICOLLISION 0x0F
+#define REG_RSSITHRESH 0x10
+#define REG_RSSIVALUE 0x11
+#define REG_RXBW 0x12
+#define REG_AFCBW 0x13
+#define REG_OOKPEAK 0x14
+#define REG_OOKFIX 0x15
+#define REG_OOKAVG 0x16
+#define REG_AFCFEI 0x1A
+#define REG_AFCMSB 0x1B
+#define REG_AFCLSB 0x1C
+#define REG_FEIMSB 0x1D
+#define REG_FEILSB 0x1E
+#define REG_PREAMBLEDETECT 0x1F
+#define REG_RXTIMEOUT1 0x20
+#define REG_RXTIMEOUT2 0x21
+#define REG_RXTIMEOUT3 0x22
+#define REG_RXDELAY 0x23
+#define REG_OSC 0x24
+#define REG_PREAMBLEMSB 0x25
+#define REG_PREAMBLELSB 0x26
+#define REG_SYNCCONFIG 0x27
+#define REG_SYNCVALUE1 0x28
+#define REG_SYNCVALUE2 0x29
+#define REG_SYNCVALUE3 0x2A
+#define REG_SYNCVALUE4 0x2B
+#define REG_SYNCVALUE5 0x2C
+#define REG_SYNCVALUE6 0x2D
+#define REG_SYNCVALUE7 0x2E
+#define REG_SYNCVALUE8 0x2F
+#define REG_PACKETCONFIG1 0x30
+#define REG_PACKETCONFIG2 0x31
+#define REG_PAYLOADLENGTH 0x32
+#define REG_NODEADRS 0x33
+#define REG_BROADCASTADRS 0x34
+#define REG_FIFOTHRESH 0x35
+#define REG_SEQCONFIG1 0x36
+#define REG_SEQCONFIG2 0x37
+#define REG_TIMERRESOL 0x38
+#define REG_TIMER1COEF 0x39
+#define REG_TIMER2COEF 0x3A
+#define REG_IMAGECAL 0x3B
+#define REG_TEMP 0x3C
+#define REG_LOWBAT 0x3D
+#define REG_IRQFLAGS1 0x3E
+#define REG_IRQFLAGS2 0x3F
+
+// IO control registers
+#define REG_DIOMAPPING1 0x40
+#define REG_DIOMAPPING2 0x41
+#define REG_VERSION 0x42
+#define REG_PLLHOP 0x44
+
+// Additional registers
+#define REG_TCXO 0x4B
+#define REG_PADAC 0x4D
+#define REG_FORMERTEMP 0x5B
+#define REG_BITRATEFRAC 0x5D
+#define REG_AGCREF 0x61
+#define REG_AGCTHRESH1 0x62
+#define REG_AGCTHRESH2 0x63
+#define REG_AGCTHRESH3 0x64
+#define REG_PLL 0x70
+
+// RegPllHop bit masks
+#define RF_PLLHOP_FASTHOP_ON 0x80
+
+// RegOcp bit masks
+#define RF_OCP_ON 0x20
+#define RF_OCP_TRIM_240_MA 0x1B
+
+// RegParamp bit masks
+#define RF_PARAMP_MODULATIONSHAPING_00 0x00
+#define RF_PARAMP_0012_US 0x0E
+
+// RegOsc bit masks
+#define RF_OSC_CLKOUT_OFF 0x07
+
+// RegRxConfig bit masks
+#define RF_RXCONFIG_RESTARTRXONCOLLISION_ON 0x80
+#define RF_RXCONFIG_AFCAUTO_ON 0x10
+#define RF_RXCONFIG_AGCAUTO_ON 0x08
+#define RF_RXCONFIG_RXTRIGER_PREAMBLEDETECT 0x06
+
+// RegAfcFei bit masks
+#define RF_AFCFEI_AFCAUTOCLEAR_ON 0x01
+
+// RegFifoThresh bit masks
+#define RF_FIFOTHRESH_TXSTARTCONDITION_FIFONOTEMPTY 0x80
+
+// RegPacketConfig2 bit masks
+#define RF_PACKETCONFIG2_DATAMODE_PACKET 0x40
+#define RF_PACKETCONFIG2_IOHOME_ON 0x20
+#define RF_PACKETCONFIG2_IOHOME_POWERFRAME 0x10
+
+// RegIrqFlags1 bit masks
+#define RF_IRQFLAGS1_MODEREADY 0x80
+#define RF_IRQFLAGS1_RXREADY 0x40
+#define RF_IRQFLAGS1_TXREADY 0x20
+#define RF_IRQFLAGS1_PLLLOCK 0x10
+#define RF_IRQFLAGS1_RSSI 0x08
+#define RF_IRQFLAGS1_TIMEOUT 0x04
+#define RF_IRQFLAGS1_PREAMBLEDETECT 0x02
+#define RF_IRQFLAGS1_SYNCADDRESSMATCH 0x01
+
+// RegIrqFlags2 bit masks
+#define RF_IRQFLAGS2_FIFOFULL 0x80
+#define RF_IRQFLAGS2_FIFOEMPTY 0x40
+#define RF_IRQFLAGS2_FIFOLEVEL 0x20
+#define RF_IRQFLAGS2_FIFOOVERRUN 0x10
+#define RF_IRQFLAGS2_PACKETSENT 0x08
+#define RF_IRQFLAGS2_PAYLOADREADY 0x04
+#define RF_IRQFLAGS2_CRCOK 0x02
+#define RF_IRQFLAGS2_LOWBAT 0x01
+
+// RegOpMode bit masks
+#define RF_OPMODE_LONGRANGEMODE_ON 0x80
+#define RF_OPMODE_LONGRANGEMODE_OFF 0x00
+#define RF_OPMODE_MODULATIONTYPE_FSK 0x00
+#define RF_OPMODE_MODULATIONTYPE_OOK 0x20

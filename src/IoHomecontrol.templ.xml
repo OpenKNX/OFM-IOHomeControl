@@ -1,0 +1,1801 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?xml-model href="../../Organization/knxprod-support/knx_project_20/knx-editor.xsd" type="application/xml" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<KNX xmlns:op="http://github.com/OpenKNX/OpenKNXproducer" xmlns="http://knx.org/xml/project/20" CreatedBy="KNX MT" ToolVersion="5.1.255.16695">
+  <ManufacturerData>
+    <Manufacturer RefId="M-00FA">
+      <ApplicationPrograms>
+        <ApplicationProgram Id="%AID%" ProgramType="ApplicationProgram" MaskVersion="MV-07B0" Name="WP-IoHomecontrol" LoadProcedureStyle="MergedProcedure" PeiType="0" DefaultLanguage="de" DynamicTableManagement="false" Linkable="true" MinEtsVersion="4.0" ApplicationNumber="0" ApplicationVersion="0">
+          <Static>
+            <Parameters>
+              <!-- Per-channel parameters -->
+              <Parameter Id="%AID%_P-%TT%%CC%000" Name="IOHC%C%Name" ParameterType="%AID%_PT-IOHCText40Byte" Text="Beschreibung" Value="" />
+
+              <!-- Pairing mode selector (P0) — standalone, outside Union -->
+              <Parameter Id="%AID%_P-%TT%%CC%010" Name="IOHC%C%PairingMode" ParameterType="%AID%_PT-IOHCPairingMode" Text="Pairing-Modus" Value="0">
+                <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
+              </Parameter>
+              <Parameter Id="%AID%_P-%TT%%CC%012" Name="IOHC%C%PairingLastResult" ParameterType="%AID%_PT-IOHCText40Byte" Text="Letztes Pairing-Ergebnis" Value="Noch nicht abgefragt" Access="Read" />
+              <Parameter Id="%AID%_P-%TT%%CC%013" Name="IOHC%C%PairedNodeIdDisplay" ParameterType="%AID%_PT-IOHCText40Byte" Text="Aktuell gepaarte Node-ID" Value="unbekannt" Access="Read" />
+              <Parameter Id="%AID%_P-%TT%%CC%014" Name="IOHC%C%OneWaySummary" ParameterType="%AID%_PT-IOHCText40Byte" Text="Protokoll / Ziel" Value="Noch nicht gelesen" Access="Read" />
+              <Parameter Id="%AID%_P-%TT%%CC%015" Name="IOHC%C%PairingDiag" ParameterType="%AID%_PT-IOHCText40Byte" Text="Letzte Pairing-Diagnose" Value="Noch keine Diagnose" Access="Read" />
+
+              <!-- Main configuration Union including 10 ETS-backed scene slots -->
+              <Union SizeInBit="392">
+                <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%001" Name="IOHC%C%Active" ParameterType="%AID%_PT-IOHCCheckBox" Offset="0" BitOffset="0" Text="Kanal aktiv" Value="1" />
+                <Parameter Id="%AID%_UP-%TT%%CC%002" Name="IOHC%C%DeviceType" ParameterType="%AID%_PT-IOHCDeviceType" Offset="1" BitOffset="0" Text="Gerätetyp" Value="1" />
+                <Parameter Id="%AID%_UP-%TT%%CC%003" Name="IOHC%C%PollInterval" ParameterType="%AID%_PT-IOHCPollInterval" Offset="2" BitOffset="0" Text="Status-Abfrageintervall (Fallback)" Value="300" />
+                <!-- P2: Opening/closing time (seconds) -->
+                <Parameter Id="%AID%_UP-%TT%%CC%004" Name="IOHC%C%OpeningTime" ParameterType="%AID%_PT-IOHCTravelTime" Offset="4" BitOffset="0" Text="Öffnungszeit (Sekunden)" Value="30.0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%005" Name="IOHC%C%ClosingTime" ParameterType="%AID%_PT-IOHCTravelTime" Offset="8" BitOffset="0" Text="Schließzeit (Sekunden)" Value="30.0" />
+                <!-- P2: Invert direction -->
+                <Parameter Id="%AID%_UP-%TT%%CC%006" Name="IOHC%C%InvertDir" ParameterType="%AID%_PT-IOHCCheckBox" Offset="0" BitOffset="1" Text="Richtung invertieren" Value="0" />
+                <!-- P2: Power-on behavior -->
+                <Parameter Id="%AID%_UP-%TT%%CC%007" Name="IOHC%C%PowerOnBeh" ParameterType="%AID%_PT-IOHCPowerOnBehavior" Offset="12" BitOffset="0" Text="Verhalten nach Neustart" Value="1" />
+                <!-- Protocol mode: 1W / 2W -->
+                <Parameter Id="%AID%_UP-%TT%%CC%009" Name="IOHC%C%ProtocolMode" ParameterType="%AID%_PT-IOHCProtocolMode" Offset="44" BitOffset="0" Text="Protokoll-Modus" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%011" Name="IOHC%C%OneWayTargetNodeId" ParameterType="%AID%_PT-IOHCOneWayTargetNodeId" Offset="45" BitOffset="0" Text="1W Aktor-Node-ID (dezimal, 0 = nicht gesetzt)" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%020" Name="IOHC%C%SceneCount" ParameterType="%AID%_PT-IOHCSceneCount" Offset="13" BitOffset="0" Text="Anzahl Szenen" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%021" Name="IOHC%C%Scene1Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="14" BitOffset="0" Text="Szene 1 Position" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%022" Name="IOHC%C%Scene2Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="15" BitOffset="0" Text="Szene 2 Position" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%023" Name="IOHC%C%Scene3Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="16" BitOffset="0" Text="Szene 3 Position" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%024" Name="IOHC%C%Scene4Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="17" BitOffset="0" Text="Szene 4 Position" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%025" Name="IOHC%C%Scene5Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="18" BitOffset="0" Text="Szene 5 Position" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%026" Name="IOHC%C%Scene6Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="19" BitOffset="0" Text="Szene 6 Position" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%027" Name="IOHC%C%Scene7Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="20" BitOffset="0" Text="Szene 7 Position" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%028" Name="IOHC%C%Scene8Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="21" BitOffset="0" Text="Szene 8 Position" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%029" Name="IOHC%C%Scene9Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="22" BitOffset="0" Text="Szene 9 Position" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%030" Name="IOHC%C%Scene10Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="23" BitOffset="0" Text="Szene 10 Position" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%031" Name="IOHC%C%Scene1Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="24" BitOffset="0" Text="Szene 1 Aktion" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%032" Name="IOHC%C%Scene2Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="25" BitOffset="0" Text="Szene 2 Aktion" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%033" Name="IOHC%C%Scene3Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="26" BitOffset="0" Text="Szene 3 Aktion" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%034" Name="IOHC%C%Scene4Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="27" BitOffset="0" Text="Szene 4 Aktion" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%035" Name="IOHC%C%Scene5Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="28" BitOffset="0" Text="Szene 5 Aktion" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%036" Name="IOHC%C%Scene6Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="29" BitOffset="0" Text="Szene 6 Aktion" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%037" Name="IOHC%C%Scene7Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="30" BitOffset="0" Text="Szene 7 Aktion" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%038" Name="IOHC%C%Scene8Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="31" BitOffset="0" Text="Szene 8 Aktion" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%039" Name="IOHC%C%Scene9Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="32" BitOffset="0" Text="Szene 9 Aktion" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%040" Name="IOHC%C%Scene10Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="33" BitOffset="0" Text="Szene 10 Aktion" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%041" Name="IOHC%C%Scene1Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="34" BitOffset="0" Text="Szene 1 Lamellenposition" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%042" Name="IOHC%C%Scene2Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="35" BitOffset="0" Text="Szene 2 Lamellenposition" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%043" Name="IOHC%C%Scene3Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="36" BitOffset="0" Text="Szene 3 Lamellenposition" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%044" Name="IOHC%C%Scene4Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="37" BitOffset="0" Text="Szene 4 Lamellenposition" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%045" Name="IOHC%C%Scene5Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="38" BitOffset="0" Text="Szene 5 Lamellenposition" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%046" Name="IOHC%C%Scene6Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="39" BitOffset="0" Text="Szene 6 Lamellenposition" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%047" Name="IOHC%C%Scene7Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="40" BitOffset="0" Text="Szene 7 Lamellenposition" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%048" Name="IOHC%C%Scene8Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="41" BitOffset="0" Text="Szene 8 Lamellenposition" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%049" Name="IOHC%C%Scene9Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="42" BitOffset="0" Text="Szene 9 Lamellenposition" Value="0" SuffixText=" %" />
+                <Parameter Id="%AID%_UP-%TT%%CC%050" Name="IOHC%C%Scene10Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="43" BitOffset="0" Text="Szene 10 Lamellenposition" Value="0" SuffixText=" %" />
+                <!-- Thermostat scene overlays: Temperature (overlaps ScenePosition offsets 14-23) -->
+                <Parameter Id="%AID%_UP-%TT%%CC%051" op:nowarn="true" Name="IOHC%C%Scene1Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="14" BitOffset="0" Text="Szene 1 Temperatur" Value="20" SuffixText=" °C" />
+                <Parameter Id="%AID%_UP-%TT%%CC%052" op:nowarn="true" Name="IOHC%C%Scene2Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="15" BitOffset="0" Text="Szene 2 Temperatur" Value="20" SuffixText=" °C" />
+                <Parameter Id="%AID%_UP-%TT%%CC%053" op:nowarn="true" Name="IOHC%C%Scene3Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="16" BitOffset="0" Text="Szene 3 Temperatur" Value="20" SuffixText=" °C" />
+                <Parameter Id="%AID%_UP-%TT%%CC%054" op:nowarn="true" Name="IOHC%C%Scene4Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="17" BitOffset="0" Text="Szene 4 Temperatur" Value="20" SuffixText=" °C" />
+                <Parameter Id="%AID%_UP-%TT%%CC%055" op:nowarn="true" Name="IOHC%C%Scene5Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="18" BitOffset="0" Text="Szene 5 Temperatur" Value="20" SuffixText=" °C" />
+                <Parameter Id="%AID%_UP-%TT%%CC%056" op:nowarn="true" Name="IOHC%C%Scene6Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="19" BitOffset="0" Text="Szene 6 Temperatur" Value="20" SuffixText=" °C" />
+                <Parameter Id="%AID%_UP-%TT%%CC%057" op:nowarn="true" Name="IOHC%C%Scene7Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="20" BitOffset="0" Text="Szene 7 Temperatur" Value="20" SuffixText=" °C" />
+                <Parameter Id="%AID%_UP-%TT%%CC%058" op:nowarn="true" Name="IOHC%C%Scene8Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="21" BitOffset="0" Text="Szene 8 Temperatur" Value="20" SuffixText=" °C" />
+                <Parameter Id="%AID%_UP-%TT%%CC%059" op:nowarn="true" Name="IOHC%C%Scene9Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="22" BitOffset="0" Text="Szene 9 Temperatur" Value="20" SuffixText=" °C" />
+                <Parameter Id="%AID%_UP-%TT%%CC%060" op:nowarn="true" Name="IOHC%C%Scene10Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="23" BitOffset="0" Text="Szene 10 Temperatur" Value="20" SuffixText=" °C" />
+                <!-- Thermostat scene overlays: CozyMode (overlaps SceneAction offsets 24-33) -->
+                <Parameter Id="%AID%_UP-%TT%%CC%061" op:nowarn="true" Name="IOHC%C%Scene1CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="24" BitOffset="0" Text="Szene 1 Modus" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%062" op:nowarn="true" Name="IOHC%C%Scene2CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="25" BitOffset="0" Text="Szene 2 Modus" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%063" op:nowarn="true" Name="IOHC%C%Scene3CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="26" BitOffset="0" Text="Szene 3 Modus" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%064" op:nowarn="true" Name="IOHC%C%Scene4CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="27" BitOffset="0" Text="Szene 4 Modus" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%065" op:nowarn="true" Name="IOHC%C%Scene5CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="28" BitOffset="0" Text="Szene 5 Modus" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%066" op:nowarn="true" Name="IOHC%C%Scene6CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="29" BitOffset="0" Text="Szene 6 Modus" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%067" op:nowarn="true" Name="IOHC%C%Scene7CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="30" BitOffset="0" Text="Szene 7 Modus" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%068" op:nowarn="true" Name="IOHC%C%Scene8CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="31" BitOffset="0" Text="Szene 8 Modus" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%069" op:nowarn="true" Name="IOHC%C%Scene9CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="32" BitOffset="0" Text="Szene 9 Modus" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%070" op:nowarn="true" Name="IOHC%C%Scene10CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="33" BitOffset="0" Text="Szene 10 Modus" Value="0" />
+                <!-- On/Off scene overlays: (overlaps ScenePosition offsets 14-23) -->
+                <Parameter Id="%AID%_UP-%TT%%CC%071" op:nowarn="true" Name="IOHC%C%Scene1OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="14" BitOffset="0" Text="Szene 1 Zustand" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%072" op:nowarn="true" Name="IOHC%C%Scene2OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="15" BitOffset="0" Text="Szene 2 Zustand" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%073" op:nowarn="true" Name="IOHC%C%Scene3OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="16" BitOffset="0" Text="Szene 3 Zustand" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%074" op:nowarn="true" Name="IOHC%C%Scene4OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="17" BitOffset="0" Text="Szene 4 Zustand" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%075" op:nowarn="true" Name="IOHC%C%Scene5OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="18" BitOffset="0" Text="Szene 5 Zustand" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%076" op:nowarn="true" Name="IOHC%C%Scene6OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="19" BitOffset="0" Text="Szene 6 Zustand" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%077" op:nowarn="true" Name="IOHC%C%Scene7OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="20" BitOffset="0" Text="Szene 7 Zustand" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%078" op:nowarn="true" Name="IOHC%C%Scene8OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="21" BitOffset="0" Text="Szene 8 Zustand" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%079" op:nowarn="true" Name="IOHC%C%Scene9OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="22" BitOffset="0" Text="Szene 9 Zustand" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%080" op:nowarn="true" Name="IOHC%C%Scene10OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="23" BitOffset="0" Text="Szene 10 Zustand" Value="0" />
+              </Union>
+            </Parameters>
+
+            <ParameterRefs>
+              <ParameterRef Id="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" RefId="%AID%_P-%TT%%CC%000" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%010_R-%TT%%CC%01001" RefId="%AID%_P-%TT%%CC%010" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%012_R-%TT%%CC%01201" RefId="%AID%_P-%TT%%CC%012" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%013_R-%TT%%CC%01301" RefId="%AID%_P-%TT%%CC%013" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%014_R-%TT%%CC%01401" RefId="%AID%_P-%TT%%CC%014" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%015_R-%TT%%CC%01501" RefId="%AID%_P-%TT%%CC%015" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101" RefId="%AID%_UP-%TT%%CC%001" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201" RefId="%AID%_UP-%TT%%CC%002" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%003_R-%TT%%CC%00301" RefId="%AID%_UP-%TT%%CC%003" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" RefId="%AID%_UP-%TT%%CC%004" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" RefId="%AID%_UP-%TT%%CC%005" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" RefId="%AID%_UP-%TT%%CC%006" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%007_R-%TT%%CC%00701" RefId="%AID%_UP-%TT%%CC%007" />
+
+              <ParameterRef Id="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901" RefId="%AID%_UP-%TT%%CC%009" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%011_R-%TT%%CC%01101" RefId="%AID%_UP-%TT%%CC%011" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_UP-%TT%%CC%020" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%021_R-%TT%%CC%02101" RefId="%AID%_UP-%TT%%CC%021" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%022_R-%TT%%CC%02201" RefId="%AID%_UP-%TT%%CC%022" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%023_R-%TT%%CC%02301" RefId="%AID%_UP-%TT%%CC%023" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%024_R-%TT%%CC%02401" RefId="%AID%_UP-%TT%%CC%024" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%025_R-%TT%%CC%02501" RefId="%AID%_UP-%TT%%CC%025" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%026_R-%TT%%CC%02601" RefId="%AID%_UP-%TT%%CC%026" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%027_R-%TT%%CC%02701" RefId="%AID%_UP-%TT%%CC%027" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%028_R-%TT%%CC%02801" RefId="%AID%_UP-%TT%%CC%028" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%029_R-%TT%%CC%02901" RefId="%AID%_UP-%TT%%CC%029" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%030_R-%TT%%CC%03001" RefId="%AID%_UP-%TT%%CC%030" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101" RefId="%AID%_UP-%TT%%CC%031" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201" RefId="%AID%_UP-%TT%%CC%032" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301" RefId="%AID%_UP-%TT%%CC%033" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401" RefId="%AID%_UP-%TT%%CC%034" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501" RefId="%AID%_UP-%TT%%CC%035" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601" RefId="%AID%_UP-%TT%%CC%036" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701" RefId="%AID%_UP-%TT%%CC%037" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801" RefId="%AID%_UP-%TT%%CC%038" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901" RefId="%AID%_UP-%TT%%CC%039" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001" RefId="%AID%_UP-%TT%%CC%040" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%041_R-%TT%%CC%04101" RefId="%AID%_UP-%TT%%CC%041" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%042_R-%TT%%CC%04201" RefId="%AID%_UP-%TT%%CC%042" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%043_R-%TT%%CC%04301" RefId="%AID%_UP-%TT%%CC%043" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%044_R-%TT%%CC%04401" RefId="%AID%_UP-%TT%%CC%044" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%045_R-%TT%%CC%04501" RefId="%AID%_UP-%TT%%CC%045" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%046_R-%TT%%CC%04601" RefId="%AID%_UP-%TT%%CC%046" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%047_R-%TT%%CC%04701" RefId="%AID%_UP-%TT%%CC%047" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%048_R-%TT%%CC%04801" RefId="%AID%_UP-%TT%%CC%048" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%049_R-%TT%%CC%04901" RefId="%AID%_UP-%TT%%CC%049" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%050_R-%TT%%CC%05001" RefId="%AID%_UP-%TT%%CC%050" />
+              <!-- Thermostat scene temperature refs -->
+              <ParameterRef Id="%AID%_UP-%TT%%CC%051_R-%TT%%CC%05101" RefId="%AID%_UP-%TT%%CC%051" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%052_R-%TT%%CC%05201" RefId="%AID%_UP-%TT%%CC%052" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%053_R-%TT%%CC%05301" RefId="%AID%_UP-%TT%%CC%053" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%054_R-%TT%%CC%05401" RefId="%AID%_UP-%TT%%CC%054" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%055_R-%TT%%CC%05501" RefId="%AID%_UP-%TT%%CC%055" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%056_R-%TT%%CC%05601" RefId="%AID%_UP-%TT%%CC%056" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%057_R-%TT%%CC%05701" RefId="%AID%_UP-%TT%%CC%057" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%058_R-%TT%%CC%05801" RefId="%AID%_UP-%TT%%CC%058" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%059_R-%TT%%CC%05901" RefId="%AID%_UP-%TT%%CC%059" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%060_R-%TT%%CC%06001" RefId="%AID%_UP-%TT%%CC%060" />
+              <!-- Thermostat scene cozy mode refs -->
+              <ParameterRef Id="%AID%_UP-%TT%%CC%061_R-%TT%%CC%06101" RefId="%AID%_UP-%TT%%CC%061" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%062_R-%TT%%CC%06201" RefId="%AID%_UP-%TT%%CC%062" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%063_R-%TT%%CC%06301" RefId="%AID%_UP-%TT%%CC%063" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%064_R-%TT%%CC%06401" RefId="%AID%_UP-%TT%%CC%064" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%065_R-%TT%%CC%06501" RefId="%AID%_UP-%TT%%CC%065" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%066_R-%TT%%CC%06601" RefId="%AID%_UP-%TT%%CC%066" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%067_R-%TT%%CC%06701" RefId="%AID%_UP-%TT%%CC%067" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%068_R-%TT%%CC%06801" RefId="%AID%_UP-%TT%%CC%068" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%069_R-%TT%%CC%06901" RefId="%AID%_UP-%TT%%CC%069" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%070_R-%TT%%CC%07001" RefId="%AID%_UP-%TT%%CC%070" />
+              <!-- On/Off scene refs -->
+              <ParameterRef Id="%AID%_UP-%TT%%CC%071_R-%TT%%CC%07101" RefId="%AID%_UP-%TT%%CC%071" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%072_R-%TT%%CC%07201" RefId="%AID%_UP-%TT%%CC%072" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%073_R-%TT%%CC%07301" RefId="%AID%_UP-%TT%%CC%073" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%074_R-%TT%%CC%07401" RefId="%AID%_UP-%TT%%CC%074" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%075_R-%TT%%CC%07501" RefId="%AID%_UP-%TT%%CC%075" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%076_R-%TT%%CC%07601" RefId="%AID%_UP-%TT%%CC%076" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%077_R-%TT%%CC%07701" RefId="%AID%_UP-%TT%%CC%077" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%078_R-%TT%%CC%07801" RefId="%AID%_UP-%TT%%CC%078" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%079_R-%TT%%CC%07901" RefId="%AID%_UP-%TT%%CC%079" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%080_R-%TT%%CC%08001" RefId="%AID%_UP-%TT%%CC%080" />
+            </ParameterRefs>
+
+            <ComObjectTable>
+              <!-- === Existing Per-channel Communication Objects === -->
+
+              <!-- K0: Position command (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%000" Name="CH%C%Position" Text="Kanal %C% Position" FunctionText="Position setzen" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K0%" />
+
+              <!-- K1: Position feedback (read) -->
+              <ComObject Id="%AID%_O-%TT%%CC%001" Name="CH%C%PositionFeedback" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K1%" />
+
+              <!-- K2: Up/Down command (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%002" Name="CH%C%UpDown" Text="Kanal %C% Auf/Ab" FunctionText="Auf/Ab Befehl" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-8" Number="%K2%" />
+
+              <!-- K3: Stop command (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%003" Name="CH%C%Stop" Text="Kanal %C% Stopp" FunctionText="Stopp Befehl" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K3%" />
+
+              <!-- K4: Status (read) -->
+              <ComObject Id="%AID%_O-%TT%%CC%004" Name="CH%C%Status" Text="Kanal %C% Bewegt" FunctionText="Bewegungsstatus" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K4%" />
+
+              <!-- K5: Slat position command (write) - visible only for blind/shutter -->
+              <ComObject Id="%AID%_O-%TT%%CC%005" Name="CH%C%Slat" Text="Kanal %C% Lamellenposition" FunctionText="Lamellenposition setzen" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K5%" />
+
+              <!-- K6: Slat position feedback (read) - visible only for blind/shutter -->
+              <ComObject Id="%AID%_O-%TT%%CC%006" Name="CH%C%SlatFeedback" Text="Kanal %C% Lamelle Rückmeldung" FunctionText="Lamellenposition Rückmeldung" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K6%" />
+
+              <!-- === P1: New Per-channel Communication Objects === -->
+
+              <!-- K7: Favorite position trigger (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%007" Name="CH%C%Favorite" Text="Kanal %C% Favorit-Position" FunctionText="Favorit-Position" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K7%" />
+
+              <!-- K8: Ventilation position trigger (write) - visible only for Fenster -->
+              <ComObject Id="%AID%_O-%TT%%CC%008" Name="CH%C%Ventilation" Text="Kanal %C% Lüftungsposition" FunctionText="Lüftungsposition" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K8%" />
+
+              <!-- K9: Per-channel pairing status (read) -->
+              <ComObject Id="%AID%_O-%TT%%CC%009" Name="CH%C%PairingStatusCh" Text="Kanal %C% Pairing-Status" FunctionText="Pairing-Status" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K9%" />
+
+              <!-- K10: Battery level (read) -->
+              <ComObject Id="%AID%_O-%TT%%CC%010" Name="CH%C%Battery" Text="Kanal %C% Batterielevel" FunctionText="Batterielevel" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K10%" />
+
+              <!-- K11: Signal strength / RSSI (read) -->
+              <ComObject Id="%AID%_O-%TT%%CC%011" Name="CH%C%Rssi" Text="Kanal %C% Signalstärke" FunctionText="Signalstärke" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K11%" />
+
+              <!-- === P2: New Per-channel Communication Objects === -->
+
+              <!-- K12: Lock / Unlock (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%012" Name="CH%C%Lock" Text="Kanal %C% Sperren" FunctionText="Kanal sperren" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K12%" />
+
+              <!-- K13: Error status (read) -->
+              <ComObject Id="%AID%_O-%TT%%CC%013" Name="CH%C%ErrorStatus" Text="Kanal %C% Fehlerstatus" FunctionText="Fehlerstatus" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-10" Number="%K13%" />
+
+              <!-- === P3: New Per-channel Communication Objects === -->
+
+              <!-- K14: Scene number (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%014" Name="CH%C%Scene" Text="Kanal %C% Szene" FunctionText="Szene" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-17-1" Number="%K14%" />
+
+              <!-- K15: Scene control — store/recall (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%015" Name="CH%C%SceneControl" Text="Kanal %C% Szenensteuerung" FunctionText="Szenensteuerung" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-18-1" Number="%K15%" />
+
+              <!-- K16: Wind/Rain alarm (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%016" Name="CH%C%WindAlarm" Text="Kanal %C% Wind-/Regenalarm" FunctionText="Wind-/Regenalarm" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-5" Number="%K16%" />
+
+              <!-- K17: Step-Stop / Long operation (write) - visible only for Jalousie -->
+              <ComObject Id="%AID%_O-%TT%%CC%017" Name="CH%C%StepStop" Text="Kanal %C% Langzeitbetrieb" FunctionText="Langzeitbetrieb" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-8" Number="%K17%" />
+
+              <!-- === Cozy thermostat KOs (visible only for DeviceType=5) === -->
+
+              <!-- K18: Temperature setpoint (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%018" Name="CH%C%CozyTemp" Text="Kanal %C% Temperatur Sollwert" FunctionText="Temperatur Sollwert" ObjectSize="2 Bytes" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-1" Number="%K18%" />
+
+              <!-- K19: Temperature feedback (read) -->
+              <ComObject Id="%AID%_O-%TT%%CC%019" Name="CH%C%CozyTempFeedback" Text="Kanal %C% Temperatur Rückmeldung" FunctionText="Temperatur Rückmeldung" ObjectSize="2 Bytes" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-1" Number="%K19%" />
+
+              <!-- K20: Operating mode (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%020" Name="CH%C%CozyMode" Text="Kanal %C% Betriebsmodus" FunctionText="Betriebsmodus" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-20-102" Number="%K20%" />
+
+              <!-- K21: Presence (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%021" Name="CH%C%CozyPresence" Text="Kanal %C% Anwesenheit" FunctionText="Anwesenheit" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-18" Number="%K21%" />
+
+              <!-- K22: Window contact (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%022" Name="CH%C%CozyWindow" Text="Kanal %C% Fensterkontakt" FunctionText="Fensterkontakt" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-19" Number="%K22%" />
+
+              <!-- === Device info KOs (always visible when channel active) === -->
+
+              <!-- K23: Device name (read) -->
+              <ComObject Id="%AID%_O-%TT%%CC%023" Name="CH%C%DeviceName" Text="Kanal %C% Gerätename" FunctionText="Gerätename" ObjectSize="14 Bytes" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-16-1" Number="%K23%" />
+
+              <!-- K24: Device type code (read) -->
+              <ComObject Id="%AID%_O-%TT%%CC%024" Name="CH%C%DeviceTypeCode" Text="Kanal %C% Gerätetyp-Code" FunctionText="Gerätetyp-Code" ObjectSize="2 Bytes" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-7-1" Number="%K24%" />
+
+            </ComObjectTable>
+
+            <ComObjectRefs>
+              <!-- Existing KOs -->
+              <ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" RefId="%AID%_O-%TT%%CC%000" FunctionText="Position setzen" Text="Kanal %C% Position" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" RefId="%AID%_O-%TT%%CC%001" FunctionText="Position Rückmeldung" Text="Kanal %C% Position Rückmeldung" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" RefId="%AID%_O-%TT%%CC%002" FunctionText="Auf/Ab Befehl" Text="Kanal %C% Auf/Ab" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" RefId="%AID%_O-%TT%%CC%003" FunctionText="Stopp Befehl" Text="Kanal %C% Stopp" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" RefId="%AID%_O-%TT%%CC%004" FunctionText="Bewegungsstatus" Text="Kanal %C% Bewegt" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" RefId="%AID%_O-%TT%%CC%005" FunctionText="Lamellenposition setzen" Text="Kanal %C% Lamellenposition" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" RefId="%AID%_O-%TT%%CC%006" FunctionText="Lamellenposition Rückmeldung" Text="Kanal %C% Lamelle Rückmeldung" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+
+              <!-- P1 KOs -->
+              <ComObjectRef Id="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" RefId="%AID%_O-%TT%%CC%007" FunctionText="Favorit-Position" Text="Kanal %C% Favorit-Position" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" RefId="%AID%_O-%TT%%CC%008" FunctionText="Lüftungsposition" Text="Kanal %C% Lüftungsposition" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" RefId="%AID%_O-%TT%%CC%009" FunctionText="Pairing-Status" Text="Kanal %C% Pairing-Status" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" RefId="%AID%_O-%TT%%CC%010" FunctionText="Batterielevel" Text="Kanal %C% Batterielevel" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" RefId="%AID%_O-%TT%%CC%011" FunctionText="Signalstärke" Text="Kanal %C% Signalstärke" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+
+              <!-- P2 KOs -->
+              <ComObjectRef Id="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" RefId="%AID%_O-%TT%%CC%012" FunctionText="Kanal sperren" Text="Kanal %C% Sperren" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%013_R-%TT%%CC%01301" RefId="%AID%_O-%TT%%CC%013" FunctionText="Fehlerstatus" Text="Kanal %C% Fehlerstatus" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+
+              <!-- P3 KOs -->
+              <ComObjectRef Id="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" RefId="%AID%_O-%TT%%CC%014" FunctionText="Szene" Text="Kanal %C% Szene" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" RefId="%AID%_O-%TT%%CC%015" FunctionText="Szenensteuerung" Text="Kanal %C% Szenensteuerung" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" RefId="%AID%_O-%TT%%CC%016" FunctionText="Wind-/Regenalarm" Text="Kanal %C% Wind-/Regenalarm" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%017_R-%TT%%CC%01701" RefId="%AID%_O-%TT%%CC%017" FunctionText="Langzeitbetrieb" Text="Kanal %C% Langzeitbetrieb" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+
+              <!-- Cozy KO Refs -->
+              <ComObjectRef Id="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" RefId="%AID%_O-%TT%%CC%018" FunctionText="Temperatur Sollwert" Text="Kanal %C% Temperatur Sollwert" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" RefId="%AID%_O-%TT%%CC%019" FunctionText="Temperatur Rückmeldung" Text="Kanal %C% Temperatur Rückmeldung" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_O-%TT%%CC%020" FunctionText="Betriebsmodus" Text="Kanal %C% Betriebsmodus" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%021_R-%TT%%CC%02101" RefId="%AID%_O-%TT%%CC%021" FunctionText="Anwesenheit" Text="Kanal %C% Anwesenheit" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" RefId="%AID%_O-%TT%%CC%022" FunctionText="Fensterkontakt" Text="Kanal %C% Fensterkontakt" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+
+              <!-- Alternative KO Refs for On/Off device types (Licht, Schalter, Schloss) -->
+              <ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00202" RefId="%AID%_O-%TT%%CC%002" FunctionText="Ein/Aus Befehl" Text="Kanal %C% Ein/Aus" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00402" RefId="%AID%_O-%TT%%CC%004" FunctionText="Status" Text="Kanal %C% Status" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+
+              <!-- Device info KO Refs -->
+              <ComObjectRef Id="%AID%_O-%TT%%CC%023_R-%TT%%CC%02301" RefId="%AID%_O-%TT%%CC%023" FunctionText="Gerätename" Text="Kanal %C% Gerätename" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%024_R-%TT%%CC%02401" RefId="%AID%_O-%TT%%CC%024" FunctionText="Gerätetyp-Code" Text="Kanal %C% Gerätetyp-Code" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+            </ComObjectRefs>
+          </Static>
+
+          <Dynamic>
+            <ChannelIndependentBlock>
+              <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101">
+                <when test="&gt;=%C%">
+                  <ParameterBlock Id="%AID%_PB-nnn" Name="IOHCChannel%C%Page" Text="io-homecontrol Kanal %C%: {{0: ...}}" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" Icon="swap-vertical" HelpContext="IOHC-Kanal" ShowInComObjectTree="true">
+                    <ParameterSeparator Id="%AID%_PS-nnn" Text="Kanal %C%" UIHint="Headline" />
+                    <ParameterRefRef RefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" IndentLevel="1" HelpContext="IOHC-Beschreibung" />
+                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101" IndentLevel="1" HelpContext="IOHC-Kanal-aktiv" />
+
+                    <choose ParamRefId="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101">
+                      <when test="&gt;0">
+                        <!-- Basic configuration -->
+                        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201" IndentLevel="1" HelpContext="IOHC-Geraetetyp" />
+                        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%003_R-%TT%%CC%00301" IndentLevel="1" HelpContext="IOHC-Status-Abfrageintervall" />
+
+                        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%007_R-%TT%%CC%00701" IndentLevel="1" HelpContext="IOHC-Verhalten-nach-Neustart" />
+                        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901" IndentLevel="1" HelpContext="IOHC-Protokoll-Modus" />
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901">
+                          <when test="1">
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%011_R-%TT%%CC%01101" IndentLevel="1" HelpContext="IOHC-Kanal" />
+                          </when>
+                        </choose>
+
+                        <!-- Position-only parameters: Fahrzeit, Richtung (types 0-4, 7, 9-11) -->
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
+                          <when test="&lt;5">
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
+                          </when>
+                          <when test="7">
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
+                          </when>
+                          <when test="9">
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
+                          </when>
+                          <when test="10">
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
+                          </when>
+                          <when test="11">
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
+                          </when>
+                        </choose>
+
+                        <!-- Scene support: available for all device types -->
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
+                          <when test="0">
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=1">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 1" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%021_R-%TT%%CC%02101" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=2">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 2" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%022_R-%TT%%CC%02201" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=3">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 3" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%023_R-%TT%%CC%02301" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=4">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 4" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%024_R-%TT%%CC%02401" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=5">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 5" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%025_R-%TT%%CC%02501" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=6">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 6" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%026_R-%TT%%CC%02601" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=7">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 7" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%027_R-%TT%%CC%02701" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=8">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 8" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%028_R-%TT%%CC%02801" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=9">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 9" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%029_R-%TT%%CC%02901" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=10">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 10" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%030_R-%TT%%CC%03001" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                          </when>
+                          <when test="1">
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=1">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 1" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%021_R-%TT%%CC%02101" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%041_R-%TT%%CC%04101" IndentLevel="2" HelpContext="IOHC-Szenenlamelle" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=2">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 2" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%022_R-%TT%%CC%02201" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%042_R-%TT%%CC%04201" IndentLevel="2" HelpContext="IOHC-Szenenlamelle" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=3">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 3" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%023_R-%TT%%CC%02301" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%043_R-%TT%%CC%04301" IndentLevel="2" HelpContext="IOHC-Szenenlamelle" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=4">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 4" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%024_R-%TT%%CC%02401" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%044_R-%TT%%CC%04401" IndentLevel="2" HelpContext="IOHC-Szenenlamelle" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=5">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 5" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%025_R-%TT%%CC%02501" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%045_R-%TT%%CC%04501" IndentLevel="2" HelpContext="IOHC-Szenenlamelle" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=6">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 6" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%026_R-%TT%%CC%02601" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%046_R-%TT%%CC%04601" IndentLevel="2" HelpContext="IOHC-Szenenlamelle" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=7">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 7" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%027_R-%TT%%CC%02701" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%047_R-%TT%%CC%04701" IndentLevel="2" HelpContext="IOHC-Szenenlamelle" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=8">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 8" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%028_R-%TT%%CC%02801" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%048_R-%TT%%CC%04801" IndentLevel="2" HelpContext="IOHC-Szenenlamelle" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=9">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 9" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%029_R-%TT%%CC%02901" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%049_R-%TT%%CC%04901" IndentLevel="2" HelpContext="IOHC-Szenenlamelle" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=10">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 10" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%030_R-%TT%%CC%03001" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%050_R-%TT%%CC%05001" IndentLevel="2" HelpContext="IOHC-Szenenlamelle" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                          </when>
+                          <when test="2">
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=1">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 1" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%021_R-%TT%%CC%02101" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=2">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 2" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%022_R-%TT%%CC%02201" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=3">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 3" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%023_R-%TT%%CC%02301" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=4">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 4" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%024_R-%TT%%CC%02401" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=5">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 5" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%025_R-%TT%%CC%02501" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=6">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 6" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%026_R-%TT%%CC%02601" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=7">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 7" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%027_R-%TT%%CC%02701" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=8">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 8" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%028_R-%TT%%CC%02801" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=9">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 9" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%029_R-%TT%%CC%02901" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=10">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 10" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%030_R-%TT%%CC%03001" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                          </when>
+                          <when test="3">
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=1">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 1" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%021_R-%TT%%CC%02101" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=2">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 2" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%022_R-%TT%%CC%02201" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=3">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 3" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%023_R-%TT%%CC%02301" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=4">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 4" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%024_R-%TT%%CC%02401" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=5">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 5" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%025_R-%TT%%CC%02501" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=6">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 6" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%026_R-%TT%%CC%02601" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=7">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 7" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%027_R-%TT%%CC%02701" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=8">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 8" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%028_R-%TT%%CC%02801" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=9">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 9" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%029_R-%TT%%CC%02901" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=10">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 10" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%030_R-%TT%%CC%03001" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                          </when>
+                          <when test="4">
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=1">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 1" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%021_R-%TT%%CC%02101" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=2">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 2" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%022_R-%TT%%CC%02201" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=3">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 3" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%023_R-%TT%%CC%02301" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=4">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 4" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%024_R-%TT%%CC%02401" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=5">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 5" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%025_R-%TT%%CC%02501" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=6">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 6" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%026_R-%TT%%CC%02601" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=7">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 7" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%027_R-%TT%%CC%02701" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=8">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 8" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%028_R-%TT%%CC%02801" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=9">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 9" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%029_R-%TT%%CC%02901" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=10">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 10" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%030_R-%TT%%CC%03001" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                          </when>
+                          <when test="5">
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=1">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 1" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%051_R-%TT%%CC%05101" IndentLevel="2" HelpContext="IOHC-Szenentemperatur" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%061_R-%TT%%CC%06101" IndentLevel="2" HelpContext="IOHC-Szenenmodus" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=2">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 2" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%052_R-%TT%%CC%05201" IndentLevel="2" HelpContext="IOHC-Szenentemperatur" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%062_R-%TT%%CC%06201" IndentLevel="2" HelpContext="IOHC-Szenenmodus" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=3">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 3" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%053_R-%TT%%CC%05301" IndentLevel="2" HelpContext="IOHC-Szenentemperatur" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%063_R-%TT%%CC%06301" IndentLevel="2" HelpContext="IOHC-Szenenmodus" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=4">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 4" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%054_R-%TT%%CC%05401" IndentLevel="2" HelpContext="IOHC-Szenentemperatur" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%064_R-%TT%%CC%06401" IndentLevel="2" HelpContext="IOHC-Szenenmodus" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=5">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 5" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%055_R-%TT%%CC%05501" IndentLevel="2" HelpContext="IOHC-Szenentemperatur" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%065_R-%TT%%CC%06501" IndentLevel="2" HelpContext="IOHC-Szenenmodus" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=6">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 6" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%056_R-%TT%%CC%05601" IndentLevel="2" HelpContext="IOHC-Szenentemperatur" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%066_R-%TT%%CC%06601" IndentLevel="2" HelpContext="IOHC-Szenenmodus" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=7">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 7" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%057_R-%TT%%CC%05701" IndentLevel="2" HelpContext="IOHC-Szenentemperatur" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%067_R-%TT%%CC%06701" IndentLevel="2" HelpContext="IOHC-Szenenmodus" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=8">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 8" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%058_R-%TT%%CC%05801" IndentLevel="2" HelpContext="IOHC-Szenentemperatur" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%068_R-%TT%%CC%06801" IndentLevel="2" HelpContext="IOHC-Szenenmodus" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=9">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 9" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%059_R-%TT%%CC%05901" IndentLevel="2" HelpContext="IOHC-Szenentemperatur" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%069_R-%TT%%CC%06901" IndentLevel="2" HelpContext="IOHC-Szenenmodus" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=10">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 10" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%060_R-%TT%%CC%06001" IndentLevel="2" HelpContext="IOHC-Szenentemperatur" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%070_R-%TT%%CC%07001" IndentLevel="2" HelpContext="IOHC-Szenenmodus" />
+                              </when>
+                            </choose>
+                          </when>
+                          <when test="6">
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=1">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 1" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%071_R-%TT%%CC%07101" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=2">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 2" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%072_R-%TT%%CC%07201" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=3">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 3" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%073_R-%TT%%CC%07301" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=4">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 4" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%074_R-%TT%%CC%07401" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=5">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 5" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%075_R-%TT%%CC%07501" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=6">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 6" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%076_R-%TT%%CC%07601" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=7">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 7" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%077_R-%TT%%CC%07701" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=8">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 8" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%078_R-%TT%%CC%07801" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=9">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 9" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%079_R-%TT%%CC%07901" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=10">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 10" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%080_R-%TT%%CC%08001" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                          </when>
+                          <when test="7">
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=1">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 1" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%021_R-%TT%%CC%02101" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=2">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 2" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%022_R-%TT%%CC%02201" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=3">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 3" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%023_R-%TT%%CC%02301" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=4">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 4" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%024_R-%TT%%CC%02401" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=5">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 5" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%025_R-%TT%%CC%02501" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=6">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 6" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%026_R-%TT%%CC%02601" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=7">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 7" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%027_R-%TT%%CC%02701" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=8">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 8" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%028_R-%TT%%CC%02801" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=9">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 9" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%029_R-%TT%%CC%02901" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=10">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 10" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%030_R-%TT%%CC%03001" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                          </when>
+                          <when test="8">
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=1">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 1" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%071_R-%TT%%CC%07101" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=2">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 2" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%072_R-%TT%%CC%07201" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=3">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 3" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%073_R-%TT%%CC%07301" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=4">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 4" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%074_R-%TT%%CC%07401" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=5">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 5" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%075_R-%TT%%CC%07501" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=6">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 6" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%076_R-%TT%%CC%07601" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=7">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 7" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%077_R-%TT%%CC%07701" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=8">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 8" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%078_R-%TT%%CC%07801" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=9">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 9" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%079_R-%TT%%CC%07901" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=10">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 10" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%080_R-%TT%%CC%08001" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                          </when>
+                          <when test="9">
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=1">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 1" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%021_R-%TT%%CC%02101" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=2">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 2" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%022_R-%TT%%CC%02201" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=3">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 3" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%023_R-%TT%%CC%02301" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=4">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 4" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%024_R-%TT%%CC%02401" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=5">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 5" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%025_R-%TT%%CC%02501" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=6">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 6" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%026_R-%TT%%CC%02601" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=7">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 7" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%027_R-%TT%%CC%02701" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=8">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 8" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%028_R-%TT%%CC%02801" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=9">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 9" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%029_R-%TT%%CC%02901" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=10">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 10" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%030_R-%TT%%CC%03001" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                          </when>
+                          <when test="10">
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=1">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 1" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%021_R-%TT%%CC%02101" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=2">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 2" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%022_R-%TT%%CC%02201" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=3">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 3" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%023_R-%TT%%CC%02301" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=4">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 4" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%024_R-%TT%%CC%02401" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=5">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 5" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%025_R-%TT%%CC%02501" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=6">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 6" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%026_R-%TT%%CC%02601" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=7">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 7" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%027_R-%TT%%CC%02701" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=8">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 8" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%028_R-%TT%%CC%02801" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=9">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 9" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%029_R-%TT%%CC%02901" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=10">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 10" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%030_R-%TT%%CC%03001" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                          </when>
+                          <when test="11">
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=1">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 1" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%021_R-%TT%%CC%02101" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=2">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 2" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%022_R-%TT%%CC%02201" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=3">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 3" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%023_R-%TT%%CC%02301" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=4">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 4" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%024_R-%TT%%CC%02401" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=5">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 5" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%025_R-%TT%%CC%02501" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=6">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 6" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%026_R-%TT%%CC%02601" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=7">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 7" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%027_R-%TT%%CC%02701" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=8">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 8" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%028_R-%TT%%CC%02801" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=9">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 9" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%029_R-%TT%%CC%02901" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=10">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 10" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%030_R-%TT%%CC%03001" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+                                  </when>
+                                </choose>
+                              </when>
+                            </choose>
+                          </when>
+                          <when test="12">
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=1">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 1" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%071_R-%TT%%CC%07101" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=2">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 2" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%072_R-%TT%%CC%07201" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=3">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 3" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%073_R-%TT%%CC%07301" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=4">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 4" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%074_R-%TT%%CC%07401" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=5">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 5" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%075_R-%TT%%CC%07501" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=6">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 6" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%076_R-%TT%%CC%07601" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=7">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 7" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%077_R-%TT%%CC%07701" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=8">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 8" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%078_R-%TT%%CC%07801" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=9">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 9" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%079_R-%TT%%CC%07901" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                              <when test=">=10">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene 10" UIHint="Headline" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%080_R-%TT%%CC%08001" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+                              </when>
+                            </choose>
+                          </when>
+                        </choose>
+
+                        <!-- === Position KOs: visible for types 0-4, 7, 9-11 (not 5=Thermostat, 6=Licht, 8=Schloss, 12=Schalter) === -->
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
+                          <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
+                          <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%017_R-%TT%%CC%01701" /></when>
+                          <when test="2"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /></when>
+                          <when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
+                          <when test="4"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
+                          <when test="5"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%021_R-%TT%%CC%02101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" /></when>
+                          <when test="6"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00202" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00402" /></when>
+                          <when test="7"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
+                          <when test="8"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00402" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
+                          <when test="9"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
+                          <when test="10"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
+                          <when test="11"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /></when>
+                          <when test="12"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00202" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00402" /></when>
+                        </choose>
+
+                        <!-- === Always-visible KOs (pairing, battery, RSSI, lock, error) === -->
+                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" />
+                        <!-- Lock KO: always visible except for Schloss where it's in the type-specific block -->
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
+                          <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
+                          <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
+                          <when test="2"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
+                          <when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
+                          <when test="4"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
+                          <when test="5"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
+                          <when test="6"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
+                          <when test="7"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
+                          <when test="9"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
+                          <when test="10"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
+                          <when test="11"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
+                          <when test="12"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
+                        </choose>
+                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%013_R-%TT%%CC%01301" />
+
+                        <!-- === Scene + Wind/Rain KOs: visible for position-capable types (not 5, 6, 8, 12) === -->
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
+                          <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
+                          <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
+                          <when test="2"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
+                          <when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
+                          <when test="4"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
+                          <when test="7"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
+                          <when test="9"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
+                          <when test="10"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
+                          <when test="11"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
+                        </choose>
+
+                        <!-- Scene KOs: visible when SceneCount >= 1, for all device types -->
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
+                          <when test="0"><choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001"><when test=">=1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" /></when></choose></when>
+                          <when test="1"><choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001"><when test=">=1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" /></when></choose></when>
+                          <when test="2"><choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001"><when test=">=1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" /></when></choose></when>
+                          <when test="3"><choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001"><when test=">=1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" /></when></choose></when>
+                          <when test="4"><choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001"><when test=">=1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" /></when></choose></when>
+                          <when test="5"><choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001"><when test=">=1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" /></when></choose></when>
+                          <when test="6"><choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001"><when test=">=1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" /></when></choose></when>
+                          <when test="7"><choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001"><when test=">=1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" /></when></choose></when>
+                          <when test="8"><choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001"><when test=">=1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" /></when></choose></when>
+                          <when test="9"><choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001"><when test=">=1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" /></when></choose></when>
+                          <when test="10"><choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001"><when test=">=1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" /></when></choose></when>
+                          <when test="11"><choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001"><when test=">=1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" /></when></choose></when>
+                          <when test="12"><choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001"><when test=">=1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" /></when></choose></when>
+                        </choose>
+
+                        <!-- === Device info KOs (always visible) === -->
+                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%023_R-%TT%%CC%02301" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%024_R-%TT%%CC%02401" />
+
+                        <!-- === P0: Pairing Section === -->
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Pairing" UIHint="Headline" />
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Hinweis: Diese Schaltflächen funktionieren nur bei aktiver ETS-Onlineverbindung zum Gerät. Sie starten oder entfernen das Pairing direkt im Gerät." UIHint="Information" />
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Der Kommunikationsobjekt-Status 'Pairing-Status' zeigt davon getrennt dauerhaft an, ob dieser Kanal aktuell angelernt ist." UIHint="Information" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%010_R-%TT%%CC%01001" IndentLevel="1" HelpContext="IOHC-Pairing-Modus" />
+                        <ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
+                          <Rows>
+                            <Row Id="%AID%_PB-nnn_R-1" />
+                          </Rows>
+                          <Columns>
+                            <Column Id="%AID%_PB-nnn_C-1" Width="2%" />
+                            <Column Id="%AID%_PB-nnn_C-2" Width="49%" />
+                            <Column Id="%AID%_PB-nnn_C-3" Width="49%" />
+                          </Columns>
+                          <Button Id="%AID%_B-%TT%%CC%003" Text="Pairing-Status auslesen" Cell="1,2" EventHandler="IOHC_refreshPairingInfo" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+
+                          <choose ParamRefId="%AID%_P-%TT%%CC%010_R-%TT%%CC%01001">
+                            <when test="0">
+                              <!-- Anlernen mode -->
+                              <Button Id="%AID%_B-%TT%%CC%001" Text="Pairing starten" Cell="1,3" EventHandler="IOHC_startPairing" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                            </when>
+                            <when test="1">
+                              <!-- Entfernen mode -->
+                              <Button Id="%AID%_B-%TT%%CC%002" Text="Pairing entfernen" Cell="1,3" EventHandler="IOHC_unpair" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                            </when>
+                          </choose>
+                        </ParameterBlock>
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%012_R-%TT%%CC%01201" IndentLevel="1" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%013_R-%TT%%CC%01301" IndentLevel="1" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%014_R-%TT%%CC%01401" IndentLevel="1" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%015_R-%TT%%CC%01501" IndentLevel="1" />
+                        <choose ParamRefId="%AID%_P-%TT%%CC%010_R-%TT%%CC%01001">
+                          <when test="1">
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Das Gerät muss nach dem Entfernen erneut angelernt werden." UIHint="Error" />
+                          </when>
+                        </choose>
+
+                      </when>
+                    </choose>
+                  </ParameterBlock>
+                </when>
+              </choose>
+            </ChannelIndependentBlock>
+          </Dynamic>
+
+        </ApplicationProgram>
+      </ApplicationPrograms>
+    </Manufacturer>
+  </ManufacturerData>
+</KNX>

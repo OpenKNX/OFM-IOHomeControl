@@ -1,0 +1,16 @@
+{
+    "name": "OFM-IO-Homecontrol",
+    "version": "0.1.0",
+    "description": "io-homecontrol protocol module for controlling Velux/Somfy devices via KNX",
+    "homepage": "https://openknx.de",
+    "authors": {
+        "name": "u20p17",
+        "email": "info@openknx.de",
+        "url": "https://openknx.de",
+        "maintainer": true
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/OpenKNX/OFM-IOHomeControl"
+    }
+}

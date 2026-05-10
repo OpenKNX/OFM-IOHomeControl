@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?xml-model href="../../Organization/knxprod-support/knx_project_20/knx-editor.xsd" type="application/xml" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<KNX xmlns:op="http://github.com/OpenKNX/OpenKNXproducer" xmlns="http://knx.org/xml/project/20" CreatedBy="KNX MT" ToolVersion="5.1.255.16695">
+
+  <op:minOpenKNXproducerVersion value="3.13.0" />
+  
+  <!-- Enable IPTool of ETS. This hide ip settings in network tab -->
+  <op:config name="%NET_IPConfigTool%" value="0" />
+  <op:config name="%NET_WifiTool%" value="0" />
+  <op:config name="%NET_LanMode%" value="0" />
+  <op:config name="%NET_ServiceNTP%" value="1" />
+  <op:config name="%NET_ServiceOTA%" value="1" />
+  <op:config name="%NET_ShowMediumInfo%" value="0" />
+
+  <!-- Prepare: Not ready to use -->
+  <op:config name="%NET_ServiceHTTP%" value="0" />
+
+  <op:config name="%IOHC_NumChannelsDefault%" value="%N%" />
+
+  <ManufacturerData>
+    <Manufacturer RefId="M-00FA">
+      <ApplicationPrograms>
+        <ApplicationProgram Id="%AID%" ApplicationNumber="40" ApplicationVersion="1" ProgramType="ApplicationProgram" MaskVersion="MV-07B0" Name="WP-IoHomecontrol" LoadProcedureStyle="MergedProcedure" PeiType="0" DefaultLanguage="de" DynamicTableManagement="false" Linkable="true" MinEtsVersion="4.0">
+          <Static>
+            <ParameterTypes>
+              <!-- Number of channels -->
+              <ParameterType Id="%AID%_PT-IOHCNumChannels" Name="IOHCNumChannels">
+                <TypeNumber SizeInBit="8" Type="unsignedInt" minInclusive="1" maxInclusive="%N%" />
+              </ParameterType>
+              <!-- Channel active toggle -->
+              <ParameterType Id="%AID%_PT-IOHCCheckBox" Name="IOHCCheckBox">
+                <TypeRestriction Base="Value" SizeInBit="1">
+                  <Enumeration Text="Aus" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Ein" Value="1" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <!-- Device type selection -->
+              <ParameterType Id="%AID%_PT-IOHCDeviceType" Name="IOHCDeviceType">
+                <TypeRestriction Base="Value" SizeInBit="8">
+                  <Enumeration Text="Generisch" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Jalousie / Rollladen" Value="1" Id="%ENID%" />
+                  <Enumeration Text="Fenster" Value="2" Id="%ENID%" />
+                  <Enumeration Text="Markise" Value="3" Id="%ENID%" />
+                  <Enumeration Text="Garagentor" Value="4" Id="%ENID%" />
+                  <Enumeration Text="Thermostat" Value="5" Id="%ENID%" />
+                  <Enumeration Text="Licht" Value="6" Id="%ENID%" />
+                  <Enumeration Text="Tor" Value="7" Id="%ENID%" />
+                  <Enumeration Text="Schloss" Value="8" Id="%ENID%" />
+                  <Enumeration Text="Sonnenschutz horizontal" Value="9" Id="%ENID%" />
+                  <Enumeration Text="Vorhangschiene" Value="10" Id="%ENID%" />
+                  <Enumeration Text="Lüftung" Value="11" Id="%ENID%" />
+                  <Enumeration Text="Schalter" Value="12" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <!-- Status poll interval -->
+              <ParameterType Id="%AID%_PT-IOHCPollInterval" Name="IOHCPollInterval">
+                <TypeRestriction Base="Value" SizeInBit="16">
+                  <Enumeration Text="Deaktiviert" Value="0" Id="%ENID%" />
+                  <Enumeration Text="30 Sekunden" Value="30" Id="%ENID%" />
+                  <Enumeration Text="1 Minute" Value="60" Id="%ENID%" />
+                  <Enumeration Text="5 Minuten" Value="300" Id="%ENID%" />
+                  <Enumeration Text="15 Minuten" Value="900" Id="%ENID%" />
+                  <Enumeration Text="30 Minuten" Value="1800" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <!-- Channel name -->
+              <ParameterType Id="%AID%_PT-IOHCText40Byte" Name="IOHCText40Byte">
+                <TypeText SizeInBit="320" />
+              </ParameterType>
+              <!-- Pairing mode selector (P0) -->
+              <ParameterType Id="%AID%_PT-IOHCPairingMode" Name="IOHCPairingMode">
+                <TypeRestriction Base="Value" SizeInBit="8">
+                  <Enumeration Text="Anlernen" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Entfernen" Value="1" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <!-- Drive time in seconds (P2) -->
+              <ParameterType Id="%AID%_PT-IOHCTravelTime" Name="IOHCTravelTime">
+                <TypeFloat Encoding="IEEE-754 Single" minInclusive="0.1" maxInclusive="300" />
+              </ParameterType>
+              <!-- Power-on behavior (P2) -->
+              <ParameterType Id="%AID%_PT-IOHCPowerOnBehavior" Name="IOHCPowerOnBehavior">
+                <TypeRestriction Base="Value" SizeInBit="8">
+                  <Enumeration Text="Nichts tun" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Status abfragen" Value="1" Id="%ENID%" />
+                  <Enumeration Text="Letzte Position anfahren" Value="2" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCSceneCount" Name="IOHCSceneCount">
+                <TypeRestriction Base="Value" SizeInBit="4">
+                  <Enumeration Text="Keine" Value="0" Id="%ENID%" />
+                  <Enumeration Text="1 Szene" Value="1" Id="%ENID%" />
+                  <Enumeration Text="2 Szenen" Value="2" Id="%ENID%" />
+                  <Enumeration Text="3 Szenen" Value="3" Id="%ENID%" />
+                  <Enumeration Text="4 Szenen" Value="4" Id="%ENID%" />
+                  <Enumeration Text="5 Szenen" Value="5" Id="%ENID%" />
+                  <Enumeration Text="6 Szenen" Value="6" Id="%ENID%" />
+                  <Enumeration Text="7 Szenen" Value="7" Id="%ENID%" />
+                  <Enumeration Text="8 Szenen" Value="8" Id="%ENID%" />
+                  <Enumeration Text="9 Szenen" Value="9" Id="%ENID%" />
+                  <Enumeration Text="10 Szenen" Value="10" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCScenePosition" Name="IOHCScenePosition">
+                <TypeNumber SizeInBit="8" Type="unsignedInt" minInclusive="0" maxInclusive="100" />
+              </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCSceneAction" Name="IOHCSceneAction">
+                <TypeRestriction Base="Value" SizeInBit="8">
+                  <Enumeration Text="Position" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Favorit" Value="1" Id="%ENID%" />
+                  <Enumeration Text="Lüftung" Value="2" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <!-- Scene temperature for thermostat (overlays ScenePosition byte) -->
+              <ParameterType Id="%AID%_PT-IOHCSceneTemperature" Name="IOHCSceneTemperature">
+                <TypeNumber SizeInBit="8" Type="unsignedInt" minInclusive="7" maxInclusive="28" />
+              </ParameterType>
+              <!-- Scene cozy mode for thermostat (overlays SceneAction byte) -->
+              <ParameterType Id="%AID%_PT-IOHCSceneCozyMode" Name="IOHCSceneCozyMode">
+                <TypeRestriction Base="Value" SizeInBit="8">
+                  <Enumeration Text="Auto" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Manuell" Value="1" Id="%ENID%" />
+                  <Enumeration Text="Programm" Value="2" Id="%ENID%" />
+                  <Enumeration Text="Aus" Value="4" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <!-- Scene on/off for Licht/Schalter (overlays ScenePosition byte) -->
+              <ParameterType Id="%AID%_PT-IOHCSceneOnOff" Name="IOHCSceneOnOff">
+                <TypeRestriction Base="Value" SizeInBit="8">
+                  <Enumeration Text="Aus" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Ein" Value="1" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <ParameterType Id="%AID%_PT-SLEDFunc" Name="SLEDFunc">
+                <TypeRestriction Base="Value" SizeInBit="16" UIHint="DropDown">
+                  <Enumeration Text="io-homecontrol Status" Value="410" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+                <ParameterType Id="%AID%_PT-IOHCOneWayTargetNodeId" Name="IOHCOneWayTargetNodeId">
+                  <TypeNumber SizeInBit="32" Type="unsignedInt" minInclusive="0" maxInclusive="16777215" />
+                </ParameterType>
+              <!-- Protocol mode per channel -->
+              <ParameterType Id="%AID%_PT-IOHCProtocolMode" Name="IOHCProtocolMode">
+                <TypeRestriction Base="Value" SizeInBit="8">
+                  <Enumeration Text="2W (bidirektional)" Value="0" Id="%ENID%" />
+                  <Enumeration Text="1W (unidirektional)" Value="1" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+            </ParameterTypes>
+
+            <Parameters>
+              <!-- Global parameters -->
+              <Parameter Id="%AID%_P-%TT%00001" Name="IOHCVisibleChannels" ParameterType="%AID%_PT-IOHCNumChannels" Text="Anzahl io-homecontrol Kanäle" SuffixText=" von %N%" Value="%IOHC_NumChannelsDefault%">
+                <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
+              </Parameter>
+              <Parameter Id="%AID%_P-%TT%00002" Name="IOHCRemoteObserve" ParameterType="%AID%_PT-IOHCCheckBox" Text="Fernbedienungs-Beobachtung aktivieren" Value="0">
+                <Memory CodeSegment="%AID%_RS-04-00000" Offset="1" BitOffset="0" />
+              </Parameter>
+              <Parameter Id="%AID%_P-%TT%00003" Name="IOHCOverviewLastRefresh" ParameterType="%AID%_PT-IOHCText40Byte" Text="Zuletzt aktualisiert" Value="Noch nicht aktualisiert" Access="Read">
+                <Memory CodeSegment="%AID%_RS-04-00000" Offset="2" BitOffset="0" />
+              </Parameter>
+            </Parameters>
+
+            <ParameterRefs>
+              <ParameterRef Id="%AID%_P-%TT%00001_R-%TT%0000101" RefId="%AID%_P-%TT%00001" />
+              <ParameterRef Id="%AID%_P-%TT%00002_R-%TT%0000201" RefId="%AID%_P-%TT%00002" />
+              <ParameterRef Id="%AID%_P-%TT%00003_R-%TT%0000301" RefId="%AID%_P-%TT%00003" />
+            </ParameterRefs>
+
+            <ComObjectTable>
+              <!-- Global Communication Objects -->
+              <ComObject Id="%AID%_O-%TT%00000" Name="IOHC_Modulstatus" Text="io-homecontrol Modulstatus" FunctionText="io-homecontrol Modulstatus" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="20" />
+              <ComObject Id="%AID%_O-%TT%00001" Name="IOHC_Discovery" Text="Discovery starten" FunctionText="Discovery starten" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="21" />
+              <ComObject Id="%AID%_O-%TT%00002" Name="IOHC_DiscoveryAktiv" Text="Discovery aktiv" FunctionText="Discovery aktiv" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="22" />
+              <ComObject Id="%AID%_O-%TT%00003" Name="IOHC_NetzwerkScan" Text="Netzwerk-Scan" FunctionText="Netzwerk-Scan" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="23" />
+              <ComObject Id="%AID%_O-%TT%00004" Name="IOHC_NetzwerkScanAktiv" Text="Netzwerk-Scan aktiv" FunctionText="Netzwerk-Scan aktiv" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="24" />
+              <ComObject Id="%AID%_O-%TT%00005" Name="IOHC_BeobachteteFernbedienung" Text="Beobachtete Fernbedienung" FunctionText="Beobachtete Fernbedienung" ObjectSize="4 Bytes" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-12-1" Number="25" />
+            </ComObjectTable>
+
+            <ComObjectRefs>
+              <ComObjectRef Id="%AID%_O-%TT%00000_R-%TT%0000001" RefId="%AID%_O-%TT%00000" FunctionText="Modulstatus" Text="Modulstatus" />
+              <ComObjectRef Id="%AID%_O-%TT%00001_R-%TT%0000101" RefId="%AID%_O-%TT%00001" FunctionText="Discovery starten" Text="Discovery starten" />
+              <ComObjectRef Id="%AID%_O-%TT%00002_R-%TT%0000201" RefId="%AID%_O-%TT%00002" FunctionText="Discovery aktiv" Text="Discovery aktiv" />
+              <ComObjectRef Id="%AID%_O-%TT%00003_R-%TT%0000301" RefId="%AID%_O-%TT%00003" FunctionText="Netzwerk-Scan" Text="Netzwerk-Scan" />
+              <ComObjectRef Id="%AID%_O-%TT%00004_R-%TT%0000401" RefId="%AID%_O-%TT%00004" FunctionText="Netzwerk-Scan aktiv" Text="Netzwerk-Scan aktiv" />
+              <ComObjectRef Id="%AID%_O-%TT%00005_R-%TT%0000501" RefId="%AID%_O-%TT%00005" FunctionText="Beobachtete Fernbedienung" Text="Beobachtete Fernbedienung" />
+            </ComObjectRefs>
+
+            <Script>
+              <op:include href="IoHomecontrol.script.js" prefix="IOHC" type="script" />
+            </Script>
+          </Static>
+
+          <Dynamic>
+            <Channel Id="%AID%_CH-%PREFIX%" Number="%PREFIX%" Name="IOHC_Global" Text="IO-HomeControl" Icon="remote" HelpContext="BASE-OpenKNX">
+              <ParameterBlock Id="%AID%_PB-nnn" Name="IOHC_Global" Text="Allgemein" Icon="cog" HelpContext="IOHC-Allgemein">
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="Allgemein" UIHint="Headline" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00001_R-%TT%0000101" HelpContext="IOHC-Verfuegbare-Kanaele" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00002_R-%TT%0000201" HelpContext="IOHC-Fernbedienungs-Beobachtung" />
+                <ComObjectRefRef RefId="%AID%_O-%TT%00000_R-%TT%0000001" />
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="Pairing-Übersicht" UIHint="Headline" />
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="Die Werte werden durch die Online-Aktionen in den jeweiligen Kanal-Seiten aktualisiert." UIHint="Information" />
+                <Button Id="%AID%_B-%TT%00010" Text="Pairing-Übersicht aktualisieren" EventHandler="IOHC_refreshAllPairingInfo" EventHandlerOnline="ConnectionOriented" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00003_R-%TT%0000301" />
+                <ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
+                  <Rows>
+                    <Row Id="%AID%_PB-nnn_R-1" />
+                  </Rows>
+                  <Columns>
+                    <Column Id="%AID%_PB-nnn_C-1" Width="2%" />
+                    <Column Id="%AID%_PB-nnn_C-2" Width="8%" />
+                    <Column Id="%AID%_PB-nnn_C-3" Width="22%" />
+                    <Column Id="%AID%_PB-nnn_C-4" Width="18%" />
+                    <Column Id="%AID%_PB-nnn_C-5" Width="20%" />
+                    <Column Id="%AID%_PB-nnn_C-6" Width="30%" />
+                  </Columns>
+                  <ParameterSeparator Id="%AID%_PS-nnn" Text="Kanal" Cell="1,2" UIHint="Headline" />
+                  <ParameterSeparator Id="%AID%_PS-nnn" Text="Ergebnis" Cell="1,3" UIHint="Headline" />
+                  <ParameterSeparator Id="%AID%_PS-nnn" Text="Node-ID" Cell="1,4" UIHint="Headline" />
+                  <ParameterSeparator Id="%AID%_PS-nnn" Text="Protokoll / Ziel" Cell="1,5" UIHint="Headline" />
+                  <ParameterSeparator Id="%AID%_PS-nnn" Text="Diagnose" Cell="1,6" UIHint="Headline" />
+                </ParameterBlock>
+
+                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=1"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="1" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%01012_R-%TT%0101201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%01013_R-%TT%0101301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%01014_R-%TT%0101401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%01015_R-%TT%0101501" Cell="1,6" /></ParameterBlock></when></choose>
+                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=2"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="2" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%02012_R-%TT%0201201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%02013_R-%TT%0201301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%02014_R-%TT%0201401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%02015_R-%TT%0201501" Cell="1,6" /></ParameterBlock></when></choose>
+                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=3"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="3" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%03012_R-%TT%0301201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%03013_R-%TT%0301301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%03014_R-%TT%0301401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%03015_R-%TT%0301501" Cell="1,6" /></ParameterBlock></when></choose>
+                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=4"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="4" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%04012_R-%TT%0401201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%04013_R-%TT%0401301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%04014_R-%TT%0401401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%04015_R-%TT%0401501" Cell="1,6" /></ParameterBlock></when></choose>
+                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=5"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="5" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%05012_R-%TT%0501201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%05013_R-%TT%0501301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%05014_R-%TT%0501401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%05015_R-%TT%0501501" Cell="1,6" /></ParameterBlock></when></choose>
+                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=6"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="6" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%06012_R-%TT%0601201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%06013_R-%TT%0601301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%06014_R-%TT%0601401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%06015_R-%TT%0601501" Cell="1,6" /></ParameterBlock></when></choose>
+                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=7"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="7" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%07012_R-%TT%0701201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%07013_R-%TT%0701301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%07014_R-%TT%0701401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%07015_R-%TT%0701501" Cell="1,6" /></ParameterBlock></when></choose>
+                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=8"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="8" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%08012_R-%TT%0801201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%08013_R-%TT%0801301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%08014_R-%TT%0801401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%08015_R-%TT%0801501" Cell="1,6" /></ParameterBlock></when></choose>
+                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=9"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="9" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%09012_R-%TT%0901201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%09013_R-%TT%0901301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%09014_R-%TT%0901401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%09015_R-%TT%0901501" Cell="1,6" /></ParameterBlock></when></choose>
+                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=10"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="10" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%10012_R-%TT%1001201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%10013_R-%TT%1001301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%10014_R-%TT%1001401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%10015_R-%TT%1001501" Cell="1,6" /></ParameterBlock></when></choose>
+                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=11"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="11" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%11012_R-%TT%1101201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%11013_R-%TT%1101301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%11014_R-%TT%1101401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%11015_R-%TT%1101501" Cell="1,6" /></ParameterBlock></when></choose>
+                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=12"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="12" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%12012_R-%TT%1201201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%12013_R-%TT%1201301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%12014_R-%TT%1201401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%12015_R-%TT%1201501" Cell="1,6" /></ParameterBlock></when></choose>
+                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=13"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="13" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%13012_R-%TT%1301201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%13013_R-%TT%1301301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%13014_R-%TT%1301401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%13015_R-%TT%1301501" Cell="1,6" /></ParameterBlock></when></choose>
+                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=14"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="14" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%14012_R-%TT%1401201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%14013_R-%TT%1401301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%14014_R-%TT%1401401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%14015_R-%TT%1401501" Cell="1,6" /></ParameterBlock></when></choose>
+                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=15"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="15" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%15012_R-%TT%1501201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%15013_R-%TT%1501301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%15014_R-%TT%1501401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%15015_R-%TT%1501501" Cell="1,6" /></ParameterBlock></when></choose>
+                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=16"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="16" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%16012_R-%TT%1601201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%16013_R-%TT%1601301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%16014_R-%TT%1601401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%16015_R-%TT%1601501" Cell="1,6" /></ParameterBlock></when></choose>
+
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="Discovery und Netzwerk-Scan" UIHint="Headline" />
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="Discovery und Netzwerk-Scan werden über Kommunikationsobjekte gesteuert. Die zugehörigen KOs findest du in der Objekttabelle dieses Kanals." UIHint="Information" />
+                <ComObjectRefRef RefId="%AID%_O-%TT%00001_R-%TT%0000101" />
+                <ComObjectRefRef RefId="%AID%_O-%TT%00002_R-%TT%0000201" />
+                <ComObjectRefRef RefId="%AID%_O-%TT%00003_R-%TT%0000301" />
+                <ComObjectRefRef RefId="%AID%_O-%TT%00004_R-%TT%0000401" />
+                <ComObjectRefRef RefId="%AID%_O-%TT%00005_R-%TT%0000501" />
+              </ParameterBlock>
+
+              <op:include href="IoHomecontrol.templ.xml" xpath="//Dynamic/ChannelIndependentBlock/*" type="template" prefix="IOHC" IsInner="true" />
+
+              <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101">
+                <when test="&lt;%N%">
+                  <ParameterBlock Id="%AID%_PB-nnn" Text="(mehr)" Icon="dots-horizontal" HelpContext="Empty">
+                    <ParameterSeparator Id="%AID%_PS-nnn" Text="Kanalauswahl" UIHint="Headline" />
+                    <ParameterRefRef RefId="%AID%_P-%TT%00001_R-%TT%0000101" HelpContext="IOHC-Verfuegbare-Kanaele" IndentLevel="1" />
+                  </ParameterBlock>
+                </when>
+              </choose>
+            </Channel>
+
+          </Dynamic>
+
+        </ApplicationProgram>
+      </ApplicationPrograms>
+      <Baggages>
+        <Baggage TargetPath="" Name="Help_de.zip" Id="%FILE-HELP-de%">
+          <FileInfo TimeInfo="%DATETIME%" />
+        </Baggage>
+      </Baggages>
+    </Manufacturer>
+  </ManufacturerData>
+
+</KNX>

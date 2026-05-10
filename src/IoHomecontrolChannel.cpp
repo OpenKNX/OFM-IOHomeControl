@@ -1,0 +1,1015 @@
+#include "IoHomecontrolChannel.h"
+#include "IoHomecontrol.h"
+#include "controller/IoHomeController.h"
+#include "protocol/IoHomeCommands.h"
+#include "knxprod.h"
+#include "OpenKNX.h"
+
+namespace
+{
+    float clampPercent(float iValue)
+    {
+        if (iValue < 0.0f)
+            return 0.0f;
+        if (iValue > 100.0f)
+            return 100.0f;
+        return iValue;
+    }
+
+    const char *iohcDeviceTypeLabel(uint16_t iType)
+    {
+        switch (static_cast<IoHomeDeviceType>(iType))
+        {
+        case IoHomeDeviceType::VenetianBlind:
+            return "venetian_blind";
+        case IoHomeDeviceType::RollerShutter:
+            return "roller_shutter";
+        case IoHomeDeviceType::Awning:
+            return "awning";
+        case IoHomeDeviceType::WindowOpener:
+            return "window_opener";
+        case IoHomeDeviceType::GarageOpener:
+            return "garage_opener";
+        case IoHomeDeviceType::Light:
+            return "light";
+        case IoHomeDeviceType::GateOpener:
+            return "gate_opener";
+        case IoHomeDeviceType::RollingDoorOpener:
+            return "rolling_door_opener";
+        case IoHomeDeviceType::Lock:
+            return "lock";
+        case IoHomeDeviceType::Blind:
+            return "blind";
+        case IoHomeDeviceType::Unknown0B:
+            return "unknown_0b";
+        case IoHomeDeviceType::Beacon:
+            return "beacon";
+        case IoHomeDeviceType::DualShutter:
+            return "dual_shutter";
+        case IoHomeDeviceType::HeatingTempInterface:
+            return "heating_temp_interface";
+        case IoHomeDeviceType::OnOffSwitch:
+            return "on_off_switch";
+        case IoHomeDeviceType::HorizontalAwning:
+            return "horizontal_awning";
+        case IoHomeDeviceType::ExternalVenetianBlind:
+            return "external_venetian_blind";
+        case IoHomeDeviceType::LouvrBlind:
+            return "louvr_blind";
+        case IoHomeDeviceType::CurtainTrack:
+            return "curtain_track";
+        case IoHomeDeviceType::VentilationPoint:
+            return "ventilation_point";
+        case IoHomeDeviceType::ExteriorHeating:
+            return "exterior_heating";
+        case IoHomeDeviceType::HeatPump:
+            return "heat_pump";
+        case IoHomeDeviceType::IntrusionAlarm:
+            return "intrusion_alarm";
+        case IoHomeDeviceType::SwingingShutter:
+            return "swinging_shutter";
+        case IoHomeDeviceType::Unknown:
+        default:
+            return "unknown";
+        }
+    }
+}
+
+IoHomecontrolChannel::IoHomecontrolChannel(uint8_t iIndex, IoHomeController &iController)
+    : mController(iController)
+{
+    _channelIndex = iIndex;
+}
+
+const std::string IoHomecontrolChannel::name()
+{
+    return "IoHomecontrol";
+}
+
+const std::string IoHomecontrolChannel::logPrefix()
+{
+    return "IoHC[" + std::to_string(_channelIndex + 1) + "]";
+}
+
+void IoHomecontrolChannel::setup()
+{
+    // Check if channel is active in ETS
+    if (!ParamIOHC_IOHCActive)
+    {
+        logDebugP("Channel disabled in ETS");
+        return;
+    }
+    mStatusPollTimer = 0;
+
+    loadSceneConfiguration();
+
+    // Apply protocol mode from ETS (Feature 4: 1W/2W per channel)
+    setIs1W(ParamIOHC_IOHCProtocolMode == 1);
+    setConfigured1WTargetNodeId(static_cast<uint32_t>(ParamIOHC_IOHCOneWayTargetNodeId));
+
+    logDebugP("Setup (type=%d, poll=%ds, open=%.1fs, close=%.1fs, invert=%d, powerOn=%d, scenes=%d, 1w=%d, 1wTarget=%06X)",
+              ParamIOHC_IOHCDeviceType, ParamIOHC_IOHCPollInterval,
+              ParamIOHC_IOHCOpeningTime, ParamIOHC_IOHCClosingTime,
+              ParamIOHC_IOHCInvertDir, ParamIOHC_IOHCPowerOnBeh,
+              getConfiguredSceneCount(), mIs1W ? 1 : 0,
+              mConfigured1WTargetNodeId);
+
+    // Send initial pairing status KO
+    getKo(IOHC_KoCHPairingStatusCh).value(mPaired, DPT_Switch);
+}
+
+void IoHomecontrolChannel::loop()
+{
+    if (!mPaired)
+        return;
+
+    if (!ParamIOHC_IOHCActive)
+        return;
+
+    updateEstimatedPosition();
+
+    // Periodic status polling based on ETS config
+    uint16_t lPollSec = ParamIOHC_IOHCPollInterval;
+    if (lPollSec > 0 && !mStatusExpected)
+    {
+        uint32_t lPollMs = (uint32_t)lPollSec * 1000;
+        if (delayCheck(mStatusPollTimer, lPollMs))
+        {
+            requestStatus();
+            mStatusPollTimer = delayTimerInit();
+        }
+    }
+    // Reset status-expected after one cycle
+    if (mStatusExpected)
+        mStatusExpected = false;
+}
+
+void IoHomecontrolChannel::processInputKo(uint8_t iIoIndex, GroupObject &iKo)
+{
+    if (!mPaired)
+    {
+        logDebugP("Ignoring KO %d - not paired", iIoIndex);
+        return;
+    }
+
+    // P2: Lock check — only Lock and WindAlarm KOs bypass the lock
+    if (mLocked && iIoIndex != IOHC_KoCHLock && iIoIndex != IOHC_KoCHWindAlarm)
+    {
+        logDebugP("Channel locked, ignoring KO %d", iIoIndex);
+        return;
+    }
+
+    switch (iIoIndex)
+    {
+    case IOHC_KoCHPosition:
+    {
+        float lPercent = (float)iKo.value(DPT_Scaling);
+        if (ParamIOHC_IOHCInvertDir)
+            lPercent = 100.0f - lPercent;
+        sendPositionCommand(lPercent);
+        break;
+    }
+    case IOHC_KoCHUpDown:
+    {
+        bool lDown = iKo.value(DPT_UpDown);
+        if (ParamIOHC_IOHCInvertDir)
+            lDown = !lDown;
+        sendUpDown(lDown);
+        break;
+    }
+    case IOHC_KoCHStop:
+    {
+        sendStop();
+        break;
+    }
+    case IOHC_KoCHSlat:
+    {
+        float lPercent = (float)iKo.value(DPT_Scaling);
+        sendSlatCommand(lPercent);
+        break;
+    }
+    // P1: Favorite position trigger
+    case IOHC_KoCHFavorite:
+    {
+        if ((bool)iKo.value(DPT_Switch))
+            sendFavorite();
+        break;
+    }
+    // P1: Ventilation position trigger
+    case IOHC_KoCHVentilation:
+    {
+        if ((bool)iKo.value(DPT_Switch))
+            sendVentilationPosition();
+        break;
+    }
+    // P2: Lock/Unlock
+    case IOHC_KoCHLock:
+    {
+        mLocked = (bool)iKo.value(DPT_Switch);
+        logDebugP("Channel %s", mLocked ? "LOCKED" : "unlocked");
+        break;
+    }
+    // P3: Scene recall (DPT 17.001)
+    case IOHC_KoCHScene:
+    {
+        uint8_t lScene = (iKo.valueRef()[0] & 0x3F) + 1;
+        handleSceneRecall(lScene);
+        break;
+    }
+    // P3: Scene control — store/recall (DPT 18.001)
+    case IOHC_KoCHSceneControl:
+    {
+        uint8_t lControl = iKo.valueRef()[0];
+        handleSceneControl(lControl);
+        break;
+    }
+    // P3: Wind/Rain alarm
+    case IOHC_KoCHWindAlarm:
+    {
+        bool lAlarm = (bool)iKo.value(DPT_Alarm);
+        handleWindAlarm(lAlarm);
+        break;
+    }
+    // P3: Step-Stop / Long operation
+    case IOHC_KoCHStepStop:
+    {
+        bool lDown = (bool)iKo.value(DPT_UpDown);
+        handleStepStop(lDown);
+        break;
+    }
+    // Cozy thermostat KOs (Feature 3: visible when DeviceType=5)
+    case IOHC_KoCHCozyTemp:
+    {
+        float lTempC = (float)iKo.value(Dpt(9, 1));
+        // Convert DPT 9.001 (°C) to io-homecontrol tenths (70=7.0°C, 280=28.0°C)
+        uint16_t lTenths = (uint16_t)(lTempC * 10.0f + 0.5f);
+        if (lTenths < 70)
+            lTenths = 70;
+        if (lTenths > 280)
+            lTenths = 280;
+        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::WritePrivate, 0x03, (uint8_t)lTenths);
+        logDebugP("Cozy temp: %.1f°C (%d tenths)", lTempC, lTenths);
+        break;
+    }
+    case IOHC_KoCHCozyMode:
+    {
+        uint8_t lMode = iKo.valueRef()[0];
+        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::WritePrivate, 0x04, lMode);
+        logDebugP("Cozy mode: %d", lMode);
+        break;
+    }
+    case IOHC_KoCHCozyPresence:
+    {
+        bool lPresent = (bool)iKo.value(DPT_Switch);
+        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::WritePrivate, 0x10, lPresent ? 1 : 0);
+        logDebugP("Cozy presence: %s", lPresent ? "ON" : "OFF");
+        break;
+    }
+    case IOHC_KoCHCozyWindow:
+    {
+        bool lOpen = (bool)iKo.value(DPT_Switch);
+        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::WritePrivate, 0x0E, lOpen ? 1 : 0);
+        logDebugP("Cozy window: %s", lOpen ? "OPEN" : "CLOSED");
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+// --- Callbacks from controller ---
+
+void IoHomecontrolChannel::onPositionFeedback(float iPositionPercent)
+{
+    publishPositionFeedback(iPositionPercent, true);
+}
+
+void IoHomecontrolChannel::onTargetPositionFeedback(float iTargetPositionPercent)
+{
+    mTargetPosition = clampPercent(iTargetPositionPercent);
+}
+
+void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
+{
+    if (!iIsMoving)
+        stopTravelEstimation(false);
+    else if (mTravelDurationMs == 0 && mTargetPosition != mCurrentPosition)
+        startTravelEstimation(mTargetPosition);
+
+    mIsMoving = iIsMoving;
+    getKo(IOHC_KoCHStatus).value(iIsMoving, DPT_Switch);
+    logDebugP("Status: %s", iIsMoving ? "moving" : "idle");
+}
+
+void IoHomecontrolChannel::logStatusSummary(float iCurrentPositionPercent, bool iHasCurrentPosition,
+                                            float iTargetPositionPercent, bool iHasTargetPosition,
+                                            bool iIsMoving)
+{
+    const char *lTypeLabel = iohcDeviceTypeLabel(mDeviceType);
+    const unsigned lType = static_cast<unsigned>(mDeviceType & 0xFF);
+    const unsigned lSubtype = static_cast<unsigned>(mDeviceSubtype);
+    const char *lDeletedText = mPaired ? "No" : "Yes";
+
+    if (mDeviceName[0] != '\0')
+    {
+        if (iHasCurrentPosition && iHasTargetPosition)
+        {
+            logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Position %.1f / Target %.1f / Moving: %s / Deleted: %s",
+                      mNodeId, mDeviceName, lType, lSubtype,
+                      iCurrentPositionPercent, iTargetPositionPercent,
+                      iIsMoving ? "Yes" : "No", lDeletedText);
+        }
+        else if (iHasCurrentPosition)
+        {
+            logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Position %.1f / Moving: %s / Deleted: %s",
+                      mNodeId, mDeviceName, lType, lSubtype,
+                      iCurrentPositionPercent, iIsMoving ? "Yes" : "No", lDeletedText);
+        }
+        else
+        {
+            logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Moving: %s / Deleted: %s",
+                      mNodeId, mDeviceName, lType, lSubtype,
+                      iIsMoving ? "Yes" : "No", lDeletedText);
+        }
+        return;
+    }
+
+    if (iHasCurrentPosition && iHasTargetPosition)
+    {
+        logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Position %.1f / Target %.1f / Moving: %s / Deleted: %s",
+                  mNodeId, lTypeLabel, lType, lSubtype,
+                  iCurrentPositionPercent, iTargetPositionPercent,
+                  iIsMoving ? "Yes" : "No", lDeletedText);
+    }
+    else if (iHasCurrentPosition)
+    {
+        logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Position %.1f / Moving: %s / Deleted: %s",
+                  mNodeId, lTypeLabel, lType, lSubtype,
+                  iCurrentPositionPercent, iIsMoving ? "Yes" : "No", lDeletedText);
+    }
+    else
+    {
+        logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Moving: %s / Deleted: %s",
+                  mNodeId, lTypeLabel, lType, lSubtype,
+                  iIsMoving ? "Yes" : "No", lDeletedText);
+    }
+}
+
+void IoHomecontrolChannel::onSlatFeedback(float iSlatPercent)
+{
+    mCurrentSlat = iSlatPercent;
+    getKo(IOHC_KoCHSlatFeedback).value((uint8_t)(iSlatPercent + 0.5f), DPT_Scaling);
+    logDebugP("Slat feedback: %.1f%%", iSlatPercent);
+}
+
+void IoHomecontrolChannel::onDeviceName(const char *iName, uint8_t iLen)
+{
+    // Strip leading control characters (bytes <= 0x20)
+    uint8_t lStart = 0;
+    while (lStart < iLen && (uint8_t)iName[lStart] <= 0x20)
+        lStart++;
+
+    // Strip trailing null/space bytes
+    uint8_t lEnd = iLen;
+    while (lEnd > lStart && ((uint8_t)iName[lEnd - 1] <= 0x20 || iName[lEnd - 1] == '\0'))
+        lEnd--;
+
+    // Convert Latin-1 to UTF-8, truncate to fit buffer (20 chars + null)
+    uint8_t lOutPos = 0;
+    for (uint8_t i = lStart; i < lEnd && lOutPos < sizeof(mDeviceName) - 1; i++)
+    {
+        uint8_t lByte = (uint8_t)iName[i];
+        if (lByte < 0x80)
+        {
+            mDeviceName[lOutPos++] = lByte;
+        }
+        else
+        {
+            // Latin-1 codepoints 0x80-0xFF → UTF-8 two-byte sequence
+            if (lOutPos + 1 >= sizeof(mDeviceName) - 1)
+                break; // not enough room for 2-byte sequence
+            mDeviceName[lOutPos++] = 0xC0 | (lByte >> 6);
+            mDeviceName[lOutPos++] = 0x80 | (lByte & 0x3F);
+        }
+    }
+    mDeviceName[lOutPos] = '\0';
+    logDebugP("Device name: %s", mDeviceName);
+
+    // Publish to KNX KO K23 (DPT 16.001, 14-byte ISO 8859-1 string)
+    GroupObject &lNameKo = getKo(IOHC_KoCHDeviceName);
+    uint8_t *lKoData = lNameKo.valueRef();
+    memset(lKoData, 0, 14);
+    strncpy((char *)lKoData, mDeviceName, 14);
+    lNameKo.objectWritten();
+}
+
+void IoHomecontrolChannel::onDeviceInfo(uint16_t iType, uint8_t iSubtype, uint8_t iManufacturer)
+{
+    mDeviceType = iType;
+    mDeviceSubtype = iSubtype;
+    mManufacturer = iManufacturer;
+    logDebugP("Device info: type=0x%04X subtype=0x%02X mfg=0x%02X", iType, iSubtype, iManufacturer);
+
+    // Publish to KNX KO K24 (DPT 7.001, unsigned 16-bit)
+    getKo(IOHC_KoCHDeviceTypeCode).value(iType, Dpt(7, 1));
+}
+
+void IoHomecontrolChannel::onBatteryLevel(uint8_t iPercent)
+{
+    mBatteryLevel = iPercent;
+    getKo(IOHC_KoCHBattery).value(iPercent, DPT_Scaling);
+    logDebugP("Battery level: %d%%", iPercent);
+}
+
+void IoHomecontrolChannel::onEstimate(uint8_t iSeconds)
+{
+    // Estimate byte from PrivateResponse (data[7]): travel time remaining in seconds
+    // 0xFF or 0x00 = unknown; reference uses this to schedule next status poll
+    if (iSeconds != 0xFF && iSeconds != 0x00)
+    {
+        logDebugP("Estimate: %d seconds remaining", iSeconds);
+        // Schedule a status poll after the estimated travel time
+        mStatusPollTimer = delayTimerInit() - ((uint32_t)ParamIOHC_IOHCPollInterval * 1000) + ((uint32_t)iSeconds * 1000);
+
+        // Restart travel-time position estimation with the device-provided remaining time.
+        mCurrentPosition = clampPercent(estimateCurrentPosition());
+        mTravelStartPosition = mCurrentPosition;
+        mTravelDurationMs = (uint32_t)iSeconds * 1000;
+        mTravelStartTime = millis();
+    }
+}
+
+float IoHomecontrolChannel::estimateCurrentPosition() const
+{
+    if (mTravelDurationMs == 0 || !mIsMoving)
+        return mCurrentPosition;
+
+    uint32_t lElapsed = millis() - mTravelStartTime;
+    return snapPositionBoundary(clampPercent(interpolatePosition(mTravelStartPosition, mTargetPosition, lElapsed, mTravelDurationMs)));
+}
+
+void IoHomecontrolChannel::onStatusExpected()
+{
+    // Device will auto-send StatusUpdate — skip next scheduled poll
+    mStatusExpected = true;
+    logDebugP("Device will auto-send status update");
+}
+
+// --- Pairing data ---
+
+bool IoHomecontrolChannel::isPaired() const
+{
+    return mPaired;
+}
+
+void IoHomecontrolChannel::setNodeId(uint32_t iNodeId)
+{
+    mNodeId = iNodeId & 0x00FFFFFF; // 24-bit
+    mPaired = (mNodeId != 0);
+    getKo(IOHC_KoCHPairingStatusCh).value(mPaired, DPT_Switch);
+}
+
+uint32_t IoHomecontrolChannel::getNodeId() const
+{
+    return mNodeId;
+}
+
+void IoHomecontrolChannel::setEncryptionKey(const uint8_t *iKey)
+{
+    memcpy(mEncKey, iKey, 16);
+}
+
+const uint8_t *IoHomecontrolChannel::getEncryptionKey() const
+{
+    return mEncKey;
+}
+
+void IoHomecontrolChannel::setLastChallenge(const uint8_t *iChallenge)
+{
+    memcpy(mLastChallenge, iChallenge, 6);
+}
+
+const uint8_t *IoHomecontrolChannel::getLastChallenge() const
+{
+    return mLastChallenge;
+}
+
+uint16_t IoHomecontrolChannel::getSequence1W() const { return mSequence1W; }
+void IoHomecontrolChannel::setSequence1W(uint16_t iSeq) { mSequence1W = iSeq; }
+uint16_t IoHomecontrolChannel::incrementSequence1W() { return ++mSequence1W; }
+bool IoHomecontrolChannel::is1W() const { return mIs1W; }
+void IoHomecontrolChannel::setIs1W(bool iIs1W) { mIs1W = iIs1W; }
+void IoHomecontrolChannel::setConfigured1WTargetNodeId(uint32_t iNodeId) { mConfigured1WTargetNodeId = iNodeId & 0x00FFFFFF; }
+uint32_t IoHomecontrolChannel::getConfigured1WTargetNodeId() const { return mConfigured1WTargetNodeId; }
+
+// --- Private command methods ---
+
+void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPercent)
+{
+    logDebugP("Send position %.1f%%", iPercent);
+    mTargetPosition = clampPercent(iPercent);
+    uint8_t lParam = (uint8_t)(iPercent + 0.5f);
+    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lParam, iSlatPercent);
+    startTravelEstimation(mTargetPosition);
+}
+
+void IoHomecontrolChannel::sendUpDown(bool iDown)
+{
+    logDebugP("Send %s", iDown ? "DOWN" : "UP");
+    uint8_t lPercent = iDown ? 100 : 0;
+    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lPercent);
+    startTravelEstimation((float)lPercent);
+}
+
+void IoHomecontrolChannel::sendStop()
+{
+    logDebugP("Send STOP");
+    stopTravelEstimation(true);
+    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD2);
+}
+
+void IoHomecontrolChannel::sendFavorite()
+{
+    logDebugP("Send FAVORITE");
+    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD8);
+}
+
+void IoHomecontrolChannel::sendSlatCommand(float iPercent)
+{
+    logDebugP("Send slat %.1f%% (with current position %.1f%%)", iPercent, mCurrentPosition);
+    uint8_t lPosParam = (uint8_t)(mCurrentPosition + 0.5f);
+    uint8_t lSlatParam = (uint8_t)(iPercent + 0.5f);
+    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lPosParam, lSlatParam);
+}
+
+void IoHomecontrolChannel::requestStatus()
+{
+    logDebugP("Request status");
+    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::GetGeneralInfo3, 0);
+}
+
+void IoHomecontrolChannel::requestStatusPrivate()
+{
+    logDebugP("Request status (Private 0x03)");
+    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private, 0);
+}
+
+bool IoHomecontrolChannel::restoreLastKnownStateAfterStartup()
+{
+    bool lBinaryState = false;
+
+    switch (ParamIOHC_IOHCDeviceType)
+    {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+    case 7:
+    case 9:
+    case 10:
+    case 11:
+        break;
+    case 6:
+    case 8:
+    case 12:
+        lBinaryState = true;
+        break;
+    default:
+        return false;
+    }
+
+    uint8_t lReportedPosition = (uint8_t)getKo(IOHC_KoCHPositionFeedback).value(DPT_Scaling);
+    if (lReportedPosition > 100)
+        return false;
+
+    if (lBinaryState)
+    {
+        bool lOn = lReportedPosition >= 50;
+        mCurrentPosition = lOn ? 100.0f : 0.0f;
+        mTargetPosition = mCurrentPosition;
+        mTravelDurationMs = 0;
+        mTravelStartTime = 0;
+        mTravelStartPosition = mCurrentPosition;
+
+        logDebugP("Restore last state: %s (from %d%%)", lOn ? "ON" : "OFF", lReportedPosition);
+        sendPositionCommand(mCurrentPosition);
+        return true;
+    }
+
+    float lDevicePosition = ParamIOHC_IOHCInvertDir ? (100.0f - lReportedPosition) : lReportedPosition;
+    mCurrentPosition = clampPercent(lDevicePosition);
+    mTargetPosition = mCurrentPosition;
+    mTravelDurationMs = 0;
+    mTravelStartTime = 0;
+    mTravelStartPosition = mCurrentPosition;
+
+    logDebugP("Restore last position: %d%%", lReportedPosition);
+    sendPositionCommand(mCurrentPosition);
+    return true;
+}
+
+void IoHomecontrolChannel::publishPositionFeedback(float iPositionPercent, bool iLogMessage)
+{
+    mCurrentPosition = clampPercent(iPositionPercent);
+
+    float lReportPos = ParamIOHC_IOHCInvertDir ? (100.0f - mCurrentPosition) : mCurrentPosition;
+    getKo(IOHC_KoCHPositionFeedback).value((uint8_t)(lReportPos + 0.5f), DPT_Scaling);
+
+    if (iLogMessage)
+        logDebugP("Position feedback: %.1f%%", mCurrentPosition);
+}
+
+void IoHomecontrolChannel::startTravelEstimation(float iTargetPositionPercent)
+{
+    float lCurrentPosition = clampPercent(estimateCurrentPosition());
+    float lTargetPosition = clampPercent(iTargetPositionPercent);
+
+    mCurrentPosition = lCurrentPosition;
+    mTravelStartPosition = lCurrentPosition;
+    mTargetPosition = lTargetPosition;
+    mTravelDurationMs = estimateTravelDurationMs(lCurrentPosition, lTargetPosition,
+                                                 configuredOpeningTimeSeconds(),
+                                                 configuredClosingTimeSeconds());
+    mTravelStartTime = millis();
+}
+
+void IoHomecontrolChannel::stopTravelEstimation(bool iPublishPosition)
+{
+    float lCurrentPosition = snapPositionBoundary(clampPercent(estimateCurrentPosition()));
+    if (iPublishPosition)
+        publishPositionFeedback(lCurrentPosition, false);
+    else
+        mCurrentPosition = lCurrentPosition;
+
+    mTravelDurationMs = 0;
+    mTravelStartTime = 0;
+    mTravelStartPosition = mCurrentPosition;
+    mTargetPosition = mCurrentPosition;
+}
+
+void IoHomecontrolChannel::updateEstimatedPosition()
+{
+    if (mTravelDurationMs == 0 || !mIsMoving)
+        return;
+
+    float lPreviousPosition = mCurrentPosition;
+    float lEstimatedPosition = snapPositionBoundary(clampPercent(estimateCurrentPosition()));
+    float lPreviousReported = ParamIOHC_IOHCInvertDir ? (100.0f - lPreviousPosition) : lPreviousPosition;
+    float lEstimatedReported = ParamIOHC_IOHCInvertDir ? (100.0f - lEstimatedPosition) : lEstimatedPosition;
+
+    mCurrentPosition = lEstimatedPosition;
+    if ((uint8_t)(lEstimatedReported + 0.5f) != (uint8_t)(lPreviousReported + 0.5f))
+        getKo(IOHC_KoCHPositionFeedback).value((uint8_t)(lEstimatedReported + 0.5f), DPT_Scaling);
+
+    if (millis() - mTravelStartTime >= mTravelDurationMs)
+    {
+        mTravelDurationMs = 0;
+        mTravelStartTime = 0;
+        mTravelStartPosition = mCurrentPosition;
+    }
+}
+
+float IoHomecontrolChannel::configuredOpeningTimeSeconds() const
+{
+    return ParamIOHC_IOHCOpeningTime > 0.0f ? ParamIOHC_IOHCOpeningTime : 0.0f;
+}
+
+float IoHomecontrolChannel::configuredClosingTimeSeconds() const
+{
+    return ParamIOHC_IOHCClosingTime > 0.0f ? ParamIOHC_IOHCClosingTime : 0.0f;
+}
+
+// --- P1: RSSI callback ---
+
+void IoHomecontrolChannel::onRssiUpdate(uint8_t iScaledPercent)
+{
+    mLastRssi = iScaledPercent;
+    getKo(IOHC_KoCHRssi).value(iScaledPercent, DPT_Scaling);
+    logDebugP("RSSI: %d%%", iScaledPercent);
+}
+
+// --- P2: Lock control ---
+
+void IoHomecontrolChannel::setLocked(bool iLocked)
+{
+    mLocked = iLocked;
+}
+
+bool IoHomecontrolChannel::isLocked() const
+{
+    return mLocked;
+}
+
+// --- P2: Error status ---
+
+void IoHomecontrolChannel::setErrorStatus(uint8_t iStatus)
+{
+    if (mErrorStatus != iStatus)
+    {
+        mErrorStatus = iStatus;
+        getKo(IOHC_KoCHErrorStatus).value(iStatus, DPT_DecimalFactor);
+        logDebugP("Error status: %d", iStatus);
+    }
+}
+
+uint8_t IoHomecontrolChannel::getErrorStatus() const
+{
+    return mErrorStatus;
+}
+
+// --- P3: Scene data ---
+
+void IoHomecontrolChannel::setScenePosition(uint8_t iScene, uint8_t iPosition)
+{
+    if (iScene < kMaxSceneCount)
+        mScenePositions[iScene] = iPosition;
+}
+
+uint8_t IoHomecontrolChannel::getScenePosition(uint8_t iScene) const
+{
+    if (iScene < kMaxSceneCount)
+        return mScenePositions[iScene];
+    return 0xFF;
+}
+
+void IoHomecontrolChannel::setSceneAction(uint8_t iScene, SceneAction iAction)
+{
+    if (iScene < kMaxSceneCount)
+        mSceneActions[iScene] = iAction;
+}
+
+IoHomecontrolChannel::SceneAction IoHomecontrolChannel::getSceneAction(uint8_t iScene) const
+{
+    if (iScene < kMaxSceneCount)
+        return mSceneActions[iScene];
+    return SceneAction::Position;
+}
+
+void IoHomecontrolChannel::setSceneSlat(uint8_t iScene, uint8_t iSlatPosition)
+{
+    if (iScene < kMaxSceneCount)
+        mSceneSlats[iScene] = iSlatPosition;
+}
+
+uint8_t IoHomecontrolChannel::getSceneSlat(uint8_t iScene) const
+{
+    if (iScene < kMaxSceneCount)
+        return mSceneSlats[iScene];
+    return 0;
+}
+
+uint8_t IoHomecontrolChannel::getConfiguredSceneCount() const
+{
+    uint8_t lSceneCount = ParamIOHC_IOHCSceneCount;
+    return lSceneCount > kMaxSceneCount ? kMaxSceneCount : lSceneCount;
+}
+
+void IoHomecontrolChannel::loadSceneConfiguration()
+{
+    memset(mScenePositions, 0xFF, sizeof(mScenePositions));
+    memset(mSceneSlats, 0, sizeof(mSceneSlats));
+    for (uint8_t i = 0; i < kMaxSceneCount; i++)
+        mSceneActions[i] = SceneAction::Position;
+
+    uint8_t lSceneCount = getConfiguredSceneCount();
+    for (uint8_t i = 0; i < lSceneCount; i++)
+    {
+        mScenePositions[i] = knx.paramByte(IOHC_ParamCalcIndex(IOHC_IOHCScene1Position + i));
+        mSceneActions[i] = static_cast<SceneAction>(knx.paramByte(IOHC_ParamCalcIndex(IOHC_IOHCScene1Action + i)));
+        mSceneSlats[i] = knx.paramByte(IOHC_ParamCalcIndex(IOHC_IOHCScene1Slat + i));
+    }
+}
+
+float IoHomecontrolChannel::sceneToDevicePosition(uint8_t iScenePosition) const
+{
+    float lPosition = (float)iScenePosition;
+    if (ParamIOHC_IOHCInvertDir)
+        lPosition = 100.0f - lPosition;
+    return lPosition;
+}
+
+uint8_t IoHomecontrolChannel::sceneToDeviceSlat(uint8_t iSceneSlat) const
+{
+    return iSceneSlat > 100 ? 100 : iSceneSlat;
+}
+
+uint8_t IoHomecontrolChannel::currentPositionToSceneValue() const
+{
+    float lPosition = ParamIOHC_IOHCInvertDir ? (100.0f - mCurrentPosition) : mCurrentPosition;
+    if (lPosition < 0.0f)
+        lPosition = 0.0f;
+    if (lPosition > 100.0f)
+        lPosition = 100.0f;
+    return (uint8_t)(lPosition + 0.5f);
+}
+
+uint8_t IoHomecontrolChannel::currentSlatToSceneValue() const
+{
+    float lSlat = mCurrentSlat;
+    if (lSlat < 0.0f)
+        lSlat = 0.0f;
+    if (lSlat > 100.0f)
+        lSlat = 100.0f;
+    return (uint8_t)(lSlat + 0.5f);
+}
+
+bool IoHomecontrolChannel::storeSceneStateToEts(uint8_t iSceneIndex, uint8_t iScenePosition, uint8_t iSceneSlat)
+{
+    if (iSceneIndex >= getConfiguredSceneCount())
+        return false;
+
+    uint8_t *lPositionData = knx.paramData(IOHC_ParamCalcIndex(IOHC_IOHCScene1Position + iSceneIndex));
+    uint8_t *lSlatData = knx.paramData(IOHC_ParamCalcIndex(IOHC_IOHCScene1Slat + iSceneIndex));
+    if (lPositionData == nullptr || lSlatData == nullptr)
+        return false;
+
+    *lPositionData = iScenePosition;
+    *lSlatData = iSceneSlat;
+    mScenePositions[iSceneIndex] = iScenePosition;
+    mSceneSlats[iSceneIndex] = iSceneSlat;
+    knx.writeMemory();
+    return true;
+}
+
+// --- P1: Ventilation position ---
+
+void IoHomecontrolChannel::sendVentilationPosition()
+{
+    logDebugP("Send VENTILATION");
+    // io-homecontrol ventilation position command: 0xD8 param=0x03
+    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD8, 0x03);
+}
+
+// --- P3: Scene handling ---
+
+void IoHomecontrolChannel::handleSceneRecall(uint8_t iScene)
+{
+    uint8_t lSceneCount = getConfiguredSceneCount();
+    if (iScene < 1 || iScene > lSceneCount)
+        return;
+
+    uint8_t lSceneIndex = iScene - 1;
+    uint8_t lDeviceType = ParamIOHC_IOHCDeviceType;
+
+    // Thermostat scenes: temperature + cozy mode
+    if (lDeviceType == 5)
+    {
+        uint8_t lTempC = mScenePositions[lSceneIndex];                    // 7-28 °C (overlaid param)
+        uint8_t lMode = static_cast<uint8_t>(mSceneActions[lSceneIndex]); // cozy mode (overlaid param)
+        uint16_t lTenths = (uint16_t)lTempC * 10;
+        if (lTenths < 70)
+            lTenths = 70;
+        if (lTenths > 280)
+            lTenths = 280;
+        logDebugP("Scene %d recall -> thermostat: %d°C, mode %d", iScene, lTempC, lMode);
+        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::WritePrivate, 0x03, (uint8_t)lTenths);
+        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::WritePrivate, 0x04, lMode);
+        return;
+    }
+
+    // Licht/Schloss/Schalter scenes: on/off
+    if (lDeviceType == 6 || lDeviceType == 8 || lDeviceType == 12)
+    {
+        uint8_t lOnOff = mScenePositions[lSceneIndex]; // 0=off, 1=on (overlaid param)
+        logDebugP("Scene %d recall -> %s", iScene, lOnOff ? "on" : "off");
+        sendPositionCommand(lOnOff ? 100.0f : 0.0f);
+        return;
+    }
+
+    // Position-type scenes (original logic)
+    SceneAction lAction = mSceneActions[lSceneIndex];
+
+    if (lAction == SceneAction::Favorite)
+    {
+        logDebugP("Scene %d recall -> favorite", iScene);
+        sendFavorite();
+        return;
+    }
+
+    if (lAction == SceneAction::Ventilation)
+    {
+        logDebugP("Scene %d recall -> ventilation", iScene);
+        sendVentilationPosition();
+        return;
+    }
+
+    uint8_t lPos = mScenePositions[lSceneIndex];
+    if (lPos == 0xFF)
+    {
+        logDebugP("Scene %d not configured", iScene);
+        return;
+    }
+
+    uint8_t lSlat = mSceneSlats[lSceneIndex];
+    bool lUseSlat = lDeviceType == 1;
+
+    if (lUseSlat)
+        logDebugP("Scene %d recall -> %d%%, lamella %d%%", iScene, lPos, lSlat);
+    else
+        logDebugP("Scene %d recall -> %d%%", iScene, lPos);
+
+    sendPositionCommand(sceneToDevicePosition(lPos), lUseSlat ? sceneToDeviceSlat(lSlat) : 0xFF);
+}
+
+void IoHomecontrolChannel::handleSceneControl(uint8_t iControl)
+{
+    uint8_t lScene = (iControl & 0x3F) + 1;
+    bool lStore = (iControl & 0x80) != 0;
+    uint8_t lSceneCount = getConfiguredSceneCount();
+
+    if (lScene < 1 || lScene > lSceneCount)
+        return;
+
+    uint8_t lSceneIndex = lScene - 1;
+    uint8_t lDeviceType = ParamIOHC_IOHCDeviceType;
+
+    // Thermostat/Licht/Schloss/Schalter: store not supported (ETS-configured only)
+    if (lDeviceType == 5 || lDeviceType == 6 || lDeviceType == 8 || lDeviceType == 12)
+    {
+        if (lStore)
+            logDebugP("Scene %d learn ignored: not supported for device type %d", lScene, lDeviceType);
+        else
+            handleSceneRecall(lScene);
+        return;
+    }
+
+    // Position-type scene store/recall
+    if (mSceneActions[lSceneIndex] != SceneAction::Position)
+    {
+        if (lStore)
+            logDebugP("Scene %d learn ignored: only Position-Szenen sind lernbar", lScene);
+        else
+            handleSceneRecall(lScene);
+        return;
+    }
+
+    if (lStore)
+    {
+        uint8_t lPos = currentPositionToSceneValue();
+        uint8_t lSlat = lDeviceType == 1 ? currentSlatToSceneValue() : 0;
+        if (storeSceneStateToEts(lSceneIndex, lPos, lSlat))
+        {
+            if (lDeviceType == 1)
+                logDebugP("Scene %d store: %d%%, lamella %d%%", lScene, lPos, lSlat);
+            else
+                logDebugP("Scene %d store: %d%%", lScene, lPos);
+        }
+    }
+    else
+    {
+        handleSceneRecall(lScene);
+    }
+}
+
+// --- P3: Wind/Rain alarm ---
+
+void IoHomecontrolChannel::handleWindAlarm(bool iAlarm)
+{
+    if (iAlarm)
+    {
+        logDebugP("WIND/RAIN ALARM — safety action");
+        uint8_t lDevType = ParamIOHC_IOHCDeviceType;
+        switch (lDevType)
+        {
+        case 2: // Fenster — close
+            sendPositionCommand(0.0f);
+            break;
+        case 3: // Markise — retract
+            sendPositionCommand(0.0f);
+            break;
+        default: // Jalousie/Generic/Garage — move up
+            sendUpDown(false);
+            break;
+        }
+    }
+    else
+    {
+        logDebugP("Wind/Rain alarm cleared");
+    }
+}
+
+// --- P3: Step-Stop ---
+
+void IoHomecontrolChannel::handleStepStop(bool iDown)
+{
+    if (mIsMoving)
+    {
+        // If moving, stop
+        sendStop();
+    }
+    else
+    {
+        // If idle, start moving
+        if (ParamIOHC_IOHCInvertDir)
+            iDown = !iDown;
+        sendUpDown(iDown);
+    }
+}
+
+GroupObject &IoHomecontrolChannel::getKo(uint8_t iIoIndex)
+{
+    // Use the generated IOHC_KoCalcNumber macro from knxprod.h
+    // This requires _channelIndex to be set (it is, from constructor)
+    return knx.getGroupObject(IOHC_KoCalcNumber(iIoIndex));
+}

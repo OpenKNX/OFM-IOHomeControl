@@ -1,0 +1,147 @@
+#include "SX1262IoHomePhy.h"
+
+#include "../protocol/IoHomeCrypto.h"
+
+#include <cstring>
+
+namespace
+{
+  constexpr uint8_t kIoHomeProtocolSync[] = {0x55, 0xFF, 0x33};
+  constexpr uint8_t kIoHomeChipSync[] = {0x57, 0xFD, 0x99};
+
+  uint8_t getBitMsb(const uint8_t *iData, size_t iBitPos)
+  {
+    return static_cast<uint8_t>((iData[iBitPos / 8U] >> (7U - (iBitPos % 8U))) & 0x01U);
+  }
+
+  void setBitMsb(uint8_t *oData, size_t iBitPos)
+  {
+    oData[iBitPos / 8U] |= static_cast<uint8_t>(1U << (7U - (iBitPos % 8U)));
+  }
+}
+
+SX1262IoHomePhySyncConfig sx1262ResolveIoHomeSyncWord(const uint8_t *iSyncWord, uint8_t iSyncWordLen)
+{
+  SX1262IoHomePhySyncConfig lConfig = {};
+  if (iSyncWord == nullptr || iSyncWordLen == 0)
+    return lConfig;
+
+  if (iSyncWordLen >= sizeof(kIoHomeProtocolSync) &&
+      std::memcmp(iSyncWord, kIoHomeProtocolSync, sizeof(kIoHomeProtocolSync)) == 0)
+  {
+    std::memcpy(lConfig.syncWord, kIoHomeChipSync, sizeof(kIoHomeChipSync));
+    lConfig.syncWordBits = 24;
+    lConfig.softwarePhyEnabled = true;
+    return lConfig;
+  }
+
+  const uint8_t lCopyLen = (iSyncWordLen < sizeof(lConfig.syncWord)) ? iSyncWordLen : static_cast<uint8_t>(sizeof(lConfig.syncWord));
+  std::memcpy(lConfig.syncWord, iSyncWord, lCopyLen);
+  lConfig.syncWordBits = static_cast<uint8_t>(lCopyLen * 8U);
+  lConfig.softwarePhyEnabled = false;
+  return lConfig;
+}
+
+size_t sx1262EncodeIoHomeFrame(const uint8_t *iFrame, size_t iFrameLen, uint8_t *oEncoded, size_t iEncodedMaxLen)
+{
+  if (iFrame == nullptr || oEncoded == nullptr || iFrameLen == 0 || iFrameLen > IOHC_FRAME_MAX_SIZE)
+    return 0;
+
+  uint8_t lProtocolFrame[IOHC_FRAME_MAX_SIZE + IOHC_CRC_SIZE] = {};
+  std::memcpy(lProtocolFrame, iFrame, iFrameLen);
+  const uint16_t lCrc = IoHomeCrypto::crc16Kermit(iFrame, iFrameLen);
+  lProtocolFrame[iFrameLen] = static_cast<uint8_t>(lCrc & 0xFFU);
+  lProtocolFrame[iFrameLen + 1U] = static_cast<uint8_t>((lCrc >> 8U) & 0xFFU);
+
+  const size_t lProtocolLen = iFrameLen + IOHC_CRC_SIZE;
+  const size_t lTotalBits = lProtocolLen * SX1262_IOHOME_UART_BITS_PER_BYTE;
+  const size_t lEncodedLen = (lTotalBits + 7U) / 8U;
+  if (lEncodedLen > iEncodedMaxLen)
+    return 0;
+
+  std::memset(oEncoded, 0, lEncodedLen);
+
+  size_t lBitPos = 0;
+  for (size_t i = 0; i < lProtocolLen; i++)
+  {
+    const uint8_t lValue = lProtocolFrame[i];
+    lBitPos++; // start bit = 0
+    for (uint8_t lBit = 0; lBit < 8U; lBit++)
+    {
+      if ((lValue & (1U << lBit)) != 0)
+        setBitMsb(oEncoded, lBitPos);
+      lBitPos++;
+    }
+
+    setBitMsb(oEncoded, lBitPos); // stop bit = 1
+    lBitPos++;
+  }
+
+  return lEncodedLen;
+}
+
+size_t sx1262DecodeIoHomeUart(const uint8_t *iRaw, size_t iRawLen, uint8_t iBitOffset,
+                              uint8_t *oDecoded, size_t iDecodedMaxLen)
+{
+  if (iRaw == nullptr || oDecoded == nullptr || iRawLen == 0 || iDecodedMaxLen == 0)
+    return 0;
+
+  size_t lDecodedLen = 0;
+  size_t lBitPos = iBitOffset;
+  const size_t lTotalBits = iRawLen * 8U;
+
+  while (lBitPos + SX1262_IOHOME_UART_BITS_PER_BYTE <= lTotalBits && lDecodedLen < iDecodedMaxLen)
+  {
+    if (getBitMsb(iRaw, lBitPos) != 0 || getBitMsb(iRaw, lBitPos + 9U) != 1U)
+      break;
+
+    uint8_t lValue = 0;
+    for (uint8_t lBit = 0; lBit < 8U; lBit++)
+      lValue = static_cast<uint8_t>(lValue | (getBitMsb(iRaw, lBitPos + 1U + lBit) << lBit));
+
+    oDecoded[lDecodedLen++] = lValue;
+    lBitPos += SX1262_IOHOME_UART_BITS_PER_BYTE;
+  }
+
+  return lDecodedLen;
+}
+
+bool sx1262FindIoHomeFrame(const uint8_t *iRaw, size_t iRawLen,
+                           uint8_t *oFrame, size_t iFrameMaxLen, size_t &oFrameLen)
+{
+  oFrameLen = 0;
+  if (iRaw == nullptr || oFrame == nullptr || iRawLen == 0)
+    return false;
+
+  for (uint8_t lBitOffset = 0; lBitOffset < SX1262_IOHOME_UART_PROBE_MAX_BIT_OFFSET; lBitOffset++)
+  {
+    uint8_t lDecoded[IOHC_FRAME_MAX_SIZE + IOHC_CRC_SIZE + 8] = {};
+    const size_t lDecodedLen = sx1262DecodeIoHomeUart(iRaw, iRawLen, lBitOffset, lDecoded, sizeof(lDecoded));
+    if (lDecodedLen < IOHC_FRAME_MIN_SIZE + IOHC_CRC_SIZE)
+      continue;
+
+    for (size_t lStart = 0; lStart + IOHC_FRAME_MIN_SIZE + IOHC_CRC_SIZE <= lDecodedLen; lStart++)
+    {
+      const uint8_t lCtrl0 = lDecoded[lStart];
+      const uint8_t lFrameLen = static_cast<uint8_t>((lCtrl0 & IOHC_CTRL0_LEN_MASK) + 1U);
+      if (lFrameLen < IOHC_FRAME_MIN_SIZE || lFrameLen > IOHC_FRAME_MAX_SIZE)
+        continue;
+      if (lStart + lFrameLen + IOHC_CRC_SIZE > lDecodedLen)
+        continue;
+
+      const uint16_t lRxCrc = static_cast<uint16_t>(lDecoded[lStart + lFrameLen]) |
+                              static_cast<uint16_t>(lDecoded[lStart + lFrameLen + 1U] << 8U);
+      const uint16_t lCalcCrc = IoHomeCrypto::crc16Kermit(lDecoded + lStart, lFrameLen);
+      if (lRxCrc != lCalcCrc)
+        continue;
+      if (lFrameLen > iFrameMaxLen)
+        return false;
+
+      std::memcpy(oFrame, lDecoded + lStart, lFrameLen);
+      oFrameLen = lFrameLen;
+      return true;
+    }
+  }
+
+  return false;
+}
