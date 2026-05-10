@@ -2566,7 +2566,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         uint8_t lMaxCrcBuffer[IOHC_FRAME_MAX_SIZE + IOHC_CRC_SIZE] = {0};
         const uint8_t lMaxCrcLen = lMaxCrc.serialize(lMaxCrcBuffer, sizeof(lMaxCrcBuffer));
         IoHomeFrame lParsedMaxCrc;
-        lChecks[7].ok = (lMaxCrcLen == IOHC_FRAME_MAX_SIZE + IOHC_CRC_SIZE) &&
+        lChecks[7].ok = (lMaxCrcLen == IOHC_FRAME_MIN_SIZE + IOHC_FRAME_MAX_DATA + IOHC_CRC_SIZE) &&
                         lParsedMaxCrc.deserialize(lMaxCrcBuffer, lMaxCrcLen) &&
                         lParsedMaxCrc.commandId == IoHomeCommand::Private &&
                         lParsedMaxCrc.dataLen == IOHC_FRAME_MAX_DATA &&

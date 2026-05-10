@@ -164,7 +164,7 @@ bool IoHomeFrame::deserialize(const uint8_t *iBuffer, uint8_t iLen)
     {
         uint16_t lReceivedCrc = (uint16_t)iBuffer[lDeclaredLen + lHmacLen] |
                                 ((uint16_t)iBuffer[lDeclaredLen + lHmacLen + 1] << 8);
-        uint16_t lExpectedCrc = IoHomeCrypto::crc16Kermit(iBuffer, lDeclaredLen);
+        uint16_t lExpectedCrc = IoHomeCrypto::crc16Kermit(iBuffer, lDeclaredLen + lHmacLen);
         if (lReceivedCrc != lExpectedCrc)
             return false;
         crc = lReceivedCrc;
