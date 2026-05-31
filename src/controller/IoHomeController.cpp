@@ -258,11 +258,7 @@ IoHomeController::IoHomeController()
     memset(mAuthChallenge, 0, sizeof(mAuthChallenge));
     memset(mPassiveChallenge, 0, sizeof(mPassiveChallenge));
     memset(mGatewayKey, 0, sizeof(mGatewayKey));
-    memset(mGatewayKeyEncrypted, 0, sizeof(mGatewayKeyEncrypted));
-    memset(mGatewayMemData, 0, sizeof(mGatewayMemData));
-    memset(mGatewayPeerChallenge, 0, sizeof(mGatewayPeerChallenge));
-    memset(mGatewayPairedNodeIds, 0, sizeof(mGatewayPairedNodeIds));
-    mGatewayDeviceCount = 0;
+    clearGatewayPairedDevices();
     mPairSetConfigRequest.init();
     mPairLaunchKeyTransferFrame.init();
     mPairPulledKeyFrame.init();
@@ -591,13 +587,7 @@ bool IoHomeController::isPassiveMode() const
 void IoHomeController::setGatewayMode(bool iEnabled)
 {
     mGatewayMode = iEnabled;
-    mGatewayState = ControllerState::GatewayIdle;
-    mGatewayPeerNodeId = 0;
-    mGatewayMemCmd = 0;
-    mGatewayMemDataLen = 0;
-    memset(mGatewayKeyEncrypted, 0, sizeof(mGatewayKeyEncrypted));
-    memset(mGatewayMemData, 0, sizeof(mGatewayMemData));
-    memset(mGatewayPeerChallenge, 0, sizeof(mGatewayPeerChallenge));
+    resetGatewaySessionState();
 
     if (iEnabled && mState == ControllerState::Idle)
         startReceive();
@@ -645,13 +635,7 @@ void IoHomeController::clearGatewayPairedDevices()
 {
     memset(mGatewayPairedNodeIds, 0, sizeof(mGatewayPairedNodeIds));
     mGatewayDeviceCount = 0;
-    mGatewayPeerNodeId = 0;
-    mGatewayState = ControllerState::GatewayIdle;
-    mGatewayMemCmd = 0;
-    mGatewayMemDataLen = 0;
-    memset(mGatewayKeyEncrypted, 0, sizeof(mGatewayKeyEncrypted));
-    memset(mGatewayMemData, 0, sizeof(mGatewayMemData));
-    memset(mGatewayPeerChallenge, 0, sizeof(mGatewayPeerChallenge));
+    resetGatewaySessionState();
 }
 
 void IoHomeController::setPairDiagnosticTraceEnabled(bool iEnabled)
@@ -4299,10 +4283,7 @@ void IoHomeController::processGatewayWaitKeyTransfer()
 
     if (mRxFrame.commandId == IoHomeCommand::DiscoverRequest)
     {
-        memset(mGatewayKeyEncrypted, 0, sizeof(mGatewayKeyEncrypted));
-        mGatewayMemCmd = 0;
-        mGatewayMemDataLen = 0;
-        mGatewayState = ControllerState::GatewayIdle;
+        resetGatewaySessionState();
         processGatewayIdle();
         return;
     }
@@ -4347,12 +4328,7 @@ void IoHomeController::processGatewayWaitChallenge()
 
     if (mRxFrame.commandId == IoHomeCommand::DiscoverRequest)
     {
-        mGatewayPeerNodeId = 0;
-        mGatewayMemCmd = 0;
-        mGatewayMemDataLen = 0;
-        memset(mGatewayKeyEncrypted, 0, sizeof(mGatewayKeyEncrypted));
-        memset(mGatewayPeerChallenge, 0, sizeof(mGatewayPeerChallenge));
-        mGatewayState = ControllerState::GatewayIdle;
+        resetGatewaySessionState();
         processGatewayIdle();
         return;
     }
@@ -4397,13 +4373,18 @@ void IoHomeController::processGatewayWaitChallenge()
     if (!lKnownDevice && mGatewayDeviceCount < kMaxGatewayPairedDevices)
         mGatewayPairedNodeIds[mGatewayDeviceCount++] = lSrcNode;
 
+    resetGatewaySessionState();
+}
+
+void IoHomeController::resetGatewaySessionState()
+{
+    mGatewayState = ControllerState::GatewayIdle;
     mGatewayPeerNodeId = 0;
     mGatewayMemCmd = 0;
     mGatewayMemDataLen = 0;
     memset(mGatewayKeyEncrypted, 0, sizeof(mGatewayKeyEncrypted));
     memset(mGatewayMemData, 0, sizeof(mGatewayMemData));
     memset(mGatewayPeerChallenge, 0, sizeof(mGatewayPeerChallenge));
-    mGatewayState = ControllerState::GatewayIdle;
 }
 
 void IoHomeController::buildGatewayDiscoverAnswer(uint8_t *oBuffer,

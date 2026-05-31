@@ -362,17 +362,17 @@ private:
 
   // Fake gateway mode state
   bool mGatewayMode;
-  uint32_t mGatewayNodeId;         // gateway node ID (source address in responses)
-  uint8_t mGatewayKey[16];         // stack key used during 2W push pairing
-  ControllerState mGatewayState;   // gateway state machine state
-  uint32_t mGatewayPeerNodeId;     // node ID of device being paired
-  uint8_t mGatewayKeyEncrypted[16];// encrypted stack key (ready to send in 0x32)
-  uint8_t mGatewayMemCmd;          // last command sent (for 0x3D HMAC)
-  uint8_t mGatewayMemData[21];     // last data sent (for 0x3D HMAC)
-  uint8_t mGatewayMemDataLen;      // length of last data sent
-  uint8_t mGatewayPeerChallenge[6];// challenge from device (for 0x3D HMAC)
-  uint8_t mGatewayDiscoverFreqIdx; // frequency for discovery responses
-  uint8_t mGatewayDeviceCount;     // number of paired devices tracked
+  uint32_t mGatewayNodeId;          // gateway node ID (source address in responses)
+  uint8_t mGatewayKey[16];          // stack key used during 2W push pairing
+  ControllerState mGatewayState;    // gateway state machine state
+  uint32_t mGatewayPeerNodeId;      // node ID of device being paired
+  uint8_t mGatewayKeyEncrypted[16]; // encrypted stack key (ready to send in 0x32)
+  uint8_t mGatewayMemCmd;           // last command sent (for 0x3D HMAC)
+  uint8_t mGatewayMemData[21];      // last data sent (for 0x3D HMAC)
+  uint8_t mGatewayMemDataLen;       // length of last data sent
+  uint8_t mGatewayPeerChallenge[6]; // challenge from device (for 0x3D HMAC)
+  uint8_t mGatewayDiscoverFreqIdx;  // frequency for discovery responses
+  uint8_t mGatewayDeviceCount;      // number of paired devices tracked
   static constexpr uint8_t kMaxGatewayPairedDevices = 8;
   uint32_t mGatewayPairedNodeIds[kMaxGatewayPairedDevices];
 
@@ -387,14 +387,14 @@ private:
   // Command scan result — tracks which commands elicited responses
   struct IoHomeCommandScanResult
   {
-    uint32_t targetNodeId;     // node that was scanned
-    uint8_t  commandsScanned;  // total commands in scan list
-    uint8_t  responsesFound;   // number of commands that got a response
-    uint8_t  bitmask[32];      // bitmask per command: 1=response, 0=no response
+    uint32_t targetNodeId;   // node that was scanned
+    uint8_t commandsScanned; // total commands in scan list
+    uint8_t responsesFound;  // number of commands that got a response
+    uint8_t bitmask[32];     // bitmask per command: 1=response, 0=no response
   };
 
   // Command scanning state
-  uint8_t  mScanIndex;
+  uint8_t mScanIndex;
   uint32_t mScanTargetNode;
   IoHomeCommandScanResult mScanResult; // accumulated scan results
 
@@ -471,22 +471,23 @@ private:
   void processGatewayWaitDiscoveryResponse();
   void processGatewayWaitKeyTransfer();
   void processGatewayWaitChallenge();
+  void resetGatewaySessionState();
   void buildGatewayDiscoverAnswer(uint8_t *oBuffer, uint8_t iBufferLen,
-                                   uint32_t iDeviceNodeId) const;
+                                  uint32_t iDeviceNodeId) const;
   void buildGatewayDiscoverActuatorAck(uint8_t *oBuffer, uint8_t iBufferLen,
-                                        uint32_t iDeviceNodeId) const;
+                                       uint32_t iDeviceNodeId) const;
   void buildGatewayKeyTransfer(uint8_t *oBuffer, uint8_t iBufferLen,
-                                uint32_t iDeviceNodeId,
-                                const uint8_t iDeviceChallenge[6]) const;
+                               uint32_t iDeviceNodeId,
+                               const uint8_t iDeviceChallenge[6]) const;
   void buildGatewayChallengeAnswer(uint8_t *oBuffer, uint8_t iBufferLen,
-                                    uint32_t iDeviceNodeId) const;
+                                   uint32_t iDeviceNodeId) const;
   void buildGatewayNameResponse(uint8_t *oBuffer, uint8_t iBufferLen,
-                                 uint32_t iDeviceNodeId) const;
+                                uint32_t iDeviceNodeId) const;
   void buildGatewaySetNameResponse(uint8_t *oBuffer, uint8_t iBufferLen,
-                                    uint32_t iDeviceNodeId) const;
+                                   uint32_t iDeviceNodeId) const;
   void buildGatewayGetGeneralInfo1Response(uint8_t *oBuffer, uint8_t iBufferLen,
-                                            uint32_t iDeviceNodeId,
-                                            const IoHomeFrame &iRequest) const;
+                                           uint32_t iDeviceNodeId,
+                                           const IoHomeFrame &iRequest) const;
   void logGatewayState(const char *iLabel) const;
 
   // Network scan recording
