@@ -533,6 +533,11 @@ void IoHomeController::cancelPairing()
 
 void IoHomeController::startDiscovery()
 {
+    if (mNetworkScanActive)
+        stopNetworkScan();
+    else if (mState == ControllerState::PassiveListening)
+        setPassiveMode(false);
+
     if (mState != ControllerState::Idle)
         return;
 
@@ -551,6 +556,11 @@ void IoHomeController::startDiscovery()
 
 void IoHomeController::startDiscoverySPE()
 {
+    if (mNetworkScanActive)
+        stopNetworkScan();
+    else if (mState == ControllerState::PassiveListening)
+        setPassiveMode(false);
+
     if (mState != ControllerState::Idle)
         return;
 

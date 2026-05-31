@@ -1142,8 +1142,6 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
         if ((bool)iKo.value(DPT_Switch))
         {
             logDebugP("Discovery triggered via KNX");
-            if (mController.isNetworkScanActive())
-                mController.stopNetworkScan();
             mController.startDiscovery();
             KoIOHC_IOHC_DiscoveryAktiv.value(true, DPT_Switch);
         }
@@ -1865,15 +1863,11 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if (lSub.length() > 9 && lSub.substr(9, 3) == "spe")
         {
             logInfoP("Starting encrypted SPE discovery broadcast...");
-            if (mController.isNetworkScanActive())
-                mController.stopNetworkScan();
             mController.startDiscoverySPE();
         }
         else
         {
             logInfoP("Starting discovery broadcast...");
-            if (mController.isNetworkScanActive())
-                mController.stopNetworkScan();
             mController.startDiscovery();
         }
         return true;
