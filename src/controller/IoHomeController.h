@@ -472,6 +472,7 @@ private:
   void processGatewayWaitDiscoveryResponse();
   void processGatewayWaitKeyTransfer();
   void processGatewayWaitChallenge();
+  bool precheckGatewayStateFrame(uint32_t iSrcNode, bool iResetSessionOnDiscover);
   void resetGatewaySessionState();
   void logGatewayState(const char *iLabel) const;
 

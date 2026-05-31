@@ -4162,18 +4162,8 @@ void IoHomeController::processGatewayWaitDiscoveryResponse()
 {
     const uint32_t lSrcNode = mRxFrame.getSrcNodeId();
 
-    if (mRxFrame.commandId == IoHomeCommand::DiscoverRequest)
-    {
-        mGatewayState = ControllerState::GatewayIdle;
-        processGatewayIdle();
+    if (!precheckGatewayStateFrame(lSrcNode, false))
         return;
-    }
-
-    if (mGatewayPeerNodeId != 0 && lSrcNode != mGatewayPeerNodeId)
-    {
-        dispatchRxFrame();
-        return;
-    }
 
     if (mRxFrame.commandId == IoHomeCommand::Confirmation)
     {
@@ -4206,18 +4196,8 @@ void IoHomeController::processGatewayWaitKeyTransfer()
 {
     const uint32_t lSrcNode = mRxFrame.getSrcNodeId();
 
-    if (mRxFrame.commandId == IoHomeCommand::DiscoverRequest)
-    {
-        resetGatewaySessionState();
-        processGatewayIdle();
+    if (!precheckGatewayStateFrame(lSrcNode, true))
         return;
-    }
-
-    if (mGatewayPeerNodeId != 0 && lSrcNode != mGatewayPeerNodeId)
-    {
-        dispatchRxFrame();
-        return;
-    }
 
     if (mRxFrame.commandId != IoHomeCommand::LaunchKeyTransfer || mRxFrame.dataLen < 6)
     {
@@ -4247,18 +4227,8 @@ void IoHomeController::processGatewayWaitChallenge()
 {
     const uint32_t lSrcNode = mRxFrame.getSrcNodeId();
 
-    if (mRxFrame.commandId == IoHomeCommand::DiscoverRequest)
-    {
-        resetGatewaySessionState();
-        processGatewayIdle();
+    if (!precheckGatewayStateFrame(lSrcNode, true))
         return;
-    }
-
-    if (mGatewayPeerNodeId != 0 && lSrcNode != mGatewayPeerNodeId)
-    {
-        dispatchRxFrame();
-        return;
-    }
 
     if (mRxFrame.commandId != IoHomeCommand::ChallengeRequest || mRxFrame.dataLen < 6)
     {
@@ -4291,6 +4261,28 @@ void IoHomeController::processGatewayWaitChallenge()
         mGatewayPairedNodeIds[mGatewayDeviceCount++] = lSrcNode;
 
     resetGatewaySessionState();
+}
+
+bool IoHomeController::precheckGatewayStateFrame(uint32_t iSrcNode, bool iResetSessionOnDiscover)
+{
+    if (mRxFrame.commandId == IoHomeCommand::DiscoverRequest)
+    {
+        if (iResetSessionOnDiscover)
+            resetGatewaySessionState();
+        else
+            mGatewayState = ControllerState::GatewayIdle;
+
+        processGatewayIdle();
+        return false;
+    }
+
+    if (mGatewayPeerNodeId != 0 && iSrcNode != mGatewayPeerNodeId)
+    {
+        dispatchRxFrame();
+        return false;
+    }
+
+    return true;
 }
 
 void IoHomeController::resetGatewaySessionState()
