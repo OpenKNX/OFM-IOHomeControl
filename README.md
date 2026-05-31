@@ -142,20 +142,6 @@ build_flags =
 
 ## ETS Configuration
 
-### Standard OpenKNX KOs (from OGM-Common)
-
-These communication objects are provided automatically by the OpenKNX base framework and are **not** defined by this module:
-
-| KO | Name | DPT | Direction | Description |
-|----|------|-----|-----------|-------------|
-| 1 | In Betrieb (Heartbeat) | 5.005 / 1.002 | Read | Cyclic alive signal (configurable interval, default 300s). Extended mode sends a status byte. |
-| 2–4 | Uhrzeit / Datum | 10.1 / 11.1 / 19.1 | Write | Optional time/date sync from bus |
-| 5 | Sommerzeit aktiv | 1.001 | Read | Optional summertime flag |
-| 6 | Speichern | 1.017 | Write | Optional manual flash save trigger |
-| 7 | Diagnose | 16.001 | Read/Write | Bidirectional diagnostic object — send text commands, receive responses. Used by `iohc status` etc. via `writeDiagnoseKo()`. |
-
-> **Note:** The Heartbeat KO#1 already provides the "module alive" function. The module-specific KO#20 (Modulstatus) below indicates that the **radio subsystem** is initialized and operational, which is distinct from the general heartbeat.
-
 ### Global Parameters
 
 | Parameter | Description | Default |
