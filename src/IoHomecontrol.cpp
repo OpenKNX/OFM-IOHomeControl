@@ -450,7 +450,7 @@ void IoHomecontrol::loop()
     {
         mPendingPostPairSpeDiscovery = false;
         logInfoP("Auto-SPE: starting encrypted sub-device discovery");
-        mController.startDiscoverySPE();
+        mController.startDiscovery(true);
     }
 
     // Update discovery status feedback (KO#22)
@@ -1863,7 +1863,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if (lSub.length() > 9 && lSub.substr(9, 3) == "spe")
         {
             logInfoP("Starting encrypted SPE discovery broadcast...");
-            mController.startDiscoverySPE();
+            mController.startDiscovery(true);
         }
         else
         {

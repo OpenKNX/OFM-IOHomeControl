@@ -140,11 +140,8 @@ public:
   // Cancel ongoing pairing
   void cancelPairing();
 
-  // Start discovery scan (no pairing)
-  void startDiscovery();
-
-  // Start encrypted discovery (only paired/known devices respond)
-  void startDiscoverySPE();
+  // Start discovery scan (no pairing); encrypted mode only lets paired/known devices respond
+  void startDiscovery(bool iEncrypted = false);
 
   // Start command scan (probe device for supported commands)
   void startCommandScan(uint32_t iNodeId);

@@ -531,7 +531,7 @@ void IoHomeController::cancelPairing()
     }
 }
 
-void IoHomeController::startDiscovery()
+void IoHomeController::startDiscovery(bool iEncrypted)
 {
     if (mNetworkScanActive)
         stopNetworkScan();
@@ -545,34 +545,12 @@ void IoHomeController::startDiscovery()
     mPairingStartTime = millis();
     mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
     resetDiscoveryTimingTrace();
-    mDiscoverySPE = false;
+    mDiscoverySPE = iEncrypted;
     mState = ControllerState::DiscoverySending;
     if (mPairDiagnosticTraceEnabled)
     {
-        logInfoP("PairDiag: starting discovery broadcast");
-        tracePairDiagnosticStateChange();
-    }
-}
-
-void IoHomeController::startDiscoverySPE()
-{
-    if (mNetworkScanActive)
-        stopNetworkScan();
-    else if (mState == ControllerState::PassiveListening)
-        setPassiveMode(false);
-
-    if (mState != ControllerState::Idle)
-        return;
-
-    mPairingFreqIdx = 0;
-    mPairingStartTime = millis();
-    mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
-    resetDiscoveryTimingTrace();
-    mDiscoverySPE = true;
-    mState = ControllerState::DiscoverySending;
-    if (mPairDiagnosticTraceEnabled)
-    {
-        logInfoP("PairDiag: starting encrypted discovery broadcast");
+        logInfoP(iEncrypted ? "PairDiag: starting encrypted discovery broadcast"
+                            : "PairDiag: starting discovery broadcast");
         tracePairDiagnosticStateChange();
     }
 }
