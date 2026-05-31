@@ -446,6 +446,7 @@ private:
   void processPairWaitSetConfig1Response();
   void processPairSendSetConfig1AuthResponse();
   void processPairWaitSetConfig1FinalResponse();
+  void interpretSetConfig1Result(bool iFinalResponse);
   bool processPairWait1WBlind(ControllerState iNextState);
 
   void processDiscovery();

@@ -1403,25 +1403,8 @@ void IoHomeController::loop()
                         memcpy(mPairSetConfigChallenge, mRxFrame.data, sizeof(mPairSetConfigChallenge));
                         mState = ControllerState::PairSendSetConfig1AuthResponse;
                     }
-                    else if (mRxFrame.commandId == IoHomeCommand::SetConfig1Response)
-                    {
-                        if (mRxFrame.dataLen >= 1 && mRxFrame.data[0] == 0x05)
-                            logInfoP("Pairing: automatic status feedback enabled for 0x%06X", mDiscoveredNodeId);
-                        else
-                            logInfoP("Pairing: SetConfig1 accepted by 0x%06X", mDiscoveredNodeId);
-                        mState = ControllerState::PairComplete;
-                    }
-                    else if (mRxFrame.commandId == IoHomeCommand::ErrorResponse)
-                    {
-                        logInfoP("Pairing: device 0x%06X does not support automatic status feedback", mDiscoveredNodeId);
-                        mState = ControllerState::PairComplete;
-                    }
                     else
-                    {
-                        logDebugP("Pairing: unexpected SetConfig1 response 0x%02X from 0x%06X",
-                                  static_cast<uint8_t>(mRxFrame.commandId), mDiscoveredNodeId);
-                        mState = ControllerState::PairComplete;
-                    }
+                        interpretSetConfig1Result(false);
                 }
             }
             else if (mState == ControllerState::PairWaitSetConfig1FinalResponse)
@@ -1429,23 +1412,7 @@ void IoHomeController::loop()
                 if (mRxFrame.getSrcNodeId() == mDiscoveredNodeId &&
                     mRxFrame.getDestNodeId() == mOwnNodeId)
                 {
-                    if (mRxFrame.commandId == IoHomeCommand::SetConfig1Response)
-                    {
-                        if (mRxFrame.dataLen >= 1 && mRxFrame.data[0] == 0x05)
-                            logInfoP("Pairing: automatic status feedback enabled for 0x%06X", mDiscoveredNodeId);
-                        else
-                            logInfoP("Pairing: SetConfig1 accepted by 0x%06X", mDiscoveredNodeId);
-                    }
-                    else if (mRxFrame.commandId == IoHomeCommand::ErrorResponse)
-                    {
-                        logInfoP("Pairing: device 0x%06X rejected automatic status feedback", mDiscoveredNodeId);
-                    }
-                    else
-                    {
-                        logDebugP("Pairing: unexpected final SetConfig1 response 0x%02X from 0x%06X",
-                                  static_cast<uint8_t>(mRxFrame.commandId), mDiscoveredNodeId);
-                    }
-                    mState = ControllerState::PairComplete;
+                    interpretSetConfig1Result(true);
                 }
             }
             else if (mState == ControllerState::AuthWaitResponse)
@@ -2706,6 +2673,31 @@ void IoHomeController::processPairWaitSetConfig1Response()
         logDebugP("Pairing: SetConfig1 timed out for 0x%06X", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
     }
+}
+
+void IoHomeController::interpretSetConfig1Result(bool iFinalResponse)
+{
+    if (mRxFrame.commandId == IoHomeCommand::SetConfig1Response)
+    {
+        if (mRxFrame.dataLen >= 1 && mRxFrame.data[0] == 0x05)
+            logInfoP("Pairing: automatic status feedback enabled for 0x%06X", mDiscoveredNodeId);
+        else
+            logInfoP("Pairing: SetConfig1 accepted by 0x%06X", mDiscoveredNodeId);
+    }
+    else if (mRxFrame.commandId == IoHomeCommand::ErrorResponse)
+    {
+        logInfoP(iFinalResponse ? "Pairing: device 0x%06X rejected automatic status feedback"
+                                : "Pairing: device 0x%06X does not support automatic status feedback",
+                 mDiscoveredNodeId);
+    }
+    else
+    {
+        logDebugP(iFinalResponse ? "Pairing: unexpected final SetConfig1 response 0x%02X from 0x%06X"
+                                 : "Pairing: unexpected SetConfig1 response 0x%02X from 0x%06X",
+                  static_cast<uint8_t>(mRxFrame.commandId), mDiscoveredNodeId);
+    }
+
+    mState = ControllerState::PairComplete;
 }
 
 void IoHomeController::processPairSendSetConfig1AuthResponse()
