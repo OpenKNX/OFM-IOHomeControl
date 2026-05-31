@@ -1780,17 +1780,7 @@ void IoHomeController::processTx1WRepeat()
         return; // wait for interval
 
     // Re-send same buffer with short preamble (repeats don't need long preamble)
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_SHORT);
-    if (lPrepErr == RadioError::Busy)
-        return;
-    if (lPrepErr != RadioError::None)
-    {
-        mCurrentCmd.active = false;
-        mState = ControllerState::Idle;
-        return;
-    }
-
-    RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
     if (lErr == RadioError::None)
     {
         mStateTimer = millis();
@@ -1874,20 +1864,10 @@ void IoHomeController::processResponse()
         lFrame.dataLen = IOHC_HMAC_SIZE;
         lFrame.hasHmac = false;
 
-        const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_SHORT);
-        if (lPrepErr == RadioError::Busy)
-            return;
-        if (lPrepErr != RadioError::None)
-        {
-            mCurrentCmd.active = false;
-            mState = ControllerState::Idle;
-            return;
-        }
-
         uint8_t lLen = lFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
         if (lLen > 0)
         {
-            const RadioError lErr = mRadio.startTransmit(mTxBuffer, lLen);
+            const RadioError lErr = startShortPreambleTransmit(mTxBuffer, lLen);
             if (lErr == RadioError::None)
             {
                 mAuthResponseSent = true;
@@ -2201,20 +2181,10 @@ void IoHomeController::processPairSendPullKeyChallenge()
     lFrame.dataLen = sizeof(mPairPullAuthChallenge);
     lFrame.hasHmac = false;
 
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_SHORT);
-    if (lPrepErr == RadioError::Busy)
-        return;
-    if (lPrepErr != RadioError::None)
-    {
-        logDebugP("Pairing: failed to challenge pulled key for 0x%06X, falling back to push flow", mDiscoveredNodeId);
-        mState = ControllerState::PairSendKeyInit;
-        return;
-    }
-
     uint8_t lLen = lFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (lLen > 0)
     {
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, lLen);
+        const RadioError lErr = startShortPreambleTransmit(mTxBuffer, lLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -2444,16 +2414,7 @@ bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
             return true;
 
         mTx1WRepeatTimer = 0;
-        const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_SHORT);
-        if (lPrepErr == RadioError::Busy)
-            return true;
-        if (lPrepErr != RadioError::None)
-        {
-            mState = ControllerState::PairFailed;
-            return true;
-        }
-
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -2635,19 +2596,10 @@ void IoHomeController::processPairSendKeyTransferAuthResponse()
     lFrame.dataLen = IOHC_HMAC_SIZE;
     lFrame.hasHmac = false;
 
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_SHORT);
-    if (lPrepErr == RadioError::Busy)
-        return;
-    if (lPrepErr != RadioError::None)
-    {
-        mState = ControllerState::PairFailed;
-        return;
-    }
-
     mTxLen = lFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3027,19 +2979,10 @@ void IoHomeController::processScanSending()
     mTxFrame.dataLen = 0;
     mTxFrame.hasHmac = false;
 
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_SHORT);
-    if (lPrepErr == RadioError::Busy)
-        return;
-    if (lPrepErr != RadioError::None)
-    {
-        mState = ControllerState::Idle;
-        return;
-    }
-
     mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3139,6 +3082,20 @@ RadioError IoHomeController::configureTxRadio(uint16_t iPreambleSymbols, const u
     }
 
     return mRadio.setPreambleLength(iPreambleSymbols);
+}
+
+RadioError IoHomeController::startShortPreambleTransmit(const uint8_t *iBuffer, uint8_t iLen,
+                                                        bool iTrackDutyCycle)
+{
+    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_SHORT);
+    if (lPrepErr != RadioError::None)
+        return lPrepErr;
+
+    const RadioError lTxErr = mRadio.startTransmit(iBuffer, iLen);
+    if (lTxErr == RadioError::None && iTrackDutyCycle)
+        mTxTimeAccum[mCurrentFreqIdx] += ((uint32_t)iLen * 8 * 1000) / IOHC_BITRATE;
+
+    return lTxErr;
 }
 
 RadioError IoHomeController::ensureReceiveAfterTransmit()
@@ -3989,17 +3946,7 @@ void IoHomeController::processAuthSendChallenge()
     uint8_t lLen = lFrame.serialize(lBuf, sizeof(lBuf));
     if (lLen > 0)
     {
-        const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_SHORT);
-        if (lPrepErr == RadioError::Busy)
-            return;
-        if (lPrepErr != RadioError::None)
-        {
-            mState = ControllerState::Idle;
-            startReceive();
-            return;
-        }
-
-        const RadioError lErr = mRadio.startTransmit(lBuf, lLen);
+        const RadioError lErr = startShortPreambleTransmit(lBuf, lLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -4143,13 +4090,8 @@ void IoHomeController::processGatewayFrame()
 
     if (mTxLen > 0)
     {
-        const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_SHORT);
-        if (lPrepErr != RadioError::None)
+        if (startShortPreambleTransmit(mTxBuffer, mTxLen, true) != RadioError::None)
             return;
-
-        const RadioError lTxErr = mRadio.startTransmit(mTxBuffer, mTxLen);
-        if (lTxErr == RadioError::None)
-            mTxTimeAccum[mCurrentFreqIdx] += ((uint32_t)mTxLen * 8 * 1000) / IOHC_BITRATE;
         return;
     }
 
@@ -4187,11 +4129,8 @@ void IoHomeController::processGatewayIdle()
                                                  mGatewayNodeId, lSrcNode);
         if (mTxLen == 0)
             return;
-        if (configureTxRadio(IOHC_PREAMBLE_SHORT) != RadioError::None)
+        if (startShortPreambleTransmit(mTxBuffer, mTxLen, true) != RadioError::None)
             return;
-        if (mRadio.startTransmit(mTxBuffer, mTxLen) != RadioError::None)
-            return;
-        mTxTimeAccum[mCurrentFreqIdx] += ((uint32_t)mTxLen * 8 * 1000) / IOHC_BITRATE;
         mGatewayState = ControllerState::GatewayWaitDiscoveryResponse;
         return;
 
@@ -4201,11 +4140,8 @@ void IoHomeController::processGatewayIdle()
                                                       mGatewayNodeId, lSrcNode);
         if (mTxLen == 0)
             return;
-        if (configureTxRadio(IOHC_PREAMBLE_SHORT) != RadioError::None)
+        if (startShortPreambleTransmit(mTxBuffer, mTxLen, true) != RadioError::None)
             return;
-        if (mRadio.startTransmit(mTxBuffer, mTxLen) != RadioError::None)
-            return;
-        mTxTimeAccum[mCurrentFreqIdx] += ((uint32_t)mTxLen * 8 * 1000) / IOHC_BITRATE;
         mGatewayState = ControllerState::GatewayWaitKeyTransfer;
         return;
 
@@ -4253,11 +4189,8 @@ void IoHomeController::processGatewayWaitDiscoveryResponse()
                                                       mGatewayNodeId, lSrcNode);
         if (mTxLen == 0)
             return;
-        if (configureTxRadio(IOHC_PREAMBLE_SHORT) != RadioError::None)
+        if (startShortPreambleTransmit(mTxBuffer, mTxLen, true) != RadioError::None)
             return;
-        if (mRadio.startTransmit(mTxBuffer, mTxLen) != RadioError::None)
-            return;
-        mTxTimeAccum[mCurrentFreqIdx] += ((uint32_t)mTxLen * 8 * 1000) / IOHC_BITRATE;
         mGatewayState = ControllerState::GatewayWaitKeyTransfer;
         return;
     }
@@ -4313,12 +4246,8 @@ void IoHomeController::processGatewayWaitKeyTransfer()
                                           mGatewayKeyEncrypted);
     if (mTxLen == 0)
         return;
-    if (configureTxRadio(IOHC_PREAMBLE_SHORT) != RadioError::None)
+    if (startShortPreambleTransmit(mTxBuffer, mTxLen, true) != RadioError::None)
         return;
-    if (mRadio.startTransmit(mTxBuffer, mTxLen) != RadioError::None)
-        return;
-
-    mTxTimeAccum[mCurrentFreqIdx] += ((uint32_t)mTxLen * 8 * 1000) / IOHC_BITRATE;
     mGatewayState = ControllerState::GatewayWaitChallenge;
 }
 
@@ -4353,12 +4282,8 @@ void IoHomeController::processGatewayWaitChallenge()
                                               mGatewayPeerChallenge, mGatewayKey);
     if (mTxLen == 0)
         return;
-    if (configureTxRadio(IOHC_PREAMBLE_SHORT) != RadioError::None)
+    if (startShortPreambleTransmit(mTxBuffer, mTxLen, true) != RadioError::None)
         return;
-    if (mRadio.startTransmit(mTxBuffer, mTxLen) != RadioError::None)
-        return;
-
-    mTxTimeAccum[mCurrentFreqIdx] += ((uint32_t)mTxLen * 8 * 1000) / IOHC_BITRATE;
 
     bool lKnownDevice = false;
     for (uint8_t i = 0; i < mGatewayDeviceCount; i++)
