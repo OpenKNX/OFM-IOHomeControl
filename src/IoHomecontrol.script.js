@@ -1,6 +1,13 @@
 // OFM-IO-Homecontrol -- OpenKNX --
 // ETS JavaScript for io-homecontrol pairing workflow
-// Uses function properties (objectIndex=160, propertyId=4) for device communication
+// Uses function properties (objectIndex=160, propertyId=10) for device communication
+
+var IOHC_FUNCTION_PROPERTY_OBJECT_INDEX = 160;
+var IOHC_FUNCTION_PROPERTY_ID = 10;
+
+function IOHC_invokeFunctionProperty(online, data) {
+    return online.invokeFunctionProperty(IOHC_FUNCTION_PROPERTY_OBJECT_INDEX, IOHC_FUNCTION_PROPERTY_ID, data);
+}
 
 function IOHC_getChannelPrefix(context) {
     return "IOHC_IOHC" + context.channelIndex;
@@ -179,7 +186,7 @@ function IOHC_queryPairingInfo(device, online, progress, context, fallbackResult
     var channelIndex = context.channelIndex - 1;
     var data = [0x12];
     data = data.concat(channelIndex);
-    var resp = online.invokeFunctionProperty(160, 4, data);
+    var resp = IOHC_invokeFunctionProperty(online, data);
     if (!resp || resp.length < 4) {
         throw new Error("io-homecontrol: Pairing-Status konnte nicht gelesen werden");
     }
@@ -232,7 +239,7 @@ function IOHC_startPairing(device, online, progress, context) {
     try {
         var data = [0x10];
         data = data.concat(channelIndex);
-        var resp = online.invokeFunctionProperty(160, 4, data);
+        var resp = IOHC_invokeFunctionProperty(online, data);
 
         if (resp[0] == 0) {
             progress.setText("Pairing gestartet. Gerät jetzt in den Lernmodus versetzen und Konsole oder Pairing-Status beobachten.");
@@ -274,7 +281,7 @@ function IOHC_unpair(device, online, progress, context) {
     try {
         var data = [0x13];
         data = data.concat(channelIndex);
-        var resp = online.invokeFunctionProperty(160, 4, data);
+        var resp = IOHC_invokeFunctionProperty(online, data);
 
         if (resp[0] == 0) {
             progress.setText("Pairing entfernt für Kanal " + (channelIndex + 1) + ".");

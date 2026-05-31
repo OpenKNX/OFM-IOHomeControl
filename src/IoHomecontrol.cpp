@@ -1181,8 +1181,8 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
                                             uint8_t length, uint8_t *data,
                                             uint8_t *resultData, uint8_t &resultLength)
 {
-    // io-homecontrol function properties: objectIndex=160, propertyId=4
-    if (objectIndex != 160 || propertyId != 4 || length < 1)
+    // io-homecontrol function properties: objectIndex=160, propertyId=10
+    if (objectIndex != kFunctionPropertyObjectIndex || propertyId != kFunctionPropertyId || length < 1)
         return false;
 
     uint8_t lCmd = data[0];

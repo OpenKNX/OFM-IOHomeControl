@@ -8,6 +8,9 @@
 class IoHomecontrol : public OpenKNX::Module
 {
 public:
+  static constexpr uint8_t kFunctionPropertyObjectIndex = 160;
+  static constexpr uint8_t kFunctionPropertyId = 10;
+
   enum class StatusLedMode : uint8_t
   {
     Unknown,

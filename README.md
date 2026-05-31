@@ -315,15 +315,34 @@ On standard io-homecontrol SX1262 builds, the helper also expects `iohc radio ra
 
 ## Function Properties (advanced)
 
-ETS function property interface (objectIndex=160, propertyId=4):
+ETS function property interface (objectIndex=160, propertyId=10).
 
-| Code | Action |
-|------|--------|
-| 0x10 | Start pairing. Payload: channel index, plus optional 3-byte node ID override for 1W pairing |
-| 0x11 | Cancel pairing |
-| 0x12 | Query pairing status (returns node ID) |
-| 0x13 | Unpair channel |
-| 0x20 | Test send position (channel, percent) |
+
+| Code | Request payload | Response payload | Description |
+|------|-----------------|------------------|-------------|
+| 0x10 | `cmd, channel[, nodeIdHi, nodeIdMid, nodeIdLo]` | `status` | Start pairing on the selected channel. The optional 3-byte node ID override is used for 1W commissioning. |
+| 0x11 | `cmd` | `status` | Cancel the active pairing session. |
+| 0x12 | `cmd, channel` | `paired, nodeIdHi, nodeIdMid, nodeIdLo, controllerState, lastPairStartStatus` | Read the current pairing state and diagnostics for one channel. |
+| 0x13 | `cmd, channel` | `status` | Unpair the selected channel, erase the stored key, and persist the change. |
+| 0x20 | `cmd, channel, percent` | `status` | Test helper for sending a position command to an already paired device. |
+
+Status byte values used by commands `0x10`, `0x11`, `0x13`, and `0x20`:
+
+| Value | Meaning |
+|-------|---------|
+| 0x00 | Command accepted / executed successfully |
+| 0x03 | 1W pairing rejected because the target node ID is missing |
+| 0x04 | Pairing start rejected because the controller is currently busy |
+| 0xFF | Invalid request, channel out of range, or command not supported in the current state |
+
+For the `0x12` status query, `lastPairStartStatus` is currently encoded as follows:
+
+| Value | Meaning |
+|-------|---------|
+| 0 | Last pairing start request was accepted |
+| 1 | Last pairing start request was blocked because the controller was busy |
+| 2 | Last 1W pairing start request was rejected because the target node ID was missing |
+| 3 | Generic pairing start failure |
 
 ## Architecture
 
