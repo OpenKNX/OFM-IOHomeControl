@@ -4312,66 +4312,6 @@ void IoHomeController::resetGatewaySessionState()
     memset(mGatewayPeerChallenge, 0, sizeof(mGatewayPeerChallenge));
 }
 
-void IoHomeController::buildGatewayDiscoverAnswer(uint8_t *oBuffer,
-                                                  uint8_t iBufferLen,
-                                                  uint32_t iDeviceNodeId) const
-{
-    buildGatewayDiscoverAnswerFrame(oBuffer, iBufferLen, mGatewayNodeId, iDeviceNodeId);
-}
-
-void IoHomeController::buildGatewayDiscoverActuatorAck(uint8_t *oBuffer,
-                                                       uint8_t iBufferLen,
-                                                       uint32_t iDeviceNodeId) const
-{
-    buildGatewayDiscoverActuatorAckFrame(oBuffer, iBufferLen, mGatewayNodeId, iDeviceNodeId);
-}
-
-void IoHomeController::buildGatewayKeyTransfer(uint8_t *oBuffer,
-                                               uint8_t iBufferLen,
-                                               uint32_t iDeviceNodeId,
-                                               const uint8_t iDeviceChallenge[6]) const
-{
-    uint8_t lEncryptedKey[16];
-    if (!buildGatewayEncryptedKey(mGatewayKey, iDeviceChallenge, lEncryptedKey))
-        return;
-    buildGatewayKeyTransferFrame(oBuffer, iBufferLen, mGatewayNodeId, iDeviceNodeId,
-                                 lEncryptedKey);
-}
-
-void IoHomeController::buildGatewayChallengeAnswer(uint8_t *oBuffer,
-                                                   uint8_t iBufferLen,
-                                                   uint32_t iDeviceNodeId) const
-{
-    buildGatewayChallengeAnswerFrame(oBuffer, iBufferLen, mGatewayNodeId,
-                                     iDeviceNodeId, mGatewayMemCmd,
-                                     mGatewayMemData, mGatewayMemDataLen,
-                                     mGatewayPeerChallenge, mGatewayKey);
-}
-
-void IoHomeController::buildGatewayNameResponse(uint8_t *oBuffer,
-                                                uint8_t iBufferLen,
-                                                uint32_t iDeviceNodeId) const
-{
-    buildGatewayNameResponseFrame(oBuffer, iBufferLen, mGatewayNodeId, iDeviceNodeId);
-}
-
-void IoHomeController::buildGatewaySetNameResponse(uint8_t *oBuffer,
-                                                   uint8_t iBufferLen,
-                                                   uint32_t iDeviceNodeId) const
-{
-    buildGatewaySetNameResponseFrame(oBuffer, iBufferLen, mGatewayNodeId, iDeviceNodeId);
-}
-
-void IoHomeController::buildGatewayGetGeneralInfo1Response(uint8_t *oBuffer,
-                                                           uint8_t iBufferLen,
-                                                           uint32_t iDeviceNodeId,
-                                                           const IoHomeFrame &iRequest) const
-{
-    (void)iRequest;
-    buildGatewayGetGeneralInfo1ResponseFrame(oBuffer, iBufferLen,
-                                             mGatewayNodeId, iDeviceNodeId);
-}
-
 void IoHomeController::logGatewayState(const char *iLabel) const
 {
     logDebugP("Gateway: %s mode=%d state=%s peer=0x%06X paired=%u", iLabel,

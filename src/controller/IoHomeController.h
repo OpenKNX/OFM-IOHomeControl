@@ -472,22 +472,6 @@ private:
   void processGatewayWaitKeyTransfer();
   void processGatewayWaitChallenge();
   void resetGatewaySessionState();
-  void buildGatewayDiscoverAnswer(uint8_t *oBuffer, uint8_t iBufferLen,
-                                  uint32_t iDeviceNodeId) const;
-  void buildGatewayDiscoverActuatorAck(uint8_t *oBuffer, uint8_t iBufferLen,
-                                       uint32_t iDeviceNodeId) const;
-  void buildGatewayKeyTransfer(uint8_t *oBuffer, uint8_t iBufferLen,
-                               uint32_t iDeviceNodeId,
-                               const uint8_t iDeviceChallenge[6]) const;
-  void buildGatewayChallengeAnswer(uint8_t *oBuffer, uint8_t iBufferLen,
-                                   uint32_t iDeviceNodeId) const;
-  void buildGatewayNameResponse(uint8_t *oBuffer, uint8_t iBufferLen,
-                                uint32_t iDeviceNodeId) const;
-  void buildGatewaySetNameResponse(uint8_t *oBuffer, uint8_t iBufferLen,
-                                   uint32_t iDeviceNodeId) const;
-  void buildGatewayGetGeneralInfo1Response(uint8_t *oBuffer, uint8_t iBufferLen,
-                                           uint32_t iDeviceNodeId,
-                                           const IoHomeFrame &iRequest) const;
   void logGatewayState(const char *iLabel) const;
 
   // Network scan recording
