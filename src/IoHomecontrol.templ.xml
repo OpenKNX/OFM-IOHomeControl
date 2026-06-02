@@ -10,15 +10,7 @@
                Parameters, ParameterRefs and the UI snippets. -->
           <op:part name="IOHCScene" href="IoHomecontrol.scene.part.xml" instances="10">
             <op:param name="N" value="1" increment="1" />
-            <op:param name="POS" value="021" increment="1" digits="3" />
-            <op:param name="ACTION" value="031" increment="1" digits="3" />
-            <op:param name="SLAT" value="041" increment="1" digits="3" />
-            <op:param name="TEMP" value="051" increment="1" digits="3" />
-            <op:param name="MODE" value="061" increment="1" digits="3" />
-            <op:param name="ONOFF" value="071" increment="1" digits="3" />
-            <op:param name="DATA_OFFSET" value="14" increment="1" />
-            <op:param name="ACTION_OFFSET" value="24" increment="1" />
-            <op:param name="SLAT_OFFSET" value="34" increment="1" />
+            <op:param name="ID" value="021" increment="1" digits="3" />
           </op:part>
           <Static>
             <Parameters>
@@ -52,7 +44,7 @@
                 <Parameter Id="%AID%_UP-%TT%%CC%011" Name="IOHC%C%OneWayTargetNodeId" ParameterType="%AID%_PT-IOHCOneWayTargetNodeId" Offset="45" BitOffset="0" Text="1W Aktor-Node-ID (dezimal, 0 = nicht gesetzt)" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%020" Name="IOHC%C%SceneCount" ParameterType="%AID%_PT-IOHCSceneCount" Offset="13" BitOffset="0" Text="Anzahl Szenen" Value="0" />
                 <!-- Scene slot parameters 1..10 are generated from IoHomecontrol.scene.part.xml. -->
-                <op:usePart name="IOHCScene" xpath="//ParameterBlock[@Name='parameters']/*" />
+                <op:usePart name="IOHCScene" xpath="//Parameters/*" />
               </Union>
             </Parameters>
 
@@ -75,7 +67,7 @@
               <ParameterRef Id="%AID%_UP-%TT%%CC%011_R-%TT%%CC%01101" RefId="%AID%_UP-%TT%%CC%011" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_UP-%TT%%CC%020" />
               <!-- Scene slot ParameterRefs 1..10 are generated from IoHomecontrol.scene.part.xml. -->
-              <op:usePart name="IOHCScene" xpath="//ParameterBlock[@Name='parameterRefs']/*" />
+              <op:usePart name="IOHCScene" xpath="//ParameterRefs/*" />
             </ParameterRefs>
 
             <ComObjectTable>
@@ -224,27 +216,7 @@
 
                         <!-- Position-only parameters: Fahrzeit, Richtung (types 0-4, 7, 9-11) -->
                         <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
-                          <when test="&lt;5">
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
-                          </when>
-                          <when test="7">
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
-                          </when>
-                          <when test="9">
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
-                          </when>
-                          <when test="10">
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
-                          </when>
-                          <when test="11">
+                          <when test="0 1 2 3 4 7 9 10 11">
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
@@ -252,25 +224,12 @@
                         </choose>
 
                         <!-- Scene support: available for all device types.
-                             The n-th scene UI is generated from IoHomecontrol.scene.part.xml. -->
+                             The complete per-scene UI selection is generated from IoHomecontrol.scene.part.xml. -->
                         <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
                         <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
-                        <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
-                          <!-- Position scenes without lamella -->
-                          <when test="0 2 3 4 7 10 11">
-                            <op:usePart name="IOHCScene" xpath="//ParameterBlock[@Name='ui-position']/*" />
-                          </when>
-                          <!-- Position scenes with lamella -->
-                          <when test="1 9">
-                            <op:usePart name="IOHCScene" xpath="//ParameterBlock[@Name='ui-position-slat']/*" />
-                          </when>
-                          <!-- Thermostat scenes -->
-                          <when test="5">
-                            <op:usePart name="IOHCScene" xpath="//ParameterBlock[@Name='ui-thermostat']/*" />
-                          </when>
-                          <!-- On/Off scenes -->
-                          <when test="6 8 12">
-                            <op:usePart name="IOHCScene" xpath="//ParameterBlock[@Name='ui-onoff']/*" />
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                          <when test="&gt;=1">
+                            <op:usePart name="IOHCScene" xpath="//Dynamic/*" />
                           </when>
                         </choose>
 
