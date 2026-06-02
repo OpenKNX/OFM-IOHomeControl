@@ -117,8 +117,6 @@ void IoHomecontrolChannel::setup()
               getConfiguredSceneCount(), mIs1W ? 1 : 0,
               mConfigured1WTargetNodeId);
 
-    // Send initial pairing status KO
-    getKo(IOHC_KoCHPairingStatusCh).value(mPaired, DPT_Switch);
 }
 
 void IoHomecontrolChannel::loop()
@@ -405,12 +403,6 @@ void IoHomecontrolChannel::onDeviceName(const char *iName, uint8_t iLen)
     mDeviceName[lOutPos] = '\0';
     logDebugP("Device name: %s", mDeviceName);
 
-    // Publish to KNX KO K23 (DPT 16.001, 14-byte ISO 8859-1 string)
-    GroupObject &lNameKo = getKo(IOHC_KoCHDeviceName);
-    uint8_t *lKoData = lNameKo.valueRef();
-    memset(lKoData, 0, 14);
-    strncpy((char *)lKoData, mDeviceName, 14);
-    lNameKo.objectWritten();
 }
 
 void IoHomecontrolChannel::onDeviceInfo(uint16_t iType, uint8_t iSubtype, uint8_t iManufacturer)
@@ -420,8 +412,6 @@ void IoHomecontrolChannel::onDeviceInfo(uint16_t iType, uint8_t iSubtype, uint8_
     mManufacturer = iManufacturer;
     logDebugP("Device info: type=0x%04X subtype=0x%02X mfg=0x%02X", iType, iSubtype, iManufacturer);
 
-    // Publish to KNX KO K24 (DPT 7.001, unsigned 16-bit)
-    getKo(IOHC_KoCHDeviceTypeCode).value(iType, Dpt(7, 1));
 }
 
 void IoHomecontrolChannel::onBatteryLevel(uint8_t iPercent)
@@ -476,7 +466,6 @@ void IoHomecontrolChannel::setNodeId(uint32_t iNodeId)
 {
     mNodeId = iNodeId & 0x00FFFFFF; // 24-bit
     mPaired = (mNodeId != 0);
-    getKo(IOHC_KoCHPairingStatusCh).value(mPaired, DPT_Switch);
 }
 
 uint32_t IoHomecontrolChannel::getNodeId() const
