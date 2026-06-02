@@ -114,7 +114,7 @@ Pairing und Diagnose
 * Discovery-Scan zum Auffinden von Geräten
 * Netzwerk-Scan zum passiven Beobachten des Funkverkehrs
 * Fernbedienungs-Beobachtung zur Erfassung erkannter io-homecontrol-Fernbedienungen
-* Diagnose über serielle Konsole und KNX-Diagnoseobjekt (OGM-Common KO 7)
+* Diagnose über die serielle Konsole
 
 Weitere Features
 
@@ -305,9 +305,9 @@ Die Funktion dient der Identifikation vorhandener io-homecontrol-Fernbedienungen
 Discovery und Netzwerk-Scan werden über Kommunikationsobjekte gesteuert. Die zugehörigen KOs befinden sich in der Objekttabelle des globalen Kanals.
 
 <!-- DOC Skip="1" -->
-#### **Discovery starten**
+#### **Discovery Start/Stopp**
 
-Wird eine 1 auf das KO "Discovery starten" (KO 21) gesendet, beginnt das Modul einen aktiven Broadcast-Scan, um io-homecontrol-Geräte in der Umgebung zu erkennen. Der Status wird über das KO "Discovery aktiv" (KO 22) zurückgemeldet.
+Wird eine 1 auf das KO "Discovery Start/Stopp" (KO 21) gesendet, beginnt das Modul einen aktiven Broadcast-Scan, um io-homecontrol-Geräte in der Umgebung zu erkennen. Eine 0 stoppt die laufende Discovery. Der Status wird über das KO "Discovery aktiv" (KO 22) zurückgemeldet.
 <!-- DOCEND -->
 
 <!-- DOC Skip="1" -->
@@ -615,14 +615,12 @@ Folgende Kommunikationsobjekte gelten für das gesamte io-homecontrol-Modul:
 
 | KO | Name | DPT | Richtung | Beschreibung |
 |----|------|-----|----------|-------------|
-| 20 | Modulstatus | 1.001 | Lesen | 1 = Radio initialisiert, 0 = nicht bereit |
-| 21 | Discovery starten | 1.001 | Schreiben | 1 = Broadcast-Discovery starten |
-| 22 | Discovery aktiv | 1.001 | Lesen | 1 = Discovery läuft |
-| 23 | Netzwerk-Scan | 1.001 | Schreiben | 1 = Passiven Scan starten, 0 = Stoppen |
-| 24 | Netzwerk-Scan aktiv | 1.001 | Lesen | 1 = Scan läuft |
+| 20 | Modulstatus | 1.011 | Lesen | 1 = Radio initialisiert, 0 = nicht bereit |
+| 21 | Discovery Start/Stopp | 1.010 | Schreiben | 1 = Broadcast-Discovery starten, 0 = Discovery stoppen |
+| 22 | Discovery aktiv | 1.011 | Lesen | 1 = Discovery läuft |
+| 23 | Netzwerk-Scan | 1.010 | Schreiben | 1 = Passiven Scan starten, 0 = Stoppen |
+| 24 | Netzwerk-Scan aktiv | 1.011 | Lesen | 1 = Scan läuft |
 | 25 | Beobachtete Fernbedienung | 12.001 | Lesen | Zuletzt beobachtete Fernbedienungs-Adresse |
-
-> Zusätzlich stellt das OGM-Common-Framework die Standard-KOs bereit: KO 1 (Heartbeat), KO 2-4 (Uhrzeit/Datum), KO 5 (Sommerzeit), KO 6 (Speichern) und KO 7 (Diagnose).
 
 ### **Kommunikationsobjekte pro Kanal**
 
