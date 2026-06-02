@@ -5,28 +5,21 @@
     <Manufacturer RefId="M-00FA">
       <ApplicationPrograms>
         <ApplicationProgram Id="%AID%" ProgramType="ApplicationProgram" MaskVersion="MV-07B0" Name="WP-IoHomecontrol" LoadProcedureStyle="MergedProcedure" PeiType="0" DefaultLanguage="de" DynamicTableManagement="false" Linkable="true" MinEtsVersion="4.0" ApplicationNumber="0" ApplicationVersion="0">
-          <!-- XML parts for io-homecontrol scene UI generation -->
-          <op:part name="IOHCScenePosition" href="IoHomecontrol.scene-position.part.xml" instances="10">
-            <op:param name="N" value="1" increment="1" />
-            <op:param name="POS" value="021" increment="1" digits="3" />
-            <op:param name="ACTION" value="031" increment="1" digits="3" />
-          </op:part>
-          <op:part name="IOHCScenePositionSlat" href="IoHomecontrol.scene-position-slat.part.xml" instances="10">
+          <!-- XML part for io-homecontrol scene generation.
+               The part contains the complete n-th scene definition:
+               Parameters, ParameterRefs and the UI snippets. -->
+          <op:part name="IOHCScene" href="IoHomecontrol.scene.part.xml" instances="10">
             <op:param name="N" value="1" increment="1" />
             <op:param name="POS" value="021" increment="1" digits="3" />
             <op:param name="ACTION" value="031" increment="1" digits="3" />
             <op:param name="SLAT" value="041" increment="1" digits="3" />
-          </op:part>
-          <op:part name="IOHCSceneThermostat" href="IoHomecontrol.scene-thermostat.part.xml" instances="10">
-            <op:param name="N" value="1" increment="1" />
             <op:param name="TEMP" value="051" increment="1" digits="3" />
             <op:param name="MODE" value="061" increment="1" digits="3" />
-          </op:part>
-          <op:part name="IOHCSceneOnOff" href="IoHomecontrol.scene-onoff.part.xml" instances="10">
-            <op:param name="N" value="1" increment="1" />
             <op:param name="ONOFF" value="071" increment="1" digits="3" />
+            <op:param name="DATA_OFFSET" value="14" increment="1" />
+            <op:param name="ACTION_OFFSET" value="24" increment="1" />
+            <op:param name="SLAT_OFFSET" value="34" increment="1" />
           </op:part>
-          <op:part name="IOHCSceneKOs" href="IoHomecontrol.scene-kos.part.xml" />
           <Static>
             <Parameters>
               <!-- Per-channel parameters -->
@@ -58,69 +51,8 @@
                 <Parameter Id="%AID%_UP-%TT%%CC%009" Name="IOHC%C%ProtocolMode" ParameterType="%AID%_PT-IOHCProtocolMode" Offset="44" BitOffset="0" Text="Protokoll-Modus" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%011" Name="IOHC%C%OneWayTargetNodeId" ParameterType="%AID%_PT-IOHCOneWayTargetNodeId" Offset="45" BitOffset="0" Text="1W Aktor-Node-ID (dezimal, 0 = nicht gesetzt)" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%020" Name="IOHC%C%SceneCount" ParameterType="%AID%_PT-IOHCSceneCount" Offset="13" BitOffset="0" Text="Anzahl Szenen" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%021" op:nowarn="true" Name="IOHC%C%Scene1Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="14" BitOffset="0" Text="Szene 1 Position" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%022" op:nowarn="true" Name="IOHC%C%Scene2Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="15" BitOffset="0" Text="Szene 2 Position" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%023" op:nowarn="true" Name="IOHC%C%Scene3Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="16" BitOffset="0" Text="Szene 3 Position" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%024" op:nowarn="true" Name="IOHC%C%Scene4Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="17" BitOffset="0" Text="Szene 4 Position" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%025" op:nowarn="true" Name="IOHC%C%Scene5Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="18" BitOffset="0" Text="Szene 5 Position" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%026" op:nowarn="true" Name="IOHC%C%Scene6Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="19" BitOffset="0" Text="Szene 6 Position" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%027" op:nowarn="true" Name="IOHC%C%Scene7Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="20" BitOffset="0" Text="Szene 7 Position" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%028" op:nowarn="true" Name="IOHC%C%Scene8Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="21" BitOffset="0" Text="Szene 8 Position" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%029" op:nowarn="true" Name="IOHC%C%Scene9Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="22" BitOffset="0" Text="Szene 9 Position" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%030" op:nowarn="true" Name="IOHC%C%Scene10Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="23" BitOffset="0" Text="Szene 10 Position" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%031" op:nowarn="true" Name="IOHC%C%Scene1Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="24" BitOffset="0" Text="Szene 1 Aktion" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%032" op:nowarn="true" Name="IOHC%C%Scene2Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="25" BitOffset="0" Text="Szene 2 Aktion" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%033" op:nowarn="true" Name="IOHC%C%Scene3Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="26" BitOffset="0" Text="Szene 3 Aktion" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%034" op:nowarn="true" Name="IOHC%C%Scene4Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="27" BitOffset="0" Text="Szene 4 Aktion" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%035" op:nowarn="true" Name="IOHC%C%Scene5Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="28" BitOffset="0" Text="Szene 5 Aktion" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%036" op:nowarn="true" Name="IOHC%C%Scene6Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="29" BitOffset="0" Text="Szene 6 Aktion" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%037" op:nowarn="true" Name="IOHC%C%Scene7Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="30" BitOffset="0" Text="Szene 7 Aktion" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%038" op:nowarn="true" Name="IOHC%C%Scene8Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="31" BitOffset="0" Text="Szene 8 Aktion" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%039" op:nowarn="true" Name="IOHC%C%Scene9Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="32" BitOffset="0" Text="Szene 9 Aktion" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%040" op:nowarn="true" Name="IOHC%C%Scene10Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="33" BitOffset="0" Text="Szene 10 Aktion" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%041" Name="IOHC%C%Scene1Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="34" BitOffset="0" Text="Szene 1 Lamellenposition" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%042" Name="IOHC%C%Scene2Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="35" BitOffset="0" Text="Szene 2 Lamellenposition" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%043" Name="IOHC%C%Scene3Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="36" BitOffset="0" Text="Szene 3 Lamellenposition" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%044" Name="IOHC%C%Scene4Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="37" BitOffset="0" Text="Szene 4 Lamellenposition" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%045" Name="IOHC%C%Scene5Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="38" BitOffset="0" Text="Szene 5 Lamellenposition" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%046" Name="IOHC%C%Scene6Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="39" BitOffset="0" Text="Szene 6 Lamellenposition" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%047" Name="IOHC%C%Scene7Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="40" BitOffset="0" Text="Szene 7 Lamellenposition" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%048" Name="IOHC%C%Scene8Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="41" BitOffset="0" Text="Szene 8 Lamellenposition" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%049" Name="IOHC%C%Scene9Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="42" BitOffset="0" Text="Szene 9 Lamellenposition" Value="0" SuffixText=" %" />
-                <Parameter Id="%AID%_UP-%TT%%CC%050" Name="IOHC%C%Scene10Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="43" BitOffset="0" Text="Szene 10 Lamellenposition" Value="0" SuffixText=" %" />
-                <!-- Thermostat scene overlays: Temperature (overlaps ScenePosition offsets 14-23) -->
-                <Parameter Id="%AID%_UP-%TT%%CC%051" op:nowarn="true" Name="IOHC%C%Scene1Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="14" BitOffset="0" Text="Szene 1 Temperatur" Value="20" SuffixText=" °C" />
-                <Parameter Id="%AID%_UP-%TT%%CC%052" op:nowarn="true" Name="IOHC%C%Scene2Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="15" BitOffset="0" Text="Szene 2 Temperatur" Value="20" SuffixText=" °C" />
-                <Parameter Id="%AID%_UP-%TT%%CC%053" op:nowarn="true" Name="IOHC%C%Scene3Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="16" BitOffset="0" Text="Szene 3 Temperatur" Value="20" SuffixText=" °C" />
-                <Parameter Id="%AID%_UP-%TT%%CC%054" op:nowarn="true" Name="IOHC%C%Scene4Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="17" BitOffset="0" Text="Szene 4 Temperatur" Value="20" SuffixText=" °C" />
-                <Parameter Id="%AID%_UP-%TT%%CC%055" op:nowarn="true" Name="IOHC%C%Scene5Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="18" BitOffset="0" Text="Szene 5 Temperatur" Value="20" SuffixText=" °C" />
-                <Parameter Id="%AID%_UP-%TT%%CC%056" op:nowarn="true" Name="IOHC%C%Scene6Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="19" BitOffset="0" Text="Szene 6 Temperatur" Value="20" SuffixText=" °C" />
-                <Parameter Id="%AID%_UP-%TT%%CC%057" op:nowarn="true" Name="IOHC%C%Scene7Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="20" BitOffset="0" Text="Szene 7 Temperatur" Value="20" SuffixText=" °C" />
-                <Parameter Id="%AID%_UP-%TT%%CC%058" op:nowarn="true" Name="IOHC%C%Scene8Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="21" BitOffset="0" Text="Szene 8 Temperatur" Value="20" SuffixText=" °C" />
-                <Parameter Id="%AID%_UP-%TT%%CC%059" op:nowarn="true" Name="IOHC%C%Scene9Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="22" BitOffset="0" Text="Szene 9 Temperatur" Value="20" SuffixText=" °C" />
-                <Parameter Id="%AID%_UP-%TT%%CC%060" op:nowarn="true" Name="IOHC%C%Scene10Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="23" BitOffset="0" Text="Szene 10 Temperatur" Value="20" SuffixText=" °C" />
-                <!-- Thermostat scene overlays: CozyMode (overlaps SceneAction offsets 24-33) -->
-                <Parameter Id="%AID%_UP-%TT%%CC%061" op:nowarn="true" Name="IOHC%C%Scene1CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="24" BitOffset="0" Text="Szene 1 Modus" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%062" op:nowarn="true" Name="IOHC%C%Scene2CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="25" BitOffset="0" Text="Szene 2 Modus" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%063" op:nowarn="true" Name="IOHC%C%Scene3CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="26" BitOffset="0" Text="Szene 3 Modus" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%064" op:nowarn="true" Name="IOHC%C%Scene4CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="27" BitOffset="0" Text="Szene 4 Modus" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%065" op:nowarn="true" Name="IOHC%C%Scene5CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="28" BitOffset="0" Text="Szene 5 Modus" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%066" op:nowarn="true" Name="IOHC%C%Scene6CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="29" BitOffset="0" Text="Szene 6 Modus" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%067" op:nowarn="true" Name="IOHC%C%Scene7CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="30" BitOffset="0" Text="Szene 7 Modus" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%068" op:nowarn="true" Name="IOHC%C%Scene8CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="31" BitOffset="0" Text="Szene 8 Modus" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%069" op:nowarn="true" Name="IOHC%C%Scene9CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="32" BitOffset="0" Text="Szene 9 Modus" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%070" op:nowarn="true" Name="IOHC%C%Scene10CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="33" BitOffset="0" Text="Szene 10 Modus" Value="0" />
-                <!-- On/Off scene overlays: (overlaps ScenePosition offsets 14-23) -->
-                <Parameter Id="%AID%_UP-%TT%%CC%071" op:nowarn="true" Name="IOHC%C%Scene1OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="14" BitOffset="0" Text="Szene 1 Zustand" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%072" op:nowarn="true" Name="IOHC%C%Scene2OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="15" BitOffset="0" Text="Szene 2 Zustand" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%073" op:nowarn="true" Name="IOHC%C%Scene3OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="16" BitOffset="0" Text="Szene 3 Zustand" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%074" op:nowarn="true" Name="IOHC%C%Scene4OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="17" BitOffset="0" Text="Szene 4 Zustand" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%075" op:nowarn="true" Name="IOHC%C%Scene5OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="18" BitOffset="0" Text="Szene 5 Zustand" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%076" op:nowarn="true" Name="IOHC%C%Scene6OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="19" BitOffset="0" Text="Szene 6 Zustand" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%077" op:nowarn="true" Name="IOHC%C%Scene7OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="20" BitOffset="0" Text="Szene 7 Zustand" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%078" op:nowarn="true" Name="IOHC%C%Scene8OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="21" BitOffset="0" Text="Szene 8 Zustand" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%079" op:nowarn="true" Name="IOHC%C%Scene9OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="22" BitOffset="0" Text="Szene 9 Zustand" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%080" op:nowarn="true" Name="IOHC%C%Scene10OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="23" BitOffset="0" Text="Szene 10 Zustand" Value="0" />
+                <!-- Scene slot parameters 1..10 are generated from IoHomecontrol.scene.part.xml. -->
+                <op:usePart name="IOHCScene" xpath="//ParameterBlock[@Name='parameters']/*" />
               </Union>
             </Parameters>
 
@@ -142,69 +74,8 @@
               <ParameterRef Id="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901" RefId="%AID%_UP-%TT%%CC%009" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%011_R-%TT%%CC%01101" RefId="%AID%_UP-%TT%%CC%011" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_UP-%TT%%CC%020" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%021_R-%TT%%CC%02101" RefId="%AID%_UP-%TT%%CC%021" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%022_R-%TT%%CC%02201" RefId="%AID%_UP-%TT%%CC%022" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%023_R-%TT%%CC%02301" RefId="%AID%_UP-%TT%%CC%023" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%024_R-%TT%%CC%02401" RefId="%AID%_UP-%TT%%CC%024" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%025_R-%TT%%CC%02501" RefId="%AID%_UP-%TT%%CC%025" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%026_R-%TT%%CC%02601" RefId="%AID%_UP-%TT%%CC%026" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%027_R-%TT%%CC%02701" RefId="%AID%_UP-%TT%%CC%027" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%028_R-%TT%%CC%02801" RefId="%AID%_UP-%TT%%CC%028" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%029_R-%TT%%CC%02901" RefId="%AID%_UP-%TT%%CC%029" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%030_R-%TT%%CC%03001" RefId="%AID%_UP-%TT%%CC%030" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%031_R-%TT%%CC%03101" RefId="%AID%_UP-%TT%%CC%031" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%032_R-%TT%%CC%03201" RefId="%AID%_UP-%TT%%CC%032" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%033_R-%TT%%CC%03301" RefId="%AID%_UP-%TT%%CC%033" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%034_R-%TT%%CC%03401" RefId="%AID%_UP-%TT%%CC%034" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%035_R-%TT%%CC%03501" RefId="%AID%_UP-%TT%%CC%035" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%036_R-%TT%%CC%03601" RefId="%AID%_UP-%TT%%CC%036" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%037_R-%TT%%CC%03701" RefId="%AID%_UP-%TT%%CC%037" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%038_R-%TT%%CC%03801" RefId="%AID%_UP-%TT%%CC%038" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%039_R-%TT%%CC%03901" RefId="%AID%_UP-%TT%%CC%039" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%040_R-%TT%%CC%04001" RefId="%AID%_UP-%TT%%CC%040" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%041_R-%TT%%CC%04101" RefId="%AID%_UP-%TT%%CC%041" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%042_R-%TT%%CC%04201" RefId="%AID%_UP-%TT%%CC%042" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%043_R-%TT%%CC%04301" RefId="%AID%_UP-%TT%%CC%043" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%044_R-%TT%%CC%04401" RefId="%AID%_UP-%TT%%CC%044" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%045_R-%TT%%CC%04501" RefId="%AID%_UP-%TT%%CC%045" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%046_R-%TT%%CC%04601" RefId="%AID%_UP-%TT%%CC%046" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%047_R-%TT%%CC%04701" RefId="%AID%_UP-%TT%%CC%047" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%048_R-%TT%%CC%04801" RefId="%AID%_UP-%TT%%CC%048" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%049_R-%TT%%CC%04901" RefId="%AID%_UP-%TT%%CC%049" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%050_R-%TT%%CC%05001" RefId="%AID%_UP-%TT%%CC%050" />
-              <!-- Thermostat scene temperature refs -->
-              <ParameterRef Id="%AID%_UP-%TT%%CC%051_R-%TT%%CC%05101" RefId="%AID%_UP-%TT%%CC%051" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%052_R-%TT%%CC%05201" RefId="%AID%_UP-%TT%%CC%052" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%053_R-%TT%%CC%05301" RefId="%AID%_UP-%TT%%CC%053" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%054_R-%TT%%CC%05401" RefId="%AID%_UP-%TT%%CC%054" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%055_R-%TT%%CC%05501" RefId="%AID%_UP-%TT%%CC%055" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%056_R-%TT%%CC%05601" RefId="%AID%_UP-%TT%%CC%056" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%057_R-%TT%%CC%05701" RefId="%AID%_UP-%TT%%CC%057" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%058_R-%TT%%CC%05801" RefId="%AID%_UP-%TT%%CC%058" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%059_R-%TT%%CC%05901" RefId="%AID%_UP-%TT%%CC%059" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%060_R-%TT%%CC%06001" RefId="%AID%_UP-%TT%%CC%060" />
-              <!-- Thermostat scene cozy mode refs -->
-              <ParameterRef Id="%AID%_UP-%TT%%CC%061_R-%TT%%CC%06101" RefId="%AID%_UP-%TT%%CC%061" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%062_R-%TT%%CC%06201" RefId="%AID%_UP-%TT%%CC%062" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%063_R-%TT%%CC%06301" RefId="%AID%_UP-%TT%%CC%063" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%064_R-%TT%%CC%06401" RefId="%AID%_UP-%TT%%CC%064" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%065_R-%TT%%CC%06501" RefId="%AID%_UP-%TT%%CC%065" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%066_R-%TT%%CC%06601" RefId="%AID%_UP-%TT%%CC%066" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%067_R-%TT%%CC%06701" RefId="%AID%_UP-%TT%%CC%067" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%068_R-%TT%%CC%06801" RefId="%AID%_UP-%TT%%CC%068" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%069_R-%TT%%CC%06901" RefId="%AID%_UP-%TT%%CC%069" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%070_R-%TT%%CC%07001" RefId="%AID%_UP-%TT%%CC%070" />
-              <!-- On/Off scene refs -->
-              <ParameterRef Id="%AID%_UP-%TT%%CC%071_R-%TT%%CC%07101" RefId="%AID%_UP-%TT%%CC%071" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%072_R-%TT%%CC%07201" RefId="%AID%_UP-%TT%%CC%072" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%073_R-%TT%%CC%07301" RefId="%AID%_UP-%TT%%CC%073" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%074_R-%TT%%CC%07401" RefId="%AID%_UP-%TT%%CC%074" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%075_R-%TT%%CC%07501" RefId="%AID%_UP-%TT%%CC%075" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%076_R-%TT%%CC%07601" RefId="%AID%_UP-%TT%%CC%076" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%077_R-%TT%%CC%07701" RefId="%AID%_UP-%TT%%CC%077" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%078_R-%TT%%CC%07801" RefId="%AID%_UP-%TT%%CC%078" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%079_R-%TT%%CC%07901" RefId="%AID%_UP-%TT%%CC%079" />
-              <ParameterRef Id="%AID%_UP-%TT%%CC%080_R-%TT%%CC%08001" RefId="%AID%_UP-%TT%%CC%080" />
+              <!-- Scene slot ParameterRefs 1..10 are generated from IoHomecontrol.scene.part.xml. -->
+              <op:usePart name="IOHCScene" xpath="//ParameterBlock[@Name='parameterRefs']/*" />
             </ParameterRefs>
 
             <ComObjectTable>
@@ -220,10 +91,10 @@
               <ComObject Id="%AID%_O-%TT%%CC%002" Name="CH%C%UpDown" Text="Kanal %C% Auf/Ab" FunctionText="Auf/Ab Befehl" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-8" Number="%K2%" />
 
               <!-- K3: Stop command (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%003" Name="CH%C%Stop" Text="Kanal %C% Stopp" FunctionText="Stopp Befehl" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-17" Number="%K3%" />
+              <ComObject Id="%AID%_O-%TT%%CC%003" Name="CH%C%Stop" Text="Kanal %C% Stopp" FunctionText="Stopp Befehl" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K3%" />
 
               <!-- K4: Status (read) -->
-              <ComObject Id="%AID%_O-%TT%%CC%004" Name="CH%C%Status" Text="Kanal %C% Bewegt" FunctionText="Bewegungsstatus" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-11" Number="%K4%" />
+              <ComObject Id="%AID%_O-%TT%%CC%004" Name="CH%C%Status" Text="Kanal %C% Bewegt" FunctionText="Bewegungsstatus" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K4%" />
 
               <!-- K5: Slat position command (write) - visible only for blind/shutter -->
               <ComObject Id="%AID%_O-%TT%%CC%005" Name="CH%C%Slat" Text="Kanal %C% Lamellenposition" FunctionText="Lamellenposition setzen" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K5%" />
@@ -234,11 +105,10 @@
               <!-- === P1: New Per-channel Communication Objects === -->
 
               <!-- K7: Favorite position trigger (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%007" Name="CH%C%Favorite" Text="Kanal %C% Favorit-Position" FunctionText="Favorit-Position" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-17" Number="%K7%" />
+              <ComObject Id="%AID%_O-%TT%%CC%007" Name="CH%C%Favorite" Text="Kanal %C% Favorit-Position" FunctionText="Favorit-Position" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K7%" />
 
               <!-- K8: Ventilation position trigger (write) - visible only for Fenster -->
-              <ComObject Id="%AID%_O-%TT%%CC%008" Name="CH%C%Ventilation" Text="Kanal %C% Lüftungsposition" FunctionText="Lüftungsposition" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-17" Number="%K8%" />
-              <!-- K9 reserved: no Pairing-Status communication object. Pairing loss is reported via K13 Fehlerstatus. -->
+              <ComObject Id="%AID%_O-%TT%%CC%008" Name="CH%C%Ventilation" Text="Kanal %C% Lüftungsposition" FunctionText="Lüftungsposition" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K8%" />
 
               <!-- K10: Battery level (read) -->
               <ComObject Id="%AID%_O-%TT%%CC%010" Name="CH%C%Battery" Text="Kanal %C% Batterielevel" FunctionText="Batterielevel" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K10%" />
@@ -249,10 +119,10 @@
               <!-- === P2: New Per-channel Communication Objects === -->
 
               <!-- K12: Lock / Unlock (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%012" Name="CH%C%Lock" Text="Kanal %C% Sperren" FunctionText="Kanal sperren" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-3" Number="%K12%" />
+              <ComObject Id="%AID%_O-%TT%%CC%012" Name="CH%C%Lock" Text="Kanal %C% Sperren" FunctionText="Kanal sperren" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K12%" />
 
               <!-- K13: Error status (read) -->
-              <ComObject Id="%AID%_O-%TT%%CC%013" Name="CH%C%ErrorStatus" Text="Kanal %C% Fehlerstatus" FunctionText="Fehlerstatus" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" Number="%K13%" />
+              <ComObject Id="%AID%_O-%TT%%CC%013" Name="CH%C%ErrorStatus" Text="Kanal %C% Fehlerstatus" FunctionText="Fehlerstatus" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-10" Number="%K13%" />
 
               <!-- === P3: New Per-channel Communication Objects === -->
 
@@ -285,9 +155,6 @@
               <!-- K22: Window contact (write) -->
               <ComObject Id="%AID%_O-%TT%%CC%022" Name="CH%C%CozyWindow" Text="Kanal %C% Fensterkontakt" FunctionText="Fensterkontakt" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-19" Number="%K22%" />
 
-              <!-- K23/K24 reserved: device info is no longer exposed as regular communication objects.
-                   Device name and io-homecontrol device type code are available via ETS diagnosis / serial console. -->
-
             </ComObjectTable>
 
             <ComObjectRefs>
@@ -303,7 +170,6 @@
               <!-- P1 KOs -->
               <ComObjectRef Id="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" RefId="%AID%_O-%TT%%CC%007" FunctionText="Favorit-Position" Text="Kanal %C% Favorit-Position" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" RefId="%AID%_O-%TT%%CC%008" FunctionText="Lüftungsposition" Text="Kanal %C% Lüftungsposition" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <!-- K9 reserved: Pairing-Status ComObjectRef intentionally omitted. -->
               <ComObjectRef Id="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" RefId="%AID%_O-%TT%%CC%010" FunctionText="Batterielevel" Text="Kanal %C% Batterielevel" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" RefId="%AID%_O-%TT%%CC%011" FunctionText="Signalstärke" Text="Kanal %C% Signalstärke" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
 
@@ -327,8 +193,6 @@
               <!-- Alternative KO Refs for On/Off device types (Licht, Schalter, Schloss) -->
               <ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00202" RefId="%AID%_O-%TT%%CC%002" FunctionText="Ein/Aus Befehl" Text="Kanal %C% Ein/Aus" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00402" RefId="%AID%_O-%TT%%CC%004" FunctionText="Status" Text="Kanal %C% Status" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-
-              <!-- K23/K24 reserved: no ComObjectRefs for device info KOs. -->
             </ComObjectRefs>
           </Static>
 
@@ -357,42 +221,53 @@
 
                         <!-- Position-only parameters: Fahrzeit, Richtung (types 0-4, 7, 9-11) -->
                         <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
-                          <when test="0 1 2 3 4 7 9 10 11">
+                          <when test="&lt;5">
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
+                          </when>
+                          <when test="7">
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
+                          </when>
+                          <when test="9">
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
+                          </when>
+                          <when test="10">
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
+                          </when>
+                          <when test="11">
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
                           </when>
                         </choose>
 
-                        <!-- Scene support: available for all active device types.
-                             Repeated scene UI rows are generated via OpenKNXproducer XML parts. -->
+                        <!-- Scene support: available for all device types.
+                             The n-th scene UI is generated from IoHomecontrol.scene.part.xml. -->
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
+                        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
                         <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
                           <!-- Position scenes without lamella -->
                           <when test="0 2 3 4 7 10 11">
-                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
-                            <op:usePart name="IOHCScenePosition" instanceFrom="1" instanceTo="10" xpath="//SNIPPET/*" />
+                            <op:usePart name="IOHCScene" xpath="//ParameterBlock[@Name='ui-position']/*" />
                           </when>
-
-                          <!-- Position scenes with lamella: Jalousie/Rollladen and horizontal sun protection -->
+                          <!-- Position scenes with lamella -->
                           <when test="1 9">
-                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
-                            <op:usePart name="IOHCScenePositionSlat" instanceFrom="1" instanceTo="10" xpath="//SNIPPET/*" />
+                            <op:usePart name="IOHCScene" xpath="//ParameterBlock[@Name='ui-position-slat']/*" />
                           </when>
-
                           <!-- Thermostat scenes -->
                           <when test="5">
-                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
-                            <op:usePart name="IOHCSceneThermostat" instanceFrom="1" instanceTo="10" xpath="//SNIPPET/*" />
+                            <op:usePart name="IOHCScene" xpath="//ParameterBlock[@Name='ui-thermostat']/*" />
                           </when>
-
-                          <!-- On/Off scenes: Licht, Schloss, Schalter -->
+                          <!-- On/Off scenes -->
                           <when test="6 8 12">
-                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
-                            <op:usePart name="IOHCSceneOnOff" instanceFrom="1" instanceTo="10" xpath="//SNIPPET/*" />
+                            <op:usePart name="IOHCScene" xpath="//ParameterBlock[@Name='ui-onoff']/*" />
                           </when>
                         </choose>
 
@@ -413,8 +288,7 @@
                           <when test="12"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00202" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00402" /></when>
                         </choose>
 
-                        <!-- === Always-visible KOs (battery, RSSI, lock, error) === -->
-                        <!-- K9 reserved: Pairing status is not exposed as a communication object. -->
+                        <!-- === Always-visible KOs (pairing, battery, RSSI, lock, error) === -->
                         <ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" />
                         <ComObjectRefRef RefId="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" />
                         <!-- Lock KO: always visible except for Schloss where it's in the type-specific block -->
@@ -447,15 +321,18 @@
                           <when test="11"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
                         </choose>
 
-                        <!-- Scene KOs: visible when SceneCount >= 1, for all device types -->
-                        <op:usePart name="IOHCSceneKOs" xpath="//SNIPPET/*" />
-
-                        <!-- K23/K24 reserved: device info KOs are not shown in the regular ETS object list. -->
+                        <!-- Scene KOs: visible when SceneCount >= 1, independent of device type and scene number. -->
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+                          <when test=">=1">
+                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" />
+                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" />
+                          </when>
+                        </choose>
 
                         <!-- === P0: Pairing Section === -->
                         <ParameterSeparator Id="%AID%_PS-nnn" Text="Pairing" UIHint="Headline" />
                         <ParameterSeparator Id="%AID%_PS-nnn" Text="Hinweis: Diese Schaltflächen funktionieren nur bei aktiver ETS-Onlineverbindung zum Gerät. Sie starten oder entfernen das Pairing direkt im Gerät." UIHint="Information" />
-                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Ein fehlendes oder verlorenes Pairing wird über das Kommunikationsobjekt Fehlerstatus gemeldet. Detaillierte Pairing-Informationen stehen in den Diagnosefeldern." UIHint="Information" />
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Ein fehlendes oder verlorenes Pairing wird im Fehlerstatus des Kanals gemeldet; Details stehen in den Diagnosefeldern unten." UIHint="Information" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%010_R-%TT%%CC%01001" IndentLevel="1" HelpContext="IOHC-Pairing-Modus" />
                         <ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
                           <Rows>

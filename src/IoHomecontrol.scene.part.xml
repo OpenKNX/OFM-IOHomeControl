@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns:op="http://github.com/OpenKNX/OpenKNXproducer" xmlns="http://knx.org/xml/project/20">
+
+  <!-- Complete definition of the n-th io-homecontrol scene slot.
+       The template includes the needed sections via XPath:
+       - parameters
+       - parameterRefs
+       - ui-position
+       - ui-position-slat
+       - ui-thermostat
+       - ui-onoff
+  -->
+
+  <ParameterBlock Name="parameters">
+    <Parameter Id="%AID%_UP-%TT%%CC%%POS%" op:nowarn="true" Name="IOHC%C%Scene%N%Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="%DATA_OFFSET%" BitOffset="0" Text="Szene %N% Position" Value="0" SuffixText=" %" />
+    <Parameter Id="%AID%_UP-%TT%%CC%%ACTION%" op:nowarn="true" Name="IOHC%C%Scene%N%Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="%ACTION_OFFSET%" BitOffset="0" Text="Szene %N% Aktion" Value="0" />
+    <Parameter Id="%AID%_UP-%TT%%CC%%SLAT%" Name="IOHC%C%Scene%N%Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="%SLAT_OFFSET%" BitOffset="0" Text="Szene %N% Lamellenposition" Value="0" SuffixText=" %" />
+    <Parameter Id="%AID%_UP-%TT%%CC%%TEMP%" op:nowarn="true" Name="IOHC%C%Scene%N%Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="%DATA_OFFSET%" BitOffset="0" Text="Szene %N% Temperatur" Value="20" SuffixText=" °C" />
+    <Parameter Id="%AID%_UP-%TT%%CC%%MODE%" op:nowarn="true" Name="IOHC%C%Scene%N%CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="%ACTION_OFFSET%" BitOffset="0" Text="Szene %N% Modus" Value="0" />
+    <Parameter Id="%AID%_UP-%TT%%CC%%ONOFF%" op:nowarn="true" Name="IOHC%C%Scene%N%OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="%DATA_OFFSET%" BitOffset="0" Text="Szene %N% Zustand" Value="0" />
+  </ParameterBlock>
+
+  <ParameterBlock Name="parameterRefs">
+    <ParameterRef Id="%AID%_UP-%TT%%CC%%POS%_R-%TT%%CC%%POS%01" RefId="%AID%_UP-%TT%%CC%%POS%" />
+    <ParameterRef Id="%AID%_UP-%TT%%CC%%ACTION%_R-%TT%%CC%%ACTION%01" RefId="%AID%_UP-%TT%%CC%%ACTION%" />
+    <ParameterRef Id="%AID%_UP-%TT%%CC%%SLAT%_R-%TT%%CC%%SLAT%01" RefId="%AID%_UP-%TT%%CC%%SLAT%" />
+    <ParameterRef Id="%AID%_UP-%TT%%CC%%TEMP%_R-%TT%%CC%%TEMP%01" RefId="%AID%_UP-%TT%%CC%%TEMP%" />
+    <ParameterRef Id="%AID%_UP-%TT%%CC%%MODE%_R-%TT%%CC%%MODE%01" RefId="%AID%_UP-%TT%%CC%%MODE%" />
+    <ParameterRef Id="%AID%_UP-%TT%%CC%%ONOFF%_R-%TT%%CC%%ONOFF%01" RefId="%AID%_UP-%TT%%CC%%ONOFF%" />
+  </ParameterBlock>
+
+  <ParameterBlock Name="ui-position">
+    <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+      <when test=">=%N%">
+        <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene %N%" UIHint="Headline" />
+        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%ACTION%_R-%TT%%CC%%ACTION%01" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+        <choose ParamRefId="%AID%_UP-%TT%%CC%%ACTION%_R-%TT%%CC%%ACTION%01">
+          <when test="0">
+            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%POS%_R-%TT%%CC%%POS%01" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+          </when>
+        </choose>
+      </when>
+    </choose>
+  </ParameterBlock>
+
+  <ParameterBlock Name="ui-position-slat">
+    <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+      <when test=">=%N%">
+        <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene %N%" UIHint="Headline" />
+        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%ACTION%_R-%TT%%CC%%ACTION%01" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+        <choose ParamRefId="%AID%_UP-%TT%%CC%%ACTION%_R-%TT%%CC%%ACTION%01">
+          <when test="0">
+            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%POS%_R-%TT%%CC%%POS%01" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%SLAT%_R-%TT%%CC%%SLAT%01" IndentLevel="2" HelpContext="IOHC-Szenenlamelle" />
+          </when>
+        </choose>
+      </when>
+    </choose>
+  </ParameterBlock>
+
+  <ParameterBlock Name="ui-thermostat">
+    <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+      <when test=">=%N%">
+        <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene %N%" UIHint="Headline" />
+        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%TEMP%_R-%TT%%CC%%TEMP%01" IndentLevel="2" HelpContext="IOHC-Szenentemperatur" />
+        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%MODE%_R-%TT%%CC%%MODE%01" IndentLevel="2" HelpContext="IOHC-Szenenmodus" />
+      </when>
+    </choose>
+  </ParameterBlock>
+
+  <ParameterBlock Name="ui-onoff">
+    <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+      <when test=">=%N%">
+        <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene %N%" UIHint="Headline" />
+        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%ONOFF%_R-%TT%%CC%%ONOFF%01" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+      </when>
+    </choose>
+  </ParameterBlock>
+
+</KNX>
