@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns:op="http://github.com/OpenKNX/OpenKNXproducer" xmlns="http://knx.org/xml/project/20">
+  <SNIPPET>
+    <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+      <when test=">=%N%">
+        <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene %N%" UIHint="Headline" />
+        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%ACTION%_R-%TT%%CC%%ACTION%01" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
+        <choose ParamRefId="%AID%_UP-%TT%%CC%%ACTION%_R-%TT%%CC%%ACTION%01">
+          <when test="0">
+            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%POS%_R-%TT%%CC%%POS%01" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+          </when>
+        </choose>
+      </when>
+    </choose>
+  </SNIPPET>
+</KNX>

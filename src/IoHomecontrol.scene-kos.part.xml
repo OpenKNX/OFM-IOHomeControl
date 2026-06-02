@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns:op="http://github.com/OpenKNX/OpenKNXproducer" xmlns="http://knx.org/xml/project/20">
+  <SNIPPET>
+    <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
+      <when test=">=1">
+        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" />
+        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" />
+      </when>
+    </choose>
+  </SNIPPET>
+</KNX>
