@@ -611,16 +611,18 @@ Für den Betrieb des io-homecontrol-Moduls ist folgende Hardware erforderlich:
 
 ### **Globale Kommunikationsobjekte**
 
-Folgende Kommunikationsobjekte gelten für das gesamte io-homecontrol-Modul:
+Folgende Kommunikationsobjekte gelten für das gesamte io-homecontrol-Modul. Die absoluten KO-Nummern hängen von der einbettenden OAM-Applikation ab.
 
-| KO | Name | DPT | Richtung | Beschreibung |
-|----|------|-----|----------|-------------|
-| 20 | Modulstatus | 1.011 | Lesen | 1 = Radio initialisiert, 0 = nicht bereit |
-| 21 | Discovery Start/Stopp | 1.010 | Schreiben | 1 = Broadcast-Discovery starten, 0 = Discovery stoppen |
-| 22 | Discovery aktiv | 1.011 | Lesen | 1 = Discovery läuft |
-| 23 | Netzwerk-Scan | 1.010 | Schreiben | 1 = Passiven Scan starten, 0 = Stoppen |
-| 24 | Netzwerk-Scan aktiv | 1.011 | Lesen | 1 = Scan läuft |
-| 25 | Beobachtete Fernbedienung | 12.001 | Lesen | Zuletzt beobachtete Fernbedienungs-Adresse |
+`G` bezeichnet den ersten globalen KO-Offset
+
+| Offset | Name | DPT | Richtung | Beschreibung |
+|--------|------|-----|----------|-------------|
+| G+0 | Modulstatus | 1.011 | Lesen | 1 = Radio initialisiert, 0 = nicht bereit |
+| G+1 | Discovery Start/Stopp | 1.010 | Schreiben | 1 = Broadcast-Discovery starten, 0 = Discovery stoppen |
+| G+2 | Discovery aktiv | 1.011 | Lesen | 1 = Discovery läuft |
+| G+3 | Netzwerk-Scan | 1.010 | Schreiben | 1 = Passiven Scan starten, 0 = Stoppen |
+| G+4 | Netzwerk-Scan aktiv | 1.011 | Lesen | 1 = Scan läuft |
+| G+5 | Beobachtete Fernbedienung | 12.001 | Lesen | Zuletzt beobachtete Fernbedienungs-Adresse |
 
 ### **Kommunikationsobjekte pro Kanal**
 
