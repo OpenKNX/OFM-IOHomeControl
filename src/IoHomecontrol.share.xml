@@ -156,9 +156,7 @@
               <Parameter Id="%AID%_P-%TT%00002" Name="IOHCRemoteObserve" ParameterType="%AID%_PT-IOHCCheckBox" Text="Fernbedienungs-Beobachtung aktivieren" Value="0">
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="1" BitOffset="0" />
               </Parameter>
-              <Parameter Id="%AID%_P-%TT%00003" Name="IOHCOverviewLastRefresh" ParameterType="%AID%_PT-IOHCText40Byte" Text="Zuletzt aktualisiert" Value="Noch nicht aktualisiert" Access="Read">
-                <Memory CodeSegment="%AID%_RS-04-00000" Offset="2" BitOffset="0" />
-              </Parameter>
+              <Parameter Id="%AID%_P-%TT%00003" Name="IOHCOverviewLastRefresh" ParameterType="%AID%_PT-IOHCText40Byte" Text="Zuletzt aktualisiert" Value="Noch nicht aktualisiert" Access="Read" />
             </Parameters>
 
             <ParameterRefs>
