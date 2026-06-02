@@ -155,6 +155,9 @@
               <!-- K22: Window contact (write) -->
               <ComObject Id="%AID%_O-%TT%%CC%022" Name="CH%C%CozyWindow" Text="Kanal %C% Fensterkontakt" FunctionText="Fensterkontakt" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-19" Number="%K22%" />
 
+              <!-- K24: Reserved dummy objects; keep the channel KO range at Kn+0..Kn+24 after removing device-info KOs from ETS visibility. Do not reference in ComObjectRefs. -->
+              <ComObject Id="%AID%_O-%TT%%CC%024" Name="CH%C%Reserved24" Text="Kanal %C% reserviert" FunctionText="Reserviert" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Disabled" CommunicationFlag="Disabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K24%" />
+
             </ComObjectTable>
 
             <ComObjectRefs>
