@@ -191,11 +191,14 @@ Alternativ kann das Pairing über die serielle Konsole durchgeführt werden.
 
 ### **Pairing-Status**
 
-Der Pairing-Status wird pro Kanal über ein Kommunikationsobjekt (KO Kn+9) gemeldet:
-* 1 = Gerät gepairt
-* 0 = Kein Gerät gepairt
+Es gibt kein eigenes Kommunikationsobjekt für den Pairing-Status.
 
-Dieses KO ist bewusst von den ETS-Diagnosefeldern getrennt. Es bildet dauerhaft den busrelevanten Zustand "gepaart / nicht gepaart" ab, während die ETS-Felder ergänzende Informationen zum letzten Pairing-Vorgang und zur zuletzt gelesenen Gerätesituation bereitstellen.
+Ein fehlendes oder verlorenes Pairing wird über den Fehlerstatus des Kanals gemeldet:
+
+* `0 = OK`
+* `3 = nicht gepairt / Pairing verloren`
+
+Detaillierte Pairing-Informationen stehen in ETS über die Pairing-Diagnosefelder sowie über die serielle Konsole zur Verfügung. Der Offset `Kn+9` bleibt reserviert und wird nicht für ein anderes Kommunikationsobjekt verwendet, damit die nachfolgenden Kanal-KO-Offsets stabil bleiben.
 
 
 
@@ -613,7 +616,7 @@ Für den Betrieb des io-homecontrol-Moduls ist folgende Hardware erforderlich:
 
 Folgende Kommunikationsobjekte gelten für das gesamte io-homecontrol-Modul. Die absoluten KO-Nummern hängen von der einbettenden OAM-Applikation ab.
 
-`G` bezeichnet den ersten globalen KO-Offset
+`G` bezeichnet den ersten globalen KO-Offset des io-homecontrol-Moduls.
 
 | Offset | Name | DPT | Richtung | Beschreibung |
 |--------|------|-----|----------|-------------|
@@ -626,46 +629,75 @@ Folgende Kommunikationsobjekte gelten für das gesamte io-homecontrol-Modul. Die
 
 ### **Kommunikationsobjekte pro Kanal**
 
-Jeder Kanal hat bis zu 25 Kommunikationsobjekte. Die KO-Nummern sind relativ zum Kanal-Offset (Kn = erster KO des Kanals n).
+Die KO-Nummern sind relativ zum Kanal-Offset (`Kn = erster KO des Kanals n`). Die tatsächlich sichtbaren Kommunikationsobjekte hängen vom Gerätetyp, von der Szenenanzahl und von der einbettenden OAM-Applikation ab. Die folgende Darstellung trennt reguläre Betriebsobjekte von Diagnose- und reservierten Offsets.
 
-#### **Basis-KOs (alle Gerätetypen)**
+#### **Positionsbasierte Gerätetypen**
 
-| Offset | Name | DPT | Richtung | Beschreibung |
-|--------|------|-----|----------|-------------|
+Gilt für Gerätetypen mit Positionssteuerung: Generisch (0), Jalousie / Rollladen (1), Fenster (2), Markise (3), Garagentor (4), Tor (7), Sonnenschutz horizontal (9), Vorhangschiene (10) und Lüftung (11).
+
+| Offset | Name | DPT | Richtung | Sichtbarkeit / Beschreibung |
+|--------|------|-----|----------|-----------------------------|
 | Kn+0 | Position setzen | 5.001 | Schreiben | Zielposition 0-100% |
 | Kn+1 | Position Rückmeldung | 5.001 | Lesen | Aktuelle Position |
 | Kn+2 | Auf/Ab | 1.008 | Schreiben | 0 = Auf, 1 = Ab |
-| Kn+3 | Stopp | 1.001 | Schreiben | Fahrt stoppen |
-| Kn+4 | Bewegungsstatus | 1.001 | Lesen | 1 = fährt, 0 = steht |
-| Kn+5 | Lamellenposition | 5.001 | Schreiben | Lamellenwinkel (nur Jalousie / Sonnenschutz horizontal) |
-| Kn+6 | Lamelle Rückmeldung | 5.001 | Lesen | Aktuelle Lamellenposition |
-| Kn+7 | Favorit-Position | 1.001 | Schreiben | 1 = Favorit-Position anfahren |
-| Kn+8 | Lüftungsposition | 1.001 | Schreiben | 1 = Lüftungsstellung (Fenster / Lüftung) |
-| Kn+9 | Pairing-Status | 1.001 | Lesen | 1 = gepairt, 0 = nicht gepairt |
-| Kn+10 | Batterielevel | 5.001 | Lesen | 0-100% (für Solargeräte) |
-| Kn+11 | Signalstärke | 5.001 | Lesen | RSSI 0-100% |
-| Kn+12 | Sperren | 1.001 | Schreiben | 1 = Kanal sperren, 0 = entsperren |
-| Kn+13 | Fehlerstatus | 5.010 | Lesen | 0=OK, 1=Kommunikationsfehler, 2=Duty-Cycle, 3=Pairing verloren, 4=Funkstörung |
-| Kn+14 | Szene | 17.001 | Schreiben | Szene aufrufen (1-10) |
-| Kn+15 | Szenensteuerung | 18.001 | Schreiben | Szene lernen / abrufen |
+| Kn+3 | Stopp | 1.017 | Schreiben | Trigger zum Stoppen einer laufenden Fahrt |
+| Kn+4 | Bewegungsstatus | 1.011 | Lesen | 1 = fährt / aktiv, 0 = steht / inaktiv |
+| Kn+7 | Favorit-Position | 1.017 | Schreiben | Trigger: gespeicherte Favorit-Position anfahren |
 | Kn+16 | Wind-/Regenalarm | 1.005 | Schreiben | 1 = Alarm, 0 = Entwarnung |
-| Kn+17 | Langzeitbetrieb | 1.008 | Schreiben | Step-Stop (nur Jalousie) |
 
-#### **Thermostat-KOs (nur Gerätetyp Thermostat)**
+Zusätzliche positionsbezogene KOs:
+
+| Offset | Name | DPT | Richtung | Sichtbarkeit / Beschreibung |
+|--------|------|-----|----------|-----------------------------|
+| Kn+5 | Lamellenposition | 5.001 | Schreiben | Nur Jalousie / Rollladen und Sonnenschutz horizontal, sofern Lamellensteuerung unterstützt wird |
+| Kn+6 | Lamelle Rückmeldung | 5.001 | Lesen | Nur Jalousie / Rollladen und Sonnenschutz horizontal, sofern Lamellensteuerung unterstützt wird |
+| Kn+8 | Lüftungsposition | 1.017 | Schreiben | Nur Fenster / Lüftung: Trigger für Lüftungsstellung |
+| Kn+17 | Langzeitbetrieb | 1.008 | Schreiben | Nur Jalousie / Rollladen: 0 = Auf, 1 = Ab |
+
+#### **Licht, Schalter und Schloss**
+
+Bei den Gerätetypen Licht (6) und Schalter (12) wird `Auf/Ab` in der ETS als `Ein/Aus` und `Bewegungsstatus` als `Status` dargestellt. DPT und Funktion bleiben unverändert. Beim Gerätetyp Schloss (8) sind derzeit nur `Status` sowie das generische KO `Sperren` sichtbar.
+
+| Gerätetyp | Offset | Name in ETS | DPT | Richtung | Beschreibung |
+|-----------|--------|-------------|-----|----------|-------------|
+| Licht / Schalter | Kn+2 | Ein/Aus | 1.008 | Schreiben | Alternative Darstellung des Auf/Ab-KO |
+| Licht / Schalter | Kn+4 | Status | 1.011 | Lesen | Alternative Darstellung des Bewegungsstatus |
+| Schloss | Kn+4 | Status | 1.011 | Lesen | Schloss-/Statusrückmeldung |
+| Schloss | Kn+12 | Sperren | 1.003 | Schreiben | 1 = Kanal sperren, 0 = entsperren |
+
+#### **Thermostat-KOs**
+
+Gilt nur für Gerätetyp Thermostat (5). Thermostat-KOs müssen nicht disjunkt zu den KOs anderer Gerätetypen sein; die hier gezeigten Offsets sind die aktuelle Template-Belegung.
 
 | Offset | Name | DPT | Richtung | Beschreibung |
 |--------|------|-----|----------|-------------|
 | Kn+18 | Temperatur Sollwert | 9.001 | Schreiben | Zieltemperatur |
 | Kn+19 | Temperatur Rückmeldung | 9.001 | Lesen | Aktuelle Temperatur |
 | Kn+20 | Betriebsmodus | 20.102 | Schreiben | HVAC-Modus |
-| Kn+21 | Anwesenheit | 1.018 | Schreiben | Anwesenheitsstatus |
-| Kn+22 | Fensterkontakt | 1.019 | Schreiben | Fenster offen/geschlossen |
+| Kn+21 | Anwesenheit | 1.018 | Schreiben | 1 = anwesend, 0 = nicht anwesend |
+| Kn+22 | Fensterkontakt | 1.019 | Schreiben | 1 = Fenster offen, 0 = Fenster geschlossen |
 
-#### **Geräteinfo-KOs**
+#### **Szenen-KOs**
+
+Diese KOs erscheinen, sobald mindestens eine Szene für den Kanal konfiguriert ist.
 
 | Offset | Name | DPT | Richtung | Beschreibung |
 |--------|------|-----|----------|-------------|
-| Kn+23 | Gerätename | 16.001 | Lesen | 14-Byte Gerätename |
-| Kn+24 | Gerätetyp-Code | 7.001 | Lesen | io-homecontrol Gerätetyp-Code (Rohwert) |
+| Kn+14 | Szene | 17.001 | Schreiben | Szene aufrufen |
+| Kn+15 | Szenensteuerung | 18.001 | Schreiben | Szene lernen / abrufen |
 
-> Bei den Gerätetypen Licht und Schalter wird "Auf/Ab" als "Ein/Aus" und "Bewegungsstatus" als "Status" dargestellt. DPT und Funktion bleiben unverändert. Beim Gerätetyp Schloss sind derzeit nur "Status" sowie das generische KO "Sperren" sichtbar.
+#### **Diagnose- und Status-KOs**
+
+Diese KOs sind nicht zwingend für den regulären Betrieb erforderlich. Sie dienen der Diagnose, Service-Anzeige oder der Zustandsüberwachung.
+
+| Offset | Name | DPT | Richtung | Beschreibung |
+|--------|------|-----|----------|-------------|
+| Kn+9 | reserviert / nicht verwendet | — | — | Kein Kommunikationsobjekt; Pairing-Verlust wird über `Kn+13 Fehlerstatus = 3` gemeldet |
+| Kn+10 | Batterielevel | 5.001 | Lesen | 0-100% (für Solargeräte) |
+| Kn+11 | Signalstärke | 5.001 | Lesen | Normierte Signalstärke 0-100% |
+| Kn+13 | Fehlerstatus | — | Lesen | Proprietärer 1-Byte-Diagnosecode: 0=OK, 1=Kommunikationsfehler, 2=Duty-Cycle, 3=nicht gepairt / Pairing verloren, 4=Funkstörung |
+
+Für den regulären Betrieb wird ein fehlendes oder verlorenes Pairing über `Fehlerstatus = 3` gemeldet. Die ETS-Diagnosefelder und die serielle Konsole liefern bei Bedarf detailliertere Pairing-Informationen.
+
+`Gerätename` und `Gerätetyp-Code` werden nicht als reguläre Kommunikationsobjekte bereitgestellt. Diese Informationen sind nach Pairing/Konfiguration in der Regel konstant und gehören daher in ETS-Diagnosefelder, die serielle Konsole oder ein allgemeines Diagnose-/Servicekonzept.
+

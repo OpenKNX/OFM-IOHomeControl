@@ -198,10 +198,10 @@
               <ComObject Id="%AID%_O-%TT%%CC%002" Name="CH%C%UpDown" Text="Kanal %C% Auf/Ab" FunctionText="Auf/Ab Befehl" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-8" Number="%K2%" />
 
               <!-- K3: Stop command (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%003" Name="CH%C%Stop" Text="Kanal %C% Stopp" FunctionText="Stopp Befehl" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K3%" />
+              <ComObject Id="%AID%_O-%TT%%CC%003" Name="CH%C%Stop" Text="Kanal %C% Stopp" FunctionText="Stopp Befehl" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-17" Number="%K3%" />
 
               <!-- K4: Status (read) -->
-              <ComObject Id="%AID%_O-%TT%%CC%004" Name="CH%C%Status" Text="Kanal %C% Bewegt" FunctionText="Bewegungsstatus" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K4%" />
+              <ComObject Id="%AID%_O-%TT%%CC%004" Name="CH%C%Status" Text="Kanal %C% Bewegt" FunctionText="Bewegungsstatus" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-11" Number="%K4%" />
 
               <!-- K5: Slat position command (write) - visible only for blind/shutter -->
               <ComObject Id="%AID%_O-%TT%%CC%005" Name="CH%C%Slat" Text="Kanal %C% Lamellenposition" FunctionText="Lamellenposition setzen" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K5%" />
@@ -212,13 +212,11 @@
               <!-- === P1: New Per-channel Communication Objects === -->
 
               <!-- K7: Favorite position trigger (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%007" Name="CH%C%Favorite" Text="Kanal %C% Favorit-Position" FunctionText="Favorit-Position" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K7%" />
+              <ComObject Id="%AID%_O-%TT%%CC%007" Name="CH%C%Favorite" Text="Kanal %C% Favorit-Position" FunctionText="Favorit-Position" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-17" Number="%K7%" />
 
               <!-- K8: Ventilation position trigger (write) - visible only for Fenster -->
-              <ComObject Id="%AID%_O-%TT%%CC%008" Name="CH%C%Ventilation" Text="Kanal %C% Lüftungsposition" FunctionText="Lüftungsposition" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K8%" />
-
-              <!-- K9: Per-channel pairing status (read) -->
-              <ComObject Id="%AID%_O-%TT%%CC%009" Name="CH%C%PairingStatusCh" Text="Kanal %C% Pairing-Status" FunctionText="Pairing-Status" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K9%" />
+              <ComObject Id="%AID%_O-%TT%%CC%008" Name="CH%C%Ventilation" Text="Kanal %C% Lüftungsposition" FunctionText="Lüftungsposition" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-17" Number="%K8%" />
+              <!-- K9 reserved: no Pairing-Status communication object. Pairing loss is reported via K13 Fehlerstatus. -->
 
               <!-- K10: Battery level (read) -->
               <ComObject Id="%AID%_O-%TT%%CC%010" Name="CH%C%Battery" Text="Kanal %C% Batterielevel" FunctionText="Batterielevel" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K10%" />
@@ -229,10 +227,10 @@
               <!-- === P2: New Per-channel Communication Objects === -->
 
               <!-- K12: Lock / Unlock (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%012" Name="CH%C%Lock" Text="Kanal %C% Sperren" FunctionText="Kanal sperren" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K12%" />
+              <ComObject Id="%AID%_O-%TT%%CC%012" Name="CH%C%Lock" Text="Kanal %C% Sperren" FunctionText="Kanal sperren" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-3" Number="%K12%" />
 
               <!-- K13: Error status (read) -->
-              <ComObject Id="%AID%_O-%TT%%CC%013" Name="CH%C%ErrorStatus" Text="Kanal %C% Fehlerstatus" FunctionText="Fehlerstatus" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-10" Number="%K13%" />
+              <ComObject Id="%AID%_O-%TT%%CC%013" Name="CH%C%ErrorStatus" Text="Kanal %C% Fehlerstatus" FunctionText="Fehlerstatus" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" Number="%K13%" />
 
               <!-- === P3: New Per-channel Communication Objects === -->
 
@@ -265,13 +263,8 @@
               <!-- K22: Window contact (write) -->
               <ComObject Id="%AID%_O-%TT%%CC%022" Name="CH%C%CozyWindow" Text="Kanal %C% Fensterkontakt" FunctionText="Fensterkontakt" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-19" Number="%K22%" />
 
-              <!-- === Device info KOs (always visible when channel active) === -->
-
-              <!-- K23: Device name (read) -->
-              <ComObject Id="%AID%_O-%TT%%CC%023" Name="CH%C%DeviceName" Text="Kanal %C% Gerätename" FunctionText="Gerätename" ObjectSize="14 Bytes" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-16-1" Number="%K23%" />
-
-              <!-- K24: Device type code (read) -->
-              <ComObject Id="%AID%_O-%TT%%CC%024" Name="CH%C%DeviceTypeCode" Text="Kanal %C% Gerätetyp-Code" FunctionText="Gerätetyp-Code" ObjectSize="2 Bytes" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-7-1" Number="%K24%" />
+              <!-- K23/K24 reserved: device info is no longer exposed as regular communication objects.
+                   Device name and io-homecontrol device type code are available via ETS diagnosis / serial console. -->
 
             </ComObjectTable>
 
@@ -288,7 +281,7 @@
               <!-- P1 KOs -->
               <ComObjectRef Id="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" RefId="%AID%_O-%TT%%CC%007" FunctionText="Favorit-Position" Text="Kanal %C% Favorit-Position" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" RefId="%AID%_O-%TT%%CC%008" FunctionText="Lüftungsposition" Text="Kanal %C% Lüftungsposition" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" RefId="%AID%_O-%TT%%CC%009" FunctionText="Pairing-Status" Text="Kanal %C% Pairing-Status" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <!-- K9 reserved: Pairing-Status ComObjectRef intentionally omitted. -->
               <ComObjectRef Id="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" RefId="%AID%_O-%TT%%CC%010" FunctionText="Batterielevel" Text="Kanal %C% Batterielevel" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" RefId="%AID%_O-%TT%%CC%011" FunctionText="Signalstärke" Text="Kanal %C% Signalstärke" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
 
@@ -313,9 +306,7 @@
               <ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00202" RefId="%AID%_O-%TT%%CC%002" FunctionText="Ein/Aus Befehl" Text="Kanal %C% Ein/Aus" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00402" RefId="%AID%_O-%TT%%CC%004" FunctionText="Status" Text="Kanal %C% Status" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
 
-              <!-- Device info KO Refs -->
-              <ComObjectRef Id="%AID%_O-%TT%%CC%023_R-%TT%%CC%02301" RefId="%AID%_O-%TT%%CC%023" FunctionText="Gerätename" Text="Kanal %C% Gerätename" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%024_R-%TT%%CC%02401" RefId="%AID%_O-%TT%%CC%024" FunctionText="Gerätetyp-Code" Text="Kanal %C% Gerätetyp-Code" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <!-- K23/K24 reserved: no ComObjectRefs for device info KOs. -->
             </ComObjectRefs>
           </Static>
 
@@ -1674,8 +1665,8 @@
                           <when test="12"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00202" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00402" /></when>
                         </choose>
 
-                        <!-- === Always-visible KOs (pairing, battery, RSSI, lock, error) === -->
-                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" />
+                        <!-- === Always-visible KOs (battery, RSSI, lock, error) === -->
+                        <!-- K9 reserved: Pairing status is not exposed as a communication object. -->
                         <ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" />
                         <ComObjectRefRef RefId="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" />
                         <!-- Lock KO: always visible except for Schloss where it's in the type-specific block -->
@@ -1725,14 +1716,12 @@
                           <when test="12"><choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001"><when test=">=1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" /></when></choose></when>
                         </choose>
 
-                        <!-- === Device info KOs (always visible) === -->
-                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%023_R-%TT%%CC%02301" />
-                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%024_R-%TT%%CC%02401" />
+                        <!-- K23/K24 reserved: device info KOs are not shown in the regular ETS object list. -->
 
                         <!-- === P0: Pairing Section === -->
                         <ParameterSeparator Id="%AID%_PS-nnn" Text="Pairing" UIHint="Headline" />
                         <ParameterSeparator Id="%AID%_PS-nnn" Text="Hinweis: Diese Schaltflächen funktionieren nur bei aktiver ETS-Onlineverbindung zum Gerät. Sie starten oder entfernen das Pairing direkt im Gerät." UIHint="Information" />
-                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Der Kommunikationsobjekt-Status 'Pairing-Status' zeigt davon getrennt dauerhaft an, ob dieser Kanal aktuell angelernt ist." UIHint="Information" />
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Ein fehlendes oder verlorenes Pairing wird über das Kommunikationsobjekt Fehlerstatus gemeldet. Detaillierte Pairing-Informationen stehen in den Diagnosefeldern." UIHint="Information" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%010_R-%TT%%CC%01001" IndentLevel="1" HelpContext="IOHC-Pairing-Modus" />
                         <ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
                           <Rows>
