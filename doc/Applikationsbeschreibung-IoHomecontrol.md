@@ -353,20 +353,20 @@ Bestimmt den Typ des angeschlossenen io-homecontrol-Geräts. Die Auswahl beeinfl
 
 Mögliche Werte:
 * Generisch (0)
-* Jalousie / Rollladen (1) — Standard
+* Jalousie / Rollladen — Standard
 * Fenster (2)
 * Markise (3)
 * Garagentor (4)
-* Thermostat (5)
+* Thermostat
 * Licht (6)
 * Tor (7)
-* Schloss (8)
+* Schloss
 * Sonnenschutz horizontal (9)
 * Vorhangschiene (10)
 * Lüftung (11)
 * Schalter (12)
 
-> Bei Gerätetypen mit Positionssteuerung (0-4, 7, 9-11) werden zusätzlich die Parameter Öffnungszeit, Schließzeit und Richtung invertieren angezeigt. Beim Gerätetyp Thermostat (5) erscheinen die Thermostat-spezifischen KOs.
+> Bei Gerätetypen mit Positionssteuerung (0-4, 7, 9-11) werden zusätzlich die Parameter Öffnungszeit, Schließzeit und Richtung invertieren angezeigt. Beim Gerätetyp Thermostat erscheinen die Thermostat-spezifischen KOs.
 
 <!-- DOC -->
 <!-- DOC HelpContext="IOHC-Status-Abfrageintervall" -->
@@ -612,92 +612,53 @@ Für den Betrieb des io-homecontrol-Moduls ist folgende Hardware erforderlich:
 
 ## **Kommunikationsobjekte**
 
-### **Globale Kommunikationsobjekte**
+Die absoluten KO-Nummern hängen von der einbettenden OAM-Applikation ab. Die Tabelle verwendet daher relative Offsets:
 
-Folgende Kommunikationsobjekte gelten für das gesamte io-homecontrol-Modul. Die absoluten KO-Nummern hängen von der einbettenden OAM-Applikation ab.
+* `G` = erster globaler KO-Offset des io-homecontrol-Moduls
+* `Kn` = erster KO des Kanals `n`
 
-`G` bezeichnet den ersten globalen KO-Offset des io-homecontrol-Moduls.
+Die tatsächlich sichtbaren Kommunikationsobjekte hängen vom Gerätetyp, von der Szenenanzahl und von der OAM-Applikation ab. Die Tabelle verwendet die Gerätetyp-Namen aus dem Abschnitt [Gerätetypen](#gerätetypen). KOs mit Klammern sind optional bzw. nur unter der angegebenen Bedingung sichtbar.
 
-| Offset | Name | DPT | Richtung | Beschreibung |
-|--------|------|-----|----------|-------------|
-| G+0 | Modulstatus | 1.011 | Lesen | 1 = Radio initialisiert, 0 = nicht bereit |
-| G+1 | Discovery Start/Stopp | 1.010 | Schreiben | 1 = Broadcast-Discovery starten, 0 = Discovery stoppen |
-| G+2 | Discovery aktiv | 1.011 | Lesen | 1 = Discovery läuft |
-| G+3 | Netzwerk-Scan | 1.010 | Schreiben | 1 = Passiven Scan starten, 0 = Stoppen |
-| G+4 | Netzwerk-Scan aktiv | 1.011 | Lesen | 1 = Scan läuft |
-| G+5 | Beobachtete Fernbedienung | 12.001 | Lesen | Zuletzt beobachtete Fernbedienungs-Adresse |
+| KO | Bereich / Sichtbarkeit | DPT | Bezeichnung | Erklärung |
+|----|------------------------|-----|-------------|-----------|
+| G+0 | Global | 1.011 | Modulstatus | `1 = Radio initialisiert`, `0 = nicht bereit` |
+| G+1 | Global / Diagnose | 1.010 | Discovery Start/Stopp | `1 = Broadcast-Discovery starten`, `0 = Discovery stoppen` |
+| G+2 | Global / Diagnose | 1.011 | Discovery aktiv | `1 = Discovery läuft`, `0 = inaktiv` |
+| G+3 | Global / Diagnose | 1.010 | Netzwerk-Scan | `1 = passiven Scan starten`, `0 = stoppen` |
+| G+4 | Global / Diagnose | 1.011 | Netzwerk-Scan aktiv | `1 = Scan läuft`, `0 = inaktiv` |
+| G+5 | Global / Diagnose | 12.001 | Beobachtete Fernbedienung | Zuletzt beobachtete Fernbedienungs-Adresse |
+| Kn+0 | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 5.001 | Position setzen | Zielposition 0-100% |
+| Kn+1 | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 5.001 | Position Rückmeldung | Aktuelle Position 0-100% |
+| Kn+2 | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 1.008 | Auf/Ab | `0 = Auf`, `1 = Ab` |
+| " | Licht, Schalter | 1.008 | Ein/Aus | Alternative ETS-Darstellung von `Kn+2`; DPT und Funktion bleiben unverändert |
+| Kn+3 | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 1.017 | Stopp | Trigger zum Stoppen einer laufenden Fahrt |
+| Kn+4 | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 1.011 | Bewegungsstatus | `1 = fährt / aktiv`, `0 = steht / inaktiv` |
+| " | Licht, Schalter, Schloss | 1.011 | Status | Alternative ETS-Darstellung von `Kn+4`; bei Schloss als Statusrückmeldung |
+| (Kn+5) | Jalousie / Rollladen, Sonnenschutz horizontal | 5.001 | Lamellenposition | Lamellenwinkel 0-100%, sofern Lamellensteuerung unterstützt wird |
+| (Kn+6) | Jalousie / Rollladen, Sonnenschutz horizontal | 5.001 | Lamelle Rückmeldung | Aktuelle Lamellenposition 0-100% |
+| (Kn+7) | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 1.017 | Favorit-Position | Trigger: gespeicherte Favorit-Position anfahren |
+| (Kn+8) | Fenster, Lüftung | 1.017 | Lüftungsposition | Trigger für Lüftungsstellung |
+| Kn+9 | reserviert | — | — | Kein Kommunikationsobjekt; Pairing-Verlust wird über `Kn+13 Fehlerstatus = 3` gemeldet |
+| (Kn+10) | Diagnose / Status | 5.001 | Batterielevel | 0-100%, insbesondere für solar- oder batteriebetriebene Geräte |
+| (Kn+11) | Diagnose / Status | 5.001 | Signalstärke | Normierte Signalstärke 0-100% |
+| (Kn+12) | Schloss | 1.003 | Sperren | `1 = Kanal sperren`, `0 = entsperren` |
+| (Kn+13) | Diagnose / Status | — | Fehlerstatus | Proprietärer 1-Byte-Diagnosecode: `0=OK`, `1=Kommunikationsfehler`, `2=Duty-Cycle`, `3=nicht gepairt / Pairing verloren`, `4=Funkstörung` |
+| (Kn+14) | Szenenanzahl >= 1 | 17.001 | Szene | Szene aufrufen |
+| (Kn+15) | Szenenanzahl >= 1 | 18.001 | Szenensteuerung | Szene lernen / abrufen |
+| (Kn+16) | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 1.005 | Wind-/Regenalarm | `1 = Alarm`, `0 = Entwarnung` |
+| (Kn+17) | Jalousie / Rollladen | 1.008 | Langzeitbetrieb | `0 = Auf`, `1 = Ab` |
+| Kn+18 | Thermostat | 9.001 | Temperatur Sollwert | Zieltemperatur setzen |
+| Kn+19 | Thermostat | 9.001 | Temperatur Rückmeldung | Aktuelle Temperatur |
+| Kn+20 | Thermostat | 20.102 | Betriebsmodus | HVAC-Modus setzen |
+| Kn+21 | Thermostat | 1.018 | Anwesenheit | `1 = anwesend`, `0 = nicht anwesend` |
+| Kn+22 | Thermostat | 1.019 | Fensterkontakt | `1 = Fenster offen`, `0 = Fenster geschlossen` |
+| Kn+23 | reserviert | — | — | Kein Kommunikationsobjekt; Gerätename wird nicht als reguläres KO bereitgestellt |
+| Kn+24 | reserviert / Dummy | — | — | Reservierter Platzhalter, damit die Kanal-KO-Ordnung stabil bleibt |
 
-### **Kommunikationsobjekte pro Kanal**
+Hinweise:
 
-Die KO-Nummern sind relativ zum Kanal-Offset (`Kn = erster KO des Kanals n`). Die tatsächlich sichtbaren Kommunikationsobjekte hängen vom Gerätetyp, von der Szenenanzahl und von der einbettenden OAM-Applikation ab. Die folgende Darstellung trennt reguläre Betriebsobjekte von Diagnose- und reservierten Offsets.
-
-#### **Positionsbasierte Gerätetypen**
-
-Gilt für Gerätetypen mit Positionssteuerung: Generisch (0), Jalousie / Rollladen (1), Fenster (2), Markise (3), Garagentor (4), Tor (7), Sonnenschutz horizontal (9), Vorhangschiene (10) und Lüftung (11).
-
-| Offset | Name | DPT | Richtung | Sichtbarkeit / Beschreibung |
-|--------|------|-----|----------|-----------------------------|
-| Kn+0 | Position setzen | 5.001 | Schreiben | Zielposition 0-100% |
-| Kn+1 | Position Rückmeldung | 5.001 | Lesen | Aktuelle Position |
-| Kn+2 | Auf/Ab | 1.008 | Schreiben | 0 = Auf, 1 = Ab |
-| Kn+3 | Stopp | 1.017 | Schreiben | Trigger zum Stoppen einer laufenden Fahrt |
-| Kn+4 | Bewegungsstatus | 1.011 | Lesen | 1 = fährt / aktiv, 0 = steht / inaktiv |
-| Kn+7 | Favorit-Position | 1.017 | Schreiben | Trigger: gespeicherte Favorit-Position anfahren |
-| Kn+16 | Wind-/Regenalarm | 1.005 | Schreiben | 1 = Alarm, 0 = Entwarnung |
-
-Zusätzliche positionsbezogene KOs:
-
-| Offset | Name | DPT | Richtung | Sichtbarkeit / Beschreibung |
-|--------|------|-----|----------|-----------------------------|
-| Kn+5 | Lamellenposition | 5.001 | Schreiben | Nur Jalousie / Rollladen und Sonnenschutz horizontal, sofern Lamellensteuerung unterstützt wird |
-| Kn+6 | Lamelle Rückmeldung | 5.001 | Lesen | Nur Jalousie / Rollladen und Sonnenschutz horizontal, sofern Lamellensteuerung unterstützt wird |
-| Kn+8 | Lüftungsposition | 1.017 | Schreiben | Nur Fenster / Lüftung: Trigger für Lüftungsstellung |
-| Kn+17 | Langzeitbetrieb | 1.008 | Schreiben | Nur Jalousie / Rollladen: 0 = Auf, 1 = Ab |
-
-#### **Licht, Schalter und Schloss**
-
-Bei den Gerätetypen Licht (6) und Schalter (12) wird `Auf/Ab` in der ETS als `Ein/Aus` und `Bewegungsstatus` als `Status` dargestellt. DPT und Funktion bleiben unverändert. Beim Gerätetyp Schloss (8) sind derzeit nur `Status` sowie das generische KO `Sperren` sichtbar.
-
-| Gerätetyp | Offset | Name in ETS | DPT | Richtung | Beschreibung |
-|-----------|--------|-------------|-----|----------|-------------|
-| Licht / Schalter | Kn+2 | Ein/Aus | 1.008 | Schreiben | Alternative Darstellung des Auf/Ab-KO |
-| Licht / Schalter | Kn+4 | Status | 1.011 | Lesen | Alternative Darstellung des Bewegungsstatus |
-| Schloss | Kn+4 | Status | 1.011 | Lesen | Schloss-/Statusrückmeldung |
-| Schloss | Kn+12 | Sperren | 1.003 | Schreiben | 1 = Kanal sperren, 0 = entsperren |
-
-#### **Thermostat-KOs**
-
-Gilt nur für Gerätetyp Thermostat (5). Thermostat-KOs müssen nicht disjunkt zu den KOs anderer Gerätetypen sein; die hier gezeigten Offsets sind die aktuelle Template-Belegung.
-
-| Offset | Name | DPT | Richtung | Beschreibung |
-|--------|------|-----|----------|-------------|
-| Kn+18 | Temperatur Sollwert | 9.001 | Schreiben | Zieltemperatur |
-| Kn+19 | Temperatur Rückmeldung | 9.001 | Lesen | Aktuelle Temperatur |
-| Kn+20 | Betriebsmodus | 20.102 | Schreiben | HVAC-Modus |
-| Kn+21 | Anwesenheit | 1.018 | Schreiben | 1 = anwesend, 0 = nicht anwesend |
-| Kn+22 | Fensterkontakt | 1.019 | Schreiben | 1 = Fenster offen, 0 = Fenster geschlossen |
-
-#### **Szenen-KOs**
-
-Diese KOs erscheinen, sobald mindestens eine Szene für den Kanal konfiguriert ist.
-
-| Offset | Name | DPT | Richtung | Beschreibung |
-|--------|------|-----|----------|-------------|
-| Kn+14 | Szene | 17.001 | Schreiben | Szene aufrufen |
-| Kn+15 | Szenensteuerung | 18.001 | Schreiben | Szene lernen / abrufen |
-
-#### **Diagnose- und Status-KOs**
-
-Diese KOs sind nicht zwingend für den regulären Betrieb erforderlich. Sie dienen der Diagnose, Service-Anzeige oder der Zustandsüberwachung.
-
-| Offset | Name | DPT | Richtung | Beschreibung |
-|--------|------|-----|----------|-------------|
-| Kn+9 | reserviert / nicht verwendet | — | — | Kein Kommunikationsobjekt; Pairing-Verlust wird über `Kn+13 Fehlerstatus = 3` gemeldet |
-| Kn+10 | Batterielevel | 5.001 | Lesen | 0-100% (für Solargeräte) |
-| Kn+11 | Signalstärke | 5.001 | Lesen | Normierte Signalstärke 0-100% |
-| Kn+13 | Fehlerstatus | — | Lesen | Proprietärer 1-Byte-Diagnosecode: 0=OK, 1=Kommunikationsfehler, 2=Duty-Cycle, 3=nicht gepairt / Pairing verloren, 4=Funkstörung |
-
-Für den regulären Betrieb wird ein fehlendes oder verlorenes Pairing über `Fehlerstatus = 3` gemeldet. Die ETS-Diagnosefelder und die serielle Konsole liefern bei Bedarf detailliertere Pairing-Informationen.
-
-`Gerätename` und `Gerätetyp-Code` werden nicht als reguläre Kommunikationsobjekte bereitgestellt. Diese Informationen sind nach Pairing/Konfiguration in der Regel konstant und gehören daher in ETS-Diagnosefelder, die serielle Konsole oder ein allgemeines Diagnose-/Servicekonzept.
-
+* Bei den Gerätetypen Licht und Schalter wird `Auf/Ab` in der ETS als `Ein/Aus` und `Bewegungsstatus` als `Status` dargestellt. DPT und Funktion bleiben unverändert.
+* Beim Gerätetyp Schloss sind derzeit nur `Status` sowie das generische KO `Sperren` sichtbar.
+* Thermostat-KOs müssen nicht disjunkt zu den KOs anderer Gerätetypen sein; die Sichtbarkeit wird über den Gerätetyp gesteuert.
+* Für den regulären Betrieb wird ein fehlendes oder verlorenes Pairing über `Fehlerstatus = 3` gemeldet. Die ETS-Diagnosefelder und die serielle Konsole liefern bei Bedarf detailliertere Pairing-Informationen.
+* `Gerätename` und `Gerätetyp-Code` werden nicht als reguläre Kommunikationsobjekte bereitgestellt. Diese Informationen sind nach Pairing/Konfiguration in der Regel konstant und gehören daher in ETS-Diagnosefelder, die serielle Konsole oder ein allgemeines Diagnose-/Servicekonzept.
