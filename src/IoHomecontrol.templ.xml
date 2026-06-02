@@ -344,27 +344,7 @@
 
                         <!-- Position-only parameters: Fahrzeit, Richtung (types 0-4, 7, 9-11) -->
                         <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
-                          <when test="&lt;5">
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
-                          </when>
-                          <when test="7">
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
-                          </when>
-                          <when test="9">
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
-                          </when>
-                          <when test="10">
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
-                          </when>
-                          <when test="11">
+                          <when test="0 1 2 3 4 7 9 10 11">
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
