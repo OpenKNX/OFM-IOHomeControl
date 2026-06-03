@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <KNX xmlns:op="http://github.com/OpenKNX/OpenKNXproducer" xmlns="http://knx.org/xml/project/20">
 
-  <!-- Complete definition of the n-th io-homecontrol scene slot.
+  <!-- Complete definition of the current io-homecontrol scene slot.
        The template inserts the Parameters into the existing channel Union,
        the ParameterRefs into the channel ParameterRefs block and the Dynamic
        snippet into the channel page. -->
@@ -16,19 +16,19 @@
            %ID+40%   = thermostat mode
            %ID+50%   = on/off state
 
-           Scene memory offsets are calculated from %N%:
-           %N+13%    = scene data 1..10  (offsets 14..23)
-           %N+23%    = action/mode 1..10 (offsets 24..33)
-           %N+33%    = slat 1..10        (offsets 34..43)
+           Scene memory offsets are calculated from %SCENE%:
+           %SCENE+13% = scene data 1..10  (offsets 14..23)
+           %SCENE+23% = action/mode 1..10 (offsets 24..33)
+           %SCENE+33% = slat 1..10        (offsets 34..43)
 
            The overlays are intentional because the active interpretation
            depends on the selected device type. -->
-      <Parameter Id="%AID%_UP-%TT%%CC%%ID%" op:nowarn="true" Name="IOHC%C%Scene%N%Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="%N+13%" BitOffset="0" Text="Szene %N% Position" Value="0" SuffixText=" %" />
-      <Parameter Id="%AID%_UP-%TT%%CC%%ID+10%" op:nowarn="true" Name="IOHC%C%Scene%N%Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="%N+23%" BitOffset="0" Text="Szene %N% Aktion" Value="0" />
-      <Parameter Id="%AID%_UP-%TT%%CC%%ID+20%" op:nowarn="true" Name="IOHC%C%Scene%N%Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="%N+33%" BitOffset="0" Text="Szene %N% Lamellenposition" Value="0" SuffixText=" %" />
-      <Parameter Id="%AID%_UP-%TT%%CC%%ID+30%" op:nowarn="true" Name="IOHC%C%Scene%N%Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="%N+13%" BitOffset="0" Text="Szene %N% Temperatur" Value="20" SuffixText=" °C" />
-      <Parameter Id="%AID%_UP-%TT%%CC%%ID+40%" op:nowarn="true" Name="IOHC%C%Scene%N%CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="%N+23%" BitOffset="0" Text="Szene %N% Modus" Value="0" />
-      <Parameter Id="%AID%_UP-%TT%%CC%%ID+50%" op:nowarn="true" Name="IOHC%C%Scene%N%OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="%N+13%" BitOffset="0" Text="Szene %N% Zustand" Value="0" />
+      <Parameter Id="%AID%_UP-%TT%%CC%%ID%" op:nowarn="true" Name="IOHC%C%Scene%SCENE%Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="%SCENE+13%" BitOffset="0" Text="Szene %SCENE% Position" Value="0" SuffixText=" %" />
+      <Parameter Id="%AID%_UP-%TT%%CC%%ID+10%" op:nowarn="true" Name="IOHC%C%Scene%SCENE%Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="%SCENE+23%" BitOffset="0" Text="Szene %SCENE% Aktion" Value="0" />
+      <Parameter Id="%AID%_UP-%TT%%CC%%ID+20%" op:nowarn="true" Name="IOHC%C%Scene%SCENE%Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="%SCENE+33%" BitOffset="0" Text="Szene %SCENE% Lamellenposition" Value="0" SuffixText=" %" />
+      <Parameter Id="%AID%_UP-%TT%%CC%%ID+30%" op:nowarn="true" Name="IOHC%C%Scene%SCENE%Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="%SCENE+13%" BitOffset="0" Text="Szene %SCENE% Temperatur" Value="20" SuffixText=" °C" />
+      <Parameter Id="%AID%_UP-%TT%%CC%%ID+40%" op:nowarn="true" Name="IOHC%C%Scene%SCENE%CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="%SCENE+23%" BitOffset="0" Text="Szene %SCENE% Modus" Value="0" />
+      <Parameter Id="%AID%_UP-%TT%%CC%%ID+50%" op:nowarn="true" Name="IOHC%C%Scene%SCENE%OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="%SCENE+13%" BitOffset="0" Text="Szene %SCENE% Zustand" Value="0" />
     </Parameters>
 
     <ParameterRefs>
@@ -43,8 +43,8 @@
 
   <Dynamic>
     <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
-      <when test="&gt;=%N%">
-        <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene %N%" UIHint="Headline" />
+      <when test="&gt;=%SCENE%">
+        <ParameterSeparator Id="%AID%_PS-nnn" Text="Szene %SCENE%" UIHint="Headline" />
 
         <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
           <!-- Position scenes without lamella -->

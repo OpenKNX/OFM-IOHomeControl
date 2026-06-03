@@ -9,7 +9,7 @@
                The part contains the complete n-th scene definition:
                Parameters, ParameterRefs and the UI snippets. -->
           <op:part name="IOHCScene" href="IoHomecontrol.scene.part.xml" instances="10">
-            <op:param name="N" value="1" increment="1" />
+            <op:param name="SCENE" value="1" increment="1" />
             <op:param name="ID" value="021" increment="1" digits="3" />
           </op:part>
           <Static>
