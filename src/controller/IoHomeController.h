@@ -418,6 +418,7 @@ private:
   bool isPairDiagnosticState(ControllerState iState) const;
   void tracePairDiagnosticStateChange();
   void tracePairDiagnosticFrame(const char *iPrefix, const IoHomeFrame &iFrame, uint8_t iFreqIdx, int16_t iRssi) const;
+  void tracePairDiagnosticDiscoveryInterpretation(const IoHomeFrame &iFrame, uint8_t iFreqIdx) const;
   void processIdle();
   void processTxPending();
   void processTxInProgress();

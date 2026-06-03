@@ -36,6 +36,7 @@ namespace
         case IoHomeCommand::DiscoverResponse:
         case IoHomeCommand::DiscoverSPERequest:
         case IoHomeCommand::DiscoverSPEResponse:
+        case IoHomeCommand::Discover2ERequest:
         case IoHomeCommand::Confirmation:
         case IoHomeCommand::ConfirmationACK:
         case IoHomeCommand::SendKey1W:
@@ -1003,6 +1004,44 @@ void IoHomeController::tracePairDiagnosticFrame(const char *iPrefix, const IoHom
              iRssi,
              iFrame.dataLen,
              iFrame.hasHmac ? 1 : 0);
+
+    if (mState == ControllerState::DiscoveryListening && strcmp(iPrefix, "rx") == 0)
+        tracePairDiagnosticDiscoveryInterpretation(iFrame, iFreqIdx);
+}
+
+void IoHomeController::tracePairDiagnosticDiscoveryInterpretation(const IoHomeFrame &iFrame, uint8_t iFreqIdx) const
+{
+    const uint32_t lFreqHz = (iFreqIdx < IOHC_NUM_FREQUENCIES) ? IOHC_FREQUENCIES[iFreqIdx] : 0;
+
+    switch (iFrame.commandId)
+    {
+    case IoHomeCommand::Discover2ERequest:
+        logInfoP("PairDiag: discovery note 1W learn request src=0x%06X dst=0x%06X freq=%u %luHz",
+                 iFrame.getSrcNodeId(),
+                 iFrame.getDestNodeId(),
+                 static_cast<unsigned>(iFreqIdx),
+                 static_cast<unsigned long>(lFreqHz));
+        break;
+
+    case IoHomeCommand::RemoveController:
+        logInfoP("PairDiag: discovery note 1W controller reset/removal src=0x%06X dst=0x%06X freq=%u %luHz",
+                 iFrame.getSrcNodeId(),
+                 iFrame.getDestNodeId(),
+                 static_cast<unsigned>(iFreqIdx),
+                 static_cast<unsigned long>(lFreqHz));
+        break;
+
+    case IoHomeCommand::SendKey1W:
+        logInfoP("PairDiag: discovery note 1W key transfer already in progress src=0x%06X dst=0x%06X freq=%u %luHz",
+                 iFrame.getSrcNodeId(),
+                 iFrame.getDestNodeId(),
+                 static_cast<unsigned>(iFreqIdx),
+                 static_cast<unsigned long>(lFreqHz));
+        break;
+
+    default:
+        break;
+    }
 }
 
 void IoHomeController::tracePairDiagnosticStateChange()
