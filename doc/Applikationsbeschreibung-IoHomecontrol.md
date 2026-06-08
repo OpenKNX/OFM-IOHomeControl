@@ -332,7 +332,16 @@ Wird eine 1 auf das KO "Discovery Start/Stopp" (KO 21) gesendet, beginnt das Mod
 <!-- DOC Skip="1" -->
 #### **Netzwerk-Scan**
 
-Wird eine 1 auf das KO "Netzwerk-Scan" (KO 23) gesendet, beginnt das Modul einen passiven Scan. Dabei wird auf allen drei Frequenzen nach io-homecontrol-Paketen gelauscht, ohne selbst zu senden. Der Scan dient Diagnosezwecken und der Ermittlung von Node-IDs. Der Status wird über das KO "Netzwerk-Scan aktiv" (KO 24) zurückgemeldet.
+Wird eine 1 auf das KO "Netzwerk-Scan" (KO 23) gesendet, beginnt das Modul einen passiven Scan. Dabei wird auf allen drei Frequenzen nach io-homecontrol-Paketen gelauscht, ohne selbst zu senden. Der Scan dient Diagnosezwecken und der Ermittlung von Node-IDs. Eine Schlüssel-Erfassung findet hier nicht statt; dafür steht ein separater, explizit gestarteter passiver Key-Sniff über die serielle Konsole zur Verfügung. Der Status wird über das KO "Netzwerk-Scan aktiv" (KO 24) zurückgemeldet.
+
+#### **Passiver Key-Sniff**
+
+Über die serielle Konsole kann ein separater passiver Key-Sniff gestartet werden. Dabei lauscht das Modul ohne eigene Sendungen auf io-homecontrol-Telegramme und hält das zuletzt erfolgreich erfasste Schlüsselergebnis fest.
+
+* `iohc sniff start [seconds]` startet den Sniff mit optionaler Laufzeit in Sekunden
+* `iohc sniff status` zeigt den aktuellen Sniff-Zustand und das gespeicherte Ergebnis
+* `iohc sniff stop` beendet einen laufenden Sniff
+* `iohc sniff clear` löscht das gespeicherte Sniff-Ergebnis
 <!-- DOCEND -->
 
 ----
@@ -593,6 +602,7 @@ Die folgenden Tabellen enthalten die Befehle für reguläre Inbetriebnahme und S
 | Befehl | Beschreibung |
 |--------|-------------|
 | `iohc send NN PP` | Sendet Position PP% an Kanal NN |
+| `iohc identify NN` | Fordert ein gepaartes 2W-Gerät zur Identifikation auf |
 | `iohc discover` | Startet Broadcast-Discovery-Scan |
 | `iohc set1w NN` | Setzt Kanal auf 1W-Modus |
 | `iohc set2w NN` | Setzt Kanal auf 2W-Modus |
@@ -638,6 +648,15 @@ Die folgenden Tabellen enthalten die Befehle für reguläre Inbetriebnahme und S
 | `iohc remote link ADDR DEV` | Verknüpft Gerät mit Fernbedienung |
 | `iohc remote unlink ADDR DEV` | Löst Verknüpfung |
 | `iohc remote observed` | Zeigt kürzlich beobachtete Adressen |
+
+### **Passiver Key-Sniff-Befehle**
+
+| Befehl | Beschreibung |
+|--------|-------------|
+| `iohc sniff start [seconds]` | Startet einen passiven Key-Sniff mit optionaler Laufzeit |
+| `iohc sniff stop` | Stoppt den passiven Key-Sniff |
+| `iohc sniff status` | Zeigt den aktuellen Sniff-Zustand und das gespeicherte Ergebnis |
+| `iohc sniff clear` | Löscht das gespeicherte Sniff-Ergebnis |
 
 ### **Netzwerk-Scan-Befehle**
 

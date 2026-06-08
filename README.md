@@ -54,8 +54,8 @@ The protocol implementation covers manufacturers such as Velux, Somfy, Atlantic,
 - **EU duty cycle compliance** with per-sub-band tracking (1-hour window)
 - **Command queue** with automatic retries (up to 3 attempts, cycling frequencies)
 - **Remote observation** — track io-homecontrol remotes on the bus, link devices to remotes
-- **Passive/sniffer mode** for diagnostics (listen-only, key extraction from observed pairing)
-- **Network scan** with per-node packet statistics and RSSI tracking
+- **Explicit passive key sniff workflow** for diagnostics (listen-only session with separate start/stop/status/clear controls)
+- **Network scan** with per-node packet statistics and RSSI tracking; observation-only
 - **Encrypted discovery (SPE)** for scanning already-paired devices
 - **Flash persistence** of 2W identity/pairing data and complete per-channel 1W controller profiles
 
@@ -234,8 +234,9 @@ IoHomecontrol (OpenKNX::Module)
     ├── Command Queue (8 entries, circular buffer)
     ├── State Machine (Idle → TxPending → TX → WaitResponse → Process)
     ├── Pairing State Machine (Discovery → Confirm/ACK → PullKey attempt → KeyInit → KeyTransfer → Confirm)
-    ├── Network Scan (passive packet capture, per-node stats)
+    ├── Network Scan (passive packet capture, per-node stats; observation-only)
     ├── Remote Observation (track remotes, link to devices)
+    ├── Passive Key Sniff (explicit session, retained capture result)
     ├── IoHomeFrame (frame serialization/deserialization, 9–32 bytes)
     └── IoHomeCrypto (AES-128 ECB, HMAC, CRC-16 Kermit, IV construction)
 ```
