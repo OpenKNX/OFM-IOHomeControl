@@ -101,17 +101,55 @@ public:
   void setConfigured1WProfileChannel(uint8_t iChannelIndex) { mConfigured1WProfileChannel = iChannelIndex; }
   uint8_t getConfigured1WProfileChannel() const { return mConfigured1WProfileChannel; }
 
-  void onPositionFeedback(float) {}
-  void onTargetPositionFeedback(float) {}
-  void onStatusUpdate(bool) {}
-  void onSlatFeedback(float) {}
+  void onPositionFeedback(float iPercent)
+  {
+    mHasPositionFeedback = true;
+    mPositionFeedback = iPercent;
+  }
+  void onTargetPositionFeedback(float iPercent)
+  {
+    mHasTargetPositionFeedback = true;
+    mTargetPositionFeedback = iPercent;
+  }
+  void onStatusUpdate(bool iMoving)
+  {
+    mHasStatusUpdate = true;
+    mStatusMoving = iMoving;
+  }
+  void onSlatFeedback(float iPercent)
+  {
+    mHasSlatFeedback = true;
+    mSlatFeedback = iPercent;
+  }
   void onDeviceName(const char *, uint8_t) {}
   void onDeviceInfo(uint16_t, uint8_t, uint8_t) {}
-  void onBatteryLevel(uint8_t) {}
-  void onEstimate(uint8_t) {}
-  void onStatusExpected() {}
+  void onBatteryLevel(uint8_t iPercent)
+  {
+    mHasBatteryLevel = true;
+    mBatteryLevel = iPercent;
+  }
+  void onEstimate(uint8_t iSeconds)
+  {
+    mHasEstimate = true;
+    mEstimate = iSeconds;
+  }
+  void onStatusExpected() { mStatusExpected = true; }
   void onRssiUpdate(uint8_t) {}
   void logStatusSummary(float, bool, float, bool, bool) {}
+
+  bool testHasPositionFeedback() const { return mHasPositionFeedback; }
+  float testPositionFeedback() const { return mPositionFeedback; }
+  bool testHasTargetPositionFeedback() const { return mHasTargetPositionFeedback; }
+  float testTargetPositionFeedback() const { return mTargetPositionFeedback; }
+  bool testHasStatusUpdate() const { return mHasStatusUpdate; }
+  bool testStatusMoving() const { return mStatusMoving; }
+  bool testHasSlatFeedback() const { return mHasSlatFeedback; }
+  float testSlatFeedback() const { return mSlatFeedback; }
+  bool testHasBatteryLevel() const { return mHasBatteryLevel; }
+  uint8_t testBatteryLevel() const { return mBatteryLevel; }
+  bool testHasEstimate() const { return mHasEstimate; }
+  uint8_t testEstimate() const { return mEstimate; }
+  bool testStatusExpected() const { return mStatusExpected; }
 
 private:
   uint32_t mNodeId = 0;
@@ -128,6 +166,19 @@ private:
   bool mLowPower2W = true;
   uint32_t mConfigured1WTargetNodeId = 0;
   uint8_t mConfigured1WBroadcastType = 2;
+  bool mHasPositionFeedback = false;
+  float mPositionFeedback = 0.0f;
+  bool mHasTargetPositionFeedback = false;
+  float mTargetPositionFeedback = 0.0f;
+  bool mHasStatusUpdate = false;
+  bool mStatusMoving = false;
+  bool mHasSlatFeedback = false;
+  float mSlatFeedback = 0.0f;
+  bool mHasBatteryLevel = false;
+  uint8_t mBatteryLevel = 0xFF;
+  bool mHasEstimate = false;
+  uint8_t mEstimate = 0xFF;
+  bool mStatusExpected = false;
 };
 
 class IoHomecontrol

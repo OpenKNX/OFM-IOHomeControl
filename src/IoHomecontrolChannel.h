@@ -165,6 +165,7 @@ private:
 
   bool isOnOffDeviceType() const;
   bool isLockDeviceType() const;
+  bool isTiltCapableDeviceType() const;
   bool isBinaryDeviceType() const;
   void publishBinaryStatus();
 

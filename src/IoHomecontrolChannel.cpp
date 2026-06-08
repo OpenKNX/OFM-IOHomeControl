@@ -594,9 +594,17 @@ void IoHomecontrolChannel::sendFavorite()
 
 void IoHomecontrolChannel::sendSlatCommand(float iPercent)
 {
-    logDebugP("Send slat %.1f%% (with current position %.1f%%)", iPercent, mCurrentPosition);
+    const float lSlatPercent = clampPercent(iPercent);
+    logDebugP("Send slat %.1f%% (with current position %.1f%%)", lSlatPercent, mCurrentPosition);
+
+    if (!mIs1W && isTiltCapableDeviceType())
+    {
+        mController.sendTiltCommand(mNodeId, mEncKey, static_cast<uint8_t>(lSlatPercent + 0.5f));
+        return;
+    }
+
     uint8_t lPosParam = (uint8_t)(mCurrentPosition + 0.5f);
-    uint8_t lSlatParam = (uint8_t)(iPercent + 0.5f);
+    uint8_t lSlatParam = (uint8_t)(lSlatPercent + 0.5f);
     mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lPosParam, lSlatParam);
 }
 
@@ -620,6 +628,24 @@ bool IoHomecontrolChannel::isOnOffDeviceType() const
 bool IoHomecontrolChannel::isLockDeviceType() const
 {
     return ParamIOHC_IOHCDeviceType == 8;
+}
+
+bool IoHomecontrolChannel::isTiltCapableDeviceType() const
+{
+    uint16_t lType = mDeviceType;
+    if (lType == 0)
+        lType = static_cast<uint16_t>(ParamIOHC_IOHCDeviceType);
+
+    switch (static_cast<IoHomeDeviceType>(lType))
+    {
+    case IoHomeDeviceType::VenetianBlind:
+    case IoHomeDeviceType::ExternalVenetianBlind:
+    case IoHomeDeviceType::LouvrBlind:
+    case IoHomeDeviceType::Blind:
+        return true;
+    default:
+        return false;
+    }
 }
 
 bool IoHomecontrolChannel::isBinaryDeviceType() const

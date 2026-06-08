@@ -26,6 +26,7 @@ namespace
     constexpr uint16_t kGatewayInfoDeviceType = 0x0002;
     constexpr uint8_t kGatewayDiscoverManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Overkiz);
     constexpr uint8_t kGatewayInfoManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
+    constexpr uint16_t kPositionRawTolerance = 100;
 
     std::string hexDump(const uint8_t *iData, uint8_t iLen)
     {
@@ -78,6 +79,115 @@ namespace
         if (iFrame.dataLen > 0)
             memcpy(oBuffer + 1, iFrame.data, iFrame.dataLen);
         return lLen;
+    }
+
+    bool rawPositionToPercent(uint16_t iRaw, float &oPercent)
+    {
+        if (iRaw > IOHC_POSITION_MAX)
+            return false;
+
+        oPercent = (float)iRaw * 100.0f / IOHC_POSITION_MAX;
+        if (oPercent > 100.0f)
+            oPercent = 100.0f;
+        return true;
+    }
+
+    bool rawPositionNear(uint16_t iA, uint16_t iB)
+    {
+        return (iA > iB) ? ((iA - iB) <= kPositionRawTolerance) : ((iB - iA) <= kPositionRawTolerance);
+    }
+
+    uint16_t readU16BE(const uint8_t *iData, uint8_t iOffset)
+    {
+        return ((uint16_t)iData[iOffset] << 8) | iData[iOffset + 1];
+    }
+
+    void dispatchPositionStatus(IoHomecontrolChannel *iChannel,
+                                const uint8_t *iData,
+                                uint8_t iDataLen,
+                                bool iStopped,
+                                uint8_t iTargetOffset,
+                                uint8_t iCurrentOffset)
+    {
+        if (!iChannel || !iData ||
+            iDataLen < iTargetOffset + 2 ||
+            iDataLen < iCurrentOffset + 2)
+        {
+            return;
+        }
+
+        const uint16_t lTargetRaw = readU16BE(iData, iTargetOffset);
+        const uint16_t lCurrentRaw = readU16BE(iData, iCurrentOffset);
+
+        float lCurrentPercent = 0.0f;
+        bool lHasCurrentPosition = rawPositionToPercent(lCurrentRaw, lCurrentPercent);
+
+        float lTargetPercent = 0.0f;
+        bool lHasTargetPosition = rawPositionToPercent(lTargetRaw, lTargetPercent);
+        if (!lHasTargetPosition && iStopped && lHasCurrentPosition)
+        {
+            lTargetPercent = lCurrentPercent;
+            lHasTargetPosition = true;
+        }
+        if (!lHasCurrentPosition && iStopped && lHasTargetPosition)
+        {
+            lCurrentPercent = lTargetPercent;
+            lHasCurrentPosition = true;
+        }
+
+        bool lMoving = !iStopped;
+        if (lMoving && lHasCurrentPosition && lHasTargetPosition &&
+            lTargetRaw <= IOHC_POSITION_MAX &&
+            rawPositionNear(lCurrentRaw, lTargetRaw))
+        {
+            lMoving = false;
+        }
+
+        if (lHasTargetPosition)
+            iChannel->onTargetPositionFeedback(lTargetPercent);
+        if (lHasCurrentPosition)
+            iChannel->onPositionFeedback(lCurrentPercent);
+
+        iChannel->onStatusUpdate(lMoving);
+        iChannel->logStatusSummary(lCurrentPercent, lHasCurrentPosition,
+                                   lTargetPercent, lHasTargetPosition,
+                                   lMoving);
+    }
+
+    void applyPrivateBatteryInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData, uint8_t iDataLen)
+    {
+        if (!iChannel || !iData || iDataLen < 2)
+            return;
+
+        if (iDataLen >= 6 && iData[1] != 0x60)
+            return;
+
+        if (iData[1] == 0x60)
+            iChannel->setLowPower2W(true);
+        else if (iData[1] == 0x00)
+            iChannel->setLowPower2W(false);
+
+        if (iDataLen >= 3 && iData[2] <= 100)
+            iChannel->onBatteryLevel(iData[2]);
+        else if (iDataLen >= 4 && iData[3] <= 100)
+            iChannel->onBatteryLevel(iData[3]);
+    }
+
+    void applyPrivateTiltInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData, uint8_t iDataLen)
+    {
+        if (!iChannel || !iData || iDataLen < 16)
+            return;
+
+        const uint16_t lTiltRaw = readU16BE(iData, 13);
+        if (lTiltRaw > IOHC_POSITION_MAX)
+            return;
+
+        float lTiltPercent = 100.0f - ((float)lTiltRaw * 100.0f / IOHC_POSITION_MAX);
+        if (lTiltPercent < 0.0f)
+            lTiltPercent = 0.0f;
+        if (lTiltPercent > 100.0f)
+            lTiltPercent = 100.0f;
+        iChannel->onSlatFeedback(lTiltPercent);
     }
 
     void initGatewayResponseFrame(IoHomeFrame &oFrame,
@@ -531,6 +641,55 @@ bool IoHomeController::sendIdentify(uint32_t iDestNodeId, const uint8_t *iEncKey
     if (lCh && lCh->is1W())
         return false;
     return sendCommand(iDestNodeId, iEncKey, IoHomeCommand::Identify, 0);
+}
+
+bool IoHomeController::sendBatteryStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey)
+{
+    IoHomecontrolChannel *lCh = channelForNode(iDestNodeId);
+    if (lCh && lCh->is1W())
+        return false;
+    return sendCommand(iDestNodeId, iEncKey, IoHomeCommand::Private, 0x06);
+}
+
+bool IoHomeController::sendBatteryStateQuery(uint32_t iDestNodeId, const uint8_t *iEncKey)
+{
+    IoHomecontrolChannel *lCh = channelForNode(iDestNodeId);
+    if (lCh && lCh->is1W())
+        return false;
+    return sendCommand(iDestNodeId, iEncKey, IoHomeCommand::Private, 0x09);
+}
+
+bool IoHomeController::sendTiltStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey)
+{
+    IoHomecontrolChannel *lCh = channelForNode(iDestNodeId);
+    if (lCh && lCh->is1W())
+        return false;
+    return sendCommand(iDestNodeId, iEncKey, IoHomeCommand::Private, 0x03, 0x20, 0x01);
+}
+
+bool IoHomeController::sendTiltCommand(uint32_t iDestNodeId, const uint8_t *iEncKey, uint8_t iTiltPercent)
+{
+    IoHomecontrolChannel *lCh = channelForNode(iDestNodeId);
+    if (lCh && lCh->is1W())
+        return false;
+
+    if (iTiltPercent > 100)
+        iTiltPercent = 100;
+
+    IoHomeQueueEntry lEntry;
+    memset(&lEntry, 0, sizeof(lEntry));
+    lEntry.destNodeId = iDestNodeId;
+    lEntry.encKey = iEncKey;
+    lEntry.command = IoHomeCommand::Execute;
+    lEntry.param = 0xFF;
+    lEntry.param2 = 0xFF;
+    lEntry.param3 = 0xFF;
+    lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
+    lEntry.twoWayTilt = true;
+    lEntry.twoWayTiltPercent = iTiltPercent;
+    lEntry.retries = 0;
+    lEntry.active = true;
+    return queuePush(lEntry);
 }
 
 bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
@@ -3792,7 +3951,22 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             mTxFrame.data[0] = IOHC_ORIGINATOR_USER; // originator: user
             mTxFrame.data[1] = IOHC_ACEI_DEFAULT;    // ACEI priority
 
-            if (iEntry.param <= 100)
+            if (iEntry.twoWayTilt)
+            {
+                const uint16_t lTiltRaw = static_cast<uint16_t>(
+                    (static_cast<uint32_t>(100 - iEntry.twoWayTiltPercent) * IOHC_POSITION_MAX) / 100U);
+
+                mTxFrame.data[0] = IOHC_ORIGINATOR_USER;
+                mTxFrame.data[1] = 0xE7;
+                mTxFrame.data[2] = 0xD4;
+                mTxFrame.data[3] = 0x00;
+                mTxFrame.data[4] = 0x20;
+                mTxFrame.data[5] = (lTiltRaw >> 8) & 0xFF;
+                mTxFrame.data[6] = lTiltRaw & 0xFF;
+                mTxFrame.data[7] = 0x00;
+                mTxFrame.dataLen = 8;
+            }
+            else if (iEntry.param <= 100)
             {
                 // Normal position (0-100%)
                 mTxFrame.data[2] = iEntry.param * 2;
@@ -3829,11 +4003,17 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         break;
     }
     case IoHomeCommand::Private:
-        // GetStatus03: 3-byte payload {0x03, 0x00, 0x00}, no auth
-        mTxFrame.data[0] = 0x03;
-        mTxFrame.data[1] = 0x00;
-        mTxFrame.data[2] = 0x00;
+        // Private query variants observed in the io-rts-esp32 protocol:
+        // 03 00 00 = status, 06/09 = battery, 03 20 01 00 = tilt status.
+        mTxFrame.data[0] = iEntry.param == 0 ? 0x03 : iEntry.param;
+        mTxFrame.data[1] = iEntry.param2 == 0xFF ? 0x00 : iEntry.param2;
+        mTxFrame.data[2] = iEntry.param3 == 0xFF ? 0x00 : iEntry.param3;
         mTxFrame.dataLen = 3;
+        if (iEntry.param2 != 0xFF && iEntry.param3 != 0xFF)
+        {
+            mTxFrame.data[3] = 0x00;
+            mTxFrame.dataLen = 4;
+        }
         mTxFrame.hasHmac = false;
         break;
 
@@ -4148,45 +4328,8 @@ void IoHomeController::dispatchRxFrame()
                 //   Minimum 11 bytes for full status
                 if (mRxFrame.dataLen >= 9)
                 {
-                    bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
-                    float lCurrentPercent = 0.0f;
-                    bool lHasCurrentPosition = false;
-                    float lTargetPercent = 0.0f;
-                    bool lHasTargetPosition = false;
-                    uint16_t lTargetRaw = ((uint16_t)mRxFrame.data[5] << 8) | mRxFrame.data[6];
-                    if (lTargetRaw <= IOHC_POSITION_MAX)
-                    {
-                        lTargetPercent = (float)lTargetRaw * 100.0f / IOHC_POSITION_MAX;
-                        if (lTargetPercent > 100.0f)
-                            lTargetPercent = 100.0f;
-                        lHasTargetPosition = true;
-                        lCh->onTargetPositionFeedback(lTargetPercent);
-                    }
-                    uint16_t lCurrentRaw = ((uint16_t)mRxFrame.data[7] << 8) | mRxFrame.data[8];
-
-                    // Filter special values before percentage conversion
-                    if (lCurrentRaw != (IOHC_POSITION_STOP & 0xFFFF) &&
-                        lCurrentRaw != (IOHC_POSITION_UNKNOWN & 0xFFFF) &&
-                        lCurrentRaw != (IOHC_POSITION_FAVORITE & 0xFFFF))
-                    {
-                        uint16_t lPosRaw = lCurrentRaw;
-                        // Unknown position fallback: if current > max and stopped, use target
-                        if (lPosRaw > IOHC_POSITION_MAX && lStopped && mRxFrame.dataLen >= 7)
-                        {
-                            uint16_t lTargetRaw = ((uint16_t)mRxFrame.data[5] << 8) | mRxFrame.data[6];
-                            if (lTargetRaw <= IOHC_POSITION_MAX)
-                                lPosRaw = lTargetRaw;
-                        }
-                        lCurrentPercent = (float)lPosRaw * 100.0f / IOHC_POSITION_MAX;
-                        if (lCurrentPercent > 100.0f)
-                            lCurrentPercent = 100.0f;
-                        lHasCurrentPosition = true;
-                        lCh->onPositionFeedback(lCurrentPercent);
-                    }
-                    lCh->onStatusUpdate(!lStopped);
-                    lCh->logStatusSummary(lCurrentPercent, lHasCurrentPosition,
-                                          lTargetPercent, lHasTargetPosition,
-                                          !lStopped);
+                    const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
+                    dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 5, 7);
                 }
                 // Status-expected flag: device will auto-send StatusUpdate
                 if (mRxFrame.dataLen >= 2 && (mRxFrame.data[1] & 0x80))
@@ -4212,42 +4355,8 @@ void IoHomeController::dispatchRxFrame()
                 // Execute response uses same layout as StatusUpdate
                 if (mRxFrame.dataLen >= 9)
                 {
-                    bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
-                    float lCurrentPercent = 0.0f;
-                    bool lHasCurrentPosition = false;
-                    float lTargetPercent = 0.0f;
-                    bool lHasTargetPosition = false;
-                    uint16_t lTargetRaw = ((uint16_t)mRxFrame.data[5] << 8) | mRxFrame.data[6];
-                    if (lTargetRaw <= IOHC_POSITION_MAX)
-                    {
-                        lTargetPercent = (float)lTargetRaw * 100.0f / IOHC_POSITION_MAX;
-                        if (lTargetPercent > 100.0f)
-                            lTargetPercent = 100.0f;
-                        lHasTargetPosition = true;
-                        lCh->onTargetPositionFeedback(lTargetPercent);
-                    }
-                    uint16_t lCurrentRaw = ((uint16_t)mRxFrame.data[7] << 8) | mRxFrame.data[8];
-
-                    if (lCurrentRaw != (IOHC_POSITION_STOP & 0xFFFF) &&
-                        lCurrentRaw != (IOHC_POSITION_UNKNOWN & 0xFFFF) &&
-                        lCurrentRaw != (IOHC_POSITION_FAVORITE & 0xFFFF))
-                    {
-                        uint16_t lPosRaw = lCurrentRaw;
-                        if (lPosRaw > IOHC_POSITION_MAX && lStopped && mRxFrame.dataLen >= 7)
-                        {
-                            if (lTargetRaw <= IOHC_POSITION_MAX)
-                                lPosRaw = lTargetRaw;
-                        }
-                        lCurrentPercent = (float)lPosRaw * 100.0f / IOHC_POSITION_MAX;
-                        if (lCurrentPercent > 100.0f)
-                            lCurrentPercent = 100.0f;
-                        lHasCurrentPosition = true;
-                        lCh->onPositionFeedback(lCurrentPercent);
-                    }
-                    lCh->onStatusUpdate(!lStopped);
-                    lCh->logStatusSummary(lCurrentPercent, lHasCurrentPosition,
-                                          lTargetPercent, lHasTargetPosition,
-                                          !lStopped);
+                    const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
+                    dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 5, 7);
                 }
                 break;
             }
@@ -4262,43 +4371,8 @@ void IoHomeController::dispatchRxFrame()
                 //   Minimum 6 bytes for position data
                 if (mRxFrame.dataLen >= 6)
                 {
-                    bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
-                    float lCurrentPercent = 0.0f;
-                    bool lHasCurrentPosition = false;
-                    float lTargetPercent = 0.0f;
-                    bool lHasTargetPosition = false;
-                    uint16_t lTargetRaw = ((uint16_t)mRxFrame.data[2] << 8) | mRxFrame.data[3];
-                    if (lTargetRaw <= IOHC_POSITION_MAX)
-                    {
-                        lTargetPercent = (float)lTargetRaw * 100.0f / IOHC_POSITION_MAX;
-                        if (lTargetPercent > 100.0f)
-                            lTargetPercent = 100.0f;
-                        lHasTargetPosition = true;
-                        lCh->onTargetPositionFeedback(lTargetPercent);
-                    }
-                    uint16_t lCurrentRaw = ((uint16_t)mRxFrame.data[4] << 8) | mRxFrame.data[5];
-
-                    if (lCurrentRaw != (IOHC_POSITION_STOP & 0xFFFF) &&
-                        lCurrentRaw != (IOHC_POSITION_UNKNOWN & 0xFFFF) &&
-                        lCurrentRaw != (IOHC_POSITION_FAVORITE & 0xFFFF))
-                    {
-                        uint16_t lPosRaw = lCurrentRaw;
-                        // Fallback: if current > max and stopped, use target
-                        if (lPosRaw > IOHC_POSITION_MAX && lStopped && mRxFrame.dataLen >= 4)
-                        {
-                            if (lTargetRaw <= IOHC_POSITION_MAX)
-                                lPosRaw = lTargetRaw;
-                        }
-                        lCurrentPercent = (float)lPosRaw * 100.0f / IOHC_POSITION_MAX;
-                        if (lCurrentPercent > 100.0f)
-                            lCurrentPercent = 100.0f;
-                        lHasCurrentPosition = true;
-                        lCh->onPositionFeedback(lCurrentPercent);
-                    }
-                    lCh->onStatusUpdate(!lStopped);
-                    lCh->logStatusSummary(lCurrentPercent, lHasCurrentPosition,
-                                          lTargetPercent, lHasTargetPosition,
-                                          !lStopped);
+                    const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
+                    dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 2, 4);
                 }
                 // Status-expected flag
                 if (mRxFrame.dataLen >= 2 && (mRxFrame.data[1] & 0x80))
@@ -4309,6 +4383,8 @@ void IoHomeController::dispatchRxFrame()
                     uint8_t lEstimate = mRxFrame.data[7];
                     lCh->onEstimate(lEstimate);
                 }
+                applyPrivateBatteryInfo(lCh, mRxFrame.data, mRxFrame.dataLen);
+                applyPrivateTiltInfo(lCh, mRxFrame.data, mRxFrame.dataLen);
                 break;
             }
             case IoHomeCommand::GetNameResponse:

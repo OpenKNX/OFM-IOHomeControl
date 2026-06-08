@@ -6508,6 +6508,264 @@ TEST(controller_send_identify_rejects_1w_channel)
     ASSERT_TRUE(!lController.sendIdentify(lDeviceNodeId, lKey));
 }
 
+static void initPaired2WControllerForTest(IoHomeController &oController,
+                                          IoHomecontrol &oModule,
+                                          IoHomecontrolChannel &oChannel,
+                                          uint32_t iRemoteNodeId,
+                                          uint32_t iDeviceNodeId,
+                                          const uint8_t iKey[16])
+{
+    oModule.testSetChannel(0, &oChannel);
+    oController.setModule(&oModule);
+    oController.setOwnNodeId(iRemoteNodeId);
+    oController.init();
+    oChannel.setNodeId(iDeviceNodeId);
+    oChannel.setEncryptionKey(iKey);
+    oChannel.setIs1W(false);
+}
+
+static bool transmitQueuedControllerFrame(IoHomeController &iController,
+                                          IoHomeFrame &oFrame)
+{
+    iController.radio().testClearTransmittedPacket();
+    iController.loop();
+    iController.loop();
+
+    const auto &lPacket = iController.radio().testLastTransmittedPacket();
+    if (lPacket.empty())
+        return false;
+    return oFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size()));
+}
+
+static bool queueControllerResponse(IoHomeController &iController,
+                                    const IoHomeFrame &iFrame)
+{
+    uint8_t lBuffer[IOHC_FRAME_MAX_SIZE];
+    const uint8_t lLen = iFrame.serialize(lBuffer, sizeof(lBuffer));
+    if (lLen == 0)
+        return false;
+
+    iController.loop(); // TxInProgress -> WaitResponse after the queued command TX
+    iController.radio().testQueueReceivedPacket(lBuffer, lLen);
+    iController.loop();
+    return true;
+}
+
+static void buildPrivateResponseFrame(IoHomeFrame &oFrame,
+                                      uint32_t iRemoteNodeId,
+                                      uint32_t iDeviceNodeId,
+                                      const uint8_t *iData,
+                                      uint8_t iDataLen)
+{
+    oFrame.init();
+    oFrame.ctrlByte0 = IOHC_CTRL0_END;
+    oFrame.ctrlByte1 = 0x00;
+    oFrame.setSrcNode(iDeviceNodeId);
+    oFrame.setDestNode(iRemoteNodeId);
+    oFrame.commandId = IoHomeCommand::PrivateResponse;
+    memcpy(oFrame.data, iData, iDataLen);
+    oFrame.dataLen = iDataLen;
+    oFrame.hasHmac = false;
+}
+
+TEST(controller_private_query_payload_variants)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, lDeviceNodeId, lKey);
+        ASSERT_TRUE(lController.sendBatteryStatusQuery(lDeviceNodeId, lKey));
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+        ASSERT_EQ(lFrame.commandId, IoHomeCommand::Private);
+        ASSERT_EQ(lFrame.dataLen, 3);
+        ASSERT_EQ(lFrame.data[0], 0x06);
+        ASSERT_EQ(lFrame.data[1], 0x00);
+        ASSERT_EQ(lFrame.data[2], 0x00);
+    }
+
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, lDeviceNodeId, lKey);
+        ASSERT_TRUE(lController.sendBatteryStateQuery(lDeviceNodeId, lKey));
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+        ASSERT_EQ(lFrame.commandId, IoHomeCommand::Private);
+        ASSERT_EQ(lFrame.dataLen, 3);
+        ASSERT_EQ(lFrame.data[0], 0x09);
+        ASSERT_EQ(lFrame.data[1], 0x00);
+        ASSERT_EQ(lFrame.data[2], 0x00);
+    }
+
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, lDeviceNodeId, lKey);
+        ASSERT_TRUE(lController.sendTiltStatusQuery(lDeviceNodeId, lKey));
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+        ASSERT_EQ(lFrame.commandId, IoHomeCommand::Private);
+        ASSERT_EQ(lFrame.dataLen, 4);
+        ASSERT_EQ(lFrame.data[0], 0x03);
+        ASSERT_EQ(lFrame.data[1], 0x20);
+        ASSERT_EQ(lFrame.data[2], 0x01);
+        ASSERT_EQ(lFrame.data[3], 0x00);
+    }
+}
+
+TEST(controller_2w_tilt_execute_payload)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+
+    ASSERT_TRUE(lController.sendTiltCommand(lDeviceNodeId, lKey, 25));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    lController.loop();
+
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_EQ(lPacket.size(), 17);
+    ASSERT_EQ(lPacket[8], static_cast<uint8_t>(IoHomeCommand::Execute));
+    ASSERT_EQ(lPacket[9], IOHC_ORIGINATOR_USER);
+    ASSERT_EQ(lPacket[10], 0xE7);
+    ASSERT_EQ(lPacket[11], 0xD4);
+    ASSERT_EQ(lPacket[12], 0x00);
+    ASSERT_EQ(lPacket[13], 0x20);
+    uint16_t lTiltRaw = ((uint16_t)lPacket[14] << 8) | lPacket[15];
+    ASSERT_EQ(lTiltRaw, (uint16_t)((75UL * IOHC_POSITION_MAX) / 100UL));
+    ASSERT_EQ(lPacket[16], 0x00);
+}
+
+TEST(controller_private_response_decodes_battery_lowpower_and_tilt)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, lDeviceNodeId, lKey);
+        lChannel.setLowPower2W(false);
+        ASSERT_TRUE(lController.sendBatteryStatusQuery(lDeviceNodeId, lKey));
+        IoHomeFrame lTxFrame;
+        ASSERT_TRUE(transmitQueuedControllerFrame(lController, lTxFrame));
+
+        uint8_t lData[4] = {0x00, 0x60, 87, 0x00};
+        IoHomeFrame lResponse;
+        buildPrivateResponseFrame(lResponse, lRemoteNodeId, lDeviceNodeId,
+                                  lData, sizeof(lData));
+        ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+        ASSERT_TRUE(lChannel.isLowPower2W());
+        ASSERT_TRUE(lChannel.testHasBatteryLevel());
+        ASSERT_EQ(lChannel.testBatteryLevel(), 87);
+    }
+
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, lDeviceNodeId, lKey);
+        ASSERT_TRUE(lController.sendTiltStatusQuery(lDeviceNodeId, lKey));
+        IoHomeFrame lTxFrame;
+        ASSERT_TRUE(transmitQueuedControllerFrame(lController, lTxFrame));
+
+        uint8_t lData[16] = {};
+        lData[0] = 0x00; // moving flag set, but raw current/target are within tolerance
+        lData[1] = 0x80; // status expected
+        const uint16_t lTargetRaw = IOHC_POSITION_MAX / 2;
+        const uint16_t lCurrentRaw = lTargetRaw + 50;
+        lData[2] = (lTargetRaw >> 8) & 0xFF;
+        lData[3] = lTargetRaw & 0xFF;
+        lData[4] = (lCurrentRaw >> 8) & 0xFF;
+        lData[5] = lCurrentRaw & 0xFF;
+        lData[7] = 4;
+        const uint16_t lTiltRaw = (75UL * IOHC_POSITION_MAX) / 100UL;
+        lData[13] = (lTiltRaw >> 8) & 0xFF;
+        lData[14] = lTiltRaw & 0xFF;
+
+        IoHomeFrame lResponse;
+        buildPrivateResponseFrame(lResponse, lRemoteNodeId, lDeviceNodeId,
+                                  lData, sizeof(lData));
+        ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+        ASSERT_TRUE(lChannel.testHasPositionFeedback());
+        ASSERT_TRUE(lChannel.testHasTargetPositionFeedback());
+        ASSERT_TRUE(lChannel.testHasStatusUpdate());
+        ASSERT_TRUE(!lChannel.testStatusMoving());
+        ASSERT_TRUE(lChannel.testStatusExpected());
+        ASSERT_TRUE(lChannel.testHasEstimate());
+        ASSERT_EQ(lChannel.testEstimate(), 4);
+        ASSERT_TRUE(lChannel.testHasSlatFeedback());
+        ASSERT_FLOAT_EQ(lChannel.testTargetPositionFeedback(), 50.0f, 0.01f);
+        ASSERT_FLOAT_EQ(lChannel.testSlatFeedback(), 25.0f, 0.01f);
+    }
+}
+
+TEST(controller_private_response_stopped_marker_uses_target_position)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Private, 0));
+    IoHomeFrame lTxFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lTxFrame));
+
+    uint8_t lData[8] = {};
+    lData[0] = 0x01; // stopped
+    const uint16_t lTargetRaw = (40UL * IOHC_POSITION_MAX) / 100UL;
+    lData[2] = (lTargetRaw >> 8) & 0xFF;
+    lData[3] = lTargetRaw & 0xFF;
+    lData[4] = (IOHC_POSITION_UNKNOWN >> 8) & 0xFF;
+    lData[5] = IOHC_POSITION_UNKNOWN & 0xFF;
+    lData[7] = 0xFF;
+
+    IoHomeFrame lResponse;
+    buildPrivateResponseFrame(lResponse, lRemoteNodeId, lDeviceNodeId,
+                              lData, sizeof(lData));
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    ASSERT_TRUE(lChannel.testHasPositionFeedback());
+    ASSERT_TRUE(lChannel.testHasTargetPositionFeedback());
+    ASSERT_TRUE(lChannel.testHasStatusUpdate());
+    ASSERT_TRUE(!lChannel.testStatusMoving());
+    ASSERT_FLOAT_EQ(lChannel.testPositionFeedback(), 40.0f, 0.01f);
+    ASSERT_FLOAT_EQ(lChannel.testTargetPositionFeedback(), 40.0f, 0.01f);
+}
+
 static bool buildChallengeRequestPacket(uint32_t iRemoteNodeId,
                                         uint32_t iDeviceNodeId,
                                         const uint8_t iChallenge[6],
@@ -7316,6 +7574,10 @@ int main()
     RUN(controller_2w_command_can_clear_low_power_for_mains_device);
     RUN(controller_send_identify_builds_authenticated_payload);
     RUN(controller_send_identify_rejects_1w_channel);
+    RUN(controller_private_query_payload_variants);
+    RUN(controller_2w_tilt_execute_payload);
+    RUN(controller_private_response_decodes_battery_lowpower_and_tilt);
+    RUN(controller_private_response_stopped_marker_uses_target_position);
     RUN(controller_2w_challenge_response_inherits_low_power);
     RUN(controller_2w_challenge_response_can_clear_low_power_for_mains_device);
     RUN(controller_default_1w_execute_uses_standard_vent_layout);

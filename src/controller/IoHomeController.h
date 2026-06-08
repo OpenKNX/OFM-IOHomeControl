@@ -39,6 +39,8 @@ struct IoHomeQueueEntry
   uint8_t oneWayFp1;
   uint8_t oneWayFp2;
   uint8_t oneWayBroadcastType; // target type: dst = ((type << 6) | 0x3F)
+  bool twoWayTilt;             // true: 2W tilt-only Execute payload
+  uint8_t twoWayTiltPercent;
   uint8_t retries;
   bool active;
   uint8_t nameData[IOHC_NAME_MAX_SIZE]; // SetName payload (zero-padded, Latin-1)
@@ -163,6 +165,11 @@ public:
 
   // Ask a paired 2W device to identify itself (authenticated 0x1E → 0x3C → 0x3D)
   bool sendIdentify(uint32_t iDestNodeId, const uint8_t *iEncKey);
+
+  bool sendBatteryStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
+  bool sendBatteryStateQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
+  bool sendTiltStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
+  bool sendTiltCommand(uint32_t iDestNodeId, const uint8_t *iEncKey, uint8_t iTiltPercent);
 
   // Start pairing process for a channel
   bool startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId = 0);
