@@ -97,6 +97,14 @@ namespace
         return (iA > iB) ? ((iA - iB) <= kPositionRawTolerance) : ((iB - iA) <= kPositionRawTolerance);
     }
 
+    uint32_t passivePairNodeFromFrame(const IoHomeFrame &iFrame)
+    {
+        const uint32_t lDestNode = iFrame.getDestNodeId();
+        if (getAddressClass(lDestNode) == IoHomeAddressClass::Unicast)
+            return lDestNode;
+        return iFrame.getSrcNodeId();
+    }
+
     uint16_t readU16BE(const uint8_t *iData, uint8_t iOffset)
     {
         return ((uint16_t)iData[iOffset] << 8) | iData[iOffset + 1];
@@ -360,6 +368,11 @@ IoHomeController::IoHomeController()
       mAuthSrcNodeId(0), mAuthChannelIdx(0),
       mStatusAckDestNodeId(0), mStatusAckFreqIdx(0),
       mPassiveMode(false), mPassivePairNodeId(0),
+      mPassiveChallengeValid(false),
+      mPassiveKeySniffStatus(PassiveKeySniffStatus::Idle),
+      mPassiveKeyResult{},
+      mPassiveKeySniffStartedAt(0),
+      mPassiveKeySniffTimeoutMs(0),
       mGatewayMode(false), mGatewayNodeId(0),
       mGatewayState(ControllerState::GatewayIdle),
       mGatewayPeerNodeId(0),
@@ -383,6 +396,7 @@ IoHomeController::IoHomeController()
     memset(&mCurrentCmd, 0, sizeof(mCurrentCmd));
     memset(mAuthChallenge, 0, sizeof(mAuthChallenge));
     memset(mPassiveChallenge, 0, sizeof(mPassiveChallenge));
+    memset(&mPassiveKeyResult, 0, sizeof(mPassiveKeyResult));
     memset(mGatewayKey, 0, sizeof(mGatewayKey));
     clearGatewayPairedDevices();
     mPairSetConfigRequest.init();
@@ -965,6 +979,11 @@ void IoHomeController::setPassiveMode(bool iEnabled)
     }
     else
     {
+        mPassivePairNodeId = 0;
+        mPassiveChallengeValid = false;
+        memset(mPassiveChallenge, 0, sizeof(mPassiveChallenge));
+        if (mPassiveKeySniffStatus == PassiveKeySniffStatus::Listening)
+            mPassiveKeySniffStatus = PassiveKeySniffStatus::Idle;
         mState = ControllerState::Idle;
     }
 }
@@ -972,6 +991,58 @@ void IoHomeController::setPassiveMode(bool iEnabled)
 bool IoHomeController::isPassiveMode() const
 {
     return mPassiveMode;
+}
+
+bool IoHomeController::startPassiveKeySniff(uint32_t iTimeoutMs)
+{
+    if (mState != ControllerState::Idle && mState != ControllerState::PassiveListening)
+        return false;
+
+    clearPassiveKeyResult();
+    mPassivePairNodeId = 0;
+    mPassiveChallengeValid = false;
+    memset(mPassiveChallenge, 0, sizeof(mPassiveChallenge));
+    mPassiveKeySniffStartedAt = millis();
+    mPassiveKeySniffTimeoutMs = iTimeoutMs;
+    mPassiveKeySniffStatus = PassiveKeySniffStatus::Listening;
+    setPassiveMode(true);
+    return true;
+}
+
+void IoHomeController::stopPassiveKeySniff()
+{
+    if (mPassiveKeySniffStatus == PassiveKeySniffStatus::Listening ||
+        mPassiveKeySniffStatus == PassiveKeySniffStatus::Timeout)
+    {
+        mPassiveKeySniffStatus = PassiveKeySniffStatus::Idle;
+    }
+
+    mPassivePairNodeId = 0;
+    mPassiveChallengeValid = false;
+    memset(mPassiveChallenge, 0, sizeof(mPassiveChallenge));
+
+    if (mPassiveMode && !mNetworkScanActive)
+        setPassiveMode(false);
+}
+
+void IoHomeController::clearPassiveKeyResult()
+{
+    memset(&mPassiveKeyResult, 0, sizeof(mPassiveKeyResult));
+    if (mPassiveKeySniffStatus == PassiveKeySniffStatus::Captured ||
+        mPassiveKeySniffStatus == PassiveKeySniffStatus::Timeout)
+    {
+        mPassiveKeySniffStatus = PassiveKeySniffStatus::Idle;
+    }
+}
+
+IoHomeController::PassiveKeySniffStatus IoHomeController::passiveKeySniffStatus() const
+{
+    return mPassiveKeySniffStatus;
+}
+
+const IoHomeController::PassiveKeyResult &IoHomeController::passiveKeyResult() const
+{
+    return mPassiveKeyResult;
 }
 
 void IoHomeController::setGatewayMode(bool iEnabled)
@@ -1668,6 +1739,22 @@ void IoHomeController::loop()
     {
         memset(mTxTimeAccum, 0, sizeof(mTxTimeAccum));
         mDutyCycleWindowStart = millis();
+    }
+
+    if (mPassiveKeySniffStatus == PassiveKeySniffStatus::Listening &&
+        mPassiveKeySniffTimeoutMs > 0 &&
+        millis() - mPassiveKeySniffStartedAt >= mPassiveKeySniffTimeoutMs)
+    {
+        mPassiveKeySniffStatus = PassiveKeySniffStatus::Timeout;
+        mPassivePairNodeId = 0;
+        mPassiveChallengeValid = false;
+        memset(mPassiveChallenge, 0, sizeof(mPassiveChallenge));
+        if (mPassiveMode && !mNetworkScanActive)
+        {
+            mPassiveMode = false;
+            mState = ControllerState::Idle;
+            startReceive();
+        }
     }
 
     // Multi-frequency RX scanning: cycle through frequencies during idle/passive listening
@@ -4627,8 +4714,9 @@ void IoHomeController::processAuthWaitResponse()
 
 void IoHomeController::processPassiveFrame()
 {
-    // Passive mode: observe pairing exchanges to extract encryption keys
-    // Flow: KeyInitTransfer (0x31) → ChallengeRequest (0x3C) → KeyTransfer (0x32)
+    // Passive mode: observe frames. Key extraction is only active while an
+    // explicit passive key-sniff session is listening.
+    // Flow: KeyInitTransfer (0x31) -> ChallengeRequest (0x3C) -> KeyTransfer (0x32)
     uint32_t lSrcNode = mRxFrame.getSrcNodeId();
 
     // Track all observed source addresses for remote management
@@ -4642,28 +4730,46 @@ void IoHomeController::processPassiveFrame()
         updateNodeStats(lSrcNode, mRadio.lastRssi(), mRxFrame.commandId);
     }
 
+    if (mPassiveKeySniffStatus != PassiveKeySniffStatus::Listening)
+    {
+        dispatchRxFrame();
+        return;
+    }
+
     switch (mRxFrame.commandId)
     {
     case IoHomeCommand::KeyInitTransfer:
         // Save the init frame and note which device is pairing
         mPassiveKeyInit = mRxFrame;
-        mPassivePairNodeId = lSrcNode;
-        logInfoP("Passive: KeyInitTransfer from 0x%06X", lSrcNode);
+        mPassivePairNodeId = passivePairNodeFromFrame(mRxFrame);
+        mPassiveChallengeValid = false;
+        memset(mPassiveChallenge, 0, sizeof(mPassiveChallenge));
+        logInfoP("Passive sniff: KeyInitTransfer src=0x%06X dst=0x%06X peer=0x%06X",
+                 lSrcNode, mRxFrame.getDestNodeId(), mPassivePairNodeId);
         break;
 
     case IoHomeCommand::ChallengeRequest:
         // Save challenge from the device being paired
         if (mRxFrame.dataLen >= 6)
         {
-            memcpy(mPassiveChallenge, mRxFrame.data, 6);
-            logInfoP("Passive: ChallengeRequest from 0x%06X", lSrcNode);
+            if (mPassivePairNodeId == 0 || mPassivePairNodeId == lSrcNode)
+            {
+                mPassivePairNodeId = lSrcNode;
+                memcpy(mPassiveChallenge, mRxFrame.data, 6);
+                mPassiveChallengeValid = true;
+                logInfoP("Passive sniff: ChallengeRequest from 0x%06X", lSrcNode);
+            }
         }
         break;
 
     case IoHomeCommand::KeyTransfer:
     {
         // Decrypt the system key using TRANSFER_KEY + observed challenge
-        if (mRxFrame.dataLen >= 16 && mPassivePairNodeId != 0)
+        const uint32_t lPairNodeId = passivePairNodeFromFrame(mRxFrame);
+        if (mRxFrame.dataLen >= 16 &&
+            mPassivePairNodeId != 0 &&
+            mPassiveChallengeValid &&
+            lPairNodeId == mPassivePairNodeId)
         {
             const uint8_t lKeyInitData[1] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
             uint8_t lKeystream[16];
@@ -4673,15 +4779,27 @@ void IoHomeController::processPassiveFrame()
                 for (int k = 0; k < 16; k++)
                     lExtractedKey[k] = mRxFrame.data[k] ^ lKeystream[k];
 
-                logInfoP("Passive: extracted system key from pairing of 0x%06X:", mPassivePairNodeId);
-                // Log key bytes for debugging
-                logInfoP("  Key: %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
-                         lExtractedKey[0], lExtractedKey[1], lExtractedKey[2], lExtractedKey[3],
-                         lExtractedKey[4], lExtractedKey[5], lExtractedKey[6], lExtractedKey[7],
-                         lExtractedKey[8], lExtractedKey[9], lExtractedKey[10], lExtractedKey[11],
-                         lExtractedKey[12], lExtractedKey[13], lExtractedKey[14], lExtractedKey[15]);
+                mPassiveKeyResult.valid = true;
+                mPassiveKeyResult.nodeId = mPassivePairNodeId;
+                memcpy(mPassiveKeyResult.key, lExtractedKey, sizeof(mPassiveKeyResult.key));
+                mPassiveKeyResult.capturedAt = millis();
+                mPassiveKeyResult.freqIdx = mCurrentFreqIdx;
+                mPassiveKeySniffStatus = PassiveKeySniffStatus::Captured;
+
+                logInfoP("Passive sniff: captured system key for 0x%06X", mPassivePairNodeId);
+                if (mModule)
+                    mModule->onPassiveKeyCaptured(mPassiveKeyResult);
+
+                if (!mNetworkScanActive)
+                {
+                    mPassiveMode = false;
+                    mState = ControllerState::Idle;
+                    startReceive();
+                }
             }
-            mPassivePairNodeId = 0; // reset
+            mPassivePairNodeId = 0;
+            mPassiveChallengeValid = false;
+            memset(mPassiveChallenge, 0, sizeof(mPassiveChallenge));
         }
         break;
     }

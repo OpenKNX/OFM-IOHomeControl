@@ -187,9 +187,35 @@ public:
   // Start command scan (probe device for supported commands)
   void startCommandScan(uint32_t iNodeId);
 
-  // Set passive mode (listen-only, no transmit; extracts keys from observed pairing)
+  // Set passive mode (listen-only, no transmit). Key extraction is opt-in via
+  // startPassiveKeySniff().
   void setPassiveMode(bool iEnabled);
   bool isPassiveMode() const;
+
+  enum class PassiveKeySniffStatus : uint8_t
+  {
+    Idle = 0,
+    Listening = 1,
+    Captured = 2,
+    Timeout = 3
+  };
+
+  struct PassiveKeyResult
+  {
+    bool valid;
+    uint32_t nodeId;
+    uint8_t key[16];
+    uint32_t capturedAt;
+    uint8_t freqIdx;
+  };
+
+  static constexpr uint32_t kPassiveKeySniffDefaultTimeoutMs = 60000UL;
+
+  bool startPassiveKeySniff(uint32_t iTimeoutMs = kPassiveKeySniffDefaultTimeoutMs);
+  void stopPassiveKeySniff();
+  void clearPassiveKeyResult();
+  PassiveKeySniffStatus passiveKeySniffStatus() const;
+  const PassiveKeyResult &passiveKeyResult() const;
 
   // Fake gateway mode (respond to device-initiated pairing requests)
   void setGatewayMode(bool iEnabled);
@@ -411,6 +437,11 @@ private:
   IoHomeFrame mPassiveKeyInit;  // saved KeyInitTransfer frame
   uint8_t mPassiveChallenge[6]; // challenge from observed ChallengeRequest
   uint32_t mPassivePairNodeId;  // node ID being paired (observed)
+  bool mPassiveChallengeValid;
+  PassiveKeySniffStatus mPassiveKeySniffStatus;
+  PassiveKeyResult mPassiveKeyResult;
+  uint32_t mPassiveKeySniffStartedAt;
+  uint32_t mPassiveKeySniffTimeoutMs;
 
   // Fake gateway mode state
   bool mGatewayMode;

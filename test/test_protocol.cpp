@@ -6766,6 +6766,164 @@ TEST(controller_private_response_stopped_marker_uses_target_position)
     ASSERT_FLOAT_EQ(lChannel.testTargetPositionFeedback(), 40.0f, 0.01f);
 }
 
+static bool queueControllerPassiveFrame(IoHomeController &iController,
+                                        const IoHomeFrame &iFrame)
+{
+    uint8_t lBuffer[IOHC_FRAME_MAX_SIZE];
+    const uint8_t lLen = iFrame.serialize(lBuffer, sizeof(lBuffer));
+    if (lLen == 0)
+        return false;
+
+    iController.radio().testQueueReceivedPacket(lBuffer, lLen);
+    iController.loop();
+    return true;
+}
+
+static void buildPassiveKeyInitFrame(IoHomeFrame &oFrame,
+                                     uint32_t iRemoteNodeId,
+                                     uint32_t iDeviceNodeId)
+{
+    oFrame.init();
+    oFrame.setStart2W();
+    oFrame.setSrcNode(iRemoteNodeId);
+    oFrame.setDestNode(iDeviceNodeId);
+    oFrame.commandId = IoHomeCommand::KeyInitTransfer;
+    oFrame.dataLen = 0;
+    oFrame.hasHmac = false;
+}
+
+static void buildPassiveChallengeFrame(IoHomeFrame &oFrame,
+                                       uint32_t iRemoteNodeId,
+                                       uint32_t iDeviceNodeId,
+                                       const uint8_t iChallenge[6])
+{
+    oFrame.init();
+    oFrame.ctrlByte0 = IOHC_CTRL0_END;
+    oFrame.ctrlByte1 = 0x00;
+    oFrame.setSrcNode(iDeviceNodeId);
+    oFrame.setDestNode(iRemoteNodeId);
+    oFrame.commandId = IoHomeCommand::ChallengeRequest;
+    memcpy(oFrame.data, iChallenge, 6);
+    oFrame.dataLen = 6;
+    oFrame.hasHmac = false;
+}
+
+static void buildPassiveKeyTransferFrame(IoHomeFrame &oFrame,
+                                         uint32_t iRemoteNodeId,
+                                         uint32_t iDeviceNodeId,
+                                         const uint8_t iChallenge[6],
+                                         const uint8_t iSystemKey[16])
+{
+    const uint8_t lKeyInitData[1] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
+    uint8_t lKeystream[16];
+    ASSERT_TRUE(IoHomeCrypto::crypt2WKey(lKeyInitData, sizeof(lKeyInitData),
+                                         iChallenge, IOHC_TRANSFER_KEY, lKeystream));
+
+    oFrame.init();
+    oFrame.ctrlByte0 = IOHC_CTRL0_END;
+    oFrame.ctrlByte1 = 0x00;
+    oFrame.setSrcNode(iRemoteNodeId);
+    oFrame.setDestNode(iDeviceNodeId);
+    oFrame.commandId = IoHomeCommand::KeyTransfer;
+    for (uint8_t i = 0; i < 16; i++)
+        oFrame.data[i] = iSystemKey[i] ^ lKeystream[i];
+    oFrame.dataLen = 16;
+    oFrame.hasHmac = false;
+}
+
+TEST(controller_passive_key_sniff_start_stop_clear)
+{
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(0x831F2A);
+    lController.init();
+
+    ASSERT_EQ(lController.passiveKeySniffStatus(), IoHomeController::PassiveKeySniffStatus::Idle);
+    ASSERT_TRUE(lController.startPassiveKeySniff(0));
+    ASSERT_TRUE(lController.isPassiveMode());
+    ASSERT_EQ(lController.passiveKeySniffStatus(), IoHomeController::PassiveKeySniffStatus::Listening);
+
+    lController.stopPassiveKeySniff();
+    ASSERT_TRUE(!lController.isPassiveMode());
+    ASSERT_EQ(lController.passiveKeySniffStatus(), IoHomeController::PassiveKeySniffStatus::Idle);
+
+    lController.clearPassiveKeyResult();
+    ASSERT_TRUE(!lController.passiveKeyResult().valid);
+}
+
+TEST(controller_passive_mode_does_not_sniff_without_explicit_start)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lChallenge[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
+    const uint8_t lSystemKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lController.setPassiveMode(true);
+
+    IoHomeFrame lFrame;
+    buildPassiveKeyInitFrame(lFrame, lRemoteNodeId, lDeviceNodeId);
+    ASSERT_TRUE(queueControllerPassiveFrame(lController, lFrame));
+    buildPassiveChallengeFrame(lFrame, lRemoteNodeId, lDeviceNodeId, lChallenge);
+    ASSERT_TRUE(queueControllerPassiveFrame(lController, lFrame));
+    buildPassiveKeyTransferFrame(lFrame, lRemoteNodeId, lDeviceNodeId, lChallenge, lSystemKey);
+    ASSERT_TRUE(queueControllerPassiveFrame(lController, lFrame));
+
+    ASSERT_EQ(lController.passiveKeySniffStatus(), IoHomeController::PassiveKeySniffStatus::Idle);
+    ASSERT_TRUE(!lController.passiveKeyResult().valid);
+    ASSERT_EQ(lModule.testPassiveCaptureCount(), 0);
+}
+
+TEST(controller_passive_key_sniff_captures_result_and_callback)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lChallenge[6] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC};
+    const uint8_t lSystemKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+
+    ASSERT_TRUE(lController.startPassiveKeySniff(0));
+
+    IoHomeFrame lFrame;
+    buildPassiveKeyInitFrame(lFrame, lRemoteNodeId, lDeviceNodeId);
+    ASSERT_TRUE(queueControllerPassiveFrame(lController, lFrame));
+    buildPassiveChallengeFrame(lFrame, lRemoteNodeId, lDeviceNodeId, lChallenge);
+    ASSERT_TRUE(queueControllerPassiveFrame(lController, lFrame));
+    buildPassiveKeyTransferFrame(lFrame, lRemoteNodeId, lDeviceNodeId, lChallenge, lSystemKey);
+    ASSERT_TRUE(queueControllerPassiveFrame(lController, lFrame));
+
+    const auto &lResult = lController.passiveKeyResult();
+    ASSERT_EQ(lController.passiveKeySniffStatus(), IoHomeController::PassiveKeySniffStatus::Captured);
+    ASSERT_TRUE(lResult.valid);
+    ASSERT_EQ(lResult.nodeId, lDeviceNodeId);
+    ASSERT_MEM_EQ(lResult.key, lSystemKey, 16);
+    ASSERT_TRUE(!lController.isPassiveMode());
+
+    ASSERT_EQ(lModule.testPassiveCaptureCount(), 1);
+    const auto &lCallbackResult = lModule.testLastPassiveKeyResult();
+    ASSERT_TRUE(lCallbackResult.valid);
+    ASSERT_EQ(lCallbackResult.nodeId, lDeviceNodeId);
+    ASSERT_MEM_EQ(lCallbackResult.key, lSystemKey, 16);
+
+    lController.clearPassiveKeyResult();
+    ASSERT_EQ(lController.passiveKeySniffStatus(), IoHomeController::PassiveKeySniffStatus::Idle);
+    ASSERT_TRUE(!lController.passiveKeyResult().valid);
+}
+
 static bool buildChallengeRequestPacket(uint32_t iRemoteNodeId,
                                         uint32_t iDeviceNodeId,
                                         const uint8_t iChallenge[6],
@@ -7578,6 +7736,9 @@ int main()
     RUN(controller_2w_tilt_execute_payload);
     RUN(controller_private_response_decodes_battery_lowpower_and_tilt);
     RUN(controller_private_response_stopped_marker_uses_target_position);
+    RUN(controller_passive_key_sniff_start_stop_clear);
+    RUN(controller_passive_mode_does_not_sniff_without_explicit_start);
+    RUN(controller_passive_key_sniff_captures_result_and_callback);
     RUN(controller_2w_challenge_response_inherits_low_power);
     RUN(controller_2w_challenge_response_can_clear_low_power_for_mains_device);
     RUN(controller_default_1w_execute_uses_standard_vent_layout);

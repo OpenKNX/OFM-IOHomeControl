@@ -369,6 +369,23 @@ namespace
             lReadCount = static_cast<uint8_t>(lMaxRecordsBySize);
         return lReadCount;
     }
+
+    const char *passiveSniffStatusName(IoHomeController::PassiveKeySniffStatus iStatus)
+    {
+        switch (iStatus)
+        {
+        case IoHomeController::PassiveKeySniffStatus::Idle:
+            return "idle";
+        case IoHomeController::PassiveKeySniffStatus::Listening:
+            return "listening";
+        case IoHomeController::PassiveKeySniffStatus::Captured:
+            return "captured";
+        case IoHomeController::PassiveKeySniffStatus::Timeout:
+            return "timeout";
+        default:
+            return "unknown";
+        }
+    }
 }
 
 IoHomecontrol openknxIoHomecontrol;
@@ -399,6 +416,20 @@ IoHomeController &IoHomecontrol::controller()
 IoHomeRemoteMap &IoHomecontrol::remoteMap()
 {
     return mRemoteMap;
+}
+
+void IoHomecontrol::onPassiveKeyCaptured(const IoHomeController::PassiveKeyResult &iResult)
+{
+    if (!iResult.valid)
+        return;
+
+    mRemoteMap.observeAddress(iResult.nodeId);
+    logInfoP("Passive sniff result: node=0x%06X freq=%u key=%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
+             iResult.nodeId, static_cast<unsigned>(iResult.freqIdx),
+             iResult.key[0], iResult.key[1], iResult.key[2], iResult.key[3],
+             iResult.key[4], iResult.key[5], iResult.key[6], iResult.key[7],
+             iResult.key[8], iResult.key[9], iResult.key[10], iResult.key[11],
+             iResult.key[12], iResult.key[13], iResult.key[14], iResult.key[15]);
 }
 
 IoHomecontrolChannel *IoHomecontrol::getChannel(uint8_t iIndex)
@@ -2107,6 +2138,8 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc remote link ADDR DEV", "Link device to remote");
     openknx.console.printHelpLine("iohc remote unlink ADDR DEV", "Unlink device from remote");
     openknx.console.printHelpLine("iohc remote observed", "Show observed addresses");
+    openknx.console.printHelpLine("iohc sniff start [S]", "Start passive key sniff for S seconds");
+    openknx.console.printHelpLine("iohc sniff stop|status|clear", "Manage passive key sniff result");
     openknx.console.printHelpLine("iohc gateway on", "Enable fake gateway mode (respond to device pairing)");
     openknx.console.printHelpLine("iohc gateway off", "Disable fake gateway mode");
     openknx.console.printHelpLine("iohc gateway status", "Show gateway mode status and paired devices");
@@ -3155,6 +3188,71 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                     logInfoP("  0x%06X", mRemoteMap.observedAddress(i));
             }
         }
+        return true;
+    }
+
+    if (lSub.substr(0, 5) == "sniff")
+    {
+        std::string lSniffCmd;
+        if (lSub.length() > 6)
+            lSniffCmd = trimSpaces(lSub.substr(6));
+
+        if (lSniffCmd.empty() || lSniffCmd.substr(0, 6) == "status")
+        {
+            const auto lStatus = mController.passiveKeySniffStatus();
+            const auto &lResult = mController.passiveKeyResult();
+            logInfoP("Passive sniff: %s passive=%d", passiveSniffStatusName(lStatus), mController.isPassiveMode() ? 1 : 0);
+            if (lResult.valid)
+            {
+                logInfoP("  node=0x%06X freq=%u capturedAt=%lu key=%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
+                         lResult.nodeId, static_cast<unsigned>(lResult.freqIdx),
+                         static_cast<unsigned long>(lResult.capturedAt),
+                         lResult.key[0], lResult.key[1], lResult.key[2], lResult.key[3],
+                         lResult.key[4], lResult.key[5], lResult.key[6], lResult.key[7],
+                         lResult.key[8], lResult.key[9], lResult.key[10], lResult.key[11],
+                         lResult.key[12], lResult.key[13], lResult.key[14], lResult.key[15]);
+            }
+            return true;
+        }
+
+        if (lSniffCmd.substr(0, 5) == "start")
+        {
+            uint32_t lTimeoutMs = IoHomeController::kPassiveKeySniffDefaultTimeoutMs;
+            std::string lArg = trimSpaces(lSniffCmd.substr(5));
+            if (!lArg.empty())
+            {
+                uint32_t lSeconds = 0;
+                if (!parseUnsignedDecimal(lArg, lSeconds))
+                {
+                    logInfoP("Invalid sniff timeout: %s", lArg.c_str());
+                    return true;
+                }
+                lTimeoutMs = lSeconds * 1000UL;
+            }
+
+            if (mController.startPassiveKeySniff(lTimeoutMs))
+                logInfoP("Passive sniff started (%lu ms timeout)", static_cast<unsigned long>(lTimeoutMs));
+            else
+                logInfoP("Passive sniff start blocked by controller state %s",
+                         IoHomeController::stateName(mController.state()));
+            return true;
+        }
+
+        if (lSniffCmd.substr(0, 4) == "stop")
+        {
+            mController.stopPassiveKeySniff();
+            logInfoP("Passive sniff stopped");
+            return true;
+        }
+
+        if (lSniffCmd.substr(0, 5) == "clear")
+        {
+            mController.clearPassiveKeyResult();
+            logInfoP("Passive sniff result cleared");
+            return true;
+        }
+
+        logInfoP("Usage: iohc sniff start [seconds] | stop | status | clear");
         return true;
     }
 

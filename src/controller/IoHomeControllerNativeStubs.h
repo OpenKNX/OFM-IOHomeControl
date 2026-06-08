@@ -197,7 +197,18 @@ public:
 
   IoHomeRemoteMap &remoteMap() { return mRemoteMap; }
 
+  void onPassiveKeyCaptured(const IoHomeController::PassiveKeyResult &iResult)
+  {
+    mPassiveCaptureCount++;
+    mLastPassiveKeyResult = iResult;
+  }
+
+  uint8_t testPassiveCaptureCount() const { return mPassiveCaptureCount; }
+  const IoHomeController::PassiveKeyResult &testLastPassiveKeyResult() const { return mLastPassiveKeyResult; }
+
 private:
   IoHomecontrolChannel *mChannels[IOHC_ChannelCount] = {};
   IoHomeRemoteMap mRemoteMap;
+  uint8_t mPassiveCaptureCount = 0;
+  IoHomeController::PassiveKeyResult mLastPassiveKeyResult = {};
 };

@@ -50,6 +50,7 @@ public:
   IoHomeController &controller();
   IoHomecontrolChannel *getChannel(uint8_t iIndex);
   IoHomeRemoteMap &remoteMap();
+  void onPassiveKeyCaptured(const IoHomeController::PassiveKeyResult &iResult);
 
 private:
   IoHomecontrolChannel *mChannels[IOHC_ChannelCount] = {};
