@@ -271,7 +271,7 @@ The io-homecontrol protocol support in this module consolidates findings from se
 - [psolyca/iown-homecontrol](https://github.com/psolyca/iown-homecontrol) — 1W/2W implementation reference with detailed command and crypto handling.
 - [CyrilOpenSource/iown-homecontrol-esp32sx1276](https://github.com/CyrilOpenSource/iown-homecontrol-esp32sx1276) — ESP32/SX1276 1W/2W implementation reference.
 - [rspaargaren/iohomecontrol](https://github.com/rspaargaren/iohomecontrol) — ESP32 implementation reference with additional 1W-focused work.
-- [nicolas5000/io-rts-esp32](https://github.com/nicolas5000/io-rts-esp32) — ESP32 implementation reference for io-homecontrol 2W and legacy RTS.
+- [nicolas5000/io-rts-esp32](https://github.com/nicolas5000/iorts-esp32)- — ESP32 implementation reference for io-homecontrol 2W and legacy RTS.
 
 ## Credits
 

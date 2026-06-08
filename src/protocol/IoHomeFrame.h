@@ -54,6 +54,7 @@ struct IoHomeFrame
 
     // Set frame as 2W (bidirectional) START frame
     void setStart2W();
+    void setLowPower(bool iLowPower = true);
 
     // Set source and destination node IDs
     void setSrcNode(uint32_t iNodeId);

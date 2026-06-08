@@ -22,6 +22,14 @@ void IoHomeFrame::setStart2W()
     ctrlByte1 = 0x00;             // version 0, matching real gateway behavior
 }
 
+void IoHomeFrame::setLowPower(bool iLowPower)
+{
+    if (iLowPower)
+        ctrlByte1 |= IOHC_CTRL1_LOW_POWER;
+    else
+        ctrlByte1 &= ~IOHC_CTRL1_LOW_POWER;
+}
+
 void IoHomeFrame::setSrcNode(uint32_t iNodeId)
 {
     srcNode[0] = (iNodeId >> 16) & 0xFF;

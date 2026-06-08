@@ -47,6 +47,8 @@ public:
   uint32_t getNodeId() const;
   void setEncryptionKey(const uint8_t *iKey);
   const uint8_t *getEncryptionKey() const;
+  void setLowPower2W(bool iLowPower);
+  bool isLowPower2W() const;
 
   // Challenge tracking for HMAC verification of responses
   void setLastChallenge(const uint8_t *iChallenge);
@@ -97,6 +99,7 @@ private:
   uint8_t mEncKey[16] = {};       // AES-128 encryption key
   uint8_t mLastChallenge[6] = {}; // challenge sent with last authenticated command
   bool mPaired = false;
+  bool mLowPower2W = true; // Battery/solar-safe default for 2W devices
   uint16_t mSequence1W = 0; // 1W monotonic sequence counter (persisted)
   uint32_t mOneWayControllerNodeId = 0;
   uint8_t mOneWayControllerKey[16] = {};

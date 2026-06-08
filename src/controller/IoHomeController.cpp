@@ -187,6 +187,7 @@ namespace
         IoHomeFrame lFrame;
         initGatewayResponseFrame(lFrame, iGatewayNodeId, iDeviceNodeId,
                                  IoHomeCommand::ChallengeResponse);
+        lFrame.setLowPower(true);
         memcpy(lFrame.data, lHmac, sizeof(lHmac));
         lFrame.dataLen = sizeof(lHmac);
         return lFrame.serialize(oBuffer, iBufferLen);
@@ -524,6 +525,14 @@ bool IoHomeController::sendSetName(uint32_t iDestNodeId, const uint8_t *iEncKey,
     return queuePush(lEntry);
 }
 
+bool IoHomeController::sendIdentify(uint32_t iDestNodeId, const uint8_t *iEncKey)
+{
+    IoHomecontrolChannel *lCh = channelForNode(iDestNodeId);
+    if (lCh && lCh->is1W())
+        return false;
+    return sendCommand(iDestNodeId, iEncKey, IoHomeCommand::Identify, 0);
+}
+
 bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
 {
     uint8_t lNext = (mQueueHead + 1) % IOHC_CMD_QUEUE_SIZE;
@@ -567,6 +576,16 @@ IoHomecontrolChannel *IoHomeController::channelForNode(uint32_t iNodeId) const
             return lCh;
     }
     return nullptr;
+}
+
+bool IoHomeController::resolveLowPower2W(uint32_t iNodeId) const
+{
+    IoHomecontrolChannel *lCh = channelForNode(iNodeId);
+    if (!lCh)
+        return true;
+    if (lCh->is1W())
+        return true;
+    return lCh->isLowPower2W();
 }
 
 IoHomecontrolChannel *IoHomeController::oneWayProfileForNode(uint32_t iNodeId) const
@@ -1029,6 +1048,8 @@ const char *IoHomeController::commandName(IoHomeCommand iCmd)
         return "WritePrivate";
     case IoHomeCommand::WritePrivateResponse:
         return "WritePrivateResponse";
+    case IoHomeCommand::Identify:
+        return "Identify";
     case IoHomeCommand::DiscoverRequest:
         return "DiscoverRequest";
     case IoHomeCommand::DiscoverResponse:
@@ -1636,6 +1657,7 @@ void IoHomeController::loop()
                         if (lCh)
                         {
                             lCh->setNodeId(mDiscoveredNodeId);
+                            lCh->setLowPower2W(true);
                             lCh->setEncryptionKey(mSystemKey);
                             openknx.flash.save();
                         }
@@ -2083,6 +2105,7 @@ void IoHomeController::processResponse()
         lFrame.init();
         lFrame.ctrlByte0 = 0; // continuation frame (per nicolas5000)
         lFrame.ctrlByte1 = 0x00;
+        lFrame.setLowPower(resolveLowPower2W(mCurrentCmd.destNodeId));
         lFrame.setSrcNode(mOwnNodeId);
         lFrame.setDestNode(mCurrentCmd.destNodeId);
         lFrame.commandId = IoHomeCommand::ChallengeResponse;
@@ -2412,6 +2435,7 @@ void IoHomeController::processPairSendPullKeyChallenge()
     lFrame.init();
     lFrame.ctrlByte0 = 0;
     lFrame.ctrlByte1 = 0x00;
+    lFrame.setLowPower(true);
     lFrame.setSrcNode(mOwnNodeId);
     lFrame.setDestNode(mDiscoveredNodeId);
     lFrame.commandId = IoHomeCommand::ChallengeRequest;
@@ -2921,6 +2945,7 @@ void IoHomeController::processPairSendKeyTransfer()
     mTxFrame.init();
     mTxFrame.ctrlByte0 = 0; // continuation frame: no START, no END (per nicolas5000)
     mTxFrame.ctrlByte1 = 0x00;
+    mTxFrame.setLowPower(true);
     mTxFrame.setSrcNode(mOwnNodeId);
     mTxFrame.setDestNode(mDiscoveredNodeId);
     mTxFrame.commandId = IoHomeCommand::KeyTransfer;
@@ -2973,6 +2998,7 @@ void IoHomeController::processPairSendKeyTransferAuthResponse()
     lFrame.init();
     lFrame.ctrlByte0 = 0;
     lFrame.ctrlByte1 = 0x00;
+    lFrame.setLowPower(true);
     lFrame.setSrcNode(mOwnNodeId);
     lFrame.setDestNode(mDiscoveredNodeId);
     lFrame.commandId = IoHomeCommand::ChallengeResponse;
@@ -3036,6 +3062,7 @@ void IoHomeController::processPairSendSetConfig1()
 {
     mPairSetConfigRequest.init();
     mPairSetConfigRequest.setStart2W();
+    mPairSetConfigRequest.setLowPower(true);
     mPairSetConfigRequest.setSrcNode(mOwnNodeId);
     mPairSetConfigRequest.setDestNode(mDiscoveredNodeId);
     mPairSetConfigRequest.commandId = IoHomeCommand::SetConfig1;
@@ -3133,6 +3160,7 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
     lFrame.init();
     lFrame.ctrlByte0 = 0;
     lFrame.ctrlByte1 = 0x00;
+    lFrame.setLowPower(true);
     lFrame.setSrcNode(mOwnNodeId);
     lFrame.setDestNode(mDiscoveredNodeId);
     lFrame.commandId = IoHomeCommand::ChallengeResponse;
@@ -3575,6 +3603,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
     }
     mTxFrame.setSrcNode(mOwnNodeId);
     mTxFrame.setDestNode(iEntry.destNodeId);
+    mTxFrame.setLowPower(resolveLowPower2W(iEntry.destNodeId));
     mTxFrame.commandId = iEntry.command;
 
     switch (iEntry.command)
@@ -3807,6 +3836,21 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         mTxFrame.dataLen = 3;
         mTxFrame.hasHmac = false;
         break;
+
+    case IoHomeCommand::Identify:
+    {
+        IoHomecontrolChannel *lTargetCh = channelForNode(iEntry.destNodeId);
+        if (lTargetCh && lTargetCh->is1W())
+            return false;
+
+        // Identify (0x1E): authenticated 2W command, challenge-response flow.
+        mTxFrame.data[0] = IOHC_ORIGINATOR_USER;
+        mTxFrame.data[1] = 0xFF;
+        mTxFrame.dataLen = 2;
+        mTxFrame.hasHmac = false;
+        mAuthResponseSent = false;
+        break;
+    }
 
     case IoHomeCommand::ActivateMode:
     {
@@ -4362,6 +4406,7 @@ uint8_t IoHomeController::buildStatusUpdateResponse(uint32_t iDestNodeId, uint8_
     lFrame.init();
     lFrame.ctrlByte0 = IOHC_CTRL0_END; // response: END only (per nicolas5000)
     lFrame.ctrlByte1 = 0x00;
+    lFrame.setLowPower(resolveLowPower2W(iDestNodeId));
     lFrame.setSrcNode(mOwnNodeId);
     lFrame.setDestNode(iDestNodeId);
     lFrame.commandId = IoHomeCommand::StatusUpdateResponse;
@@ -4455,6 +4500,7 @@ void IoHomeController::processAuthSendChallenge()
     lFrame.init();
     lFrame.ctrlByte0 = 0; // continuation frame: no START, no END (per nicolas5000)
     lFrame.ctrlByte1 = 0x00;
+    lFrame.setLowPower(resolveLowPower2W(mAuthSrcNodeId));
     lFrame.setSrcNode(mOwnNodeId);
     lFrame.setDestNode(mAuthSrcNodeId);
     lFrame.commandId = IoHomeCommand::ChallengeRequest;

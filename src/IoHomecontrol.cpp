@@ -1627,6 +1627,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         {
             mController.cancelPairing();
             mChannels[lChannel]->setNodeId(0);
+            mChannels[lChannel]->setLowPower2W(true);
             memset(const_cast<uint8_t *>(mChannels[lChannel]->getEncryptionKey()), 0, 16);
             resultData[0] = 0x00;
             resultLength = 1;
@@ -1689,12 +1690,12 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
 }
 
 // --- Flash persistence ---
-// Layout v9: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
+// Layout v10: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
 // default 1W broadcastType(1) + numChannels(1) +
 // per-channel: index(1) + flags(1) + actuatorNodeId(3) + actuatorKey(16) +
 // 1W seq(2) + 1W controllerNodeId(3) + 1W controllerKey(16) +
 // 1W manufacturer(1) = 43 bytes + remoteMap
-// flags: bit0=paired, bit1=is1W
+// flags: bit0=paired, bit1=is1W, bit2=2W low-power
 
 uint16_t IoHomecontrol::flashSize()
 {
@@ -1703,7 +1704,7 @@ uint16_t IoHomecontrol::flashSize()
 
 void IoHomecontrol::writeFlash()
 {
-    openknx.flash.writeByte(9); // format version 9 (one complete 1W controller profile per channel)
+    openknx.flash.writeByte(10); // format version 10 (v9 + 2W low-power flag)
 
     // Write system key
     const uint8_t *lSysKey = mController.getSystemKey();
@@ -1725,6 +1726,8 @@ void IoHomecontrol::writeFlash()
             lFlags |= 0x01;
         if (mChannels[i]->is1W())
             lFlags |= 0x02;
+        if (mChannels[i]->isLowPower2W())
+            lFlags |= 0x04;
         openknx.flash.writeByte(lFlags);
         uint32_t lNodeId = mChannels[i]->getNodeId();
         openknx.flash.writeByte((lNodeId >> 16) & 0xFF);
@@ -1771,7 +1774,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
     uint8_t lVersion = openknx.flash.readByte();
 
-    if (lVersion == 9)
+    if (lVersion == 10 || lVersion == 9)
     {
         if (iSize < kFlashHeaderV9)
             return;
@@ -1789,7 +1792,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
         const uint8_t lCount = openknx.flash.readByte();
         const uint8_t lReadCount = clampFlashRecordCount(lCount, mNumChannels, iSize, kFlashHeaderV9, kFlashRecordV9);
-        logDebugP("Reading %d channels from flash (v9)", lReadCount);
+        logDebugP("Reading %d channels from flash (v%d)", lReadCount, lVersion);
         for (uint8_t i = 0; i < lReadCount; i++)
         {
             const uint8_t lIdx = openknx.flash.readByte();
@@ -1816,6 +1819,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
                 mChannels[lIdx]->setNodeId(lNodeId);
                 mChannels[lIdx]->setEncryptionKey(lKey);
             }
+            mChannels[lIdx]->setLowPower2W(lVersion >= 10 ? ((lFlags & 0x04) != 0) : true);
             mChannels[lIdx]->setSequence1W(lSeq);
             mChannels[lIdx]->setOneWayControllerNodeId(lControllerNodeId);
             mChannels[lIdx]->setOneWayControllerKey(lControllerKey);
@@ -2077,6 +2081,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc discover", "Broadcast discovery, list devices");
     openknx.console.printHelpLine("iohc discover spe", "Encrypted SPE/sub-device discovery");
     openknx.console.printHelpLine("iohc autospe on|off|status", "Runtime post-pair SPE discovery");
+    openknx.console.printHelpLine("iohc identify NN", "Ask paired 2W device NN to identify itself");
     openknx.console.printHelpLine("iohc send NN PP", "Send position PP% to channel NN");
     openknx.console.printHelpLine("iohc send1wbtn NN up|down|stop|my|prog|release|stop2", "Send 1W remote button command");
     openknx.console.printHelpLine("iohc raw1w NN HEX", "Send raw 1W button code, e.g. 0000/00FE/00FF");
@@ -2703,6 +2708,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             {
                 mController.cancelPairing();
                 mChannels[lIdx]->setNodeId(0);
+                mChannels[lIdx]->setLowPower2W(true);
                 memset(const_cast<uint8_t *>(mChannels[lIdx]->getEncryptionKey()), 0, 16);
                 openknx.flash.save();
                 logInfoP("Channel %d unpaired", lIdx + 1);
@@ -2900,6 +2906,41 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 logInfoP("Invalid send command: %s", lSub.c_str());
             }
         }
+        return true;
+    }
+
+    if (lSub.rfind("identify", 0) == 0)
+    {
+        std::string lArg = (lSub.length() > strlen("identify")) ? lSub.substr(strlen("identify")) : "";
+        size_t lPos = 0;
+        while (lPos < lArg.length() && isSpace(lArg[lPos]))
+            lPos++;
+        if (lPos > 0)
+            lArg = lArg.substr(lPos);
+
+        uint8_t lIdx = 0;
+        if (lArg.empty() || !parseChannelIndex(lArg, mNumChannels, lIdx))
+        {
+            logInfoP("Usage: iohc identify NN");
+            return true;
+        }
+
+        IoHomecontrolChannel *lCh = mChannels[lIdx];
+        if (!lCh->isPaired())
+        {
+            logInfoP("Channel %d not paired", lIdx + 1);
+            return true;
+        }
+        if (lCh->is1W())
+        {
+            logInfoP("Channel %d is in 1W mode; Identify is 2W only", lIdx + 1);
+            return true;
+        }
+
+        if (mController.sendIdentify(lCh->getNodeId(), lCh->getEncryptionKey()))
+            logInfoP("Sent Identify to channel %d", lIdx + 1);
+        else
+            logInfoP("Failed to queue Identify for channel %d", lIdx + 1);
         return true;
     }
 

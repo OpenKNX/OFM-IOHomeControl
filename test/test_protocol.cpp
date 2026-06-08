@@ -2219,6 +2219,7 @@ TEST(command_id_enum_values)
     ASSERT_EQ((uint8_t)IoHomeCommand::PrivateResponse, 0x04);
     ASSERT_EQ((uint8_t)IoHomeCommand::Private2, 0x0C);
     ASSERT_EQ((uint8_t)IoHomeCommand::Private2Response, 0x0D);
+    ASSERT_EQ((uint8_t)IoHomeCommand::Identify, 0x1E);
     ASSERT_EQ((uint8_t)IoHomeCommand::DiscoverRequest, 0x28);
     ASSERT_EQ((uint8_t)IoHomeCommand::DiscoverResponse, 0x29);
     ASSERT_EQ((uint8_t)IoHomeCommand::DiscoverSPERequest, 0x2A);
@@ -3981,6 +3982,11 @@ TEST(write_private_enum_value)
     ASSERT_EQ(static_cast<uint8_t>(IoHomeCommand::WritePrivateResponse), 0x21);
 }
 
+TEST(identify_enum_value)
+{
+    ASSERT_EQ(static_cast<uint8_t>(IoHomeCommand::Identify), 0x1E);
+}
+
 TEST(send_key_1w_enum_value)
 {
     ASSERT_EQ(static_cast<uint8_t>(IoHomeCommand::SendKey1W), 0x30);
@@ -4156,13 +4162,15 @@ TEST(ems2_sync_word_constant)
 
 TEST(scan_command_list)
 {
-    ASSERT_EQ(IOHC_SCAN_COMMANDS_COUNT, (size_t)25);
+    ASSERT_EQ(IOHC_SCAN_COMMANDS_COUNT, (size_t)26);
     // Verify some expected commands are present
-    bool hasExecute = false, hasDiscover = false, hasStatus = false;
+    bool hasExecute = false, hasDiscover = false, hasIdentify = false, hasStatus = false;
     for (size_t i = 0; i < IOHC_SCAN_COMMANDS_COUNT; i++)
     {
         if (IOHC_SCAN_COMMANDS[i] == 0x00)
             hasExecute = true;
+        if (IOHC_SCAN_COMMANDS[i] == 0x1E)
+            hasIdentify = true;
         if (IOHC_SCAN_COMMANDS[i] == 0x28)
             hasDiscover = true;
         if (IOHC_SCAN_COMMANDS[i] == 0x71)
@@ -4170,6 +4178,7 @@ TEST(scan_command_list)
     }
     ASSERT_TRUE(hasExecute);
     ASSERT_TRUE(hasDiscover);
+    ASSERT_TRUE(hasIdentify);
     ASSERT_TRUE(hasStatus);
 }
 
@@ -4296,8 +4305,7 @@ TEST(direct_command_2w_has_hmac)
 
 TEST(scan_command_list_includes_direct)
 {
-    // Scan list should now be 25 entries (added 0x02)
-    ASSERT_EQ(IOHC_SCAN_COMMANDS_COUNT, (size_t)25);
+    ASSERT_EQ(IOHC_SCAN_COMMANDS_COUNT, (size_t)26);
     bool found = false;
     for (size_t i = 0; i < IOHC_SCAN_COMMANDS_COUNT; i++)
         if (IOHC_SCAN_COMMANDS[i] == 0x02)
@@ -5004,11 +5012,15 @@ TEST(command_name_enum_coverage)
 
     // Key commands have expected values
     ASSERT_EQ((uint8_t)IoHomeCommand::Execute, 0x00);
+    ASSERT_EQ((uint8_t)IoHomeCommand::Identify, 0x1E);
     ASSERT_EQ((uint8_t)IoHomeCommand::StatusUpdate, 0x71);
     ASSERT_EQ((uint8_t)IoHomeCommand::WritePrivate, 0x20);
     ASSERT_EQ((uint8_t)IoHomeCommand::KeyTransfer, 0x32);
     ASSERT_EQ((uint8_t)IoHomeCommand::GetName, 0x50);
     ASSERT_EQ((uint8_t)IoHomeCommand::DiscoverRequest, 0x28);
+#ifdef TEST_NATIVE
+    ASSERT_TRUE(strcmp(IoHomeController::commandName(IoHomeCommand::Identify), "Identify") == 0);
+#endif
 }
 
 // =====================================================================
@@ -5369,6 +5381,59 @@ void test_setname_challenge_response_hmac_input()
     IoHomeCrypto::createHmac2W(hmacInput, 1 + IOHC_NAME_MAX_SIZE,
                                challenge, key, hmac3);
     ASSERT_TRUE(memcmp(hmac, hmac3, 6) != 0);
+}
+
+// =====================================================================
+// Identify (0x1E) command
+// =====================================================================
+
+void test_identify_frame_layout()
+{
+    IoHomeFrame frame;
+    frame.init();
+    frame.setStart2W();
+    frame.setLowPower(true);
+    frame.setSrcNode(0x123456);
+    frame.setDestNode(0xABCDEF);
+    frame.commandId = IoHomeCommand::Identify;
+    frame.data[0] = IOHC_ORIGINATOR_USER;
+    frame.data[1] = 0xFF;
+    frame.dataLen = 2;
+    frame.hasHmac = false;
+
+    uint8_t buf[IOHC_FRAME_MAX_SIZE];
+    uint8_t len = frame.serialize(buf, sizeof(buf));
+    ASSERT_TRUE(len > 0);
+
+    IoHomeFrame parsed;
+    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_EQ(parsed.commandId, IoHomeCommand::Identify);
+    ASSERT_TRUE(parsed.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
+    ASSERT_EQ(parsed.dataLen, 2);
+    ASSERT_EQ(parsed.data[0], IOHC_ORIGINATOR_USER);
+    ASSERT_EQ(parsed.data[1], 0xFF);
+    ASSERT_TRUE(!parsed.hasHmac);
+}
+
+void test_identify_challenge_response_hmac_input()
+{
+    uint8_t hmacInput[3] = {
+        static_cast<uint8_t>(IoHomeCommand::Identify),
+        IOHC_ORIGINATOR_USER,
+        0xFF};
+
+    uint8_t challenge[6] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
+    uint8_t key[16] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11, 0x22,
+                       0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00};
+    uint8_t hmac[6];
+
+    ASSERT_TRUE(IoHomeCrypto::createHmac2W(hmacInput, sizeof(hmacInput),
+                                           challenge, key, hmac));
+
+    uint8_t hmac2[6];
+    ASSERT_TRUE(IoHomeCrypto::createHmac2W(hmacInput, sizeof(hmacInput),
+                                           challenge, key, hmac2));
+    ASSERT_TRUE(memcmp(hmac, hmac2, 6) == 0);
 }
 
 // =====================================================================
@@ -6211,6 +6276,7 @@ TEST(gateway_controller_challenge_response_tracks_paired_device)
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_EQ(lResponse.dataLen, 6);
+    ASSERT_TRUE(lResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
 
     uint8_t lHmacInput[17];
     lHmacInput[0] = static_cast<uint8_t>(IoHomeCommand::KeyTransfer);
@@ -6312,6 +6378,244 @@ TEST(controller_1w_key_frame_uses_profile_manufacturer_without_hmac)
     ASSERT_EQ(lFrame.dataLen, 20);
     ASSERT_EQ(lFrame.data[16], static_cast<uint8_t>(IoHomeManufacturer::Velux));
     ASSERT_TRUE(!lFrame.hasHmac);
+}
+
+TEST(controller_2w_command_defaults_to_low_power)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setNodeId(lDeviceNodeId);
+    lChannel.setEncryptionKey(lKey);
+    lChannel.setIs1W(false);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 50));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    lController.loop();
+
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lPacket.empty());
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
+    ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
+}
+
+TEST(controller_2w_command_can_clear_low_power_for_mains_device)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setNodeId(lDeviceNodeId);
+    lChannel.setEncryptionKey(lKey);
+    lChannel.setIs1W(false);
+    lChannel.setLowPower2W(false);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 50));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    lController.loop();
+
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lPacket.empty());
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
+    ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
+}
+
+TEST(controller_send_identify_builds_authenticated_payload)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setNodeId(lDeviceNodeId);
+    lChannel.setEncryptionKey(lKey);
+    lChannel.setIs1W(false);
+
+    ASSERT_TRUE(lController.sendIdentify(lDeviceNodeId, lKey));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    lController.loop();
+
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lPacket.empty());
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::Identify);
+    ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
+    ASSERT_EQ(lFrame.getDestNodeId(), lDeviceNodeId);
+    ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
+    ASSERT_EQ(lFrame.dataLen, 2);
+    ASSERT_EQ(lFrame.data[0], IOHC_ORIGINATOR_USER);
+    ASSERT_EQ(lFrame.data[1], 0xFF);
+    ASSERT_TRUE(!lFrame.hasHmac);
+}
+
+TEST(controller_send_identify_rejects_1w_channel)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setNodeId(lDeviceNodeId);
+    lChannel.setEncryptionKey(lKey);
+    lChannel.setIs1W(true);
+
+    ASSERT_TRUE(!lController.sendIdentify(lDeviceNodeId, lKey));
+}
+
+static bool buildChallengeRequestPacket(uint32_t iRemoteNodeId,
+                                        uint32_t iDeviceNodeId,
+                                        const uint8_t iChallenge[6],
+                                        uint8_t *oBuffer,
+                                        uint8_t &oLen)
+{
+    IoHomeFrame lChallengeFrame;
+    lChallengeFrame.init();
+    lChallengeFrame.ctrlByte0 = IOHC_CTRL0_END;
+    lChallengeFrame.ctrlByte1 = 0x01;
+    lChallengeFrame.setSrcNode(iDeviceNodeId);
+    lChallengeFrame.setDestNode(iRemoteNodeId);
+    lChallengeFrame.commandId = IoHomeCommand::ChallengeRequest;
+    memcpy(lChallengeFrame.data, iChallenge, 6);
+    lChallengeFrame.dataLen = 6;
+    lChallengeFrame.hasHmac = false;
+
+    oLen = lChallengeFrame.serialize(oBuffer, IOHC_FRAME_MAX_SIZE);
+    return oLen > 0;
+}
+
+static bool sendExecuteAndAnswerChallenge(IoHomeController &iController,
+                                          uint32_t iRemoteNodeId,
+                                          uint32_t iDeviceNodeId,
+                                          const uint8_t iKey[16],
+                                          IoHomeFrame &oChallengeResponse)
+{
+    if (!iController.sendCommand(iDeviceNodeId, iKey, IoHomeCommand::Execute, 50))
+        return false;
+
+    iController.radio().testClearTransmittedPacket();
+    iController.loop(); // Idle -> TxPending
+    iController.loop(); // TxPending -> TxInProgress, initial Execute transmitted
+    iController.loop(); // TxInProgress -> WaitResponse
+
+    const uint8_t lChallenge[6] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC};
+    uint8_t lChallengePacket[IOHC_FRAME_MAX_SIZE];
+    uint8_t lChallengeLen = 0;
+    if (!buildChallengeRequestPacket(iRemoteNodeId, iDeviceNodeId,
+                                     lChallenge, lChallengePacket, lChallengeLen))
+    {
+        return false;
+    }
+
+    iController.radio().testClearTransmittedPacket();
+    iController.radio().testQueueReceivedPacket(lChallengePacket, lChallengeLen);
+    iController.loop();
+
+    const auto &lPacket = iController.radio().testLastTransmittedPacket();
+    if (lPacket.empty())
+        return false;
+    return oChallengeResponse.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size()));
+}
+
+TEST(controller_2w_challenge_response_inherits_low_power)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setNodeId(lDeviceNodeId);
+    lChannel.setEncryptionKey(lKey);
+    lChannel.setIs1W(false);
+    lChannel.setLowPower2W(true);
+
+    IoHomeFrame lResponse;
+    ASSERT_TRUE(sendExecuteAndAnswerChallenge(lController, lRemoteNodeId,
+                                             lDeviceNodeId, lKey, lResponse));
+    ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
+    ASSERT_EQ(lResponse.dataLen, IOHC_HMAC_SIZE);
+    ASSERT_TRUE(lResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
+}
+
+TEST(controller_2w_challenge_response_can_clear_low_power_for_mains_device)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setNodeId(lDeviceNodeId);
+    lChannel.setEncryptionKey(lKey);
+    lChannel.setIs1W(false);
+    lChannel.setLowPower2W(false);
+
+    IoHomeFrame lResponse;
+    ASSERT_TRUE(sendExecuteAndAnswerChallenge(lController, lRemoteNodeId,
+                                             lDeviceNodeId, lKey, lResponse));
+    ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
+    ASSERT_EQ(lResponse.dataLen, IOHC_HMAC_SIZE);
+    ASSERT_TRUE((lResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
 }
 
 TEST(controller_default_1w_execute_uses_standard_vent_layout)
@@ -6861,6 +7165,7 @@ int main()
 
     printf("\nNew command enums:\n");
     RUN(write_private_enum_value);
+    RUN(identify_enum_value);
     RUN(send_key_1w_enum_value);
     RUN(address_request_enum);
     RUN(launch_key_transfer_enum);
@@ -6992,6 +7297,10 @@ int main()
     RUN(setname_frame_layout);
     RUN(setname_challenge_response_hmac_input);
 
+    printf("\nIdentify (0x1E) command:\n");
+    RUN(identify_frame_layout);
+    RUN(identify_challenge_response_hmac_input);
+
     printf("\nFake gateway mode tests:\n");
     RUN(gateway_discover_answer_frame_layout);
     RUN(gateway_key_transfer_encryption);
@@ -7003,6 +7312,12 @@ int main()
     RUN(gateway_controller_challenge_response_tracks_paired_device);
     RUN(controller_default_1w_pairing_uses_standard_type2);
     RUN(controller_1w_key_frame_uses_profile_manufacturer_without_hmac);
+    RUN(controller_2w_command_defaults_to_low_power);
+    RUN(controller_2w_command_can_clear_low_power_for_mains_device);
+    RUN(controller_send_identify_builds_authenticated_payload);
+    RUN(controller_send_identify_rejects_1w_channel);
+    RUN(controller_2w_challenge_response_inherits_low_power);
+    RUN(controller_2w_challenge_response_can_clear_low_power_for_mains_device);
     RUN(controller_default_1w_execute_uses_standard_vent_layout);
     RUN(controller_1w_channel_broadcast_type3_controls_all_tx_paths);
     RUN(controller_1w_channel_profiles_are_independent);

@@ -21,7 +21,7 @@ enum class IoHomeCommand : uint8_t
     // Unknown14 = 0x14,  // not used — observed in rspaargaren scan list only
     // Unknown16 = 0x16,  // not used — observed in rspaargaren scan list only
     // Unknown19 = 0x19,  // not used — observed in rspaargaren scan list only
-    // Unknown1E = 0x1E,  // not used — observed in rspaargaren scan list only
+    Identify = 0x1E, // Authenticated - make device identify itself
 
     // Cozy/Atlantic thermostat control
     WritePrivate = 0x20,         // Authenticated — set temperature, mode, presence
@@ -354,7 +354,7 @@ namespace IoHomeCozyPayload
 
 // Command scanning — list of known command IDs for device probing
 constexpr uint8_t IOHC_SCAN_COMMANDS[] = {
-    0x00, 0x01, 0x02, 0x03, 0x0C, 0x20, 0x28, 0x2A, 0x2C, 0x2E,
+    0x00, 0x01, 0x02, 0x03, 0x0C, 0x1E, 0x20, 0x28, 0x2A, 0x2C, 0x2E,
     0x31, 0x32, 0x36, 0x38, 0x39, 0x3C, 0x46, 0x4A,
     0x50, 0x52, 0x54, 0x56, 0x58, 0x6F, 0x71};
 #define IOHC_SCAN_COMMANDS_COUNT (sizeof(IOHC_SCAN_COMMANDS) / sizeof(IOHC_SCAN_COMMANDS[0]))

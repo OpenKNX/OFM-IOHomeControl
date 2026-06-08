@@ -161,6 +161,9 @@ public:
   bool sendSetName(uint32_t iDestNodeId, const uint8_t *iEncKey,
                    const char *iName, uint8_t iNameLen);
 
+  // Ask a paired 2W device to identify itself (authenticated 0x1E → 0x3C → 0x3D)
+  bool sendIdentify(uint32_t iDestNodeId, const uint8_t *iEncKey);
+
   // Start pairing process for a channel
   bool startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId = 0);
   // Start the standard 1W learning flow with an explicit broadcast type override.
@@ -560,6 +563,7 @@ private:
   bool queuePop(IoHomeQueueEntry &oEntry);
   bool queueEmpty() const;
   IoHomecontrolChannel *channelForNode(uint32_t iNodeId) const;
+  bool resolveLowPower2W(uint32_t iNodeId) const;
   IoHomecontrolChannel *oneWayProfileForNode(uint32_t iNodeId) const;
   uint8_t oneWayBroadcastTypeForNode(uint32_t iNodeId) const;
 };

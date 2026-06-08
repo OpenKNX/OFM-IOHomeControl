@@ -66,6 +66,8 @@ public:
   }
 
   const uint8_t *getEncryptionKey() const { return mEncKey; }
+  void setLowPower2W(bool iLowPower) { mLowPower2W = iLowPower; }
+  bool isLowPower2W() const { return mLowPower2W; }
 
   void setLastChallenge(const uint8_t *iChallenge)
   {
@@ -123,6 +125,7 @@ private:
   uint8_t mConfigured1WProfileChannel = 0xFF;
   bool mIs1W = false;
   bool mPaired = false;
+  bool mLowPower2W = true;
   uint32_t mConfigured1WTargetNodeId = 0;
   uint8_t mConfigured1WBroadcastType = 2;
 };

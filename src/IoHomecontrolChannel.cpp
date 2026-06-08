@@ -506,6 +506,16 @@ const uint8_t *IoHomecontrolChannel::getEncryptionKey() const
     return mEncKey;
 }
 
+void IoHomecontrolChannel::setLowPower2W(bool iLowPower)
+{
+    mLowPower2W = iLowPower;
+}
+
+bool IoHomecontrolChannel::isLowPower2W() const
+{
+    return mLowPower2W;
+}
+
 void IoHomecontrolChannel::setLastChallenge(const uint8_t *iChallenge)
 {
     memcpy(mLastChallenge, iChallenge, 6);
