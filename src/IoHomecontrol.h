@@ -115,6 +115,12 @@ private:
 
   void deriveOwnNodeId();
   void initSystemKey();
+  bool generateOneWayControllerProfile(IoHomecontrolChannel *iChannel);
+  void initOneWayControllerProfiles();
+  void consolidateOneWayProfileSequences();
+  void applyOneWayControllerConfiguration();
+  uint8_t oneWayProfileIndex(IoHomecontrolChannel *iProfile) const;
+  bool oneWayProfileUsedByPairedChannel(IoHomecontrolChannel *iProfile) const;
   uint8_t countPairedChannels() const;
   bool isPairingState(ControllerState iState) const;
   OpenKNX::Led::FunctionGroup *statusLedFunction();

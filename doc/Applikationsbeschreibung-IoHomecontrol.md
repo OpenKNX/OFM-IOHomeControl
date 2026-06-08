@@ -81,10 +81,10 @@ Unterstützte Gerätetypen
 
 Statusüberwachung
 
-* Automatische Status-Abfrage mit konfigurierbarem Intervall
-* Positionsrückmeldung vom Gerät
-* Batterielevel für solarbetriebene Geräte (z.B. Velux Solar)
-* Signalstärke (RSSI) pro Kanal
+* Automatische Status-Abfrage mit konfigurierbarem Intervall im 2W-Modus
+* Positionsrückmeldung vom Gerät im 2W-Modus
+* Batterielevel für solarbetriebene Geräte (z.B. Velux Solar) im 2W-Modus
+* Signalstärke (RSSI) pro Kanal im 2W-Modus
 * Fehlerstatus (Kommunikationsfehler, Duty-Cycle, Pairing verloren, Funkstörung)
 * Bewegungsstatus (fährt / steht)
 
@@ -100,6 +100,7 @@ Sicherheit und Kommunikation
 
 * AES-128 verschlüsselte bidirektionale Kommunikation
 * Challenge-Response-Authentifizierung
+* Cyril-kompatible 1W-Controllerprofile mit persistentem Sequenzzähler und Low-Power-Flag
 * 3-Kanal Frequency-Hopping (868.25 / 868.95 / 869.85 MHz)
 * EU Duty-Cycle-Compliance mit Sub-Band-Tracking
 * Automatische Wiederholversuche (bis zu 3 Versuche, Frequenzwechsel)
@@ -122,7 +123,7 @@ Weitere Features
 * Richtung invertieren pro Kanal
 * Getrennte Öffnungs- und Schließzeiten pro Kanal für lineare Positionsschätzung während der Fahrt
 * Verhalten nach Neustart konfigurierbar (Nichts tun / Status abfragen / Letzte Position anfahren)
-* Pairing-Daten und Schlüssel persistent im Flash gespeichert
+* 2W-Pairing-Daten sowie vollständige 1W-Controllerprofile persistent im Flash gespeichert
 
 
 
@@ -154,7 +155,7 @@ Das io-homecontrol-Modul unterstützt verschiedene Gerätetypen. Der Gerätetyp 
 
 ## **Pairing (Geräte anlernen)**
 
-Vor der Steuerung eines io-homecontrol-Geräts muss dieses mit dem Modul gepairt werden. Im Rahmen des Pairings wird ein gemeinsamer Verschlüsselungsschlüssel zwischen Modul und Gerät ausgetauscht.
+Vor der Steuerung eines io-homecontrol-Geräts muss dieses mit dem Modul gepairt werden. Im 2W-Modus wird dabei der globale Systemschlüssel des Moduls mit dem Gerät ausgetauscht. Im 1W-Modus emuliert der Kanal eine Fernbedienung und überträgt deren Controller-Adresse, Schlüssel und Hersteller im Cyril-kompatiblen Lernablauf.
 
 ### **Pairing über die ETS**
 
@@ -170,7 +171,7 @@ Die angezeigten ETS-Felder sind:
 
 * **Letztes Pairing-Ergebnis**: Zeigt den letzten von ETS ausgelösten oder gelesenen Status an.
 * **Aktuell gepaarte Node-ID**: Zeigt die aktuell im Gerät hinterlegte Ziel-Node-ID bzw. `nicht angelernt`.
-* **Protokoll / Ziel**: Zeigt im 2W-Modus `2W (bidirektional)` und im 1W-Modus die Ziel- bzw. die tatsächlich gepaarte Node-ID.
+* **Protokoll / Ziel**: Zeigt im 2W-Modus `2W (bidirektional)` und im 1W-Modus Broadcast-Typ, wirksamen Profilkanal, Controller-Adresse, Hersteller und Sequenzzähler.
 * **Letzte Pairing-Diagnose**: Zeigt Zusatzinformationen wie aktiven Controller-Zustand oder die Ursache einer Start-Ablehnung.
 
 Zusätzlich gibt es auf der globalen Seite **Allgemein** eine **Pairing-Übersicht**, die diese vier Werte für alle sichtbaren Kanäle tabellarisch darstellt und per Sammel-Button aktualisiert.
@@ -188,6 +189,10 @@ Alternativ kann das Pairing über die serielle Konsole durchgeführt werden.
 * `iohc pair NN AABBCC` — Startet 1W-Pairing mit bekannter Node-ID (Hex)
 * `iohc pair cancel` — Bricht einen laufenden Pairing-Vorgang ab
 * `iohc unpair NN` — Entfernt das Pairing für Kanal NN
+* `iohc 1wctrl status` — Zeigt die wirksamen 1W-Controllerprofile
+* `iohc 1wctrl NN status` — Zeigt das wirksame Profil eines einzelnen 1W-Kanals
+* `iohc 1wqr NN QRHEX` — Importiert Adresse und Schlüssel einer Situo-QR-Identität in das wirksame Profil
+* `iohc 1wnew NN` — Erzeugt für einen ungepaarten Kanal ein neues eigenes 1W-Profil
 
 ### **Pairing-Status**
 
@@ -198,7 +203,7 @@ Ein fehlendes oder verlorenes Pairing wird über den Fehlerstatus des Kanals gem
 * `0 = OK`
 * `3 = nicht gepairt / Pairing verloren`
 
-Detaillierte Pairing-Informationen stehen in ETS über die Pairing-Diagnosefelder sowie über die serielle Konsole zur Verfügung. Der Offset `Kn+9` bleibt reserviert und wird nicht für ein anderes Kommunikationsobjekt verwendet, damit die nachfolgenden Kanal-KO-Offsets stabil bleiben.
+Detaillierte Pairing-Informationen stehen in ETS über die Pairing-Diagnosefelder sowie über die serielle Konsole zur Verfügung.
 
 
 
@@ -219,10 +224,21 @@ Dieser Modus ist für alle Geräte zu bevorzugen, die 2W unterstützen.
 
 ### **1W (unidirektional)**
 
-Im unidirektionalen Modus sendet das Modul Befehle, ohne auf eine Antwort zu warten. Dieser Modus ist für Geräte vorgesehen, die ausschließlich Einweg-Kommunikation unterstützen.
+Im unidirektionalen Modus sendet das Modul Befehle, ohne auf eine Antwort zu warten. Dieser Modus ist für Geräte vorgesehen, die ausschließlich Einweg-Kommunikation unterstützen oder deren 2W-Handshake nicht zuverlässig nutzbar ist.
 
-Bei Auswahl von 1W erscheint ein zusätzliches Feld:
-* **1W Aktor-Node-ID**: Die dezimale Node-ID des Zielgeräts (0 = nicht gesetzt). Diese muss bekannt sein, z.B. durch vorheriges Beobachten mit dem Netzwerk-Scan.
+Bei Auswahl von 1W erscheinen zusätzliche Felder:
+* **1W Aktor-Node-ID**: Die dezimale Node-ID des Zielgeräts (0 = nicht gesetzt). Diese muss für Pairing und Kanalzuordnung bekannt sein, z.B. durch vorheriges Beobachten mit dem Netzwerk-Scan. Normale 1W-Befehle werden anschließend an die typabhängige Broadcast-Adresse gesendet.
+* **1W Broadcast-Typ**: Bestimmt die typabhängige Broadcast-Adresse. Automatisch verwendet Typ 3 für Markisen und horizontalen Sonnenschutz sowie Typ 2 für andere Gerätetypen.
+* **1W Controller-Hersteller**: Herstellerkennung des eigenen Controllerprofils. Bei einem geteilten Profil gilt der Hersteller des Profilkanals.
+* **1W Profil teilen mit Kanal**: `0` verwendet ein eigenes Profil. Eine Kanalnummer lässt mehrere Kanäle dieselbe 1W-Fernbedienungsidentität und denselben Sequenzzähler verwenden.
+
+Die globale Controller-Adresse und der globale Systemschlüssel gehören ausschließlich zur 2W-Identität. Jeder 1W-Kanal erhält stattdessen standardmäßig ein eigenes persistentes Controllerprofil aus zufälliger Adresse, 16-Byte-Schlüssel, Sequenzzähler und Hersteller. Dieses Verhalten entspricht dem Profilmodell der Cyril-Referenzimplementierung.
+
+Der Sequenzzähler wird vor jedem neuen 1W-Telegramm erhöht und danach sofort persistent gespeichert. Das erste Telegramm einer neu erzeugten oder neu importierten Identität verwendet Sequenz `1`. Alle 1W-Telegramme setzen das Low-Power-Flag und verwenden den konfigurierten Broadcast-Typ für Pairing und normale Befehle.
+
+Mehrere Kanäle können ein Profil explizit teilen. Sie verwenden dann dieselbe Adresse, denselben Schlüssel, denselben Hersteller und denselben Sequenzzähler. Ungültige oder zyklische Profilverweise fallen auf das eigene Profil zurück; identische importierte Profile werden intern auf einen gemeinsamen Sequenzzähler zusammengeführt.
+
+Eine vorhandene Somfy-Situo-QR-Controlleridentität kann über `iohc 1wqr NN QRHEX` importiert werden. Erwartet werden mindestens 20 Hex-Bytes im Aufbau `Typ + Adresse[3] + Schlüssel[16]`; die drei Adressbytes werden für die Funkadresse umgekehrt. Der QR-Code liefert damit Controller-Adresse und Schlüssel. Der Hersteller bleibt ein lokaler Profilwert und wird über ETS oder Konsole festgelegt; neue automatisch erzeugte Profile verwenden ohne ETS-Override zunächst Somfy. Die Online-Aktion und die Servicekonsole ändern keine Profilidentität, solange ein gepaarter Kanal das Profil verwendet. Eine geänderte ETS-Profilzuordnung oder Profilidentität erfordert anschließend ein erneutes Pairing der betroffenen Aktoren.
 
 > Im 1W-Modus stehen keine Positionsrückmeldung, kein Batterielevel und keine Signalstärke vom Gerät zur Verfügung. Die Positionsschätzung erfolgt ausschließlich anhand der konfigurierten Fahrzeiten.
 
@@ -250,8 +266,8 @@ Für Jalousien und horizontale Sonnenschutzsysteme steht zusätzlich eine Lamell
 
 ### **Spezielle Positionen**
 
-* **Favorit-Position** (KO Kn+7): Löst die im Gerät gespeicherte Vorzugsposition aus.
-* **Lüftungsposition** (KO Kn+8): Fährt ein Fenster oder einen Lüftungskanal in die Lüftungsstellung.
+* **Favorit-Position** (KO Kn+10): Löst die im Gerät gespeicherte Vorzugsposition aus.
+* **Lüftungsposition** (KO Kn+11): Fährt ein Fenster oder einen Lüftungskanal in die Lüftungsstellung.
 
 
 
@@ -386,6 +402,8 @@ Mögliche Werte:
 
 > Ein kürzeres Intervall erhöht die Duty-Cycle-Auslastung des 868-MHz-Bandes. Die Wahl des Intervalls sollte daher an die Anforderungen der jeweiligen Anlage angepasst werden.
 
+> Im 1W-Modus gibt es keine Rückmeldung vom Gerät. Die Statusabfrage ist daher nur im 2W-Modus sinnvoll; 1W-Positionen werden anhand der Fahrzeiten geschätzt.
+
 <!-- DOC -->
 <!-- DOC HelpContext="IOHC-Fahrzeit" -->
 ### **Fahrzeit**
@@ -426,6 +444,8 @@ Mögliche Werte:
 * **Status abfragen** (1) — Standard: Das Modul fragt die aktuelle Position vom Gerät ab
 * **Letzte Position anfahren** (2): Das Modul sendet nach dem Neustart den zuletzt gespeicherten Zustand erneut. Bei Gerätetypen mit Positionssteuerung wird die letzte Positionsrückmeldung verwendet, bei Licht-, Schalter- und Schloss-Kanälen der letzte Ein/Aus-Zustand.
 
+> Im 1W-Modus kann **Status abfragen** keine Rückmeldung liefern. Dort stehen nur lokal gespeicherte bzw. geschätzte Zustände zur Verfügung.
+
 <!-- DOC -->
 <!-- DOC HelpContext="IOHC-Protokoll-Modus" -->
 ### **Protokoll-Modus**
@@ -442,6 +462,22 @@ Bei Auswahl von 1W erscheint zusätzlich:
 #### **1W Aktor-Node-ID**
 
 Die dezimale Node-ID des Zielgeräts. Sie muss bekannt sein und kann beispielsweise über den Netzwerk-Scan ermittelt werden. Wertebereich: 0 bis 16777215 (24 Bit). 0 bedeutet "nicht gesetzt".
+
+Die Node-ID wird für Pairing und Kanalzuordnung benötigt. Normale 1W-Befehle werden an die aus dem Broadcast-Typ gebildete Gruppenadresse gesendet.
+
+#### **1W Broadcast-Typ**
+
+Bestimmt die Broadcast-Adresse für Pairing und Befehle. Die automatische Auswahl verwendet Typ 3 für Markisen und horizontalen Sonnenschutz sowie Typ 2 für die übrigen Gerätetypen. Für Diagnose und Sondergeräte können Typ 0, Typ 2 oder Typ 3 explizit gewählt werden.
+
+#### **1W Controller-Hersteller**
+
+Bestimmt die Herstellerkennung des eigenen Controllerprofils. Die Kennung wird beim 1W-Key-Transfer übertragen. Die Standardeinstellung übernimmt den persistent gespeicherten Wert; ein QR-Import ändert den Hersteller nicht. Neue automatisch erzeugte Profile verwenden ohne ETS-Override zunächst Somfy. Nach einer Änderung müssen die betroffenen Aktoren erneut angelernt werden, damit sie den geänderten Key-Transfer erhalten.
+
+#### **1W Profil teilen mit Kanal**
+
+Mit `0` besitzt der Kanal eine eigene virtuelle Fernbedienungsidentität. Durch Angabe eines anderen, als 1W konfigurierten Kanals teilen beide Kanäle Controller-Adresse, Schlüssel, Hersteller und Sequenzzähler. Dies ist für Aktoren gedacht, die als gemeinsame 1W-Gruppe mit derselben Fernbedienung angelernt wurden. Ungültige oder zyklische Verweise fallen auf das eigene Profil zurück.
+
+Über die ETS-Online-Aktion **Neues eigenes 1W-Controllerprofil erzeugen** kann eine neue zufällige Identität erzeugt werden. Die Aktion ist nur für ein eigenes Profil möglich und wird abgelehnt, solange irgendein gepaarter Kanal dieses Profil verwendet. Das erste danach gesendete Telegramm verwendet Sequenz `1`.
 
 <!-- DOC -->
 <!-- DOC HelpContext="IOHC-Anzahl-Szenen" -->
@@ -504,6 +540,8 @@ Auf jeder Kanalseite befindet sich ein Pairing-Bereich zur Verwaltung der Gerät
 
 Zusätzlich steht der ETS-Button **Pairing-Status auslesen** zur Verfügung. Damit können die Diagnosefelder manuell aktualisiert werden, ohne ein neues Pairing zu starten.
 
+Bei 1W-Kanälen mit eigenem Profil steht außerdem **Neues eigenes 1W-Controllerprofil erzeugen** zur Verfügung. Eine neue Identität erfordert anschließend ein erneutes Pairing.
+
 Unterhalb der Schaltflächen zeigt die ETS vier read-only Felder an:
 
 * **Letztes Pairing-Ergebnis**
@@ -519,17 +557,19 @@ Erscheint nur bei Gerätetyp "Thermostat" (5).
 
 Für Atlantic Cozy io Thermostate stehen zusätzliche Kommunikationsobjekte zur Verfügung:
 
-* **Temperatur Sollwert** (KO Kn+18, DPT 9.001): Setzt die Zieltemperatur
-* **Temperatur Rückmeldung** (KO Kn+19, DPT 9.001): Aktuelle Temperatur vom Gerät
-* **Betriebsmodus** (KO Kn+20, DPT 20.102): HVAC-Betriebsmodus
-* **Anwesenheit** (KO Kn+21, DPT 1.018): Anwesenheitsstatus
-* **Fensterkontakt** (KO Kn+22, DPT 1.019): Fenster offen/geschlossen
+* **Temperatur Sollwert** (KO Kn+20, DPT 9.001): Setzt die Zieltemperatur
+* **Temperatur Rückmeldung** (KO Kn+21, DPT 9.001): Aktuelle Temperatur vom Gerät
+* **Betriebsmodus** (KO Kn+22, DPT 20.102): HVAC-Betriebsmodus
+* **Anwesenheit** (KO Kn+23, DPT 1.018): Anwesenheitsstatus
+* **Fensterkontakt** (KO Kn+24, DPT 1.019): Fenster offen/geschlossen
 
 ----
 
 ## **Serielle Konsole**
 
 Das Modul stellt eine serielle Konsole für Diagnose- und Pairing-Funktionen bereit. Alle Befehle beginnen mit dem Präfix `iohc`.
+
+Die folgenden Tabellen enthalten die Befehle für reguläre Inbetriebnahme und Service. `iohc help` zeigt zusätzlich hardwareabhängige Radio-, Gateway- und Bench-Diagnosebefehle und ist die verbindliche Liste für die jeweils laufende Firmware.
 
 ### **Allgemeine Befehle**
 
@@ -556,6 +596,26 @@ Das Modul stellt eine serielle Konsole für Diagnose- und Pairing-Funktionen ber
 | `iohc discover` | Startet Broadcast-Discovery-Scan |
 | `iohc set1w NN` | Setzt Kanal auf 1W-Modus |
 | `iohc set2w NN` | Setzt Kanal auf 2W-Modus |
+| `iohc 1wctrl status` | Zeigt alle wirksamen 1W-Controllerprofile |
+| `iohc 1wctrl NN status` | Zeigt das wirksame Profil eines einzelnen 1W-Kanals |
+| `iohc 1wctrl NN ADDR HEX32 [MFG]` | Setzt Adresse, Schlüssel und optional Hersteller des wirksamen Profils |
+| `iohc 1wqr NN QRHEX` | Importiert Adresse und Schlüssel einer Situo-QR-Controlleridentität in das wirksame Profil |
+| `iohc 1wnew NN` | Erzeugt ein neues eigenes Profil, sofern es von keinem gepaarten Kanal verwendet wird |
+| `iohc 1wmfg NN ID` | Setzt den Hersteller des wirksamen Profils |
+| `iohc 1wtype TYPE` | Setzt den globalen 1W-Broadcast-Fallback; übliche Werte sind 0, 2 und 3 |
+| `iohc pair1w-type NN ADDR TYPE` | Startet 1W-Pairing mit explizitem Broadcast-Typ |
+| `iohc send1w-type NN open\|close\|stop\|vent\|force [TYPE]` | Sendet einen 1W-Befehl mit explizitem Broadcast-Typ |
+
+`iohc set1w` und `iohc set2w` ändern den Modus nur zur Laufzeit für Diagnosezwecke. Nach einem Neustart gilt wieder die ETS-Konfiguration.
+
+### **1W-Diagnosebefehle**
+
+| Befehl | Beschreibung |
+|--------|-------------|
+| `iohc send1wbtn NN up\|down\|stop\|my\|prog\|release\|stop2` | Sendet einen bekannten 1W-Fernbedienungstastencode |
+| `iohc raw1w NN HEX` | Sendet einen rohen 1W-Tastencode |
+| `iohc execraw NN HEX` | Sendet einen exakten 1W-Execute-Payload; Sequenz und HMAC werden ergänzt |
+| `iohc pairdiag on\|off\|status` | Aktiviert oder zeigt ausführliche Pairing-Diagnose |
 
 ### **Thermostat-Befehle (Atlantic Cozy)**
 
@@ -606,18 +666,20 @@ Für den Betrieb des io-homecontrol-Moduls ist folgende Hardware erforderlich:
 
 **Verdrahtung:**
 * SPI-Bus (SCK, MISO, MOSI, CS)
-* Radio-Pins: RST, DIO0/DIO1, optional DIO4/BUSY
+* Radio-Pins: RST und DIO0 sowie optional DIO4 für SX1276 bzw. DIO1 und BUSY für SX1262
 
 ----
 
 ## **Kommunikationsobjekte**
 
-Die absoluten KO-Nummern hängen von der einbettenden OAM-Applikation ab. Die Tabelle verwendet daher relative Offsets:
+Die absoluten KO-Nummern hängen von der einbettenden OAM-Applikation ab. Die Tabellen verwenden daher relative Offsets:
 
 * `G` = erster globaler KO-Offset des io-homecontrol-Moduls
 * `Kn` = erster KO des Kanals `n`
 
-Die tatsächlich sichtbaren Kommunikationsobjekte hängen vom Gerätetyp, von der Szenenanzahl und von der OAM-Applikation ab. Die Tabelle verwendet die Gerätetyp-Namen aus dem Abschnitt [Gerätetypen](#gerätetypen). KOs mit Klammern sind optional bzw. nur unter der angegebenen Bedingung sichtbar.
+Die tatsächlich sichtbaren Kommunikationsobjekte hängen vom Gerätetyp, von der Szenenanzahl und von der OAM-Applikation ab. Die Tabellen verwenden die Gerätetyp-Namen aus dem Abschnitt [Gerätetypen](#gerätetypen). KOs mit Klammern sind optional bzw. nur unter der angegebenen Bedingung sichtbar.
+
+### Modul-Basis-KOs
 
 | KO | Bereich / Sichtbarkeit | DPT | Bezeichnung | Erklärung |
 |----|------------------------|-----|-------------|-----------|
@@ -627,38 +689,42 @@ Die tatsächlich sichtbaren Kommunikationsobjekte hängen vom Gerätetyp, von de
 | G+3 | Global / Diagnose | 1.010 | Netzwerk-Scan | `1 = passiven Scan starten`, `0 = stoppen` |
 | G+4 | Global / Diagnose | 1.011 | Netzwerk-Scan aktiv | `1 = Scan läuft`, `0 = inaktiv` |
 | G+5 | Global / Diagnose | 12.001 | Beobachtete Fernbedienung | Zuletzt beobachtete Fernbedienungs-Adresse |
+
+### Kanal-KOs
+
+| KO | Bereich / Sichtbarkeit | DPT | Bezeichnung | Erklärung |
+|----|------------------------|-----|-------------|-----------|
 | Kn+0 | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 5.001 | Position setzen | Zielposition 0-100% |
 | Kn+1 | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 5.001 | Position Rückmeldung | Aktuelle Position 0-100% |
 | Kn+2 | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 1.008 | Auf/Ab | `0 = Auf`, `1 = Ab` |
-| " | Licht, Schalter | 1.008 | Ein/Aus | Alternative ETS-Darstellung von `Kn+2`; DPT und Funktion bleiben unverändert |
-| Kn+3 | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 1.017 | Stopp | Trigger zum Stoppen einer laufenden Fahrt |
-| Kn+4 | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 1.011 | Bewegungsstatus | `1 = fährt / aktiv`, `0 = steht / inaktiv` |
-| " | Licht, Schalter, Schloss | 1.011 | Status | Alternative ETS-Darstellung von `Kn+4`; bei Schloss als Statusrückmeldung |
-| (Kn+5) | Jalousie / Rollladen, Sonnenschutz horizontal | 5.001 | Lamellenposition | Lamellenwinkel 0-100%, sofern Lamellensteuerung unterstützt wird |
-| (Kn+6) | Jalousie / Rollladen, Sonnenschutz horizontal | 5.001 | Lamelle Rückmeldung | Aktuelle Lamellenposition 0-100% |
-| (Kn+7) | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 1.017 | Favorit-Position | Trigger: gespeicherte Favorit-Position anfahren |
-| (Kn+8) | Fenster, Lüftung | 1.017 | Lüftungsposition | Trigger für Lüftungsstellung |
-| Kn+9 | reserviert | — | — | Kein Kommunikationsobjekt; Pairing-Verlust wird über `Kn+13 Fehlerstatus = 3` gemeldet |
-| (Kn+10) | Diagnose / Status | 5.001 | Batterielevel | 0-100%, insbesondere für solar- oder batteriebetriebene Geräte |
-| (Kn+11) | Diagnose / Status | 5.001 | Signalstärke | Normierte Signalstärke 0-100% |
-| (Kn+12) | Schloss | 1.003 | Sperren | `1 = Kanal sperren`, `0 = entsperren` |
-| (Kn+13) | Diagnose / Status | — | Fehlerstatus | Proprietärer 1-Byte-Diagnosecode: `0=OK`, `1=Kommunikationsfehler`, `2=Duty-Cycle`, `3=nicht gepairt / Pairing verloren`, `4=Funkstörung` |
-| (Kn+14) | Szenenanzahl >= 1 | 17.001 | Szene | Szene aufrufen |
-| (Kn+15) | Szenenanzahl >= 1 | 18.001 | Szenensteuerung | Szene lernen / abrufen |
-| (Kn+16) | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 1.005 | Wind-/Regenalarm | `1 = Alarm`, `0 = Entwarnung` |
-| (Kn+17) | Jalousie / Rollladen | 1.008 | Langzeitbetrieb | `0 = Auf`, `1 = Ab` |
-| Kn+18 | Thermostat | 9.001 | Temperatur Sollwert | Zieltemperatur setzen |
-| Kn+19 | Thermostat | 9.001 | Temperatur Rückmeldung | Aktuelle Temperatur |
-| Kn+20 | Thermostat | 20.102 | Betriebsmodus | HVAC-Modus setzen |
-| Kn+21 | Thermostat | 1.018 | Anwesenheit | `1 = anwesend`, `0 = nicht anwesend` |
-| Kn+22 | Thermostat | 1.019 | Fensterkontakt | `1 = Fenster offen`, `0 = Fenster geschlossen` |
-| Kn+23 | reserviert | — | — | Kein Kommunikationsobjekt; Gerätename wird nicht als reguläres KO bereitgestellt |
-| Kn+24 | reserviert / Dummy | — | — | Reservierter Platzhalter, damit die Kanal-KO-Ordnung stabil bleibt |
+| Kn+3 | Licht, Schalter | 1.001 | Ein/Aus | Schalten von Licht bzw. Schalter |
+| Kn+4 | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 1.017 | Stopp | Trigger zum Stoppen einer laufenden Fahrt |
+| Kn+5 | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 1.011 | Bewegungsstatus | `1 = fährt / aktiv`, `0 = steht / inaktiv` |
+| Kn+6 | Licht, Schalter | 1.001 | Status | Schaltzustand |
+| Kn+7 | Schloss | 1.011 | Status | Statusrückmeldung des Schlosses |
+| (Kn+8) | Jalousie / Rollladen, Sonnenschutz horizontal | 5.001 | Lamellenposition | Lamellenwinkel 0-100%, sofern Lamellensteuerung unterstützt wird |
+| (Kn+9) | Jalousie / Rollladen, Sonnenschutz horizontal | 5.001 | Lamelle Rückmeldung | Aktuelle Lamellenposition 0-100% |
+| (Kn+10) | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 1.017 | Favorit-Position | Trigger: gespeicherte Favorit-Position anfahren |
+| (Kn+11) | Fenster, Lüftung | 1.017 | Lüftungsposition | Trigger für Lüftungsstellung |
+| (Kn+12) | Diagnose / Status | 5.001 | Batterielevel | 0-100%, insbesondere für solar- oder batteriebetriebene Geräte |
+| (Kn+13) | Diagnose / Status | 5.001 | Signalstärke | Normierte Signalstärke 0-100% |
+| (Kn+14) | Alle aktiven Kanäle | 1.003 | Sperren | `1 = Kanal sperren`, `0 = entsperren` |
+| (Kn+15) | Diagnose / Status | — | Fehlerstatus | Proprietärer 1-Byte-Diagnosecode: `0=OK`, `1=Kommunikationsfehler`, `2=Duty-Cycle`, `3=nicht gepairt / Pairing verloren`, `4=Funkstörung` |
+| (Kn+16) | Szenenanzahl >= 1 | 17.001 | Szene | Szene aufrufen |
+| (Kn+17) | Szenenanzahl >= 1 | 18.001 | Szenensteuerung | Szene lernen / abrufen |
+| (Kn+18) | Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung | 1.005 | Wind-/Regenalarm | `1 = Alarm`, `0 = Entwarnung` |
+| (Kn+19) | Jalousie / Rollladen | 1.008 | Langzeitbetrieb | `0 = Auf`, `1 = Ab` |
+| Kn+20 | Thermostat | 9.001 | Temperatur Sollwert | Zieltemperatur setzen |
+| Kn+21 | Thermostat | 9.001 | Temperatur Rückmeldung | Aktuelle Temperatur |
+| Kn+22 | Thermostat | 20.102 | Betriebsmodus | HVAC-Modus setzen |
+| Kn+23 | Thermostat | 1.018 | Anwesenheit | `1 = anwesend`, `0 = nicht anwesend` |
+| Kn+24 | Thermostat | 1.019 | Fensterkontakt | `1 = Fenster offen`, `0 = Fenster geschlossen` |
 
 Hinweise:
 
-* Bei den Gerätetypen Licht und Schalter wird `Auf/Ab` in der ETS als `Ein/Aus` und `Bewegungsstatus` als `Status` dargestellt. DPT und Funktion bleiben unverändert.
-* Beim Gerätetyp Schloss sind derzeit nur `Status` sowie das generische KO `Sperren` sichtbar.
+* `Auf/Ab` und `Ein/Aus` sind getrennte Kommunikationsobjekte mit eigenen DPTs. Dadurch erzeugt ETS bei direkter GA-Erstellung den passenden DPT für den jeweiligen Gerätetyp.
+* `Bewegungsstatus`, `Status` für Licht/Schalter und `Status` für Schloss sind ebenfalls getrennte Kommunikationsobjekte.
+* Beim Gerätetyp Schloss sind derzeit `Status` sowie das KO `Sperren` sichtbar.
 * Thermostat-KOs müssen nicht disjunkt zu den KOs anderer Gerätetypen sein; die Sichtbarkeit wird über den Gerätetyp gesteuert.
 * Für den regulären Betrieb wird ein fehlendes oder verlorenes Pairing über `Fehlerstatus = 3` gemeldet. Die ETS-Diagnosefelder und die serielle Konsole liefern bei Bedarf detailliertere Pairing-Informationen.
 * `Gerätename` und `Gerätetyp-Code` werden nicht als reguläre Kommunikationsobjekte bereitgestellt. Diese Informationen sind nach Pairing/Konfiguration in der Regel konstant und gehören daher in ETS-Diagnosefelder, die serielle Konsole oder ein allgemeines Diagnose-/Servicekonzept.

@@ -7,6 +7,16 @@
 
 namespace
 {
+    uint8_t resolveOneWayBroadcastType(uint8_t iConfiguredType, uint8_t iDeviceType)
+    {
+        if (iConfiguredType != 0xFF)
+            return iConfiguredType & 0x3F;
+
+        // Known Cyril-compatible targets: type 2 for shutters/blinds and
+        // type 3 for awnings. Preserve type 2 as fallback for other types.
+        return (iDeviceType == 3 || iDeviceType == 9) ? 3 : 2;
+    }
+
     float clampPercent(float iValue)
     {
         if (iValue < 0.0f)
@@ -109,14 +119,22 @@ void IoHomecontrolChannel::setup()
     // Apply protocol mode from ETS (Feature 4: 1W/2W per channel)
     setIs1W(ParamIOHC_IOHCProtocolMode == 1);
     setConfigured1WTargetNodeId(static_cast<uint32_t>(ParamIOHC_IOHCOneWayTargetNodeId));
+    setConfigured1WBroadcastType(resolveOneWayBroadcastType(
+        static_cast<uint8_t>(ParamIOHC_IOHCOneWayBroadcastType),
+        static_cast<uint8_t>(ParamIOHC_IOHCDeviceType)));
+    const uint8_t lProfileChannel = static_cast<uint8_t>(ParamIOHC_IOHCOneWayProfileChannel);
+    setConfigured1WProfileChannel(lProfileChannel == 0 ? 0xFF : static_cast<uint8_t>(lProfileChannel - 1));
+    mConfigured1WManufacturer = static_cast<uint8_t>(ParamIOHC_IOHCOneWayManufacturer);
+    if (mConfigured1WManufacturer != 0)
+        setOneWayControllerManufacturer(mConfigured1WManufacturer);
 
-    logDebugP("Setup (type=%d, poll=%ds, open=%.1fs, close=%.1fs, invert=%d, powerOn=%d, scenes=%d, 1w=%d, 1wTarget=%06X)",
+    logDebugP("Setup (type=%d, poll=%ds, open=%.1fs, close=%.1fs, invert=%d, powerOn=%d, scenes=%d, 1w=%d, 1wTarget=%06X, 1wType=%u, 1wProfile=%u)",
               ParamIOHC_IOHCDeviceType, ParamIOHC_IOHCPollInterval,
               ParamIOHC_IOHCOpeningTime, ParamIOHC_IOHCClosingTime,
               ParamIOHC_IOHCInvertDir, ParamIOHC_IOHCPowerOnBeh,
               getConfiguredSceneCount(), mIs1W ? 1 : 0,
-              mConfigured1WTargetNodeId);
-
+              mConfigured1WTargetNodeId, static_cast<unsigned>(mConfigured1WBroadcastType),
+              mConfigured1WProfileChannel == 0xFF ? 0U : static_cast<unsigned>(mConfigured1WProfileChannel + 1));
 }
 
 void IoHomecontrolChannel::loop()
@@ -176,6 +194,12 @@ void IoHomecontrolChannel::processInputKo(uint8_t iIoIndex, GroupObject &iKo)
         if (ParamIOHC_IOHCInvertDir)
             lDown = !lDown;
         sendUpDown(lDown);
+        break;
+    }
+    case IOHC_KoCHOnOff:
+    {
+        bool lOn = (bool)iKo.value(DPT_Switch);
+        sendPositionCommand(lOn ? 100.0f : 0.0f);
         break;
     }
     case IOHC_KoCHStop:
@@ -298,7 +322,8 @@ void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
         startTravelEstimation(mTargetPosition);
 
     mIsMoving = iIsMoving;
-    getKo(IOHC_KoCHStatus).value(iIsMoving, DPT_Switch);
+    if (!isBinaryDeviceType())
+        getKo(IOHC_KoCHMovementStatus).value(iIsMoving, Dpt(1, 11));
     logDebugP("Status: %s", iIsMoving ? "moving" : "idle");
 }
 
@@ -402,7 +427,6 @@ void IoHomecontrolChannel::onDeviceName(const char *iName, uint8_t iLen)
     }
     mDeviceName[lOutPos] = '\0';
     logDebugP("Device name: %s", mDeviceName);
-
 }
 
 void IoHomecontrolChannel::onDeviceInfo(uint16_t iType, uint8_t iSubtype, uint8_t iManufacturer)
@@ -411,7 +435,6 @@ void IoHomecontrolChannel::onDeviceInfo(uint16_t iType, uint8_t iSubtype, uint8_
     mDeviceSubtype = iSubtype;
     mManufacturer = iManufacturer;
     logDebugP("Device info: type=0x%04X subtype=0x%02X mfg=0x%02X", iType, iSubtype, iManufacturer);
-
 }
 
 void IoHomecontrolChannel::onBatteryLevel(uint8_t iPercent)
@@ -496,10 +519,36 @@ const uint8_t *IoHomecontrolChannel::getLastChallenge() const
 uint16_t IoHomecontrolChannel::getSequence1W() const { return mSequence1W; }
 void IoHomecontrolChannel::setSequence1W(uint16_t iSeq) { mSequence1W = iSeq; }
 uint16_t IoHomecontrolChannel::incrementSequence1W() { return ++mSequence1W; }
+void IoHomecontrolChannel::setOneWayControllerNodeId(uint32_t iNodeId) { mOneWayControllerNodeId = iNodeId & 0x00FFFFFF; }
+uint32_t IoHomecontrolChannel::getOneWayControllerNodeId() const { return mOneWayControllerNodeId; }
+void IoHomecontrolChannel::setOneWayControllerKey(const uint8_t *iKey)
+{
+    if (iKey)
+        memcpy(mOneWayControllerKey, iKey, sizeof(mOneWayControllerKey));
+}
+const uint8_t *IoHomecontrolChannel::getOneWayControllerKey() const { return mOneWayControllerKey; }
+void IoHomecontrolChannel::setOneWayControllerManufacturer(uint8_t iManufacturer) { mOneWayControllerManufacturer = iManufacturer; }
+uint8_t IoHomecontrolChannel::getOneWayControllerManufacturer() const { return mOneWayControllerManufacturer; }
+uint8_t IoHomecontrolChannel::getConfigured1WManufacturer() const { return mConfigured1WManufacturer; }
+bool IoHomecontrolChannel::hasOneWayControllerIdentity() const
+{
+    if (mOneWayControllerNodeId == 0)
+        return false;
+    for (uint8_t i = 0; i < sizeof(mOneWayControllerKey); i++)
+    {
+        if (mOneWayControllerKey[i] != 0)
+            return true;
+    }
+    return false;
+}
+void IoHomecontrolChannel::setConfigured1WProfileChannel(uint8_t iChannelIndex) { mConfigured1WProfileChannel = iChannelIndex; }
+uint8_t IoHomecontrolChannel::getConfigured1WProfileChannel() const { return mConfigured1WProfileChannel; }
 bool IoHomecontrolChannel::is1W() const { return mIs1W; }
 void IoHomecontrolChannel::setIs1W(bool iIs1W) { mIs1W = iIs1W; }
 void IoHomecontrolChannel::setConfigured1WTargetNodeId(uint32_t iNodeId) { mConfigured1WTargetNodeId = iNodeId & 0x00FFFFFF; }
 uint32_t IoHomecontrolChannel::getConfigured1WTargetNodeId() const { return mConfigured1WTargetNodeId; }
+void IoHomecontrolChannel::setConfigured1WBroadcastType(uint8_t iBroadcastType) { mConfigured1WBroadcastType = iBroadcastType & 0x3F; }
+uint8_t IoHomecontrolChannel::getConfigured1WBroadcastType() const { return mConfigured1WBroadcastType; }
 
 // --- Private command methods ---
 
@@ -553,6 +602,33 @@ void IoHomecontrolChannel::requestStatusPrivate()
     mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private, 0);
 }
 
+bool IoHomecontrolChannel::isOnOffDeviceType() const
+{
+    return ParamIOHC_IOHCDeviceType == 6 || ParamIOHC_IOHCDeviceType == 12;
+}
+
+bool IoHomecontrolChannel::isLockDeviceType() const
+{
+    return ParamIOHC_IOHCDeviceType == 8;
+}
+
+bool IoHomecontrolChannel::isBinaryDeviceType() const
+{
+    return isOnOffDeviceType() || isLockDeviceType();
+}
+
+void IoHomecontrolChannel::publishBinaryStatus()
+{
+    if (!isBinaryDeviceType())
+        return;
+
+    bool lActive = mCurrentPosition >= 50.0f;
+    if (isOnOffDeviceType())
+        getKo(IOHC_KoCHOnOffStatus).value(lActive, DPT_Switch);
+    else
+        getKo(IOHC_KoCHLockStatus).value(lActive, Dpt(1, 11));
+}
+
 bool IoHomecontrolChannel::restoreLastKnownStateAfterStartup()
 {
     bool lBinaryState = false;
@@ -578,23 +654,25 @@ bool IoHomecontrolChannel::restoreLastKnownStateAfterStartup()
         return false;
     }
 
-    uint8_t lReportedPosition = (uint8_t)getKo(IOHC_KoCHPositionFeedback).value(DPT_Scaling);
-    if (lReportedPosition > 100)
-        return false;
-
     if (lBinaryState)
     {
-        bool lOn = lReportedPosition >= 50;
+        bool lOn = isOnOffDeviceType()
+                       ? (bool)getKo(IOHC_KoCHOnOffStatus).value(DPT_Switch)
+                       : (bool)getKo(IOHC_KoCHLockStatus).value(Dpt(1, 11));
         mCurrentPosition = lOn ? 100.0f : 0.0f;
         mTargetPosition = mCurrentPosition;
         mTravelDurationMs = 0;
         mTravelStartTime = 0;
         mTravelStartPosition = mCurrentPosition;
 
-        logDebugP("Restore last state: %s (from %d%%)", lOn ? "ON" : "OFF", lReportedPosition);
+        logDebugP("Restore last state: %s", lOn ? "ON" : "OFF");
         sendPositionCommand(mCurrentPosition);
         return true;
     }
+
+    uint8_t lReportedPosition = (uint8_t)getKo(IOHC_KoCHPositionFeedback).value(DPT_Scaling);
+    if (lReportedPosition > 100)
+        return false;
 
     float lDevicePosition = ParamIOHC_IOHCInvertDir ? (100.0f - lReportedPosition) : lReportedPosition;
     mCurrentPosition = clampPercent(lDevicePosition);
@@ -614,6 +692,7 @@ void IoHomecontrolChannel::publishPositionFeedback(float iPositionPercent, bool 
 
     float lReportPos = ParamIOHC_IOHCInvertDir ? (100.0f - mCurrentPosition) : mCurrentPosition;
     getKo(IOHC_KoCHPositionFeedback).value((uint8_t)(lReportPos + 0.5f), DPT_Scaling);
+    publishBinaryStatus();
 
     if (iLogMessage)
         logDebugP("Position feedback: %.1f%%", mCurrentPosition);
@@ -659,7 +738,10 @@ void IoHomecontrolChannel::updateEstimatedPosition()
 
     mCurrentPosition = lEstimatedPosition;
     if ((uint8_t)(lEstimatedReported + 0.5f) != (uint8_t)(lPreviousReported + 0.5f))
+    {
         getKo(IOHC_KoCHPositionFeedback).value((uint8_t)(lEstimatedReported + 0.5f), DPT_Scaling);
+        publishBinaryStatus();
+    }
 
     if (millis() - mTravelStartTime >= mTravelDurationMs)
     {

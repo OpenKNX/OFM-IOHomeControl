@@ -8,4 +8,8 @@ Dieser Modus ist der vorgesehene Standard.
 Im Modus 1W werden Befehle ohne Rückmeldung übertragen.
 Er ist für Geräte ohne Rückkanal oder für Sonderfälle gedacht, in denen der bidirektionale Handshake nicht zuverlässig funktioniert.
 
+Im 1W-Modus werden zusätzlich die Aktor-Node-ID, der Broadcast-Typ und das Controllerprofil konfiguriert. Der Broadcast-Typ bestimmt, welche Geräteklasse das Pairing und die späteren Befehle empfängt. Das Controllerprofil bestimmt die emulierte Fernbedienungsadresse, den Schlüssel, den Sequenzzähler und den Hersteller.
+
+Die globale Systemidentität wird nur für 2W verwendet. 1W-Telegramme verwenden das wirksame Controllerprofil des Kanals, das Low-Power-Flag und eine typabhängige Broadcast-Adresse.
+
 Sofern kein konkreter Grund für 1W vorliegt, sollte 2W verwendet werden.

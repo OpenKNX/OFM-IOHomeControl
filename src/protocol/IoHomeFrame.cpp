@@ -49,6 +49,7 @@ void IoHomeFrame::setDestGroup()
 void IoHomeFrame::set1WMode()
 {
     ctrlByte0 |= IOHC_CTRL0_MODE_1W;
+    ctrlByte1 |= IOHC_CTRL1_LOW_POWER;
 }
 
 uint8_t IoHomeFrame::getFrameOrder() const
@@ -84,14 +85,22 @@ uint8_t IoHomeFrame::totalLength() const
 
 uint8_t IoHomeFrame::serialize(uint8_t *oBuffer, uint8_t iMaxLen) const
 {
-    // The declared length excludes HMAC and CRC which are appended after.
-    // Per io-homecontrol spec: maximum 32 bytes (excluding ctrl0 and CRC)
-    uint8_t lDeclaredLen = 9 + dataLen; // header + data
-    uint8_t lTotal = lDeclaredLen + (hasHmac ? IOHC_HMAC_SIZE : 0) + (hasCrc ? IOHC_CRC_SIZE : 0);
+    // io-homecontrol CTRL0 length field is awkward in 1W mode:
+    // - SendKey1W (0x30) uses 9 + dataLen, excluding the appended 6-byte HMAC.
+    //   This is required for the known 0x30 reference frame to start with 0xFC.
+    // - Normal authenticated 1W commands (Execute/ActivateMode/...) include the
+    //   appended HMAC in the length field. Example reference Execute starts with
+    //   0xF6 for 9 + 8 data bytes + 6 HMAC bytes -> length field 22.
+    // CRC is still transport-layer and is never included here.
+    const bool lOneWay = (ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0;
+    const bool lIncludeHmacInLength = lOneWay && hasHmac && commandId != IoHomeCommand::SendKey1W;
+
+    uint8_t lDeclaredLen = 9 + dataLen + (lIncludeHmacInLength ? IOHC_HMAC_SIZE : 0);
+    uint8_t lTotal = 9 + dataLen + (hasHmac ? IOHC_HMAC_SIZE : 0) + (hasCrc ? IOHC_CRC_SIZE : 0);
     if (lDeclaredLen > IOHC_FRAME_MAX_SIZE || lTotal > iMaxLen)
         return 0;
 
-    // Update ctrl byte 0 with frame length (excluding CRC — CRC is transport-layer)
+    // Update ctrl byte 0 with frame length (excluding CTRL0 and CRC, encoded as len-1).
     uint8_t lCtrl0 = ctrlByte0;
     lCtrl0 = (lCtrl0 & ~IOHC_CTRL0_LEN_MASK) | ((lDeclaredLen - 1) & IOHC_CTRL0_LEN_MASK);
 
@@ -142,17 +151,24 @@ bool IoHomeFrame::deserialize(const uint8_t *iBuffer, uint8_t iLen)
     uint8_t lHmacLen = 0;
     uint8_t lCrcLen = 0;
 
-    if (iLen == lDeclaredLen + IOHC_HMAC_SIZE + IOHC_CRC_SIZE) {
+    if (iLen == lDeclaredLen + IOHC_HMAC_SIZE + IOHC_CRC_SIZE)
+    {
         // Both HMAC and CRC present
         lHmacLen = IOHC_HMAC_SIZE;
         lCrcLen = IOHC_CRC_SIZE;
-    } else if (iLen == lDeclaredLen + IOHC_HMAC_SIZE) {
+    }
+    else if (iLen == lDeclaredLen + IOHC_HMAC_SIZE)
+    {
         // HMAC only
         lHmacLen = IOHC_HMAC_SIZE;
-    } else if (iLen == lDeclaredLen + IOHC_CRC_SIZE) {
+    }
+    else if (iLen == lDeclaredLen + IOHC_CRC_SIZE)
+    {
         // CRC only
         lCrcLen = IOHC_CRC_SIZE;
-    } else if (iLen != lDeclaredLen) {
+    }
+    else if (iLen != lDeclaredLen)
+    {
         // No valid match
         return false;
     }
@@ -190,7 +206,8 @@ bool IoHomeFrame::deserialize(const uint8_t *iBuffer, uint8_t iLen)
     if (lIs2W)
         lNeedsHmac = (lCmd == 0x00 || lCmd == 0x01 || lCmd == 0x02 || lCmd == 0x20 || lCmd == 0x39 || lCmd == 0x71);
     else // 1W
-        lNeedsHmac = (lCmd == 0x00 || lCmd == 0x30 || lCmd == 0x2E);
+        lNeedsHmac = (lCmd == 0x00 || lCmd == 0x2E || lCmd == 0x39 ||
+                      (lCmd == 0x30 && lHmacLen == IOHC_HMAC_SIZE));
 
     uint8_t lRemainingBytes = lPayloadLen - lPos;
 

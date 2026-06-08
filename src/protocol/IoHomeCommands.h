@@ -39,7 +39,7 @@ enum class IoHomeCommand : uint8_t
     Discover2ERequest = 0x2E, // 1W learning mode / pairing start
 
     // Key exchange
-    SendKey1W = 0x30,               // 1W key transfer (encrypted key + manufacturer + sequence + HMAC)
+    SendKey1W = 0x30,               // 1W key transfer (encrypted key + manufacturer + sequence; optional HMAC)
     KeyInitTransfer = 0x31,         // 2W: ask challenge
     KeyTransfer = 0x32,             // 2W: send encrypted system key
     KeyTransferConfirmation = 0x33, // Device confirms key storage (not used — not parsed in reference)

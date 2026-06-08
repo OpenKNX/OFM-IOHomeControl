@@ -13,6 +13,10 @@
 #define IOHC_PAIR_TIMEOUT_MS 30000
 #define IOHC_DUTY_CYCLE_WINDOW_MS 3600000 // 1 hour
 #define IOHC_RX_SCAN_INTERVAL_US 2700     // ~2.7ms frequency scan interval (per nicolas5000)
+// Maximum raw Execute payload bytes before appending the 1W sequence number.
+// Normal 1W authenticated frames include 6-byte HMAC in CTRL0 length, so keep
+// 9(header) + raw + 2(seq) + 6(hmac) <= IOHC_FRAME_MAX_SIZE.
+#define IOHC_1W_RAW_EXEC_MAX_DATA (IOHC_FRAME_MAX_SIZE - 9 - 2 - IOHC_HMAC_SIZE)
 
 class IoHomecontrolChannel;
 
@@ -23,8 +27,18 @@ struct IoHomeQueueEntry
   const uint8_t *encKey; // pointer to channel's key (valid as long as channel exists)
   IoHomeCommand command;
   uint8_t param;
-  uint8_t param2; // second parameter (e.g., slat angle); 0xFF = unused
-  uint8_t param3; // third parameter (for _p0x00_16 extended format); 0xFF = unused
+  uint8_t param2;            // second parameter (e.g., slat angle); 0xFF = unused
+  uint8_t param3;            // third parameter (for _p0x00_16 extended format); 0xFF = unused
+  bool oneWayButton;         // true: 1W button-style Execute command
+  uint16_t oneWayButtonCode; // 0x0000=up, 0x0001=down, 0x0002=stop, 0x0003=my/prog, 0x00FE=release, 0x00FF=stop2
+  bool oneWayRawExecute;     // true: send exact raw Execute payload bytes before sequence/HMAC
+  uint8_t oneWayRawData[IOHC_1W_RAW_EXEC_MAX_DATA];
+  uint8_t oneWayRawLen;
+  bool oneWayStandardExecute;  // true: standard 14-byte 1W Execute payload mapping
+  uint16_t oneWayMain;         // main[2] value, e.g. 0x0000=open, 0xC800=close, 0xD200=stop
+  uint8_t oneWayFp1;
+  uint8_t oneWayFp2;
+  uint8_t oneWayBroadcastType; // target type: dst = ((type << 6) | 0x3F)
   uint8_t retries;
   bool active;
   uint8_t nameData[IOHC_NAME_MAX_SIZE]; // SetName payload (zero-padded, Latin-1)
@@ -128,12 +142,29 @@ public:
   bool sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
                    IoHomeCommand iCmd, uint8_t iParam, uint8_t iParam2, uint8_t iParam3);
 
+  // Queue a 1W raw/button-style Execute command.
+  // Codes from known 1W remotes: 0x0000=up, 0x0001=down, 0x0002=stop,
+  // 0x0003=my/prog, 0x00FE=release, 0x00FF=alternative stop.
+  bool sendOneWayButton(uint32_t iDestNodeId, const uint8_t *iEncKey, uint16_t iButtonCode);
+
+  // Queue an exact 1W Execute payload. The controller appends sequence + HMAC.
+  bool sendOneWayRawExecute(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                            const uint8_t *iPayload, uint8_t iPayloadLen);
+
+  // Queue a standard 1W Execute command with an explicit broadcast type:
+  // payload = 01 43 main[2] fp1 fp2, then sequence + HMAC are appended.
+  bool sendOneWayExecuteWithType(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                                 uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
+                                 uint8_t iBroadcastType);
+
   // Set device name (authenticated 2W command: 0x52 → 0x3C → 0x3D → 0x53)
   bool sendSetName(uint32_t iDestNodeId, const uint8_t *iEncKey,
                    const char *iName, uint8_t iNameLen);
 
   // Start pairing process for a channel
   bool startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId = 0);
+  // Start the standard 1W learning flow with an explicit broadcast type override.
+  bool startPairingWithType(uint8_t iChannelIndex, uint32_t iKnownNodeId, uint8_t iBroadcastType);
   PairStartStatus lastPairStartStatus() const;
   ControllerState lastPairStartBlockedState() const;
 
@@ -259,6 +290,10 @@ public:
   // Set system key (16 bytes AES-128)
   void setSystemKey(const uint8_t *iKey);
   const uint8_t *getSystemKey() const;
+  void setOneWayBroadcastType(uint8_t iBroadcastType);
+  uint8_t getOneWayBroadcastType() const;
+  uint32_t oneWayBroadcastTarget(uint8_t iBroadcastType) const;
+  IoHomecontrolChannel *oneWayProfileForChannel(IoHomecontrolChannel *iChannel) const;
 
   // Set pointer to parent module (for channel callbacks)
   void setModule(IoHomecontrol *iModule);
@@ -323,6 +358,10 @@ private:
   uint8_t mTx1WRepeatRemaining = 0; // remaining 1W repeats (0 = done)
   uint32_t mTx1WRepeatTimer = 0;    // millis timestamp for next repeat
 
+  // TX timing diagnostics/guard. Long io-homecontrol preambles can exceed the
+  // generic 500 ms TX timeout on SX1276, especially for 1W learn/key frames.
+  uint16_t mCurrentTxPreambleSymbols = IOHC_PREAMBLE_SHORT;
+
   // 2W challenge-response auth state (for authenticated commands like SetName)
   bool mAuthResponseSent = false; // true after sending ChallengeResponse, reset on new command
 
@@ -343,6 +382,9 @@ private:
   IoHomeFrame mPairPulledKeyFrame;
   uint8_t mPairPulledKey[16];
   uint8_t mPairPullAuthChallenge[6];
+  uint8_t mPairing1WStage = 0; // 0=Pair(0x2E), 1=Remove(0x39), 2=Add(0x30)
+  uint8_t mPairing1WBroadcastType = 2;
+  uint8_t mDefault1WBroadcastType = 2;
 
   // Receive-side authentication state
   IoHomeFrame mPendingAuthFrame; // saved unsolicited frame awaiting verification
@@ -489,7 +531,7 @@ private:
   void logCommandScanResults() const;
 
   // Build frame from queue entry
-  void buildTxFrame(const IoHomeQueueEntry &iEntry);
+  bool buildTxFrame(const IoHomeQueueEntry &iEntry);
 
   // Dispatch received frame to appropriate channel
   void dispatchRxFrame();
@@ -502,6 +544,7 @@ private:
   RadioError configureTxRadio(uint16_t iPreambleSymbols, const uint32_t *iFrequencyHz = nullptr);
   RadioError startShortPreambleTransmit(const uint8_t *iBuffer, uint8_t iLen,
                                         bool iTrackDutyCycle = false);
+  uint32_t currentTxTimeoutMs() const;
 
   RadioError ensureReceiveAfterTransmit();
 
@@ -516,4 +559,7 @@ private:
   bool queuePush(const IoHomeQueueEntry &iEntry);
   bool queuePop(IoHomeQueueEntry &oEntry);
   bool queueEmpty() const;
+  IoHomecontrolChannel *channelForNode(uint32_t iNodeId) const;
+  IoHomecontrolChannel *oneWayProfileForNode(uint32_t iNodeId) const;
+  uint8_t oneWayBroadcastTypeForNode(uint32_t iNodeId) const;
 };

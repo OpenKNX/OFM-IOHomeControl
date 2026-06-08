@@ -28,7 +28,8 @@
 
 struct OpenKnxNativeFlashStub
 {
-  void save() {}
+  uint32_t saveCount = 0;
+  void save() { saveCount++; }
 };
 
 struct OpenKnxNativeStub
@@ -48,6 +49,8 @@ public:
 
   void setConfigured1WTargetNodeId(uint32_t iNodeId) { mConfigured1WTargetNodeId = iNodeId; }
   uint32_t getConfigured1WTargetNodeId() const { return mConfigured1WTargetNodeId; }
+  void setConfigured1WBroadcastType(uint8_t iBroadcastType) { mConfigured1WBroadcastType = iBroadcastType & 0x3F; }
+  uint8_t getConfigured1WBroadcastType() const { return mConfigured1WBroadcastType; }
 
   void setNodeId(uint32_t iNodeId)
   {
@@ -77,6 +80,24 @@ public:
   uint16_t getSequence1W() const { return mSequence1W; }
   void setSequence1W(uint16_t iSequence) { mSequence1W = iSequence; }
   uint16_t incrementSequence1W() { return ++mSequence1W; }
+  void setOneWayControllerNodeId(uint32_t iNodeId) { mOneWayControllerNodeId = iNodeId & 0x00FFFFFF; }
+  uint32_t getOneWayControllerNodeId() const { return mOneWayControllerNodeId; }
+  void setOneWayControllerKey(const uint8_t *iKey) { if (iKey) memcpy(mOneWayControllerKey, iKey, sizeof(mOneWayControllerKey)); }
+  const uint8_t *getOneWayControllerKey() const { return mOneWayControllerKey; }
+  void setOneWayControllerManufacturer(uint8_t iManufacturer) { mOneWayControllerManufacturer = iManufacturer; }
+  uint8_t getOneWayControllerManufacturer() const { return mOneWayControllerManufacturer; }
+  uint8_t getConfigured1WManufacturer() const { return mConfigured1WManufacturer; }
+  bool hasOneWayControllerIdentity() const
+  {
+    if (mOneWayControllerNodeId == 0)
+      return false;
+    for (uint8_t b : mOneWayControllerKey)
+      if (b != 0)
+        return true;
+    return false;
+  }
+  void setConfigured1WProfileChannel(uint8_t iChannelIndex) { mConfigured1WProfileChannel = iChannelIndex; }
+  uint8_t getConfigured1WProfileChannel() const { return mConfigured1WProfileChannel; }
 
   void onPositionFeedback(float) {}
   void onTargetPositionFeedback(float) {}
@@ -95,9 +116,15 @@ private:
   uint8_t mEncKey[16] = {};
   uint8_t mLastChallenge[6] = {};
   uint16_t mSequence1W = 0;
+  uint32_t mOneWayControllerNodeId = 0;
+  uint8_t mOneWayControllerKey[16] = {};
+  uint8_t mOneWayControllerManufacturer = 2;
+  uint8_t mConfigured1WManufacturer = 0;
+  uint8_t mConfigured1WProfileChannel = 0xFF;
   bool mIs1W = false;
   bool mPaired = false;
   uint32_t mConfigured1WTargetNodeId = 0;
+  uint8_t mConfigured1WBroadcastType = 2;
 };
 
 class IoHomecontrol

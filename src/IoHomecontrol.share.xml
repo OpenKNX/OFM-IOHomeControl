@@ -146,6 +146,34 @@
                   <Enumeration Text="1W (unidirektional)" Value="1" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCOneWayBroadcastType" Name="IOHCOneWayBroadcastType">
+                <TypeRestriction Base="Value" SizeInBit="8">
+                  <Enumeration Text="Automatisch nach Gerätetyp" Value="255" Id="%ENID%" />
+                  <Enumeration Text="Alle Geräte (Typ 0)" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Rollladen / Jalousie (Typ 2)" Value="2" Id="%ENID%" />
+                  <Enumeration Text="Markise (Typ 3)" Value="3" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCOneWayManufacturer" Name="IOHCOneWayManufacturer">
+                <TypeRestriction Base="Value" SizeInBit="8">
+                  <Enumeration Text="Aus gespeicherter Controller-Identität" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Velux" Value="1" Id="%ENID%" />
+                  <Enumeration Text="Somfy" Value="2" Id="%ENID%" />
+                  <Enumeration Text="Honeywell" Value="3" Id="%ENID%" />
+                  <Enumeration Text="Hörmann" Value="4" Id="%ENID%" />
+                  <Enumeration Text="Assa Abloy" Value="5" Id="%ENID%" />
+                  <Enumeration Text="Niko" Value="6" Id="%ENID%" />
+                  <Enumeration Text="WindowMaster" Value="7" Id="%ENID%" />
+                  <Enumeration Text="Renson" Value="8" Id="%ENID%" />
+                  <Enumeration Text="Ciat" Value="9" Id="%ENID%" />
+                  <Enumeration Text="Secuyou" Value="10" Id="%ENID%" />
+                  <Enumeration Text="Overkiz" Value="11" Id="%ENID%" />
+                  <Enumeration Text="Atlantic Group" Value="12" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCOneWayProfileChannel" Name="IOHCOneWayProfileChannel">
+                <TypeNumber SizeInBit="8" Type="unsignedInt" minInclusive="0" maxInclusive="%N%" />
+              </ParameterType>
             </ParameterTypes>
 
             <Parameters>

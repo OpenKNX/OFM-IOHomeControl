@@ -18,7 +18,6 @@ static unsigned long micros() { return 0; }
 
 namespace
 {
-    constexpr uint8_t kPair1WControllerManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
     constexpr uint8_t kPair1WFreqIdx = 1;
     constexpr uint8_t kGatewayNameLen = 16;
     constexpr char kGatewayName[] = "MY_GATEWAY";
@@ -27,6 +26,19 @@ namespace
     constexpr uint16_t kGatewayInfoDeviceType = 0x0002;
     constexpr uint8_t kGatewayDiscoverManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Overkiz);
     constexpr uint8_t kGatewayInfoManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
+
+    std::string hexDump(const uint8_t *iData, uint8_t iLen)
+    {
+        static const char kHex[] = "0123456789ABCDEF";
+        std::string lOut;
+        lOut.reserve(static_cast<size_t>(iLen) * 2);
+        for (uint8_t i = 0; i < iLen; i++)
+        {
+            lOut.push_back(kHex[(iData[i] >> 4) & 0x0F]);
+            lOut.push_back(kHex[iData[i] & 0x0F]);
+        }
+        return lOut;
+    }
 
     bool isPairDiagnosticCommand(IoHomeCommand iCommand)
     {
@@ -232,6 +244,8 @@ IoHomeController::IoHomeController()
       mDiscoverySendPhase(DiscoverySendPhase::SetFrequency),
       mDiscoveryTimingTrace{},
       mDiscoverySPE(false),
+      mPairing1WStage(0),
+      mPairing1WBroadcastType(2), mDefault1WBroadcastType(2),
       mAuthSrcNodeId(0), mAuthChannelIdx(0),
       mStatusAckDestNodeId(0), mStatusAckFreqIdx(0),
       mPassiveMode(false), mPassivePairNodeId(0),
@@ -322,6 +336,21 @@ const uint8_t *IoHomeController::getSystemKey() const
     return mSystemKey;
 }
 
+void IoHomeController::setOneWayBroadcastType(uint8_t iBroadcastType)
+{
+    mDefault1WBroadcastType = iBroadcastType & 0x3F;
+}
+
+uint8_t IoHomeController::getOneWayBroadcastType() const
+{
+    return mDefault1WBroadcastType;
+}
+
+uint32_t IoHomeController::oneWayBroadcastTarget(uint8_t iBroadcastType) const
+{
+    return static_cast<uint32_t>(((static_cast<uint16_t>(iBroadcastType & 0x3F) << 6) | 0x003F) & 0x00FFFF);
+}
+
 ControllerState IoHomeController::state() const
 {
     return mState;
@@ -377,6 +406,101 @@ bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
     lEntry.param = iParam;
     lEntry.param2 = iParam2;
     lEntry.param3 = iParam3;
+    lEntry.oneWayButton = false;
+    lEntry.oneWayButtonCode = 0;
+    lEntry.oneWayRawExecute = false;
+    lEntry.oneWayRawLen = 0;
+    if (iCmd == IoHomeCommand::Execute && iParam3 == 0xFF)
+    {
+        // Use the standard 14-byte 1W Execute layout by default.
+        // The flag is ignored for 2W channels.
+        lEntry.oneWayStandardExecute = true;
+        if (iParam <= 100)
+        {
+            lEntry.oneWayMain = static_cast<uint16_t>(iParam * 2U) << 8;
+            if (iParam2 != 0xFF)
+            {
+                lEntry.oneWayFp1 = 0x80;
+                lEntry.oneWayFp2 = iParam2 * 2U;
+            }
+        }
+        else if (iParam == 0xD8 && iParam2 == 0x03)
+        {
+            lEntry.oneWayMain = IOHC_POSITION_VENT;
+        }
+        else
+        {
+            lEntry.oneWayMain = static_cast<uint16_t>(iParam) << 8;
+        }
+    }
+    lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
+    lEntry.retries = 0;
+    lEntry.active = true;
+    return queuePush(lEntry);
+}
+
+bool IoHomeController::sendOneWayButton(uint32_t iDestNodeId, const uint8_t *iEncKey, uint16_t iButtonCode)
+{
+    IoHomeQueueEntry lEntry;
+    memset(&lEntry, 0, sizeof(lEntry));
+    lEntry.destNodeId = iDestNodeId;
+    lEntry.encKey = iEncKey;
+    lEntry.command = IoHomeCommand::Execute;
+    lEntry.param = 0xFF;
+    lEntry.param2 = 0xFF;
+    lEntry.param3 = 0xFF;
+    lEntry.oneWayButton = true;
+    lEntry.oneWayButtonCode = iButtonCode;
+    lEntry.oneWayRawExecute = false;
+    lEntry.oneWayRawLen = 0;
+    lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
+    lEntry.retries = 0;
+    lEntry.active = true;
+    return queuePush(lEntry);
+}
+
+bool IoHomeController::sendOneWayRawExecute(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                                            const uint8_t *iPayload, uint8_t iPayloadLen)
+{
+    if (iPayload == nullptr || iPayloadLen == 0 || iPayloadLen > IOHC_1W_RAW_EXEC_MAX_DATA)
+        return false;
+
+    IoHomeQueueEntry lEntry;
+    memset(&lEntry, 0, sizeof(lEntry));
+    lEntry.destNodeId = iDestNodeId;
+    lEntry.encKey = iEncKey;
+    lEntry.command = IoHomeCommand::Execute;
+    lEntry.param = 0xFF;
+    lEntry.param2 = 0xFF;
+    lEntry.param3 = 0xFF;
+    lEntry.oneWayButton = false;
+    lEntry.oneWayButtonCode = 0;
+    lEntry.oneWayRawExecute = true;
+    lEntry.oneWayRawLen = iPayloadLen;
+    lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
+    memcpy(lEntry.oneWayRawData, iPayload, iPayloadLen);
+    lEntry.retries = 0;
+    lEntry.active = true;
+    return queuePush(lEntry);
+}
+
+bool IoHomeController::sendOneWayExecuteWithType(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                                                 uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
+                                                 uint8_t iBroadcastType)
+{
+    if (iEncKey == nullptr)
+        return false;
+
+    IoHomeQueueEntry lEntry;
+    memset(&lEntry, 0, sizeof(lEntry));
+    lEntry.destNodeId = iDestNodeId;
+    lEntry.encKey = iEncKey;
+    lEntry.command = IoHomeCommand::Execute;
+    lEntry.oneWayStandardExecute = true;
+    lEntry.oneWayMain = iMain;
+    lEntry.oneWayFp1 = iFp1;
+    lEntry.oneWayFp2 = iFp2;
+    lEntry.oneWayBroadcastType = iBroadcastType & 0x3F;
     lEntry.retries = 0;
     lEntry.active = true;
     return queuePush(lEntry);
@@ -424,6 +548,72 @@ bool IoHomeController::queueEmpty() const
     return mQueueTail == mQueueHead;
 }
 
+uint8_t IoHomeController::oneWayBroadcastTypeForNode(uint32_t iNodeId) const
+{
+    IoHomecontrolChannel *lCh = channelForNode(iNodeId);
+    return lCh ? lCh->getConfigured1WBroadcastType() : mDefault1WBroadcastType;
+}
+
+IoHomecontrolChannel *IoHomeController::channelForNode(uint32_t iNodeId) const
+{
+    if (!mModule)
+        return nullptr;
+
+    const uint32_t lNodeId = iNodeId & 0x00FFFFFF;
+    for (uint8_t i = 0; i < IOHC_ChannelCount; i++)
+    {
+        IoHomecontrolChannel *lCh = mModule->getChannel(i);
+        if (lCh && lCh->getNodeId() == lNodeId)
+            return lCh;
+    }
+    return nullptr;
+}
+
+IoHomecontrolChannel *IoHomeController::oneWayProfileForNode(uint32_t iNodeId) const
+{
+    return oneWayProfileForChannel(channelForNode(iNodeId));
+}
+
+IoHomecontrolChannel *IoHomeController::oneWayProfileForChannel(IoHomecontrolChannel *iChannel) const
+{
+    if (!iChannel || !mModule)
+        return iChannel;
+
+    IoHomecontrolChannel *lProfile = iChannel;
+    bool lVisited[IOHC_ChannelCount] = {};
+    for (uint8_t depth = 0; depth < IOHC_ChannelCount; depth++)
+    {
+        const uint8_t lRef = lProfile->getConfigured1WProfileChannel();
+        if (lRef == 0xFF)
+            break;
+        if (lRef >= IOHC_ChannelCount || lVisited[lRef])
+            return iChannel;
+        lVisited[lRef] = true;
+        IoHomecontrolChannel *lReferenced = mModule->getChannel(lRef);
+        if (!lReferenced || !lReferenced->is1W() || lReferenced == lProfile)
+            return iChannel;
+        lProfile = lReferenced;
+    }
+
+    // Imported legacy/QR profiles with the same address and key represent the
+    // same remote and must share one sequence counter even without an ETS link.
+    if (lProfile->hasOneWayControllerIdentity())
+    {
+        for (uint8_t i = 0; i < IOHC_ChannelCount; i++)
+        {
+            IoHomecontrolChannel *lCandidate = mModule->getChannel(i);
+            if (!lCandidate || !lCandidate->is1W() ||
+                lCandidate->getConfigured1WProfileChannel() != 0xFF ||
+                !lCandidate->hasOneWayControllerIdentity())
+                continue;
+            if (lCandidate->getOneWayControllerNodeId() == lProfile->getOneWayControllerNodeId() &&
+                memcmp(lCandidate->getOneWayControllerKey(), lProfile->getOneWayControllerKey(), 16) == 0)
+                return lCandidate;
+        }
+    }
+    return lProfile;
+}
+
 // --- Pairing ---
 
 bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId)
@@ -456,6 +646,8 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
         startReceive();
     }
 
+    mPairing1WStage = 0;
+    mPairing1WBroadcastType = mDefault1WBroadcastType;
     mPairingChannel = iChannelIndex;
     mPairingFreqIdx = 0;
     mPairingStartTime = millis();
@@ -474,6 +666,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(iChannelIndex) : nullptr;
     if (lCh && lCh->is1W())
     {
+        mPairing1WBroadcastType = lCh->getConfigured1WBroadcastType();
         uint32_t lKnownNodeId = iKnownNodeId & 0x00FFFFFF;
         if (lKnownNodeId == 0)
         {
@@ -489,6 +682,9 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
         }
 
         mDiscoveredNodeId = lKnownNodeId;
+        // Standard 1W learning flow: authenticated Pair + Remove followed by
+        // an unauthenticated SendKey1W payload.
+        mPairing1WStage = 0;
         mState = ControllerState::PairSend1WRemove;
         if (mPairDiagnosticTraceEnabled)
         {
@@ -505,6 +701,21 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
         tracePairDiagnosticStateChange();
     }
     return true;
+}
+
+bool IoHomeController::startPairingWithType(uint8_t iChannelIndex, uint32_t iKnownNodeId, uint8_t iBroadcastType)
+{
+    const bool lOk = startPairing(iChannelIndex, iKnownNodeId);
+    if (lOk)
+    {
+        mPairing1WStage = 0;
+        mPairing1WBroadcastType = iBroadcastType & 0x3F;
+        if (mPairDiagnosticTraceEnabled)
+            logInfoP("PairDiag: 1W pairing type override enabled type=%u target=0x%06X",
+                     static_cast<unsigned>(mPairing1WBroadcastType),
+                     oneWayBroadcastTarget(mPairing1WBroadcastType));
+    }
+    return lOk;
 }
 
 IoHomeController::PairStartStatus IoHomeController::lastPairStartStatus() const
@@ -1673,8 +1884,10 @@ void IoHomeController::processIdle()
         if (queuePop(lEntry))
         {
             mCurrentCmd = lEntry;
-            buildTxFrame(mCurrentCmd);
-            mState = ControllerState::TxPending;
+            if (buildTxFrame(mCurrentCmd))
+                mState = ControllerState::TxPending;
+            else
+                mCurrentCmd.active = false;
         }
     }
 }
@@ -1689,6 +1902,20 @@ void IoHomeController::processTxPending()
     {
         mState = ControllerState::Idle;
         return;
+    }
+
+    if (mPairDiagnosticTraceEnabled && ((mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0))
+    {
+        const std::string lHex = hexDump(mTxBuffer, mTxLen);
+        logInfoP("PairDiag: 1W tx cmd=%s(0x%02X) len=%u seq=%u src=0x%06X dst=0x%06X hex=%s",
+                 commandName(mTxFrame.commandId),
+                 static_cast<unsigned>(mTxFrame.commandId),
+                 static_cast<unsigned>(mTxLen),
+                 static_cast<unsigned>(mTxFrame.dataLen >= 2 ? ((static_cast<uint16_t>(mTxFrame.data[mTxFrame.dataLen - 2]) << 8) | mTxFrame.data[mTxFrame.dataLen - 1])
+                                                             : 0),
+                 mTxFrame.getSrcNodeId(),
+                 mTxFrame.getDestNodeId(),
+                 lHex.c_str());
     }
 
     // Set preamble based on frame type: START frames need long preamble for low-power devices
@@ -1772,9 +1999,10 @@ void IoHomeController::processTxInProgress()
             mState = ControllerState::WaitResponse;
         }
     }
-    else if (millis() - mStateTimer > IOHC_TX_TIMEOUT_MS)
+    else if (millis() - mStateTimer > currentTxTimeoutMs())
     {
-        // TX timeout
+        // TX timeout. Use a dynamic timeout because long io-homecontrol
+        // preambles can exceed the generic 500 ms guard on SX1276.
         mRadio.standby();
         mState = ControllerState::Idle;
     }
@@ -1821,8 +2049,13 @@ void IoHomeController::processWaitResponse()
         if (mCurrentCmd.active && mCurrentCmd.retries < IOHC_MAX_RETRIES)
         {
             mCurrentCmd.retries++;
-            buildTxFrame(mCurrentCmd);
-            mState = ControllerState::TxPending;
+            if (buildTxFrame(mCurrentCmd))
+                mState = ControllerState::TxPending;
+            else
+            {
+                mCurrentCmd.active = false;
+                mState = ControllerState::Idle;
+            }
         }
         else
         {
@@ -2239,16 +2472,6 @@ void IoHomeController::processPairSend1WRemove()
         return;
     }
 
-    mTxFrame.init();
-    mTxFrame.set1WMode();
-    mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
-    mTxFrame.setSrcNode(mOwnNodeId);
-    mTxFrame.setDestNode(0x00003F);
-    mTxFrame.commandId = IoHomeCommand::RemoveController;
-    mTxFrame.data[0] = 0x00;
-    mTxFrame.dataLen = 1;
-    mTxFrame.hasHmac = false;
-
     mCurrentFreqIdx = kPair1WFreqIdx;
     const uint32_t lPair1WFreq = IOHC_FREQ_2;
     const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lPair1WFreq);
@@ -2260,9 +2483,88 @@ void IoHomeController::processPairSend1WRemove()
         return;
     }
 
+    mTxFrame.init();
+    mTxFrame.set1WMode();
+    mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
+    mTxFrame.setDestNode(oneWayBroadcastTarget(mPairing1WBroadcastType));
+
+    uint16_t lSeq = 0;
+    IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(mPairingChannel) : nullptr;
+    IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lCh);
+    if (!lProfile || !lProfile->hasOneWayControllerIdentity())
+    {
+        mState = ControllerState::PairFailed;
+        return;
+    }
+    mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
+
+    if (mPairing1WStage == 0)
+    {
+        // 1W Pair/Auth frame:
+        //   cmd=0x2E, data=0x00, sequence[2], hmac[6]
+        // HMAC input is cmd + data (2 bytes), sequence is supplied separately.
+        if (!lCh)
+        {
+            mState = ControllerState::PairFailed;
+            return;
+        }
+        mTxFrame.commandId = IoHomeCommand::Discover2ERequest;
+        lSeq = lProfile->incrementSequence1W();
+        openknx.flash.save();
+        mTxFrame.data[0] = 0x00;
+        mTxFrame.data[1] = (lSeq >> 8) & 0xFF;
+        mTxFrame.data[2] = lSeq & 0xFF;
+        mTxFrame.dataLen = 3;
+        uint8_t lHmacInput[2] = {static_cast<uint8_t>(mTxFrame.commandId), 0x00};
+        if (!IoHomeCrypto::createHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
+        {
+            mState = ControllerState::PairFailed;
+            return;
+        }
+        mTxFrame.hasHmac = true;
+    }
+    else
+    {
+        // 1W Remove frame:
+        //   cmd=0x39, data=0x00, sequence[2], hmac[6]
+        if (!lCh)
+        {
+            mState = ControllerState::PairFailed;
+            return;
+        }
+        mTxFrame.commandId = IoHomeCommand::RemoveController;
+        lSeq = lProfile->incrementSequence1W();
+        openknx.flash.save();
+        mTxFrame.data[0] = 0x00;
+        mTxFrame.data[1] = (lSeq >> 8) & 0xFF;
+        mTxFrame.data[2] = lSeq & 0xFF;
+        mTxFrame.dataLen = 3;
+        uint8_t lHmacInput[2] = {static_cast<uint8_t>(mTxFrame.commandId), 0x00};
+        if (!IoHomeCrypto::createHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
+        {
+            mState = ControllerState::PairFailed;
+            return;
+        }
+        mTxFrame.hasHmac = true;
+    }
+
     mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
+        if (mPairDiagnosticTraceEnabled)
+        {
+            const std::string lHex = hexDump(mTxBuffer, mTxLen);
+            logInfoP("PairDiag: 1W pre-key tx cmd=%s(0x%02X) stage=%u len=%u seq=%u src=0x%06X dst=0x%06X hex=%s",
+                     commandName(mTxFrame.commandId),
+                     static_cast<unsigned>(static_cast<uint8_t>(mTxFrame.commandId)),
+                     static_cast<unsigned>(mPairing1WStage),
+                     static_cast<unsigned>(mTxLen),
+                     static_cast<unsigned>(lSeq),
+                     mTxFrame.getSrcNodeId(),
+                     mTxFrame.getDestNodeId(),
+                     lHex.c_str());
+        }
+
         const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
@@ -2288,7 +2590,19 @@ void IoHomeController::processPairSend1WRemove()
 
 void IoHomeController::processPairWait1WRemove()
 {
-    processPairWait1WBlind(ControllerState::PairSend1WKeyTransfer);
+    if (mPairing1WStage == 0)
+    {
+        if (!processPairWait1WBlind(ControllerState::PairSend1WRemove))
+            return;
+        if (mState == ControllerState::PairSend1WRemove)
+            mPairing1WStage = 1;
+        return;
+    }
+
+    if (!processPairWait1WBlind(ControllerState::PairSend1WKeyTransfer))
+        return;
+    if (mState == ControllerState::PairSend1WKeyTransfer)
+        mPairing1WStage = 2;
 }
 
 void IoHomeController::processPairSend1WKeyTransfer()
@@ -2300,54 +2614,12 @@ void IoHomeController::processPairSend1WKeyTransfer()
     }
 
     IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(mPairingChannel) : nullptr;
-    if (!lCh)
+    IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lCh);
+    if (!lCh || !lProfile || !lProfile->hasOneWayControllerIdentity())
     {
         mState = ControllerState::PairFailed;
         return;
     }
-
-    mTxFrame.init();
-    mTxFrame.set1WMode();
-    mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
-    mTxFrame.commandId = IoHomeCommand::SendKey1W;
-
-    // The 1W key encryption IV must be the DEVICE's node address, not the controller's.
-    // This ensures only the target device can decrypt the key.
-    // IV = {node[0], node[1], node[2]} repeated to fill 16 bytes (io-homecontrol spec)
-    uint8_t lDeviceNodeAddr[3];
-    lDeviceNodeAddr[0] = (mDiscoveredNodeId >> 16) & 0xFF;
-    lDeviceNodeAddr[1] = (mDiscoveredNodeId >> 8) & 0xFF;
-    lDeviceNodeAddr[2] = mDiscoveredNodeId & 0xFF;
-
-    // Working 1W references put the paired device node into the source field
-    // and use 0x00003F as the broadcast target for 0x30.
-    mTxFrame.setSrcNode(mDiscoveredNodeId);
-    mTxFrame.setDestNode(0x00003F);
-
-    uint8_t lEncryptedKey[16];
-    if (!IoHomeCrypto::encrypt1WKey(mSystemKey, IOHC_TRANSFER_KEY, lDeviceNodeAddr, lEncryptedKey))
-    {
-        mState = ControllerState::PairFailed;
-        return;
-    }
-
-    uint16_t lSeq = lCh->incrementSequence1W();
-    memcpy(mTxFrame.data, lEncryptedKey, sizeof(lEncryptedKey));
-    mTxFrame.data[16] = kPair1WControllerManufacturer;
-    mTxFrame.data[17] = 0x01;
-    mTxFrame.data[18] = (lSeq >> 8) & 0xFF;
-    mTxFrame.data[19] = lSeq & 0xFF;
-    mTxFrame.dataLen = 20;
-
-    uint8_t lHmacInput[17];
-    lHmacInput[0] = static_cast<uint8_t>(mTxFrame.commandId);
-    memcpy(lHmacInput + 1, lEncryptedKey, sizeof(lEncryptedKey));
-    if (!IoHomeCrypto::createHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, mSystemKey, mTxFrame.hmac))
-    {
-        mState = ControllerState::PairFailed;
-        return;
-    }
-    mTxFrame.hasHmac = true;
 
     mCurrentFreqIdx = kPair1WFreqIdx;
     const uint32_t lPair1WFreq = IOHC_FREQ_2;
@@ -2360,9 +2632,72 @@ void IoHomeController::processPairSend1WKeyTransfer()
         return;
     }
 
+    mTxFrame.init();
+    mTxFrame.set1WMode();
+    mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
+    mTxFrame.commandId = IoHomeCommand::SendKey1W;
+
+    // In 1W mode we emulate a handheld remote. The address in the 0x30 frame
+    // is the REMOTE/controller address, not the actuator address.
+    // Frame shape: <ctrl> <type broadcast> <remoteNode> 30 <encryptedKey> <manufacturer> 01 <seq>.
+    // The 1W key encryption IV also uses that remote/controller address repeated
+    // to 16 bytes. The actuator then stores "remoteNode + key" and accepts later
+    // 1W commands from this source address.
+    uint32_t lRemoteNodeId = lProfile->getOneWayControllerNodeId();
+    if (lRemoteNodeId == 0 || lRemoteNodeId == mDiscoveredNodeId)
+    {
+        mState = ControllerState::PairFailed;
+        return;
+    }
+
+    uint8_t lRemoteNodeAddr[3];
+    lRemoteNodeAddr[0] = (lRemoteNodeId >> 16) & 0xFF;
+    lRemoteNodeAddr[1] = (lRemoteNodeId >> 8) & 0xFF;
+    lRemoteNodeAddr[2] = lRemoteNodeId & 0xFF;
+
+    mTxFrame.setSrcNode(lRemoteNodeId);
+    mTxFrame.setDestNode(oneWayBroadcastTarget(mPairing1WBroadcastType));
+
+    uint8_t lEncryptedKey[16];
+    if (!IoHomeCrypto::encrypt1WKey(lProfile->getOneWayControllerKey(), IOHC_TRANSFER_KEY, lRemoteNodeAddr, lEncryptedKey))
+    {
+        mState = ControllerState::PairFailed;
+        return;
+    }
+
+    uint16_t lSeq = lProfile->incrementSequence1W();
+    openknx.flash.save();
+    memcpy(mTxFrame.data, lEncryptedKey, sizeof(lEncryptedKey));
+    mTxFrame.data[16] = lProfile->getOneWayControllerManufacturer();
+    mTxFrame.data[17] = 0x01;
+    mTxFrame.data[18] = (lSeq >> 8) & 0xFF;
+    mTxFrame.data[19] = lSeq & 0xFF;
+    mTxFrame.dataLen = 20;
+
+    // The 1W learning key frame is encryptedKey[16] + manufacturer + 0x01 +
+    // sequence[2] and does not append a 1W HMAC.
+    mTxFrame.hasHmac = false;
+
     mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
+        if (mPairDiagnosticTraceEnabled)
+        {
+            logInfoP("PairDiag: 1W key tx prepared len=%u seq=%u remote=0x%06X device=0x%06X src=0x%06X dst=0x%06X type=%u mfg=0x%02X freq=%u %luHz",
+                     static_cast<unsigned>(mTxLen),
+                     static_cast<unsigned>(lSeq),
+                     lRemoteNodeId,
+                     mDiscoveredNodeId,
+                     mTxFrame.getSrcNodeId(),
+                     mTxFrame.getDestNodeId(),
+                     static_cast<unsigned>(mPairing1WBroadcastType),
+                     static_cast<unsigned>(lProfile->getOneWayControllerManufacturer()),
+                     static_cast<unsigned>(mCurrentFreqIdx),
+                     static_cast<unsigned long>(IOHC_FREQ_2));
+            const std::string lHex = hexDump(mTxBuffer, mTxLen);
+            logInfoP("PairDiag: 1W key tx hex=%s", lHex.c_str());
+        }
+
         const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
@@ -2396,8 +2731,10 @@ void IoHomeController::processPairWait1WKeyTransfer()
         IoHomecontrolChannel *lCh = mModule->getChannel(mPairingChannel);
         if (lCh)
         {
+            IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lCh);
             lCh->setNodeId(mDiscoveredNodeId);
-            lCh->setEncryptionKey(mSystemKey);
+            if (lProfile)
+                lCh->setEncryptionKey(lProfile->getOneWayControllerKey());
             openknx.flash.save();
             logInfoP("Pairing: 1W learn flow sent for 0x%06X on channel %d (no device ACK in 1W mode)",
                      mDiscoveredNodeId, mPairingChannel + 1);
@@ -2420,7 +2757,33 @@ bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
             return true;
 
         mTx1WRepeatTimer = 0;
-        const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
+
+        RadioError lErr = RadioError::None;
+        const bool lPairingRepeat = (mState == ControllerState::PairWait1WRemove ||
+                                     mState == ControllerState::PairWait1WKeyTransfer);
+        if (lPairingRepeat)
+        {
+            // During 1W learning, keep the long preamble on all repeats.
+            // Short-repeat remotes are fine for normal button commands, but
+            // learning mode is more timing-sensitive.
+            const uint32_t lPair1WFreq = IOHC_FREQ_2;
+            lErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lPair1WFreq);
+            if (lErr == RadioError::None)
+                lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+            if (mPairDiagnosticTraceEnabled && lErr == RadioError::None)
+            {
+                logInfoP("PairDiag: 1W pair repeat tx state=%s remaining=%u len=%u pre=%u",
+                         stateName(mState),
+                         static_cast<unsigned>(mTx1WRepeatRemaining),
+                         static_cast<unsigned>(mTxLen),
+                         static_cast<unsigned>(IOHC_PREAMBLE_LONG));
+            }
+        }
+        else
+        {
+            lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
+        }
+
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -2436,7 +2799,14 @@ bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
         return true;
     }
 
-    if (mRadio.isTxDone())
+    bool lTxDone = mRadio.isTxDone();
+#if defined(RADIO_SX1262)
+    // SX1262 may need one blocking IRQ/status read to complete the TX_DONE cleanup
+    // before the controller can advance the blind 1W learn flow.
+    if (!lTxDone)
+        lTxDone = mRadio.isTxDoneBlocking();
+#endif
+    if (lTxDone)
     {
         uint32_t lTxTimeMs = ((uint32_t)mTxLen * 8 * 1000) / IOHC_BITRATE;
         mTxTimeAccum[mCurrentFreqIdx] += lTxTimeMs;
@@ -2453,8 +2823,26 @@ bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
         return true;
     }
 
-    if (millis() - mStateTimer > IOHC_TX_TIMEOUT_MS)
+    const uint32_t lTxTimeoutMs = currentTxTimeoutMs();
+    if (millis() - mStateTimer > lTxTimeoutMs)
     {
+        if (mPairDiagnosticTraceEnabled && mState == ControllerState::PairWait1WKeyTransfer)
+        {
+            const IoHomeRadioHealth lHealth = radioHealth();
+            logInfoP("PairDiag: 1W key tx timeout len=%u pre=%u timeout=%lums txS=%lu txD=%lu irq=%lu lastIrq=0x%04X txIrq=0x%04X txSt=0x%02X radioState=%d",
+                     static_cast<unsigned>(mTxLen),
+                     static_cast<unsigned>(mCurrentTxPreambleSymbols),
+                     static_cast<unsigned long>(lTxTimeoutMs),
+                     static_cast<unsigned long>(lHealth.txStartCount),
+                     static_cast<unsigned long>(lHealth.txDoneCount),
+                     static_cast<unsigned long>(lHealth.irqCount),
+                     lHealth.lastIrqStatus,
+                     lHealth.lastTxIrqImmediate,
+                     static_cast<unsigned>(lHealth.lastTxSetStatus),
+                     static_cast<int>(lHealth.radioState));
+            logPairDiagnosticStatus();
+        }
+
         mRadio.standby();
         mState = ControllerState::PairFailed;
         return true;
@@ -3102,6 +3490,21 @@ void IoHomeController::processScanWaitResponse()
     }
 }
 
+uint32_t IoHomeController::currentTxTimeoutMs() const
+{
+    // The old fixed 500 ms timeout is enough for short preambles and small
+    // frames, but the measured SX1276 timing for 1024-symbol io-homecontrol
+    // preambles can be well above 500 ms. Keep normal traffic fast, but allow
+    // enough headroom for long-preamble pairing/learn frames.
+    if (mCurrentTxPreambleSymbols >= IOHC_PREAMBLE_LONG)
+        return 1500UL;
+    if (mCurrentTxPreambleSymbols >= 512)
+        return 900UL;
+    if (mCurrentTxPreambleSymbols >= 256)
+        return 700UL;
+    return IOHC_TX_TIMEOUT_MS;
+}
+
 RadioError IoHomeController::configureTxRadio(uint16_t iPreambleSymbols, const uint32_t *iFrequencyHz)
 {
     if (iFrequencyHz != nullptr)
@@ -3112,7 +3515,10 @@ RadioError IoHomeController::configureTxRadio(uint16_t iPreambleSymbols, const u
         updateCurrentFrequencyIndex(*iFrequencyHz);
     }
 
-    return mRadio.setPreambleLength(iPreambleSymbols);
+    const RadioError lPreambleErr = mRadio.setPreambleLength(iPreambleSymbols);
+    if (lPreambleErr == RadioError::None)
+        mCurrentTxPreambleSymbols = iPreambleSymbols;
+    return lPreambleErr;
 }
 
 RadioError IoHomeController::startShortPreambleTransmit(const uint8_t *iBuffer, uint8_t iLen,
@@ -3154,7 +3560,7 @@ void IoHomeController::updateCurrentFrequencyIndex(uint32_t iFrequencyHz)
 
 // --- Helper methods ---
 
-void IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
+bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 {
     mTxFrame.init();
     if (iEntry.retries == 0)
@@ -3192,14 +3598,89 @@ void IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 
         if (lTargetCh && lTargetCh->is1W())
         {
-            // 1W Execute: fire-and-forget with sequence counter + HMAC
+            IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lTargetCh);
+            if (!lProfile || !lProfile->hasOneWayControllerIdentity())
+                return false;
+            const uint8_t *lProfileKey = lProfile->getOneWayControllerKey();
+            mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
+            // 1W Execute: fire-and-forget with sequence counter + HMAC.
+            // 1W remotes broadcast commands to a type-dependent target:
+            // dst = ((type << 6) | 0x3F). Type 0 => 0x00003F, type 2 => 0x0000BF, type 3 => 0x0000FF.
+            mTxFrame.setDestNode(oneWayBroadcastTarget(iEntry.oneWayBroadcastType));
             mTxFrame.set1WMode();
             mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END); // START+END both set
 
             mTxFrame.data[0] = IOHC_ORIGINATOR_USER; // 0x01
             mTxFrame.data[1] = IOHC_ACEI_1W;         // 0x43
 
-            if (iEntry.param3 != 0xFF)
+            if (iEntry.oneWayStandardExecute)
+            {
+                // Standard 1W Execute:
+                // payload before sequence/HMAC = 01 43 main[2] fp1 fp2.
+                // Examples: open=0000, close=C800, stop=D200, vent=D803, force=6400.
+                mTxFrame.data[2] = (iEntry.oneWayMain >> 8) & 0xFF;
+                mTxFrame.data[3] = iEntry.oneWayMain & 0xFF;
+                mTxFrame.data[4] = iEntry.oneWayFp1;
+                mTxFrame.data[5] = iEntry.oneWayFp2;
+
+                uint16_t lSeq = lProfile->incrementSequence1W();
+                openknx.flash.save();
+                mTxFrame.data[6] = (lSeq >> 8) & 0xFF;
+                mTxFrame.data[7] = lSeq & 0xFF;
+                mTxFrame.dataLen = 8;
+
+                uint8_t lHmacIn[7];
+                lHmacIn[0] = static_cast<uint8_t>(mTxFrame.commandId);
+                memcpy(lHmacIn + 1, mTxFrame.data, 6);
+                IoHomeCrypto::createHmac1W(lHmacIn, sizeof(lHmacIn), lSeq, lProfileKey, mTxFrame.hmac);
+                mTxFrame.hasHmac = true;
+            }
+            else if (iEntry.oneWayRawExecute)
+            {
+                // Exact raw 1W Execute payload. The payload is copied as-is and
+                // the controller appends sequence + HMAC. Use this for reference
+                // comparison and command discovery, e.g. 0000/00FE/0143....
+                memcpy(mTxFrame.data, iEntry.oneWayRawData, iEntry.oneWayRawLen);
+
+                uint16_t lSeq = lProfile->incrementSequence1W();
+                openknx.flash.save();
+                mTxFrame.data[iEntry.oneWayRawLen] = (lSeq >> 8) & 0xFF;
+                mTxFrame.data[iEntry.oneWayRawLen + 1] = lSeq & 0xFF;
+                mTxFrame.dataLen = iEntry.oneWayRawLen + 2;
+
+                uint8_t lHmacIn[1 + IOHC_1W_RAW_EXEC_MAX_DATA];
+                lHmacIn[0] = static_cast<uint8_t>(mTxFrame.commandId);
+                memcpy(lHmacIn + 1, mTxFrame.data, iEntry.oneWayRawLen);
+                IoHomeCrypto::createHmac1W(lHmacIn, 1 + iEntry.oneWayRawLen, lSeq, lProfileKey, mTxFrame.hmac);
+                mTxFrame.hasHmac = true;
+            }
+            else if (iEntry.oneWayButton)
+            {
+                // Raw 1W remote-style button command.
+                // Known values from 1W remotes:
+                //   0x0000 = Up, 0x0001 = Down, 0x0002 = Stop, 0x0003 = My/Prog
+                //   0x00FE = Button Released, 0x00FF = alternative Stop
+                // Payload before sequence/HMAC:
+                //   origin(1) + acei(1) + buttonCode[2] + fp1(0) + fp2(0)
+                mTxFrame.data[2] = (iEntry.oneWayButtonCode >> 8) & 0xFF;
+                mTxFrame.data[3] = iEntry.oneWayButtonCode & 0xFF;
+                mTxFrame.data[4] = 0x00;
+                mTxFrame.data[5] = 0x00;
+
+                uint16_t lSeq = lProfile->incrementSequence1W();
+                openknx.flash.save();
+                mTxFrame.data[6] = (lSeq >> 8) & 0xFF;
+                mTxFrame.data[7] = lSeq & 0xFF;
+                mTxFrame.dataLen = 8;
+
+                // 1W HMAC input excludes the appended sequence bytes and HMAC.
+                uint8_t lHmacIn[7];
+                lHmacIn[0] = static_cast<uint8_t>(mTxFrame.commandId);
+                memcpy(lHmacIn + 1, mTxFrame.data, 6);
+                IoHomeCrypto::createHmac1W(lHmacIn, sizeof(lHmacIn), lSeq, lProfileKey, mTxFrame.hmac);
+                mTxFrame.hasHmac = true;
+            }
+            else if (iEntry.param3 != 0xFF)
             {
                 // Extended 16-byte format (_p0x00_16):
                 // origin(1)+acei(1)+main[2]+fp1(1)+fp2(1)+data[2]+seq(2)+hmac(6) = 16B
@@ -3210,7 +3691,8 @@ void IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 mTxFrame.data[6] = 0x00;          // data[0]
                 mTxFrame.data[7] = 0x00;          // data[1]
 
-                uint16_t lSeq = lTargetCh->incrementSequence1W();
+                uint16_t lSeq = lProfile->incrementSequence1W();
+                openknx.flash.save();
                 mTxFrame.data[8] = (lSeq >> 8) & 0xFF;
                 mTxFrame.data[9] = lSeq & 0xFF;
                 mTxFrame.dataLen = 10;
@@ -3219,7 +3701,7 @@ void IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 uint8_t lHmacIn[9];
                 lHmacIn[0] = static_cast<uint8_t>(mTxFrame.commandId);
                 memcpy(lHmacIn + 1, mTxFrame.data, 8);
-                IoHomeCrypto::createHmac1W(lHmacIn, 9, lSeq, iEntry.encKey, mTxFrame.hmac);
+                IoHomeCrypto::createHmac1W(lHmacIn, 9, lSeq, lProfileKey, mTxFrame.hmac);
                 mTxFrame.hasHmac = true;
             }
             else
@@ -3248,7 +3730,8 @@ void IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                     mTxFrame.data[5] = 0x00;
                 }
 
-                uint16_t lSeq = lTargetCh->incrementSequence1W();
+                uint16_t lSeq = lProfile->incrementSequence1W();
+                openknx.flash.save();
                 mTxFrame.data[6] = (lSeq >> 8) & 0xFF;
                 mTxFrame.data[7] = lSeq & 0xFF;
                 mTxFrame.dataLen = 8;
@@ -3257,7 +3740,7 @@ void IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 uint8_t lHmacIn[7];
                 lHmacIn[0] = static_cast<uint8_t>(mTxFrame.commandId);
                 memcpy(lHmacIn + 1, mTxFrame.data, 6);
-                IoHomeCrypto::createHmac1W(lHmacIn, 7, lSeq, iEntry.encKey, mTxFrame.hmac);
+                IoHomeCrypto::createHmac1W(lHmacIn, 7, lSeq, lProfileKey, mTxFrame.hmac);
                 mTxFrame.hasHmac = true;
             }
             mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
@@ -3344,8 +3827,13 @@ void IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 
         if (lTargetChAM && lTargetChAM->is1W())
         {
+            IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lTargetChAM);
+            if (!lProfile || !lProfile->hasOneWayControllerIdentity())
+                return false;
+            mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
             // 1W ActivateMode (_p0x01_13): origin(1)+acei(1)+main(1)+fp1(1)+fp2(1)+seq(2)+hmac(6) = 13B
             // Note: main is 1 byte (not 2!) in _p0x01_13
+            mTxFrame.setDestNode(oneWayBroadcastTarget(iEntry.oneWayBroadcastType));
             mTxFrame.set1WMode();
             mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
 
@@ -3355,7 +3843,8 @@ void IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             mTxFrame.data[3] = (iEntry.param2 != 0xFF) ? iEntry.param2 : 0x01; // fp1
             mTxFrame.data[4] = 0x00;                                           // fp2
 
-            uint16_t lSeqAM = lTargetChAM->incrementSequence1W();
+            uint16_t lSeqAM = lProfile->incrementSequence1W();
+            openknx.flash.save();
             mTxFrame.data[5] = (lSeqAM >> 8) & 0xFF;
             mTxFrame.data[6] = lSeqAM & 0xFF;
             mTxFrame.dataLen = 7;
@@ -3364,7 +3853,7 @@ void IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             uint8_t lHmacInAM[6];
             lHmacInAM[0] = static_cast<uint8_t>(mTxFrame.commandId); // 0x01
             memcpy(lHmacInAM + 1, mTxFrame.data, 5);
-            IoHomeCrypto::createHmac1W(lHmacInAM, 6, lSeqAM, iEntry.encKey, mTxFrame.hmac);
+            IoHomeCrypto::createHmac1W(lHmacInAM, 6, lSeqAM, lProfile->getOneWayControllerKey(), mTxFrame.hmac);
             mTxFrame.hasHmac = true;
             mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
         }
@@ -3457,34 +3946,33 @@ void IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 
     case IoHomeCommand::SendKey1W:
     {
+        IoHomecontrolChannel *lProfile = oneWayProfileForNode(iEntry.destNodeId);
+        if (!lProfile || !lProfile->hasOneWayControllerIdentity())
+            return false;
         // 1W key transfer: 1W mode, 20-byte payload
         // Bytes 0-15: encrypted key, byte 16: manufacturer, byte 17: controller marker, bytes 18-19: sequence
         mTxFrame.set1WMode();
         mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END); // standalone 1W: START+END (per rspaargaren)
 
-        // Encrypt the key with the transfer key
+        // Encrypt the key with the transfer key. For 1W key push, the node address
+        // is the remote/controller source address, not the actuator address.
         uint8_t lEncKey1W[16];
-        uint8_t lDeviceNodeAddr[3] = {
-            static_cast<uint8_t>((iEntry.destNodeId >> 16) & 0xFF),
-            static_cast<uint8_t>((iEntry.destNodeId >> 8) & 0xFF),
-            static_cast<uint8_t>(iEntry.destNodeId & 0xFF)};
-        mTxFrame.setSrcNode(iEntry.destNodeId);
-        mTxFrame.setDestNode(0x00003F);
-        IoHomeCrypto::encrypt1WKey(iEntry.encKey, IOHC_TRANSFER_KEY, lDeviceNodeAddr, lEncKey1W);
+        uint32_t lRemoteNodeId = lProfile->getOneWayControllerNodeId();
+        uint8_t lRemoteNodeAddr[3] = {
+            static_cast<uint8_t>((lRemoteNodeId >> 16) & 0xFF),
+            static_cast<uint8_t>((lRemoteNodeId >> 8) & 0xFF),
+            static_cast<uint8_t>(lRemoteNodeId & 0xFF)};
+        mTxFrame.setSrcNode(lRemoteNodeId);
+        mTxFrame.setDestNode(oneWayBroadcastTarget(iEntry.oneWayBroadcastType));
+        IoHomeCrypto::encrypt1WKey(lProfile->getOneWayControllerKey(), IOHC_TRANSFER_KEY, lRemoteNodeAddr, lEncKey1W);
         memcpy(mTxFrame.data, lEncKey1W, 16);
-        mTxFrame.data[16] = iEntry.param;                                   // manufacturer ID
+        mTxFrame.data[16] = lProfile->getOneWayControllerManufacturer();
         mTxFrame.data[17] = 0x01;                                           // controller marker
         mTxFrame.data[18] = (iEntry.param2 != 0xFF) ? iEntry.param2 : 0x00; // sequence high
         mTxFrame.data[19] = (iEntry.param3 != 0xFF) ? iEntry.param3 : 0x00; // sequence low
         mTxFrame.dataLen = 20;
 
-        // 1W HMAC for 0x30 uses only command + encrypted key, with the sequence passed separately.
-        uint16_t lSeq1W = ((uint16_t)mTxFrame.data[18] << 8) | mTxFrame.data[19];
-        uint8_t lHmacInput1W[17];
-        lHmacInput1W[0] = static_cast<uint8_t>(mTxFrame.commandId);
-        memcpy(lHmacInput1W + 1, mTxFrame.data, 16); // encrypted key only
-        IoHomeCrypto::createHmac1W(lHmacInput1W, 17, lSeq1W, iEntry.encKey, mTxFrame.hmac);
-        mTxFrame.hasHmac = true;
+        mTxFrame.hasHmac = false;
         mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
         break;
     }
@@ -3525,6 +4013,7 @@ void IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         mTxFrame.hasHmac = false;
         break;
     }
+    return true;
 }
 
 void IoHomeController::dispatchRxFrame()
@@ -3949,7 +4438,7 @@ void IoHomeController::processStatusAckTxWait()
         mStatusAckFreqIdx++;
         mState = ControllerState::StatusAckSend;
     }
-    else if (millis() - mStateTimer > IOHC_TX_TIMEOUT_MS)
+    else if (millis() - mStateTimer > currentTxTimeoutMs())
     {
         mRadio.standby();
         mStatusAckFreqIdx++;

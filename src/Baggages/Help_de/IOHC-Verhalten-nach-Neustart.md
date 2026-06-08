@@ -6,3 +6,5 @@ Dieser Parameter legt fest, wie sich der Kanal nach einem Neustart des Gateways 
 "Status abfragen" liest den aktuellen Gerätezustand nach dem Neustart neu ein und ist in der Regel die sinnvolle Standardwahl.
 "Letzte Position anfahren" überträgt den zuletzt gespeicherten Zustand erneut.
 Bei Positionskanälen wird die zuletzt bekannte Positionsrückmeldung verwendet, bei Licht-, Schalter- und Schloss-Kanälen der zuletzt gespeicherte Ein-/Aus-Zustand.
+
+Im 1W-Modus kann "Status abfragen" keine Rückmeldung liefern. Dort stehen nur lokal gespeicherte bzw. geschätzte Zustände zur Verfügung.

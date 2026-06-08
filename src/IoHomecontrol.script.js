@@ -130,22 +130,28 @@ function IOHC_buildOneWaySummary(device, context, paired, pairedNodeId) {
         return "2W (bidirektional)";
     }
 
+    var broadcastType = IOHC_getParameter(device, prefix + "OneWayBroadcastType").value;
+    var typeText = broadcastType;
+    if (broadcastType == 255) {
+        var deviceType = IOHC_getParameter(device, prefix + "DeviceType").value;
+        typeText = "auto->" + ((deviceType == 3 || deviceType == 9) ? "3" : "2");
+    }
     var targetNodeId = IOHC_getParameter(device, prefix + "OneWayTargetNodeId").value;
     if (!targetNodeId) {
-        return paired ? "1W ohne Ziel, gepaart " + IOHC_formatNodeId(pairedNodeId) : "1W Ziel fehlt";
+        return paired ? "1W Typ " + typeText + ", gepaart " + IOHC_formatNodeId(pairedNodeId) : "1W Typ " + typeText + ", Ziel fehlt";
     }
 
     var targetText = IOHC_formatNodeId(targetNodeId);
     if (!paired) {
-        return "1W Ziel " + targetText + ", nicht angelernt";
+        return "1W Typ " + typeText + ", Ziel " + targetText + ", nicht angelernt";
     }
 
     var pairedText = IOHC_formatNodeId(pairedNodeId);
     if (pairedNodeId === targetNodeId) {
-        return "1W Ziel " + targetText + " aktiv";
+        return "1W Typ " + typeText + ", Ziel " + targetText + " aktiv";
     }
 
-    return "1W Ziel " + targetText + ", gepaart " + pairedText;
+    return "1W Typ " + typeText + ", Ziel " + targetText + ", gepaart " + pairedText;
 }
 
 function IOHC_applyStatusResponse(device, context, resp, fallbackResult, fallbackDiag) {
@@ -179,7 +185,20 @@ function IOHC_applyStatusResponse(device, context, resp, fallbackResult, fallbac
         }
     }
 
-    IOHC_setPairingInfo(device, context, resultText, nodeText, IOHC_buildOneWaySummary(device, context, paired, pairedNodeId), diagText);
+    var oneWaySummary = IOHC_buildOneWaySummary(device, context, paired, pairedNodeId);
+    var prefix = IOHC_getChannelPrefix(context);
+    var protocolMode = IOHC_getParameter(device, prefix + "ProtocolMode").value;
+    if (protocolMode == 1 && resp.length >= 13) {
+        var broadcastType = resp.length >= 14 ? resp[13] : IOHC_getParameter(device, prefix + "OneWayBroadcastType").value;
+        var profileChannel = resp[6] || 0;
+        var profileNodeId = IOHC_readNodeId(resp, 7);
+        var manufacturer = resp[10] || 0;
+        var sequence = ((resp[11] || 0) << 8) | (resp[12] || 0);
+        oneWaySummary = "1W T" + broadcastType + " P" + profileChannel + " " +
+                        IOHC_formatNodeId(profileNodeId) + " M" + manufacturer + " S" + sequence;
+    }
+
+    IOHC_setPairingInfo(device, context, resultText, nodeText, oneWaySummary, diagText);
 }
 
 function IOHC_queryPairingInfo(device, online, progress, context, fallbackResult, fallbackDiag) {
@@ -307,4 +326,31 @@ function IOHC_refreshPairingInfo(device, online, progress, context) {
         online.disconnect();
     }
     progress.setText("Pairing-Status aktualisiert für Kanal " + (channelIndex + 1) + ".");
+}
+
+function IOHC_generateOneWayProfile(device, online, progress, context) {
+    var channelIndex = context.channelIndex - 1;
+    progress.setText("Neues eigenes 1W-Controllerprofil wird erzeugt für Kanal " + (channelIndex + 1) + " ...");
+    progress.setProgress(20);
+    online.connect();
+    try {
+        var resp = IOHC_invokeFunctionProperty(online, [0x15, channelIndex]);
+        if (!resp || resp.length < 1) {
+            throw new Error("io-homecontrol: Keine Antwort beim Erzeugen des 1W-Profils");
+        }
+        if (resp[0] == 0) {
+            IOHC_queryPairingInfo(device, online, progress, context, "Neues 1W-Profil erzeugt", "Eigenes Controllerprofil ist bereit zum Pairing");
+            progress.setText("Neues eigenes 1W-Controllerprofil für Kanal " + (channelIndex + 1) + " erzeugt.");
+            return;
+        }
+        if (resp[0] == 3) {
+            throw new Error("io-homecontrol: Profil wird von mindestens einem gepaarten Kanal verwendet. Pairing zuerst entfernen.");
+        }
+        if (resp[0] == 4) {
+            throw new Error("io-homecontrol: Kanal verwendet ein geteiltes Profil. In ETS zuerst 'eigenes Profil' wählen.");
+        }
+        throw new Error("io-homecontrol: Neues 1W-Profil konnte nicht erzeugt werden");
+    } finally {
+        online.disconnect();
+    }
 }

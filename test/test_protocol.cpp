@@ -4140,6 +4140,7 @@ TEST(frame_1w_mode_flag)
     ASSERT_TRUE(!(frame.ctrlByte0 & IOHC_CTRL0_MODE_1W));
     frame.set1WMode();
     ASSERT_TRUE(frame.ctrlByte0 & IOHC_CTRL0_MODE_1W);
+    ASSERT_TRUE(frame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
 }
 
 // --- EMS2 constants ---
@@ -5880,7 +5881,7 @@ TEST(integration_1w_key_transfer_flow)
     lKeyTransferFrame.setDestNode(0x00003F);
     lKeyTransferFrame.commandId = IoHomeCommand::SendKey1W;
     memcpy(lKeyTransferFrame.data, lEncryptedKey, 16);
-    lKeyTransferFrame.data[16] = 0x01; // manufacturer (Somfy)
+    lKeyTransferFrame.data[16] = static_cast<uint8_t>(IoHomeManufacturer::Velux);
     lKeyTransferFrame.data[17] = 0x01; // data flag
     lKeyTransferFrame.data[18] = (lSequence >> 8) & 0xFF;
     lKeyTransferFrame.data[19] = lSequence & 0xFF;
@@ -6222,6 +6223,361 @@ TEST(gateway_controller_challenge_response_tracks_paired_device)
     ASSERT_MEM_EQ(lResponse.data, lExpectedHmac, sizeof(lExpectedHmac));
     ASSERT_EQ(lController.getGatewayPairedDeviceCount(), 1);
     ASSERT_EQ(lController.getGatewayPairedNodeId(0), lDeviceNodeId);
+}
+
+TEST(controller_default_1w_pairing_uses_standard_type2)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.setSystemKey(lKey);
+    lController.init();
+    lChannel.setIs1W(true);
+    lChannel.setConfigured1WTargetNodeId(lDeviceNodeId);
+    lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+    lChannel.setOneWayControllerKey(lKey);
+
+    ASSERT_EQ(lController.getOneWayBroadcastType(), 2);
+    ASSERT_EQ(lChannel.getOneWayControllerManufacturer(), static_cast<uint8_t>(IoHomeManufacturer::Somfy));
+    lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Velux));
+    ASSERT_EQ(lChannel.getOneWayControllerManufacturer(), static_cast<uint8_t>(IoHomeManufacturer::Velux));
+    ASSERT_EQ(lController.oneWayBroadcastTarget(lController.getOneWayBroadcastType()), 0x0000BF);
+    ASSERT_EQ(lController.oneWayBroadcastTarget(0), 0x00003F);
+    ASSERT_EQ(lController.oneWayBroadcastTarget(3), 0x0000FF);
+    ASSERT_TRUE(lController.startPairing(0, lDeviceNodeId));
+
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lPacket.empty());
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::Discover2ERequest);
+    ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BF);
+    ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
+    ASSERT_EQ(lFrame.dataLen, 3);
+    ASSERT_EQ(lFrame.data[1], 0x00);
+    ASSERT_EQ(lFrame.data[2], 0x01);
+    ASSERT_EQ(lChannel.getSequence1W(), 1);
+    ASSERT_TRUE(lFrame.hasHmac);
+}
+
+TEST(controller_1w_key_frame_uses_profile_manufacturer_without_hmac)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setNodeId(0x7E9E6E);
+    lChannel.setIs1W(true);
+    lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+    lChannel.setOneWayControllerKey(lKey);
+    lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Velux));
+
+    ASSERT_TRUE(lController.sendCommand(0x7E9E6E, lKey, IoHomeCommand::SendKey1W,
+                                        0x02, 0x00, 0x01));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    lController.loop();
+
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_EQ(lPacket.size(), 29);
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
+    ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BF);
+    ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
+    ASSERT_EQ(lFrame.dataLen, 20);
+    ASSERT_EQ(lFrame.data[16], static_cast<uint8_t>(IoHomeManufacturer::Velux));
+    ASSERT_TRUE(!lFrame.hasHmac);
+}
+
+TEST(controller_default_1w_execute_uses_standard_vent_layout)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setNodeId(lDeviceNodeId);
+    lChannel.setEncryptionKey(lKey);
+    lChannel.setIs1W(true);
+    lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+    lChannel.setOneWayControllerKey(lKey);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 0xD8, 0x03));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    lController.loop();
+
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lPacket.empty());
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
+    ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BF);
+    ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
+    ASSERT_EQ(lFrame.dataLen, 8);
+    ASSERT_EQ(lFrame.data[0], IOHC_ORIGINATOR_USER);
+    ASSERT_EQ(lFrame.data[1], IOHC_ACEI_1W);
+    ASSERT_EQ(lFrame.data[2], 0xD8);
+    ASSERT_EQ(lFrame.data[3], 0x03);
+    ASSERT_EQ(lFrame.data[4], 0x00);
+    ASSERT_EQ(lFrame.data[5], 0x00);
+    ASSERT_TRUE(lFrame.hasHmac);
+}
+
+TEST(controller_1w_channel_broadcast_type3_controls_all_tx_paths)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.setSystemKey(lKey);
+        lController.init();
+        lChannel.setIs1W(true);
+        lChannel.setConfigured1WTargetNodeId(lDeviceNodeId);
+        lChannel.setConfigured1WBroadcastType(3);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+
+        ASSERT_TRUE(lController.startPairing(0, lDeviceNodeId));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+
+        IoHomeFrame lFrame;
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lFrame.getDestNodeId(), 0x0000FF);
+    }
+
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setNodeId(lDeviceNodeId);
+        lChannel.setEncryptionKey(lKey);
+        lChannel.setIs1W(true);
+        lChannel.setConfigured1WBroadcastType(3);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+
+        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 0xD8, 0x03));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        lController.loop();
+
+        IoHomeFrame lFrame;
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lFrame.getDestNodeId(), 0x0000FF);
+    }
+
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setNodeId(lDeviceNodeId);
+        lChannel.setEncryptionKey(lKey);
+        lChannel.setIs1W(true);
+        lChannel.setConfigured1WBroadcastType(3);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+
+        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::ActivateMode, 0x01));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        lController.loop();
+
+        IoHomeFrame lFrame;
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lFrame.getDestNodeId(), 0x0000FF);
+    }
+}
+
+TEST(controller_1w_channel_profiles_are_independent)
+{
+    const uint8_t lKey1[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+    const uint8_t lKey2[16] = {16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel1;
+    IoHomecontrolChannel lChannel2;
+    lModule.testSetChannel(0, &lChannel1);
+    lModule.testSetChannel(1, &lChannel2);
+    lController.setModule(&lModule);
+
+    lChannel1.setIs1W(true);
+    lChannel1.setOneWayControllerNodeId(0x810001);
+    lChannel1.setOneWayControllerKey(lKey1);
+    lChannel1.setSequence1W(10);
+    lChannel2.setIs1W(true);
+    lChannel2.setOneWayControllerNodeId(0x820002);
+    lChannel2.setOneWayControllerKey(lKey2);
+    lChannel2.setSequence1W(20);
+
+    ASSERT_TRUE(lController.oneWayProfileForChannel(&lChannel1) == &lChannel1);
+    ASSERT_TRUE(lController.oneWayProfileForChannel(&lChannel2) == &lChannel2);
+    ASSERT_EQ(lController.oneWayProfileForChannel(&lChannel1)->getOneWayControllerNodeId(), 0x810001);
+    ASSERT_EQ(lController.oneWayProfileForChannel(&lChannel2)->getOneWayControllerNodeId(), 0x820002);
+    ASSERT_EQ(lChannel1.getSequence1W(), 10);
+    ASSERT_EQ(lChannel2.getSequence1W(), 20);
+}
+
+TEST(controller_1w_shared_profile_uses_owner_sequence_and_identity)
+{
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lOwner;
+    IoHomecontrolChannel lShared;
+    lModule.testSetChannel(0, &lOwner);
+    lModule.testSetChannel(1, &lShared);
+    lController.setModule(&lModule);
+    lController.init();
+
+    lOwner.setIs1W(true);
+    lOwner.setOneWayControllerNodeId(0x810001);
+    lOwner.setOneWayControllerKey(lKey);
+    lOwner.setSequence1W(10);
+    lShared.setNodeId(lDeviceNodeId);
+    lShared.setIs1W(true);
+    lShared.setConfigured1WProfileChannel(0);
+
+    ASSERT_TRUE(lController.oneWayProfileForChannel(&lShared) == &lOwner);
+    const uint32_t lSaveCountBefore = openknx.flash.saveCount;
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 0xD8, 0x03));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    lController.loop();
+
+    IoHomeFrame lFrame;
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lFrame.getSrcNodeId(), 0x810001);
+    ASSERT_EQ(lOwner.getSequence1W(), 11);
+    ASSERT_EQ(lShared.getSequence1W(), 0);
+    ASSERT_EQ(lFrame.data[6], 0x00);
+    ASSERT_EQ(lFrame.data[7], 0x0B);
+    ASSERT_TRUE(openknx.flash.saveCount > lSaveCountBefore);
+}
+
+TEST(controller_1w_identical_imported_profiles_share_first_sequence_owner)
+{
+    const uint8_t lKey[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel1;
+    IoHomecontrolChannel lChannel2;
+    lModule.testSetChannel(0, &lChannel1);
+    lModule.testSetChannel(1, &lChannel2);
+    lController.setModule(&lModule);
+
+    lChannel1.setIs1W(true);
+    lChannel1.setOneWayControllerNodeId(0x810001);
+    lChannel1.setOneWayControllerKey(lKey);
+    lChannel1.setSequence1W(30);
+    lChannel2.setIs1W(true);
+    lChannel2.setOneWayControllerNodeId(0x810001);
+    lChannel2.setOneWayControllerKey(lKey);
+    lChannel2.setSequence1W(20);
+
+    ASSERT_TRUE(lController.oneWayProfileForChannel(&lChannel1) == &lChannel1);
+    ASSERT_TRUE(lController.oneWayProfileForChannel(&lChannel2) == &lChannel1);
+}
+
+TEST(controller_1w_invalid_or_cyclic_profile_reference_falls_back_to_own)
+{
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel1;
+    IoHomecontrolChannel lChannel2;
+    lModule.testSetChannel(0, &lChannel1);
+    lModule.testSetChannel(1, &lChannel2);
+    lController.setModule(&lModule);
+
+    lChannel1.setIs1W(true);
+    lChannel1.setConfigured1WProfileChannel(1);
+    ASSERT_TRUE(lController.oneWayProfileForChannel(&lChannel1) == &lChannel1);
+
+    lChannel2.setIs1W(true);
+    lChannel2.setConfigured1WProfileChannel(0);
+    ASSERT_TRUE(lController.oneWayProfileForChannel(&lChannel1) == &lChannel1);
+    ASSERT_TRUE(lController.oneWayProfileForChannel(&lChannel2) == &lChannel2);
+}
+
+TEST(controller_1w_missing_profile_does_not_send_empty_frame)
+{
+    const uint8_t lKey[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.init();
+    lChannel.setNodeId(0x7E9E6E);
+    lChannel.setIs1W(true);
+
+    ASSERT_TRUE(lController.sendCommand(0x7E9E6E, lKey, IoHomeCommand::Execute, 0xD8, 0x03));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    lController.loop();
+    ASSERT_TRUE(lController.radio().testLastTransmittedPacket().empty());
 }
 #endif
 
@@ -6645,6 +7001,15 @@ int main()
     RUN(gateway_controller_discover_request_from_idle);
     RUN(gateway_controller_key_transfer_uses_configured_gateway_key);
     RUN(gateway_controller_challenge_response_tracks_paired_device);
+    RUN(controller_default_1w_pairing_uses_standard_type2);
+    RUN(controller_1w_key_frame_uses_profile_manufacturer_without_hmac);
+    RUN(controller_default_1w_execute_uses_standard_vent_layout);
+    RUN(controller_1w_channel_broadcast_type3_controls_all_tx_paths);
+    RUN(controller_1w_channel_profiles_are_independent);
+    RUN(controller_1w_shared_profile_uses_owner_sequence_and_identity);
+    RUN(controller_1w_identical_imported_profiles_share_first_sequence_owner);
+    RUN(controller_1w_invalid_or_cyclic_profile_reference_falls_back_to_own);
+    RUN(controller_1w_missing_profile_does_not_send_empty_frame);
 #endif
 
     printf("\n=== Results: %d passed, %d failed ===\n", sTestsPassed, sTestsFailed);

@@ -27,7 +27,7 @@
               <Parameter Id="%AID%_P-%TT%%CC%015" Name="IOHC%C%PairingDiag" ParameterType="%AID%_PT-IOHCText40Byte" Text="Letzte Pairing-Diagnose" Value="Noch keine Diagnose" Access="Read" />
 
               <!-- Main configuration Union including 10 ETS-backed scene slots -->
-              <Union SizeInBit="392">
+              <Union SizeInBit="416">
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%001" Name="IOHC%C%Active" ParameterType="%AID%_PT-IOHCCheckBox" Offset="0" BitOffset="0" Text="Kanal aktiv" Value="1" />
                 <Parameter Id="%AID%_UP-%TT%%CC%002" Name="IOHC%C%DeviceType" ParameterType="%AID%_PT-IOHCDeviceType" Offset="1" BitOffset="0" Text="Gerätetyp" Value="1" />
@@ -42,6 +42,9 @@
                 <!-- Protocol mode: 1W / 2W -->
                 <Parameter Id="%AID%_UP-%TT%%CC%009" Name="IOHC%C%ProtocolMode" ParameterType="%AID%_PT-IOHCProtocolMode" Offset="44" BitOffset="0" Text="Protokoll-Modus" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%011" Name="IOHC%C%OneWayTargetNodeId" ParameterType="%AID%_PT-IOHCOneWayTargetNodeId" Offset="45" BitOffset="0" Text="1W Aktor-Node-ID (dezimal, 0 = nicht gesetzt)" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%016" Name="IOHC%C%OneWayBroadcastType" ParameterType="%AID%_PT-IOHCOneWayBroadcastType" Offset="49" BitOffset="0" Text="1W Broadcast-Typ" Value="255" />
+                <Parameter Id="%AID%_UP-%TT%%CC%017" Name="IOHC%C%OneWayManufacturer" ParameterType="%AID%_PT-IOHCOneWayManufacturer" Offset="50" BitOffset="0" Text="1W Controller-Hersteller (eigenes Profil)" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%018" Name="IOHC%C%OneWayProfileChannel" ParameterType="%AID%_PT-IOHCOneWayProfileChannel" Offset="51" BitOffset="0" Text="1W Profil teilen mit Kanal (0 = eigenes)" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%020" Name="IOHC%C%SceneCount" ParameterType="%AID%_PT-IOHCSceneCount" Offset="13" BitOffset="0" Text="Anzahl Szenen" Value="0" />
                 <!-- Scene slot parameters 1..10 are generated from IoHomecontrol.scene.part.xml. -->
                 <op:usePart name="IOHCScene" xpath="//Parameters/*" />
@@ -65,129 +68,122 @@
 
               <ParameterRef Id="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901" RefId="%AID%_UP-%TT%%CC%009" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%011_R-%TT%%CC%01101" RefId="%AID%_UP-%TT%%CC%011" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%016_R-%TT%%CC%01601" RefId="%AID%_UP-%TT%%CC%016" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%017_R-%TT%%CC%01701" RefId="%AID%_UP-%TT%%CC%017" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801" RefId="%AID%_UP-%TT%%CC%018" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_UP-%TT%%CC%020" />
               <!-- Scene slot ParameterRefs 1..10 are generated from IoHomecontrol.scene.part.xml. -->
               <op:usePart name="IOHCScene" xpath="//ParameterRefs/*" />
             </ParameterRefs>
 
             <ComObjectTable>
-              <!-- === Existing Per-channel Communication Objects === -->
-
+              <!-- === Per-channel Communication Objects === -->
               <!-- K0: Position command (write) -->
               <ComObject Id="%AID%_O-%TT%%CC%000" Name="CH%C%Position" Text="Kanal %C% Position" FunctionText="Position setzen" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K0%" />
 
               <!-- K1: Position feedback (read) -->
               <ComObject Id="%AID%_O-%TT%%CC%001" Name="CH%C%PositionFeedback" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K1%" />
 
-              <!-- K2: Up/Down command (write) -->
+              <!-- K2: Up/Down command (write) - position devices -->
               <ComObject Id="%AID%_O-%TT%%CC%002" Name="CH%C%UpDown" Text="Kanal %C% Auf/Ab" FunctionText="Auf/Ab Befehl" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-8" Number="%K2%" />
 
-              <!-- K3: Stop command (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%003" Name="CH%C%Stop" Text="Kanal %C% Stopp" FunctionText="Stopp Befehl" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K3%" />
+              <!-- K3: On/Off command (write) - Licht/Schalter -->
+              <ComObject Id="%AID%_O-%TT%%CC%003" Name="CH%C%OnOff" Text="Kanal %C% Ein/Aus" FunctionText="Ein/Aus Befehl" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K3%" />
 
-              <!-- K4: Status (read) -->
-              <ComObject Id="%AID%_O-%TT%%CC%004" Name="CH%C%Status" Text="Kanal %C% Bewegt" FunctionText="Bewegungsstatus" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K4%" />
+              <!-- K4: Stop command trigger (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%004" Name="CH%C%Stop" Text="Kanal %C% Stopp" FunctionText="Stopp Befehl" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-17" Number="%K4%" />
 
-              <!-- K5: Slat position command (write) - visible only for blind/shutter -->
-              <ComObject Id="%AID%_O-%TT%%CC%005" Name="CH%C%Slat" Text="Kanal %C% Lamellenposition" FunctionText="Lamellenposition setzen" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K5%" />
+              <!-- K5: Movement status (read) - position devices -->
+              <ComObject Id="%AID%_O-%TT%%CC%005" Name="CH%C%MovementStatus" Text="Kanal %C% Bewegt" FunctionText="Bewegungsstatus" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-11" Number="%K5%" />
 
-              <!-- K6: Slat position feedback (read) - visible only for blind/shutter -->
-              <ComObject Id="%AID%_O-%TT%%CC%006" Name="CH%C%SlatFeedback" Text="Kanal %C% Lamelle Rückmeldung" FunctionText="Lamellenposition Rückmeldung" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K6%" />
+              <!-- K6: On/Off status (read) - Licht/Schalter -->
+              <ComObject Id="%AID%_O-%TT%%CC%006" Name="CH%C%OnOffStatus" Text="Kanal %C% Status" FunctionText="Status" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K6%" />
 
-              <!-- === P1: New Per-channel Communication Objects === -->
+              <!-- K7: Lock/status feedback (read) - Schloss -->
+              <ComObject Id="%AID%_O-%TT%%CC%007" Name="CH%C%LockStatus" Text="Kanal %C% Status" FunctionText="Status" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-11" Number="%K7%" />
 
-              <!-- K7: Favorite position trigger (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%007" Name="CH%C%Favorite" Text="Kanal %C% Favorit-Position" FunctionText="Favorit-Position" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K7%" />
+              <!-- K8: Slat position command (write) - visible only for blind/shutter -->
+              <ComObject Id="%AID%_O-%TT%%CC%008" Name="CH%C%Slat" Text="Kanal %C% Lamellenposition" FunctionText="Lamellenposition setzen" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K8%" />
 
-              <!-- K8: Ventilation position trigger (write) - visible only for Fenster -->
-              <ComObject Id="%AID%_O-%TT%%CC%008" Name="CH%C%Ventilation" Text="Kanal %C% Lüftungsposition" FunctionText="Lüftungsposition" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K8%" />
+              <!-- K9: Slat position feedback (read) - visible only for blind/shutter -->
+              <ComObject Id="%AID%_O-%TT%%CC%009" Name="CH%C%SlatFeedback" Text="Kanal %C% Lamelle Rückmeldung" FunctionText="Lamellenposition Rückmeldung" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K9%" />
 
-              <!-- K10: Battery level (read) -->
-              <ComObject Id="%AID%_O-%TT%%CC%010" Name="CH%C%Battery" Text="Kanal %C% Batterielevel" FunctionText="Batterielevel" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K10%" />
+              <!-- K10: Favorite position trigger (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%010" Name="CH%C%Favorite" Text="Kanal %C% Favorit-Position" FunctionText="Favorit-Position" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-17" Number="%K10%" />
 
-              <!-- K11: Signal strength / RSSI (read) -->
-              <ComObject Id="%AID%_O-%TT%%CC%011" Name="CH%C%Rssi" Text="Kanal %C% Signalstärke" FunctionText="Signalstärke" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K11%" />
+              <!-- K11: Ventilation position trigger (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%011" Name="CH%C%Ventilation" Text="Kanal %C% Lüftungsposition" FunctionText="Lüftungsposition" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-17" Number="%K11%" />
 
-              <!-- === P2: New Per-channel Communication Objects === -->
+              <!-- K12: Battery level (read) -->
+              <ComObject Id="%AID%_O-%TT%%CC%012" Name="CH%C%Battery" Text="Kanal %C% Batterielevel" FunctionText="Batterielevel" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K12%" />
 
-              <!-- K12: Lock / Unlock (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%012" Name="CH%C%Lock" Text="Kanal %C% Sperren" FunctionText="Kanal sperren" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K12%" />
+              <!-- K13: Signal strength / RSSI (read) -->
+              <ComObject Id="%AID%_O-%TT%%CC%013" Name="CH%C%Rssi" Text="Kanal %C% Signalstärke" FunctionText="Signalstärke" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K13%" />
 
-              <!-- K13: Error status (read) -->
-              <ComObject Id="%AID%_O-%TT%%CC%013" Name="CH%C%ErrorStatus" Text="Kanal %C% Fehlerstatus" FunctionText="Fehlerstatus" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-10" Number="%K13%" />
 
-              <!-- === P3: New Per-channel Communication Objects === -->
+              <!-- K14: Lock / unlock channel (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%014" Name="CH%C%Lock" Text="Kanal %C% Sperren" FunctionText="Kanal sperren" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-3" Number="%K14%" />
 
-              <!-- K14: Scene number (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%014" Name="CH%C%Scene" Text="Kanal %C% Szene" FunctionText="Szene" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-17-1" Number="%K14%" />
+              <!-- K15: Error status (read), proprietary 1-byte code -->
+              <ComObject Id="%AID%_O-%TT%%CC%015" Name="CH%C%ErrorStatus" Text="Kanal %C% Fehlerstatus" FunctionText="Fehlerstatus" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" Number="%K15%" />
 
-              <!-- K15: Scene control — store/recall (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%015" Name="CH%C%SceneControl" Text="Kanal %C% Szenensteuerung" FunctionText="Szenensteuerung" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-18-1" Number="%K15%" />
+              <!-- K16: Scene number (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%016" Name="CH%C%Scene" Text="Kanal %C% Szene" FunctionText="Szene" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-17-1" Number="%K16%" />
 
-              <!-- K16: Wind/Rain alarm (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%016" Name="CH%C%WindAlarm" Text="Kanal %C% Wind-/Regenalarm" FunctionText="Wind-/Regenalarm" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-5" Number="%K16%" />
+              <!-- K17: Scene control — store/recall (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%017" Name="CH%C%SceneControl" Text="Kanal %C% Szenensteuerung" FunctionText="Szenensteuerung" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-18-1" Number="%K17%" />
 
-              <!-- K17: Step-Stop / Long operation (write) - visible only for Jalousie -->
-              <ComObject Id="%AID%_O-%TT%%CC%017" Name="CH%C%StepStop" Text="Kanal %C% Langzeitbetrieb" FunctionText="Langzeitbetrieb" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-8" Number="%K17%" />
+              <!-- K18: Wind/Rain alarm (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%018" Name="CH%C%WindAlarm" Text="Kanal %C% Wind-/Regenalarm" FunctionText="Wind-/Regenalarm" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-5" Number="%K18%" />
 
-              <!-- === Cozy thermostat KOs (visible only for DeviceType=5) === -->
+              <!-- K19: Step-Stop / long operation (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%019" Name="CH%C%StepStop" Text="Kanal %C% Langzeitbetrieb" FunctionText="Langzeitbetrieb" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-8" Number="%K19%" />
 
-              <!-- K18: Temperature setpoint (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%018" Name="CH%C%CozyTemp" Text="Kanal %C% Temperatur Sollwert" FunctionText="Temperatur Sollwert" ObjectSize="2 Bytes" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-1" Number="%K18%" />
 
-              <!-- K19: Temperature feedback (read) -->
-              <ComObject Id="%AID%_O-%TT%%CC%019" Name="CH%C%CozyTempFeedback" Text="Kanal %C% Temperatur Rückmeldung" FunctionText="Temperatur Rückmeldung" ObjectSize="2 Bytes" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-1" Number="%K19%" />
+              <!-- K20: Temperature setpoint (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%020" Name="CH%C%CozyTemp" Text="Kanal %C% Temperatur Sollwert" FunctionText="Temperatur Sollwert" ObjectSize="2 Bytes" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-1" Number="%K20%" />
 
-              <!-- K20: Operating mode (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%020" Name="CH%C%CozyMode" Text="Kanal %C% Betriebsmodus" FunctionText="Betriebsmodus" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-20-102" Number="%K20%" />
+              <!-- K21: Temperature feedback (read) -->
+              <ComObject Id="%AID%_O-%TT%%CC%021" Name="CH%C%CozyTempFeedback" Text="Kanal %C% Temperatur Rückmeldung" FunctionText="Temperatur Rückmeldung" ObjectSize="2 Bytes" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-1" Number="%K21%" />
 
-              <!-- K21: Presence (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%021" Name="CH%C%CozyPresence" Text="Kanal %C% Anwesenheit" FunctionText="Anwesenheit" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-18" Number="%K21%" />
+              <!-- K22: Operating mode (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%022" Name="CH%C%CozyMode" Text="Kanal %C% Betriebsmodus" FunctionText="Betriebsmodus" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-20-102" Number="%K22%" />
 
-              <!-- K22: Window contact (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%022" Name="CH%C%CozyWindow" Text="Kanal %C% Fensterkontakt" FunctionText="Fensterkontakt" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-19" Number="%K22%" />
+              <!-- K23: Presence (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%023" Name="CH%C%CozyPresence" Text="Kanal %C% Anwesenheit" FunctionText="Anwesenheit" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-18" Number="%K23%" />
 
-              <!-- K24: Reserved dummy objects; keep the channel KO range at Kn+0..Kn+24 after removing device-info KOs from ETS visibility. Do not reference in ComObjectRefs. -->
-              <ComObject Id="%AID%_O-%TT%%CC%024" Name="CH%C%Reserved24" Text="Kanal %C% reserviert" FunctionText="Reserviert" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Disabled" CommunicationFlag="Disabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K24%" />
+              <!-- K24: Window contact (write) -->
+              <ComObject Id="%AID%_O-%TT%%CC%024" Name="CH%C%CozyWindow" Text="Kanal %C% Fensterkontakt" FunctionText="Fensterkontakt" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-19" Number="%K24%" />
 
             </ComObjectTable>
 
             <ComObjectRefs>
-              <!-- Existing KOs -->
+              <!-- Per-channel KO refs. Device-type visibility is handled in Dynamic. -->
               <ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" RefId="%AID%_O-%TT%%CC%000" FunctionText="Position setzen" Text="Kanal %C% Position" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" RefId="%AID%_O-%TT%%CC%001" FunctionText="Position Rückmeldung" Text="Kanal %C% Position Rückmeldung" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" RefId="%AID%_O-%TT%%CC%002" FunctionText="Auf/Ab Befehl" Text="Kanal %C% Auf/Ab" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" RefId="%AID%_O-%TT%%CC%003" FunctionText="Stopp Befehl" Text="Kanal %C% Stopp" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" RefId="%AID%_O-%TT%%CC%004" FunctionText="Bewegungsstatus" Text="Kanal %C% Bewegt" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" RefId="%AID%_O-%TT%%CC%005" FunctionText="Lamellenposition setzen" Text="Kanal %C% Lamellenposition" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" RefId="%AID%_O-%TT%%CC%006" FunctionText="Lamellenposition Rückmeldung" Text="Kanal %C% Lamelle Rückmeldung" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-
-              <!-- P1 KOs -->
-              <ComObjectRef Id="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" RefId="%AID%_O-%TT%%CC%007" FunctionText="Favorit-Position" Text="Kanal %C% Favorit-Position" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" RefId="%AID%_O-%TT%%CC%008" FunctionText="Lüftungsposition" Text="Kanal %C% Lüftungsposition" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" RefId="%AID%_O-%TT%%CC%010" FunctionText="Batterielevel" Text="Kanal %C% Batterielevel" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" RefId="%AID%_O-%TT%%CC%011" FunctionText="Signalstärke" Text="Kanal %C% Signalstärke" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-
-              <!-- P2 KOs -->
-              <ComObjectRef Id="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" RefId="%AID%_O-%TT%%CC%012" FunctionText="Kanal sperren" Text="Kanal %C% Sperren" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%013_R-%TT%%CC%01301" RefId="%AID%_O-%TT%%CC%013" FunctionText="Fehlerstatus" Text="Kanal %C% Fehlerstatus" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-
-              <!-- P3 KOs -->
-              <ComObjectRef Id="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" RefId="%AID%_O-%TT%%CC%014" FunctionText="Szene" Text="Kanal %C% Szene" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" RefId="%AID%_O-%TT%%CC%015" FunctionText="Szenensteuerung" Text="Kanal %C% Szenensteuerung" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" RefId="%AID%_O-%TT%%CC%016" FunctionText="Wind-/Regenalarm" Text="Kanal %C% Wind-/Regenalarm" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%017_R-%TT%%CC%01701" RefId="%AID%_O-%TT%%CC%017" FunctionText="Langzeitbetrieb" Text="Kanal %C% Langzeitbetrieb" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-
-              <!-- Cozy KO Refs -->
-              <ComObjectRef Id="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" RefId="%AID%_O-%TT%%CC%018" FunctionText="Temperatur Sollwert" Text="Kanal %C% Temperatur Sollwert" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" RefId="%AID%_O-%TT%%CC%019" FunctionText="Temperatur Rückmeldung" Text="Kanal %C% Temperatur Rückmeldung" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_O-%TT%%CC%020" FunctionText="Betriebsmodus" Text="Kanal %C% Betriebsmodus" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%021_R-%TT%%CC%02101" RefId="%AID%_O-%TT%%CC%021" FunctionText="Anwesenheit" Text="Kanal %C% Anwesenheit" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" RefId="%AID%_O-%TT%%CC%022" FunctionText="Fensterkontakt" Text="Kanal %C% Fensterkontakt" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-
-              <!-- Alternative KO Refs for On/Off device types (Licht, Schalter, Schloss) -->
-              <ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00202" RefId="%AID%_O-%TT%%CC%002" FunctionText="Ein/Aus Befehl" Text="Kanal %C% Ein/Aus" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00402" RefId="%AID%_O-%TT%%CC%004" FunctionText="Status" Text="Kanal %C% Status" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" RefId="%AID%_O-%TT%%CC%003" FunctionText="Ein/Aus Befehl" Text="Kanal %C% Ein/Aus" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" RefId="%AID%_O-%TT%%CC%004" FunctionText="Stopp Befehl" Text="Kanal %C% Stopp" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" RefId="%AID%_O-%TT%%CC%005" FunctionText="Bewegungsstatus" Text="Kanal %C% Bewegt" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" RefId="%AID%_O-%TT%%CC%006" FunctionText="Status" Text="Kanal %C% Status" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" RefId="%AID%_O-%TT%%CC%007" FunctionText="Status" Text="Kanal %C% Status" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" RefId="%AID%_O-%TT%%CC%008" FunctionText="Lamellenposition setzen" Text="Kanal %C% Lamellenposition" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" RefId="%AID%_O-%TT%%CC%009" FunctionText="Lamellenposition Rückmeldung" Text="Kanal %C% Lamelle Rückmeldung" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" RefId="%AID%_O-%TT%%CC%010" FunctionText="Favorit-Position" Text="Kanal %C% Favorit-Position" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" RefId="%AID%_O-%TT%%CC%011" FunctionText="Lüftungsposition" Text="Kanal %C% Lüftungsposition" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" RefId="%AID%_O-%TT%%CC%012" FunctionText="Batterielevel" Text="Kanal %C% Batterielevel" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%013_R-%TT%%CC%01301" RefId="%AID%_O-%TT%%CC%013" FunctionText="Signalstärke" Text="Kanal %C% Signalstärke" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" RefId="%AID%_O-%TT%%CC%014" FunctionText="Kanal sperren" Text="Kanal %C% Sperren" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" RefId="%AID%_O-%TT%%CC%015" FunctionText="Fehlerstatus" Text="Kanal %C% Fehlerstatus" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" RefId="%AID%_O-%TT%%CC%016" FunctionText="Szene" Text="Kanal %C% Szene" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%017_R-%TT%%CC%01701" RefId="%AID%_O-%TT%%CC%017" FunctionText="Szenensteuerung" Text="Kanal %C% Szenensteuerung" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" RefId="%AID%_O-%TT%%CC%018" FunctionText="Wind-/Regenalarm" Text="Kanal %C% Wind-/Regenalarm" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" RefId="%AID%_O-%TT%%CC%019" FunctionText="Langzeitbetrieb" Text="Kanal %C% Langzeitbetrieb" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_O-%TT%%CC%020" FunctionText="Temperatur Sollwert" Text="Kanal %C% Temperatur Sollwert" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%021_R-%TT%%CC%02101" RefId="%AID%_O-%TT%%CC%021" FunctionText="Temperatur Rückmeldung" Text="Kanal %C% Temperatur Rückmeldung" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" RefId="%AID%_O-%TT%%CC%022" FunctionText="Betriebsmodus" Text="Kanal %C% Betriebsmodus" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%023_R-%TT%%CC%02301" RefId="%AID%_O-%TT%%CC%023" FunctionText="Anwesenheit" Text="Kanal %C% Anwesenheit" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%024_R-%TT%%CC%02401" RefId="%AID%_O-%TT%%CC%024" FunctionText="Fensterkontakt" Text="Kanal %C% Fensterkontakt" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
             </ComObjectRefs>
           </Static>
 
@@ -211,6 +207,24 @@
                         <choose ParamRefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901">
                           <when test="1">
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%011_R-%TT%%CC%01101" IndentLevel="1" HelpContext="IOHC-Kanal" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%016_R-%TT%%CC%01601" IndentLevel="1" HelpContext="IOHC-1W-Broadcast-Typ" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801" IndentLevel="1" HelpContext="IOHC-1W-Profil" />
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801">
+                              <when test="0">
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%017_R-%TT%%CC%01701" IndentLevel="1" HelpContext="IOHC-1W-Hersteller" />
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Ein neues Controllerprofil erfordert danach ein erneutes 1W-Pairing. Die Aktion ist nur möglich, solange kein Kanal dieses Profil gepaart verwendet." UIHint="Information" />
+                                <ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
+                                  <Rows>
+                                    <Row Id="%AID%_PB-nnn_R-1" />
+                                  </Rows>
+                                  <Columns>
+                                    <Column Id="%AID%_PB-nnn_C-1" Width="2%" />
+                                    <Column Id="%AID%_PB-nnn_C-2" Width="98%" />
+                                  </Columns>
+                                  <Button Id="%AID%_B-%TT%%CC%004" Text="Neues eigenes 1W-Controllerprofil erzeugen" Cell="1,2" EventHandler="IOHC_generateOneWayProfile" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                                </ParameterBlock>
+                              </when>
+                            </choose>
                           </when>
                         </choose>
 
@@ -233,64 +247,49 @@
                           </when>
                         </choose>
 
-                        <!-- === Position KOs: visible for types 0-4, 7, 9-11 (not 5=Thermostat, 6=Licht, 8=Schloss, 12=Schalter) === -->
+                        <!-- === Device-type-specific KOs === -->
                         <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
-                          <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
-                          <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%017_R-%TT%%CC%01701" /></when>
-                          <when test="2"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /></when>
-                          <when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
-                          <when test="4"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
-                          <when test="5"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%021_R-%TT%%CC%02101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" /></when>
-                          <when test="6"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00202" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00402" /></when>
-                          <when test="7"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
-                          <when test="8"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00402" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
-                          <when test="9"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
-                          <when test="10"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
-                          <when test="11"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /></when>
-                          <when test="12"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00202" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00402" /></when>
+                          <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
+                          <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" /></when>
+                          <when test="2"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" /></when>
+                          <when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
+                          <when test="4"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
+                          <when test="5"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%021_R-%TT%%CC%02101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%023_R-%TT%%CC%02301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%024_R-%TT%%CC%02401" /></when>
+                          <when test="6"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
+                          <when test="7"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
+                          <when test="8"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
+                          <when test="9"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
+                          <when test="10"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
+                          <when test="11"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" /></when>
+                          <when test="12"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
                         </choose>
 
-                        <!-- === Always-visible KOs (pairing, battery, RSSI, lock, error) === -->
-                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" />
-                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" />
-                        <!-- Lock KO: always visible except for Schloss where it's in the type-specific block -->
-                        <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
-                          <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
-                          <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
-                          <when test="2"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
-                          <when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
-                          <when test="4"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
-                          <when test="5"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
-                          <when test="6"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
-                          <when test="7"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
-                          <when test="9"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
-                          <when test="10"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
-                          <when test="11"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
-                          <when test="12"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" /></when>
-                        </choose>
+                        <!-- === Always-visible channel diagnostics/control KOs === -->
+                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" />
                         <ComObjectRefRef RefId="%AID%_O-%TT%%CC%013_R-%TT%%CC%01301" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" />
+                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" />
 
-                        <!-- === Scene + Wind/Rain KOs: visible for position-capable types (not 5, 6, 8, 12) === -->
+                        <!-- === Wind/Rain KO: visible for position-capable types === -->
                         <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
-                          <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
-                          <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
-                          <when test="2"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
-                          <when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
-                          <when test="4"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
-                          <when test="7"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
-                          <when test="9"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
-                          <when test="10"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
-                          <when test="11"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" /></when>
+                          <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
+                          <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
+                          <when test="2"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
+                          <when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
+                          <when test="4"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
+                          <when test="7"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
+                          <when test="9"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
+                          <when test="10"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
+                          <when test="11"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
                         </choose>
 
                         <!-- Scene KOs: visible when SceneCount >= 1, independent of device type and scene number. -->
                         <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
-                          <when test=">=1">
-                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" />
-                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" />
+                          <when test="&gt;=1">
+                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" />
+                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%017_R-%TT%%CC%01701" />
                           </when>
                         </choose>
-
                         <!-- === P0: Pairing Section === -->
                         <ParameterSeparator Id="%AID%_PS-nnn" Text="Pairing" UIHint="Headline" />
                         <ParameterSeparator Id="%AID%_PS-nnn" Text="Hinweis: Diese Schaltflächen funktionieren nur bei aktiver ETS-Onlineverbindung zum Gerät. Sie starten oder entfernen das Pairing direkt im Gerät." UIHint="Information" />

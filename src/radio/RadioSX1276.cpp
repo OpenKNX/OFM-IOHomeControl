@@ -32,6 +32,10 @@ static constexpr uint8_t kMaxSx1276PayloadLen = IOHC_FRAME_MAX_SIZE + IOHC_CRC_S
 #define RF_OPMODE_FSRX 0x04
 #define RF_OPMODE_RX 0x05
 
+// SX1276 RegOpMode flags
+#define RF_OPMODE_LONGRANGEMODE_LORA 0x80
+#define RF_OPMODE_LOWFREQUENCYMODE_ON 0x08
+
 // SPI read/write masks
 #define SPI_WRITE_MASK 0x80
 #define SPI_READ_MASK 0x7F
@@ -123,9 +127,14 @@ RadioError RadioSX1276::configure()
     // Enter standby mode for configuration
     setMode(RF_OPMODE_STANDBY);
 
-    // Set FSK mode (not LoRa): RegOpMode bit 7 = 0
+    // Set FSK mode (not LoRa) and force HF band.
+    // Bit 7 = LoRa mode, bit 3 = LowFrequencyModeOn.
+    // io-homecontrol runs at 868/869 MHz, so LowFrequencyModeOn must be 0.
+    // Keeping bit 3 set made RegOpMode read back as 0x09 (standby + LF),
+    // which can prevent the chip from actually entering TX at 868 MHz.
     uint8_t lOpMode = readRegister(REG_OPMODE);
-    lOpMode &= 0x7F; // Clear LoRa bit
+    lOpMode &= ~RF_OPMODE_LONGRANGEMODE_LORA;
+    lOpMode &= ~RF_OPMODE_LOWFREQUENCYMODE_ON;
     writeRegister(REG_OPMODE, lOpMode);
 
     // Disable clock output (save power)
@@ -282,6 +291,12 @@ RadioError RadioSX1276::startTransmit(const uint8_t *iData, uint8_t iLen)
     // Enter standby to load FIFO
     setMode(RF_OPMODE_STANDBY);
 
+    // Keep packet mode configured for the maximum variable-length frame size.
+    // In io-homecontrol mode (IoHomeOn=1) the SX1276 handles the length byte
+    // internally. Leaving PayloadLength at 0xFF avoids blocking larger 1W frames
+    // such as SendKey1W (35 bytes).
+    writeRegister(REG_PAYLOADLENGTH, 0xFF);
+
     // Write data to FIFO (with IoHomeOn=1, radio handles length byte internally)
     writeFifo(iData, iLen);
 
@@ -301,6 +316,9 @@ RadioError RadioSX1276::startReceive()
 {
     if (!mInitialized)
         return RadioError::NotInitialized;
+
+    // Restore the variable-length RX ceiling after TX-specific payload lengths.
+    writeRegister(REG_PAYLOADLENGTH, 0xFF);
 
     mDio0Fired = false; // clear stale interrupt before RX
     setMode(RF_OPMODE_RX);
@@ -635,7 +653,14 @@ void RadioSX1276::setMode(uint8_t iMode)
 {
     uint8_t lOpMode = readRegister(REG_OPMODE);
     mLastOpStatusBefore = lOpMode;
+
+    // Keep modulation/settings bits, but always force HF FSK for io-homecontrol.
+    // The previous implementation preserved bit 3 (LowFrequencyModeOn). With that
+    // bit set, a TX request could read back as 0x09 (standby + LF) instead of TX.
+    lOpMode &= ~RF_OPMODE_LONGRANGEMODE_LORA;
+    lOpMode &= ~RF_OPMODE_LOWFREQUENCYMODE_ON;
     lOpMode = (lOpMode & 0xF8) | (iMode & 0x07);
+
     writeRegister(REG_OPMODE, lOpMode);
     mLastOpStatusAfter = readRegister(REG_OPMODE);
 }
@@ -659,8 +684,13 @@ void RadioSX1276::calibrate()
         delay(1);
 #endif
 
-    // 4. Set frequency to 868 MHz (HF band) and calibrate again
+    // 4. Set frequency to 868 MHz (HF band) and calibrate again.
+    // Force LowFrequencyModeOn=0 before the HF image calibration.
     setFrequency(868000000UL);
+    uint8_t lOpMode = readRegister(REG_OPMODE);
+    lOpMode &= ~RF_OPMODE_LOWFREQUENCYMODE_ON;
+    lOpMode &= ~RF_OPMODE_LONGRANGEMODE_LORA;
+    writeRegister(REG_OPMODE, lOpMode);
     lReg = readRegister(REG_IMAGECAL);
     writeRegister(REG_IMAGECAL, lReg | 0x40); // Start ImageCal for HF
 #ifdef ESP32

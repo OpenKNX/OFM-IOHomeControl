@@ -129,6 +129,60 @@ namespace
         return true;
     }
 
+    bool parseHexBytesDynamic(const std::string &iText, uint8_t *oBytes, size_t iMaxBytes, uint8_t &oLen)
+    {
+        oLen = 0;
+        if (oBytes == nullptr || iMaxBytes == 0)
+            return false;
+
+        size_t lPos = 0;
+        while (lPos < iText.length() && isSpace(iText[lPos]))
+            lPos++;
+
+        if (lPos + 2 < iText.length() && iText[lPos] == '0' && (iText[lPos + 1] == 'x' || iText[lPos + 1] == 'X'))
+            lPos += 2;
+
+        uint8_t lByte = 0;
+        bool lGotNibble = false;
+        bool lAny = false;
+        while (lPos < iText.length())
+        {
+            const char lChar = iText[lPos];
+            if (isSpace(lChar))
+            {
+                lPos++;
+                continue;
+            }
+
+            uint8_t lNibble = 0;
+            if (lChar >= '0' && lChar <= '9')
+                lNibble = static_cast<uint8_t>(lChar - '0');
+            else if (lChar >= 'a' && lChar <= 'f')
+                lNibble = static_cast<uint8_t>(lChar - 'a' + 10);
+            else if (lChar >= 'A' && lChar <= 'F')
+                lNibble = static_cast<uint8_t>(lChar - 'A' + 10);
+            else
+                return false;
+
+            lAny = true;
+            if (!lGotNibble)
+            {
+                lByte = lNibble;
+                lGotNibble = true;
+            }
+            else
+            {
+                if (oLen >= iMaxBytes)
+                    return false;
+                oBytes[oLen++] = static_cast<uint8_t>((lByte << 4) | lNibble);
+                lGotNibble = false;
+            }
+            lPos++;
+        }
+
+        return lAny && !lGotNibble && oLen > 0;
+    }
+
     bool parseHex24(const std::string &iText, uint32_t &oValue)
     {
         size_t lPos = 0;
@@ -171,6 +225,135 @@ namespace
 
         oValue = lValue & 0x00FFFFFF;
         return true;
+    }
+
+    std::string trimSpaces(const std::string &iText)
+    {
+        size_t lStart = 0;
+        while (lStart < iText.length() && isSpace(iText[lStart]))
+            lStart++;
+
+        size_t lEnd = iText.length();
+        while (lEnd > lStart && isSpace(iText[lEnd - 1]))
+            lEnd--;
+
+        return iText.substr(lStart, lEnd - lStart);
+    }
+
+    bool takeToken(std::string &ioText, std::string &oToken)
+    {
+        ioText = trimSpaces(ioText);
+        if (ioText.empty())
+            return false;
+        const size_t lEnd = ioText.find_first_of(" \t");
+        if (lEnd == std::string::npos)
+        {
+            oToken = ioText;
+            ioText.clear();
+        }
+        else
+        {
+            oToken = ioText.substr(0, lEnd);
+            ioText = trimSpaces(ioText.substr(lEnd + 1));
+        }
+        return true;
+    }
+
+    bool parseHexByteToken(const std::string &iText, uint8_t &oValue)
+    {
+        uint8_t lByte = 0;
+        if (!parseHexBytes(trimSpaces(iText), &lByte, 1))
+            return false;
+        oValue = lByte;
+        return true;
+    }
+
+    bool isHexDigit(char iChar)
+    {
+        return (iChar >= '0' && iChar <= '9') ||
+               (iChar >= 'a' && iChar <= 'f') ||
+               (iChar >= 'A' && iChar <= 'F');
+    }
+
+    uint8_t hexDigitValue(char iChar)
+    {
+        if (iChar >= '0' && iChar <= '9')
+            return static_cast<uint8_t>(iChar - '0');
+        if (iChar >= 'a' && iChar <= 'f')
+            return static_cast<uint8_t>(iChar - 'a' + 10);
+        if (iChar >= 'A' && iChar <= 'F')
+            return static_cast<uint8_t>(iChar - 'A' + 10);
+        return 0;
+    }
+
+    bool parseHexPayload(const std::string &iText, uint8_t *oPayload, uint8_t iMaxLen, uint8_t &oLen)
+    {
+        oLen = 0;
+        bool lHaveHighNibble = false;
+        uint8_t lHighNibble = 0;
+
+        for (size_t i = 0; i < iText.length(); i++)
+        {
+            char lChar = iText[i];
+            if (isSpace(lChar) || lChar == ':' || lChar == '-' || lChar == ',')
+                continue;
+            if (lChar == '0' && (i + 1) < iText.length() &&
+                (iText[i + 1] == 'x' || iText[i + 1] == 'X'))
+            {
+                i++; // tolerate 0xAA-style input
+                continue;
+            }
+            if (!isHexDigit(lChar))
+                return false;
+
+            const uint8_t lNibble = hexDigitValue(lChar);
+            if (!lHaveHighNibble)
+            {
+                lHighNibble = lNibble;
+                lHaveHighNibble = true;
+            }
+            else
+            {
+                if (oLen >= iMaxLen)
+                    return false;
+                oPayload[oLen++] = static_cast<uint8_t>((lHighNibble << 4) | lNibble);
+                lHaveHighNibble = false;
+            }
+        }
+
+        return !lHaveHighNibble && oLen > 0;
+    }
+
+    bool parseOneWayQrController(const std::string &iQrText, uint32_t &oRemoteNodeId, uint8_t oKey[16])
+    {
+        uint8_t lPayload[32] = {};
+        uint8_t lLen = 0;
+        if (!parseHexPayload(iQrText, lPayload, sizeof(lPayload), lLen))
+            return false;
+
+        // Velocet docs: Somfy Situo QR payload starts with one type byte,
+        // then 3 controller-address bytes, then the 16-byte 1W product key.
+        // Example: 45 2A1F83 2ADDFC13C9976011B1C109FBF3952FA1 ...
+        // The channel address used on air is the address bytes reversed
+        // for channel 1: 2A1F83 -> 831F2A.
+        if (lLen < 20)
+            return false;
+
+        oRemoteNodeId = ((uint32_t)lPayload[3] << 16) |
+                        ((uint32_t)lPayload[2] << 8) |
+                        (uint32_t)lPayload[1];
+        memcpy(oKey, lPayload + 4, 16);
+        return true;
+    }
+
+    void buildRadioTxLenPayload(uint8_t *oPayload, uint8_t iLen, uint8_t iFirstByte)
+    {
+        if (iLen == 0)
+            return;
+
+        oPayload[0] = iFirstByte;
+        for (uint8_t i = 1; i < iLen; i++)
+            oPayload[i] = static_cast<uint8_t>(0x30 + ((i * 37U) & 0x3F));
     }
 
     uint8_t clampFlashRecordCount(uint8_t iStoredCount, uint8_t iConfiguredCount, uint16_t iSize, uint16_t iHeaderSize, uint16_t iRecordSize)
@@ -229,6 +412,13 @@ IoHomecontrolChannel *IoHomecontrol::getChannel(uint8_t iIndex)
 
 void IoHomecontrol::deriveOwnNodeId()
 {
+    // The global node ID belongs to the 2W system identity.
+    if (mController.getOwnNodeId() != 0)
+    {
+        logDebugP("Own node ID restored: %06X", mController.getOwnNodeId());
+        return;
+    }
+
     // Derive a 3-byte (24-bit) io-homecontrol node ID from the ESP32 MAC address.
     // Use the last 3 bytes of the base MAC, OR'd with 0x800000 to mark as locally administered.
     uint32_t lNodeId = 0x800001; // fallback
@@ -279,6 +469,156 @@ void IoHomecontrol::initSystemKey()
         mController.setSystemKey(lKey);
         logDebugP("Generated new system key");
         openknx.flash.save(); // persist immediately
+    }
+}
+
+bool IoHomecontrol::generateOneWayControllerProfile(IoHomecontrolChannel *iChannel)
+{
+    if (!iChannel)
+        return false;
+
+    uint32_t lNodeId = 0;
+    for (uint8_t attempt = 0; attempt < 32; attempt++)
+    {
+#ifdef ESP32
+        lNodeId = (esp_random() & 0x007FFFFF) | 0x00800000;
+#else
+        lNodeId = (static_cast<uint32_t>(rand()) & 0x007FFFFF) | 0x00800000;
+#endif
+        bool lUnique = lNodeId != mController.getOwnNodeId();
+        for (uint8_t i = 0; lUnique && i < mNumChannels; i++)
+        {
+            if (mChannels[i] &&
+                (mChannels[i]->getNodeId() == lNodeId ||
+                 mChannels[i]->getOneWayControllerNodeId() == lNodeId))
+                lUnique = false;
+        }
+        if (lUnique)
+            break;
+        lNodeId = 0;
+    }
+    if (lNodeId == 0)
+        return false;
+
+    uint8_t lKey[16];
+#ifdef ESP32
+    for (uint8_t i = 0; i < sizeof(lKey); i += 4)
+    {
+        const uint32_t lRandom = esp_random();
+        lKey[i] = (lRandom >> 0) & 0xFF;
+        lKey[i + 1] = (lRandom >> 8) & 0xFF;
+        lKey[i + 2] = (lRandom >> 16) & 0xFF;
+        lKey[i + 3] = (lRandom >> 24) & 0xFF;
+    }
+#else
+    for (uint8_t &lByte : lKey)
+        lByte = rand() & 0xFF;
+#endif
+
+    iChannel->setOneWayControllerNodeId(lNodeId);
+    iChannel->setOneWayControllerKey(lKey);
+    // The stored value is the last sequence used. Starting at zero makes the
+    // first frame use sequence 1 when the controller increments before TX.
+    iChannel->setSequence1W(0);
+    if (iChannel->getOneWayControllerManufacturer() == 0)
+        iChannel->setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Somfy));
+    logInfoP("Generated 1W controller profile: remote=0x%06X", lNodeId);
+    return true;
+}
+
+void IoHomecontrol::consolidateOneWayProfileSequences()
+{
+    for (uint8_t i = 0; i < mNumChannels; i++)
+    {
+        IoHomecontrolChannel *lChannel = mChannels[i];
+        IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(lChannel);
+        if (!lChannel || !lProfile || !lChannel->hasOneWayControllerIdentity())
+            continue;
+        const bool lSameIdentity =
+            lChannel->getOneWayControllerNodeId() == lProfile->getOneWayControllerNodeId() &&
+            memcmp(lChannel->getOneWayControllerKey(), lProfile->getOneWayControllerKey(), 16) == 0;
+        if (lSameIdentity && lChannel->getSequence1W() > lProfile->getSequence1W())
+            lProfile->setSequence1W(lChannel->getSequence1W());
+    }
+}
+
+uint8_t IoHomecontrol::oneWayProfileIndex(IoHomecontrolChannel *iProfile) const
+{
+    if (!iProfile)
+        return 0xFF;
+    for (uint8_t i = 0; i < mNumChannels; i++)
+    {
+        if (mChannels[i] == iProfile)
+            return i;
+    }
+    return 0xFF;
+}
+
+bool IoHomecontrol::oneWayProfileUsedByPairedChannel(IoHomecontrolChannel *iProfile) const
+{
+    if (!iProfile)
+        return false;
+    for (uint8_t i = 0; i < mNumChannels; i++)
+    {
+        if (mChannels[i] && mChannels[i]->isPaired() &&
+            mController.oneWayProfileForChannel(mChannels[i]) == iProfile)
+            return true;
+    }
+    return false;
+}
+
+void IoHomecontrol::initOneWayControllerProfiles()
+{
+    bool lChanged = false;
+    for (uint8_t i = 0; i < mNumChannels; i++)
+    {
+        IoHomecontrolChannel *lChannel = mChannels[i];
+        if (!lChannel || !lChannel->is1W())
+            continue;
+
+        IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(lChannel);
+        if (!lProfile)
+            lProfile = lChannel;
+
+        if (!lProfile->hasOneWayControllerIdentity())
+        {
+            // Legacy versions used the global 2W identity for every 1W channel.
+            // Preserve an existing pairing before generating a new independent profile.
+            if (lChannel->isPaired() && mController.getOwnNodeId() != 0)
+            {
+                lProfile->setOneWayControllerNodeId(mController.getOwnNodeId());
+                lProfile->setOneWayControllerKey(mController.getSystemKey());
+                if (lProfile->getOneWayControllerManufacturer() == 0)
+                    lProfile->setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Somfy));
+                lChanged = true;
+            }
+            else
+            {
+                lChanged |= generateOneWayControllerProfile(lProfile);
+            }
+        }
+
+        lChannel->setEncryptionKey(lProfile->getOneWayControllerKey());
+    }
+
+    consolidateOneWayProfileSequences();
+    if (lChanged)
+        openknx.flash.save();
+}
+
+void IoHomecontrol::applyOneWayControllerConfiguration()
+{
+    for (uint8_t i = 0; i < mNumChannels; i++)
+    {
+        IoHomecontrolChannel *lChannel = mChannels[i];
+        if (!lChannel || !lChannel->is1W())
+            continue;
+        IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(lChannel);
+        if (!lProfile)
+            continue;
+        if (lProfile == lChannel && lChannel->getConfigured1WManufacturer() != 0)
+            lProfile->setOneWayControllerManufacturer(lChannel->getConfigured1WManufacturer());
+        lChannel->setEncryptionKey(lProfile->getOneWayControllerKey());
     }
 }
 
@@ -423,6 +763,8 @@ void IoHomecontrol::setup()
 
     // Initialize system key (may generate if first boot)
     initSystemKey();
+    initOneWayControllerProfiles();
+    applyOneWayControllerConfiguration();
 
     // Report module status OK
     KoIOHC_IOHC_Modulstatus.value(true, DPT_Switch);
@@ -1259,7 +1601,19 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
             resultData[3] = lNodeId & 0xFF;
             resultData[4] = static_cast<uint8_t>(mController.state());
             resultData[5] = static_cast<uint8_t>(mController.lastPairStartStatus());
-            resultLength = 6;
+            IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(mChannels[lChannel]);
+            const uint8_t lProfileIndex = oneWayProfileIndex(lProfile);
+            const uint32_t lProfileNodeId = lProfile ? lProfile->getOneWayControllerNodeId() : 0;
+            const uint16_t lSequence = lProfile ? lProfile->getSequence1W() : 0;
+            resultData[6] = lProfileIndex == 0xFF ? 0 : static_cast<uint8_t>(lProfileIndex + 1);
+            resultData[7] = (lProfileNodeId >> 16) & 0xFF;
+            resultData[8] = (lProfileNodeId >> 8) & 0xFF;
+            resultData[9] = lProfileNodeId & 0xFF;
+            resultData[10] = lProfile ? lProfile->getOneWayControllerManufacturer() : 0;
+            resultData[11] = (lSequence >> 8) & 0xFF;
+            resultData[12] = lSequence & 0xFF;
+            resultData[13] = mChannels[lChannel]->getConfigured1WBroadcastType();
+            resultLength = 14;
             return true;
         }
         break;
@@ -1278,6 +1632,34 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
             resultLength = 1;
             openknx.flash.save();
             logInfoP("ETS: channel %d unpaired", lChannel + 1);
+            return true;
+        }
+        break;
+    }
+    case 0x15: // Generate a new own 1W controller profile
+    {
+        if (length < 2)
+            break;
+        const uint8_t lChannel = data[1];
+        if (lChannel < mNumChannels)
+        {
+            IoHomecontrolChannel *lCh = mChannels[lChannel];
+            resultData[0] = 0x02;
+            if (lCh && lCh->is1W())
+            {
+                if (lCh->getConfigured1WProfileChannel() != 0xFF)
+                    resultData[0] = 0x04;
+                else if (oneWayProfileUsedByPairedChannel(lCh))
+                    resultData[0] = 0x03;
+                else if (generateOneWayControllerProfile(lCh))
+                {
+                    lCh->setEncryptionKey(lCh->getOneWayControllerKey());
+                    openknx.flash.save();
+                    resultData[0] = 0x00;
+                    logInfoP("ETS: generated new 1W controller profile for channel %d", lChannel + 1);
+                }
+            }
+            resultLength = 1;
             return true;
         }
         break;
@@ -1307,22 +1689,32 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
 }
 
 // --- Flash persistence ---
-// Layout v6: version(1) + systemKey(16) + numChannels(1) + per-channel: index(1) + flags(1) + nodeId(3) + key(16) + seq1W(2) + reserved(1) = 24 bytes + remoteMap
+// Layout v9: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
+// default 1W broadcastType(1) + numChannels(1) +
+// per-channel: index(1) + flags(1) + actuatorNodeId(3) + actuatorKey(16) +
+// 1W seq(2) + 1W controllerNodeId(3) + 1W controllerKey(16) +
+// 1W manufacturer(1) = 43 bytes + remoteMap
 // flags: bit0=paired, bit1=is1W
 
 uint16_t IoHomecontrol::flashSize()
 {
-    return 1 + 16 + 1 + (IOHC_ChannelCount * 24) + mRemoteMap.flashSize();
+    return 1 + 16 + 3 + 1 + 1 + (IOHC_ChannelCount * 43) + mRemoteMap.flashSize();
 }
 
 void IoHomecontrol::writeFlash()
 {
-    openknx.flash.writeByte(6); // format version 6 (added 1W sequence + mode)
+    openknx.flash.writeByte(9); // format version 9 (one complete 1W controller profile per channel)
 
     // Write system key
     const uint8_t *lSysKey = mController.getSystemKey();
     for (uint8_t k = 0; k < 16; k++)
         openknx.flash.writeByte(lSysKey[k]);
+
+    const uint32_t lOwnNodeId = mController.getOwnNodeId();
+    openknx.flash.writeByte((lOwnNodeId >> 16) & 0xFF);
+    openknx.flash.writeByte((lOwnNodeId >> 8) & 0xFF);
+    openknx.flash.writeByte(lOwnNodeId & 0xFF);
+    openknx.flash.writeByte(mController.getOneWayBroadcastType());
 
     openknx.flash.writeByte(mNumChannels);
     for (uint8_t i = 0; i < mNumChannels; i++)
@@ -1344,7 +1736,14 @@ void IoHomecontrol::writeFlash()
         uint16_t lSeq = mChannels[i]->getSequence1W();
         openknx.flash.writeByte((lSeq >> 8) & 0xFF);
         openknx.flash.writeByte(lSeq & 0xFF);
-        openknx.flash.writeByte(0x00); // reserved
+        const uint32_t lControllerNodeId = mChannels[i]->getOneWayControllerNodeId();
+        openknx.flash.writeByte((lControllerNodeId >> 16) & 0xFF);
+        openknx.flash.writeByte((lControllerNodeId >> 8) & 0xFF);
+        openknx.flash.writeByte(lControllerNodeId & 0xFF);
+        const uint8_t *lControllerKey = mChannels[i]->getOneWayControllerKey();
+        for (uint8_t k = 0; k < 16; k++)
+            openknx.flash.writeByte(lControllerKey[k]);
+        openknx.flash.writeByte(mChannels[i]->getOneWayControllerManufacturer());
     }
 
     // Write remote map
@@ -1359,6 +1758,10 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
     if (iSize == 0)
         return;
 
+    constexpr uint16_t kFlashHeaderV9 = 1 + 16 + 3 + 1 + 1;
+    constexpr uint16_t kFlashRecordV9 = 43;
+    constexpr uint16_t kFlashHeaderV8 = 1 + 16 + 3 + 1 + 1 + 1;
+    constexpr uint16_t kFlashHeaderV7 = 1 + 16 + 3 + 1 + 1;
     constexpr uint16_t kFlashHeaderV6 = 1 + 16 + 1;
     constexpr uint16_t kFlashHeaderV5 = 1 + 16 + 1;
     constexpr uint16_t kFlashHeaderV1 = 1 + 1;
@@ -1368,9 +1771,9 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
     uint8_t lVersion = openknx.flash.readByte();
 
-    if (lVersion == 6)
+    if (lVersion == 9)
     {
-        if (iSize < kFlashHeaderV6)
+        if (iSize < kFlashHeaderV9)
             return;
 
         uint8_t lSysKey[16];
@@ -1378,12 +1781,85 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
             lSysKey[k] = openknx.flash.readByte();
         mController.setSystemKey(lSysKey);
 
-        uint8_t lCount = openknx.flash.readByte();
-        logDebugP("Reading %d channels from flash (v6)", lCount);
+        const uint32_t lOwnNodeId = ((uint32_t)openknx.flash.readByte() << 16) |
+                                    ((uint32_t)openknx.flash.readByte() << 8) |
+                                    (uint32_t)openknx.flash.readByte();
+        mController.setOwnNodeId(lOwnNodeId);
+        mController.setOneWayBroadcastType(openknx.flash.readByte());
 
-        const uint8_t lReadCount = clampFlashRecordCount(lCount, mNumChannels, iSize, kFlashHeaderV6, kFlashRecordV6);
+        const uint8_t lCount = openknx.flash.readByte();
+        const uint8_t lReadCount = clampFlashRecordCount(lCount, mNumChannels, iSize, kFlashHeaderV9, kFlashRecordV9);
+        logDebugP("Reading %d channels from flash (v9)", lReadCount);
+        for (uint8_t i = 0; i < lReadCount; i++)
+        {
+            const uint8_t lIdx = openknx.flash.readByte();
+            const uint8_t lFlags = openknx.flash.readByte();
+            const uint32_t lNodeId = ((uint32_t)openknx.flash.readByte() << 16) |
+                                     ((uint32_t)openknx.flash.readByte() << 8) |
+                                     (uint32_t)openknx.flash.readByte();
+            uint8_t lKey[16];
+            for (uint8_t k = 0; k < 16; k++)
+                lKey[k] = openknx.flash.readByte();
+            const uint16_t lSeq = ((uint16_t)openknx.flash.readByte() << 8) | openknx.flash.readByte();
+            const uint32_t lControllerNodeId = ((uint32_t)openknx.flash.readByte() << 16) |
+                                               ((uint32_t)openknx.flash.readByte() << 8) |
+                                               (uint32_t)openknx.flash.readByte();
+            uint8_t lControllerKey[16];
+            for (uint8_t k = 0; k < 16; k++)
+                lControllerKey[k] = openknx.flash.readByte();
+            const uint8_t lManufacturer = openknx.flash.readByte();
+
+            if (lIdx >= mNumChannels)
+                continue;
+            if (lFlags & 0x01)
+            {
+                mChannels[lIdx]->setNodeId(lNodeId);
+                mChannels[lIdx]->setEncryptionKey(lKey);
+            }
+            mChannels[lIdx]->setSequence1W(lSeq);
+            mChannels[lIdx]->setOneWayControllerNodeId(lControllerNodeId);
+            mChannels[lIdx]->setOneWayControllerKey(lControllerKey);
+            mChannels[lIdx]->setOneWayControllerManufacturer(lManufacturer);
+        }
+
+        consolidateOneWayProfileSequences();
+        const uint16_t lChannelDataSize = kFlashHeaderV9 + static_cast<uint16_t>(lReadCount) * kFlashRecordV9;
+        const uint16_t lRemaining = (iSize > lChannelDataSize) ? (iSize - lChannelDataSize) : 0;
+        if (lRemaining > 0 && lRemaining <= IOHC_REMOTE_MAP_FLASH_SIZE)
+            mRemoteMap.readFromBuffer(iBuffer + lChannelDataSize, lRemaining);
+    }
+    else if (lVersion == 8 || lVersion == 7 || lVersion == 6)
+    {
+        const uint16_t lHeaderSize = (lVersion == 8) ? kFlashHeaderV8 :
+                                     (lVersion == 7) ? kFlashHeaderV7 : kFlashHeaderV6;
+        if (iSize < lHeaderSize)
+            return;
+
+        uint8_t lSysKey[16];
+        for (uint8_t k = 0; k < 16; k++)
+            lSysKey[k] = openknx.flash.readByte();
+        mController.setSystemKey(lSysKey);
+
+        if (lVersion == 8 || lVersion == 7)
+        {
+            const uint32_t lOwnNodeId = ((uint32_t)openknx.flash.readByte() << 16) |
+                                        ((uint32_t)openknx.flash.readByte() << 8) |
+                                        (uint32_t)openknx.flash.readByte();
+            mController.setOwnNodeId(lOwnNodeId);
+            mController.setOneWayBroadcastType(openknx.flash.readByte());
+            uint8_t lLegacyManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
+            if (lVersion == 8)
+                lLegacyManufacturer = openknx.flash.readByte();
+            for (uint8_t i = 0; i < mNumChannels; i++)
+                mChannels[i]->setOneWayControllerManufacturer(lLegacyManufacturer);
+        }
+
+        uint8_t lCount = openknx.flash.readByte();
+        logDebugP("Reading %d channels from flash (v%d)", lCount, lVersion);
+
+        const uint8_t lReadCount = clampFlashRecordCount(lCount, mNumChannels, iSize, lHeaderSize, kFlashRecordV6);
         if (lReadCount != lCount)
-            logDebugP("Flash v6 channel count clamped from %d to %d", lCount, lReadCount);
+            logDebugP("Flash v%d channel count clamped from %d to %d", lVersion, lCount, lReadCount);
 
         for (uint8_t i = 0; i < lReadCount; i++)
         {
@@ -1398,23 +1874,29 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
             uint16_t lSeq = ((uint16_t)openknx.flash.readByte() << 8) | openknx.flash.readByte();
             openknx.flash.readByte(); // reserved
 
+            if ((lFlags & 0x02) && lIdx < mNumChannels)
+            {
+                mChannels[lIdx]->setOneWayControllerNodeId(mController.getOwnNodeId());
+                mChannels[lIdx]->setOneWayControllerKey(mController.getSystemKey());
+                mChannels[lIdx]->setSequence1W(lSeq);
+            }
             if ((lFlags & 0x01) && lIdx < mNumChannels)
             {
                 mChannels[lIdx]->setNodeId(lNodeId);
                 mChannels[lIdx]->setEncryptionKey(lKey);
-                mChannels[lIdx]->setIs1W((lFlags & 0x02) != 0);
                 mChannels[lIdx]->setSequence1W(lSeq);
             }
         }
 
         // Read remote map after channel data
-        uint16_t lChannelDataSize = kFlashHeaderV6 + static_cast<uint16_t>(lReadCount) * kFlashRecordV6;
+        uint16_t lChannelDataSize = lHeaderSize + static_cast<uint16_t>(lReadCount) * kFlashRecordV6;
         uint16_t lRemaining = (iSize > lChannelDataSize) ? (iSize - lChannelDataSize) : 0;
         if (lRemaining > 0 && lRemaining <= IOHC_REMOTE_MAP_FLASH_SIZE)
         {
             const uint8_t *lRemoteData = iBuffer + lChannelDataSize;
             mRemoteMap.readFromBuffer(lRemoteData, lRemaining);
         }
+        consolidateOneWayProfileSequences();
     }
     else if (lVersion == 5 || lVersion == 4)
     {
@@ -1574,6 +2056,8 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
     {
         logDebugP("Unknown flash version %d", lVersion);
     }
+
+    applyOneWayControllerConfiguration();
 }
 
 // --- Serial console ---
@@ -1594,8 +2078,18 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc discover spe", "Encrypted SPE/sub-device discovery");
     openknx.console.printHelpLine("iohc autospe on|off|status", "Runtime post-pair SPE discovery");
     openknx.console.printHelpLine("iohc send NN PP", "Send position PP% to channel NN");
+    openknx.console.printHelpLine("iohc send1wbtn NN up|down|stop|my|prog|release|stop2", "Send 1W remote button command");
+    openknx.console.printHelpLine("iohc raw1w NN HEX", "Send raw 1W button code, e.g. 0000/00FE/00FF");
+    openknx.console.printHelpLine("iohc execraw NN HEX", "Send exact raw 1W Execute payload before seq/HMAC");
     openknx.console.printHelpLine("iohc set1w NN", "Mark channel NN as 1W (one-way)");
     openknx.console.printHelpLine("iohc set2w NN", "Mark channel NN as 2W (two-way)");
+    openknx.console.printHelpLine("iohc 1wctrl status|NN [ADDR HEX32 [MFG]]", "Show or set the effective channel 1W controller profile");
+    openknx.console.printHelpLine("iohc 1wqr NN QRHEX", "Import a Situo QR controller identity into the effective channel profile");
+    openknx.console.printHelpLine("iohc 1wnew NN", "Generate a new own 1W controller profile for an unpaired channel");
+    openknx.console.printHelpLine("iohc 1wtype TYPE", "Set default 1W broadcast type: 0=all, 2=roller shutter, 3=awning");
+    openknx.console.printHelpLine("iohc 1wmfg NN ID", "Set manufacturer of the effective channel 1W profile");
+    openknx.console.printHelpLine("iohc pair1w-type NN ADDR TYPE", "1W pair with explicit broadcast type");
+    openknx.console.printHelpLine("iohc send1w-type NN open|close|stop|vent|force [TYPE]", "Send 1W Execute with explicit broadcast type");
     openknx.console.printHelpLine("iohc cozy temp NN TT", "Set thermostat temp (TT=tenths, 70-280)");
     openknx.console.printHelpLine("iohc cozy mode NN MM", "Set thermostat mode (0-3)");
     openknx.console.printHelpLine("iohc cozy presence NN 0/1", "Set presence on/off");
@@ -1626,6 +2120,9 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc radio raw", "Show raw SX1262 register readback");
 #else
     openknx.console.printHelpLine("iohc radio txtest", "Send a minimal SX1276 TX test payload (SPI TX)");
+    openknx.console.printHelpLine("iohc radio txlen LEN [B]", "SX1276 TX test with LEN bytes, optional first byte B hex");
+    openknx.console.printHelpLine("iohc radio txpre PRE LEN [B]", "SX1276 TX test with preamble symbols, LEN bytes, optional first byte B");
+    openknx.console.printHelpLine("iohc radio txraw HEX", "SX1276 TX test with exact raw hex payload");
     openknx.console.printHelpLine("iohc radio sweep [N]", "TX self-test on all 3 io-homecontrol frequencies");
     openknx.console.printHelpLine("iohc radio soak [S]", "Time-budgeted TX soak on all 3 io-homecontrol frequencies");
     openknx.console.printHelpLine("iohc radio raw", "Show basic SX1276 register readback (SPI test)");
@@ -1791,6 +2288,366 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         return true;
     }
 
+    if (lSub.rfind("1wctrl", 0) == 0)
+    {
+        std::string lArg = trimSpaces(lSub.length() > strlen("1wctrl") ? lSub.substr(strlen("1wctrl")) : "");
+        if (lArg.empty() || lArg == "status")
+        {
+            for (uint8_t i = 0; i < mNumChannels; i++)
+            {
+                IoHomecontrolChannel *lCh = mChannels[i];
+                if (!lCh || !lCh->is1W())
+                    continue;
+                IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(lCh);
+                const uint8_t lProfileIndex = oneWayProfileIndex(lProfile);
+                logInfoP("1W ch%02u profile=ch%02u remote=0x%06X key=%s seq=%u mfg=0x%02X",
+                         static_cast<unsigned>(i + 1),
+                         static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1),
+                         lProfile ? lProfile->getOneWayControllerNodeId() : 0,
+                         lProfile && lProfile->hasOneWayControllerIdentity() ? "set" : "missing",
+                         static_cast<unsigned>(lProfile ? lProfile->getSequence1W() : 0),
+                         static_cast<unsigned>(lProfile ? lProfile->getOneWayControllerManufacturer() : 0));
+            }
+            return true;
+        }
+
+        std::string lChannelText;
+        if (!takeToken(lArg, lChannelText))
+        {
+            openknx.console.printHelpLine("iohc 1wctrl status|NN [ADDR HEX32 [MFG]]", "Show or set the effective channel 1W controller profile");
+            return true;
+        }
+        uint8_t lIdx = 0;
+        if (!parseChannelIndex(lChannelText, mNumChannels, lIdx))
+        {
+            logInfoP("Invalid channel: %s", lChannelText.c_str());
+            return true;
+        }
+        if (!mChannels[lIdx] || !mChannels[lIdx]->is1W())
+        {
+            logInfoP("Channel %u is not configured for 1W.", static_cast<unsigned>(lIdx + 1));
+            return true;
+        }
+        IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(mChannels[lIdx]);
+        const uint8_t lProfileIndex = oneWayProfileIndex(lProfile);
+        if (lArg.empty() || lArg == "status")
+        {
+            logInfoP("1W ch%02u effective profile=ch%02u remote=0x%06X key=%s seq=%u mfg=0x%02X",
+                     static_cast<unsigned>(lIdx + 1),
+                     static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1),
+                     lProfile ? lProfile->getOneWayControllerNodeId() : 0,
+                     lProfile && lProfile->hasOneWayControllerIdentity() ? "set" : "missing",
+                     static_cast<unsigned>(lProfile ? lProfile->getSequence1W() : 0),
+                     static_cast<unsigned>(lProfile ? lProfile->getOneWayControllerManufacturer() : 0));
+            return true;
+        }
+
+        std::string lAddressText;
+        std::string lKeyText;
+        std::string lManufacturerText;
+        if (!takeToken(lArg, lAddressText) || !takeToken(lArg, lKeyText) ||
+            (!lArg.empty() && !takeToken(lArg, lManufacturerText)) || !lArg.empty())
+        {
+            openknx.console.printHelpLine("iohc 1wctrl NN ADDR HEX32 [MFG]", "Set the effective channel 1W controller profile");
+            return true;
+        }
+        uint32_t lRemoteNodeId = 0;
+        uint8_t lKey[16] = {};
+        uint32_t lManufacturer = lProfile ? lProfile->getOneWayControllerManufacturer() : 0;
+        if (!lProfile || !parseHex24(lAddressText, lRemoteNodeId) ||
+            !parseHexBytes(lKeyText, lKey, 16) ||
+            (!lManufacturerText.empty() && (!parseUnsignedDecimal(lManufacturerText, lManufacturer) || lManufacturer > 0xFF)))
+        {
+            logInfoP("Invalid 1W profile. Use: iohc 1wctrl NN ADDR HEX32 [MFG]");
+            return true;
+        }
+
+        const bool lChangedIdentity =
+            lProfile->getOneWayControllerNodeId() != lRemoteNodeId ||
+            memcmp(lProfile->getOneWayControllerKey(), lKey, sizeof(lKey)) != 0;
+        if (lChangedIdentity && oneWayProfileUsedByPairedChannel(lProfile))
+        {
+            logInfoP("Cannot replace profile ch%02u while a channel using it is paired.",
+                     static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1));
+            return true;
+        }
+        lProfile->setOneWayControllerNodeId(lRemoteNodeId);
+        lProfile->setOneWayControllerKey(lKey);
+        lProfile->setOneWayControllerManufacturer(static_cast<uint8_t>(lManufacturer));
+        if (lChangedIdentity)
+            lProfile->setSequence1W(0);
+        openknx.flash.save();
+        logInfoP("1W profile ch%02u saved: remote=0x%06X key=set seq=%u mfg=0x%02X",
+                 static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1),
+                 lRemoteNodeId, static_cast<unsigned>(lProfile->getSequence1W()),
+                 static_cast<unsigned>(lProfile->getOneWayControllerManufacturer()));
+        if (lChangedIdentity)
+            logInfoP("Channels using this profile must be paired again.");
+        return true;
+    }
+
+    if (lSub.rfind("1wqr", 0) == 0)
+    {
+        std::string lArg = trimSpaces(lSub.length() > strlen("1wqr") ? lSub.substr(strlen("1wqr")) : "");
+        std::string lChannelText;
+        if (!takeToken(lArg, lChannelText) || lArg.empty())
+        {
+            openknx.console.printHelpLine("iohc 1wqr NN QRHEX", "Import a Situo QR controller identity into the effective channel profile");
+            return true;
+        }
+
+        uint8_t lIdx = 0;
+        uint32_t lRemoteNodeId = 0;
+        uint8_t lKey[16] = {};
+        if (!parseChannelIndex(lChannelText, mNumChannels, lIdx) ||
+            !parseOneWayQrController(lArg, lRemoteNodeId, lKey))
+        {
+            logInfoP("Invalid 1W QR payload. Expected at least 20 bytes hex: type + addr3 + key16.");
+            return true;
+        }
+        if (!mChannels[lIdx] || !mChannels[lIdx]->is1W())
+        {
+            logInfoP("Channel %u is not configured for 1W.", static_cast<unsigned>(lIdx + 1));
+            return true;
+        }
+
+        IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(mChannels[lIdx]);
+        if (!lProfile)
+        {
+            logInfoP("No 1W profile available for channel %u", static_cast<unsigned>(lIdx + 1));
+            return true;
+        }
+        const bool lChangedIdentity =
+            lProfile->getOneWayControllerNodeId() != lRemoteNodeId ||
+            memcmp(lProfile->getOneWayControllerKey(), lKey, sizeof(lKey)) != 0;
+        if (lChangedIdentity && oneWayProfileUsedByPairedChannel(lProfile))
+        {
+            logInfoP("Cannot import QR identity while a channel using profile ch%02u is paired.",
+                     static_cast<unsigned>(oneWayProfileIndex(lProfile) + 1));
+            return true;
+        }
+        lProfile->setOneWayControllerNodeId(lRemoteNodeId);
+        lProfile->setOneWayControllerKey(lKey);
+        if (lChangedIdentity)
+            lProfile->setSequence1W(0);
+        openknx.flash.save();
+        logInfoP("1W QR imported into profile ch%02u: remote=0x%06X key=set seq=%u mfg=0x%02X",
+                 static_cast<unsigned>(oneWayProfileIndex(lProfile) + 1), lRemoteNodeId,
+                 static_cast<unsigned>(lProfile->getSequence1W()),
+                 static_cast<unsigned>(lProfile->getOneWayControllerManufacturer()));
+        if (lChangedIdentity)
+            logInfoP("Channels using this profile must be paired again.");
+        return true;
+    }
+
+    if (lSub.rfind("1wnew", 0) == 0)
+    {
+        std::string lArg = trimSpaces(lSub.length() > strlen("1wnew") ? lSub.substr(strlen("1wnew")) : "");
+        uint8_t lIdx = 0;
+        if (!parseChannelIndex(lArg, mNumChannels, lIdx))
+        {
+            openknx.console.printHelpLine("iohc 1wnew NN", "Generate a new own 1W controller profile for an unpaired channel");
+            return true;
+        }
+        IoHomecontrolChannel *lCh = mChannels[lIdx];
+        if (!lCh || !lCh->is1W() || lCh->getConfigured1WProfileChannel() != 0xFF)
+        {
+            logInfoP("Channel %u must be 1W and configured for its own profile.", static_cast<unsigned>(lIdx + 1));
+            return true;
+        }
+        if (oneWayProfileUsedByPairedChannel(lCh))
+        {
+            logInfoP("Cannot replace profile ch%02u while a channel using it is paired.", static_cast<unsigned>(lIdx + 1));
+            return true;
+        }
+        if (!generateOneWayControllerProfile(lCh))
+        {
+            logInfoP("Could not generate a new 1W profile for channel %u.", static_cast<unsigned>(lIdx + 1));
+            return true;
+        }
+        lCh->setEncryptionKey(lCh->getOneWayControllerKey());
+        openknx.flash.save();
+        logInfoP("Generated new own 1W profile ch%02u: remote=0x%06X key=set seq=%u mfg=0x%02X",
+                 static_cast<unsigned>(lIdx + 1), lCh->getOneWayControllerNodeId(),
+                 static_cast<unsigned>(lCh->getSequence1W()),
+                 static_cast<unsigned>(lCh->getOneWayControllerManufacturer()));
+        return true;
+    }
+
+    if (lSub.rfind("1wtype", 0) == 0)
+    {
+        std::string lArg = trimSpaces(lSub.length() > strlen("1wtype") ? lSub.substr(strlen("1wtype")) : "");
+        uint32_t lType = 0;
+        if (lArg.empty() || !parseUnsignedDecimal(lArg, lType) || lType > 63)
+        {
+            openknx.console.printHelpLine("iohc 1wtype TYPE", "Set default 1W broadcast type: 0=all, 2=roller shutter, 3=awning");
+            return true;
+        }
+        mController.setOneWayBroadcastType(static_cast<uint8_t>(lType));
+        openknx.flash.save();
+        logInfoP("1W default broadcast type set: type=%u target=0x%06X", static_cast<unsigned>(lType), mController.oneWayBroadcastTarget(static_cast<uint8_t>(lType)));
+        return true;
+    }
+
+    if (lSub.rfind("1wmfg", 0) == 0)
+    {
+        std::string lArg = trimSpaces(lSub.length() > strlen("1wmfg") ? lSub.substr(strlen("1wmfg")) : "");
+        std::string lChannelText;
+        std::string lManufacturerText;
+        uint8_t lIdx = 0;
+        uint32_t lManufacturer = 0;
+        if (!takeToken(lArg, lChannelText) || !takeToken(lArg, lManufacturerText) || !lArg.empty() ||
+            !parseChannelIndex(lChannelText, mNumChannels, lIdx) ||
+            !parseUnsignedDecimal(lManufacturerText, lManufacturer) || lManufacturer > 0xFF)
+        {
+            openknx.console.printHelpLine("iohc 1wmfg NN ID", "Set manufacturer of the effective channel 1W profile");
+            return true;
+        }
+        if (!mChannels[lIdx] || !mChannels[lIdx]->is1W())
+        {
+            logInfoP("Channel %u is not configured for 1W.", static_cast<unsigned>(lIdx + 1));
+            return true;
+        }
+        IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(mChannels[lIdx]);
+        if (!lProfile)
+            return true;
+        if (lProfile->getOneWayControllerManufacturer() != static_cast<uint8_t>(lManufacturer) &&
+            oneWayProfileUsedByPairedChannel(lProfile))
+        {
+            logInfoP("Cannot change manufacturer while a channel using profile ch%02u is paired.",
+                     static_cast<unsigned>(oneWayProfileIndex(lProfile) + 1));
+            return true;
+        }
+        lProfile->setOneWayControllerManufacturer(static_cast<uint8_t>(lManufacturer));
+        openknx.flash.save();
+        logInfoP("1W profile ch%02u manufacturer set: 0x%02X",
+                 static_cast<unsigned>(oneWayProfileIndex(lProfile) + 1),
+                 static_cast<unsigned>(lManufacturer));
+        return true;
+    }
+
+    if (lSub.rfind("pair1w-type", 0) == 0)
+    {
+        std::string lArgs = trimSpaces(lSub.length() > strlen("pair1w-type") ? lSub.substr(strlen("pair1w-type")) : "");
+        size_t lSpace1 = lArgs.find_first_of(" \t");
+        if (lSpace1 == std::string::npos)
+        {
+            openknx.console.printHelpLine("iohc pair1w-type NN ADDR TYPE", "1W pair with explicit broadcast type");
+            return true;
+        }
+        std::string lChanText = lArgs.substr(0, lSpace1);
+        std::string lRest = trimSpaces(lArgs.substr(lSpace1 + 1));
+        size_t lSpace2 = lRest.find_first_of(" \t");
+        if (lSpace2 == std::string::npos)
+        {
+            openknx.console.printHelpLine("iohc pair1w-type NN ADDR TYPE", "1W pair with explicit broadcast type");
+            return true;
+        }
+        std::string lAddrText = lRest.substr(0, lSpace2);
+        std::string lTypeText = trimSpaces(lRest.substr(lSpace2 + 1));
+
+        uint8_t lIdx = 0;
+        uint32_t lNodeId = 0;
+        uint32_t lType = 0;
+        if (!parseChannelIndex(lChanText, mNumChannels, lIdx) ||
+            !parseHex24(lAddrText, lNodeId) ||
+            !parseUnsignedDecimal(lTypeText, lType) || lType > 63)
+        {
+            logInfoP("Usage: iohc pair1w-type NN ADDR TYPE (TYPE 0..63; common 0/2/3)");
+            return true;
+        }
+
+        mChannels[lIdx]->setIs1W(true);
+        const bool lOk = mController.startPairingWithType(lIdx, lNodeId, static_cast<uint8_t>(lType));
+        if (lOk)
+            logInfoP("1W pairing started ch=%u target=0x%06X type=%u dst=0x%06X", static_cast<unsigned>(lIdx + 1), lNodeId, static_cast<unsigned>(lType), mController.oneWayBroadcastTarget(static_cast<uint8_t>(lType)));
+        else
+            logInfoP("1W pairing failed to start for channel %u", static_cast<unsigned>(lIdx + 1));
+        return true;
+    }
+
+    if (lSub.rfind("send1w-type", 0) == 0)
+    {
+        std::string lArgs = trimSpaces(lSub.length() > strlen("send1w-type") ? lSub.substr(strlen("send1w-type")) : "");
+        size_t lSpace1 = lArgs.find_first_of(" \t");
+        if (lSpace1 == std::string::npos)
+        {
+            openknx.console.printHelpLine("iohc send1w-type NN open|close|stop|vent|force [TYPE]", "Send 1W Execute with explicit broadcast type");
+            return true;
+        }
+        std::string lChanText = lArgs.substr(0, lSpace1);
+        std::string lRest = trimSpaces(lArgs.substr(lSpace1 + 1));
+        size_t lSpace2 = lRest.find_first_of(" \t");
+        std::string lAction = (lSpace2 == std::string::npos) ? lRest : lRest.substr(0, lSpace2);
+        std::string lTypeText = (lSpace2 == std::string::npos) ? "" : trimSpaces(lRest.substr(lSpace2 + 1));
+
+        uint8_t lIdx = 0;
+        if (!parseChannelIndex(lChanText, mNumChannels, lIdx))
+        {
+            logInfoP("Invalid channel: %s", lChanText.c_str());
+            return true;
+        }
+        IoHomecontrolChannel *lCh = mChannels[lIdx];
+        if (!lCh->isPaired())
+        {
+            logInfoP("Channel %u not paired", static_cast<unsigned>(lIdx + 1));
+            return true;
+        }
+        if (!lCh->is1W())
+        {
+            logInfoP("Channel %u is not in 1W mode", static_cast<unsigned>(lIdx + 1));
+            return true;
+        }
+
+        uint32_t lType = mController.getOneWayBroadcastType();
+        if (!lTypeText.empty() && (!parseUnsignedDecimal(lTypeText, lType) || lType > 63))
+        {
+            logInfoP("Invalid 1W type: %s", lTypeText.c_str());
+            return true;
+        }
+
+        uint16_t lMain = 0;
+        uint8_t lFp1 = 0;
+        uint8_t lFp2 = 0;
+        const char *lName = lAction.c_str();
+        if (lAction == "open" || lAction == "up")
+        {
+            lMain = 0x0000;
+            lName = "open";
+        }
+        else if (lAction == "close" || lAction == "down")
+        {
+            lMain = 0xC800;
+            lName = "close";
+        }
+        else if (lAction == "stop")
+        {
+            lMain = 0xD200;
+            lName = "stop";
+        }
+        else if (lAction == "vent" || lAction == "ventilation")
+        {
+            lMain = 0xD803;
+            lName = "vent";
+        }
+        else if (lAction == "force")
+        {
+            lMain = 0x6400;
+            lName = "force";
+        }
+        else
+        {
+            logInfoP("Usage: iohc send1w-type NN open|close|stop|vent|force [TYPE]");
+            return true;
+        }
+
+        if (mController.sendOneWayExecuteWithType(lCh->getNodeId(), lCh->getEncryptionKey(), lMain, lFp1, lFp2, static_cast<uint8_t>(lType)))
+            logInfoP("Sent 1W %s main=0x%04X type=%u dst=0x%06X to channel %u", lName, static_cast<unsigned>(lMain), static_cast<unsigned>(lType), mController.oneWayBroadcastTarget(static_cast<uint8_t>(lType)), static_cast<unsigned>(lIdx + 1));
+        else
+            logInfoP("Failed to queue 1W %s for channel %u", lName, static_cast<unsigned>(lIdx + 1));
+        return true;
+    }
+
     if (lSub.substr(0, 4) == "pair")
     {
         if (lSub.length() > 5 && lSub.substr(5, 1) == "c")
@@ -1893,6 +2750,126 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                      mAutoSpeDiscoveryAfterPairing ? "on" : "off",
                      mPendingPostPairSpeDiscovery ? " (pending)" : "");
         }
+        return true;
+    }
+
+    if (lSub.rfind("send1wbtn", 0) == 0 || lSub.rfind("btn", 0) == 0 ||
+        lSub.rfind("raw1w", 0) == 0 || lSub.rfind("execraw", 0) == 0)
+    {
+        const bool lIsRawCode = lSub.rfind("raw1w", 0) == 0;
+        const bool lIsExecRaw = lSub.rfind("execraw", 0) == 0;
+        const size_t lPrefixLen = lIsExecRaw ? strlen("execraw") : (lIsRawCode ? strlen("raw1w") : (lSub.rfind("send1wbtn", 0) == 0 ? strlen("send1wbtn") : strlen("btn")));
+        std::string lArgs = (lSub.length() > lPrefixLen) ? lSub.substr(lPrefixLen) : "";
+        size_t lPos = 0;
+        while (lPos < lArgs.length() && isSpace(lArgs[lPos]))
+            lPos++;
+        if (lPos > 0)
+            lArgs = lArgs.substr(lPos);
+
+        size_t lSpace = lArgs.find_first_of(" 	");
+        if (lSpace == std::string::npos)
+        {
+            logInfoP("Usage: iohc %s NN %s",
+                     lIsExecRaw ? "execraw" : (lIsRawCode ? "raw1w" : "send1wbtn"),
+                     lIsExecRaw ? "HEX_PAYLOAD" : (lIsRawCode ? "HEX_CODE" : "up|down|stop|my|prog|release|stop2"));
+            return true;
+        }
+
+        const std::string lChannelText = lArgs.substr(0, lSpace);
+        std::string lValueText = lArgs.substr(lSpace + 1);
+        lPos = 0;
+        while (lPos < lValueText.length() && isSpace(lValueText[lPos]))
+            lPos++;
+        if (lPos > 0)
+            lValueText = lValueText.substr(lPos);
+
+        uint8_t lIdx = 0;
+        if (!parseChannelIndex(lChannelText, mNumChannels, lIdx))
+        {
+            logInfoP("Invalid channel: %s", lChannelText.c_str());
+            return true;
+        }
+
+        IoHomecontrolChannel *lCh = mChannels[lIdx];
+        if (!lCh->isPaired())
+        {
+            logInfoP("Channel %d not paired", lIdx + 1);
+            return true;
+        }
+        if (!lCh->is1W())
+        {
+            logInfoP("Channel %d is not in 1W mode", lIdx + 1);
+            return true;
+        }
+
+        if (lIsExecRaw)
+        {
+            uint8_t lPayload[IOHC_1W_RAW_EXEC_MAX_DATA] = {};
+            uint8_t lPayloadLen = 0;
+            if (!parseHexBytesDynamic(lValueText, lPayload, sizeof(lPayload), lPayloadLen))
+            {
+                logInfoP("Invalid execraw payload: %s (max %u bytes, even hex digits)",
+                         lValueText.c_str(), static_cast<unsigned>(sizeof(lPayload)));
+                return true;
+            }
+
+            if (mController.sendOneWayRawExecute(lCh->getNodeId(), lCh->getEncryptionKey(), lPayload, lPayloadLen))
+                logInfoP("Sent raw 1W Execute payload len=%u to channel %d", static_cast<unsigned>(lPayloadLen), lIdx + 1);
+            else
+                logInfoP("Failed to queue raw 1W Execute payload len=%u for channel %d", static_cast<unsigned>(lPayloadLen), lIdx + 1);
+            return true;
+        }
+
+        uint32_t lCodeValue = 0;
+        const char *lButtonName = lValueText.c_str();
+        if (lIsRawCode)
+        {
+            if (!parseHex24(lValueText, lCodeValue) || lCodeValue > 0xFFFF)
+            {
+                logInfoP("Invalid raw 1W code: %s", lValueText.c_str());
+                return true;
+            }
+        }
+        else if (lValueText == "up" || lValueText == "open")
+        {
+            lCodeValue = 0x0000;
+            lButtonName = "up";
+        }
+        else if (lValueText == "down" || lValueText == "close")
+        {
+            lCodeValue = 0x0001;
+            lButtonName = "down";
+        }
+        else if (lValueText == "stop")
+        {
+            lCodeValue = 0x0002;
+            lButtonName = "stop";
+        }
+        else if (lValueText == "my" || lValueText == "prog" || lValueText == "favorite")
+        {
+            lCodeValue = 0x0003;
+            lButtonName = "my/prog";
+        }
+        else if (lValueText == "release" || lValueText == "released")
+        {
+            lCodeValue = 0x00FE;
+            lButtonName = "release";
+        }
+        else if (lValueText == "stop2" || lValueText == "altstop")
+        {
+            lCodeValue = 0x00FF;
+            lButtonName = "stop2";
+        }
+        else
+        {
+            logInfoP("Usage: iohc send1wbtn NN up|down|stop|my|prog|release|stop2");
+            return true;
+        }
+
+        if (mController.sendOneWayButton(lCh->getNodeId(), lCh->getEncryptionKey(), static_cast<uint16_t>(lCodeValue)))
+            logInfoP("Sent 1W button %s (0x%04X) to channel %d", lButtonName, static_cast<unsigned>(lCodeValue), lIdx + 1);
+        else
+            logInfoP("Failed to queue 1W button %s (0x%04X) for channel %d", lButtonName, static_cast<unsigned>(lCodeValue), lIdx + 1);
         return true;
     }
 
@@ -2307,6 +3284,221 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                  static_cast<unsigned int>(lIrq1),
                  static_cast<unsigned int>(lIrq2),
                  static_cast<unsigned int>(lOp));
+#endif
+        return true;
+    }
+
+    if (lSub.rfind("radio txlen", 0) == 0 || lSub.rfind("radio txraw", 0) == 0 || lSub.rfind("radio txpre", 0) == 0)
+    {
+#if defined(RADIO_SX1276)
+        constexpr uint8_t kMaxDiagPayloadLen = IOHC_FRAME_MAX_SIZE + IOHC_CRC_SIZE;
+        uint8_t lPayload[kMaxDiagPayloadLen] = {};
+        uint8_t lPayloadLen = 0;
+        uint8_t lFirstByte = 0xAA;
+        uint16_t lRequestedPreamble = 0;
+        const bool lIsTxRaw = (lSub.rfind("radio txraw", 0) == 0);
+        const bool lIsTxPre = (lSub.rfind("radio txpre", 0) == 0);
+        const size_t lPrefixLen = lIsTxRaw ? strlen("radio txraw") : (lIsTxPre ? strlen("radio txpre") : strlen("radio txlen"));
+        std::string lArg = (lSub.length() > lPrefixLen) ? trimSpaces(lSub.substr(lPrefixLen)) : std::string();
+
+        if (lArg.empty())
+        {
+            if (lIsTxRaw)
+                openknx.console.printHelpLine("iohc radio txraw HEX", "Example: iohc radio txraw FC00003F7E9E6E30...");
+            else if (lIsTxPre)
+                openknx.console.printHelpLine("iohc radio txpre PRE LEN [B]", "Example: iohc radio txpre 1024 35 FC");
+            else
+                openknx.console.printHelpLine("iohc radio txlen LEN [B]", "Example: iohc radio txlen 35 FC");
+            return true;
+        }
+
+        if (lIsTxRaw)
+        {
+            // Two supported forms:
+            //   iohc radio txraw AABBCCDD     -> exact bytes
+            //   iohc radio txraw 35 FC        -> generated LEN bytes with first byte FC
+            const size_t lSpace = lArg.find(' ');
+            uint32_t lParsedLen = 0;
+            if (lSpace != std::string::npos && parseUnsignedDecimal(lArg.substr(0, lSpace), lParsedLen))
+            {
+                if (lParsedLen < 1 || lParsedLen > kMaxDiagPayloadLen)
+                {
+                    logInfoP("RadioTxRaw: invalid length %lu (allowed 1..%u)",
+                             static_cast<unsigned long>(lParsedLen),
+                             static_cast<unsigned>(kMaxDiagPayloadLen));
+                    return true;
+                }
+                if (!parseHexByteToken(lArg.substr(lSpace + 1), lFirstByte))
+                {
+                    logInfoP("RadioTxRaw: invalid first byte: %s", lArg.substr(lSpace + 1).c_str());
+                    return true;
+                }
+                lPayloadLen = static_cast<uint8_t>(lParsedLen);
+                buildRadioTxLenPayload(lPayload, lPayloadLen, lFirstByte);
+            }
+            else if (!parseHexPayload(lArg, lPayload, kMaxDiagPayloadLen, lPayloadLen))
+            {
+                logInfoP("RadioTxRaw: invalid hex payload: %s", lArg.c_str());
+                return true;
+            }
+            else
+            {
+                lFirstByte = lPayload[0];
+            }
+        }
+        else if (lIsTxPre)
+        {
+            // Syntax: iohc radio txpre PRE LEN [B]
+            // PRE is the SX1276 preamble length in symbols. LEN is generated payload length.
+            const size_t lSpace1 = lArg.find(' ');
+            if (lSpace1 == std::string::npos)
+            {
+                openknx.console.printHelpLine("iohc radio txpre PRE LEN [B]", "Example: iohc radio txpre 1024 35 FC");
+                return true;
+            }
+
+            uint32_t lParsedPreamble = 0;
+            if (!parseUnsignedDecimal(lArg.substr(0, lSpace1), lParsedPreamble) || lParsedPreamble < 1 || lParsedPreamble > 65535UL)
+            {
+                logInfoP("RadioTxPre: invalid preamble %s (allowed 1..65535)", lArg.substr(0, lSpace1).c_str());
+                return true;
+            }
+
+            std::string lRest = trimSpaces(lArg.substr(lSpace1 + 1));
+            const size_t lSpace2 = lRest.find(' ');
+            const std::string lLenArg = (lSpace2 == std::string::npos) ? lRest : lRest.substr(0, lSpace2);
+            uint32_t lParsedLen = 0;
+            if (!parseUnsignedDecimal(lLenArg, lParsedLen) || lParsedLen < 1 || lParsedLen > kMaxDiagPayloadLen)
+            {
+                logInfoP("RadioTxPre: invalid length %s (allowed 1..%u)",
+                         lLenArg.c_str(), static_cast<unsigned>(kMaxDiagPayloadLen));
+                return true;
+            }
+
+            if (lSpace2 != std::string::npos)
+            {
+                if (!parseHexByteToken(lRest.substr(lSpace2 + 1), lFirstByte))
+                {
+                    logInfoP("RadioTxPre: invalid first byte: %s", lRest.substr(lSpace2 + 1).c_str());
+                    return true;
+                }
+            }
+
+            lRequestedPreamble = static_cast<uint16_t>(lParsedPreamble);
+            lPayloadLen = static_cast<uint8_t>(lParsedLen);
+            buildRadioTxLenPayload(lPayload, lPayloadLen, lFirstByte);
+        }
+        else
+        {
+            const size_t lSpace = lArg.find(' ');
+            const std::string lLenArg = (lSpace == std::string::npos) ? lArg : lArg.substr(0, lSpace);
+            uint32_t lParsedLen = 0;
+            if (!parseUnsignedDecimal(lLenArg, lParsedLen) || lParsedLen < 1 || lParsedLen > kMaxDiagPayloadLen)
+            {
+                logInfoP("RadioTxLen: invalid length %s (allowed 1..%u)",
+                         lLenArg.c_str(), static_cast<unsigned>(kMaxDiagPayloadLen));
+                return true;
+            }
+
+            if (lSpace != std::string::npos)
+            {
+                if (!parseHexByteToken(lArg.substr(lSpace + 1), lFirstByte))
+                {
+                    logInfoP("RadioTxLen: invalid first byte: %s", lArg.substr(lSpace + 1).c_str());
+                    return true;
+                }
+            }
+
+            lPayloadLen = static_cast<uint8_t>(lParsedLen);
+            buildRadioTxLenPayload(lPayload, lPayloadLen, lFirstByte);
+        }
+
+        const bool lPrevRxScan = mController.isRxScanEnabled();
+        mController.setRxScanEnabled(false);
+        mController.radio().standby();
+        mController.radio().setFrequency(IOHC_FREQ_2);
+        if (lIsTxPre)
+            mController.radio().setPreambleLength(lRequestedPreamble);
+
+        const RadioError lErr = mController.radio().startTransmit(lPayload, lPayloadLen);
+        bool lDone = false;
+        uint32_t lWaitedMs = 0;
+        uint32_t lWaitBudgetMs = IOHC_TX_TIMEOUT_MS;
+        if (lIsTxPre)
+        {
+            // Give long-preamble diagnostics enough time to finish so we can see
+            // whether pairing's fixed 500 ms timeout is too short.
+            // The theoretical bitrate-derived time is too optimistic for
+            // SX1276/io-homecontrol long-preamble packet mode. Use the same
+            // empirically safe timeout buckets as the controller.
+            if (lRequestedPreamble >= IOHC_PREAMBLE_LONG)
+                lWaitBudgetMs = 1500UL;
+            else if (lRequestedPreamble >= 512)
+                lWaitBudgetMs = 900UL;
+            else if (lRequestedPreamble >= 256)
+                lWaitBudgetMs = 700UL;
+            else
+                lWaitBudgetMs = IOHC_TX_TIMEOUT_MS;
+            if (lWaitBudgetMs > 5000UL)
+                lWaitBudgetMs = 5000UL;
+        }
+
+        if (lErr == RadioError::None)
+        {
+            const uint32_t lStart = millis();
+            while (millis() - lStart < lWaitBudgetMs)
+            {
+                if (mController.radio().isTxDone())
+                {
+                    lDone = true;
+                    break;
+                }
+                delay(1);
+            }
+            lWaitedMs = millis() - lStart;
+            if (!lDone)
+                mController.radio().standby();
+        }
+
+        const uint8_t lIrq1 = mController.radio().debugReadRegister(REG_IRQFLAGS1);
+        const uint8_t lIrq2 = mController.radio().debugReadRegister(REG_IRQFLAGS2);
+        const uint16_t lIrqNow = (static_cast<uint16_t>(lIrq1) << 8) | lIrq2;
+        const uint8_t lOp = mController.radio().debugReadRegister(REG_OPMODE);
+        const uint8_t lPayloadLengthReg = mController.radio().debugReadRegister(REG_PAYLOADLENGTH);
+        const uint8_t lPacketConfig2 = mController.radio().debugReadRegister(REG_PACKETCONFIG2);
+        const uint8_t lFifoThresh = mController.radio().debugReadRegister(REG_FIFOTHRESH);
+        const uint16_t lLastIrq = mController.radio().lastIrqStatus();
+        const uint16_t lTxIrq = mController.radio().lastTxIrqImmediate();
+        const uint8_t lTxStatus = mController.radio().lastTxSetStatus();
+        const uint16_t lPreambleReg = (static_cast<uint16_t>(mController.radio().debugReadRegister(REG_PREAMBLEMSB)) << 8) |
+                                      mController.radio().debugReadRegister(REG_PREAMBLELSB);
+
+        // Restore normal short preamble after the diagnostic, then restart RX.
+        if (lIsTxPre)
+            mController.radio().setPreambleLength(IOHC_PREAMBLE_SHORT);
+        mController.radio().startReceive();
+        mController.setRxScanEnabled(lPrevRxScan);
+
+        logInfoP("RadioTx%s: err=%d pre=%u len=%u first=0x%02X done=%d wait=%lums budget=%lums lastIrq=0x%04X txIrq=0x%04X txSt=0x%02X irqNow=0x%04X op=0x%02X pl=0x%02X pc2=0x%02X fifoThr=0x%02X preReg=%u",
+                 lIsTxRaw ? "Raw" : (lIsTxPre ? "Pre" : "Len"),
+                 static_cast<int>(lErr),
+                 static_cast<unsigned>(lIsTxPre ? lRequestedPreamble : 0),
+                 static_cast<unsigned>(lPayloadLen),
+                 static_cast<unsigned>(lFirstByte),
+                 lDone ? 1 : 0,
+                 static_cast<unsigned long>(lWaitedMs),
+                 static_cast<unsigned long>(lWaitBudgetMs),
+                 static_cast<unsigned int>(lLastIrq),
+                 static_cast<unsigned int>(lTxIrq),
+                 static_cast<unsigned int>(lTxStatus),
+                 static_cast<unsigned int>(lIrqNow),
+                 static_cast<unsigned int>(lOp),
+                 static_cast<unsigned int>(lPayloadLengthReg),
+                 static_cast<unsigned int>(lPacketConfig2),
+                 static_cast<unsigned int>(lFifoThresh),
+                 static_cast<unsigned int>(lPreambleReg));
+#else
+        logInfoP("RadioTxLen/TxRaw/TxPre is currently implemented for SX1276 diagnostics only");
 #endif
         return true;
     }

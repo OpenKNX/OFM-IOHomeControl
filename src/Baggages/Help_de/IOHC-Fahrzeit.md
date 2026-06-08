@@ -6,3 +6,5 @@ Die Öffnungszeit gilt für Fahrten in Richtung 0 %, die Schließzeit für Fahrt
 
 Die Werte dienen der internen Positionsschätzung, sofern das Gerät während der Bewegung keine genaueren Zwischenpositionen liefert.
 Je realistischer die Angaben sind, desto plausibler fallen Positionsanzeige und Folgefahrten aus.
+
+Im 1W-Modus gibt es keine Positionsrückmeldung; dort bilden die Fahrzeiten die alleinige Grundlage der Positionsschätzung.

@@ -35,6 +35,8 @@ The protocol implementation covers manufacturers such as Velux, Somfy, Atlantic,
 - **Thermostat control** for Atlantic Cozy io — temperature setpoint, operating mode, presence, window contact
 - **Direction inversion** per channel for different mounting orientations
 - **Protocol mode** selectable per channel (2-way bidirectional or 1-way unidirectional)
+- **Independent persistent 1W controller profiles** per channel, with explicit profile sharing for 1W groups
+- **Configurable 1W broadcast type and controller manufacturer**, plus Situo QR identity import
 - **Device pairing/unpairing** via ETS workflows, function properties, or service console
 - **Automatic status polling** with configurable intervals (30s – 30min); after pairing, the module also tries to enable device-driven status updates when the device supports them
 - **Position estimation** during travel using configurable opening/closing times and linear interpolation
@@ -47,6 +49,7 @@ The protocol implementation covers manufacturers such as Velux, Somfy, Atlantic,
 - **Wind/rain alarm** safety input — auto-retract awnings, close windows on alarm
 - **Step-stop (Langzeitbetrieb)** — standard KNX blind behavior for venetian blinds
 - **Power-on behavior** configurable per channel (nothing, request status, restore last feedback position)
+- **Dedicated binary command/status handling** for lights, switches and locks
 - **3-channel frequency hopping** across the 868 MHz ISM band
 - **EU duty cycle compliance** with per-sub-band tracking (1-hour window)
 - **Command queue** with automatic retries (up to 3 attempts, cycling frequencies)
@@ -54,7 +57,9 @@ The protocol implementation covers manufacturers such as Velux, Somfy, Atlantic,
 - **Passive/sniffer mode** for diagnostics (listen-only, key extraction from observed pairing)
 - **Network scan** with per-node packet statistics and RSSI tracking
 - **Encrypted discovery (SPE)** for scanning already-paired devices
-- **Flash persistence** of pairing data, encryption keys, and system key (AES-128)
+- **Flash persistence** of 2W identity/pairing data and complete per-channel 1W controller profiles
+
+For 2W, the module uses one global controller node ID and system key. For 1W, each channel uses a Cyril-style virtual remote profile containing its own controller address, key, sequence counter, and manufacturer. Channels that should control the same 1W group can explicitly share one profile. The 1W sequence counter is persisted after every generated frame, and new/imported profiles use sequence `1` for their first frame.
 
 ## Hardware Requirements
 
@@ -159,11 +164,12 @@ ETS function property interface (objectIndex=160, propertyId=10).
 |------|-----------------|------------------|-------------|
 | 0x10 | `cmd, channel[, nodeIdHi, nodeIdMid, nodeIdLo]` | `status` | Start pairing on the selected channel. The optional 3-byte node ID override is used for 1W commissioning. |
 | 0x11 | `cmd` | `status` | Cancel the active pairing session. |
-| 0x12 | `cmd, channel` | `paired, nodeIdHi, nodeIdMid, nodeIdLo, controllerState, lastPairStartStatus` | Read the current pairing state and diagnostics for one channel. |
+| 0x12 | `cmd, channel` | `paired, nodeIdHi, nodeIdMid, nodeIdLo, controllerState, lastPairStartStatus, profileChannel, profileNodeHi, profileNodeMid, profileNodeLo, manufacturer, sequenceHi, sequenceLo, broadcastType` | Read pairing state plus the effective 1W profile diagnostics for one channel. The profile fields are unused and should be ignored for 2W channels. |
 | 0x13 | `cmd, channel` | `status` | Unpair the selected channel, erase the stored key, and persist the change. |
+| 0x15 | `cmd, channel` | `status` | Generate a new own 1W controller profile. Rejected for shared profiles or while any paired channel uses the profile. |
 | 0x20 | `cmd, channel, percent` | `status` | Test helper for sending a position command to an already paired device. |
 
-Status byte values used by commands `0x10`, `0x11`, `0x13`, and `0x20`:
+Common status byte values used by commands `0x10`, `0x11`, `0x13`, and `0x20`:
 
 | Value | Meaning |
 |-------|---------|
@@ -171,6 +177,16 @@ Status byte values used by commands `0x10`, `0x11`, `0x13`, and `0x20`:
 | 0x03 | 1W pairing rejected because the target node ID is missing |
 | 0x04 | Pairing start rejected because the controller is currently busy |
 | 0xFF | Invalid request, channel out of range, or command not supported in the current state |
+
+Status byte values specific to command `0x15`:
+
+| Value | Meaning |
+|-------|---------|
+| 0x00 | New own 1W controller profile generated and persisted |
+| 0x02 | Channel is not configured for 1W, or profile generation failed |
+| 0x03 | Profile is currently used by at least one paired channel |
+| 0x04 | Channel uses a shared profile instead of its own profile |
+| 0xFF | Invalid request or channel out of range |
 
 For the `0x12` status query, `lastPairStartStatus` is currently encoded as follows:
 
@@ -207,6 +223,7 @@ This OFM defines a **single channel template** (`IoHomecontrol.templ.xml`). The 
 IoHomecontrol (OpenKNX::Module)
 ├── IoHomecontrolChannel[0..15] (OpenKNX::Channel)  — one per paired device
 │   ├── Pairing data (node ID, encryption key, challenge)
+│   ├── Persistent 1W virtual-remote profile (controller ID, key, sequence, manufacturer)
 │   ├── Position tracking (current, target, opening/closing time)
 │   ├── Status polling (interval, timer)
 │   ├── Thermostat state (temperature, mode, presence — Cozy devices)
@@ -229,19 +246,21 @@ IoHomecontrol (OpenKNX::Module)
 - **6-byte HMAC** for frame authentication
 - **Challenge-response** protocol for bidirectional verification
 - **Per-device encryption keys** derived during pairing
-- **System key** (16 bytes) generated per module, persisted in flash
+- **2W system key** (16 bytes) generated per module, persisted in flash
+- **Independent 1W controller keys and monotonic sequence counters**, persisted per profile
 - **CRC-16 Kermit** checksum on all frames
-- Replay protection via challenge freshness checking
+- Replay protection via 2W challenge freshness and persistent 1W sequence counters
 
 ## Radio Protocol
 
 - Modulation: 2-FSK, 38.4 kbps, no shaping
 - Bandwidth: 250 kHz, deviation: 19.2 kHz
 - Frequencies: 868.25 / 868.95 / 869.85 MHz (3-channel hopping)
-- Preamble: 1024 bytes (START frames), 8 bytes (follow-up)
+- Preamble: 1024 symbols (START frames), 8 symbols (follow-up)
 - Sync word: 0xFF 0x33 (preceded by 0x55 preamble anchor byte)
 - Packet format: variable length, hardware CRC (CCITT), io-homecontrol mode enabled
 - Frame size: 9–32 bytes
+- 1W frames use the low-power flag and type-dependent broadcast destinations
 
 ## Related protocol sources
 

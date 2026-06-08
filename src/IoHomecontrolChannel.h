@@ -56,10 +56,22 @@ public:
   uint16_t getSequence1W() const;
   void setSequence1W(uint16_t iSeq);
   uint16_t incrementSequence1W();
+  void setOneWayControllerNodeId(uint32_t iNodeId);
+  uint32_t getOneWayControllerNodeId() const;
+  void setOneWayControllerKey(const uint8_t *iKey);
+  const uint8_t *getOneWayControllerKey() const;
+  void setOneWayControllerManufacturer(uint8_t iManufacturer);
+  uint8_t getOneWayControllerManufacturer() const;
+  uint8_t getConfigured1WManufacturer() const;
+  bool hasOneWayControllerIdentity() const;
+  void setConfigured1WProfileChannel(uint8_t iChannelIndex);
+  uint8_t getConfigured1WProfileChannel() const;
   bool is1W() const;
   void setIs1W(bool iIs1W);
   void setConfigured1WTargetNodeId(uint32_t iNodeId);
   uint32_t getConfigured1WTargetNodeId() const;
+  void setConfigured1WBroadcastType(uint8_t iBroadcastType);
+  uint8_t getConfigured1WBroadcastType() const;
 
   // Lock control (P2)
   void setLocked(bool iLocked);
@@ -86,8 +98,14 @@ private:
   uint8_t mLastChallenge[6] = {}; // challenge sent with last authenticated command
   bool mPaired = false;
   uint16_t mSequence1W = 0; // 1W monotonic sequence counter (persisted)
+  uint32_t mOneWayControllerNodeId = 0;
+  uint8_t mOneWayControllerKey[16] = {};
+  uint8_t mOneWayControllerManufacturer = 2; // Somfy
+  uint8_t mConfigured1WManufacturer = 0; // 0 = keep persistent profile value
+  uint8_t mConfigured1WProfileChannel = 0xFF; // 0xFF = own profile
   bool mIs1W = false;       // true if channel uses 1W protocol
   uint32_t mConfigured1WTargetNodeId = 0;
+  uint8_t mConfigured1WBroadcastType = 2;
   float mCurrentPosition = 0.0f;
   float mCurrentSlat = 0.0f;
   bool mIsMoving = false;
@@ -141,6 +159,11 @@ private:
   uint8_t currentPositionToSceneValue() const;
   uint8_t currentSlatToSceneValue() const;
   bool storeSceneStateToEts(uint8_t iSceneIndex, uint8_t iScenePosition, uint8_t iSceneSlat);
+
+  bool isOnOffDeviceType() const;
+  bool isLockDeviceType() const;
+  bool isBinaryDeviceType() const;
+  void publishBinaryStatus();
 
   GroupObject &getKo(uint8_t iIoIndex);
   const std::string logPrefix() override;
