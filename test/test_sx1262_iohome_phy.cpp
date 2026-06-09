@@ -74,7 +74,7 @@ TEST(encode_and_find_round_trip_frame)
   const size_t lEncodedLen = sx1262EncodeIoHomeFrame(lFrame, sizeof(lFrame), lEncoded, sizeof(lEncoded));
   ASSERT_TRUE(lEncodedLen > 0);
 
-  uint8_t lDecoded[IOHC_FRAME_MAX_SIZE] = {};
+  uint8_t lDecoded[IOHC_FRAME_BUFFER_SIZE] = {};
   size_t lDecodedLen = 0;
   ASSERT_TRUE(sx1262FindIoHomeFrame(lEncoded, lEncodedLen, lDecoded, sizeof(lDecoded), lDecodedLen));
   ASSERT_EQ(lDecodedLen, sizeof(lFrame));
@@ -91,7 +91,7 @@ TEST(find_frame_with_bit_offset)
   uint8_t lShifted[SX1262_IOHOME_MAX_ENCODED_FRAME_LEN + 2] = {};
   shiftBitsMsb(lEncoded, lEncodedLen, 3, lShifted, sizeof(lShifted));
 
-  uint8_t lDecoded[IOHC_FRAME_MAX_SIZE] = {};
+  uint8_t lDecoded[IOHC_FRAME_BUFFER_SIZE] = {};
   size_t lDecodedLen = 0;
   ASSERT_TRUE(sx1262FindIoHomeFrame(lShifted, sizeof(lShifted), lDecoded, sizeof(lDecoded), lDecodedLen));
   ASSERT_EQ(lDecodedLen, sizeof(lFrame));
@@ -107,7 +107,7 @@ TEST(rejects_crc_invalid_capture)
 
   lEncoded[lEncodedLen / 2U] ^= 0x20U;
 
-  uint8_t lDecoded[IOHC_FRAME_MAX_SIZE] = {};
+  uint8_t lDecoded[IOHC_FRAME_BUFFER_SIZE] = {};
   size_t lDecodedLen = 0;
   ASSERT_TRUE(!sx1262FindIoHomeFrame(lEncoded, lEncodedLen, lDecoded, sizeof(lDecoded), lDecodedLen));
   ASSERT_EQ(lDecodedLen, 0u);

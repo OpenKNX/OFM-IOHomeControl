@@ -1865,8 +1865,8 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
     }
     else if (lVersion == 8 || lVersion == 7 || lVersion == 6)
     {
-        const uint16_t lHeaderSize = (lVersion == 8) ? kFlashHeaderV8 :
-                                     (lVersion == 7) ? kFlashHeaderV7 : kFlashHeaderV6;
+        const uint16_t lHeaderSize = (lVersion == 8) ? kFlashHeaderV8 : (lVersion == 7) ? kFlashHeaderV7
+                                                                                        : kFlashHeaderV6;
         if (iSize < lHeaderSize)
             return;
 
@@ -3446,7 +3446,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     if (lSub.rfind("radio txlen", 0) == 0 || lSub.rfind("radio txraw", 0) == 0 || lSub.rfind("radio txpre", 0) == 0)
     {
 #if defined(RADIO_SX1276)
-        constexpr uint8_t kMaxDiagPayloadLen = IOHC_FRAME_MAX_SIZE + IOHC_CRC_SIZE;
+        constexpr uint8_t kMaxDiagPayloadLen = IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE;
         uint8_t lPayload[kMaxDiagPayloadLen] = {};
         uint8_t lPayloadLen = 0;
         uint8_t lFirstByte = 0xAA;
@@ -3777,7 +3777,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             {"max CRC frame", false},
             {"length mismatch reject", false},
             {"malformed length reject", false},
-            {"CRC+HMAC decoded verify", false},
+            {"2W appended HMAC reject", false},
             {"invalid console input", false},
             {"corrupt flash count", false},
             {"CRC tamper reject", false},
@@ -3795,14 +3795,15 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         lTx2W.commandId = IoHomeCommand::Execute;
         memcpy(lTx2W.data, kFrame2WData, sizeof(kFrame2WData));
         lTx2W.dataLen = sizeof(kFrame2WData);
-        lTx2W.hasHmac = true;
+        lTx2W.hasHmac = false;
         lTx2W.hasCrc = true;
 
+        uint8_t lTx2WHmac[IOHC_HMAC_SIZE] = {0};
         uint8_t lHmacInput2W[1 + sizeof(kFrame2WData)] = {static_cast<uint8_t>(IoHomeCommand::Execute), 0, 0, 0, 0};
         memcpy(lHmacInput2W + 1, kFrame2WData, sizeof(kFrame2WData));
-        IoHomeCrypto::createHmac2W(lHmacInput2W, sizeof(lHmacInput2W), kChallenge, kSystemKey, lTx2W.hmac);
+        IoHomeCrypto::createHmac2W(lHmacInput2W, sizeof(lHmacInput2W), kChallenge, kSystemKey, lTx2WHmac);
 
-        uint8_t lBuffer2W[IOHC_FRAME_MAX_SIZE + IOHC_CRC_SIZE] = {0};
+        uint8_t lBuffer2W[IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE] = {0};
         const uint8_t lLen2W = lTx2W.serialize(lBuffer2W, sizeof(lBuffer2W));
         IoHomeFrame lRx2W;
         lRx2W.init();
@@ -3812,21 +3813,17 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                                   lRx2W.commandId == IoHomeCommand::Execute &&
                                   lRx2W.dataLen == sizeof(kFrame2WData) &&
                                   memcmp(lRx2W.data, kFrame2WData, sizeof(kFrame2WData)) == 0 &&
-                                  lRx2W.hasHmac && lRx2W.hasCrc &&
-                                  memcmp(lRx2W.hmac, lTx2W.hmac, IOHC_HMAC_SIZE) == 0;
+                                  !lRx2W.hasHmac && lRx2W.hasCrc;
         lChecks[0].ok = lRoundTrip2W;
-        lChecks[1].ok = lRoundTrip2W && IoHomeCrypto::verifyHmac(lHmacInput2W, sizeof(lHmacInput2W), lRx2W.hmac, kChallenge, kSystemKey);
+        lChecks[1].ok = IoHomeCrypto::verifyHmac(lHmacInput2W, sizeof(lHmacInput2W), lTx2WHmac, kChallenge, kSystemKey);
 
-        uint8_t lParsedHmacInput[1 + IOHC_FRAME_MAX_DATA] = {0};
-        lParsedHmacInput[0] = static_cast<uint8_t>(lRx2W.commandId);
-        if (lRx2W.dataLen > 0)
-            memcpy(lParsedHmacInput + 1, lRx2W.data, lRx2W.dataLen);
-        const uint8_t lParsedHmacInputLen = 1 + lRx2W.dataLen;
-        const uint8_t lLegacyRawLen = (lLen2W > IOHC_HMAC_SIZE + IOHC_CRC_SIZE) ? (lLen2W - IOHC_HMAC_SIZE - IOHC_CRC_SIZE) : 0;
-        lChecks[10].ok = lRoundTrip2W &&
-                         IoHomeCrypto::verifyHmac(lParsedHmacInput, lParsedHmacInputLen, lRx2W.hmac, kChallenge, kSystemKey) &&
-                         lLegacyRawLen > 0 &&
-                         !IoHomeCrypto::verifyHmac(lBuffer2W, lLegacyRawLen, lRx2W.hmac, kChallenge, kSystemKey);
+        IoHomeFrame lLegacyAuth2W = lTx2W;
+        memcpy(lLegacyAuth2W.hmac, lTx2WHmac, IOHC_HMAC_SIZE);
+        lLegacyAuth2W.hasHmac = true;
+        uint8_t lLegacyAuth2WBuffer[IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE] = {0};
+        const uint8_t lLegacyAuth2WLen = lLegacyAuth2W.serialize(lLegacyAuth2WBuffer, sizeof(lLegacyAuth2WBuffer));
+        IoHomeFrame lLegacyAuth2WRx;
+        lChecks[10].ok = (lLegacyAuth2WLen > 0) && !lLegacyAuth2WRx.deserialize(lLegacyAuth2WBuffer, lLegacyAuth2WLen);
 
         IoHomeFrame lTx1W;
         lTx1W.init();
@@ -3844,7 +3841,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         uint8_t lHmacInput1W[7] = {static_cast<uint8_t>(IoHomeCommand::Execute), IOHC_ORIGINATOR_USER, IOHC_ACEI_1W, 0x32, 0x00, 0x00, 0x00};
         IoHomeCrypto::createHmac1W(lHmacInput1W, sizeof(lHmacInput1W), kSeq1W, kSystemKey, lTx1W.hmac);
 
-        uint8_t lBuffer1W[IOHC_FRAME_MAX_SIZE + IOHC_CRC_SIZE] = {0};
+        uint8_t lBuffer1W[IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE] = {0};
         const uint8_t lLen1W = lTx1W.serialize(lBuffer1W, sizeof(lBuffer1W));
         IoHomeFrame lRx1W;
         lRx1W.init();
@@ -3877,7 +3874,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         lChallengeResponse.hasHmac = false;
         lChallengeResponse.hasCrc = true;
 
-        uint8_t lChallengeResponseBuffer[IOHC_FRAME_MAX_SIZE + IOHC_CRC_SIZE] = {0};
+        uint8_t lChallengeResponseBuffer[IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE] = {0};
         const uint8_t lChallengeResponseLen = lChallengeResponse.serialize(lChallengeResponseBuffer, sizeof(lChallengeResponseBuffer));
         IoHomeFrame lParsedChallengeResponse;
         lChecks[5].ok = (lChallengeResponseLen > 0) &&
@@ -3888,7 +3885,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                         memcmp(lParsedChallengeResponse.data, kChallengeResponseData, sizeof(kChallengeResponseData)) == 0;
 
         lChallengeResponse.hasCrc = false;
-        uint8_t lChallengeResponseNoCrcBuffer[IOHC_FRAME_MAX_SIZE] = {0};
+        uint8_t lChallengeResponseNoCrcBuffer[IOHC_FRAME_BUFFER_SIZE] = {0};
         const uint8_t lChallengeResponseNoCrcLen = lChallengeResponse.serialize(lChallengeResponseNoCrcBuffer, sizeof(lChallengeResponseNoCrcBuffer));
         IoHomeFrame lParsedChallengeResponseNoCrc;
         lChecks[6].ok = (lChallengeResponseNoCrcLen == IOHC_FRAME_MIN_SIZE + IOHC_HMAC_SIZE) &&
@@ -3910,7 +3907,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         lMaxCrc.dataLen = IOHC_FRAME_MAX_DATA;
         lMaxCrc.hasCrc = true;
 
-        uint8_t lMaxCrcBuffer[IOHC_FRAME_MAX_SIZE + IOHC_CRC_SIZE] = {0};
+        uint8_t lMaxCrcBuffer[IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE] = {0};
         const uint8_t lMaxCrcLen = lMaxCrc.serialize(lMaxCrcBuffer, sizeof(lMaxCrcBuffer));
         IoHomeFrame lParsedMaxCrc;
         lChecks[7].ok = (lMaxCrcLen == IOHC_FRAME_MIN_SIZE + IOHC_FRAME_MAX_DATA + IOHC_CRC_SIZE) &&
@@ -3957,7 +3954,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         lChecks[13].ok = (lLen2W >= 2) && !lBadCrcFrame.deserialize(lCorruptCrc, lLen2W);
 
         uint8_t lBadHmac[IOHC_HMAC_SIZE] = {0};
-        memcpy(lBadHmac, lTx2W.hmac, IOHC_HMAC_SIZE);
+        memcpy(lBadHmac, lTx2WHmac, IOHC_HMAC_SIZE);
         lBadHmac[0] ^= 0x80;
         lChecks[14].ok = !IoHomeCrypto::verifyHmac(lHmacInput2W, sizeof(lHmacInput2W), lBadHmac, kChallenge, kSystemKey);
 
@@ -3973,7 +3970,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         lKeyTransfer.hasHmac = false;
         lKeyTransfer.hasCrc = true;
 
-        uint8_t lKeyTransferBuffer[IOHC_FRAME_MAX_SIZE + IOHC_CRC_SIZE] = {0};
+        uint8_t lKeyTransferBuffer[IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE] = {0};
         const uint8_t lKeyTransferLen = lKeyTransfer.serialize(lKeyTransferBuffer, sizeof(lKeyTransferBuffer));
         IoHomeFrame lParsedKeyTransfer;
         lChecks[15].ok = (lKeyTransferLen == IOHC_FRAME_MIN_SIZE + sizeof(kEncrypted2WKey) + IOHC_CRC_SIZE) &&
@@ -3998,7 +3995,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         lKeyTransferAuth.hasHmac = false;
         lKeyTransferAuth.hasCrc = true;
 
-        uint8_t lKeyTransferAuthBuffer[IOHC_FRAME_MAX_SIZE + IOHC_CRC_SIZE] = {0};
+        uint8_t lKeyTransferAuthBuffer[IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE] = {0};
         const uint8_t lKeyTransferAuthLen = lKeyTransferAuth.serialize(lKeyTransferAuthBuffer, sizeof(lKeyTransferAuthBuffer));
         IoHomeFrame lParsedKeyTransferAuth;
         lChecks[16].ok = lChecks[15].ok && lKeyTransferHmacOk &&

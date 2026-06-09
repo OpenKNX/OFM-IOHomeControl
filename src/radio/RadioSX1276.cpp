@@ -22,7 +22,7 @@ static unsigned long millis() { return 0; }
 #define LOW 0
 #endif
 
-static constexpr uint8_t kMaxSx1276PayloadLen = IOHC_FRAME_MAX_SIZE + IOHC_CRC_SIZE;
+static constexpr uint8_t kMaxSx1276PayloadLen = IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE;
 
 // SX1276 operating modes (RegOpMode)
 #define RF_OPMODE_SLEEP 0x00

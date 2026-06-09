@@ -4283,8 +4283,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             static_cast<uint8_t>(lRemoteNodeId & 0xFF)};
         mTxFrame.setSrcNode(lRemoteNodeId);
         mTxFrame.setDestNode(iEntry.oneWayBroadcastTypeExplicit
-                     ? oneWayBroadcastTarget(iEntry.oneWayBroadcastType)
-                     : 0x00003F);
+                                 ? oneWayBroadcastTarget(iEntry.oneWayBroadcastType)
+                                 : 0x00003F);
         IoHomeCrypto::encrypt1WKey(lProfile->getOneWayControllerKey(), IOHC_TRANSFER_KEY, lRemoteNodeAddr, lEncKey1W);
         memcpy(mTxFrame.data, lEncKey1W, 16);
         mTxFrame.data[16] = lProfile->getOneWayControllerManufacturer();
@@ -4681,7 +4681,7 @@ void IoHomeController::processAuthSendChallenge()
     lFrame.dataLen = 6;
     lFrame.hasHmac = false;
 
-    uint8_t lBuf[IOHC_FRAME_MAX_SIZE];
+    uint8_t lBuf[IOHC_FRAME_BUFFER_SIZE];
     uint8_t lLen = lFrame.serialize(lBuf, sizeof(lBuf));
     if (lLen > 0)
     {

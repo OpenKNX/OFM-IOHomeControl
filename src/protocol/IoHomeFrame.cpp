@@ -102,10 +102,12 @@ uint8_t IoHomeFrame::serialize(uint8_t *oBuffer, uint8_t iMaxLen) const
     // CRC is still transport-layer and is never included here.
     const bool lOneWay = (ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0;
     const bool lIncludeHmacInLength = lOneWay && hasHmac && commandId != IoHomeCommand::SendKey1W;
+    const uint8_t lMaxDeclared = lOneWay ? IOHC_FRAME_MAX_SIZE_1W
+                                         : IOHC_FRAME_MAX_SIZE_2W;
 
     uint8_t lDeclaredLen = 9 + dataLen + (lIncludeHmacInLength ? IOHC_HMAC_SIZE : 0);
     uint8_t lTotal = 9 + dataLen + (hasHmac ? IOHC_HMAC_SIZE : 0) + (hasCrc ? IOHC_CRC_SIZE : 0);
-    if (lDeclaredLen > IOHC_FRAME_MAX_SIZE || lTotal > iMaxLen)
+    if (lDeclaredLen > lMaxDeclared || lTotal > iMaxLen)
         return 0;
 
     // Update ctrl byte 0 with frame length (excluding CTRL0 and CRC, encoded as len-1).
@@ -145,43 +147,50 @@ uint8_t IoHomeFrame::serialize(uint8_t *oBuffer, uint8_t iMaxLen) const
 
 bool IoHomeFrame::deserialize(const uint8_t *iBuffer, uint8_t iLen)
 {
-    if (!iBuffer || iLen < IOHC_FRAME_MIN_SIZE || iLen > IOHC_FRAME_MAX_SIZE + IOHC_CRC_SIZE)
+    if (!iBuffer || iLen < IOHC_FRAME_MIN_SIZE)
         return false;
 
     init();
 
-    uint8_t lDeclaredLen = (iBuffer[0] & IOHC_CTRL0_LEN_MASK) + 1;
-    if (lDeclaredLen < IOHC_FRAME_MIN_SIZE || lDeclaredLen > IOHC_FRAME_MAX_SIZE)
+    const bool lIs1W = (iBuffer[0] & IOHC_CTRL0_MODE_1W) != 0;
+    const uint8_t lMaxDeclared = lIs1W ? IOHC_FRAME_MAX_SIZE_1W
+                                       : IOHC_FRAME_MAX_SIZE_2W;
+    const uint8_t lMaxRxLen = lMaxDeclared + IOHC_CRC_SIZE;
+    if (iLen > lMaxRxLen)
         return false;
 
-    // The declared length excludes HMAC and CRC which are appended after.
-    // Detect HMAC/CRC presence by matching against known length patterns.
+    uint8_t lDeclaredLen = (iBuffer[0] & IOHC_CTRL0_LEN_MASK) + 1;
+    if (lDeclaredLen < IOHC_FRAME_MIN_SIZE || lDeclaredLen > lMaxDeclared)
+        return false;
+
+    const uint8_t lCmd = iBuffer[IOHC_FRAME_MIN_SIZE - 1];
+
+    // 2W frames are length-delimited by CTRL0 and may only carry an optional
+    // transport CRC after the declared bytes. 1W keeps the legacy appended HMAC
+    // handling, including SendKey1W frames whose declared length excludes HMAC.
     uint8_t lHmacLen = 0;
     uint8_t lCrcLen = 0;
 
-    if (iLen == lDeclaredLen + IOHC_HMAC_SIZE + IOHC_CRC_SIZE)
+    if (iLen == lDeclaredLen + IOHC_CRC_SIZE)
     {
-        // Both HMAC and CRC present
+        lCrcLen = IOHC_CRC_SIZE;
+    }
+    else if (lIs1W && lCmd == static_cast<uint8_t>(IoHomeCommand::SendKey1W) &&
+             iLen == lDeclaredLen + IOHC_HMAC_SIZE + IOHC_CRC_SIZE)
+    {
         lHmacLen = IOHC_HMAC_SIZE;
         lCrcLen = IOHC_CRC_SIZE;
     }
-    else if (iLen == lDeclaredLen + IOHC_HMAC_SIZE)
+    else if (lIs1W && lCmd == static_cast<uint8_t>(IoHomeCommand::SendKey1W) &&
+             iLen == lDeclaredLen + IOHC_HMAC_SIZE)
     {
-        // HMAC only
         lHmacLen = IOHC_HMAC_SIZE;
-    }
-    else if (iLen == lDeclaredLen + IOHC_CRC_SIZE)
-    {
-        // CRC only
-        lCrcLen = IOHC_CRC_SIZE;
     }
     else if (iLen != lDeclaredLen)
     {
-        // No valid match
         return false;
     }
 
-    // Payload length includes HMAC (CRC is separate, after HMAC)
     uint8_t lPayloadLen = lDeclaredLen + lHmacLen;
 
     if (lCrcLen > 0)
@@ -206,22 +215,22 @@ bool IoHomeFrame::deserialize(const uint8_t *iBuffer, uint8_t iLen)
 
     commandId = static_cast<IoHomeCommand>(iBuffer[lPos++]);
 
-    // Determine if HMAC is present (authenticated commands)
-    // For 2W mode, most commands include HMAC
-    bool lIs2W = !(ctrlByte0 & IOHC_CTRL0_MODE_1W);
-    uint8_t lCmd = static_cast<uint8_t>(commandId);
-    bool lNeedsHmac = false;
-    if (lIs2W)
-        lNeedsHmac = (lCmd == 0x00 || lCmd == 0x01 || lCmd == 0x02 || lCmd == 0x20 || lCmd == 0x39 || lCmd == 0x71);
-    else // 1W
-        lNeedsHmac = (lCmd == 0x00 || lCmd == 0x2E || lCmd == 0x39 ||
-                      (lCmd == 0x30 && lHmacLen == IOHC_HMAC_SIZE));
-
+    uint8_t lDeclaredRemainingBytes = lDeclaredLen - lPos;
     uint8_t lRemainingBytes = lPayloadLen - lPos;
 
-    if (lNeedsHmac && lRemainingBytes >= IOHC_HMAC_SIZE)
+    if (!lIs1W)
     {
-        dataLen = lRemainingBytes - IOHC_HMAC_SIZE;
+        dataLen = lDeclaredRemainingBytes;
+        hasHmac = false;
+    }
+    else if (lCmd == static_cast<uint8_t>(IoHomeCommand::SendKey1W) && lHmacLen == IOHC_HMAC_SIZE)
+    {
+        dataLen = lDeclaredRemainingBytes;
+        hasHmac = true;
+    }
+    else if ((lCmd == 0x00 || lCmd == 0x2E || lCmd == 0x39) && lDeclaredRemainingBytes >= IOHC_HMAC_SIZE)
+    {
+        dataLen = lDeclaredRemainingBytes - IOHC_HMAC_SIZE;
         hasHmac = true;
     }
     else

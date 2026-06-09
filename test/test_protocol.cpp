@@ -82,7 +82,7 @@ static bool queueGatewayRequestAndLoop(IoHomeController &iController,
                                        const IoHomeFrame &iRequest,
                                        IoHomeFrame &oResponse)
 {
-    uint8_t lBuffer[IOHC_FRAME_MAX_SIZE];
+    uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE];
     const uint8_t lLen = iRequest.serialize(lBuffer, sizeof(lBuffer));
     if (lLen == 0)
         return false;
@@ -369,17 +369,11 @@ TEST(frame_roundtrip_with_data)
     original.data[0] = 0x4E; // position MSB
     original.data[1] = 0x20; // position LSB
     original.dataLen = 2;
-    original.hmac[0] = 0xDE;
-    original.hmac[1] = 0xAD;
-    original.hmac[2] = 0xBE;
-    original.hmac[3] = 0xEF;
-    original.hmac[4] = 0xCA;
-    original.hmac[5] = 0xFE;
-    original.hasHmac = true;
+    original.hasHmac = false;
 
     uint8_t buf[32];
     uint8_t len = original.serialize(buf, sizeof(buf));
-    ASSERT_EQ(len, 9 + 2 + 6); // header + data + hmac = 17
+    ASSERT_EQ(len, 9 + 2); // header + data = 11
 
     // Deserialize
     IoHomeFrame parsed;
@@ -390,8 +384,7 @@ TEST(frame_roundtrip_with_data)
     ASSERT_EQ(parsed.dataLen, 2);
     ASSERT_EQ(parsed.data[0], 0x4E);
     ASSERT_EQ(parsed.data[1], 0x20);
-    ASSERT_TRUE(parsed.hasHmac);
-    ASSERT_MEM_EQ(parsed.hmac, original.hmac, 6);
+    ASSERT_TRUE(!parsed.hasHmac);
 }
 
 TEST(frame_roundtrip_no_hmac)
@@ -429,6 +422,26 @@ TEST(frame_deserialize_rejects_too_long)
     uint8_t buf[33] = {0};
     IoHomeFrame frame;
     ASSERT_TRUE(!frame.deserialize(buf, 33)); // max is 32
+}
+
+TEST(frame_2w_rejects_oversized_declared_length)
+{
+    IoHomeFrame frame;
+    frame.init();
+    frame.setStart2W();
+    frame.setSrcNode(0xAABBCC);
+    frame.setDestNode(0x112233);
+    frame.commandId = IoHomeCommand::Private;
+    for (uint8_t i = 0; i < IOHC_FRAME_MAX_DATA; i++)
+        frame.data[i] = i;
+    frame.dataLen = IOHC_FRAME_MAX_DATA + 1;
+
+    uint8_t buf[40] = {0};
+    const uint8_t len = frame.serialize(buf, sizeof(buf));
+    ASSERT_EQ(len, 0);
+
+    buf[0] = static_cast<uint8_t>(IOHC_CTRL0_START | ((IOHC_FRAME_MAX_SIZE_2W - 1) & IOHC_CTRL0_LEN_MASK));
+    ASSERT_TRUE(!frame.deserialize(buf, IOHC_FRAME_MAX_SIZE_2W + 1));
 }
 
 // =====================================================================
@@ -803,9 +816,10 @@ TEST(hmac_deterministic)
 // 15. HMAC detection per command type in deserialize
 // =====================================================================
 
-TEST(frame_deserialize_execute_2w_has_hmac)
+TEST(frame_deserialize_rejects_2w_appended_hmac)
 {
-    // Build a 2W Execute frame (cmd=0x00) with 2 bytes data + 6 bytes HMAC
+    // 2W frames are length-delimited by CTRL0. Extra appended HMAC bytes must
+    // be rejected instead of being split out of the declared payload.
     IoHomeFrame orig;
     orig.init();
     orig.setStart2W(); // 2W mode
@@ -825,42 +839,34 @@ TEST(frame_deserialize_execute_2w_has_hmac)
 
     uint8_t buf[32];
     uint8_t len = orig.serialize(buf, sizeof(buf));
+    ASSERT_EQ((buf[0] & IOHC_CTRL0_LEN_MASK) + 1, 11);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
-    ASSERT_TRUE(parsed.hasHmac);
-    ASSERT_EQ(parsed.dataLen, 2);
-    ASSERT_MEM_EQ(parsed.hmac, orig.hmac, 6);
+    ASSERT_TRUE(!parsed.deserialize(buf, len));
 }
 
-TEST(frame_deserialize_status_update_2w_has_hmac)
+TEST(frame_deserialize_status_update_2w_keeps_payload)
 {
-    // StatusUpdate (0x71) in 2W mode should also split HMAC
+    // StatusUpdate (0x71) in 2W mode keeps all declared payload bytes in data.
     IoHomeFrame orig;
     orig.init();
     orig.setStart2W();
     orig.setSrcNode(0xAABBCC);
     orig.setDestNode(0x112233);
     orig.commandId = IoHomeCommand::StatusUpdate; // 0x71
-    orig.data[0] = 0x27;
-    orig.data[1] = 0x10; // position
-    orig.dataLen = 2;
-    orig.hmac[0] = 0xAA;
-    orig.hmac[1] = 0xBB;
-    orig.hmac[2] = 0xCC;
-    orig.hmac[3] = 0xDD;
-    orig.hmac[4] = 0xEE;
-    orig.hmac[5] = 0xFF;
-    orig.hasHmac = true;
+    const uint8_t expectedData[8] = {0x27, 0x10, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
+    memcpy(orig.data, expectedData, sizeof(expectedData));
+    orig.dataLen = sizeof(expectedData);
+    orig.hasHmac = false;
 
     uint8_t buf[32];
     uint8_t len = orig.serialize(buf, sizeof(buf));
 
     IoHomeFrame parsed;
     ASSERT_TRUE(parsed.deserialize(buf, len));
-    ASSERT_TRUE(parsed.hasHmac);
-    ASSERT_EQ(parsed.dataLen, 2);
-    ASSERT_MEM_EQ(parsed.hmac, orig.hmac, 6);
+    ASSERT_TRUE(!parsed.hasHmac);
+    ASSERT_EQ(parsed.dataLen, sizeof(expectedData));
+    ASSERT_MEM_EQ(parsed.data, expectedData, sizeof(expectedData));
 }
 
 TEST(frame_deserialize_getname_2w_no_hmac)
@@ -1196,15 +1202,14 @@ TEST(position_decoding_from_frame)
     frame.data[7] = (posRaw >> 8) & 0xFF;
     frame.data[8] = posRaw & 0xFF;
     frame.dataLen = 11;
-    memset(frame.hmac, 0, 6);
-    frame.hasHmac = true;
+    frame.hasHmac = false;
 
     uint8_t buf[32];
     uint8_t len = frame.serialize(buf, sizeof(buf));
 
     IoHomeFrame parsed;
     ASSERT_TRUE(parsed.deserialize(buf, len));
-    ASSERT_TRUE(parsed.hasHmac);
+    ASSERT_TRUE(!parsed.hasHmac);
 
     // Decode per reference: current position at data[7:8]
     uint16_t currentRaw = ((uint16_t)parsed.data[7] << 8) | parsed.data[8];
@@ -1330,19 +1335,17 @@ TEST(frame_execute_with_slat)
     frame.data[9] = 0x00;
     frame.dataLen = 10;
 
-    // Add dummy HMAC
-    memset(frame.hmac, 0xAA, 6);
-    frame.hasHmac = true;
+    frame.hasHmac = false;
 
     uint8_t buf[32];
     uint8_t len = frame.serialize(buf, sizeof(buf));
-    ASSERT_EQ(len, 9 + 10 + 6); // header + 10 data + hmac = 25
+    ASSERT_EQ(len, 9 + 10); // header + 10 data = 19
 
     // Deserialize
     IoHomeFrame parsed;
     ASSERT_TRUE(parsed.deserialize(buf, len));
     ASSERT_EQ(parsed.dataLen, 10);
-    ASSERT_TRUE(parsed.hasHmac);
+    ASSERT_TRUE(!parsed.hasHmac);
 
     // Verify originator and priority
     ASSERT_EQ(parsed.data[0], 0x01);
@@ -1511,8 +1514,7 @@ TEST(position_special_values_encoding)
     frame.data[0] = (IOHC_POSITION_STOP >> 8) & 0xFF;
     frame.data[1] = IOHC_POSITION_STOP & 0xFF;
     frame.dataLen = 2;
-    memset(frame.hmac, 0xBB, 6);
-    frame.hasHmac = true;
+    frame.hasHmac = false;
 
     uint8_t buf[32];
     uint8_t len = frame.serialize(buf, sizeof(buf));
@@ -1943,8 +1945,7 @@ TEST(ctrl0_start_and_end)
     frame.data[1] = 0x67;
     frame.data[2] = 100; // 50%
     frame.dataLen = 3;
-    memset(frame.hmac, 0xBB, 6);
-    frame.hasHmac = true;
+    frame.hasHmac = false;
 
     uint8_t buf[32];
     uint8_t len = frame.serialize(buf, sizeof(buf));
@@ -1954,7 +1955,7 @@ TEST(ctrl0_start_and_end)
     ASSERT_TRUE((parsed.ctrlByte0 & IOHC_CTRL0_START) != 0);
     ASSERT_TRUE((parsed.ctrlByte0 & IOHC_CTRL0_END) != 0);
     ASSERT_TRUE(!(parsed.ctrlByte0 & IOHC_CTRL0_MODE_1W)); // 2W
-    ASSERT_TRUE(parsed.hasHmac);
+    ASSERT_TRUE(!parsed.hasHmac);
 }
 
 // =====================================================================
@@ -3013,13 +3014,13 @@ TEST(integration_execute_status_flow)
     ASSERT_TRUE(txLenNoHmac > 0);
 
     // Create HMAC over the frame-without-HMAC bytes
-    IoHomeCrypto::createHmac2W(txBufNoHmac, txLenNoHmac, challenge, sysKey, txFrame.hmac);
-    txFrame.hasHmac = true;
+    uint8_t txHmac[IOHC_HMAC_SIZE] = {0};
+    IoHomeCrypto::createHmac2W(txBufNoHmac, txLenNoHmac, challenge, sysKey, txHmac);
 
-    // Re-serialize with HMAC for transmission
+    // Re-serialize for transmission without appended HMAC bytes.
     uint8_t txBuf[32];
     uint8_t txLen = txFrame.serialize(txBuf, sizeof(txBuf));
-    ASSERT_EQ(txLen, 9 + 8 + 6); // header + 8 data + 6 hmac = 23
+    ASSERT_EQ(txLen, 9 + 8); // header + 8 data = 17
 
     // Deserialize on "device side"
     IoHomeFrame rxOnDevice;
@@ -3027,12 +3028,12 @@ TEST(integration_execute_status_flow)
     ASSERT_EQ(rxOnDevice.getSrcNodeId(), gwNode);
     ASSERT_EQ(rxOnDevice.getDestNodeId(), devNode);
     ASSERT_EQ((uint8_t)rxOnDevice.commandId, 0x00);
-    ASSERT_TRUE(rxOnDevice.hasHmac);
+    ASSERT_TRUE(!rxOnDevice.hasHmac);
 
     // Device verifies HMAC using pre-HMAC frame bytes
     // (ctrl0 length field differs between with/without HMAC serializations)
     ASSERT_TRUE(IoHomeCrypto::verifyHmac(txBufNoHmac, txLenNoHmac,
-                                         rxOnDevice.hmac, challenge, sysKey));
+                                         txHmac, challenge, sysKey));
 
     // Device reads position from data[2]: 100/2 = 50%
     ASSERT_EQ(rxOnDevice.data[2] / 2, 50);
@@ -3062,8 +3063,8 @@ TEST(integration_execute_status_flow)
     uint8_t respBufNoHmac[32];
     respFrame.hasHmac = false;
     uint8_t respLenNoHmac = respFrame.serialize(respBufNoHmac, sizeof(respBufNoHmac));
-    IoHomeCrypto::createHmac2W(respBufNoHmac, respLenNoHmac, challenge, sysKey, respFrame.hmac);
-    respFrame.hasHmac = true;
+    uint8_t respHmac[IOHC_HMAC_SIZE] = {0};
+    IoHomeCrypto::createHmac2W(respBufNoHmac, respLenNoHmac, challenge, sysKey, respHmac);
     uint8_t respBuf[32];
     uint8_t respLen = respFrame.serialize(respBuf, sizeof(respBuf));
 
@@ -3071,11 +3072,11 @@ TEST(integration_execute_status_flow)
     IoHomeFrame rxOnGw;
     ASSERT_TRUE(rxOnGw.deserialize(respBuf, respLen));
     ASSERT_EQ(rxOnGw.getSrcNodeId(), devNode);
-    ASSERT_TRUE(rxOnGw.hasHmac);
+    ASSERT_TRUE(!rxOnGw.hasHmac);
 
     // Gateway verifies HMAC using pre-HMAC frame bytes
     ASSERT_TRUE(IoHomeCrypto::verifyHmac(respBufNoHmac, respLenNoHmac,
-                                         rxOnGw.hmac, challenge, sysKey));
+                                         respHmac, challenge, sysKey));
 
     // Gateway decodes position
     uint16_t rawPos = ((uint16_t)rxOnGw.data[7] << 8) | rxOnGw.data[8];
@@ -3338,15 +3339,15 @@ TEST(integration_challenge_lifecycle)
 
     uint8_t respBufNoHmac[32];
     uint8_t respLenNoHmac = respFrame.serialize(respBufNoHmac, sizeof(respBufNoHmac));
-    IoHomeCrypto::createHmac2W(respBufNoHmac, respLenNoHmac, storedChallenge, sysKey, respFrame.hmac);
-    respFrame.hasHmac = true;
+    uint8_t respHmac[IOHC_HMAC_SIZE] = {0};
+    IoHomeCrypto::createHmac2W(respBufNoHmac, respLenNoHmac, storedChallenge, sysKey, respHmac);
     uint8_t respBuf[32];
     uint8_t respLen = respFrame.serialize(respBuf, sizeof(respBuf));
 
     // Step 2b: Verify HMAC with stored challenge — should pass
     IoHomeFrame rxFrame;
     ASSERT_TRUE(rxFrame.deserialize(respBuf, respLen));
-    ASSERT_TRUE(rxFrame.hasHmac);
+    ASSERT_TRUE(!rxFrame.hasHmac);
 
     // Check pending challenge is non-zero
     bool hasPending = false;
@@ -3359,7 +3360,7 @@ TEST(integration_challenge_lifecycle)
     ASSERT_TRUE(hasPending);
 
     ASSERT_TRUE(IoHomeCrypto::verifyHmac(respBufNoHmac, respLenNoHmac,
-                                         rxFrame.hmac, storedChallenge, sysKey));
+                                         respHmac, storedChallenge, sysKey));
 
     // Step 3: Clear challenge after successful verification
     memset(storedChallenge, 0, 6);
@@ -3610,8 +3611,8 @@ TEST(integration_retry_then_success)
     uint8_t respBufNoHmac2[32];
     respFrame.hasHmac = false;
     uint8_t respLenNoHmac2 = respFrame.serialize(respBufNoHmac2, sizeof(respBufNoHmac2));
-    IoHomeCrypto::createHmac2W(respBufNoHmac2, respLenNoHmac2, challenge, sysKey, respFrame.hmac);
-    respFrame.hasHmac = true;
+    uint8_t respHmac2[IOHC_HMAC_SIZE] = {0};
+    IoHomeCrypto::createHmac2W(respBufNoHmac2, respLenNoHmac2, challenge, sysKey, respHmac2);
     uint8_t respBuf2[32];
     uint8_t respLen2 = respFrame.serialize(respBuf2, sizeof(respBuf2));
 
@@ -3619,7 +3620,7 @@ TEST(integration_retry_then_success)
     IoHomeFrame rxFrame;
     ASSERT_TRUE(rxFrame.deserialize(respBuf2, respLen2));
     ASSERT_TRUE(IoHomeCrypto::verifyHmac(respBufNoHmac2, respLenNoHmac2,
-                                         rxFrame.hmac, challenge, sysKey));
+                                         respHmac2, challenge, sysKey));
 
     uint16_t rawPos = ((uint16_t)rxFrame.data[7] << 8) | rxFrame.data[8];
     uint8_t percent = (uint8_t)((uint32_t)rawPos * 100 / IOHC_POSITION_MAX);
@@ -3726,7 +3727,7 @@ TEST(activate_mode_enum_value)
 
 TEST(activate_mode_frame)
 {
-    // ActivateMode frame with favorite position (authenticated, includes HMAC)
+    // ActivateMode payload stays fully in the declared 2W frame body.
     IoHomeFrame frame;
     frame.init();
     frame.setStart2W();
@@ -3741,9 +3742,7 @@ TEST(activate_mode_frame)
     frame.data[5] = IOHC_POSITION_UNKNOWN & 0xFF;         // 0x00
     memset(frame.data + 6, 0, 7);
     frame.dataLen = 13;
-    // ActivateMode is always authenticated — add HMAC
-    memset(frame.hmac, 0xBB, IOHC_HMAC_SIZE);
-    frame.hasHmac = true;
+    frame.hasHmac = false;
 
     uint8_t buf[32];
     uint8_t len = frame.serialize(buf, sizeof(buf));
@@ -3753,16 +3752,16 @@ TEST(activate_mode_frame)
     ASSERT_TRUE(parsed.deserialize(buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x01);
     ASSERT_EQ(parsed.dataLen, 13);
-    ASSERT_TRUE(parsed.hasHmac);
+    ASSERT_TRUE(!parsed.hasHmac);
     ASSERT_EQ(parsed.data[0], IOHC_ORIGINATOR_USER);
     ASSERT_EQ(parsed.data[1], IOHC_ACEI_DEFAULT);
     ASSERT_EQ(parsed.data[2], 0xD8);
     ASSERT_EQ(parsed.data[3], 0x00);
 }
 
-TEST(activate_mode_2w_has_hmac)
+TEST(activate_mode_2w_rejects_appended_hmac)
 {
-    // ActivateMode in 2W mode should be detected as needing HMAC
+    // Appending 6 extra bytes after the declared 2W payload is invalid.
     IoHomeFrame frame;
     frame.init();
     frame.setStart2W();
@@ -3782,9 +3781,7 @@ TEST(activate_mode_2w_has_hmac)
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
-    ASSERT_TRUE(parsed.hasHmac);
-    ASSERT_EQ(parsed.dataLen, 13);
+    ASSERT_TRUE(!parsed.deserialize(buf, len));
 }
 
 // =====================================================================
@@ -4010,9 +4007,9 @@ TEST(remove_controller_enum)
 
 // --- HMAC detection in deserialize ---
 
-TEST(write_private_2w_has_hmac)
+TEST(write_private_2w_rejects_appended_hmac)
 {
-    // Build a 2W frame with WritePrivate (0x20), enough data for HMAC
+    // WritePrivate in 2W mode must also reject undeclared appended HMAC bytes.
     IoHomeFrame frame;
     frame.init();
     frame.setStart2W();
@@ -4033,9 +4030,7 @@ TEST(write_private_2w_has_hmac)
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
-    ASSERT_TRUE(parsed.hasHmac);
-    ASSERT_EQ(parsed.dataLen, 13);
+    ASSERT_TRUE(!parsed.deserialize(buf, len));
 }
 
 TEST(send_key_1w_has_hmac)
@@ -4277,7 +4272,7 @@ TEST(direct_command_enum_value)
     ASSERT_EQ(static_cast<uint8_t>(IoHomeCommand::DirectCommand), 0x02);
 }
 
-TEST(direct_command_2w_has_hmac)
+TEST(direct_command_2w_rejects_appended_hmac)
 {
     IoHomeFrame frame;
     frame.init();
@@ -4298,9 +4293,7 @@ TEST(direct_command_2w_has_hmac)
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
-    ASSERT_TRUE(parsed.hasHmac);
-    ASSERT_EQ(parsed.dataLen, 4);
+    ASSERT_TRUE(!parsed.deserialize(buf, len));
 }
 
 TEST(scan_command_list_includes_direct)
@@ -5337,7 +5330,7 @@ void test_setname_frame_layout()
     ASSERT_EQ(frame.dataLen, 16);
 
     // Serialize round-trip
-    uint8_t buf[IOHC_FRAME_MAX_SIZE];
+    uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
     uint8_t len = frame.serialize(buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
@@ -5401,7 +5394,7 @@ void test_identify_frame_layout()
     frame.dataLen = 2;
     frame.hasHmac = false;
 
-    uint8_t buf[IOHC_FRAME_MAX_SIZE];
+    uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
     uint8_t len = frame.serialize(buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
@@ -5907,7 +5900,7 @@ TEST(integration_1w_key_transfer_flow)
     lRemoveFrame.dataLen = 1;
     lRemoveFrame.hasHmac = false;
 
-    uint8_t lBuf[IOHC_FRAME_MAX_SIZE]; // 36 bytes max (supports 1W SendKey1W with HMAC)
+    uint8_t lBuf[IOHC_FRAME_BUFFER_SIZE]; // 36 bytes max (supports 1W SendKey1W with HMAC)
     uint8_t lLen = lRemoveFrame.serialize(lBuf, sizeof(lBuf));
     ASSERT_EQ(lLen, 10); // 9 header + 1 data
 
@@ -6049,7 +6042,7 @@ TEST(gateway_discover_answer_frame_layout)
     IoHomeFrame frame;
     frame.init();
     frame.setStart2W();
-    frame.setSrcNode(0x112233); // gateway node ID
+    frame.setSrcNode(0x112233);  // gateway node ID
     frame.setDestNode(0x445566); // device node ID
     frame.commandId = IoHomeCommand::DiscoverResponse;
     // data: {0xFF, 0xC0, gwAddr[3], mfr, info, ts[2]} = 9 bytes
@@ -6091,7 +6084,7 @@ TEST(gateway_key_transfer_encryption)
     // Encrypt gateway key using transfer key + challenge IV
     uint8_t lEncryptedKey[16];
     bool lOk = IoHomeCrypto::crypt2WKey(lKeyInitData, sizeof(lKeyInitData),
-                                         lChallenge, IOHC_TRANSFER_KEY, lEncryptedKey);
+                                        lChallenge, IOHC_TRANSFER_KEY, lEncryptedKey);
     ASSERT_TRUE(lOk);
 
     // Verify the keystream differs from the challenge
@@ -6116,20 +6109,20 @@ TEST(gateway_challenge_answer_hmac)
 
     uint8_t lHmac[6];
     bool lOk = IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
-                                           lChallenge, lSystemKey, lHmac);
+                                          lChallenge, lSystemKey, lHmac);
     ASSERT_TRUE(lOk);
 
     // Verify HMAC is deterministic (same input → same HMAC)
     uint8_t lHmac2[6];
     IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
-                                lChallenge, lSystemKey, lHmac2);
+                               lChallenge, lSystemKey, lHmac2);
     ASSERT_MEM_EQ(lHmac, lHmac2, 6);
 
     // Verify HMAC differs for different challenge
     const uint8_t lOtherChallenge[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     uint8_t lHmac3[6];
     IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
-                                lOtherChallenge, lSystemKey, lHmac3);
+                               lOtherChallenge, lSystemKey, lHmac3);
     ASSERT_MEM_NEQ(lHmac, lHmac3, 6);
 }
 
@@ -6540,7 +6533,7 @@ static bool transmitQueuedControllerFrame(IoHomeController &iController,
 static bool queueControllerResponse(IoHomeController &iController,
                                     const IoHomeFrame &iFrame)
 {
-    uint8_t lBuffer[IOHC_FRAME_MAX_SIZE];
+    uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE];
     const uint8_t lLen = iFrame.serialize(lBuffer, sizeof(lBuffer));
     if (lLen == 0)
         return false;
@@ -6769,7 +6762,7 @@ TEST(controller_private_response_stopped_marker_uses_target_position)
 static bool queueControllerPassiveFrame(IoHomeController &iController,
                                         const IoHomeFrame &iFrame)
 {
-    uint8_t lBuffer[IOHC_FRAME_MAX_SIZE];
+    uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE];
     const uint8_t lLen = iFrame.serialize(lBuffer, sizeof(lBuffer));
     if (lLen == 0)
         return false;
@@ -6941,7 +6934,7 @@ static bool buildChallengeRequestPacket(uint32_t iRemoteNodeId,
     lChallengeFrame.dataLen = 6;
     lChallengeFrame.hasHmac = false;
 
-    oLen = lChallengeFrame.serialize(oBuffer, IOHC_FRAME_MAX_SIZE);
+    oLen = lChallengeFrame.serialize(oBuffer, IOHC_FRAME_BUFFER_SIZE);
     return oLen > 0;
 }
 
@@ -6960,7 +6953,7 @@ static bool sendExecuteAndAnswerChallenge(IoHomeController &iController,
     iController.loop(); // TxInProgress -> WaitResponse
 
     const uint8_t lChallenge[6] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC};
-    uint8_t lChallengePacket[IOHC_FRAME_MAX_SIZE];
+    uint8_t lChallengePacket[IOHC_FRAME_BUFFER_SIZE];
     uint8_t lChallengeLen = 0;
     if (!buildChallengeRequestPacket(iRemoteNodeId, iDeviceNodeId,
                                      lChallenge, lChallengePacket, lChallengeLen))
@@ -7000,7 +6993,7 @@ TEST(controller_2w_challenge_response_inherits_low_power)
 
     IoHomeFrame lResponse;
     ASSERT_TRUE(sendExecuteAndAnswerChallenge(lController, lRemoteNodeId,
-                                             lDeviceNodeId, lKey, lResponse));
+                                              lDeviceNodeId, lKey, lResponse));
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_EQ(lResponse.dataLen, IOHC_HMAC_SIZE);
     ASSERT_TRUE(lResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
@@ -7028,7 +7021,7 @@ TEST(controller_2w_challenge_response_can_clear_low_power_for_mains_device)
 
     IoHomeFrame lResponse;
     ASSERT_TRUE(sendExecuteAndAnswerChallenge(lController, lRemoteNodeId,
-                                             lDeviceNodeId, lKey, lResponse));
+                                              lDeviceNodeId, lKey, lResponse));
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_EQ(lResponse.dataLen, IOHC_HMAC_SIZE);
     ASSERT_TRUE((lResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
@@ -7415,6 +7408,7 @@ int main()
     RUN(frame_roundtrip_no_hmac);
     RUN(frame_deserialize_rejects_too_short);
     RUN(frame_deserialize_rejects_too_long);
+    RUN(frame_2w_rejects_oversized_declared_length);
     RUN(frame_deserialize_smoove_origin_packet);
     RUN(frame_deserialize_1w_execute_real_capture_from_box);
     RUN(frame_rejects_sx1262_parse_fail_capture);
@@ -7441,8 +7435,8 @@ int main()
     RUN(position_encoding);
 
     printf("\nHMAC detection per command type:\n");
-    RUN(frame_deserialize_execute_2w_has_hmac);
-    RUN(frame_deserialize_status_update_2w_has_hmac);
+    RUN(frame_deserialize_rejects_2w_appended_hmac);
+    RUN(frame_deserialize_status_update_2w_keeps_payload);
     RUN(frame_deserialize_getname_2w_no_hmac);
     RUN(frame_deserialize_1w_execute_no_hmac);
 
@@ -7620,7 +7614,7 @@ int main()
     printf("\nActivateMode (0x01) command:\n");
     RUN(activate_mode_enum_value);
     RUN(activate_mode_frame);
-    RUN(activate_mode_2w_has_hmac);
+    RUN(activate_mode_2w_rejects_appended_hmac);
 
     printf("\nVent and ForceOpen position constants:\n");
     RUN(vent_position_constant);
@@ -7670,7 +7664,7 @@ int main()
     RUN(remove_controller_enum);
 
     printf("\nHMAC detection for new commands:\n");
-    RUN(write_private_2w_has_hmac);
+    RUN(write_private_2w_rejects_appended_hmac);
     RUN(send_key_1w_has_hmac);
     RUN(frame_1w_execute_has_hmac);
 
@@ -7707,7 +7701,7 @@ int main()
 
     printf("\nDirect Command (0x02):\n");
     RUN(direct_command_enum_value);
-    RUN(direct_command_2w_has_hmac);
+    RUN(direct_command_2w_rejects_appended_hmac);
     RUN(scan_command_list_includes_direct);
 
     printf("\nFrame order field:\n");

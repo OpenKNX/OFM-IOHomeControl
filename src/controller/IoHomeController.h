@@ -15,8 +15,8 @@
 #define IOHC_RX_SCAN_INTERVAL_US 2700     // ~2.7ms frequency scan interval (per nicolas5000)
 // Maximum raw Execute payload bytes before appending the 1W sequence number.
 // Normal 1W authenticated frames include 6-byte HMAC in CTRL0 length, so keep
-// 9(header) + raw + 2(seq) + 6(hmac) <= IOHC_FRAME_MAX_SIZE.
-#define IOHC_1W_RAW_EXEC_MAX_DATA (IOHC_FRAME_MAX_SIZE - 9 - 2 - IOHC_HMAC_SIZE)
+// 9(header) + raw + 2(seq) + 6(hmac) <= IOHC_FRAME_BUFFER_SIZE.
+#define IOHC_1W_RAW_EXEC_MAX_DATA (IOHC_FRAME_BUFFER_SIZE - 9 - 2 - IOHC_HMAC_SIZE)
 
 class IoHomecontrolChannel;
 
@@ -34,13 +34,13 @@ struct IoHomeQueueEntry
   bool oneWayRawExecute;     // true: send exact raw Execute payload bytes before sequence/HMAC
   uint8_t oneWayRawData[IOHC_1W_RAW_EXEC_MAX_DATA];
   uint8_t oneWayRawLen;
-  bool oneWayStandardExecute;  // true: standard 14-byte 1W Execute payload mapping
-  uint16_t oneWayMain;         // main[2] value, e.g. 0x0000=open, 0xC800=close, 0xD200=stop
+  bool oneWayStandardExecute; // true: standard 14-byte 1W Execute payload mapping
+  uint16_t oneWayMain;        // main[2] value, e.g. 0x0000=open, 0xC800=close, 0xD200=stop
   uint8_t oneWayFp1;
   uint8_t oneWayFp2;
-  uint8_t oneWayBroadcastType; // target type: dst = ((type << 6) | 0x3F)
+  uint8_t oneWayBroadcastType;      // target type: dst = ((type << 6) | 0x3F)
   bool oneWayBroadcastTypeExplicit; // true when the caller explicitly requested a typed 1W broadcast target
-  bool twoWayTilt;             // true: 2W tilt-only Execute payload
+  bool twoWayTilt;                  // true: 2W tilt-only Execute payload
   uint8_t twoWayTiltPercent;
   uint8_t retries;
   bool active;
@@ -387,9 +387,9 @@ private:
   IoHomeFrame mTxFrame;
   IoHomeFrame mRxFrame;
   IoHomeFrame mPairSetConfigRequest;
-  uint8_t mTxBuffer[IOHC_FRAME_MAX_SIZE];
+  uint8_t mTxBuffer[IOHC_FRAME_BUFFER_SIZE];
   uint8_t mTxLen;
-  uint8_t mRxBuffer[IOHC_FRAME_MAX_SIZE];
+  uint8_t mRxBuffer[IOHC_FRAME_BUFFER_SIZE];
 
   // 1W repeat transmission state
   uint8_t mTx1WRepeatRemaining = 0; // remaining 1W repeats (0 = done)

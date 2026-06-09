@@ -36,7 +36,7 @@ static unsigned long millis() { return 0; }
 
 static constexpr uint16_t kCachedIrqMask = SX1262_IRQ_TX_DONE | SX1262_IRQ_RX_DONE | SX1262_IRQ_TIMEOUT | SX1262_IRQ_CRC_ERR;
 
-static constexpr uint8_t kMaxSx1262PayloadLen = IOHC_FRAME_MAX_SIZE + IOHC_CRC_SIZE;
+static constexpr uint8_t kMaxSx1262PayloadLen = IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE;
 static constexpr uint32_t kRxDiscardLogIntervalMs = 1000UL;
 static constexpr size_t kRxDiscardDumpLen = 24;
 
@@ -342,7 +342,7 @@ RadioError RadioSX1262::configure()
     if (!applySyncWord(IOHC_SYNC_WORD, IOHC_SYNC_WORD_SIZE))
         return RadioError::HardwareError;
 
-    mPacketPayloadLen = mSoftwarePhyMode ? SX1262_IOHOME_RX_FIXED_LEN : IOHC_FRAME_MAX_SIZE;
+    mPacketPayloadLen = mSoftwarePhyMode ? SX1262_IOHOME_RX_FIXED_LEN : IOHC_FRAME_BUFFER_SIZE;
     if (!applyPacketParams())
         return RadioError::HardwareError;
 
@@ -546,7 +546,7 @@ RadioError RadioSX1262::startTransmitInternal(const uint8_t *iData, uint8_t iLen
 
     if (mSoftwarePhyMode)
     {
-        if (iLen > IOHC_FRAME_MAX_SIZE)
+        if (iLen > IOHC_FRAME_BUFFER_SIZE)
             return RadioError::InvalidParam;
 
         const size_t lEncodedLen = sx1262EncodeIoHomeFrame(iData, iLen, lEncodedBuf, sizeof(lEncodedBuf));
@@ -664,7 +664,7 @@ RadioError RadioSX1262::startReceiveInternal(bool iBlocking)
     }
 
     setRfSwitchRx();
-    mPacketPayloadLen = mSoftwarePhyMode ? SX1262_IOHOME_RX_FIXED_LEN : IOHC_FRAME_MAX_SIZE;
+    mPacketPayloadLen = mSoftwarePhyMode ? SX1262_IOHOME_RX_FIXED_LEN : IOHC_FRAME_BUFFER_SIZE;
 
     // Clear IRQ flags and preamble flag before RX
     mIrqFired = false;
@@ -1128,7 +1128,7 @@ void RadioSX1262::configureEms2Mode()
 
     // EMS2 uses 2-byte sync word {0x2D, 0xD4}
     applySyncWord(IOHC_EMS2_SYNC_WORD, IOHC_EMS2_SYNC_WORD_SIZE);
-    mPacketPayloadLen = IOHC_FRAME_MAX_SIZE;
+    mPacketPayloadLen = IOHC_FRAME_BUFFER_SIZE;
     applyPacketParams();
 
     // EMS2 uses 868.95 MHz
@@ -1143,7 +1143,7 @@ void RadioSX1262::configureStandardMode()
 
     // Restore 3-byte io-homecontrol sync word
     applySyncWord(IOHC_SYNC_WORD, IOHC_SYNC_WORD_SIZE);
-    mPacketPayloadLen = mSoftwarePhyMode ? SX1262_IOHOME_RX_FIXED_LEN : IOHC_FRAME_MAX_SIZE;
+    mPacketPayloadLen = mSoftwarePhyMode ? SX1262_IOHOME_RX_FIXED_LEN : IOHC_FRAME_BUFFER_SIZE;
     applyPacketParams();
 
     // Restore default frequency
@@ -1212,7 +1212,7 @@ bool RadioSX1262::applyPacketParams(bool iBlocking)
     uint16_t lPreambleBits = mPreambleLength * 8;
     uint8_t lPayloadLen = mPacketPayloadLen;
     if (lPayloadLen == 0)
-        lPayloadLen = mSoftwarePhyMode ? SX1262_IOHOME_RX_FIXED_LEN : IOHC_FRAME_MAX_SIZE;
+        lPayloadLen = mSoftwarePhyMode ? SX1262_IOHOME_RX_FIXED_LEN : IOHC_FRAME_BUFFER_SIZE;
     lParams[0] = (lPreambleBits >> 8) & 0xFF;
     lParams[1] = lPreambleBits & 0xFF;
     lParams[2] = 0x05;                           // preamble detector: 16 bits (2 bytes, matches Semtech SX126x encoding)
