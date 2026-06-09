@@ -49,7 +49,11 @@ public:
 
   RadioError setFrequencyBlocking(uint32_t iFreqHz) { return setFrequency(iFreqHz); }
   RadioError setOutputPower(uint8_t) { return RadioError::None; }
-  RadioError setPreambleLength(uint16_t) { return RadioError::None; }
+  RadioError setPreambleLength(uint16_t iSymbols)
+  {
+    mLastPreambleLength = iSymbols;
+    return RadioError::None;
+  }
   RadioError setPreambleLengthBlocking(uint16_t iSymbols) { return setPreambleLength(iSymbols); }
 
   RadioError startTransmit(const uint8_t *iData, uint8_t iLen)
@@ -174,6 +178,7 @@ public:
   void testClearReceivedPackets() { mReceiveQueue.clear(); }
   void testClearTransmittedPacket() { mLastTransmittedPacket.clear(); }
   uint32_t testTransmitCount() const { return mTxStartCount; }
+  uint16_t testLastPreambleLength() const { return mLastPreambleLength; }
   const std::vector<uint8_t> &testLastTransmittedPacket() const { return mLastTransmittedPacket; }
 
 private:
@@ -193,6 +198,7 @@ private:
   uint32_t mRxStartCount = 0;
   uint32_t mIrqCount = 0;
   uint32_t mRxDoneCount = 0;
+  uint16_t mLastPreambleLength = 0;
   std::deque<QueuedPacket> mReceiveQueue;
   std::vector<uint8_t> mLastTransmittedPacket;
 };

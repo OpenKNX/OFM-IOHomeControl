@@ -591,8 +591,12 @@ private:
 
   // Configure TX-side radio settings without blocking on BUSY.
   RadioError configureTxRadio(uint16_t iPreambleSymbols, const uint32_t *iFrequencyHz = nullptr);
+  RadioError startTransmitWithPreamble(const uint8_t *iBuffer, uint8_t iLen,
+                                       uint16_t iPreambleSymbols,
+                                       bool iTrackDutyCycle = false);
   RadioError startShortPreambleTransmit(const uint8_t *iBuffer, uint8_t iLen,
                                         bool iTrackDutyCycle = false);
+  uint16_t authResponsePreamble() const;
   uint32_t currentTxTimeoutMs() const;
 
   RadioError ensureReceiveAfterTransmit();

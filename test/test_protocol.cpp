@@ -7044,6 +7044,7 @@ TEST(controller_2w_challenge_response_inherits_low_power)
                                               lDeviceNodeId, lKey, lResponse));
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_EQ(lResponse.dataLen, IOHC_HMAC_SIZE);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), 64);
     ASSERT_TRUE(lResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
 }
 

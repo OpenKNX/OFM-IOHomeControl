@@ -2427,7 +2427,8 @@ void IoHomeController::processResponse()
         uint8_t lLen = lFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
         if (lLen > 0)
         {
-            const RadioError lErr = startShortPreambleTransmit(mTxBuffer, lLen);
+            const RadioError lErr = startTransmitWithPreamble(mTxBuffer, lLen,
+                                                              authResponsePreamble());
             if (lErr == RadioError::None)
             {
                 mAuthResponseSent = true;
@@ -3858,7 +3859,23 @@ RadioError IoHomeController::configureTxRadio(uint16_t iPreambleSymbols, const u
 RadioError IoHomeController::startShortPreambleTransmit(const uint8_t *iBuffer, uint8_t iLen,
                                                         bool iTrackDutyCycle)
 {
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_SHORT);
+    return startTransmitWithPreamble(iBuffer, iLen, IOHC_PREAMBLE_SHORT, iTrackDutyCycle);
+}
+
+uint16_t IoHomeController::authResponsePreamble() const
+{
+#if defined(RADIO_SX1262) || defined(TEST_NATIVE)
+    return 64;
+#else
+    return IOHC_PREAMBLE_SHORT;
+#endif
+}
+
+RadioError IoHomeController::startTransmitWithPreamble(const uint8_t *iBuffer, uint8_t iLen,
+                                                       uint16_t iPreambleSymbols,
+                                                       bool iTrackDutyCycle)
+{
+    const RadioError lPrepErr = configureTxRadio(iPreambleSymbols);
     if (lPrepErr != RadioError::None)
         return lPrepErr;
 
