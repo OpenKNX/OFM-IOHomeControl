@@ -567,7 +567,10 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
     logDebugP("Send position %.1f%%", iPercent);
     mTargetPosition = clampPercent(iPercent);
     uint8_t lParam = (uint8_t)(iPercent + 0.5f);
-    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lParam, iSlatPercent);
+    if (mIs1W)
+        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lParam, iSlatPercent);
+    else
+        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lParam);
     startTravelEstimation(mTargetPosition);
 }
 

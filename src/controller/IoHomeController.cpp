@@ -4069,14 +4069,6 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 mTxFrame.data[6] = 0x06; // standard mode (0x05 = quiet)
                 mTxFrame.data[7] = 0x00;
                 mTxFrame.dataLen = 8;
-
-                // Second parameter (slat angle for venetian blinds) appended after
-                if (iEntry.param2 != 0xFF)
-                {
-                    mTxFrame.data[8] = iEntry.param2 * 2;
-                    mTxFrame.data[9] = 0x00;
-                    mTxFrame.dataLen = 10;
-                }
             }
             else
             {

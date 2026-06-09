@@ -6651,6 +6651,36 @@ TEST(controller_2w_tilt_execute_payload)
     ASSERT_EQ(lPacket[16], 0x00);
 }
 
+TEST(controller_2w_execute_ignores_combined_slat_param)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 50, 75));
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
+    ASSERT_EQ(lFrame.dataLen, 8);
+    ASSERT_EQ(lFrame.data[0], IOHC_ORIGINATOR_USER);
+    ASSERT_EQ(lFrame.data[1], IOHC_ACEI_DEFAULT);
+    ASSERT_EQ(lFrame.data[2], 100);
+    ASSERT_EQ(lFrame.data[3], 0x00);
+    ASSERT_EQ(lFrame.data[4], 0x80);
+    ASSERT_EQ(lFrame.data[5], 0xD8);
+    ASSERT_EQ(lFrame.data[6], 0x06);
+    ASSERT_EQ(lFrame.data[7], 0x00);
+}
+
 TEST(controller_private_response_decodes_battery_lowpower_and_tilt)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
