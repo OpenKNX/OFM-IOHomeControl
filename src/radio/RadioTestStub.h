@@ -43,6 +43,12 @@ public:
 
   RadioError setFrequency(uint32_t iFreqHz)
   {
+    if (mNextFrequencyError != RadioError::None)
+    {
+      const RadioError lErr = mNextFrequencyError;
+      mNextFrequencyError = RadioError::None;
+      return lErr;
+    }
     mCurrentFreq = iFreqHz;
     return RadioError::None;
   }
@@ -51,6 +57,12 @@ public:
   RadioError setOutputPower(uint8_t) { return RadioError::None; }
   RadioError setPreambleLength(uint16_t iSymbols)
   {
+    if (mNextPreambleError != RadioError::None)
+    {
+      const RadioError lErr = mNextPreambleError;
+      mNextPreambleError = RadioError::None;
+      return lErr;
+    }
     mLastPreambleLength = iSymbols;
     return RadioError::None;
   }
@@ -62,6 +74,12 @@ public:
       return RadioError::NotInitialized;
     if (iData == nullptr || iLen == 0)
       return RadioError::InvalidParam;
+    if (mNextTransmitError != RadioError::None)
+    {
+      const RadioError lErr = mNextTransmitError;
+      mNextTransmitError = RadioError::None;
+      return lErr;
+    }
 
     mLastTransmittedPacket.assign(iData, iData + iLen);
     mState = RadioState::Transmitting;
@@ -177,6 +195,9 @@ public:
 
   void testClearReceivedPackets() { mReceiveQueue.clear(); }
   void testClearTransmittedPacket() { mLastTransmittedPacket.clear(); }
+  void testSetNextFrequencyError(RadioError iError) { mNextFrequencyError = iError; }
+  void testSetNextPreambleError(RadioError iError) { mNextPreambleError = iError; }
+  void testSetNextTransmitError(RadioError iError) { mNextTransmitError = iError; }
   uint32_t testTransmitCount() const { return mTxStartCount; }
   uint16_t testLastPreambleLength() const { return mLastPreambleLength; }
   const std::vector<uint8_t> &testLastTransmittedPacket() const { return mLastTransmittedPacket; }
@@ -199,6 +220,9 @@ private:
   uint32_t mIrqCount = 0;
   uint32_t mRxDoneCount = 0;
   uint16_t mLastPreambleLength = 0;
+  RadioError mNextFrequencyError = RadioError::None;
+  RadioError mNextPreambleError = RadioError::None;
+  RadioError mNextTransmitError = RadioError::None;
   std::deque<QueuedPacket> mReceiveQueue;
   std::vector<uint8_t> mLastTransmittedPacket;
 };
