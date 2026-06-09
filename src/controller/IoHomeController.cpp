@@ -4090,15 +4090,12 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
     case IoHomeCommand::Private:
         // Private query variants observed in the io-rts-esp32 protocol:
         // 03 00 00 = status, 06/09 = battery, 03 20 01 00 = tilt status.
-        mTxFrame.data[0] = iEntry.param == 0 ? 0x03 : iEntry.param;
-        mTxFrame.data[1] = iEntry.param2 == 0xFF ? 0x00 : iEntry.param2;
-        mTxFrame.data[2] = iEntry.param3 == 0xFF ? 0x00 : iEntry.param3;
-        mTxFrame.dataLen = 3;
-        if (iEntry.param2 != 0xFF && iEntry.param3 != 0xFF)
-        {
+        mTxFrame.data[0] = iEntry.param;
+        mTxFrame.data[1] = (iEntry.param2 != 0xFF) ? iEntry.param2 : 0x00;
+        mTxFrame.data[2] = (iEntry.param3 != 0xFF) ? iEntry.param3 : 0x00;
+        mTxFrame.dataLen = (iEntry.param2 != 0xFF || iEntry.param3 != 0xFF) ? 4 : 3;
+        if (mTxFrame.dataLen == 4)
             mTxFrame.data[3] = 0x00;
-            mTxFrame.dataLen = 4;
-        }
         mTxFrame.hasHmac = false;
         break;
 

@@ -6575,6 +6575,22 @@ TEST(controller_private_query_payload_variants)
         IoHomecontrolChannel lChannel;
         initPaired2WControllerForTest(lController, lModule, lChannel,
                                       lRemoteNodeId, lDeviceNodeId, lKey);
+        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Private, 0x03));
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+        ASSERT_EQ(lFrame.commandId, IoHomeCommand::Private);
+        ASSERT_EQ(lFrame.dataLen, 3);
+        ASSERT_EQ(lFrame.data[0], 0x03);
+        ASSERT_EQ(lFrame.data[1], 0x00);
+        ASSERT_EQ(lFrame.data[2], 0x00);
+    }
+
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, lDeviceNodeId, lKey);
         ASSERT_TRUE(lController.sendBatteryStatusQuery(lDeviceNodeId, lKey));
         IoHomeFrame lFrame;
         ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));

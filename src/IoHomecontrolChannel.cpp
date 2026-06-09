@@ -614,13 +614,21 @@ void IoHomecontrolChannel::sendSlatCommand(float iPercent)
 void IoHomecontrolChannel::requestStatus()
 {
     logDebugP("Request status");
-    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::GetGeneralInfo3, 0);
+
+    if (!mIs1W && isTiltCapableDeviceType())
+    {
+        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private, 0x03, 0x20, 0x01);
+    }
+    else
+    {
+        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private, 0x03);
+    }
 }
 
 void IoHomecontrolChannel::requestStatusPrivate()
 {
     logDebugP("Request status (Private 0x03)");
-    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private, 0);
+    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private, 0x03);
 }
 
 bool IoHomecontrolChannel::isOnOffDeviceType() const

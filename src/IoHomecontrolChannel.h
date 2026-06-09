@@ -74,6 +74,7 @@ public:
   uint32_t getConfigured1WTargetNodeId() const;
   void setConfigured1WBroadcastType(uint8_t iBroadcastType);
   uint8_t getConfigured1WBroadcastType() const;
+  void requestStatus();
 
   // Lock control (P2)
   void setLocked(bool iLocked);
@@ -141,7 +142,6 @@ private:
   void sendFavorite();
   void sendSlatCommand(float iPercent);
   void sendVentilationPosition();
-  void requestStatus();
   void requestStatusPrivate();
   void publishPositionFeedback(float iPositionPercent, bool iLogMessage);
   void startTravelEstimation(float iTargetPositionPercent);

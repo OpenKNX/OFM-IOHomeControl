@@ -1491,9 +1491,7 @@ void IoHomecontrol::processAfterStartupDelay()
         if (lBehavior == 1) // Status abfragen
         {
             logDebugP("Ch%d: power-on -> request status", i + 1);
-            mController.sendCommand(mChannels[i]->getNodeId(),
-                                    mChannels[i]->getEncryptionKey(),
-                                    IoHomeCommand::GetGeneralInfo3, 0);
+            mChannels[i]->requestStatus();
         }
         else if (lBehavior == 2)
         {
