@@ -7019,6 +7019,47 @@ static bool sendExecuteAndAnswerChallenge(IoHomeController &iController,
     return oChallengeResponse.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size()));
 }
 
+static void buildStatusUpdateFrame(IoHomeFrame &oFrame,
+                                   uint32_t iRemoteNodeId,
+                                   uint32_t iDeviceNodeId,
+                                   const uint8_t *iData,
+                                   uint8_t iDataLen)
+{
+    oFrame.init();
+    oFrame.ctrlByte0 = IOHC_CTRL0_END;
+    oFrame.ctrlByte1 = 0x00;
+    oFrame.setSrcNode(iDeviceNodeId);
+    oFrame.setDestNode(iRemoteNodeId);
+    oFrame.commandId = IoHomeCommand::StatusUpdate;
+    memcpy(oFrame.data, iData, iDataLen);
+    oFrame.dataLen = iDataLen;
+    oFrame.hasHmac = false;
+}
+
+static void buildChallengeResponseFrame(IoHomeFrame &oFrame,
+                                        uint32_t iRemoteNodeId,
+                                        uint32_t iDeviceNodeId,
+                                        const uint8_t *iStatusData,
+                                        uint8_t iStatusDataLen,
+                                        const uint8_t iChallenge[6],
+                                        const uint8_t iKey[16])
+{
+    uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA] = {};
+    lHmacInput[0] = static_cast<uint8_t>(IoHomeCommand::StatusUpdate);
+    memcpy(lHmacInput + 1, iStatusData, iStatusDataLen);
+
+    oFrame.init();
+    oFrame.ctrlByte0 = IOHC_CTRL0_END;
+    oFrame.ctrlByte1 = 0x00;
+    oFrame.setSrcNode(iDeviceNodeId);
+    oFrame.setDestNode(iRemoteNodeId);
+    oFrame.commandId = IoHomeCommand::ChallengeResponse;
+    ASSERT_TRUE(IoHomeCrypto::createHmac2W(lHmacInput, 1 + iStatusDataLen,
+                                           iChallenge, iKey, oFrame.data));
+    oFrame.dataLen = IOHC_HMAC_SIZE;
+    oFrame.hasHmac = false;
+}
+
 TEST(controller_2w_challenge_response_inherits_low_power)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -7074,6 +7115,88 @@ TEST(controller_2w_challenge_response_can_clear_low_power_for_mains_device)
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_EQ(lResponse.dataLen, IOHC_HMAC_SIZE);
     ASSERT_TRUE((lResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
+}
+
+TEST(controller_status_update_receive_auth_uses_saved_command_data)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    uint8_t lStatusData[11] = {};
+    lStatusData[0] = 0x01;
+    lStatusData[1] = 0x80;
+    lStatusData[3] = 55;
+    const uint16_t lTargetRaw = (40UL * IOHC_POSITION_MAX) / 100UL;
+    const uint16_t lCurrentRaw = (38UL * IOHC_POSITION_MAX) / 100UL;
+    lStatusData[5] = (lTargetRaw >> 8) & 0xFF;
+    lStatusData[6] = lTargetRaw & 0xFF;
+    lStatusData[7] = (lCurrentRaw >> 8) & 0xFF;
+    lStatusData[8] = lCurrentRaw & 0xFF;
+    lStatusData[10] = 7;
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+
+    IoHomeFrame lStatusFrame;
+    buildStatusUpdateFrame(lStatusFrame, lRemoteNodeId, lDeviceNodeId,
+                           lStatusData, sizeof(lStatusData));
+
+    uint8_t lStatusBuffer[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t lStatusLen = lStatusFrame.serialize(lStatusBuffer, sizeof(lStatusBuffer));
+    ASSERT_TRUE(lStatusLen > 0);
+
+    lController.radio().testClearTransmittedPacket();
+    lController.radio().testQueueReceivedPacket(lStatusBuffer, lStatusLen);
+    lController.loop();
+
+    IoHomeFrame lChallengeRequest;
+    const auto &lChallengePacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lChallengePacket.empty());
+    ASSERT_TRUE(lChallengeRequest.deserialize(lChallengePacket.data(), static_cast<uint8_t>(lChallengePacket.size())));
+    ASSERT_EQ(lChallengeRequest.commandId, IoHomeCommand::ChallengeRequest);
+    ASSERT_EQ(lChallengeRequest.dataLen, 6);
+    ASSERT_TRUE(!lChannel.testHasStatusUpdate());
+    ASSERT_TRUE(!lChannel.testHasPositionFeedback());
+
+    IoHomeFrame lChallengeResponse;
+    buildChallengeResponseFrame(lChallengeResponse, lRemoteNodeId, lDeviceNodeId,
+                                lStatusData, sizeof(lStatusData),
+                                lChallengeRequest.data, lKey);
+    uint8_t lChallengeResponseBuffer[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t lChallengeResponseLen = lChallengeResponse.serialize(lChallengeResponseBuffer,
+                                                                       sizeof(lChallengeResponseBuffer));
+    ASSERT_TRUE(lChallengeResponseLen > 0);
+
+    lController.radio().testClearTransmittedPacket();
+    lController.radio().testQueueReceivedPacket(lChallengeResponseBuffer, lChallengeResponseLen);
+    lController.loop();
+
+    IoHomeFrame lAckFrame;
+    const auto &lAckPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lAckPacket.empty());
+    ASSERT_TRUE(lAckFrame.deserialize(lAckPacket.data(), static_cast<uint8_t>(lAckPacket.size())));
+    ASSERT_EQ(lAckFrame.commandId, IoHomeCommand::StatusUpdateResponse);
+    ASSERT_EQ(lAckFrame.dataLen, 2);
+    ASSERT_EQ(lAckFrame.data[0], 0x05);
+    ASSERT_EQ(lAckFrame.data[1], 0x00);
+
+    ASSERT_TRUE(lChannel.testHasStatusUpdate());
+    ASSERT_TRUE(!lChannel.testStatusMoving());
+    ASSERT_TRUE(lChannel.testHasPositionFeedback());
+    ASSERT_TRUE(lChannel.testHasTargetPositionFeedback());
+    ASSERT_TRUE(lChannel.testHasBatteryLevel());
+    ASSERT_EQ(lChannel.testBatteryLevel(), 55);
+    ASSERT_TRUE(lChannel.testStatusExpected());
+    ASSERT_FLOAT_EQ(lChannel.testTargetPositionFeedback(), 40.0f, 0.01f);
+
+    for (int i = 0; i < 8; i++)
+        lController.loop();
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
 }
 
 TEST(controller_2w_initial_response_wait_uses_retry_gap)
@@ -7983,6 +8106,7 @@ int main()
     RUN(controller_passive_key_sniff_captures_result_and_callback);
     RUN(controller_2w_challenge_response_inherits_low_power);
     RUN(controller_2w_challenge_response_can_clear_low_power_for_mains_device);
+    RUN(controller_status_update_receive_auth_uses_saved_command_data);
     RUN(controller_2w_initial_response_wait_uses_retry_gap);
     RUN(controller_2w_final_response_wait_and_sx1262_dwell);
     RUN(controller_default_1w_execute_uses_standard_vent_layout);

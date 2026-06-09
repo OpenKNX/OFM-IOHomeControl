@@ -4423,6 +4423,20 @@ void IoHomeController::dispatchRxFrame()
         IoHomecontrolChannel *lCh = mModule->getChannel(i);
         if (lCh && lCh->isPaired() && lCh->getNodeId() == lSrcNode)
         {
+            if (!mPassiveMode &&
+                mRxFrame.commandId == IoHomeCommand::StatusUpdate &&
+                mRxFrame.getDestNodeId() == mOwnNodeId &&
+                mState != ControllerState::AuthSendChallenge &&
+                mState != ControllerState::AuthWaitResponse)
+            {
+                mPendingAuthFrame = mRxFrame;
+                mAuthSrcNodeId = lSrcNode;
+                mAuthChannelIdx = i;
+                IoHomeCrypto::generateChallenge(mAuthChallenge);
+                mState = ControllerState::AuthSendChallenge;
+                return;
+            }
+
             // Verify HMAC on authenticated frames before trusting data
             if (mRxFrame.hasHmac)
             {
@@ -4441,17 +4455,6 @@ void IoHomeController::dispatchRxFrame()
 
                 if (!lHasPendingChallenge)
                 {
-                    // For unsolicited StatusUpdate with HMAC, initiate challenge-response auth
-                    if (mRxFrame.commandId == IoHomeCommand::StatusUpdate &&
-                        mState == ControllerState::Idle && !mPassiveMode)
-                    {
-                        mPendingAuthFrame = mRxFrame;
-                        mAuthSrcNodeId = lSrcNode;
-                        mAuthChannelIdx = i;
-                        IoHomeCrypto::generateChallenge(mAuthChallenge);
-                        mState = ControllerState::AuthSendChallenge;
-                        return; // don't dispatch yet — wait for auth
-                    }
                     logInfoP("HMAC frame rejected: no pending challenge for node 0x%06X", lSrcNode);
                     break;
                 }
