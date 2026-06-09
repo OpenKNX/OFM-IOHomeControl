@@ -60,6 +60,13 @@ function IOHC_readNodeId(resp, startIndex) {
            (resp[startIndex + 2] || 0);
 }
 
+function IOHC_appendNodeId(data, nodeId) {
+    var normalizedNodeId = nodeId || 0;
+    data.push((normalizedNodeId >> 16) & 0xFF);
+    data.push((normalizedNodeId >> 8) & 0xFF);
+    data.push(normalizedNodeId & 0xFF);
+}
+
 function IOHC_controllerStateText(state) {
     switch (state) {
     case 0:
@@ -252,12 +259,16 @@ function IOHC_refreshAllPairingInfo(device, online, progress, context) {
  */
 function IOHC_startPairing(device, online, progress, context) {
     var channelIndex = context.channelIndex - 1;
+    var prefix = IOHC_getChannelPrefix(context);
     progress.setText("Pairing wird gestartet für Kanal " + (channelIndex + 1) + " ...");
     progress.setProgress(10);
     online.connect();
     try {
         var data = [0x10];
         data = data.concat(channelIndex);
+        if (IOHC_getParameter(device, prefix + "ProtocolMode").value == 1) {
+            IOHC_appendNodeId(data, IOHC_getParameter(device, prefix + "OneWayTargetNodeId").value);
+        }
         var resp = IOHC_invokeFunctionProperty(online, data);
 
         if (resp[0] == 0) {

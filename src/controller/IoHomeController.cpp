@@ -559,6 +559,7 @@ bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
         }
     }
     lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
+    lEntry.oneWayBroadcastTypeExplicit = false;
     lEntry.retries = 0;
     lEntry.active = true;
     return queuePush(lEntry);
@@ -579,6 +580,7 @@ bool IoHomeController::sendOneWayButton(uint32_t iDestNodeId, const uint8_t *iEn
     lEntry.oneWayRawExecute = false;
     lEntry.oneWayRawLen = 0;
     lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
+    lEntry.oneWayBroadcastTypeExplicit = false;
     lEntry.retries = 0;
     lEntry.active = true;
     return queuePush(lEntry);
@@ -603,6 +605,7 @@ bool IoHomeController::sendOneWayRawExecute(uint32_t iDestNodeId, const uint8_t 
     lEntry.oneWayRawExecute = true;
     lEntry.oneWayRawLen = iPayloadLen;
     lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
+    lEntry.oneWayBroadcastTypeExplicit = false;
     memcpy(lEntry.oneWayRawData, iPayload, iPayloadLen);
     lEntry.retries = 0;
     lEntry.active = true;
@@ -626,6 +629,7 @@ bool IoHomeController::sendOneWayExecuteWithType(uint32_t iDestNodeId, const uin
     lEntry.oneWayFp1 = iFp1;
     lEntry.oneWayFp2 = iFp2;
     lEntry.oneWayBroadcastType = iBroadcastType & 0x3F;
+    lEntry.oneWayBroadcastTypeExplicit = true;
     lEntry.retries = 0;
     lEntry.active = true;
     return queuePush(lEntry);
@@ -699,6 +703,7 @@ bool IoHomeController::sendTiltCommand(uint32_t iDestNodeId, const uint8_t *iEnc
     lEntry.param2 = 0xFF;
     lEntry.param3 = 0xFF;
     lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
+    lEntry.oneWayBroadcastTypeExplicit = false;
     lEntry.twoWayTilt = true;
     lEntry.twoWayTiltPercent = iTiltPercent;
     lEntry.retries = 0;
@@ -3878,10 +3883,11 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 return false;
             const uint8_t *lProfileKey = lProfile->getOneWayControllerKey();
             mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
-            // 1W Execute: fire-and-forget with sequence counter + HMAC.
-            // 1W remotes broadcast commands to a type-dependent target:
-            // dst = ((type << 6) | 0x3F). Type 0 => 0x00003F, type 2 => 0x0000BF, type 3 => 0x0000FF.
-            mTxFrame.setDestNode(oneWayBroadcastTarget(iEntry.oneWayBroadcastType));
+            // Keep the legacy default 1W target at 0x00003F for actuator control.
+            // Only explicit typed send paths override this destination.
+            mTxFrame.setDestNode(iEntry.oneWayBroadcastTypeExplicit
+                                     ? oneWayBroadcastTarget(iEntry.oneWayBroadcastType)
+                                     : 0x00003F);
             mTxFrame.set1WMode();
             mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END); // START+END both set
 
@@ -4144,7 +4150,9 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
             // 1W ActivateMode (_p0x01_13): origin(1)+acei(1)+main(1)+fp1(1)+fp2(1)+seq(2)+hmac(6) = 13B
             // Note: main is 1 byte (not 2!) in _p0x01_13
-            mTxFrame.setDestNode(oneWayBroadcastTarget(iEntry.oneWayBroadcastType));
+            mTxFrame.setDestNode(iEntry.oneWayBroadcastTypeExplicit
+                                     ? oneWayBroadcastTarget(iEntry.oneWayBroadcastType)
+                                     : 0x00003F);
             mTxFrame.set1WMode();
             mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
 
@@ -4274,7 +4282,9 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             static_cast<uint8_t>((lRemoteNodeId >> 8) & 0xFF),
             static_cast<uint8_t>(lRemoteNodeId & 0xFF)};
         mTxFrame.setSrcNode(lRemoteNodeId);
-        mTxFrame.setDestNode(oneWayBroadcastTarget(iEntry.oneWayBroadcastType));
+        mTxFrame.setDestNode(iEntry.oneWayBroadcastTypeExplicit
+                     ? oneWayBroadcastTarget(iEntry.oneWayBroadcastType)
+                     : 0x00003F);
         IoHomeCrypto::encrypt1WKey(lProfile->getOneWayControllerKey(), IOHC_TRANSFER_KEY, lRemoteNodeAddr, lEncKey1W);
         memcpy(mTxFrame.data, lEncKey1W, 16);
         mTxFrame.data[16] = lProfile->getOneWayControllerManufacturer();

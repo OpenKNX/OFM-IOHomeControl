@@ -6373,7 +6373,7 @@ TEST(controller_1w_key_frame_uses_profile_manufacturer_without_hmac)
     ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
-    ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BF);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
     ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
     ASSERT_EQ(lFrame.dataLen, 20);
     ASSERT_EQ(lFrame.data[16], static_cast<uint8_t>(IoHomeManufacturer::Velux));
@@ -7067,7 +7067,7 @@ TEST(controller_default_1w_execute_uses_standard_vent_layout)
     ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
-    ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BF);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
     ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
     ASSERT_EQ(lFrame.dataLen, 8);
     ASSERT_EQ(lFrame.data[0], IOHC_ORIGINATOR_USER);
@@ -7079,7 +7079,63 @@ TEST(controller_default_1w_execute_uses_standard_vent_layout)
     ASSERT_TRUE(lFrame.hasHmac);
 }
 
-TEST(controller_1w_channel_broadcast_type3_controls_all_tx_paths)
+TEST(controller_default_1w_execute_matches_reference_payloads)
+{
+    struct TestCase
+    {
+        uint8_t param;
+        uint8_t param2;
+        uint8_t expectedData[6];
+    };
+
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    const TestCase lCases[] = {
+        {0x00, 0xFF, {IOHC_ORIGINATOR_USER, IOHC_ACEI_1W, 0x00, 0x00, 0x00, 0x00}},
+        {100, 0xFF, {IOHC_ORIGINATOR_USER, IOHC_ACEI_1W, 0xC8, 0x00, 0x00, 0x00}},
+        {0xD2, 0xFF, {IOHC_ORIGINATOR_USER, IOHC_ACEI_1W, 0xD2, 0x00, 0x00, 0x00}},
+        {0xD8, 0x03, {IOHC_ORIGINATOR_USER, IOHC_ACEI_1W, 0xD8, 0x03, 0x00, 0x00}},
+    };
+
+    for (const TestCase &lCase : lCases)
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setNodeId(lDeviceNodeId);
+        lChannel.setEncryptionKey(lKey);
+        lChannel.setIs1W(true);
+        lChannel.setConfigured1WBroadcastType(3);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+
+        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, lCase.param, lCase.param2));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        lController.loop();
+
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(!lPacket.empty());
+
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
+        ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
+        ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+        ASSERT_EQ(lFrame.dataLen, 8);
+        ASSERT_MEM_EQ(lFrame.data, lCase.expectedData, sizeof(lCase.expectedData));
+        ASSERT_TRUE(lFrame.hasHmac);
+    }
+}
+
+TEST(controller_1w_channel_broadcast_type3_keeps_pairing_typed_but_defaults_runtime_to_legacy_group)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -7135,7 +7191,7 @@ TEST(controller_1w_channel_broadcast_type3_controls_all_tx_paths)
         IoHomeFrame lFrame;
         const auto &lPacket = lController.radio().testLastTransmittedPacket();
         ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
-        ASSERT_EQ(lFrame.getDestNodeId(), 0x0000FF);
+        ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
     }
 
     {
@@ -7154,6 +7210,32 @@ TEST(controller_1w_channel_broadcast_type3_controls_all_tx_paths)
         lChannel.setOneWayControllerKey(lKey);
 
         ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::ActivateMode, 0x01));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        lController.loop();
+
+        IoHomeFrame lFrame;
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+    }
+
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setNodeId(lDeviceNodeId);
+        lChannel.setEncryptionKey(lKey);
+        lChannel.setIs1W(true);
+        lChannel.setConfigured1WBroadcastType(3);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+
+        ASSERT_TRUE(lController.sendOneWayExecuteWithType(lDeviceNodeId, lKey, IOHC_POSITION_VENT, 0x00, 0x00, 3));
         lController.radio().testClearTransmittedPacket();
         lController.loop();
         lController.loop();
@@ -7742,7 +7824,8 @@ int main()
     RUN(controller_2w_challenge_response_inherits_low_power);
     RUN(controller_2w_challenge_response_can_clear_low_power_for_mains_device);
     RUN(controller_default_1w_execute_uses_standard_vent_layout);
-    RUN(controller_1w_channel_broadcast_type3_controls_all_tx_paths);
+    RUN(controller_default_1w_execute_matches_reference_payloads);
+    RUN(controller_1w_channel_broadcast_type3_keeps_pairing_typed_but_defaults_runtime_to_legacy_group);
     RUN(controller_1w_channel_profiles_are_independent);
     RUN(controller_1w_shared_profile_uses_owner_sequence_and_identity);
     RUN(controller_1w_identical_imported_profiles_share_first_sequence_owner);

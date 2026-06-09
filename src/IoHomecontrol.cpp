@@ -2860,6 +2860,8 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         }
 
         uint32_t lCodeValue = 0;
+        bool lUseStandard1WExecute = false;
+        uint8_t lExecuteParam = 0;
         const char *lButtonName = lValueText.c_str();
         if (lIsRawCode)
         {
@@ -2873,21 +2875,29 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         {
             lCodeValue = 0x0000;
             lButtonName = "up";
+            lUseStandard1WExecute = true;
+            lExecuteParam = 0;
         }
         else if (lValueText == "down" || lValueText == "close")
         {
             lCodeValue = 0x0001;
             lButtonName = "down";
+            lUseStandard1WExecute = true;
+            lExecuteParam = 100;
         }
         else if (lValueText == "stop")
         {
             lCodeValue = 0x0002;
             lButtonName = "stop";
+            lUseStandard1WExecute = true;
+            lExecuteParam = 0xD2;
         }
         else if (lValueText == "my" || lValueText == "prog" || lValueText == "favorite")
         {
             lCodeValue = 0x0003;
             lButtonName = "my/prog";
+            lUseStandard1WExecute = true;
+            lExecuteParam = 0xD8;
         }
         else if (lValueText == "release" || lValueText == "released")
         {
@@ -2905,7 +2915,13 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             return true;
         }
 
-        if (mController.sendOneWayButton(lCh->getNodeId(), lCh->getEncryptionKey(), static_cast<uint16_t>(lCodeValue)))
+        bool lQueued = false;
+        if (lUseStandard1WExecute)
+            lQueued = mController.sendCommand(lCh->getNodeId(), lCh->getEncryptionKey(), IoHomeCommand::Execute, lExecuteParam);
+        else
+            lQueued = mController.sendOneWayButton(lCh->getNodeId(), lCh->getEncryptionKey(), static_cast<uint16_t>(lCodeValue));
+
+        if (lQueued)
             logInfoP("Sent 1W button %s (0x%04X) to channel %d", lButtonName, static_cast<unsigned>(lCodeValue), lIdx + 1);
         else
             logInfoP("Failed to queue 1W button %s (0x%04X) for channel %d", lButtonName, static_cast<unsigned>(lCodeValue), lIdx + 1);

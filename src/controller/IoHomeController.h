@@ -39,6 +39,7 @@ struct IoHomeQueueEntry
   uint8_t oneWayFp1;
   uint8_t oneWayFp2;
   uint8_t oneWayBroadcastType; // target type: dst = ((type << 6) | 0x3F)
+  bool oneWayBroadcastTypeExplicit; // true when the caller explicitly requested a typed 1W broadcast target
   bool twoWayTilt;             // true: 2W tilt-only Execute payload
   uint8_t twoWayTiltPercent;
   uint8_t retries;
