@@ -7244,6 +7244,19 @@ static void buildPassiveKeyInitFrame(IoHomeFrame &oFrame,
     oFrame.hasHmac = false;
 }
 
+static void buildPassiveExecuteFrame(IoHomeFrame &oFrame,
+                                     uint32_t iRemoteNodeId,
+                                     uint32_t iDeviceNodeId)
+{
+    oFrame.init();
+    oFrame.setStart2W();
+    oFrame.setSrcNode(iRemoteNodeId);
+    oFrame.setDestNode(iDeviceNodeId);
+    oFrame.commandId = IoHomeCommand::Execute;
+    oFrame.dataLen = 0;
+    oFrame.hasHmac = false;
+}
+
 static void buildPassiveChallengeFrame(IoHomeFrame &oFrame,
                                        uint32_t iRemoteNodeId,
                                        uint32_t iDeviceNodeId,
@@ -7374,6 +7387,58 @@ TEST(controller_passive_key_sniff_captures_result_and_callback)
     lController.clearPassiveKeyResult();
     ASSERT_EQ(lController.passiveKeySniffStatus(), IoHomeController::PassiveKeySniffStatus::Idle);
     ASSERT_TRUE(!lController.passiveKeyResult().valid);
+}
+
+TEST(controller_passive_remote_activity_schedules_follow_up_poll_for_target_device)
+{
+    const uint32_t lOwnNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint32_t lRemoteNodeId = 0x112233;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lOwnNodeId, lDeviceNodeId, lKey);
+
+    IoHomeFrame lFrame;
+    buildPassiveExecuteFrame(lFrame, lRemoteNodeId, lDeviceNodeId);
+    ASSERT_TRUE(queueControllerPassiveFrame(lController, lFrame));
+
+    ASSERT_TRUE(lChannel.testHasScheduledStatusPoll());
+    ASSERT_EQ(lChannel.testScheduledStatusPollCount(), 1);
+    ASSERT_EQ(lChannel.testLastScheduledStatusPollMs(), 2000UL);
+}
+
+TEST(controller_linked_remote_activity_schedules_follow_up_poll_for_linked_device)
+{
+    const uint32_t lOwnNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint32_t lRemoteNodeId = 0x112233;
+    const uint32_t lOtherNodeId = 0x00003F;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lOwnNodeId, lDeviceNodeId, lKey);
+
+    ASSERT_TRUE(lModule.remoteMap().addRemote(lRemoteNodeId, "Remote"));
+    ASSERT_TRUE(lModule.remoteMap().linkDevice(lRemoteNodeId, lDeviceNodeId));
+
+    IoHomeFrame lFrame;
+    buildPassiveExecuteFrame(lFrame, lRemoteNodeId, lOtherNodeId);
+    ASSERT_TRUE(queueControllerPassiveFrame(lController, lFrame));
+
+    ASSERT_TRUE(lChannel.testHasScheduledStatusPoll());
+    ASSERT_EQ(lChannel.testScheduledStatusPollCount(), 1);
+    ASSERT_EQ(lChannel.testLastScheduledStatusPollMs(), 2000UL);
 }
 
 static bool buildChallengeRequestPacket(uint32_t iRemoteNodeId,
@@ -8713,6 +8778,8 @@ int main()
     RUN(controller_passive_key_sniff_start_stop_clear);
     RUN(controller_passive_mode_does_not_sniff_without_explicit_start);
     RUN(controller_passive_key_sniff_captures_result_and_callback);
+    RUN(controller_passive_remote_activity_schedules_follow_up_poll_for_target_device);
+    RUN(controller_linked_remote_activity_schedules_follow_up_poll_for_linked_device);
     RUN(controller_2w_challenge_response_inherits_low_power);
     RUN(controller_2w_challenge_response_can_clear_low_power_for_mains_device);
     RUN(controller_status_update_receive_auth_uses_saved_command_data);

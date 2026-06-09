@@ -4509,6 +4509,7 @@ void IoHomeController::dispatchRxFrame()
         return;
 
     uint32_t lSrcNode = mRxFrame.getSrcNodeId();
+    uint32_t lDestNode = mRxFrame.getDestNodeId();
 
     if (mState == ControllerState::DiscoveryListening &&
         (mRxFrame.commandId == IoHomeCommand::DiscoverResponse ||
@@ -4520,6 +4521,30 @@ void IoHomeController::dispatchRxFrame()
         logInfoP("Discovery: %s from 0x%06X freq=%d rssi=%ddBm",
                  commandName(mRxFrame.commandId), lSrcNode, mCurrentFreqIdx, mRadio.lastRssi());
         return;
+    }
+
+    const auto lScheduleStatusPollForDevice = [this](uint32_t iNodeId) -> bool
+    {
+        IoHomecontrolChannel *lCh = channelForNode(iNodeId);
+        if (!lCh || !lCh->isPaired())
+            return false;
+
+        lCh->scheduleStatusPoll(2000UL);
+        return true;
+    };
+
+    if (lSrcNode != mOwnNodeId && lScheduleStatusPollForDevice(lDestNode))
+        return;
+
+    const IoHomeRemoteEntry *lRemote = mModule->remoteMap().findRemote(lSrcNode);
+    if (lRemote)
+    {
+        bool lScheduled = false;
+        for (uint8_t i = 0; i < lRemote->linkCount; i++)
+            lScheduled = lScheduleStatusPollForDevice(lRemote->linkedDevices[i]) || lScheduled;
+
+        if (lScheduled)
+            return;
     }
 
     // Find the channel that matches this source node

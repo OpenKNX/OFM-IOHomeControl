@@ -76,6 +76,7 @@ public:
   void setConfigured1WBroadcastType(uint8_t iBroadcastType);
   uint8_t getConfigured1WBroadcastType() const;
   bool requestStatus();
+  void scheduleStatusPoll(uint32_t iDelayMs);
 
   // Lock control (P2)
   void setLocked(bool iLocked);

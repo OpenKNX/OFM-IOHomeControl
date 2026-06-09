@@ -744,6 +744,27 @@ bool IoHomecontrolChannel::requestStatus()
     return lQueued;
 }
 
+void IoHomecontrolChannel::scheduleStatusPoll(uint32_t iDelayMs)
+{
+    if (!mPaired)
+        return;
+
+    const uint32_t lDelayMs = (iDelayMs > 0) ? iDelayMs : defaultTrackedStatusPollDelayMs();
+    const uint32_t lNow = millis();
+    const uint32_t lRequestedPollMs = lNow + lDelayMs;
+
+    mSingleFollowUpPollPending = true;
+    mStatusExpected = false;
+    mStatusPollFailures = 0;
+    mAuthPollFailures = 0;
+
+    if (mNextStatusPollMs == 0 || static_cast<int32_t>(lRequestedPollMs - mNextStatusPollMs) < 0)
+        mNextStatusPollMs = lRequestedPollMs;
+
+    if (mPollTrackingDeadlineMs == 0 || timeReached(lRequestedPollMs, mPollTrackingDeadlineMs))
+        mPollTrackingDeadlineMs = lRequestedPollMs;
+}
+
 void IoHomecontrolChannel::requestStatusPrivate()
 {
     logDebugP("Request status (Private 0x03)");

@@ -195,6 +195,12 @@ public:
     else
       mDirectPollFailureCount++;
   }
+  void scheduleStatusPoll(uint32_t iDelayMs)
+  {
+    mHasScheduledStatusPoll = true;
+    mScheduledStatusPollCount++;
+    mLastScheduledStatusPollMs = iDelayMs;
+  }
   void onRssiUpdate(uint8_t) {}
   void logStatusSummary(float, bool, float, bool, bool) {}
 
@@ -216,6 +222,9 @@ public:
   uint8_t testStatusPollFailureCount() const { return mStatusPollFailureCount; }
   uint8_t testAuthPollFailureCount() const { return mAuthPollFailureCount; }
   uint8_t testDirectPollFailureCount() const { return mDirectPollFailureCount; }
+  bool testHasScheduledStatusPoll() const { return mHasScheduledStatusPoll; }
+  uint8_t testScheduledStatusPollCount() const { return mScheduledStatusPollCount; }
+  uint32_t testLastScheduledStatusPollMs() const { return mLastScheduledStatusPollMs; }
 
 private:
   uint32_t mNodeId = 0;
@@ -250,6 +259,9 @@ private:
   uint8_t mStatusPollFailureCount = 0;
   uint8_t mAuthPollFailureCount = 0;
   uint8_t mDirectPollFailureCount = 0;
+  bool mHasScheduledStatusPoll = false;
+  uint8_t mScheduledStatusPollCount = 0;
+  uint32_t mLastScheduledStatusPollMs = 0;
 };
 
 class IoHomecontrol
