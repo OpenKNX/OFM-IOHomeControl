@@ -33,6 +33,7 @@ public:
   void onBatteryLevel(uint8_t iPercent);
   void onEstimate(uint8_t iSeconds);
   void onStatusExpected();
+  void onStatusPollFailed(bool iAfterChallenge);
   void onRssiUpdate(uint8_t iScaledPercent);
   void logStatusSummary(float iCurrentPositionPercent, bool iHasCurrentPosition,
                         float iTargetPositionPercent, bool iHasTargetPosition,
@@ -74,7 +75,7 @@ public:
   uint32_t getConfigured1WTargetNodeId() const;
   void setConfigured1WBroadcastType(uint8_t iBroadcastType);
   uint8_t getConfigured1WBroadcastType() const;
-  void requestStatus();
+  bool requestStatus();
 
   // Lock control (P2)
   void setLocked(bool iLocked);
@@ -100,20 +101,20 @@ private:
   uint8_t mEncKey[16] = {};       // AES-128 encryption key
   uint8_t mLastChallenge[6] = {}; // challenge sent with last authenticated command
   bool mPaired = false;
-  bool mLowPower2W = true; // Battery/solar-safe default for 2W devices
+  bool mLowPower2W = true;  // Battery/solar-safe default for 2W devices
   uint16_t mSequence1W = 0; // 1W monotonic sequence counter (persisted)
   uint32_t mOneWayControllerNodeId = 0;
   uint8_t mOneWayControllerKey[16] = {};
-  uint8_t mOneWayControllerManufacturer = 2; // Somfy
-  uint8_t mConfigured1WManufacturer = 0; // 0 = keep persistent profile value
+  uint8_t mOneWayControllerManufacturer = 2;  // Somfy
+  uint8_t mConfigured1WManufacturer = 0;      // 0 = keep persistent profile value
   uint8_t mConfigured1WProfileChannel = 0xFF; // 0xFF = own profile
-  bool mIs1W = false;       // true if channel uses 1W protocol
+  bool mIs1W = false;                         // true if channel uses 1W protocol
   uint32_t mConfigured1WTargetNodeId = 0;
   uint8_t mConfigured1WBroadcastType = 2;
   float mCurrentPosition = 0.0f;
   float mCurrentSlat = 0.0f;
   bool mIsMoving = false;
-  bool mStatusExpected = false; // device will auto-send StatusUpdate
+  bool mStatusExpected = false; // device will auto-send StatusUpdate while tracking
   uint8_t mBatteryLevel = 0xFF; // 0xFF = unknown, 0-100 = percent
   bool mLocked = false;         // P2: channel lock
   uint8_t mErrorStatus = 0;     // P2: error status enum (0=OK)
@@ -126,6 +127,11 @@ private:
   float mTravelStartPosition = 0.0f;
 
   uint32_t mStatusPollTimer = 0;
+  uint32_t mNextStatusPollMs = 0;
+  uint32_t mPollTrackingDeadlineMs = 0;
+  bool mSingleFollowUpPollPending = false;
+  uint8_t mStatusPollFailures = 0;
+  uint8_t mAuthPollFailures = 0;
   char mDeviceName[21] = {}; // max 20 chars + null terminator
   uint16_t mDeviceType = 0;
   uint8_t mDeviceSubtype = 0;
@@ -144,6 +150,11 @@ private:
   void sendVentilationPosition();
   void requestStatusPrivate();
   void publishPositionFeedback(float iPositionPercent, bool iLogMessage);
+  void startStatusPollTracking(uint32_t iDelayMs);
+  void clearStatusPollTracking();
+  uint32_t configuredStatusPollIntervalMs() const;
+  uint32_t defaultTrackedStatusPollDelayMs() const;
+  bool isStatusPollTrackingActive(uint32_t iNowMs) const;
   void startTravelEstimation(float iTargetPositionPercent);
   void stopTravelEstimation(bool iPublishPosition);
   void updateEstimatedPosition();

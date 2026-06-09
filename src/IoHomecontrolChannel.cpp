@@ -7,6 +7,9 @@
 
 namespace
 {
+    constexpr uint32_t kTrackedStatusPollDefaultMs = 2000UL;
+    constexpr uint32_t kTrackedStatusEstimateBiasMs = 1000UL;
+
     uint8_t resolveOneWayBroadcastType(uint8_t iConfiguredType, uint8_t iDeviceType)
     {
         if (iConfiguredType != 0xFF)
@@ -24,6 +27,11 @@ namespace
         if (iValue > 100.0f)
             return 100.0f;
         return iValue;
+    }
+
+    bool timeReached(uint32_t iNow, uint32_t iDeadline)
+    {
+        return static_cast<int32_t>(iNow - iDeadline) >= 0;
     }
 
     const char *iohcDeviceTypeLabel(uint16_t iType)
@@ -113,6 +121,12 @@ void IoHomecontrolChannel::setup()
         return;
     }
     mStatusPollTimer = 0;
+    mNextStatusPollMs = 0;
+    mPollTrackingDeadlineMs = 0;
+    mSingleFollowUpPollPending = false;
+    mStatusPollFailures = 0;
+    mAuthPollFailures = 0;
+    mStatusExpected = false;
 
     loadSceneConfiguration();
 
@@ -145,11 +159,35 @@ void IoHomecontrolChannel::loop()
     if (!ParamIOHC_IOHCActive)
         return;
 
+    const uint32_t lNow = millis();
+
     updateEstimatedPosition();
+
+    if (mPollTrackingDeadlineMs != 0 &&
+        timeReached(lNow, mPollTrackingDeadlineMs) &&
+        mNextStatusPollMs == 0 &&
+        !mSingleFollowUpPollPending)
+    {
+        clearStatusPollTracking();
+    }
+
+    if (mNextStatusPollMs != 0 && timeReached(lNow, mNextStatusPollMs))
+    {
+        if (requestStatus())
+        {
+            mNextStatusPollMs = 0;
+            mSingleFollowUpPollPending = false;
+            mStatusExpected = false;
+        }
+        else
+        {
+            onStatusPollFailed(false);
+        }
+    }
 
     // Periodic status polling based on ETS config
     uint16_t lPollSec = ParamIOHC_IOHCPollInterval;
-    if (lPollSec > 0 && !mStatusExpected)
+    if (lPollSec > 0 && !isStatusPollTrackingActive(lNow))
     {
         uint32_t lPollMs = (uint32_t)lPollSec * 1000;
         if (delayCheck(mStatusPollTimer, lPollMs))
@@ -158,9 +196,6 @@ void IoHomecontrolChannel::loop()
             mStatusPollTimer = delayTimerInit();
         }
     }
-    // Reset status-expected after one cycle
-    if (mStatusExpected)
-        mStatusExpected = false;
 }
 
 void IoHomecontrolChannel::processInputKo(uint8_t iIoIndex, GroupObject &iKo)
@@ -316,10 +351,27 @@ void IoHomecontrolChannel::onTargetPositionFeedback(float iTargetPositionPercent
 
 void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
 {
+    mStatusPollTimer = delayTimerInit();
+    mStatusPollFailures = 0;
+    mAuthPollFailures = 0;
+
     if (!iIsMoving)
+    {
+        clearStatusPollTracking();
         stopTravelEstimation(false);
+    }
     else if (mTravelDurationMs == 0 && mTargetPosition != mCurrentPosition)
         startTravelEstimation(mTargetPosition);
+
+    if (iIsMoving)
+    {
+        const uint32_t lDelayMs = defaultTrackedStatusPollDelayMs();
+        const uint32_t lNow = millis();
+        if (mPollTrackingDeadlineMs == 0)
+            mPollTrackingDeadlineMs = lNow + lDelayMs;
+        if (mNextStatusPollMs == 0 && (mSingleFollowUpPollPending || mStatusExpected))
+            mNextStatusPollMs = lNow + lDelayMs;
+    }
 
     mIsMoving = iIsMoving;
     if (!isBinaryDeviceType())
@@ -451,8 +503,18 @@ void IoHomecontrolChannel::onEstimate(uint8_t iSeconds)
     if (iSeconds != 0xFF && iSeconds != 0x00)
     {
         logDebugP("Estimate: %d seconds remaining", iSeconds);
-        // Schedule a status poll after the estimated travel time
-        mStatusPollTimer = delayTimerInit() - ((uint32_t)ParamIOHC_IOHCPollInterval * 1000) + ((uint32_t)iSeconds * 1000);
+        mStatusPollTimer = delayTimerInit();
+
+        uint32_t lDelayMs = static_cast<uint32_t>(iSeconds) * 1000UL + kTrackedStatusEstimateBiasMs;
+        const uint32_t lConfiguredPollMs = configuredStatusPollIntervalMs();
+        if (lConfiguredPollMs > 0 && lConfiguredPollMs < lDelayMs)
+            lDelayMs = lConfiguredPollMs;
+
+        mSingleFollowUpPollPending = true;
+        mStatusPollFailures = 0;
+        mAuthPollFailures = 0;
+        mNextStatusPollMs = millis() + lDelayMs;
+        mPollTrackingDeadlineMs = millis() + lDelayMs;
 
         // Restart travel-time position estimation with the device-provided remaining time.
         mCurrentPosition = clampPercent(estimateCurrentPosition());
@@ -473,9 +535,48 @@ float IoHomecontrolChannel::estimateCurrentPosition() const
 
 void IoHomecontrolChannel::onStatusExpected()
 {
-    // Device will auto-send StatusUpdate — skip next scheduled poll
+    const uint32_t lDelayMs = defaultTrackedStatusPollDelayMs();
+    if (mPollTrackingDeadlineMs == 0)
+        mPollTrackingDeadlineMs = millis() + lDelayMs;
+    if (mNextStatusPollMs == 0)
+        mNextStatusPollMs = millis() + lDelayMs;
+
     mStatusExpected = true;
     logDebugP("Device will auto-send status update");
+}
+
+void IoHomecontrolChannel::onStatusPollFailed(bool iAfterChallenge)
+{
+    const uint32_t lBaseDelayMs = defaultTrackedStatusPollDelayMs();
+    const uint32_t lNow = millis();
+    uint32_t lBackoffFactor = 1;
+
+    if (iAfterChallenge)
+    {
+        if (mAuthPollFailures < 0xFF)
+            mAuthPollFailures++;
+        lBackoffFactor = 2U + (static_cast<uint32_t>(mAuthPollFailures) * 2U);
+        if (lBackoffFactor > 8U)
+            lBackoffFactor = 8U;
+    }
+    else
+    {
+        if (mStatusPollFailures < 0xFF)
+            mStatusPollFailures++;
+        lBackoffFactor = 1U + static_cast<uint32_t>(mStatusPollFailures);
+        if (lBackoffFactor > 4U)
+            lBackoffFactor = 4U;
+    }
+
+    mStatusExpected = false;
+    mSingleFollowUpPollPending = true;
+    mNextStatusPollMs = lNow + (lBaseDelayMs * lBackoffFactor);
+    if (mPollTrackingDeadlineMs == 0 || timeReached(mNextStatusPollMs, mPollTrackingDeadlineMs))
+        mPollTrackingDeadlineMs = mNextStatusPollMs;
+
+    logDebugP("Status poll failed%s, retry in %lu ms",
+              iAfterChallenge ? " after challenge" : "",
+              static_cast<unsigned long>(lBaseDelayMs * lBackoffFactor));
 }
 
 // --- Pairing data ---
@@ -567,32 +668,44 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
     logDebugP("Send position %.1f%%", iPercent);
     mTargetPosition = clampPercent(iPercent);
     uint8_t lParam = (uint8_t)(iPercent + 0.5f);
-    if (mIs1W)
-        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lParam, iSlatPercent);
-    else
-        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lParam);
+    const bool lQueued = mIs1W
+                             ? mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lParam, iSlatPercent)
+                             : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lParam);
+    if (!lQueued)
+        return;
+
     startTravelEstimation(mTargetPosition);
+    startStatusPollTracking(defaultTrackedStatusPollDelayMs());
 }
 
 void IoHomecontrolChannel::sendUpDown(bool iDown)
 {
     logDebugP("Send %s", iDown ? "DOWN" : "UP");
     uint8_t lPercent = iDown ? 100 : 0;
-    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lPercent);
+    if (!mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lPercent))
+        return;
+
     startTravelEstimation((float)lPercent);
+    startStatusPollTracking(defaultTrackedStatusPollDelayMs());
 }
 
 void IoHomecontrolChannel::sendStop()
 {
     logDebugP("Send STOP");
     stopTravelEstimation(true);
-    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD2);
+    if (!mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD2))
+        return;
+
+    startStatusPollTracking(defaultTrackedStatusPollDelayMs());
 }
 
 void IoHomecontrolChannel::sendFavorite()
 {
     logDebugP("Send FAVORITE");
-    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD8);
+    if (!mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD8))
+        return;
+
+    startStatusPollTracking(defaultTrackedStatusPollDelayMs());
 }
 
 void IoHomecontrolChannel::sendSlatCommand(float iPercent)
@@ -602,33 +715,86 @@ void IoHomecontrolChannel::sendSlatCommand(float iPercent)
 
     if (!mIs1W && isTiltCapableDeviceType())
     {
-        mController.sendTiltCommand(mNodeId, mEncKey, static_cast<uint8_t>(lSlatPercent + 0.5f));
+        if (mController.sendTiltCommand(mNodeId, mEncKey, static_cast<uint8_t>(lSlatPercent + 0.5f)))
+            startStatusPollTracking(defaultTrackedStatusPollDelayMs());
         return;
     }
 
     uint8_t lPosParam = (uint8_t)(mCurrentPosition + 0.5f);
     uint8_t lSlatParam = (uint8_t)(lSlatPercent + 0.5f);
-    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lPosParam, lSlatParam);
+    if (mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lPosParam, lSlatParam))
+        startStatusPollTracking(defaultTrackedStatusPollDelayMs());
 }
 
-void IoHomecontrolChannel::requestStatus()
+bool IoHomecontrolChannel::requestStatus()
 {
     logDebugP("Request status");
 
     if (!mIs1W && isTiltCapableDeviceType())
     {
-        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private, 0x03, 0x20, 0x01);
+        const bool lQueued = mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private, 0x03, 0x20, 0x01);
+        if (lQueued)
+            mStatusPollTimer = delayTimerInit();
+        return lQueued;
     }
-    else
-    {
-        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private, 0x03);
-    }
+
+    const bool lQueued = mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private, 0x03);
+    if (lQueued)
+        mStatusPollTimer = delayTimerInit();
+    return lQueued;
 }
 
 void IoHomecontrolChannel::requestStatusPrivate()
 {
     logDebugP("Request status (Private 0x03)");
     mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private, 0x03);
+}
+
+void IoHomecontrolChannel::startStatusPollTracking(uint32_t iDelayMs)
+{
+    const uint32_t lNow = millis();
+    const uint32_t lTrackingWindowMs = (mTravelDurationMs > 0)
+                                           ? (mTravelDurationMs + kTrackedStatusEstimateBiasMs)
+                                           : iDelayMs;
+
+    mSingleFollowUpPollPending = true;
+    mStatusExpected = false;
+    mStatusPollFailures = 0;
+    mAuthPollFailures = 0;
+    mNextStatusPollMs = lNow + iDelayMs;
+    mPollTrackingDeadlineMs = lNow + ((lTrackingWindowMs > iDelayMs) ? lTrackingWindowMs : iDelayMs);
+}
+
+void IoHomecontrolChannel::clearStatusPollTracking()
+{
+    mNextStatusPollMs = 0;
+    mPollTrackingDeadlineMs = 0;
+    mSingleFollowUpPollPending = false;
+    mStatusPollFailures = 0;
+    mAuthPollFailures = 0;
+    mStatusExpected = false;
+}
+
+uint32_t IoHomecontrolChannel::configuredStatusPollIntervalMs() const
+{
+    const uint16_t lPollSec = ParamIOHC_IOHCPollInterval;
+    return (lPollSec > 0) ? (static_cast<uint32_t>(lPollSec) * 1000UL) : 0UL;
+}
+
+uint32_t IoHomecontrolChannel::defaultTrackedStatusPollDelayMs() const
+{
+    const uint32_t lConfiguredPollMs = configuredStatusPollIntervalMs();
+    if (lConfiguredPollMs == 0 || lConfiguredPollMs > kTrackedStatusPollDefaultMs)
+        return kTrackedStatusPollDefaultMs;
+    return lConfiguredPollMs;
+}
+
+bool IoHomecontrolChannel::isStatusPollTrackingActive(uint32_t iNowMs) const
+{
+    if (mNextStatusPollMs != 0 || mSingleFollowUpPollPending || mStatusExpected)
+        return true;
+
+    return mPollTrackingDeadlineMs != 0 && !timeReached(iNowMs, mPollTrackingDeadlineMs);
 }
 
 bool IoHomecontrolChannel::isOnOffDeviceType() const
@@ -978,6 +1144,8 @@ void IoHomecontrolChannel::sendVentilationPosition()
     // 1W path: controller maps Execute(0xD8, 0x03) to IOHC_POSITION_VENT.
     if (!mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD8, 0x03))
         logDebugP("VENTILATION queue failed");
+    else
+        startStatusPollTracking(defaultTrackedStatusPollDelayMs());
 }
 
 // --- P3: Scene handling ---

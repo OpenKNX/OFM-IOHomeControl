@@ -7760,6 +7760,43 @@ TEST(controller_general_info2_response_uses_selector_before_tilt_decode)
     }
 }
 
+TEST(controller_status_poll_failure_after_challenge_notifies_channel)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    static const uint8_t kChallenge[6] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Private, 0x03));
+
+    IoHomeFrame lTxFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lTxFrame));
+    ASSERT_EQ(lTxFrame.commandId, IoHomeCommand::Private);
+    ASSERT_EQ(lTxFrame.dataLen, 1);
+    ASSERT_EQ(lTxFrame.data[0], 0x03);
+
+    IoHomeFrame lChallengeRequest;
+    buildPairChallengeRequestFrame(lChallengeRequest, lRemoteNodeId, lDeviceNodeId, kChallenge);
+
+    lController.radio().testSetNextTransmitError(RadioError::HardwareError);
+    ASSERT_TRUE(queueControllerResponse(lController, lChallengeRequest));
+
+    ASSERT_TRUE(lChannel.testHasStatusPollFailure());
+    ASSERT_TRUE(lChannel.testStatusPollFailureAfterChallenge());
+    ASSERT_EQ(lChannel.testStatusPollFailureCount(), 1);
+    ASSERT_EQ(lChannel.testAuthPollFailureCount(), 1);
+    ASSERT_EQ(lChannel.testDirectPollFailureCount(), 0);
+    ASSERT_EQ(lController.state(), ControllerState::Idle);
+}
+
 TEST(controller_2w_initial_response_wait_uses_retry_gap)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -8662,6 +8699,7 @@ int main()
     RUN(controller_status_update_requires_11_bytes_for_position);
     RUN(controller_private_response_requires_8_bytes_for_position);
     RUN(controller_general_info2_response_uses_selector_before_tilt_decode);
+    RUN(controller_status_poll_failure_after_challenge_notifies_channel);
     RUN(controller_1w_key_frame_uses_profile_manufacturer_without_hmac);
     RUN(controller_2w_command_defaults_to_low_power);
     RUN(controller_2w_command_can_clear_low_power_for_mains_device);

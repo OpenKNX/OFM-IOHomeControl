@@ -185,6 +185,16 @@ public:
     mEstimate = iSeconds;
   }
   void onStatusExpected() { mStatusExpected = true; }
+  void onStatusPollFailed(bool iAfterChallenge)
+  {
+    mHasStatusPollFailure = true;
+    mStatusPollFailureAfterChallenge = iAfterChallenge;
+    mStatusPollFailureCount++;
+    if (iAfterChallenge)
+      mAuthPollFailureCount++;
+    else
+      mDirectPollFailureCount++;
+  }
   void onRssiUpdate(uint8_t) {}
   void logStatusSummary(float, bool, float, bool, bool) {}
 
@@ -201,6 +211,11 @@ public:
   bool testHasEstimate() const { return mHasEstimate; }
   uint8_t testEstimate() const { return mEstimate; }
   bool testStatusExpected() const { return mStatusExpected; }
+  bool testHasStatusPollFailure() const { return mHasStatusPollFailure; }
+  bool testStatusPollFailureAfterChallenge() const { return mStatusPollFailureAfterChallenge; }
+  uint8_t testStatusPollFailureCount() const { return mStatusPollFailureCount; }
+  uint8_t testAuthPollFailureCount() const { return mAuthPollFailureCount; }
+  uint8_t testDirectPollFailureCount() const { return mDirectPollFailureCount; }
 
 private:
   uint32_t mNodeId = 0;
@@ -230,6 +245,11 @@ private:
   bool mHasEstimate = false;
   uint8_t mEstimate = 0xFF;
   bool mStatusExpected = false;
+  bool mHasStatusPollFailure = false;
+  bool mStatusPollFailureAfterChallenge = false;
+  uint8_t mStatusPollFailureCount = 0;
+  uint8_t mAuthPollFailureCount = 0;
+  uint8_t mDirectPollFailureCount = 0;
 };
 
 class IoHomecontrol

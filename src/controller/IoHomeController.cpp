@@ -38,6 +38,31 @@ namespace
     constexpr bool kIsSX1262Radio = false;
 #endif
 
+    bool isTrackedStatusPollCommand(const IoHomeQueueEntry &iCmd)
+    {
+        return iCmd.active &&
+               iCmd.command == IoHomeCommand::Private &&
+               iCmd.param == 0x03;
+    }
+
+    void notifyTrackedStatusPollFailure(IoHomecontrol *iModule,
+                                        const IoHomeQueueEntry &iCmd,
+                                        bool iAfterChallenge)
+    {
+        if (!iModule || !isTrackedStatusPollCommand(iCmd))
+            return;
+
+        for (uint8_t i = 0; i < IOHC_ChannelCount; i++)
+        {
+            IoHomecontrolChannel *lCh = iModule->getChannel(i);
+            if (lCh && lCh->getNodeId() == iCmd.destNodeId)
+            {
+                lCh->onStatusPollFailed(iAfterChallenge);
+                break;
+            }
+        }
+    }
+
     std::string hexDump(const uint8_t *iData, uint8_t iLen)
     {
         static const char kHex[] = "0123456789ABCDEF";
@@ -2429,6 +2454,8 @@ void IoHomeController::processWaitResponse()
 
         if (mCurrentCmd.active && mCurrentCmd.retries < IOHC_MAX_RETRIES)
         {
+            const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
+            const bool lAfterChallenge = mSawChallenge;
             mCurrentCmd.retries++;
             mWaitingFinalResponse = false;
             mSawChallenge = false;
@@ -2441,14 +2468,18 @@ void IoHomeController::processWaitResponse()
                 mWaitingFinalResponse = false;
                 mSawChallenge = false;
                 mState = ControllerState::Idle;
+                notifyTrackedStatusPollFailure(mModule, lFailedCmd, lAfterChallenge);
             }
         }
         else
         {
+            const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
+            const bool lAfterChallenge = mSawChallenge;
             mCurrentCmd.active = false;
             mWaitingFinalResponse = false;
             mSawChallenge = false;
             mState = ControllerState::Idle;
+            notifyTrackedStatusPollFailure(mModule, lFailedCmd, lAfterChallenge);
         }
     }
 }
@@ -2484,8 +2515,10 @@ void IoHomeController::processResponse()
             !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
                                         lChallenge, mCurrentCmd.encKey, lFrame.data))
         {
+            const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
             mCurrentCmd.active = false;
             mState = ControllerState::Idle;
+            notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
             return;
         }
 
@@ -2513,14 +2546,18 @@ void IoHomeController::processResponse()
             }
             else
             {
+                const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
                 mCurrentCmd.active = false;
                 mState = ControllerState::Idle;
+                notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
             }
         }
         else
         {
+            const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
             mCurrentCmd.active = false;
             mState = ControllerState::Idle;
+            notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
         }
         return;
     }
