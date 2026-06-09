@@ -193,7 +193,27 @@ namespace
 
     void applyPrivateTiltInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData, uint8_t iDataLen)
     {
-        if (!iChannel || !iData || iDataLen < 16)
+        if (!iChannel || !iData || iDataLen < 15)
+            return;
+
+        const uint16_t lTiltRaw = readU16BE(iData, 13);
+        if (lTiltRaw > IOHC_POSITION_MAX)
+            return;
+
+        float lTiltPercent = 100.0f - ((float)lTiltRaw * 100.0f / IOHC_POSITION_MAX);
+        if (lTiltPercent < 0.0f)
+            lTiltPercent = 0.0f;
+        if (lTiltPercent > 100.0f)
+            lTiltPercent = 100.0f;
+        iChannel->onSlatFeedback(lTiltPercent);
+    }
+
+    void applyGeneralInfo2TiltInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData, uint8_t iDataLen)
+    {
+        if (!iChannel || !iData || iDataLen < 15)
+            return;
+
+        if (iData[12] == 0x00)
             return;
 
         const uint16_t lTiltRaw = readU16BE(iData, 13);
@@ -4535,7 +4555,7 @@ void IoHomeController::dispatchRxFrame()
                 //   data[10]:   estimate / timer
                 //   Position encoding: raw * 100 / IOHC_POSITION_MAX (0xC800)
                 //   Minimum 11 bytes for full status
-                if (mRxFrame.dataLen >= 9)
+                if (mRxFrame.dataLen >= 11)
                 {
                     const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
                     dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 5, 7);
@@ -4562,7 +4582,7 @@ void IoHomeController::dispatchRxFrame()
             case IoHomeCommand::Execute: // response to execute
             {
                 // Execute response uses same layout as StatusUpdate
-                if (mRxFrame.dataLen >= 9)
+                if (mRxFrame.dataLen >= 11)
                 {
                     const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
                     dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 5, 7);
@@ -4577,8 +4597,8 @@ void IoHomeController::dispatchRxFrame()
                 //   data[2:3]:  target position (16-bit BE)
                 //   data[4:5]:  current position (16-bit BE)
                 //   data[7]:    estimate (travel time in seconds; 0xFF/0x00 = unknown)
-                //   Minimum 6 bytes for position data
-                if (mRxFrame.dataLen >= 6)
+                //   Minimum 8 bytes for full position+estimate payload
+                if (mRxFrame.dataLen >= 8)
                 {
                     const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
                     dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 2, 4);
@@ -4627,6 +4647,7 @@ void IoHomeController::dispatchRxFrame()
                     uint8_t lSubtype = mRxFrame.data[11] & 0x3F;
                     lCh->onDeviceInfo(lType, lSubtype, 0);
                 }
+                applyGeneralInfo2TiltInfo(lCh, mRxFrame.data, mRxFrame.dataLen);
                 break;
             }
             case IoHomeCommand::GetGeneralInfo3Response:
