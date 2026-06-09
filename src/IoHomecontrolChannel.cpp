@@ -964,9 +964,20 @@ bool IoHomecontrolChannel::storeSceneStateToEts(uint8_t iSceneIndex, uint8_t iSc
 
 void IoHomecontrolChannel::sendVentilationPosition()
 {
-    logDebugP("Send VENTILATION");
-    // io-homecontrol ventilation position command: 0xD8 param=0x03
-    mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD8, 0x03);
+    // 2W ventilation has not been validated from a real capture yet.
+    // Do not overload normal 2W Execute(0xD8, 0x03), because this may be
+    // interpreted as favorite/special execute depending on the device.
+    if (!mIs1W)
+    {
+        logDebugP("VENTILATION disabled for 2W: no validated capture available");
+        return;
+    }
+
+    logDebugP("Send 1W VENTILATION");
+
+    // 1W path: controller maps Execute(0xD8, 0x03) to IOHC_POSITION_VENT.
+    if (!mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD8, 0x03))
+        logDebugP("VENTILATION queue failed");
 }
 
 // --- P3: Scene handling ---
