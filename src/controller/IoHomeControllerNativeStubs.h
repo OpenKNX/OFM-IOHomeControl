@@ -11,19 +11,31 @@
 #endif
 
 #ifndef logInfoP
-#define logInfoP(...) do {} while (0)
+#define logInfoP(...) \
+  do                  \
+  {                   \
+  } while (0)
 #endif
 
 #ifndef logDebugP
-#define logDebugP(...) do {} while (0)
+#define logDebugP(...) \
+  do                   \
+  {                    \
+  } while (0)
 #endif
 
 #ifndef logWarnP
-#define logWarnP(...) do {} while (0)
+#define logWarnP(...) \
+  do                  \
+  {                   \
+  } while (0)
 #endif
 
 #ifndef logErrorP
-#define logErrorP(...) do {} while (0)
+#define logErrorP(...) \
+  do                   \
+  {                    \
+  } while (0)
 #endif
 
 struct OpenKnxNativeFlashStub
@@ -38,6 +50,41 @@ struct OpenKnxNativeStub
 };
 
 inline OpenKnxNativeStub openknx{};
+
+inline uint32_t gIoHomeTestMillis = 0;
+inline uint32_t gIoHomeTestMicros = 0;
+
+inline uint32_t ioHomeTestMillis()
+{
+  return gIoHomeTestMillis;
+}
+
+inline uint32_t ioHomeTestMicros()
+{
+  return gIoHomeTestMicros;
+}
+
+inline void ioHomeTestSetMillis(uint32_t iMillis)
+{
+  gIoHomeTestMillis = iMillis;
+}
+
+inline void ioHomeTestSetMicros(uint32_t iMicros)
+{
+  gIoHomeTestMicros = iMicros;
+}
+
+inline void ioHomeTestAdvanceMillis(uint32_t iMillis)
+{
+  gIoHomeTestMillis += iMillis;
+  gIoHomeTestMicros += iMillis * 1000UL;
+}
+
+inline void ioHomeTestAdvanceMicros(uint32_t iMicros)
+{
+  gIoHomeTestMicros += iMicros;
+  gIoHomeTestMillis = gIoHomeTestMicros / 1000UL;
+}
 
 class IoHomecontrolChannel
 {
@@ -84,7 +131,11 @@ public:
   uint16_t incrementSequence1W() { return ++mSequence1W; }
   void setOneWayControllerNodeId(uint32_t iNodeId) { mOneWayControllerNodeId = iNodeId & 0x00FFFFFF; }
   uint32_t getOneWayControllerNodeId() const { return mOneWayControllerNodeId; }
-  void setOneWayControllerKey(const uint8_t *iKey) { if (iKey) memcpy(mOneWayControllerKey, iKey, sizeof(mOneWayControllerKey)); }
+  void setOneWayControllerKey(const uint8_t *iKey)
+  {
+    if (iKey)
+      memcpy(mOneWayControllerKey, iKey, sizeof(mOneWayControllerKey));
+  }
   const uint8_t *getOneWayControllerKey() const { return mOneWayControllerKey; }
   void setOneWayControllerManufacturer(uint8_t iManufacturer) { mOneWayControllerManufacturer = iManufacturer; }
   uint8_t getOneWayControllerManufacturer() const { return mOneWayControllerManufacturer; }

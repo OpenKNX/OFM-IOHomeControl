@@ -10,6 +10,9 @@
 #define IOHC_MAX_RETRIES 3
 #define IOHC_TX_TIMEOUT_MS 500
 #define IOHC_RX_TIMEOUT_MS 300
+#define IOHC_RX_FINAL_TIMEOUT_MS 500
+#define IOHC_RETRY_GAP_MS 250
+#define IOHC_AUTH_DWELL_MS_SX1262 90
 #define IOHC_PAIR_TIMEOUT_MS 30000
 #define IOHC_DUTY_CYCLE_WINDOW_MS 3600000 // 1 hour
 #define IOHC_RX_SCAN_INTERVAL_US 2700     // ~2.7ms frequency scan interval (per nicolas5000)
@@ -401,6 +404,10 @@ private:
 
   // 2W challenge-response auth state (for authenticated commands like SetName)
   bool mAuthResponseSent = false; // true after sending ChallengeResponse, reset on new command
+  bool mWaitingFinalResponse = false;
+  bool mSawChallenge = false;
+  uint32_t mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
+  uint32_t mRetryAtMs = 0;
 
   // Pairing state
   uint8_t mPairingChannel;

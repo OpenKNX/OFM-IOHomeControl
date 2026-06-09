@@ -6508,6 +6508,8 @@ static void initPaired2WControllerForTest(IoHomeController &oController,
                                           uint32_t iDeviceNodeId,
                                           const uint8_t iKey[16])
 {
+    ioHomeTestSetMillis(0);
+    ioHomeTestSetMicros(0);
     oModule.testSetChannel(0, &oChannel);
     oController.setModule(&oModule);
     oController.setOwnNodeId(iRemoteNodeId);
@@ -7071,6 +7073,123 @@ TEST(controller_2w_challenge_response_can_clear_low_power_for_mains_device)
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_EQ(lResponse.dataLen, IOHC_HMAC_SIZE);
     ASSERT_TRUE((lResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
+}
+
+TEST(controller_2w_initial_response_wait_uses_retry_gap)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 50));
+    lController.loop();
+    lController.loop();
+    lController.loop();
+
+    ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
+
+    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS - 1);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
+
+    ioHomeTestAdvanceMillis(1);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
+
+    ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS - 1);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
+
+    ioHomeTestAdvanceMillis(1);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::TxPending);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
+
+    lController.loop();
+    lController.loop();
+    ASSERT_EQ(lController.radio().testTransmitCount(), 2U);
+}
+
+TEST(controller_2w_final_response_wait_and_sx1262_dwell)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 50));
+    lController.loop();
+    lController.loop();
+    lController.loop();
+
+    const uint8_t lChallenge[6] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC};
+    uint8_t lChallengePacket[IOHC_FRAME_BUFFER_SIZE];
+    uint8_t lChallengeLen = 0;
+    ASSERT_TRUE(buildChallengeRequestPacket(lRemoteNodeId, lDeviceNodeId,
+                                            lChallenge, lChallengePacket, lChallengeLen));
+
+    lController.radio().testQueueReceivedPacket(lChallengePacket, lChallengeLen);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::TxInProgress);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 2U);
+
+    const uint32_t lRxStartsBeforeDwell = lController.radio().rxStartCount();
+
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
+    ASSERT_EQ(lController.radio().rxStartCount(), lRxStartsBeforeDwell + 1);
+
+    ioHomeTestAdvanceMillis(IOHC_AUTH_DWELL_MS_SX1262 - 1);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
+    ASSERT_EQ(lController.radio().rxStartCount(), lRxStartsBeforeDwell + 1);
+
+    ioHomeTestAdvanceMillis(1);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
+    ASSERT_EQ(lController.radio().rxStartCount(), lRxStartsBeforeDwell + 1);
+
+    ioHomeTestAdvanceMillis(IOHC_RX_FINAL_TIMEOUT_MS - IOHC_AUTH_DWELL_MS_SX1262 - 1);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 2U);
+
+    ioHomeTestAdvanceMillis(1);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 2U);
+
+    ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS - 1);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 2U);
+
+    ioHomeTestAdvanceMillis(1);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::TxPending);
+
+    lController.loop();
+    lController.loop();
+    ASSERT_EQ(lController.radio().testTransmitCount(), 3U);
 }
 
 TEST(controller_default_1w_execute_uses_standard_vent_layout)
@@ -7863,6 +7982,8 @@ int main()
     RUN(controller_passive_key_sniff_captures_result_and_callback);
     RUN(controller_2w_challenge_response_inherits_low_power);
     RUN(controller_2w_challenge_response_can_clear_low_power_for_mains_device);
+    RUN(controller_2w_initial_response_wait_uses_retry_gap);
+    RUN(controller_2w_final_response_wait_and_sx1262_dwell);
     RUN(controller_default_1w_execute_uses_standard_vent_layout);
     RUN(controller_default_1w_execute_matches_reference_payloads);
     RUN(controller_1w_channel_broadcast_type3_keeps_pairing_typed_but_defaults_runtime_to_legacy_group);

@@ -12,8 +12,13 @@
 #ifdef ESP32
 #include <Arduino.h>
 #else
+#ifdef TEST_NATIVE
+static unsigned long millis() { return ioHomeTestMillis(); }
+static unsigned long micros() { return ioHomeTestMicros(); }
+#else
 static unsigned long millis() { return 0; }
 static unsigned long micros() { return 0; }
+#endif
 #endif
 
 namespace
@@ -27,6 +32,11 @@ namespace
     constexpr uint8_t kGatewayDiscoverManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Overkiz);
     constexpr uint8_t kGatewayInfoManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
     constexpr uint16_t kPositionRawTolerance = 100;
+#if defined(RADIO_SX1262) || defined(TEST_NATIVE)
+    constexpr bool kIsSX1262Radio = true;
+#else
+    constexpr bool kIsSX1262Radio = false;
+#endif
 
     std::string hexDump(const uint8_t *iData, uint8_t iLen)
     {
@@ -433,6 +443,10 @@ void IoHomeController::init()
     mRadio.init(IOHC_SPI_CS, IOHC_RADIO_RST, IOHC_RADIO_DIO0, IOHC_RADIO_DIO4);
 #endif
     mState = ControllerState::Idle;
+    mWaitingFinalResponse = false;
+    mSawChallenge = false;
+    mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
+    mRetryAtMs = 0;
     mDutyCycleWindowStart = millis();
 }
 
@@ -2193,6 +2207,13 @@ void IoHomeController::processTxPending()
 
     // Set preamble based on frame type: START frames need long preamble for low-power devices
     bool lIsStartFrame = (mTxFrame.ctrlByte0 & IOHC_CTRL0_START);
+    if (!(mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W))
+    {
+        mWaitingFinalResponse = false;
+        mSawChallenge = false;
+        mResponseTimeoutMs = lIsStartFrame ? IOHC_RX_TIMEOUT_MS : IOHC_RX_FINAL_TIMEOUT_MS;
+        mRetryAtMs = 0;
+    }
     const RadioError lPrepErr = configureTxRadio(lIsStartFrame ? IOHC_PREAMBLE_LONG : IOHC_PREAMBLE_SHORT);
     if (lPrepErr == RadioError::Busy)
         return;
@@ -2313,8 +2334,27 @@ void IoHomeController::processWaitResponse()
         return;
     }
 
-    if (millis() - mStateTimer > IOHC_RX_TIMEOUT_MS)
+    if (mSawChallenge && mWaitingFinalResponse && kIsSX1262Radio &&
+        millis() - mStateTimer < IOHC_AUTH_DWELL_MS_SX1262)
     {
+        // After sending 0x3D stay in RX on the same channel for a short dwell
+        // before allowing timeout-driven hop/retry handling.
+        return;
+    }
+
+    if (millis() - mStateTimer >= mResponseTimeoutMs)
+    {
+        if (mRetryAtMs == 0)
+        {
+            mRetryAtMs = millis() + IOHC_RETRY_GAP_MS;
+            return;
+        }
+
+        if (millis() < mRetryAtMs)
+            return;
+
+        mRetryAtMs = 0;
+
         // No response — retry on next frequency or give up
         if (!hopFrequency())
             return;
@@ -2322,17 +2362,24 @@ void IoHomeController::processWaitResponse()
         if (mCurrentCmd.active && mCurrentCmd.retries < IOHC_MAX_RETRIES)
         {
             mCurrentCmd.retries++;
+            mWaitingFinalResponse = false;
+            mSawChallenge = false;
+            mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
             if (buildTxFrame(mCurrentCmd))
                 mState = ControllerState::TxPending;
             else
             {
                 mCurrentCmd.active = false;
+                mWaitingFinalResponse = false;
+                mSawChallenge = false;
                 mState = ControllerState::Idle;
             }
         }
         else
         {
             mCurrentCmd.active = false;
+            mWaitingFinalResponse = false;
+            mSawChallenge = false;
             mState = ControllerState::Idle;
         }
     }
@@ -2384,6 +2431,10 @@ void IoHomeController::processResponse()
             if (lErr == RadioError::None)
             {
                 mAuthResponseSent = true;
+                mWaitingFinalResponse = true;
+                mSawChallenge = true;
+                mResponseTimeoutMs = IOHC_RX_FINAL_TIMEOUT_MS;
+                mRetryAtMs = 0;
                 mStateTimer = millis();
                 mState = ControllerState::TxInProgress; // will transition to WaitResponse when TX done
             }
@@ -2407,6 +2458,10 @@ void IoHomeController::processResponse()
 
     dispatchRxFrame();
     mCurrentCmd.active = false;
+    mWaitingFinalResponse = false;
+    mSawChallenge = false;
+    mRetryAtMs = 0;
+    mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
     if (mState == ControllerState::ProcessResponse)
         mState = ControllerState::Idle;
 }
