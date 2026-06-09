@@ -240,6 +240,48 @@ namespace
         return iText.substr(lStart, lEnd - lStart);
     }
 
+    const char *pairing2WModeName(IoHomeController::Pairing2WMode iMode)
+    {
+        switch (iMode)
+        {
+        case IoHomeController::Pairing2WMode::DiscoveryConfirmation:
+            return "discovery-confirm";
+        case IoHomeController::Pairing2WMode::LaunchKeyTransfer:
+            return "launch-key";
+        case IoHomeController::Pairing2WMode::PullKey:
+            return "pull-key";
+        case IoHomeController::Pairing2WMode::Normal:
+        default:
+            return "normal";
+        }
+    }
+
+    bool parsePairing2WMode(const std::string &iText, IoHomeController::Pairing2WMode &oMode)
+    {
+        const std::string lMode = trimSpaces(iText);
+        if (lMode == "normal")
+        {
+            oMode = IoHomeController::Pairing2WMode::Normal;
+            return true;
+        }
+        if (lMode == "discovery-confirm" || lMode == "discovery-confirmation")
+        {
+            oMode = IoHomeController::Pairing2WMode::DiscoveryConfirmation;
+            return true;
+        }
+        if (lMode == "launch-key")
+        {
+            oMode = IoHomeController::Pairing2WMode::LaunchKeyTransfer;
+            return true;
+        }
+        if (lMode == "pull-key" || lMode == "pull")
+        {
+            oMode = IoHomeController::Pairing2WMode::PullKey;
+            return true;
+        }
+        return false;
+    }
+
     bool takeToken(std::string &ioText, std::string &oToken)
     {
         ioText = trimSpaces(ioText);
@@ -2104,6 +2146,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc status", "Show all channel status");
     openknx.console.printHelpLine("iohc status NN", "Show channel NN detail");
     openknx.console.printHelpLine("iohc pair NN [ADDR]", "Start pairing; 1W uses ETS target or hex ADDR override");
+    openknx.console.printHelpLine("iohc pair2w-exp NN MODE [ADDR]", "Diagnostic-only 2W pairing mode: discovery-confirm|launch-key|pull-key");
     openknx.console.printHelpLine("iohc pair cancel", "Cancel ongoing pairing");
     openknx.console.printHelpLine("iohc pairdiag on|off|status", "Verbose pairing/discovery diagnostics");
     openknx.console.printHelpLine("iohc unpair NN", "Remove pairing for channel NN");
@@ -2681,6 +2724,53 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             logInfoP("Sent 1W %s main=0x%04X type=%u dst=0x%06X to channel %u", lName, static_cast<unsigned>(lMain), static_cast<unsigned>(lType), mController.oneWayBroadcastTarget(static_cast<uint8_t>(lType)), static_cast<unsigned>(lIdx + 1));
         else
             logInfoP("Failed to queue 1W %s for channel %u", lName, static_cast<unsigned>(lIdx + 1));
+        return true;
+    }
+
+    if (lSub.rfind("pair2w-exp", 0) == 0)
+    {
+        std::string lArgs = trimSpaces(lSub.length() > strlen("pair2w-exp") ? lSub.substr(strlen("pair2w-exp")) : "");
+        std::string lChanText;
+        std::string lModeText;
+        if (!takeToken(lArgs, lChanText) || !takeToken(lArgs, lModeText))
+        {
+            logInfoP("Usage: iohc pair2w-exp NN discovery-confirm|launch-key|pull-key [ADDR]");
+            return true;
+        }
+
+        uint8_t lIdx = 0;
+        if (!parseChannelIndex(lChanText, mNumChannels, lIdx))
+        {
+            logInfoP("Invalid channel: %s", lChanText.c_str());
+            return true;
+        }
+        if (mChannels[lIdx]->is1W())
+        {
+            logInfoP("Channel %u is configured for 1W; pair2w-exp is only available for 2W channels", static_cast<unsigned>(lIdx + 1));
+            return true;
+        }
+
+        IoHomeController::Pairing2WMode lMode = IoHomeController::Pairing2WMode::Normal;
+        if (!parsePairing2WMode(lModeText, lMode) || lMode == IoHomeController::Pairing2WMode::Normal)
+        {
+            logInfoP("Usage: iohc pair2w-exp NN discovery-confirm|launch-key|pull-key [ADDR]");
+            return true;
+        }
+
+        uint32_t lNodeId = 0;
+        if (!lArgs.empty() && !parseHex24(lArgs, lNodeId))
+        {
+            logInfoP("Invalid node address: %s", lArgs.c_str());
+            return true;
+        }
+
+        const bool lOk = mController.startPairingExperimental(lIdx, lNodeId, lMode);
+        if (lOk)
+            logInfoP("Experimental 2W pairing started for channel %u mode=%s", static_cast<unsigned>(lIdx + 1), pairing2WModeName(lMode));
+        else if (mController.lastPairStartStatus() == IoHomeController::PairStartStatus::Busy)
+            logInfoP("Experimental 2W pairing blocked for channel %u, controller state=%s", static_cast<unsigned>(lIdx + 1), IoHomeController::stateName(mController.lastPairStartBlockedState()));
+        else
+            logInfoP("Experimental 2W pairing failed to start for channel %u mode=%s", static_cast<unsigned>(lIdx + 1), pairing2WModeName(lMode));
         return true;
     }
 

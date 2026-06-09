@@ -831,6 +831,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
 {
     mLastPairStartStatus = PairStartStatus::Ok;
     mLastPairStartBlockedState = mState;
+    mPairing2WMode = Pairing2WMode::Normal;
 
     if (mState >= ControllerState::PairSendDiscovery &&
         mState <= ControllerState::PairFailed)
@@ -912,6 +913,29 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
         tracePairDiagnosticStateChange();
     }
     return true;
+}
+
+bool IoHomeController::startPairingExperimental(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing2WMode iMode)
+{
+    if (iMode == Pairing2WMode::Normal)
+        return startPairing(iChannelIndex, iKnownNodeId);
+
+    IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(iChannelIndex) : nullptr;
+    if (lCh && lCh->is1W())
+    {
+        mLastPairStartStatus = PairStartStatus::Failed;
+        mLastPairStartBlockedState = mState;
+        return false;
+    }
+
+    const bool lOk = startPairing(iChannelIndex, iKnownNodeId);
+    if (lOk)
+    {
+        mPairing2WMode = iMode;
+        logInfoP("Pairing: experimental 2W mode enabled: %u",
+                 static_cast<unsigned>(mPairing2WMode));
+    }
+    return lOk;
 }
 
 bool IoHomeController::startPairingWithType(uint8_t iChannelIndex, uint32_t iKnownNodeId, uint8_t iBroadcastType)
@@ -1823,7 +1847,31 @@ void IoHomeController::loop()
                 {
                     mDiscoveredNodeId = mRxFrame.getSrcNodeId();
                     mPairingFreqIdx = mLastResponseFreqIdx;
-                    mState = ControllerState::PairSendDiscoveryConfirmation;
+
+                    // Default laberning-style path:
+                    // 0x28 DiscoverRequest -> 0x29/0x2B DiscoverResponse
+                    // -> 0x31 KeyInitTransfer -> 0x3C -> 0x32 -> 0x33.
+                    // Experimental branches are only reachable via explicit
+                    // diagnostic pairing modes.
+                    switch (mPairing2WMode)
+                    {
+                    case Pairing2WMode::DiscoveryConfirmation:
+                        mState = ControllerState::PairSendDiscoveryConfirmation;
+                        break;
+
+                    case Pairing2WMode::LaunchKeyTransfer:
+                        mState = ControllerState::PairSendLaunchKeyTransfer;
+                        break;
+
+                    case Pairing2WMode::PullKey:
+                        mState = ControllerState::PairSendPullKeyChallenge;
+                        break;
+
+                    case Pairing2WMode::Normal:
+                    default:
+                        mState = ControllerState::PairSendKeyInit;
+                        break;
+                    }
                 }
             }
             else if (mState == ControllerState::PairWaitDiscoveryConfirmationAck)

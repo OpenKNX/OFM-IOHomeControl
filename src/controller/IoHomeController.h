@@ -64,6 +64,21 @@ enum class ControllerState : uint8_t
   // Pairing states
   PairSendDiscovery,
   PairWaitDiscoveryResponse,
+
+  // Experimental / legacy 2W pairing states.
+  //
+  // These are intentionally not used by the default 2W pairing flow.
+  // Normal 2W pairing follows:
+  //   DiscoverRequest(0x28)
+  //   -> DiscoverResponse(0x29)
+  //   -> KeyInitTransfer(0x31)
+  //   -> ChallengeRequest(0x3C)
+  //   -> KeyTransfer(0x32)
+  //   -> KeyTransferConfirmation(0x33/0x2D)
+  //   -> optional SetConfig1(0x6F)
+  //
+  // The states below are kept for protocol research and device-specific tests.
+  // They must only be entered through explicit diagnostic pairing modes.
   PairSendDiscoveryConfirmation,
   PairWaitDiscoveryConfirmationAck,
   PairSendLaunchKeyTransfer,
@@ -110,6 +125,14 @@ enum class ControllerState : uint8_t
   GatewayWaitDiscoveryResponse,
   GatewayWaitKeyTransfer,
   GatewayWaitChallenge
+};
+
+enum class Pairing2WMode : uint8_t
+{
+  Normal = 0,                // default: 0x28 -> 0x31 -> 0x32 -> 0x33 -> optional 0x6F
+  DiscoveryConfirmation = 1, // experimental: 0x2C/0x2D after discovery
+  LaunchKeyTransfer = 2,     // experimental: 0x38 path
+  PullKey = 3                // experimental: pull existing key from device
 };
 
 // Pairing result callback
@@ -177,6 +200,7 @@ public:
 
   // Start pairing process for a channel
   bool startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId = 0);
+  bool startPairingExperimental(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing2WMode iMode);
   // Start the standard 1W learning flow with an explicit broadcast type override.
   bool startPairingWithType(uint8_t iChannelIndex, uint32_t iKnownNodeId, uint8_t iBroadcastType);
   PairStartStatus lastPairStartStatus() const;
@@ -429,6 +453,7 @@ private:
   uint8_t mPairing1WStage = 0; // 0=Pair(0x2E), 1=Remove(0x39), 2=Add(0x30)
   uint8_t mPairing1WBroadcastType = 2;
   uint8_t mDefault1WBroadcastType = 2;
+  Pairing2WMode mPairing2WMode = Pairing2WMode::Normal;
 
   // Receive-side authentication state
   IoHomeFrame mPendingAuthFrame; // saved unsolicited frame awaiting verification
