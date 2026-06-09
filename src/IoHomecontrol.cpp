@@ -240,43 +240,43 @@ namespace
         return iText.substr(lStart, lEnd - lStart);
     }
 
-    const char *pairing2WModeName(IoHomeController::Pairing2WMode iMode)
+    const char *pairing2WModeName(Pairing2WMode iMode)
     {
         switch (iMode)
         {
-        case IoHomeController::Pairing2WMode::DiscoveryConfirmation:
+        case Pairing2WMode::DiscoveryConfirmation:
             return "discovery-confirm";
-        case IoHomeController::Pairing2WMode::LaunchKeyTransfer:
+        case Pairing2WMode::LaunchKeyTransfer:
             return "launch-key";
-        case IoHomeController::Pairing2WMode::PullKey:
+        case Pairing2WMode::PullKey:
             return "pull-key";
-        case IoHomeController::Pairing2WMode::Normal:
+        case Pairing2WMode::Normal:
         default:
             return "normal";
         }
     }
 
-    bool parsePairing2WMode(const std::string &iText, IoHomeController::Pairing2WMode &oMode)
+    bool parsePairing2WMode(const std::string &iText, Pairing2WMode &oMode)
     {
         const std::string lMode = trimSpaces(iText);
         if (lMode == "normal")
         {
-            oMode = IoHomeController::Pairing2WMode::Normal;
+            oMode = Pairing2WMode::Normal;
             return true;
         }
         if (lMode == "discovery-confirm" || lMode == "discovery-confirmation")
         {
-            oMode = IoHomeController::Pairing2WMode::DiscoveryConfirmation;
+            oMode = Pairing2WMode::DiscoveryConfirmation;
             return true;
         }
         if (lMode == "launch-key")
         {
-            oMode = IoHomeController::Pairing2WMode::LaunchKeyTransfer;
+            oMode = Pairing2WMode::LaunchKeyTransfer;
             return true;
         }
         if (lMode == "pull-key" || lMode == "pull")
         {
-            oMode = IoHomeController::Pairing2WMode::PullKey;
+            oMode = Pairing2WMode::PullKey;
             return true;
         }
         return false;
@@ -2750,8 +2750,8 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             return true;
         }
 
-        IoHomeController::Pairing2WMode lMode = IoHomeController::Pairing2WMode::Normal;
-        if (!parsePairing2WMode(lModeText, lMode) || lMode == IoHomeController::Pairing2WMode::Normal)
+        Pairing2WMode lMode = Pairing2WMode::Normal;
+        if (!parsePairing2WMode(lModeText, lMode) || lMode == Pairing2WMode::Normal)
         {
             logInfoP("Usage: iohc pair2w-exp NN discovery-confirm|launch-key|pull-key [ADDR]");
             return true;
