@@ -19,7 +19,6 @@ static unsigned long micros() { return ioHomeTestMicros(); }
 static unsigned long millis() { return 0; }
 static unsigned long micros() { return 0; }
 #endif
-static void delay(unsigned long) {}
 #endif
 
 namespace
@@ -32,37 +31,12 @@ namespace
     constexpr uint16_t kGatewayInfoDeviceType = 0x0002;
     constexpr uint8_t kGatewayDiscoverManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Overkiz);
     constexpr uint8_t kGatewayInfoManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
+    constexpr uint16_t kPositionRawTolerance = 100;
 #if defined(RADIO_SX1262) || defined(TEST_NATIVE)
     constexpr bool kIsSX1262Radio = true;
 #else
     constexpr bool kIsSX1262Radio = false;
 #endif
-
-    const char *pairing2WModeName(Pairing2WMode iMode)
-    {
-        switch (iMode)
-        {
-        case Pairing2WMode::DiscoveryConfirmation:
-            return "discovery-confirm";
-        case Pairing2WMode::LaunchKeyTransfer:
-            return "launch-key";
-        case Pairing2WMode::PullKey:
-            return "pull-key";
-        case Pairing2WMode::Normal:
-        default:
-            return "normal";
-        }
-    }
-
-    bool isExperimentalPairing2WMode(Pairing2WMode iMode)
-    {
-        return iMode != Pairing2WMode::Normal;
-    }
-
-    bool isNormal2WPairingModeAllowed(Pairing2WMode iMode, bool iExplicitDiagnosticMode)
-    {
-        return iMode == Pairing2WMode::Normal || iExplicitDiagnosticMode;
-    }
 
     bool isTrackedStatusPollCommand(const IoHomeQueueEntry &iCmd)
     {
@@ -130,7 +104,33 @@ namespace
         }
     }
 
+    size_t buildHmacInput(const IoHomeFrame &iFrame, uint8_t *oBuffer, size_t iBufferLen)
+    {
+        const size_t lLen = static_cast<size_t>(iFrame.dataLen) + 1;
+        if (iBufferLen < lLen)
+            return 0;
 
+        oBuffer[0] = static_cast<uint8_t>(iFrame.commandId);
+        if (iFrame.dataLen > 0)
+            memcpy(oBuffer + 1, iFrame.data, iFrame.dataLen);
+        return lLen;
+    }
+
+    bool rawPositionToPercent(uint16_t iRaw, float &oPercent)
+    {
+        if (iRaw > IOHC_POSITION_MAX)
+            return false;
+
+        oPercent = (float)iRaw * 100.0f / IOHC_POSITION_MAX;
+        if (oPercent > 100.0f)
+            oPercent = 100.0f;
+        return true;
+    }
+
+    bool rawPositionNear(uint16_t iA, uint16_t iB)
+    {
+        return (iA > iB) ? ((iA - iB) <= kPositionRawTolerance) : ((iB - iA) <= kPositionRawTolerance);
+    }
 
     uint32_t passivePairNodeFromFrame(const IoHomeFrame &iFrame)
     {
@@ -162,18 +162,39 @@ namespace
         const uint16_t lTargetRaw = readU16BE(iData, iTargetOffset);
         const uint16_t lCurrentRaw = readU16BE(iData, iCurrentOffset);
 
-        const IoHomeController::PositionDecodeResult lDecoded =
-            IoHomeController::decodePositionStatus(lTargetRaw, lCurrentRaw, iStopped);
+        float lCurrentPercent = 0.0f;
+        bool lHasCurrentPosition = rawPositionToPercent(lCurrentRaw, lCurrentPercent);
 
-        if (lDecoded.hasTargetPosition)
-            iChannel->onTargetPositionFeedback(lDecoded.targetPositionPercent);
-        if (lDecoded.hasCurrentPosition)
-            iChannel->onPositionFeedback(lDecoded.currentPositionPercent);
+        float lTargetPercent = 0.0f;
+        bool lHasTargetPosition = rawPositionToPercent(lTargetRaw, lTargetPercent);
+        if (!lHasTargetPosition && iStopped && lHasCurrentPosition)
+        {
+            lTargetPercent = lCurrentPercent;
+            lHasTargetPosition = true;
+        }
+        if (!lHasCurrentPosition && iStopped && lHasTargetPosition)
+        {
+            lCurrentPercent = lTargetPercent;
+            lHasCurrentPosition = true;
+        }
 
-        iChannel->onStatusUpdate(lDecoded.moving);
-        iChannel->logStatusSummary(lDecoded.currentPositionPercent, lDecoded.hasCurrentPosition,
-                                   lDecoded.targetPositionPercent, lDecoded.hasTargetPosition,
-                                   lDecoded.moving);
+        bool lMoving = !iStopped;
+        if (lMoving && lHasCurrentPosition && lHasTargetPosition &&
+            lTargetRaw <= IOHC_POSITION_MAX &&
+            rawPositionNear(lCurrentRaw, lTargetRaw))
+        {
+            lMoving = false;
+        }
+
+        if (lHasTargetPosition)
+            iChannel->onTargetPositionFeedback(lTargetPercent);
+        if (lHasCurrentPosition)
+            iChannel->onPositionFeedback(lCurrentPercent);
+
+        iChannel->onStatusUpdate(lMoving);
+        iChannel->logStatusSummary(lCurrentPercent, lHasCurrentPosition,
+                                   lTargetPercent, lHasTargetPosition,
+                                   lMoving);
     }
 
     void applyPrivateBatteryInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData, uint8_t iDataLen)
@@ -201,10 +222,14 @@ namespace
             return;
 
         const uint16_t lTiltRaw = readU16BE(iData, 13);
-        float lTiltPercent = 0.0f;
-        if (!IoHomeController::decodeTiltRaw(lTiltRaw, lTiltPercent))
+        if (lTiltRaw > IOHC_POSITION_MAX)
             return;
 
+        float lTiltPercent = 100.0f - ((float)lTiltRaw * 100.0f / IOHC_POSITION_MAX);
+        if (lTiltPercent < 0.0f)
+            lTiltPercent = 0.0f;
+        if (lTiltPercent > 100.0f)
+            lTiltPercent = 100.0f;
         iChannel->onSlatFeedback(lTiltPercent);
     }
 
@@ -217,10 +242,14 @@ namespace
             return;
 
         const uint16_t lTiltRaw = readU16BE(iData, 13);
-        float lTiltPercent = 0.0f;
-        if (!IoHomeController::decodeTiltRaw(lTiltRaw, lTiltPercent))
+        if (lTiltRaw > IOHC_POSITION_MAX)
             return;
 
+        float lTiltPercent = 100.0f - ((float)lTiltRaw * 100.0f / IOHC_POSITION_MAX);
+        if (lTiltPercent < 0.0f)
+            lTiltPercent = 0.0f;
+        if (lTiltPercent > 100.0f)
+            lTiltPercent = 100.0f;
         iChannel->onSlatFeedback(lTiltPercent);
     }
 
@@ -243,9 +272,18 @@ namespace
                                   uint8_t oEncryptedKey[16])
     {
         const uint8_t lKeyInitData[1] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
-        return IoHomeCrypto::crypt2WKeyXor(lKeyInitData, sizeof(lKeyInitData),
-                                           iDeviceChallenge, iGatewayKey,
-                                           IOHC_TRANSFER_KEY, oEncryptedKey);
+        uint8_t lKeystream[16];
+        if (!IoHomeCrypto::crypt2WKey(lKeyInitData, sizeof(lKeyInitData),
+                                      iDeviceChallenge, IOHC_TRANSFER_KEY,
+                                      lKeystream))
+        {
+            return false;
+        }
+
+        for (uint8_t i = 0; i < 16; i++)
+            oEncryptedKey[i] = iGatewayKey[i] ^ lKeystream[i];
+
+        return true;
     }
 
     uint8_t buildGatewayDiscoverAnswerFrame(uint8_t *oBuffer,
@@ -266,7 +304,7 @@ namespace
         lFrame.data[7] = 0x00;
         lFrame.data[8] = 0x00;
         lFrame.dataLen = 9;
-        return lFrame.serialize(oBuffer, iBufferLen);
+        return lFrame.serialize2W(oBuffer, iBufferLen);
     }
 
     uint8_t buildGatewayDiscoverActuatorAckFrame(uint8_t *oBuffer,
@@ -278,7 +316,7 @@ namespace
         initGatewayResponseFrame(lFrame, iGatewayNodeId, iDeviceNodeId,
                                  IoHomeCommand::ConfirmationACK);
         lFrame.dataLen = 0;
-        return lFrame.serialize(oBuffer, iBufferLen);
+        return lFrame.serialize2W(oBuffer, iBufferLen);
     }
 
     uint8_t buildGatewayKeyTransferFrame(uint8_t *oBuffer,
@@ -292,7 +330,7 @@ namespace
                                  IoHomeCommand::KeyTransfer);
         memcpy(lFrame.data, iEncryptedKey, 16);
         lFrame.dataLen = 16;
-        return lFrame.serialize(oBuffer, iBufferLen);
+        return lFrame.serialize2W(oBuffer, iBufferLen);
     }
 
     uint8_t buildGatewayChallengeAnswerFrame(uint8_t *oBuffer,
@@ -308,21 +346,12 @@ namespace
         if (iMemCmd == 0 || iMemData == nullptr || iMemDataLen == 0)
             return 0;
 
-        if (iMemDataLen > IOHC_FRAME_MAX_DATA)
-            return 0;
-
-        IoHomeFrame lAuthenticatedFrame;
-        lAuthenticatedFrame.init();
-        lAuthenticatedFrame.commandId = static_cast<IoHomeCommand>(iMemCmd);
-        memcpy(lAuthenticatedFrame.data, iMemData, iMemDataLen);
-        lAuthenticatedFrame.dataLen = iMemDataLen;
-
         uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA] = {};
-        const size_t lHmacInputLen = lAuthenticatedFrame.buildAuthTranscript(lHmacInput, sizeof(lHmacInput));
+        lHmacInput[0] = iMemCmd;
+        memcpy(lHmacInput + 1, iMemData, iMemDataLen);
 
         uint8_t lHmac[IOHC_HMAC_SIZE];
-        if (lHmacInputLen == 0 ||
-            !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
+        if (!IoHomeCrypto::createHmac2W(lHmacInput, 1 + iMemDataLen,
                                         iPeerChallenge, iGatewayKey, lHmac))
         {
             return 0;
@@ -334,7 +363,7 @@ namespace
         lFrame.setLowPower(true);
         memcpy(lFrame.data, lHmac, sizeof(lHmac));
         lFrame.dataLen = sizeof(lHmac);
-        return lFrame.serialize(oBuffer, iBufferLen);
+        return lFrame.serialize2W(oBuffer, iBufferLen);
     }
 
     uint8_t buildGatewayNameResponseFrame(uint8_t *oBuffer,
@@ -348,7 +377,7 @@ namespace
         memset(lFrame.data, 0, kGatewayNameLen);
         memcpy(lFrame.data, kGatewayName, sizeof(kGatewayName) - 1);
         lFrame.dataLen = kGatewayNameLen;
-        return lFrame.serialize(oBuffer, iBufferLen);
+        return lFrame.serialize2W(oBuffer, iBufferLen);
     }
 
     uint8_t buildGatewaySetNameResponseFrame(uint8_t *oBuffer,
@@ -360,7 +389,7 @@ namespace
         initGatewayResponseFrame(lFrame, iGatewayNodeId, iDeviceNodeId,
                                  IoHomeCommand::SetNameResponse);
         lFrame.dataLen = 0;
-        return lFrame.serialize(oBuffer, iBufferLen);
+        return lFrame.serialize2W(oBuffer, iBufferLen);
     }
 
     uint8_t buildGatewayGetGeneralInfo1ResponseFrame(uint8_t *oBuffer,
@@ -376,25 +405,7 @@ namespace
                          ((kGatewayInfoSubtype & 0x3F) << 2);
         lFrame.data[2] = kGatewayInfoManufacturer;
         lFrame.dataLen = 3;
-        return lFrame.serialize(oBuffer, iBufferLen);
-    }
-
-    bool buildSetConfig1(IoHomeFrame &oFrame, uint32_t iOwnNodeId, uint32_t iDestNodeId)
-    {
-        static constexpr uint8_t kSetConfig1Payload[] = {0xE0, 0x10, 0x0A, 0x08, 0x00};
-        static_assert(sizeof(kSetConfig1Payload) <= IOHC_FRAME_MAX_DATA,
-                      "SetConfig1 payload exceeds IoHomeFrame data capacity");
-
-        oFrame.init();
-        oFrame.setStart2W();
-        oFrame.setLowPower(true);
-        oFrame.setSrcNode(iOwnNodeId);
-        oFrame.setDestNode(iDestNodeId);
-        oFrame.commandId = IoHomeCommand::SetConfig1;
-        memcpy(oFrame.data, kSetConfig1Payload, sizeof(kSetConfig1Payload));
-        oFrame.dataLen = sizeof(kSetConfig1Payload);
-        oFrame.hasHmac = false;
-        return true;
+        return lFrame.serialize2W(oBuffer, iBufferLen);
     }
 }
 
@@ -424,10 +435,6 @@ IoHomeController::IoHomeController()
       mGatewayDiscoverFreqIdx(0),
       mScanIndex(0), mScanTargetNode(0),
       mDutyCycleWindowStart(0),
-      mLbtBusyCount(0), mLbtBypassCount(0), mLbtClearCount(0),
-      mLbtInvalidRssiCount(0), mLastLbtRssi(0),
-      mLastLbtRssiValid(false), mLastLbtAttempts(0),
-      mLastLbtBypassed(false), mLastLbtAuthResponse(false),
       mRxScanLastSwitch(0), mRxScanIntervalUs(IOHC_RX_SCAN_INTERVAL_US),
       mRxScanEnabled(true), mLastResponseFreqIdx(0),
       mPairDiagnosticTraceEnabled(false),
@@ -546,104 +553,6 @@ Radio &IoHomeController::radio()
 const Radio &IoHomeController::radio() const
 {
     return mRadio;
-}
-
-bool IoHomeController::frameMatchesExchangeEndpoints(const IoHomeFrame &iRequest,
-                                                     const IoHomeFrame &iCandidate)
-{
-    return iCandidate.getSrcNodeId() == iRequest.getDestNodeId() &&
-           iCandidate.getDestNodeId() == iRequest.getSrcNodeId();
-}
-
-IoHomeController::FirstResponseDisposition
-IoHomeController::classifyFirstResponse(const IoHomeFrame &iRequest,
-                                        const IoHomeFrame &iCandidate)
-{
-    if (!frameMatchesExchangeEndpoints(iRequest, iCandidate))
-        return FirstResponseDisposition::Ignore;
-
-    if (iCandidate.commandId == IoHomeCommand::ChallengeRequest)
-        return FirstResponseDisposition::NeedAuth;
-
-    return FirstResponseDisposition::DirectComplete;
-}
-
-IoHomeController::FinalResponseDisposition
-IoHomeController::classifyFinalResponse(const IoHomeFrame &iRequest,
-                                        const IoHomeFrame &iCandidate)
-{
-    if (!frameMatchesExchangeEndpoints(iRequest, iCandidate))
-        return FinalResponseDisposition::Ignore;
-
-    return FinalResponseDisposition::Accept;
-}
-
-bool IoHomeController::rawPositionToPercent(uint16_t iRaw, float &oPercent)
-{
-    if (iRaw > IOHC_POSITION_MAX)
-        return false;
-
-    oPercent = (float)iRaw * 100.0f / IOHC_POSITION_MAX;
-    if (oPercent > 100.0f)
-        oPercent = 100.0f;
-    return true;
-}
-
-bool IoHomeController::rawPositionNear(uint16_t iA, uint16_t iB)
-{
-    return (iA > iB) ? ((iA - iB) <= kPositionRawTolerance)
-                     : ((iB - iA) <= kPositionRawTolerance);
-}
-
-IoHomeController::PositionDecodeResult
-IoHomeController::decodePositionStatus(uint16_t iTargetRaw,
-                                       uint16_t iCurrentRaw,
-                                       bool iStopped)
-{
-    PositionDecodeResult lResult = {};
-
-    lResult.hasCurrentPosition = rawPositionToPercent(iCurrentRaw, lResult.currentPositionPercent);
-    lResult.hasTargetPosition = rawPositionToPercent(iTargetRaw, lResult.targetPositionPercent);
-
-    // Some io-homecontrol status payloads report marker values such as 0xD200
-    // or 0xD400 in the target field when stopped. Match the reference behavior:
-    // keep the actual current position and mirror it as target instead of
-    // reporting an invalid/unknown target.
-    if (!lResult.hasTargetPosition && iStopped && lResult.hasCurrentPosition)
-    {
-        lResult.targetPositionPercent = lResult.currentPositionPercent;
-        lResult.hasTargetPosition = true;
-    }
-
-    // Conversely, if the current position is not usable but the target is valid
-    // and the actuator reports stopped, treat the current position as the target.
-    if (!lResult.hasCurrentPosition && iStopped && lResult.hasTargetPosition)
-    {
-        lResult.currentPositionPercent = lResult.targetPositionPercent;
-        lResult.hasCurrentPosition = true;
-    }
-
-    lResult.moving = !iStopped;
-    if (lResult.moving && lResult.hasCurrentPosition && lResult.hasTargetPosition &&
-        rawPositionNear(iCurrentRaw, iTargetRaw))
-    {
-        lResult.moving = false;
-    }
-
-    return lResult;
-}
-
-bool IoHomeController::decodeTiltRaw(uint16_t iRaw, float &oPercent)
-{
-    if (iRaw > IOHC_POSITION_MAX)
-        return false;
-
-    oPercent = 100.0f - ((float)iRaw * 100.0f / IOHC_POSITION_MAX);
-    if (oPercent < 0.0f)
-        oPercent = 0.0f;
-    if (oPercent > 100.0f)
-        oPercent = 100.0f;
-    return true;
 }
 
 RadioError IoHomeController::startReceive()
@@ -965,37 +874,9 @@ IoHomecontrolChannel *IoHomeController::oneWayProfileForChannel(IoHomecontrolCha
 
 bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId)
 {
-    return startPairingInternal(iChannelIndex, iKnownNodeId, Pairing2WMode::Normal, false);
-}
-
-bool IoHomeController::startPairingExperimental(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing2WMode iMode)
-{
-    if (!isExperimentalPairing2WMode(iMode))
-    {
-        mLastPairStartStatus = PairStartStatus::Failed;
-        mLastPairStartBlockedState = mState;
-        logInfoP("Pairing: refusing diagnostic 2W pairing with normal mode; use startPairing() for the frozen default path");
-        return false;
-    }
-
-    return startPairingInternal(iChannelIndex, iKnownNodeId, iMode, true);
-}
-
-bool IoHomeController::startPairingInternal(uint8_t iChannelIndex,
-                                            uint32_t iKnownNodeId,
-                                            Pairing2WMode iMode,
-                                            bool iExplicitDiagnosticMode)
-{
     mLastPairStartStatus = PairStartStatus::Ok;
     mLastPairStartBlockedState = mState;
-
-    if (!isNormal2WPairingModeAllowed(iMode, iExplicitDiagnosticMode))
-    {
-        mLastPairStartStatus = PairStartStatus::Failed;
-        logInfoP("Pairing: refusing non-normal 2W mode %s without explicit diagnostic entry point",
-                 pairing2WModeName(iMode));
-        return false;
-    }
+    mPairing2WMode = Pairing2WMode::Normal;
 
     if (mState >= ControllerState::PairSendDiscovery &&
         mState <= ControllerState::PairFailed)
@@ -1022,8 +903,6 @@ bool IoHomeController::startPairingInternal(uint8_t iChannelIndex,
         startReceive();
     }
 
-    mPairing2WMode = Pairing2WMode::Normal;
-    mPairing2WExperimental = false;
     mPairing1WStage = 0;
     mPairing1WBroadcastType = mDefault1WBroadcastType;
     mPairingChannel = iChannelIndex;
@@ -1044,14 +923,6 @@ bool IoHomeController::startPairingInternal(uint8_t iChannelIndex,
     IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(iChannelIndex) : nullptr;
     if (lCh && lCh->is1W())
     {
-        if (isExperimentalPairing2WMode(iMode))
-        {
-            mLastPairStartStatus = PairStartStatus::Failed;
-            logInfoP("Pairing: refusing experimental 2W mode %s for 1W channel %u",
-                     pairing2WModeName(iMode), static_cast<unsigned>(iChannelIndex + 1));
-            return false;
-        }
-
         mPairing1WBroadcastType = lCh->getConfigured1WBroadcastType();
         uint32_t lKnownNodeId = iKnownNodeId & 0x00FFFFFF;
         if (lKnownNodeId == 0)
@@ -1080,27 +951,36 @@ bool IoHomeController::startPairingInternal(uint8_t iChannelIndex,
         return true;
     }
 
-    mPairing2WMode = iMode;
-    mPairing2WExperimental = iExplicitDiagnosticMode && isExperimentalPairing2WMode(iMode);
     mState = ControllerState::PairSendDiscovery;
     if (mPairDiagnosticTraceEnabled)
     {
-        logInfoP("PairDiag: starting 2W pairing ch=%u known=0x%06X mode=%s entry=%s path=%s",
-                 static_cast<unsigned>(iChannelIndex + 1),
-                 iKnownNodeId & 0x00FFFFFF,
-                 pairing2WModeName(mPairing2WMode),
-                 mPairing2WExperimental ? "pair2w-exp" : "normal/ETS",
-                 mPairing2WExperimental ? "experimental" : "0x28->0x29->0x31->0x3C->0x32->0x33/0x2D->optional-0x6F");
+        logInfoP("PairDiag: starting 2W pairing ch=%u known=0x%06X", static_cast<unsigned>(iChannelIndex + 1), iKnownNodeId & 0x00FFFFFF);
         tracePairDiagnosticStateChange();
     }
-    else if (mPairing2WExperimental)
-    {
-        logInfoP("Pairing: explicit diagnostic 2W mode=%s ch=%u known=0x%06X",
-                 pairing2WModeName(mPairing2WMode),
-                 static_cast<unsigned>(iChannelIndex + 1),
-                 iKnownNodeId & 0x00FFFFFF);
-    }
     return true;
+}
+
+bool IoHomeController::startPairingExperimental(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing2WMode iMode)
+{
+    if (iMode == Pairing2WMode::Normal)
+        return startPairing(iChannelIndex, iKnownNodeId);
+
+    IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(iChannelIndex) : nullptr;
+    if (lCh && lCh->is1W())
+    {
+        mLastPairStartStatus = PairStartStatus::Failed;
+        mLastPairStartBlockedState = mState;
+        return false;
+    }
+
+    const bool lOk = startPairing(iChannelIndex, iKnownNodeId);
+    if (lOk)
+    {
+        mPairing2WMode = iMode;
+        logInfoP("Pairing: experimental 2W mode enabled: %u",
+                 static_cast<unsigned>(mPairing2WMode));
+    }
+    return lOk;
 }
 
 bool IoHomeController::startPairingWithType(uint8_t iChannelIndex, uint32_t iKnownNodeId, uint8_t iBroadcastType)
@@ -1777,17 +1657,6 @@ void IoHomeController::logPairDiagnosticStatus() const
              static_cast<unsigned long>(lHealth.rxStartCount),
              static_cast<unsigned long>(lHealth.crcErrorCount),
              static_cast<unsigned long>(lHealth.timeoutCount));
-    logInfoP("PairDiag: lbt lastValid=%d lastRssi=%d attempts=%u bypass=%d auth=%d busy=%lu clear=%lu bypassTotal=%lu invalid=%lu threshold=%ddBm",
-             lHealth.lastLbtRssiValid ? 1 : 0,
-             lHealth.lastLbtRssi,
-             static_cast<unsigned>(lHealth.lastLbtAttempts),
-             lHealth.lastLbtBypassed ? 1 : 0,
-             lHealth.lastLbtAuthResponse ? 1 : 0,
-             static_cast<unsigned long>(lHealth.lbtBusyCount),
-             static_cast<unsigned long>(lHealth.lbtClearCount),
-             static_cast<unsigned long>(lHealth.lbtBypassCount),
-             static_cast<unsigned long>(lHealth.lbtInvalidRssiCount),
-             IOHC_LBT_RSSI_THRESHOLD_DBM);
 }
 
 void IoHomeController::resetDiscoveryTimingTrace()
@@ -1866,15 +1735,6 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
     lHealth.lastRssi = mRadio.lastRssi();
     lHealth.currentRssi = 0;
     lHealth.currentRssiValid = const_cast<Radio &>(mRadio).currentRssi(lHealth.currentRssi);
-    lHealth.lastLbtRssiValid = mLastLbtRssiValid;
-    lHealth.lastLbtRssi = mLastLbtRssi;
-    lHealth.lastLbtAttempts = mLastLbtAttempts;
-    lHealth.lastLbtBypassed = mLastLbtBypassed;
-    lHealth.lastLbtAuthResponse = mLastLbtAuthResponse;
-    lHealth.lbtBusyCount = mLbtBusyCount;
-    lHealth.lbtBypassCount = mLbtBypassCount;
-    lHealth.lbtClearCount = mLbtClearCount;
-    lHealth.lbtInvalidRssiCount = mLbtInvalidRssiCount;
     lHealth.initError = 0;
     lHealth.initStatusByte = 0;
     lHealth.initCommandStatus = 0;
@@ -2033,47 +1893,29 @@ void IoHomeController::loop()
                     mDiscoveredNodeId = mRxFrame.getSrcNodeId();
                     mPairingFreqIdx = mLastResponseFreqIdx;
 
-                    // Frozen default laberning-style path:
+                    // Default laberning-style path:
                     // 0x28 DiscoverRequest -> 0x29/0x2B DiscoverResponse
-                    // -> 0x31 KeyInitTransfer -> 0x3C -> 0x32 -> 0x33/0x2D
-                    // -> optional 0x6F SetConfig1. Experimental branches are
-                    // quarantined behind startPairingExperimental(), currently
-                    // exposed only by the explicit `pair2w-exp` diagnostic command.
-                    if (!mPairing2WExperimental)
+                    // -> 0x31 KeyInitTransfer -> 0x3C -> 0x32 -> 0x33.
+                    // Experimental branches are only reachable via explicit
+                    // diagnostic pairing modes.
+                    switch (mPairing2WMode)
                     {
-                        if (mPairing2WMode != Pairing2WMode::Normal)
-                        {
-                            logInfoP("Pairing: refusing non-normal 2W mode %s on normal/ETS path; continuing with frozen normal sequence",
-                                     pairing2WModeName(mPairing2WMode));
-                            mPairing2WMode = Pairing2WMode::Normal;
-                        }
+                    case Pairing2WMode::DiscoveryConfirmation:
+                        mState = ControllerState::PairSendDiscoveryConfirmation;
+                        break;
+
+                    case Pairing2WMode::LaunchKeyTransfer:
+                        mState = ControllerState::PairSendLaunchKeyTransfer;
+                        break;
+
+                    case Pairing2WMode::PullKey:
+                        mState = ControllerState::PairSendPullKeyChallenge;
+                        break;
+
+                    case Pairing2WMode::Normal:
+                    default:
                         mState = ControllerState::PairSendKeyInit;
-                    }
-                    else
-                    {
-                        switch (mPairing2WMode)
-                        {
-                        case Pairing2WMode::DiscoveryConfirmation:
-                            mState = ControllerState::PairSendDiscoveryConfirmation;
-                            break;
-
-                        case Pairing2WMode::LaunchKeyTransfer:
-                            mState = ControllerState::PairSendLaunchKeyTransfer;
-                            break;
-
-                        case Pairing2WMode::PullKey:
-                            mState = ControllerState::PairSendPullKeyChallenge;
-                            break;
-
-                        case Pairing2WMode::Normal:
-                        default:
-                            logInfoP("Pairing: invalid diagnostic 2W mode %s; falling back to frozen normal sequence",
-                                     pairing2WModeName(mPairing2WMode));
-                            mPairing2WExperimental = false;
-                            mPairing2WMode = Pairing2WMode::Normal;
-                            mState = ControllerState::PairSendKeyInit;
-                            break;
-                        }
+                        break;
                     }
                 }
             }
@@ -2095,10 +1937,12 @@ void IoHomeController::loop()
                 {
                     uint8_t lLaunchData[1 + sizeof(mPairingChallenge)] = {static_cast<uint8_t>(IoHomeCommand::LaunchKeyTransfer)};
                     memcpy(lLaunchData + 1, mPairingChallenge, sizeof(mPairingChallenge));
-                    if (IoHomeCrypto::crypt2WKeyXor(lLaunchData, sizeof(lLaunchData),
-                                                    mPairingChallenge, mRxFrame.data,
-                                                    IOHC_TRANSFER_KEY, mPairPulledKey))
+                    uint8_t lKeystream[16];
+                    if (IoHomeCrypto::crypt2WKey(lLaunchData, sizeof(lLaunchData), mPairingChallenge, IOHC_TRANSFER_KEY, lKeystream))
                     {
+                        for (uint8_t i = 0; i < 16; i++)
+                            mPairPulledKey[i] = mRxFrame.data[i] ^ lKeystream[i];
+
                         mPairPulledKeyFrame = mRxFrame;
                         mState = ControllerState::PairSendPullKeyChallenge;
                     }
@@ -2118,10 +1962,10 @@ void IoHomeController::loop()
                 {
                     uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
                     uint8_t lExpected[IOHC_HMAC_SIZE];
-                    const size_t lHmacInputLen = mPairPulledKeyFrame.buildAuthTranscript(lHmacInput, sizeof(lHmacInput));
+                    lHmacInput[0] = static_cast<uint8_t>(mPairPulledKeyFrame.commandId);
+                    memcpy(lHmacInput + 1, mPairPulledKeyFrame.data, mPairPulledKeyFrame.dataLen);
 
-                    if (lHmacInputLen > 0 &&
-                        IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
+                    if (IoHomeCrypto::createHmac2W(lHmacInput, 1 + mPairPulledKeyFrame.dataLen,
                                                    mPairPullAuthChallenge, mPairPulledKey, lExpected))
                     {
                         uint8_t lDiff = 0;
@@ -2213,7 +2057,7 @@ void IoHomeController::loop()
                         if (lCh && mRxFrame.dataLen == IOHC_HMAC_SIZE)
                         {
                             uint8_t lFrameData[1 + IOHC_FRAME_MAX_DATA] = {0};
-                            const size_t lFrameDataLen = mPendingAuthFrame.buildAuthTranscript(lFrameData, sizeof(lFrameData));
+                            const size_t lFrameDataLen = buildHmacInput(mPendingAuthFrame, lFrameData, sizeof(lFrameData));
 
                             if (lFrameDataLen > 0 &&
                                 IoHomeCrypto::verifyHmac(lFrameData,
@@ -2454,9 +2298,8 @@ void IoHomeController::processTxPending()
                  lHex.c_str());
     }
 
-    const bool lIsStartFrame = (mTxFrame.ctrlByte0 & IOHC_CTRL0_START) != 0;
-    const TxContext lTxContext = lIsStartFrame ? TxContext::InitialStartFrame
-                                               : TxContext::ContinuationFrame;
+    // Set preamble based on frame type: START frames need long preamble for low-power devices
+    bool lIsStartFrame = (mTxFrame.ctrlByte0 & IOHC_CTRL0_START);
     if (!(mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W))
     {
         mWaitingFinalResponse = false;
@@ -2464,7 +2307,7 @@ void IoHomeController::processTxPending()
         mResponseTimeoutMs = lIsStartFrame ? IOHC_RX_TIMEOUT_MS : IOHC_RX_FINAL_TIMEOUT_MS;
         mRetryAtMs = 0;
     }
-    const RadioError lPrepErr = configureTxRadio(preambleForFrame(mTxFrame, lTxContext));
+    const RadioError lPrepErr = configureTxRadio(lIsStartFrame ? IOHC_PREAMBLE_LONG : IOHC_PREAMBLE_SHORT);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -2473,9 +2316,7 @@ void IoHomeController::processTxPending()
         return;
     }
 
-    const LbtContext lLbtContext = (mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) ? LbtContext::Bypass
-                                                                                : LbtContext::Normal;
-    RadioError lErr = startRadioTransmit(mTxBuffer, mTxLen, lLbtContext);
+    RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
     if (lErr == RadioError::None)
     {
         mStateTimer = millis();
@@ -2560,7 +2401,7 @@ void IoHomeController::processTx1WRepeat()
         return; // wait for interval
 
     // Re-send same buffer with short preamble (repeats don't need long preamble)
-    const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen, false, LbtContext::Bypass);
+    const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
     if (lErr == RadioError::None)
     {
         mStateTimer = millis();
@@ -2645,148 +2486,90 @@ void IoHomeController::processWaitResponse()
 
 void IoHomeController::processResponse()
 {
-    auto continueWaitingForMatchingResponse = [this](const char *iReason) {
-        logDebugP("Ignoring non-matching exchange response (%s): cmd=0x%02X src=0x%06X dst=0x%06X expected src=0x%06X dst=0x%06X",
-                  iReason,
-                  static_cast<uint8_t>(mRxFrame.commandId),
-                  static_cast<unsigned long>(mRxFrame.getSrcNodeId()),
-                  static_cast<unsigned long>(mRxFrame.getDestNodeId()),
-                  static_cast<unsigned long>(mTxFrame.getDestNodeId()),
-                  static_cast<unsigned long>(mTxFrame.getSrcNodeId()));
-        mState = ControllerState::WaitResponse;
-        startReceive();
-    };
-
-    auto completeCurrentExchange = [this]() {
-        dispatchRxFrame();
-        mCurrentCmd.active = false;
-        mWaitingFinalResponse = false;
-        mSawChallenge = false;
-        mAuthResponseSent = false;
-        mRetryAtMs = 0;
-        mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
-        if (mState == ControllerState::ProcessResponse)
-            mState = ControllerState::Idle;
-    };
-
-    if (!mCurrentCmd.active)
+    // Check for challenge-response authentication (0x3C) for authenticated 2W commands
+    if (mRxFrame.commandId == IoHomeCommand::ChallengeRequest &&
+        mCurrentCmd.active && !mAuthResponseSent &&
+        mRxFrame.dataLen >= 6)
     {
-        dispatchRxFrame();
-        if (mState == ControllerState::ProcessResponse)
-            mState = ControllerState::Idle;
-        return;
-    }
+        // Device challenges our authenticated command — build and send ChallengeResponse (0x3D)
+        // HMAC input: {original command ID} + {original command data}
+        // Challenge: first 6 bytes of the 0x3C payload
+        // Key: channel encryption key (from queue entry)
+        uint8_t lChallenge[6];
+        memcpy(lChallenge, mRxFrame.data, 6);
 
-    if (mWaitingFinalResponse)
-    {
-        if (classifyFinalResponse(mTxFrame, mRxFrame) == FinalResponseDisposition::Ignore)
+        IoHomeFrame lFrame;
+        lFrame.init();
+        lFrame.ctrlByte0 = 0; // continuation frame (per nicolas5000)
+        lFrame.ctrlByte1 = 0x00;
+        lFrame.setLowPower(resolveLowPower2W(mCurrentCmd.destNodeId));
+        lFrame.setSrcNode(mOwnNodeId);
+        lFrame.setDestNode(mCurrentCmd.destNodeId);
+        lFrame.commandId = IoHomeCommand::ChallengeResponse;
+
+        // Build HMAC over {original_cmd_id, original_data...} with challenge and key
+        uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
+        const size_t lHmacInputLen = buildHmacInput(mTxFrame, lHmacInput, sizeof(lHmacInput));
+
+        if (lHmacInputLen == 0 ||
+            !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
+                                        lChallenge, mCurrentCmd.encKey, lFrame.data))
         {
-            continueWaitingForMatchingResponse("final");
+            const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
+            mCurrentCmd.active = false;
+            mState = ControllerState::Idle;
+            notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
             return;
         }
 
-        completeCurrentExchange();
-        return;
-    }
+        lFrame.dataLen = IOHC_HMAC_SIZE;
+        lFrame.hasHmac = false;
 
-    const FirstResponseDisposition lFirstDisposition = classifyFirstResponse(mTxFrame, mRxFrame);
-    if (lFirstDisposition == FirstResponseDisposition::Ignore)
-    {
-        continueWaitingForMatchingResponse("first");
-        return;
-    }
-
-    if (lFirstDisposition == FirstResponseDisposition::DirectComplete)
-    {
-        completeCurrentExchange();
-        return;
-    }
-
-    // NeedAuth: challenge-response authentication (0x3C) for authenticated 2W commands.
-    if (mAuthResponseSent || mRxFrame.dataLen < 6)
-    {
-        continueWaitingForMatchingResponse("invalid-auth-challenge");
-        return;
-    }
-
-    // Device challenges our authenticated command — build and send ChallengeResponse (0x3D).
-    // HMAC input: {original command ID} + {original command data}
-    // Challenge: first 6 bytes of the 0x3C payload
-    // Key: channel encryption key (from queue entry)
-    uint8_t lChallenge[6];
-    memcpy(lChallenge, mRxFrame.data, 6);
-
-    IoHomeFrame lFrame;
-    lFrame.init();
-    lFrame.ctrlByte0 = 0; // continuation frame (per reference)
-    lFrame.ctrlByte1 = 0x00;
-    lFrame.setLowPower(resolveLowPower2W(mCurrentCmd.destNodeId));
-    lFrame.setSrcNode(mOwnNodeId);
-    lFrame.setDestNode(mCurrentCmd.destNodeId);
-    lFrame.commandId = IoHomeCommand::ChallengeResponse;
-
-    // Build HMAC over {original_cmd_id, original_data...} with challenge and key.
-    uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
-    const size_t lHmacInputLen = mTxFrame.buildAuthTranscript(lHmacInput, sizeof(lHmacInput));
-
-    if (lHmacInputLen == 0 ||
-        !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
-                                    lChallenge, mCurrentCmd.encKey, lFrame.data))
-    {
-        const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
-        mCurrentCmd.active = false;
-        mWaitingFinalResponse = false;
-        mSawChallenge = false;
-        mAuthResponseSent = false;
-        mState = ControllerState::Idle;
-        notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
-        return;
-    }
-
-    lFrame.dataLen = IOHC_HMAC_SIZE;
-    lFrame.hasHmac = false;
-
-    uint8_t lLen = lFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
-    if (lLen > 0)
-    {
-        const RadioError lErr = startTransmitWithPreamble(mTxBuffer, lLen,
-                                                          preambleForFrame(lFrame, TxContext::AuthResponse),
-                                                          false, LbtContext::AuthResponse);
-        if (lErr == RadioError::None)
+        uint8_t lLen = lFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
+        if (lLen > 0)
         {
-            mAuthResponseSent = true;
-            mWaitingFinalResponse = true;
-            mSawChallenge = true;
-            mResponseTimeoutMs = IOHC_RX_FINAL_TIMEOUT_MS;
-            mRetryAtMs = 0;
-            mStateTimer = millis();
-            mState = ControllerState::TxInProgress; // will transition to WaitResponse when TX done
-        }
-        else if (lErr == RadioError::Busy)
-        {
-            return;
+            const RadioError lErr = startTransmitWithPreamble(mTxBuffer, lLen,
+                                                              authResponsePreamble());
+            if (lErr == RadioError::None)
+            {
+                mAuthResponseSent = true;
+                mWaitingFinalResponse = true;
+                mSawChallenge = true;
+                mResponseTimeoutMs = IOHC_RX_FINAL_TIMEOUT_MS;
+                mRetryAtMs = 0;
+                mStateTimer = millis();
+                mState = ControllerState::TxInProgress; // will transition to WaitResponse when TX done
+            }
+            else if (lErr == RadioError::Busy)
+            {
+                return;
+            }
+            else
+            {
+                const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
+                mCurrentCmd.active = false;
+                mState = ControllerState::Idle;
+                notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
+            }
         }
         else
         {
             const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
             mCurrentCmd.active = false;
-            mWaitingFinalResponse = false;
-            mSawChallenge = false;
-            mAuthResponseSent = false;
             mState = ControllerState::Idle;
             notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
         }
+        return;
     }
-    else
-    {
-        const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
-        mCurrentCmd.active = false;
-        mWaitingFinalResponse = false;
-        mSawChallenge = false;
-        mAuthResponseSent = false;
+
+    dispatchRxFrame();
+    mCurrentCmd.active = false;
+    mWaitingFinalResponse = false;
+    mSawChallenge = false;
+    mRetryAtMs = 0;
+    mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
+    if (mState == ControllerState::ProcessResponse)
         mState = ControllerState::Idle;
-        notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
-    }
 }
 
 // --- Pairing state handlers ---
@@ -2838,9 +2621,9 @@ void IoHomeController::processPairSendDiscovery()
         return;
     }
     updateCurrentFrequencyIndex(lDiscoveryFreq);
-    const RadioError lPrepErr = mRadio.setPreambleLengthBlocking(preambleForFrame(mTxFrame, TxContext::InitialStartFrame));
+    const RadioError lPrepErr = mRadio.setPreambleLengthBlocking(IOHC_PREAMBLE_LONG);
 #else
-    const RadioError lPrepErr = configureTxRadio(preambleForFrame(mTxFrame, TxContext::InitialStartFrame), &lDiscoveryFreq);
+    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lDiscoveryFreq);
 #endif
     if (lPrepErr == RadioError::Busy)
         return;
@@ -2850,13 +2633,13 @@ void IoHomeController::processPairSendDiscovery()
         return;
     }
 
-    mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
+    mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
 #if defined(RADIO_SX1262)
         const RadioError lErr = mRadio.startTransmitBlocking(mTxBuffer, mTxLen);
 #else
-        const RadioError lErr = startRadioTransmit(mTxBuffer, mTxLen, LbtContext::Normal);
+        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
 #endif
         if (lErr == RadioError::None)
         {
@@ -2925,9 +2708,9 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
         return;
     }
     updateCurrentFrequencyIndex(lConfirmationFreq);
-    const RadioError lPrepErr = mRadio.setPreambleLengthBlocking(preambleForFrame(mTxFrame, TxContext::InitialStartFrame));
+    const RadioError lPrepErr = mRadio.setPreambleLengthBlocking(IOHC_PREAMBLE_LONG);
 #else
-    const RadioError lPrepErr = configureTxRadio(preambleForFrame(mTxFrame, TxContext::InitialStartFrame), &lConfirmationFreq);
+    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lConfirmationFreq);
 #endif
     if (lPrepErr == RadioError::Busy)
         return;
@@ -2938,13 +2721,13 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
         return;
     }
 
-    mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
+    mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
 #if defined(RADIO_SX1262)
         const RadioError lErr = mRadio.startTransmitBlocking(mTxBuffer, mTxLen);
 #else
-        const RadioError lErr = startRadioTransmit(mTxBuffer, mTxLen, LbtContext::Normal);
+        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
 #endif
         if (lErr == RadioError::None)
         {
@@ -3004,7 +2787,7 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
     mPairLaunchKeyTransferFrame.dataLen = sizeof(mPairingChallenge);
     mPairLaunchKeyTransferFrame.hasHmac = false;
 
-    const RadioError lPrepErr = configureTxRadio(preambleForFrame(mPairLaunchKeyTransferFrame, TxContext::InitialStartFrame));
+    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -3014,10 +2797,10 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
         return;
     }
 
-    mTxLen = mPairLaunchKeyTransferFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
+    mTxLen = mPairLaunchKeyTransferFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = startRadioTransmit(mTxBuffer, mTxLen, LbtContext::Normal);
+        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3073,7 +2856,7 @@ void IoHomeController::processPairSendPullKeyChallenge()
     lFrame.dataLen = sizeof(mPairPullAuthChallenge);
     lFrame.hasHmac = false;
 
-    uint8_t lLen = lFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
+    uint8_t lLen = lFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (lLen > 0)
     {
         const RadioError lErr = startShortPreambleTransmit(mTxBuffer, lLen);
@@ -3201,7 +2984,7 @@ void IoHomeController::processPairSend1WRemove()
         mTxFrame.hasHmac = true;
     }
 
-    mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
+    mTxLen = mTxFrame.serialize1W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
         if (mPairDiagnosticTraceEnabled)
@@ -3331,7 +3114,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
     // sequence[2] and does not append a 1W HMAC.
     mTxFrame.hasHmac = false;
 
-    mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
+    mTxLen = mTxFrame.serialize1W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
         if (mPairDiagnosticTraceEnabled)
@@ -3519,7 +3302,7 @@ void IoHomeController::processPairSendKeyInit()
     mTxFrame.dataLen = 0;
     mTxFrame.hasHmac = false;
 
-    const RadioError lPrepErr = configureTxRadio(preambleForFrame(mTxFrame, TxContext::InitialStartFrame));
+    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -3528,10 +3311,10 @@ void IoHomeController::processPairSendKeyInit()
         return;
     }
 
-    mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
+    mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = startRadioTransmit(mTxBuffer, mTxLen, LbtContext::Normal);
+        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3591,24 +3374,24 @@ void IoHomeController::processPairSendKeyTransfer()
     mTxFrame.hasHmac = false;
 
     const uint8_t lKeyInitData[1] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
-    if (!IoHomeCrypto::crypt2WKeyXor(lKeyInitData, sizeof(lKeyInitData),
-                                     mPairingChallenge, mSystemKey,
-                                     IOHC_TRANSFER_KEY, lEncryptedKey))
+    uint8_t lKeystream[16];
+    if (!IoHomeCrypto::crypt2WKey(lKeyInitData, sizeof(lKeyInitData), mPairingChallenge, IOHC_TRANSFER_KEY, lKeystream))
     {
         mState = ControllerState::PairFailed;
         return;
     }
+    for (int i = 0; i < 16; i++)
+        lEncryptedKey[i] = mSystemKey[i] ^ lKeystream[i];
 
     // Put encrypted key as frame data
     memcpy(mTxFrame.data, lEncryptedKey, 16);
     mTxFrame.dataLen = 16;
     mTxFrame.hasHmac = false;
 
-    mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
+    mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = startTransmitWithPreamble(mTxBuffer, mTxLen,
-                                                          preambleForFrame(mTxFrame, TxContext::ContinuationFrame));
+        const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3643,7 +3426,7 @@ void IoHomeController::processPairSendKeyTransferAuthResponse()
     lFrame.commandId = IoHomeCommand::ChallengeResponse;
 
     uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
-    const size_t lHmacInputLen = mTxFrame.buildAuthTranscript(lHmacInput, sizeof(lHmacInput));
+    const size_t lHmacInputLen = buildHmacInput(mTxFrame, lHmacInput, sizeof(lHmacInput));
     if (lHmacInputLen == 0 ||
         !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
                                     mPairKeyTransferChallenge, mSystemKey, lFrame.data))
@@ -3655,12 +3438,10 @@ void IoHomeController::processPairSendKeyTransferAuthResponse()
     lFrame.dataLen = IOHC_HMAC_SIZE;
     lFrame.hasHmac = false;
 
-    mTxLen = lFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
+    mTxLen = lFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = startTransmitWithPreamble(mTxBuffer, mTxLen,
-                                                          preambleForFrame(lFrame, TxContext::AuthResponse),
-                                                          false, LbtContext::AuthResponse);
+        const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3701,28 +3482,35 @@ void IoHomeController::processPairWaitKeyTransferConfirmation()
 
 void IoHomeController::processPairSendSetConfig1()
 {
-    if (!buildSetConfig1(mPairSetConfigRequest, mOwnNodeId, mDiscoveredNodeId))
-    {
-        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (build error)", mDiscoveredNodeId);
-        mState = ControllerState::PairComplete;
-        return;
-    }
+    mPairSetConfigRequest.init();
+    mPairSetConfigRequest.setStart2W();
+    mPairSetConfigRequest.setLowPower(true);
+    mPairSetConfigRequest.setSrcNode(mOwnNodeId);
+    mPairSetConfigRequest.setDestNode(mDiscoveredNodeId);
+    mPairSetConfigRequest.commandId = IoHomeCommand::SetConfig1;
+    mPairSetConfigRequest.data[0] = 0xE0;
+    mPairSetConfigRequest.data[1] = 0x10;
+    mPairSetConfigRequest.data[2] = 0x0A;
+    mPairSetConfigRequest.data[3] = 0x08;
+    mPairSetConfigRequest.data[4] = 0x00;
+    mPairSetConfigRequest.dataLen = 5;
+    mPairSetConfigRequest.hasHmac = false;
 
     const uint32_t lSetConfigFreq = IOHC_FREQ_2;
-    const RadioError lPrepErr = configureTxRadio(preambleForFrame(mPairSetConfigRequest, TxContext::InitialStartFrame), &lSetConfigFreq);
+    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lSetConfigFreq);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
     {
-        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (radio prep error)", mDiscoveredNodeId);
+        logDebugP("Pairing: failed to send SetConfig1 to 0x%06X", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
         return;
     }
 
-    mTxLen = mPairSetConfigRequest.serialize(mTxBuffer, sizeof(mTxBuffer));
+    mTxLen = mPairSetConfigRequest.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = startRadioTransmit(mTxBuffer, mTxLen, LbtContext::Normal);
+        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3734,13 +3522,13 @@ void IoHomeController::processPairSendSetConfig1()
         }
         else
         {
-            logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (TX error)", mDiscoveredNodeId);
+            logDebugP("Pairing: failed to send SetConfig1 to 0x%06X", mDiscoveredNodeId);
             mState = ControllerState::PairComplete;
         }
     }
     else
     {
-        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (serialize error)", mDiscoveredNodeId);
+        logDebugP("Pairing: failed to send SetConfig1 to 0x%06X", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
     }
 }
@@ -3752,14 +3540,13 @@ void IoHomeController::processPairWaitSetConfig1Response()
         return;
     if (lRxErr != RadioError::None)
     {
-        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (RX setup error)", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
         return;
     }
 
     if (millis() - mStateTimer > 2000)
     {
-        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (timeout)", mDiscoveredNodeId);
+        logDebugP("Pairing: SetConfig1 timed out for 0x%06X", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
     }
 }
@@ -3775,15 +3562,15 @@ void IoHomeController::interpretSetConfig1Result(bool iFinalResponse)
     }
     else if (mRxFrame.commandId == IoHomeCommand::ErrorResponse)
     {
-        logInfoP(iFinalResponse ? "Pairing: paired, SetConfig1 failed for 0x%06X (device rejected automatic status feedback)"
-                                : "Pairing: paired, SetConfig1 failed for 0x%06X (device does not support automatic status feedback)",
+        logInfoP(iFinalResponse ? "Pairing: device 0x%06X rejected automatic status feedback"
+                                : "Pairing: device 0x%06X does not support automatic status feedback",
                  mDiscoveredNodeId);
     }
     else
     {
-        logInfoP(iFinalResponse ? "Pairing: paired, SetConfig1 failed for 0x%06X (unexpected final response 0x%02X)"
-                                : "Pairing: paired, SetConfig1 failed for 0x%06X (unexpected response 0x%02X)",
-                 mDiscoveredNodeId, static_cast<uint8_t>(mRxFrame.commandId));
+        logDebugP(iFinalResponse ? "Pairing: unexpected final SetConfig1 response 0x%02X from 0x%06X"
+                                 : "Pairing: unexpected SetConfig1 response 0x%02X from 0x%06X",
+                  static_cast<uint8_t>(mRxFrame.commandId), mDiscoveredNodeId);
     }
 
     mState = ControllerState::PairComplete;
@@ -3801,13 +3588,13 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
     lFrame.commandId = IoHomeCommand::ChallengeResponse;
 
     uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
-    const size_t lHmacInputLen = mPairSetConfigRequest.buildAuthTranscript(lHmacInput, sizeof(lHmacInput));
+    const size_t lHmacInputLen = buildHmacInput(mPairSetConfigRequest, lHmacInput, sizeof(lHmacInput));
 
     if (lHmacInputLen == 0 ||
         !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
                                     mPairSetConfigChallenge, mSystemKey, lFrame.data))
     {
-        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (auth build error)", mDiscoveredNodeId);
+        logDebugP("Pairing: failed to build SetConfig1 challenge response for 0x%06X", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
         return;
     }
@@ -3816,20 +3603,20 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
     lFrame.hasHmac = false;
 
     const uint32_t lSetConfigFreq = IOHC_FREQ_2;
-    const RadioError lPrepErr = configureTxRadio(preambleForFrame(lFrame, TxContext::AuthResponse), &lSetConfigFreq);
+    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_SHORT, &lSetConfigFreq);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
     {
-        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (auth radio prep error)", mDiscoveredNodeId);
+        logDebugP("Pairing: failed to send SetConfig1 challenge response to 0x%06X", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
         return;
     }
 
-    mTxLen = lFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
+    mTxLen = lFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = startRadioTransmit(mTxBuffer, mTxLen, LbtContext::AuthResponse);
+        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3841,13 +3628,13 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
         }
         else
         {
-            logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (auth TX error)", mDiscoveredNodeId);
+            logDebugP("Pairing: failed to send SetConfig1 challenge response to 0x%06X", mDiscoveredNodeId);
             mState = ControllerState::PairComplete;
         }
     }
     else
     {
-        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (auth serialize error)", mDiscoveredNodeId);
+        logDebugP("Pairing: failed to send SetConfig1 challenge response to 0x%06X", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
     }
 }
@@ -3859,14 +3646,13 @@ void IoHomeController::processPairWaitSetConfig1FinalResponse()
         return;
     if (lRxErr != RadioError::None)
     {
-        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (final RX setup error)", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
         return;
     }
 
     if (millis() - mStateTimer > 2000)
     {
-        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (final timeout)", mDiscoveredNodeId);
+        logDebugP("Pairing: final SetConfig1 response timed out for 0x%06X", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
     }
 }
@@ -3919,7 +3705,7 @@ void IoHomeController::processDiscovery()
         }
         else if (mDiscoverySendPhase == DiscoverySendPhase::SetPreamble)
         {
-            lPrepErr = mRadio.setPreambleLengthBlocking(preambleForFrame(mTxFrame, TxContext::InitialStartFrame));
+            lPrepErr = mRadio.setPreambleLengthBlocking(IOHC_PREAMBLE_LONG);
             if (lPrepErr == RadioError::None)
             {
                 mDiscoveryTimingTrace.preambleReadyUs = micros();
@@ -3936,7 +3722,7 @@ void IoHomeController::processDiscovery()
             return;
         }
 #else
-        const RadioError lPrepErr = configureTxRadio(preambleForFrame(mTxFrame, TxContext::InitialStartFrame), &lDiscoveryFreq);
+        const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lDiscoveryFreq);
         if (lPrepErr == RadioError::Busy)
             return;
         if (lPrepErr != RadioError::None)
@@ -3946,14 +3732,14 @@ void IoHomeController::processDiscovery()
         }
 #endif
 
-        mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
+        mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
         if (mTxLen > 0)
         {
             RadioError lErr = RadioError::None;
 #if defined(RADIO_SX1262)
             lErr = mRadio.startTransmitBlocking(mTxBuffer, mTxLen);
 #else
-            lErr = startRadioTransmit(mTxBuffer, mTxLen, LbtContext::Normal);
+            lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
 #endif
             if (lErr == RadioError::None)
             {
@@ -4062,11 +3848,10 @@ void IoHomeController::processScanSending()
     mTxFrame.dataLen = 0;
     mTxFrame.hasHmac = false;
 
-    mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
+    mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = startTransmitWithPreamble(mTxBuffer, mTxLen,
-                                                          preambleForFrame(mTxFrame, TxContext::InitialStartFrame));
+        const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -4170,29 +3955,6 @@ uint32_t IoHomeController::currentTxTimeoutMs() const
     return IOHC_TX_TIMEOUT_MS;
 }
 
-uint16_t IoHomeController::preambleForFrame(const IoHomeFrame &iFrame, TxContext iContext) const
-{
-    (void)iFrame;
-
-    // Central io-homecontrol TX preamble policy, matching the reference:
-    // - initial START frames wake low-power devices with a long preamble
-    // - continuation frames, key-transfer continuation frames, and SX1276 auth
-    //   responses use the short preamble
-    // - SX1262 auth responses use the empirically required dwell/preamble value
-    if (iContext == TxContext::InitialStartFrame)
-        return IOHC_PREAMBLE_LONG;
-
-    if (iContext == TxContext::AuthResponse && radioIsSX1262())
-        return IOHC_AUTH_PREAMBLE_SX1262;
-
-    return IOHC_PREAMBLE_SHORT;
-}
-
-bool IoHomeController::radioIsSX1262() const
-{
-    return kIsSX1262Radio;
-}
-
 RadioError IoHomeController::configureTxRadio(uint16_t iPreambleSymbols, const uint32_t *iFrequencyHz)
 {
     if (iFrequencyHz != nullptr)
@@ -4210,94 +3972,29 @@ RadioError IoHomeController::configureTxRadio(uint16_t iPreambleSymbols, const u
 }
 
 RadioError IoHomeController::startShortPreambleTransmit(const uint8_t *iBuffer, uint8_t iLen,
-                                                        bool iTrackDutyCycle,
-                                                        LbtContext iLbtContext)
+                                                        bool iTrackDutyCycle)
 {
-    IoHomeFrame lFrame;
-    lFrame.init();
-    return startTransmitWithPreamble(iBuffer, iLen,
-                                     preambleForFrame(lFrame, TxContext::ContinuationFrame),
-                                     iTrackDutyCycle,
-                                     iLbtContext);
+    return startTransmitWithPreamble(iBuffer, iLen, IOHC_PREAMBLE_SHORT, iTrackDutyCycle);
 }
 
 uint16_t IoHomeController::authResponsePreamble() const
 {
-    IoHomeFrame lFrame;
-    lFrame.init();
-    lFrame.commandId = IoHomeCommand::ChallengeResponse;
-    return preambleForFrame(lFrame, TxContext::AuthResponse);
-}
-
-bool IoHomeController::waitForLbtClear(LbtContext iContext)
-{
-    mLastLbtRssi = 0;
-    mLastLbtRssiValid = false;
-    mLastLbtAttempts = 0;
-    mLastLbtBypassed = false;
-    mLastLbtAuthResponse = (iContext == LbtContext::AuthResponse);
-
-    if (iContext == LbtContext::Bypass)
-        return true;
-
-    const uint8_t lMaxAttempts = (iContext == LbtContext::AuthResponse)
-                                     ? IOHC_LBT_AUTH_MAX_RETRIES
-                                     : IOHC_LBT_MAX_RETRIES;
-
-    for (uint8_t i = 0; i < lMaxAttempts; i++)
-    {
-        int16_t lRssi = 0;
-        mLastLbtAttempts = static_cast<uint8_t>(i + 1);
-        if (!mRadio.currentRssi(lRssi))
-        {
-            mLbtInvalidRssiCount++;
-            if (mPairDiagnosticTraceEnabled)
-                logInfoP("PairDiag: LBT RSSI unavailable before TX, bypassing carrier-sense");
-            return true;
-        }
-
-        mLastLbtRssi = lRssi;
-        mLastLbtRssiValid = true;
-
-        if (lRssi <= IOHC_LBT_RSSI_THRESHOLD_DBM)
-        {
-            mLbtClearCount++;
-            return true;
-        }
-
-        mLbtBusyCount++;
-        if (i + 1 < lMaxAttempts)
-            delay(IOHC_LBT_RETRY_DELAY_MS);
-    }
-
-    mLastLbtBypassed = true;
-    mLbtBypassCount++;
-    if (mPairDiagnosticTraceEnabled)
-    {
-        logInfoP("PairDiag: LBT busy before TX rssi=%d attempts=%u auth=%d - bypassing to preserve IOHC timing",
-                 mLastLbtRssi,
-                 static_cast<unsigned>(mLastLbtAttempts),
-                 mLastLbtAuthResponse ? 1 : 0);
-    }
-    return true;
-}
-
-RadioError IoHomeController::startRadioTransmit(const uint8_t *iBuffer, uint8_t iLen, LbtContext iLbtContext)
-{
-    waitForLbtClear(iLbtContext);
-    return mRadio.startTransmit(iBuffer, iLen);
+#if defined(RADIO_SX1262) || defined(TEST_NATIVE)
+    return 64;
+#else
+    return IOHC_PREAMBLE_SHORT;
+#endif
 }
 
 RadioError IoHomeController::startTransmitWithPreamble(const uint8_t *iBuffer, uint8_t iLen,
                                                        uint16_t iPreambleSymbols,
-                                                       bool iTrackDutyCycle,
-                                                       LbtContext iLbtContext)
+                                                       bool iTrackDutyCycle)
 {
     const RadioError lPrepErr = configureTxRadio(iPreambleSymbols);
     if (lPrepErr != RadioError::None)
         return lPrepErr;
 
-    const RadioError lTxErr = startRadioTransmit(iBuffer, iLen, iLbtContext);
+    const RadioError lTxErr = mRadio.startTransmit(iBuffer, iLen);
     if (lTxErr == RadioError::None && iTrackDutyCycle)
         mTxTimeAccum[mCurrentFreqIdx] += ((uint32_t)iLen * 8 * 1000) / IOHC_BITRATE;
 
@@ -4903,7 +4600,7 @@ void IoHomeController::dispatchRxFrame()
                 }
 
                 uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA] = {0};
-                const size_t lHmacInputLen = mRxFrame.buildAuthTranscript(lHmacInput, sizeof(lHmacInput));
+                const size_t lHmacInputLen = buildHmacInput(mRxFrame, lHmacInput, sizeof(lHmacInput));
                 if (lHmacInputLen == 0 ||
                     !IoHomeCrypto::verifyHmac(lHmacInput, lHmacInputLen,
                                               mRxFrame.hmac, lChallenge, lCh->getEncryptionKey()))
@@ -5096,7 +4793,7 @@ uint8_t IoHomeController::buildStatusUpdateResponse(uint32_t iDestNodeId, uint8_
     lFrame.dataLen = 2;
     lFrame.hasHmac = false;
 
-    return lFrame.serialize(oBuffer, iBufferLen);
+    return lFrame.serialize2W(oBuffer, iBufferLen);
 }
 
 void IoHomeController::processStatusAckSend()
@@ -5136,7 +4833,7 @@ void IoHomeController::processStatusAckSend()
         return;
     }
 
-    const RadioError lTxErr = startRadioTransmit(mTxBuffer, mTxLen, LbtContext::Normal);
+    const RadioError lTxErr = mRadio.startTransmit(mTxBuffer, mTxLen);
     if (lTxErr == RadioError::None)
     {
         mStateTimer = millis();
@@ -5190,7 +4887,7 @@ void IoHomeController::processAuthSendChallenge()
     lFrame.hasHmac = false;
 
     uint8_t lBuf[IOHC_FRAME_BUFFER_SIZE];
-    uint8_t lLen = lFrame.serialize(lBuf, sizeof(lBuf));
+    uint8_t lLen = lFrame.serialize2W(lBuf, sizeof(lBuf));
     if (lLen > 0)
     {
         const RadioError lErr = startShortPreambleTransmit(lBuf, lLen);
@@ -5290,11 +4987,13 @@ void IoHomeController::processPassiveFrame()
             lPairNodeId == mPassivePairNodeId)
         {
             const uint8_t lKeyInitData[1] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
-            uint8_t lExtractedKey[16];
-            if (IoHomeCrypto::crypt2WKeyXor(lKeyInitData, sizeof(lKeyInitData),
-                                            mPassiveChallenge, mRxFrame.data,
-                                            IOHC_TRANSFER_KEY, lExtractedKey))
+            uint8_t lKeystream[16];
+            if (IoHomeCrypto::crypt2WKey(lKeyInitData, sizeof(lKeyInitData), mPassiveChallenge, IOHC_TRANSFER_KEY, lKeystream))
             {
+                uint8_t lExtractedKey[16];
+                for (int k = 0; k < 16; k++)
+                    lExtractedKey[k] = mRxFrame.data[k] ^ lKeystream[k];
+
                 mPassiveKeyResult.valid = true;
                 mPassiveKeyResult.nodeId = mPassivePairNodeId;
                 memcpy(mPassiveKeyResult.key, lExtractedKey, sizeof(mPassiveKeyResult.key));
@@ -5528,7 +5227,7 @@ void IoHomeController::processGatewayWaitChallenge()
                                               mGatewayPeerChallenge, mGatewayKey);
     if (mTxLen == 0)
         return;
-    if (startTransmitWithPreamble(mTxBuffer, mTxLen, authResponsePreamble(), true, LbtContext::AuthResponse) != RadioError::None)
+    if (startShortPreambleTransmit(mTxBuffer, mTxLen, true) != RadioError::None)
         return;
 
     bool lKnownDevice = false;

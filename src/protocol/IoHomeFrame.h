@@ -1,6 +1,5 @@
 #pragma once
 #include <stdint.h>
-#include <stddef.h>
 #include "IoHomeCommands.h"
 #include "IoHomeCrypto.h"
 
@@ -74,14 +73,23 @@ struct IoHomeFrame
     uint32_t getSrcNodeId() const;
     uint32_t getDestNodeId() const;
 
-    // Serialize frame to byte buffer for TX
-    // Returns number of bytes written, or 0 on error
-    uint8_t serialize(uint8_t *oBuffer, uint8_t iMaxLen) const;
+    // Serialize a strict 2W protocol frame for normal TX.
+    // 2W frames never append hasHmac and never append CRC here.
+    // Returns number of bytes written, or 0 on error.
+    uint8_t serialize2W(uint8_t *oBuffer, uint8_t iMaxLen) const;
 
-    // Build canonical 2W authentication transcript for ChallengeResponse (0x3D).
-    // The transcript is exactly: original command id + original command data.
-    // It intentionally excludes CTRL bytes, addresses, CRC, HMAC and the 0x3D wrapper.
-    size_t buildAuthTranscript(uint8_t *oBuffer, size_t iBufferLen) const;
+    // Serialize a 1W protocol frame for normal TX.
+    // Isolates 1W HMAC/length rules, including the SendKey1W special case.
+    // Transport CRC is not appended here.
+    uint8_t serialize1W(uint8_t *oBuffer, uint8_t iMaxLen) const;
+
+    // Serialize a raw radio/diagnostic frame and append transport CRC.
+    // This is intentionally explicit so normal protocol serializers stay CRC-free.
+    uint8_t serializeRawWithCrc(uint8_t *oBuffer, uint8_t iMaxLen) const;
+
+    // Legacy compatibility dispatcher for normal TX.
+    // Dispatches by MODE_1W and does not append CRC.
+    uint8_t serialize(uint8_t *oBuffer, uint8_t iMaxLen) const;
 
     // Deserialize an exact protocol frame from a received byte buffer.
     // Strict mode: no CRC bytes and no extra transport bytes are accepted.

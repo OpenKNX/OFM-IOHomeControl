@@ -91,70 +91,135 @@ uint8_t IoHomeFrame::totalLength() const
     return lLen;
 }
 
-size_t IoHomeFrame::buildAuthTranscript(uint8_t *oBuffer, size_t iBufferLen) const
+namespace
 {
-    const size_t lLen = static_cast<size_t>(dataLen) + 1;
-    if (oBuffer == nullptr || iBufferLen < lLen)
+    uint8_t serializeProtocolFrame(const IoHomeFrame &iFrame,
+                                   uint8_t *oBuffer,
+                                   uint8_t iMaxLen,
+                                   uint8_t iMaxDeclaredLen,
+                                   bool iIncludeHmacInLength,
+                                   bool iAppendHmac,
+                                   bool iAppendCrc)
+    {
+        if (!oBuffer)
+            return 0;
+
+        const uint8_t lDeclaredLen = 9 + iFrame.dataLen +
+                                     (iIncludeHmacInLength ? IOHC_HMAC_SIZE : 0);
+        const uint8_t lTotalLen = 9 + iFrame.dataLen +
+                                  (iAppendHmac ? IOHC_HMAC_SIZE : 0) +
+                                  (iAppendCrc ? IOHC_CRC_SIZE : 0);
+
+        if (lDeclaredLen < IOHC_FRAME_MIN_SIZE ||
+            lDeclaredLen > iMaxDeclaredLen ||
+            lTotalLen > iMaxLen ||
+            iFrame.dataLen > IOHC_FRAME_MAX_DATA)
+        {
+            return 0;
+        }
+
+        // Update CTRL0 with the declared protocol-frame length encoded as len-1.
+        // CRC is always transport-layer and never part of the declared length.
+        uint8_t lCtrl0 = iFrame.ctrlByte0;
+        lCtrl0 = (lCtrl0 & ~IOHC_CTRL0_LEN_MASK) |
+                 ((lDeclaredLen - 1) & IOHC_CTRL0_LEN_MASK);
+
+        uint8_t lPos = 0;
+        oBuffer[lPos++] = lCtrl0;
+        oBuffer[lPos++] = iFrame.ctrlByte1;
+        memcpy(oBuffer + lPos, iFrame.destNode, IOHC_NODE_ID_SIZE);
+        lPos += IOHC_NODE_ID_SIZE;
+        memcpy(oBuffer + lPos, iFrame.srcNode, IOHC_NODE_ID_SIZE);
+        lPos += IOHC_NODE_ID_SIZE;
+        oBuffer[lPos++] = static_cast<uint8_t>(iFrame.commandId);
+
+        if (iFrame.dataLen > 0)
+        {
+            memcpy(oBuffer + lPos, iFrame.data, iFrame.dataLen);
+            lPos += iFrame.dataLen;
+        }
+
+        if (iAppendHmac)
+        {
+            memcpy(oBuffer + lPos, iFrame.hmac, IOHC_HMAC_SIZE);
+            lPos += IOHC_HMAC_SIZE;
+        }
+
+        if (iAppendCrc)
+        {
+            const uint16_t lCrc = IoHomeCrypto::crc16Kermit(oBuffer, lPos);
+            oBuffer[lPos++] = lCrc & 0xFF;        // LSB first
+            oBuffer[lPos++] = (lCrc >> 8) & 0xFF; // MSB
+        }
+
+        return lPos;
+    }
+}
+
+uint8_t IoHomeFrame::serialize2W(uint8_t *oBuffer, uint8_t iMaxLen) const
+{
+    // 2W frames are strict protocol frames. A 0x3D ChallengeResponse carries
+    // the 6-byte HMAC as normal data with hasHmac=false. Appended HMAC and CRC
+    // are rejected here so normal 2W TX cannot accidentally emit legacy/raw bytes.
+    if ((ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0 || hasHmac || hasCrc)
         return 0;
 
-    oBuffer[0] = static_cast<uint8_t>(commandId);
-    if (dataLen > 0)
-        memcpy(oBuffer + 1, data, dataLen);
-    return lLen;
+    return serializeProtocolFrame(*this, oBuffer, iMaxLen,
+                                  IOHC_FRAME_MAX_SIZE_2W,
+                                  false,
+                                  false,
+                                  false);
+}
+
+uint8_t IoHomeFrame::serialize1W(uint8_t *oBuffer, uint8_t iMaxLen) const
+{
+    // 1W has its own HMAC/length semantics:
+    // - SendKey1W (0x30) declares only header+data; any appended HMAC is outside
+    //   the CTRL0 length field.
+    // - Normal authenticated 1W commands include the appended HMAC in CTRL0.
+    // Transport CRC is not appended by the normal 1W serializer.
+    if ((ctrlByte0 & IOHC_CTRL0_MODE_1W) == 0 || hasCrc)
+        return 0;
+
+    const bool lIncludeHmacInLength = hasHmac && commandId != IoHomeCommand::SendKey1W;
+    return serializeProtocolFrame(*this, oBuffer, iMaxLen,
+                                  IOHC_FRAME_MAX_SIZE_1W,
+                                  lIncludeHmacInLength,
+                                  hasHmac,
+                                  false);
+}
+
+uint8_t IoHomeFrame::serializeRawWithCrc(uint8_t *oBuffer, uint8_t iMaxLen) const
+{
+    // Raw/diagnostic serialization is the only place where the transport CRC is
+    // appended by the frame layer. Keep 2W appended-HMAC forbidden even here;
+    // 2W auth responses must encode HMAC as command data on 0x3D.
+    const bool lOneWay = (ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0;
+    if (!lOneWay && hasHmac)
+        return 0;
+
+    if (lOneWay)
+    {
+        const bool lIncludeHmacInLength = hasHmac && commandId != IoHomeCommand::SendKey1W;
+        return serializeProtocolFrame(*this, oBuffer, iMaxLen,
+                                      IOHC_FRAME_MAX_SIZE_1W,
+                                      lIncludeHmacInLength,
+                                      hasHmac,
+                                      true);
+    }
+
+    return serializeProtocolFrame(*this, oBuffer, iMaxLen,
+                                  IOHC_FRAME_MAX_SIZE_2W,
+                                  false,
+                                  false,
+                                  true);
 }
 
 uint8_t IoHomeFrame::serialize(uint8_t *oBuffer, uint8_t iMaxLen) const
 {
-    // io-homecontrol CTRL0 length field is awkward in 1W mode:
-    // - SendKey1W (0x30) uses 9 + dataLen, excluding the appended 6-byte HMAC.
-    //   This is required for the known 0x30 reference frame to start with 0xFC.
-    // - Normal authenticated 1W commands (Execute/ActivateMode/...) include the
-    //   appended HMAC in the length field. Example reference Execute starts with
-    //   0xF6 for 9 + 8 data bytes + 6 HMAC bytes -> length field 22.
-    // CRC is still transport-layer and is never included here.
-    const bool lOneWay = (ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0;
-    const bool lIncludeHmacInLength = lOneWay && hasHmac && commandId != IoHomeCommand::SendKey1W;
-    const uint8_t lMaxDeclared = lOneWay ? IOHC_FRAME_MAX_SIZE_1W
-                                         : IOHC_FRAME_MAX_SIZE_2W;
-
-    uint8_t lDeclaredLen = 9 + dataLen + (lIncludeHmacInLength ? IOHC_HMAC_SIZE : 0);
-    uint8_t lTotal = 9 + dataLen + (hasHmac ? IOHC_HMAC_SIZE : 0) + (hasCrc ? IOHC_CRC_SIZE : 0);
-    if (lDeclaredLen > lMaxDeclared || lTotal > iMaxLen)
-        return 0;
-
-    // Update ctrl byte 0 with frame length (excluding CTRL0 and CRC, encoded as len-1).
-    uint8_t lCtrl0 = ctrlByte0;
-    lCtrl0 = (lCtrl0 & ~IOHC_CTRL0_LEN_MASK) | ((lDeclaredLen - 1) & IOHC_CTRL0_LEN_MASK);
-
-    uint8_t lPos = 0;
-    oBuffer[lPos++] = lCtrl0;
-    oBuffer[lPos++] = ctrlByte1;
-    memcpy(oBuffer + lPos, destNode, IOHC_NODE_ID_SIZE);
-    lPos += IOHC_NODE_ID_SIZE;
-    memcpy(oBuffer + lPos, srcNode, IOHC_NODE_ID_SIZE);
-    lPos += IOHC_NODE_ID_SIZE;
-    oBuffer[lPos++] = static_cast<uint8_t>(commandId);
-
-    if (dataLen > 0)
-    {
-        memcpy(oBuffer + lPos, data, dataLen);
-        lPos += dataLen;
-    }
-
-    if (hasHmac)
-    {
-        memcpy(oBuffer + lPos, hmac, IOHC_HMAC_SIZE);
-        lPos += IOHC_HMAC_SIZE;
-    }
-
-    if (hasCrc)
-    {
-        uint16_t lCrc = IoHomeCrypto::crc16Kermit(oBuffer, lPos);
-        oBuffer[lPos++] = lCrc & 0xFF;        // LSB first
-        oBuffer[lPos++] = (lCrc >> 8) & 0xFF; // MSB
-    }
-
-    return lPos;
+    if ((ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0)
+        return serialize1W(oBuffer, iMaxLen);
+    return serialize2W(oBuffer, iMaxLen);
 }
 
 bool IoHomeFrame::deserializeFrame(const uint8_t *iBuffer, uint8_t iLen)
