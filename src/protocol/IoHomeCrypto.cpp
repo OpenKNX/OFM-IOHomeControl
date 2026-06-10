@@ -1,36 +1,13 @@
 #include "IoHomeCrypto.h"
 #include <string.h>
 
-#ifdef ESP32
-#include "mbedtls/aes.h"
-#elif defined(TEST_NATIVE)
-// Real AES implementation provided by test harness
+#if defined(ESP32) || defined(TEST_NATIVE)
+// Real AES is mandatory for io-homecontrol crypto.
+// ESP32 provides mbedTLS via the SDK; host protocol tests must define
+// TEST_NATIVE and link against mbedTLS as well.
 #include "mbedtls/aes.h"
 #else
-// Stub for non-ESP32 compilation (passthrough - not suitable for protocol testing)
-struct mbedtls_aes_context
-{
-    uint8_t key[16];
-};
-static void mbedtls_aes_init(mbedtls_aes_context *) {}
-static void mbedtls_aes_free(mbedtls_aes_context *) {}
-static int mbedtls_aes_setkey_enc(mbedtls_aes_context *ctx, const uint8_t *key, unsigned int)
-{
-    memcpy(ctx->key, key, 16);
-    return 0;
-}
-static int mbedtls_aes_setkey_dec(mbedtls_aes_context *ctx, const uint8_t *key, unsigned int)
-{
-    memcpy(ctx->key, key, 16);
-    return 0;
-}
-#define MBEDTLS_AES_ENCRYPT 1
-#define MBEDTLS_AES_DECRYPT 0
-static int mbedtls_aes_crypt_ecb(mbedtls_aes_context *, int, const uint8_t *input, uint8_t *output)
-{
-    memcpy(output, input, 16); // passthrough for testing
-    return 0;
-}
+#error "Real AES required for IOHC protocol tests. Define TEST_NATIVE with mbedTLS or build for ESP32."
 #endif
 
 #ifdef ESP32
