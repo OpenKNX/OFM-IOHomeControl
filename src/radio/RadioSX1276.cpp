@@ -50,7 +50,7 @@ static constexpr uint8_t kDioMapping2IohcReference = 0xF1;
 RadioSX1276::RadioSX1276()
     : mCsPin(0), mResetPin(0), mDio0Pin(0), mDio4Pin(PIN_NOT_CONNECTED),
       mInitialized(false), mState(RadioState::Idle),
-      mLastRssi(0), mCurrentFreq(0), mEms2Mode(false),
+      mLastRssi(0), mCurrentFreq(0), mPreviousStandardFrequency(IOHC_FREQ_2), mEms2Mode(false),
       mTxStartCount(0), mTxDoneCount(0), mRxStartCount(0), mIrqCount(0),
       mRxPayloadReadyPollCount(0), mRxFifoOverrunCount(0), mLastRxLen(0),
       mLastRxIrqStatus(0), mLastIrqStatus(0), mLastOpStatusBefore(0), mLastOpStatusAfter(0),
@@ -546,6 +546,13 @@ void RadioSX1276::configureEms2Mode()
 {
     setMode(RF_OPMODE_STANDBY);
 
+    // Remember the normal io-homecontrol channel before switching protocols.
+    // If the radio has not been tuned yet, fall back to CH2, the normal default channel.
+    if (mCurrentFreq != 0 && mCurrentFreq != IOHC_EMS2_FREQ)
+        mPreviousStandardFrequency = mCurrentFreq;
+    else if (mPreviousStandardFrequency == 0)
+        mPreviousStandardFrequency = IOHC_FREQ_2;
+
     // EMS2 uses 2-byte sync word {0x2D, 0xD4}
     writeRegister(REG_SYNCCONFIG, 0x51); // AutoRestart=WaitPLL_Off, Sync on, 2 bytes
     writeRegister(REG_SYNCVALUE1, IOHC_EMS2_SYNC_WORD[0]);
@@ -573,8 +580,13 @@ void RadioSX1276::configureStandardMode()
     writeRegister(REG_DIOMAPPING1, kDioMapping1IohcReference);
     writeRegister(REG_DIOMAPPING2, kDioMapping2IohcReference);
 
-    // Restore default frequency
-    setFrequency(IOHC_FREQ_1);
+    // Restore the standard io-homecontrol channel that was active before EMS2.
+    // Never keep the EMS2/sentinel frequency here; CH2 is the safe default.
+    const uint32_t lRestoreFreq = (mPreviousStandardFrequency != 0 &&
+                                   mPreviousStandardFrequency != IOHC_EMS2_FREQ)
+                                      ? mPreviousStandardFrequency
+                                      : IOHC_FREQ_2;
+    setFrequency(lRestoreFreq);
 
     mEms2Mode = false;
 }
@@ -587,6 +599,12 @@ RadioError RadioSX1276::sendEms2Wake()
     // Set frequency deviation to 0 (unmodulated carrier)
     writeRegister(REG_FDEVMSB, 0x00);
     writeRegister(REG_FDEVLSB, 0x00);
+
+    // Remember the standard channel before transmitting the EMS2 wake carrier.
+    if (mCurrentFreq != 0 && mCurrentFreq != IOHC_EMS2_FREQ)
+        mPreviousStandardFrequency = mCurrentFreq;
+    else if (mPreviousStandardFrequency == 0)
+        mPreviousStandardFrequency = IOHC_FREQ_2;
 
     // Set EMS2 frequency
     setFrequency(IOHC_EMS2_FREQ);
@@ -607,6 +625,16 @@ RadioError RadioSX1276::sendEms2Wake()
     uint16_t lFdev = 314;
     writeRegister(REG_FDEVMSB, (lFdev >> 8) & 0xFF);
     writeRegister(REG_FDEVLSB, lFdev & 0xFF);
+
+    // Leave the radio on the standard io-homecontrol channel after EMS2 wake.
+    // This avoids a hidden CH1/EMS2-frequency dependency before the next normal TX/RX.
+    const uint32_t lRestoreFreq = (mPreviousStandardFrequency != 0 &&
+                                   mPreviousStandardFrequency != IOHC_EMS2_FREQ)
+                                      ? mPreviousStandardFrequency
+                                      : IOHC_FREQ_2;
+    const RadioError lRestoreErr = setFrequency(lRestoreFreq);
+    if (lRestoreErr != RadioError::None)
+        return lRestoreErr;
 
     return RadioError::None;
 }

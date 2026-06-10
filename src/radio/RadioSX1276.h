@@ -75,6 +75,7 @@ private:
   RadioState mState;
   int16_t mLastRssi;
   uint32_t mCurrentFreq;
+  uint32_t mPreviousStandardFrequency;
   bool mEms2Mode;
   uint32_t mTxStartCount;
   uint32_t mTxDoneCount;
