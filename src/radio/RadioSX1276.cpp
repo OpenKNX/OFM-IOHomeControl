@@ -45,7 +45,8 @@ RadioSX1276::RadioSX1276()
       mInitialized(false), mState(RadioState::Idle),
       mLastRssi(0), mCurrentFreq(0), mEms2Mode(false),
       mTxStartCount(0), mTxDoneCount(0), mRxStartCount(0), mIrqCount(0),
-      mLastIrqStatus(0), mLastOpStatusBefore(0), mLastOpStatusAfter(0),
+      mRxPayloadReadyPollCount(0), mRxFifoOverrunCount(0), mLastRxLen(0),
+      mLastRxIrqStatus(0), mLastIrqStatus(0), mLastOpStatusBefore(0), mLastOpStatusAfter(0),
       mLastTxSetStatus(0), mLastTxIrqImmediate(0), mDio0Fired(false)
 {
 }
@@ -362,12 +363,32 @@ bool RadioSX1276::isPacketAvailable()
     if (mState != RadioState::Receiving)
         return false;
 
-    if (mDio0Fired)
+    const uint16_t lIrqStatus = readIrqStatus();
+    const bool lDio0Fired = mDio0Fired;
+    const bool lPayloadReady = (lIrqStatus & RF_IRQFLAGS2_PAYLOADREADY) != 0;
+
+    // The working reference polls PayloadReady in addition to DIO state.
+    // This keeps RX reliable if the ESP32 ISR is missed, DIO0 was already
+    // high before polling, or DIO0 wiring/mapping is marginal.
+    if (lDio0Fired || lPayloadReady)
     {
+        if (lPayloadReady && !lDio0Fired)
+            mRxPayloadReadyPollCount++;
+
         mDio0Fired = false;
-        mLastIrqStatus = readIrqStatus();
+        mLastIrqStatus = lIrqStatus;
         return true;
     }
+
+    if ((lIrqStatus & RF_IRQFLAGS2_FIFOOVERRUN) != 0)
+    {
+        if ((mLastIrqStatus & RF_IRQFLAGS2_FIFOOVERRUN) == 0)
+            mRxFifoOverrunCount++;
+        mLastIrqStatus = lIrqStatus;
+        // SX1276 FSK IRQ flags are cleared by writing a 1 to the flag bit.
+        writeRegister(REG_IRQFLAGS2, RF_IRQFLAGS2_FIFOOVERRUN);
+    }
+
     return false;
 }
 
@@ -387,11 +408,23 @@ uint8_t RadioSX1276::readPacket(uint8_t *oBuffer, uint8_t iMaxLen)
     if (!mInitialized)
         return 0;
 
-    // Read RSSI
+    const uint16_t lIrqStatus = readIrqStatus();
+    mLastRxIrqStatus = lIrqStatus;
+    mLastIrqStatus = lIrqStatus;
+
+    // Record RSSI at packet-read time for diagnostics.
     mLastRssi = -(readRegister(REG_RSSIVALUE) / 2);
 
-    // Read packet from FIFO (with IoHomeOn=1, read until FIFO empty)
+    // Read packet from FIFO (with IoHomeOn=1, read until FIFO empty).
     uint8_t lLen = readFifo(oBuffer, iMaxLen);
+    mLastRxLen = lLen;
+
+    if ((lIrqStatus & RF_IRQFLAGS2_FIFOOVERRUN) != 0)
+    {
+        mRxFifoOverrunCount++;
+        // SX1276 FSK IRQ flags are cleared by writing a 1 to the flag bit.
+        writeRegister(REG_IRQFLAGS2, RF_IRQFLAGS2_FIFOOVERRUN);
+    }
 
     // Restart RX
     startReceive();
@@ -454,6 +487,26 @@ uint32_t RadioSX1276::rxStartCount() const
 uint32_t RadioSX1276::irqCount() const
 {
     return mIrqCount;
+}
+
+uint32_t RadioSX1276::rxPayloadReadyPollCount() const
+{
+    return mRxPayloadReadyPollCount;
+}
+
+uint32_t RadioSX1276::rxFifoOverrunCount() const
+{
+    return mRxFifoOverrunCount;
+}
+
+uint8_t RadioSX1276::lastRxLen() const
+{
+    return mLastRxLen;
+}
+
+uint16_t RadioSX1276::lastRxIrqStatus() const
+{
+    return mLastRxIrqStatus;
 }
 
 uint16_t RadioSX1276::lastIrqStatus() const

@@ -46,6 +46,10 @@ public:
   uint32_t txDoneCount() const;
   uint32_t rxStartCount() const;
   uint32_t irqCount() const;
+  uint32_t rxPayloadReadyPollCount() const;
+  uint32_t rxFifoOverrunCount() const;
+  uint8_t lastRxLen() const;
+  uint16_t lastRxIrqStatus() const;
   uint16_t lastIrqStatus() const;
   uint8_t lastOpStatusBefore() const;
   uint8_t lastOpStatusAfter() const;
@@ -76,6 +80,10 @@ private:
   uint32_t mTxDoneCount;
   uint32_t mRxStartCount;
   uint32_t mIrqCount;
+  uint32_t mRxPayloadReadyPollCount;
+  uint32_t mRxFifoOverrunCount;
+  uint8_t mLastRxLen;
+  uint16_t mLastRxIrqStatus;
   uint16_t mLastIrqStatus;
   uint8_t mLastOpStatusBefore;
   uint8_t mLastOpStatusAfter;
