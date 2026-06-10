@@ -19,6 +19,7 @@ static unsigned long micros() { return ioHomeTestMicros(); }
 static unsigned long millis() { return 0; }
 static unsigned long micros() { return 0; }
 #endif
+static void delay(unsigned long) {}
 #endif
 
 namespace
@@ -468,6 +469,10 @@ IoHomeController::IoHomeController()
       mGatewayDiscoverFreqIdx(0),
       mScanIndex(0), mScanTargetNode(0),
       mDutyCycleWindowStart(0),
+      mLbtBusyCount(0), mLbtBypassCount(0), mLbtClearCount(0),
+      mLbtInvalidRssiCount(0), mLastLbtRssi(0),
+      mLastLbtRssiValid(false), mLastLbtAttempts(0),
+      mLastLbtBypassed(false), mLastLbtAuthResponse(false),
       mRxScanLastSwitch(0), mRxScanIntervalUs(IOHC_RX_SCAN_INTERVAL_US),
       mRxScanEnabled(true), mLastResponseFreqIdx(0),
       mPairDiagnosticTraceEnabled(false),
@@ -1749,6 +1754,17 @@ void IoHomeController::logPairDiagnosticStatus() const
              static_cast<unsigned long>(lHealth.rxStartCount),
              static_cast<unsigned long>(lHealth.crcErrorCount),
              static_cast<unsigned long>(lHealth.timeoutCount));
+    logInfoP("PairDiag: lbt lastValid=%d lastRssi=%d attempts=%u bypass=%d auth=%d busy=%lu clear=%lu bypassTotal=%lu invalid=%lu threshold=%ddBm",
+             lHealth.lastLbtRssiValid ? 1 : 0,
+             lHealth.lastLbtRssi,
+             static_cast<unsigned>(lHealth.lastLbtAttempts),
+             lHealth.lastLbtBypassed ? 1 : 0,
+             lHealth.lastLbtAuthResponse ? 1 : 0,
+             static_cast<unsigned long>(lHealth.lbtBusyCount),
+             static_cast<unsigned long>(lHealth.lbtClearCount),
+             static_cast<unsigned long>(lHealth.lbtBypassCount),
+             static_cast<unsigned long>(lHealth.lbtInvalidRssiCount),
+             IOHC_LBT_RSSI_THRESHOLD_DBM);
 }
 
 void IoHomeController::resetDiscoveryTimingTrace()
@@ -1827,6 +1843,15 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
     lHealth.lastRssi = mRadio.lastRssi();
     lHealth.currentRssi = 0;
     lHealth.currentRssiValid = const_cast<Radio &>(mRadio).currentRssi(lHealth.currentRssi);
+    lHealth.lastLbtRssiValid = mLastLbtRssiValid;
+    lHealth.lastLbtRssi = mLastLbtRssi;
+    lHealth.lastLbtAttempts = mLastLbtAttempts;
+    lHealth.lastLbtBypassed = mLastLbtBypassed;
+    lHealth.lastLbtAuthResponse = mLastLbtAuthResponse;
+    lHealth.lbtBusyCount = mLbtBusyCount;
+    lHealth.lbtBypassCount = mLbtBypassCount;
+    lHealth.lbtClearCount = mLbtClearCount;
+    lHealth.lbtInvalidRssiCount = mLbtInvalidRssiCount;
     lHealth.initError = 0;
     lHealth.initStatusByte = 0;
     lHealth.initCommandStatus = 0;
@@ -2425,7 +2450,9 @@ void IoHomeController::processTxPending()
         return;
     }
 
-    RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    const LbtContext lLbtContext = (mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) ? LbtContext::Bypass
+                                                                                : LbtContext::Normal;
+    RadioError lErr = startRadioTransmit(mTxBuffer, mTxLen, lLbtContext);
     if (lErr == RadioError::None)
     {
         mStateTimer = millis();
@@ -2510,7 +2537,7 @@ void IoHomeController::processTx1WRepeat()
         return; // wait for interval
 
     // Re-send same buffer with short preamble (repeats don't need long preamble)
-    const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
+    const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen, false, LbtContext::Bypass);
     if (lErr == RadioError::None)
     {
         mStateTimer = millis();
@@ -2700,7 +2727,8 @@ void IoHomeController::processResponse()
     if (lLen > 0)
     {
         const RadioError lErr = startTransmitWithPreamble(mTxBuffer, lLen,
-                                                          preambleForFrame(lFrame, TxContext::AuthResponse));
+                                                          preambleForFrame(lFrame, TxContext::AuthResponse),
+                                                          false, LbtContext::AuthResponse);
         if (lErr == RadioError::None)
         {
             mAuthResponseSent = true;
@@ -2805,7 +2833,7 @@ void IoHomeController::processPairSendDiscovery()
 #if defined(RADIO_SX1262)
         const RadioError lErr = mRadio.startTransmitBlocking(mTxBuffer, mTxLen);
 #else
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startRadioTransmit(mTxBuffer, mTxLen, LbtContext::Normal);
 #endif
         if (lErr == RadioError::None)
         {
@@ -2893,7 +2921,7 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
 #if defined(RADIO_SX1262)
         const RadioError lErr = mRadio.startTransmitBlocking(mTxBuffer, mTxLen);
 #else
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startRadioTransmit(mTxBuffer, mTxLen, LbtContext::Normal);
 #endif
         if (lErr == RadioError::None)
         {
@@ -2966,7 +2994,7 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
     mTxLen = mPairLaunchKeyTransferFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startRadioTransmit(mTxBuffer, mTxLen, LbtContext::Normal);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3480,7 +3508,7 @@ void IoHomeController::processPairSendKeyInit()
     mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startRadioTransmit(mTxBuffer, mTxLen, LbtContext::Normal);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3608,7 +3636,8 @@ void IoHomeController::processPairSendKeyTransferAuthResponse()
     if (mTxLen > 0)
     {
         const RadioError lErr = startTransmitWithPreamble(mTxBuffer, mTxLen,
-                                                          preambleForFrame(lFrame, TxContext::AuthResponse));
+                                                          preambleForFrame(lFrame, TxContext::AuthResponse),
+                                                          false, LbtContext::AuthResponse);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3670,7 +3699,7 @@ void IoHomeController::processPairSendSetConfig1()
     mTxLen = mPairSetConfigRequest.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startRadioTransmit(mTxBuffer, mTxLen, LbtContext::Normal);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3777,7 +3806,7 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
     mTxLen = lFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startRadioTransmit(mTxBuffer, mTxLen, LbtContext::AuthResponse);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3901,7 +3930,7 @@ void IoHomeController::processDiscovery()
 #if defined(RADIO_SX1262)
             lErr = mRadio.startTransmitBlocking(mTxBuffer, mTxLen);
 #else
-            lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+            lErr = startRadioTransmit(mTxBuffer, mTxLen, LbtContext::Normal);
 #endif
             if (lErr == RadioError::None)
             {
@@ -4158,13 +4187,15 @@ RadioError IoHomeController::configureTxRadio(uint16_t iPreambleSymbols, const u
 }
 
 RadioError IoHomeController::startShortPreambleTransmit(const uint8_t *iBuffer, uint8_t iLen,
-                                                        bool iTrackDutyCycle)
+                                                        bool iTrackDutyCycle,
+                                                        LbtContext iLbtContext)
 {
     IoHomeFrame lFrame;
     lFrame.init();
     return startTransmitWithPreamble(iBuffer, iLen,
                                      preambleForFrame(lFrame, TxContext::ContinuationFrame),
-                                     iTrackDutyCycle);
+                                     iTrackDutyCycle,
+                                     iLbtContext);
 }
 
 uint16_t IoHomeController::authResponsePreamble() const
@@ -4175,15 +4206,75 @@ uint16_t IoHomeController::authResponsePreamble() const
     return preambleForFrame(lFrame, TxContext::AuthResponse);
 }
 
+bool IoHomeController::waitForLbtClear(LbtContext iContext)
+{
+    mLastLbtRssi = 0;
+    mLastLbtRssiValid = false;
+    mLastLbtAttempts = 0;
+    mLastLbtBypassed = false;
+    mLastLbtAuthResponse = (iContext == LbtContext::AuthResponse);
+
+    if (iContext == LbtContext::Bypass)
+        return true;
+
+    const uint8_t lMaxAttempts = (iContext == LbtContext::AuthResponse)
+                                     ? IOHC_LBT_AUTH_MAX_RETRIES
+                                     : IOHC_LBT_MAX_RETRIES;
+
+    for (uint8_t i = 0; i < lMaxAttempts; i++)
+    {
+        int16_t lRssi = 0;
+        mLastLbtAttempts = static_cast<uint8_t>(i + 1);
+        if (!mRadio.currentRssi(lRssi))
+        {
+            mLbtInvalidRssiCount++;
+            if (mPairDiagnosticTraceEnabled)
+                logInfoP("PairDiag: LBT RSSI unavailable before TX, bypassing carrier-sense");
+            return true;
+        }
+
+        mLastLbtRssi = lRssi;
+        mLastLbtRssiValid = true;
+
+        if (lRssi <= IOHC_LBT_RSSI_THRESHOLD_DBM)
+        {
+            mLbtClearCount++;
+            return true;
+        }
+
+        mLbtBusyCount++;
+        if (i + 1 < lMaxAttempts)
+            delay(IOHC_LBT_RETRY_DELAY_MS);
+    }
+
+    mLastLbtBypassed = true;
+    mLbtBypassCount++;
+    if (mPairDiagnosticTraceEnabled)
+    {
+        logInfoP("PairDiag: LBT busy before TX rssi=%d attempts=%u auth=%d - bypassing to preserve IOHC timing",
+                 mLastLbtRssi,
+                 static_cast<unsigned>(mLastLbtAttempts),
+                 mLastLbtAuthResponse ? 1 : 0);
+    }
+    return true;
+}
+
+RadioError IoHomeController::startRadioTransmit(const uint8_t *iBuffer, uint8_t iLen, LbtContext iLbtContext)
+{
+    waitForLbtClear(iLbtContext);
+    return mRadio.startTransmit(iBuffer, iLen);
+}
+
 RadioError IoHomeController::startTransmitWithPreamble(const uint8_t *iBuffer, uint8_t iLen,
                                                        uint16_t iPreambleSymbols,
-                                                       bool iTrackDutyCycle)
+                                                       bool iTrackDutyCycle,
+                                                       LbtContext iLbtContext)
 {
     const RadioError lPrepErr = configureTxRadio(iPreambleSymbols);
     if (lPrepErr != RadioError::None)
         return lPrepErr;
 
-    const RadioError lTxErr = mRadio.startTransmit(iBuffer, iLen);
+    const RadioError lTxErr = startRadioTransmit(iBuffer, iLen, iLbtContext);
     if (lTxErr == RadioError::None && iTrackDutyCycle)
         mTxTimeAccum[mCurrentFreqIdx] += ((uint32_t)iLen * 8 * 1000) / IOHC_BITRATE;
 
@@ -5022,7 +5113,7 @@ void IoHomeController::processStatusAckSend()
         return;
     }
 
-    const RadioError lTxErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    const RadioError lTxErr = startRadioTransmit(mTxBuffer, mTxLen, LbtContext::Normal);
     if (lTxErr == RadioError::None)
     {
         mStateTimer = millis();
@@ -5414,7 +5505,7 @@ void IoHomeController::processGatewayWaitChallenge()
                                               mGatewayPeerChallenge, mGatewayKey);
     if (mTxLen == 0)
         return;
-    if (startTransmitWithPreamble(mTxBuffer, mTxLen, authResponsePreamble(), true) != RadioError::None)
+    if (startTransmitWithPreamble(mTxBuffer, mTxLen, authResponsePreamble(), true, LbtContext::AuthResponse) != RadioError::None)
         return;
 
     bool lKnownDevice = false;

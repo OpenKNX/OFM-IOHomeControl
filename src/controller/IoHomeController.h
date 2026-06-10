@@ -16,6 +16,10 @@
 #define IOHC_AUTH_PREAMBLE_SX1262 64
 #define IOHC_PAIR_TIMEOUT_MS 30000
 #define IOHC_DUTY_CYCLE_WINDOW_MS 3600000 // 1 hour
+#define IOHC_LBT_RSSI_THRESHOLD_DBM -90    // clear channel threshold before TX
+#define IOHC_LBT_MAX_RETRIES 5             // normal TX: 5 * 5ms worst-case
+#define IOHC_LBT_AUTH_MAX_RETRIES 1        // auth responses must not be delayed too long
+#define IOHC_LBT_RETRY_DELAY_MS 5
 #define IOHC_RX_SCAN_INTERVAL_US 2700     // ~2.7ms frequency scan interval (per nicolas5000)
 // Maximum raw Execute payload bytes before appending the 1W sequence number.
 // Normal 1W authenticated frames include 6-byte HMAC in CTRL0 length, so keep
@@ -316,6 +320,15 @@ public:
     int16_t lastRssi;
     bool currentRssiValid;
     int16_t currentRssi;
+    bool lastLbtRssiValid;
+    int16_t lastLbtRssi;
+    uint8_t lastLbtAttempts;
+    bool lastLbtBypassed;
+    bool lastLbtAuthResponse;
+    uint32_t lbtBusyCount;
+    uint32_t lbtBypassCount;
+    uint32_t lbtClearCount;
+    uint32_t lbtInvalidRssiCount;
     uint8_t queueDepth;
     uint16_t dutyPermille;
     uint8_t initError;
@@ -400,6 +413,13 @@ private:
   {
     InitialStartFrame,
     ContinuationFrame,
+    AuthResponse
+  };
+
+  enum class LbtContext : uint8_t
+  {
+    Bypass,
+    Normal,
     AuthResponse
   };
 
@@ -549,6 +569,15 @@ private:
   // Duty cycle tracking (per sub-band per hour)
   uint32_t mTxTimeAccum[IOHC_NUM_FREQUENCIES]; // accumulated TX time in ms
   uint32_t mDutyCycleWindowStart;
+  uint32_t mLbtBusyCount;
+  uint32_t mLbtBypassCount;
+  uint32_t mLbtClearCount;
+  uint32_t mLbtInvalidRssiCount;
+  int16_t mLastLbtRssi;
+  bool mLastLbtRssiValid;
+  uint8_t mLastLbtAttempts;
+  bool mLastLbtBypassed;
+  bool mLastLbtAuthResponse;
 
   // Multi-frequency RX scanning
   uint32_t mRxScanLastSwitch;   // timestamp (micros) of last frequency switch
@@ -654,11 +683,15 @@ private:
   uint16_t preambleForFrame(const IoHomeFrame &iFrame, TxContext iContext) const;
   bool radioIsSX1262() const;
   RadioError configureTxRadio(uint16_t iPreambleSymbols, const uint32_t *iFrequencyHz = nullptr);
+  bool waitForLbtClear(LbtContext iContext);
+  RadioError startRadioTransmit(const uint8_t *iBuffer, uint8_t iLen, LbtContext iLbtContext);
   RadioError startTransmitWithPreamble(const uint8_t *iBuffer, uint8_t iLen,
                                        uint16_t iPreambleSymbols,
-                                       bool iTrackDutyCycle = false);
+                                       bool iTrackDutyCycle = false,
+                                       LbtContext iLbtContext = LbtContext::Normal);
   RadioError startShortPreambleTransmit(const uint8_t *iBuffer, uint8_t iLen,
-                                        bool iTrackDutyCycle = false);
+                                        bool iTrackDutyCycle = false,
+                                        LbtContext iLbtContext = LbtContext::Normal);
   uint16_t authResponsePreamble() const;
   uint32_t currentTxTimeoutMs() const;
 
