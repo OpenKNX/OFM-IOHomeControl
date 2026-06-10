@@ -77,8 +77,18 @@ struct IoHomeFrame
     // Returns number of bytes written, or 0 on error
     uint8_t serialize(uint8_t *oBuffer, uint8_t iMaxLen) const;
 
-    // Deserialize frame from received byte buffer
-    // Returns true on success
+    // Deserialize an exact protocol frame from a received byte buffer.
+    // Strict mode: no CRC bytes and no extra transport bytes are accepted.
+    // 2W frames must match the CTRL0-declared length exactly.
+    // 1W parsing keeps the existing SendKey1W HMAC handling so 1W behavior is unchanged.
+    bool deserializeFrame(const uint8_t *iBuffer, uint8_t iLen);
+
+    // Deserialize a raw radio/diagnostic buffer that may include a transport CRC.
+    // If CRC bytes are present they are verified and stripped before protocol parsing.
+    bool deserializeRawWithOptionalCrc(const uint8_t *iBuffer, uint8_t iLen);
+
+    // Legacy compatibility wrapper. Normal RX paths should call deserializeFrame();
+    // diagnostics/tests that intentionally pass raw buffers may keep using this.
     bool deserialize(const uint8_t *iBuffer, uint8_t iLen);
 
     // Get total frame length including HMAC

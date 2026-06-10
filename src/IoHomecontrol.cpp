@@ -706,6 +706,52 @@ uint8_t IoHomecontrol::countPairedChannels() const
     return lCount;
 }
 
+uint8_t IoHomecontrol::configuredChannelCount() const
+{
+    return MIN(ParamIOHC_IOHCVisibleChannels, IOHC_ChannelCount);
+}
+
+void IoHomecontrol::restoreChannelFlashState(uint8_t iIndex, const FlashChannelState &iState)
+{
+    if (iIndex >= IOHC_ChannelCount || !iState.valid)
+        return;
+
+    if (iIndex >= mNumChannels || mChannels[iIndex] == nullptr)
+    {
+        mPendingFlashChannels[iIndex] = iState;
+        return;
+    }
+
+    IoHomecontrolChannel *lChannel = mChannels[iIndex];
+    if (iState.paired)
+    {
+        lChannel->setNodeId(iState.nodeId);
+        lChannel->setEncryptionKey(iState.key);
+    }
+
+    lChannel->setLowPower2W(iState.lowPower2W);
+    if (iState.is1W && !lChannel->is1W())
+        logInfoP("Flash restore: channel %u was saved as 1W while ETS runtime config is 2W; keeping saved 1W mode", static_cast<unsigned>(iIndex + 1));
+    lChannel->setIs1W(lChannel->is1W() || iState.is1W);
+    lChannel->setSequence1W(iState.sequence1W);
+    lChannel->setOneWayControllerNodeId(iState.oneWayControllerNodeId);
+    lChannel->setOneWayControllerKey(iState.oneWayControllerKey);
+    lChannel->setOneWayControllerManufacturer(iState.oneWayControllerManufacturer);
+}
+
+void IoHomecontrol::applyPendingFlashChannelState()
+{
+    for (uint8_t i = 0; i < mNumChannels; i++)
+    {
+        if (!mPendingFlashChannels[i].valid)
+            continue;
+
+        FlashChannelState lState = mPendingFlashChannels[i];
+        mPendingFlashChannels[i] = FlashChannelState{};
+        restoreChannelFlashState(i, lState);
+    }
+}
+
 bool IoHomecontrol::isPairingState(ControllerState iState) const
 {
     return iState >= ControllerState::PairSendDiscovery && iState <= ControllerState::PairWaitSetConfig1FinalResponse;
@@ -825,7 +871,7 @@ void IoHomecontrol::setup()
     deriveOwnNodeId();
 
     // Create channels from ETS configuration
-    mNumChannels = MIN(ParamIOHC_IOHCVisibleChannels, IOHC_ChannelCount);
+    mNumChannels = configuredChannelCount();
     logDebugP("Visible channels: %d", mNumChannels);
 
     for (uint8_t i = 0; i < mNumChannels; i++)
@@ -833,6 +879,7 @@ void IoHomecontrol::setup()
         mChannels[i] = new IoHomecontrolChannel(i, mController);
         mChannels[i]->setup();
     }
+    applyPendingFlashChannelState();
 
     // Initialize system key (may generate if first boot)
     initSystemKey();
@@ -1615,6 +1662,21 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
                           ((uint32_t)data[3] << 8) |
                           (uint32_t)data[4];
             }
+            const bool lExplicitOneWayRequest = lNodeId != 0;
+
+            logInfoP("ETS: start pairing request ch=%d len=%u runtime=%s target=0x%06X",
+                     lChannel + 1,
+                     static_cast<unsigned>(length),
+                     mChannels[lChannel]->is1W() ? "1W" : "2W",
+                     lNodeId & 0x00FFFFFF);
+            if (lExplicitOneWayRequest && !mChannels[lChannel]->is1W())
+            {
+                logInfoP("ETS: explicit 1W target supplied for channel %d while runtime protocol is 2W; forcing 1W for this channel",
+                         lChannel + 1);
+                mChannels[lChannel]->setIs1W(true);
+                mChannels[lChannel]->setConfigured1WTargetNodeId(lNodeId);
+                openknx.flash.save();
+            }
 
             bool lStarted = mController.startPairing(lChannel, lNodeId);
             resultData[0] = lStarted ? 0x00 : 0x02;
@@ -1862,8 +1924,14 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
         mController.setOneWayBroadcastType(openknx.flash.readByte());
 
         const uint8_t lCount = openknx.flash.readByte();
-        const uint8_t lReadCount = clampFlashRecordCount(lCount, mNumChannels, iSize, kFlashHeaderV9, kFlashRecordV9);
-        logDebugP("Reading %d channels from flash (v%d)", lReadCount, lVersion);
+        const uint8_t lConfiguredCount = mNumChannels > 0 ? mNumChannels : configuredChannelCount();
+        const uint8_t lReadCount = clampFlashRecordCount(lCount, lConfiguredCount, iSize, kFlashHeaderV9, kFlashRecordV9);
+        logInfoP("Flash restore: v%d stored=%u configured=%u active=%u reading=%u",
+                 static_cast<unsigned>(lVersion),
+                 static_cast<unsigned>(lCount),
+                 static_cast<unsigned>(lConfiguredCount),
+                 static_cast<unsigned>(mNumChannels),
+                 static_cast<unsigned>(lReadCount));
         for (uint8_t i = 0; i < lReadCount; i++)
         {
             const uint8_t lIdx = openknx.flash.readByte();
@@ -1883,18 +1951,18 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
                 lControllerKey[k] = openknx.flash.readByte();
             const uint8_t lManufacturer = openknx.flash.readByte();
 
-            if (lIdx >= mNumChannels)
-                continue;
-            if (lFlags & 0x01)
-            {
-                mChannels[lIdx]->setNodeId(lNodeId);
-                mChannels[lIdx]->setEncryptionKey(lKey);
-            }
-            mChannels[lIdx]->setLowPower2W(lVersion >= 10 ? ((lFlags & 0x04) != 0) : true);
-            mChannels[lIdx]->setSequence1W(lSeq);
-            mChannels[lIdx]->setOneWayControllerNodeId(lControllerNodeId);
-            mChannels[lIdx]->setOneWayControllerKey(lControllerKey);
-            mChannels[lIdx]->setOneWayControllerManufacturer(lManufacturer);
+            FlashChannelState lState;
+            lState.valid = true;
+            lState.paired = (lFlags & 0x01) != 0;
+            lState.is1W = (lFlags & 0x02) != 0;
+            lState.lowPower2W = lVersion >= 10 ? ((lFlags & 0x04) != 0) : true;
+            lState.nodeId = lNodeId;
+            memcpy(lState.key, lKey, sizeof(lState.key));
+            lState.sequence1W = lSeq;
+            lState.oneWayControllerNodeId = lControllerNodeId;
+            memcpy(lState.oneWayControllerKey, lControllerKey, sizeof(lState.oneWayControllerKey));
+            lState.oneWayControllerManufacturer = lManufacturer;
+            restoreChannelFlashState(lIdx, lState);
         }
 
         consolidateOneWayProfileSequences();
@@ -2792,6 +2860,14 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 {
                     logInfoP("Invalid node address: %s", lSub.substr(8).c_str());
                     return true;
+                }
+                if (lNodeId != 0 && !mChannels[lIdx]->is1W())
+                {
+                    logInfoP("Explicit 1W target 0x%06X supplied for channel %d while runtime protocol is 2W; forcing 1W for this channel",
+                             lNodeId & 0x00FFFFFF, lIdx + 1);
+                    mChannels[lIdx]->setIs1W(true);
+                    mChannels[lIdx]->setConfigured1WTargetNodeId(lNodeId);
+                    openknx.flash.save();
                 }
 
                 bool lOk = mController.startPairing(lIdx, lNodeId);
@@ -3855,14 +3931,15 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         const uint8_t kNodeAddress[3] = {0x65, 0x43, 0x21};
 
         ProtoCheck lChecks[] = {
-            {"2W serialize/deserialize", false},
+            {"2W exact deserialize", false},
             {"2W HMAC verify", false},
             {"1W serialize/deserialize", false},
             {"1W HMAC verify", false},
             {"1W key encrypt/decrypt", false},
-            {"0x3D data payload", false},
+            {"0x3D raw CRC payload", false},
             {"0x3D exact no CRC", false},
-            {"max CRC frame", false},
+            {"max raw CRC frame", false},
+            {"strict CRC reject", false},
             {"length mismatch reject", false},
             {"malformed length reject", false},
             {"2W appended HMAC reject", false},
@@ -3884,7 +3961,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         memcpy(lTx2W.data, kFrame2WData, sizeof(kFrame2WData));
         lTx2W.dataLen = sizeof(kFrame2WData);
         lTx2W.hasHmac = false;
-        lTx2W.hasCrc = true;
+        lTx2W.hasCrc = false;
 
         uint8_t lTx2WHmac[IOHC_HMAC_SIZE] = {0};
         uint8_t lHmacInput2W[1 + sizeof(kFrame2WData)] = {static_cast<uint8_t>(IoHomeCommand::Execute), 0, 0, 0, 0};
@@ -3895,13 +3972,18 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         const uint8_t lLen2W = lTx2W.serialize(lBuffer2W, sizeof(lBuffer2W));
         IoHomeFrame lRx2W;
         lRx2W.init();
-        const bool lRoundTrip2W = (lLen2W > 0) && lRx2W.deserialize(lBuffer2W, lLen2W) &&
+        const bool lRoundTrip2W = (lLen2W > 0) && lRx2W.deserializeFrame(lBuffer2W, lLen2W) &&
                                   lRx2W.getSrcNodeId() == kSrcNodeId &&
                                   lRx2W.getDestNodeId() == kDestNodeId &&
                                   lRx2W.commandId == IoHomeCommand::Execute &&
                                   lRx2W.dataLen == sizeof(kFrame2WData) &&
                                   memcmp(lRx2W.data, kFrame2WData, sizeof(kFrame2WData)) == 0 &&
-                                  !lRx2W.hasHmac && lRx2W.hasCrc;
+                                  !lRx2W.hasHmac && !lRx2W.hasCrc;
+
+        IoHomeFrame lTx2WRaw = lTx2W;
+        lTx2WRaw.hasCrc = true;
+        uint8_t lBuffer2WRaw[IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE] = {0};
+        const uint8_t lLen2WRaw = lTx2WRaw.serialize(lBuffer2WRaw, sizeof(lBuffer2WRaw));
         lChecks[0].ok = lRoundTrip2W;
         lChecks[1].ok = IoHomeCrypto::verifyHmac(lHmacInput2W, sizeof(lHmacInput2W), lTx2WHmac, kChallenge, kSystemKey);
 
@@ -3911,7 +3993,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         uint8_t lLegacyAuth2WBuffer[IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE] = {0};
         const uint8_t lLegacyAuth2WLen = lLegacyAuth2W.serialize(lLegacyAuth2WBuffer, sizeof(lLegacyAuth2WBuffer));
         IoHomeFrame lLegacyAuth2WRx;
-        lChecks[10].ok = (lLegacyAuth2WLen > 0) && !lLegacyAuth2WRx.deserialize(lLegacyAuth2WBuffer, lLegacyAuth2WLen);
+        lChecks[11].ok = (lLegacyAuth2WLen > 0) && !lLegacyAuth2WRx.deserializeFrame(lLegacyAuth2WBuffer, lLegacyAuth2WLen);
 
         IoHomeFrame lTx1W;
         lTx1W.init();
@@ -3933,7 +4015,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         const uint8_t lLen1W = lTx1W.serialize(lBuffer1W, sizeof(lBuffer1W));
         IoHomeFrame lRx1W;
         lRx1W.init();
-        const bool lRoundTrip1W = (lLen1W > 0) && lRx1W.deserialize(lBuffer1W, lLen1W) &&
+        const bool lRoundTrip1W = (lLen1W > 0) && lRx1W.deserializeRawWithOptionalCrc(lBuffer1W, lLen1W) &&
                                   lRx1W.getSrcNodeId() == kSrcNodeId &&
                                   lRx1W.getDestNodeId() == kDestNodeId &&
                                   lRx1W.commandId == IoHomeCommand::Execute &&
@@ -3966,7 +4048,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         const uint8_t lChallengeResponseLen = lChallengeResponse.serialize(lChallengeResponseBuffer, sizeof(lChallengeResponseBuffer));
         IoHomeFrame lParsedChallengeResponse;
         lChecks[5].ok = (lChallengeResponseLen > 0) &&
-                        lParsedChallengeResponse.deserialize(lChallengeResponseBuffer, lChallengeResponseLen) &&
+                        lParsedChallengeResponse.deserializeRawWithOptionalCrc(lChallengeResponseBuffer, lChallengeResponseLen) &&
                         lParsedChallengeResponse.commandId == IoHomeCommand::ChallengeResponse &&
                         lParsedChallengeResponse.dataLen == sizeof(kChallengeResponseData) &&
                         !lParsedChallengeResponse.hasHmac && lParsedChallengeResponse.hasCrc &&
@@ -3977,7 +4059,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         const uint8_t lChallengeResponseNoCrcLen = lChallengeResponse.serialize(lChallengeResponseNoCrcBuffer, sizeof(lChallengeResponseNoCrcBuffer));
         IoHomeFrame lParsedChallengeResponseNoCrc;
         lChecks[6].ok = (lChallengeResponseNoCrcLen == IOHC_FRAME_MIN_SIZE + IOHC_HMAC_SIZE) &&
-                        lParsedChallengeResponseNoCrc.deserialize(lChallengeResponseNoCrcBuffer, lChallengeResponseNoCrcLen) &&
+                        lParsedChallengeResponseNoCrc.deserializeFrame(lChallengeResponseNoCrcBuffer, lChallengeResponseNoCrcLen) &&
                         lParsedChallengeResponseNoCrc.commandId == IoHomeCommand::ChallengeResponse &&
                         lParsedChallengeResponseNoCrc.dataLen == sizeof(kChallengeResponseData) &&
                         !lParsedChallengeResponseNoCrc.hasHmac && !lParsedChallengeResponseNoCrc.hasCrc &&
@@ -3999,24 +4081,29 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         const uint8_t lMaxCrcLen = lMaxCrc.serialize(lMaxCrcBuffer, sizeof(lMaxCrcBuffer));
         IoHomeFrame lParsedMaxCrc;
         lChecks[7].ok = (lMaxCrcLen == IOHC_FRAME_MIN_SIZE + IOHC_FRAME_MAX_DATA + IOHC_CRC_SIZE) &&
-                        lParsedMaxCrc.deserialize(lMaxCrcBuffer, lMaxCrcLen) &&
+                        lParsedMaxCrc.deserializeRawWithOptionalCrc(lMaxCrcBuffer, lMaxCrcLen) &&
                         lParsedMaxCrc.commandId == IoHomeCommand::Private &&
                         lParsedMaxCrc.dataLen == IOHC_FRAME_MAX_DATA &&
                         lParsedMaxCrc.hasCrc &&
                         memcmp(lParsedMaxCrc.data, lMaxCrc.data, IOHC_FRAME_MAX_DATA) == 0;
 
+        IoHomeFrame lStrictCrcFrame;
+        lChecks[8].ok = (lLen2WRaw == lLen2W + IOHC_CRC_SIZE) &&
+                        !lStrictCrcFrame.deserializeFrame(lBuffer2WRaw, lLen2WRaw) &&
+                        lStrictCrcFrame.deserializeRawWithOptionalCrc(lBuffer2WRaw, lLen2WRaw);
+
         IoHomeFrame lWrongLengthFrame;
-        lChecks[8].ok = (lLen2W > IOHC_CRC_SIZE) && !lWrongLengthFrame.deserialize(lBuffer2W, lLen2W - 1);
+        lChecks[9].ok = (lLen2W > 0) && !lWrongLengthFrame.deserializeFrame(lBuffer2W, lLen2W - 1);
 
         uint8_t lMalformedDeclaredLen[sizeof(lBuffer2W)] = {0};
         memcpy(lMalformedDeclaredLen, lBuffer2W, lLen2W);
         lMalformedDeclaredLen[0] = (lMalformedDeclaredLen[0] & ~IOHC_CTRL0_LEN_MASK);
         IoHomeFrame lMalformedDeclaredFrame;
-        lChecks[9].ok = (lLen2W > 0) && !lMalformedDeclaredFrame.deserialize(lMalformedDeclaredLen, lLen2W);
+        lChecks[10].ok = (lLen2W > 0) && !lMalformedDeclaredFrame.deserializeFrame(lMalformedDeclaredLen, lLen2W);
 
         uint32_t lParsedValue = 0;
         uint8_t lParsedChannel = 0;
-        lChecks[11].ok = parseUnsignedDecimal(" 42 ", lParsedValue) && lParsedValue == 42 &&
+        lChecks[12].ok = parseUnsignedDecimal(" 42 ", lParsedValue) && lParsedValue == 42 &&
                          !parseUnsignedDecimal("", lParsedValue) &&
                          !parseUnsignedDecimal("12x", lParsedValue) &&
                          !parseUnsignedDecimal("4294967296", lParsedValue) &&
@@ -4029,22 +4116,22 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 
         constexpr uint16_t kFlashSelftestHeader = 18;
         constexpr uint16_t kFlashSelftestRecord = 24;
-        lChecks[12].ok = clampFlashRecordCount(255, 8, kFlashSelftestHeader + 2 * kFlashSelftestRecord, kFlashSelftestHeader, kFlashSelftestRecord) == 2 &&
+        lChecks[13].ok = clampFlashRecordCount(255, 8, kFlashSelftestHeader + 2 * kFlashSelftestRecord, kFlashSelftestHeader, kFlashSelftestRecord) == 2 &&
                          clampFlashRecordCount(4, 1, kFlashSelftestHeader + 4 * kFlashSelftestRecord, kFlashSelftestHeader, kFlashSelftestRecord) == 1 &&
                          clampFlashRecordCount(4, 8, kFlashSelftestHeader - 1, kFlashSelftestHeader, kFlashSelftestRecord) == 0 &&
                          clampFlashRecordCount(4, 8, kFlashSelftestHeader, kFlashSelftestHeader, 0) == 0;
 
-        uint8_t lCorruptCrc[sizeof(lBuffer2W)] = {0};
-        memcpy(lCorruptCrc, lBuffer2W, lLen2W);
-        if (lLen2W >= 2)
-            lCorruptCrc[lLen2W - 1] ^= 0x01;
+        uint8_t lCorruptCrc[sizeof(lBuffer2WRaw)] = {0};
+        memcpy(lCorruptCrc, lBuffer2WRaw, lLen2WRaw);
+        if (lLen2WRaw >= 2)
+            lCorruptCrc[lLen2WRaw - 1] ^= 0x01;
         IoHomeFrame lBadCrcFrame;
-        lChecks[13].ok = (lLen2W >= 2) && !lBadCrcFrame.deserialize(lCorruptCrc, lLen2W);
+        lChecks[14].ok = (lLen2WRaw >= 2) && !lBadCrcFrame.deserializeRawWithOptionalCrc(lCorruptCrc, lLen2WRaw);
 
         uint8_t lBadHmac[IOHC_HMAC_SIZE] = {0};
         memcpy(lBadHmac, lTx2WHmac, IOHC_HMAC_SIZE);
         lBadHmac[0] ^= 0x80;
-        lChecks[14].ok = !IoHomeCrypto::verifyHmac(lHmacInput2W, sizeof(lHmacInput2W), lBadHmac, kChallenge, kSystemKey);
+        lChecks[15].ok = !IoHomeCrypto::verifyHmac(lHmacInput2W, sizeof(lHmacInput2W), lBadHmac, kChallenge, kSystemKey);
 
         IoHomeFrame lKeyTransfer;
         lKeyTransfer.init();
@@ -4061,8 +4148,8 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         uint8_t lKeyTransferBuffer[IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE] = {0};
         const uint8_t lKeyTransferLen = lKeyTransfer.serialize(lKeyTransferBuffer, sizeof(lKeyTransferBuffer));
         IoHomeFrame lParsedKeyTransfer;
-        lChecks[15].ok = (lKeyTransferLen == IOHC_FRAME_MIN_SIZE + sizeof(kEncrypted2WKey) + IOHC_CRC_SIZE) &&
-                         lParsedKeyTransfer.deserialize(lKeyTransferBuffer, lKeyTransferLen) &&
+        lChecks[16].ok = (lKeyTransferLen == IOHC_FRAME_MIN_SIZE + sizeof(kEncrypted2WKey) + IOHC_CRC_SIZE) &&
+                         lParsedKeyTransfer.deserializeRawWithOptionalCrc(lKeyTransferBuffer, lKeyTransferLen) &&
                          lParsedKeyTransfer.commandId == IoHomeCommand::KeyTransfer &&
                          lParsedKeyTransfer.dataLen == sizeof(kEncrypted2WKey) &&
                          !lParsedKeyTransfer.hasHmac && lParsedKeyTransfer.hasCrc &&
@@ -4086,9 +4173,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         uint8_t lKeyTransferAuthBuffer[IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE] = {0};
         const uint8_t lKeyTransferAuthLen = lKeyTransferAuth.serialize(lKeyTransferAuthBuffer, sizeof(lKeyTransferAuthBuffer));
         IoHomeFrame lParsedKeyTransferAuth;
-        lChecks[16].ok = lChecks[15].ok && lKeyTransferHmacOk &&
+        lChecks[17].ok = lChecks[16].ok && lKeyTransferHmacOk &&
                          (lKeyTransferAuthLen == IOHC_FRAME_MIN_SIZE + IOHC_HMAC_SIZE + IOHC_CRC_SIZE) &&
-                         lParsedKeyTransferAuth.deserialize(lKeyTransferAuthBuffer, lKeyTransferAuthLen) &&
+                         lParsedKeyTransferAuth.deserializeRawWithOptionalCrc(lKeyTransferAuthBuffer, lKeyTransferAuthLen) &&
                          lParsedKeyTransferAuth.commandId == IoHomeCommand::ChallengeResponse &&
                          lParsedKeyTransferAuth.dataLen == IOHC_HMAC_SIZE &&
                          !lParsedKeyTransferAuth.hasHmac && lParsedKeyTransferAuth.hasCrc &&

@@ -145,7 +145,7 @@ uint8_t IoHomeFrame::serialize(uint8_t *oBuffer, uint8_t iMaxLen) const
     return lPos;
 }
 
-bool IoHomeFrame::deserialize(const uint8_t *iBuffer, uint8_t iLen)
+bool IoHomeFrame::deserializeFrame(const uint8_t *iBuffer, uint8_t iLen)
 {
     if (!iBuffer || iLen < IOHC_FRAME_MIN_SIZE)
         return false;
@@ -155,54 +155,39 @@ bool IoHomeFrame::deserialize(const uint8_t *iBuffer, uint8_t iLen)
     const bool lIs1W = (iBuffer[0] & IOHC_CTRL0_MODE_1W) != 0;
     const uint8_t lMaxDeclared = lIs1W ? IOHC_FRAME_MAX_SIZE_1W
                                        : IOHC_FRAME_MAX_SIZE_2W;
-    const uint8_t lMaxRxLen = lMaxDeclared + IOHC_CRC_SIZE;
-    if (iLen > lMaxRxLen)
-        return false;
-
-    uint8_t lDeclaredLen = (iBuffer[0] & IOHC_CTRL0_LEN_MASK) + 1;
+    const uint8_t lDeclaredLen = (iBuffer[0] & IOHC_CTRL0_LEN_MASK) + 1;
     if (lDeclaredLen < IOHC_FRAME_MIN_SIZE || lDeclaredLen > lMaxDeclared)
         return false;
 
-    const uint8_t lCmd = iBuffer[IOHC_FRAME_MIN_SIZE - 1];
-
-    // 2W frames are length-delimited by CTRL0 and may only carry an optional
-    // transport CRC after the declared bytes. 1W keeps the legacy appended HMAC
-    // handling, including SendKey1W frames whose declared length excludes HMAC.
-    uint8_t lHmacLen = 0;
-    uint8_t lCrcLen = 0;
-
-    if (iLen == lDeclaredLen + IOHC_CRC_SIZE)
-    {
-        lCrcLen = IOHC_CRC_SIZE;
-    }
-    else if (lIs1W && lCmd == static_cast<uint8_t>(IoHomeCommand::SendKey1W) &&
-             iLen == lDeclaredLen + IOHC_HMAC_SIZE + IOHC_CRC_SIZE)
-    {
-        lHmacLen = IOHC_HMAC_SIZE;
-        lCrcLen = IOHC_CRC_SIZE;
-    }
-    else if (lIs1W && lCmd == static_cast<uint8_t>(IoHomeCommand::SendKey1W) &&
-             iLen == lDeclaredLen + IOHC_HMAC_SIZE)
-    {
-        lHmacLen = IOHC_HMAC_SIZE;
-    }
-    else if (iLen != lDeclaredLen)
-    {
+    if (!lIs1W && iLen != lDeclaredLen)
         return false;
-    }
 
-    uint8_t lPayloadLen = lDeclaredLen + lHmacLen;
+    const uint8_t lCmd = iBuffer[IOHC_FRAME_MIN_SIZE - 1];
+    uint8_t lHmacLen = 0;
 
-    if (lCrcLen > 0)
+    // Keep the existing 1W semantics unchanged:
+    // - SendKey1W declares only header+data and appends the 6-byte HMAC outside
+    //   the CTRL0 length field.
+    // - Normal authenticated 1W commands include the HMAC in the CTRL0 length.
+    if (lIs1W)
     {
-        uint16_t lReceivedCrc = (uint16_t)iBuffer[lDeclaredLen + lHmacLen] |
-                                ((uint16_t)iBuffer[lDeclaredLen + lHmacLen + 1] << 8);
-        uint16_t lExpectedCrc = IoHomeCrypto::crc16Kermit(iBuffer, lDeclaredLen + lHmacLen);
-        if (lReceivedCrc != lExpectedCrc)
+        if (lCmd == static_cast<uint8_t>(IoHomeCommand::SendKey1W))
+        {
+            if (iLen == lDeclaredLen + IOHC_HMAC_SIZE)
+                lHmacLen = IOHC_HMAC_SIZE;
+            else if (iLen != lDeclaredLen)
+                return false;
+        }
+        else if (iLen != lDeclaredLen)
+        {
             return false;
-        crc = lReceivedCrc;
-        hasCrc = true;
+        }
+
+        if (iLen > IOHC_FRAME_MAX_SIZE_1W)
+            return false;
     }
+
+    const uint8_t lPayloadLen = lDeclaredLen + lHmacLen;
 
     uint8_t lPos = 0;
     ctrlByte0 = iBuffer[lPos++];
@@ -215,8 +200,11 @@ bool IoHomeFrame::deserialize(const uint8_t *iBuffer, uint8_t iLen)
 
     commandId = static_cast<IoHomeCommand>(iBuffer[lPos++]);
 
-    uint8_t lDeclaredRemainingBytes = lDeclaredLen - lPos;
-    uint8_t lRemainingBytes = lPayloadLen - lPos;
+    const uint8_t lDeclaredRemainingBytes = lDeclaredLen - lPos;
+    const uint8_t lRemainingBytes = lPayloadLen - lPos;
+
+    hasCrc = false;
+    crc = 0;
 
     if (!lIs1W)
     {
@@ -240,7 +228,7 @@ bool IoHomeFrame::deserialize(const uint8_t *iBuffer, uint8_t iLen)
     }
 
     if (dataLen > IOHC_FRAME_MAX_DATA)
-        dataLen = IOHC_FRAME_MAX_DATA;
+        return false;
 
     if (dataLen > 0)
         memcpy(data, iBuffer + lPos, dataLen);
@@ -248,9 +236,63 @@ bool IoHomeFrame::deserialize(const uint8_t *iBuffer, uint8_t iLen)
 
     if (hasHmac)
     {
+        if (lPos + IOHC_HMAC_SIZE > lPayloadLen)
+            return false;
         memcpy(hmac, iBuffer + lPos, IOHC_HMAC_SIZE);
         lPos += IOHC_HMAC_SIZE;
     }
 
+    return lPos == lPayloadLen;
+}
+
+bool IoHomeFrame::deserializeRawWithOptionalCrc(const uint8_t *iBuffer, uint8_t iLen)
+{
+    if (!iBuffer || iLen < IOHC_FRAME_MIN_SIZE)
+        return false;
+
+    // First accept exact, CRC-free protocol frames.
+    if (deserializeFrame(iBuffer, iLen))
+        return true;
+
+    const bool lIs1W = (iBuffer[0] & IOHC_CTRL0_MODE_1W) != 0;
+    const uint8_t lMaxDeclared = lIs1W ? IOHC_FRAME_MAX_SIZE_1W
+                                       : IOHC_FRAME_MAX_SIZE_2W;
+    const uint8_t lDeclaredLen = (iBuffer[0] & IOHC_CTRL0_LEN_MASK) + 1;
+    if (lDeclaredLen < IOHC_FRAME_MIN_SIZE || lDeclaredLen > lMaxDeclared)
+        return false;
+
+    const uint8_t lCmd = iBuffer[IOHC_FRAME_MIN_SIZE - 1];
+    uint8_t lProtocolLen = lDeclaredLen;
+
+    if (lIs1W && lCmd == static_cast<uint8_t>(IoHomeCommand::SendKey1W) &&
+        iLen == lDeclaredLen + IOHC_HMAC_SIZE + IOHC_CRC_SIZE)
+    {
+        lProtocolLen = lDeclaredLen + IOHC_HMAC_SIZE;
+    }
+    else if (iLen == lDeclaredLen + IOHC_CRC_SIZE)
+    {
+        lProtocolLen = lDeclaredLen;
+    }
+    else
+    {
+        return false;
+    }
+
+    const uint16_t lReceivedCrc = (uint16_t)iBuffer[lProtocolLen] |
+                                  ((uint16_t)iBuffer[lProtocolLen + 1] << 8);
+    const uint16_t lExpectedCrc = IoHomeCrypto::crc16Kermit(iBuffer, lProtocolLen);
+    if (lReceivedCrc != lExpectedCrc)
+        return false;
+
+    if (!deserializeFrame(iBuffer, lProtocolLen))
+        return false;
+
+    crc = lReceivedCrc;
+    hasCrc = true;
     return true;
+}
+
+bool IoHomeFrame::deserialize(const uint8_t *iBuffer, uint8_t iLen)
+{
+    return deserializeRawWithOptionalCrc(iBuffer, iLen);
 }

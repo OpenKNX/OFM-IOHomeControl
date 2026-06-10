@@ -1869,7 +1869,7 @@ void IoHomeController::loop()
     if (mRadio.isPacketAvailable())
     {
         uint8_t lLen = mRadio.readPacket(mRxBuffer, sizeof(mRxBuffer));
-        if (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen))
+        if (lLen > 0 && mRxFrame.deserializeFrame(mRxBuffer, lLen))
         {
             // Record which frequency the response came on
             mLastResponseFreqIdx = mCurrentFreqIdx;
@@ -3888,7 +3888,7 @@ void IoHomeController::processScanWaitResponse()
     if (mRadio.isPacketAvailable())
     {
         uint8_t lLen = mRadio.readPacket(mRxBuffer, sizeof(mRxBuffer));
-        if (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen))
+        if (lLen > 0 && mRxFrame.deserializeFrame(mRxBuffer, lLen))
         {
             if (mRxFrame.getSrcNodeId() == mScanTargetNode)
             {
