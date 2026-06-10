@@ -24,6 +24,13 @@ static unsigned long millis() { return 0; }
 
 static constexpr uint8_t kMaxSx1276PayloadLen = IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE;
 
+// Reference-compatible SX1276 DIO mapping for FSK/io-homecontrol.
+// DIO0 remains mapped to PacketSent in TX and PayloadReady in RX.
+// DIO4 is mapped to PreambleDetect via RegDioMapping2/MapPreambleDetect,
+// matching the working SX1276 reference instead of the earlier minimal DIO0-only map.
+static constexpr uint8_t kDioMapping1IohcReference = 0x39;
+static constexpr uint8_t kDioMapping2IohcReference = 0xF1;
+
 // SX1276 operating modes (RegOpMode)
 #define RF_OPMODE_SLEEP 0x00
 #define RF_OPMODE_STANDBY 0x01
@@ -211,11 +218,12 @@ RadioError RadioSX1276::configure()
     // FIFO threshold: TX start as soon as FIFO is not empty (per nicolas5000)
     writeRegister(REG_FIFOTHRESH, RF_FIFOTHRESH_TXSTARTCONDITION_FIFONOTEMPTY);
 
-    // DIO0 mapping: PacketSent in TX, PayloadReady in RX
-    writeRegister(REG_DIOMAPPING1, 0x00);
-    // DIO4 mapping: PreambleDetect (only if DIO4 pin is connected)
-    if (mDio4Pin != PIN_NOT_CONNECTED)
-        writeRegister(REG_DIOMAPPING2, 0x01);
+    // Reference-compatible DIO mapping.
+    // DIO0 still provides PacketSent in TX and PayloadReady in RX.
+    // DIO4, when wired, provides PreambleDetect. We program the full reference
+    // mapping even if DIO4 is not connected so register dumps match captures.
+    writeRegister(REG_DIOMAPPING1, kDioMapping1IohcReference);
+    writeRegister(REG_DIOMAPPING2, kDioMapping2IohcReference);
 
     // Set default frequency (CH2 = 868.95 MHz, the shared 1W/2W channel)
     setFrequency(IOHC_FREQ_2);
@@ -560,6 +568,10 @@ void RadioSX1276::configureStandardMode()
     writeRegister(REG_SYNCVALUE1, IOHC_SYNC_WORD[0]);
     writeRegister(REG_SYNCVALUE2, IOHC_SYNC_WORD[1]);
     writeRegister(REG_SYNCVALUE3, IOHC_SYNC_WORD[2]);
+
+    // Restore reference-compatible DIO mapping after any diagnostic/EMS2 mode.
+    writeRegister(REG_DIOMAPPING1, kDioMapping1IohcReference);
+    writeRegister(REG_DIOMAPPING2, kDioMapping2IohcReference);
 
     // Restore default frequency
     setFrequency(IOHC_FREQ_1);
