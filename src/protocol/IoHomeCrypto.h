@@ -33,10 +33,18 @@ namespace IoHomeCrypto
     // AES-128 ECB decrypt a single 16-byte block
     bool aes128Decrypt(const uint8_t iInput[16], const uint8_t iKey[16], uint8_t oOutput[16]);
 
-    // Encrypt/decrypt using 2W key derivation (construct IV + AES-128 ECB)
-    // Returns the keystream derived from frame data, challenge, and key
-    bool crypt2WKey(const uint8_t *iFrameData, size_t iDataLen,
-                    const uint8_t iChallenge[6], const uint8_t iKey[16], uint8_t oOutput[16]);
+    // Derive the 2W AES keystream from the auth/key transcript and peer challenge.
+    // This returns only the AES-ECB(IV) keystream; it does not XOR payload/key bytes.
+    bool derive2WKeystream(const uint8_t *iFrameData, size_t iDataLen,
+                           const uint8_t iChallenge[6], const uint8_t iAesKey[16],
+                           uint8_t oKeystream[16]);
+
+    // Encrypt/decrypt a 16-byte 2W key by XORing it with the derived keystream.
+    // io-homecontrol key transfer is symmetric: calling this again with the same
+    // transcript/challenge/xor AES key recovers the original input key.
+    bool crypt2WKeyXor(const uint8_t *iFrameData, size_t iDataLen,
+                       const uint8_t iChallenge[6], const uint8_t iInputKey[16],
+                       const uint8_t iXorAesKey[16], uint8_t oOutputKey[16]);
 
     // Create 6-byte HMAC for frame authentication
     bool createHmac2W(const uint8_t *iFrameData, size_t iDataLen,

@@ -261,18 +261,9 @@ namespace
                                   uint8_t oEncryptedKey[16])
     {
         const uint8_t lKeyInitData[1] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
-        uint8_t lKeystream[16];
-        if (!IoHomeCrypto::crypt2WKey(lKeyInitData, sizeof(lKeyInitData),
-                                      iDeviceChallenge, IOHC_TRANSFER_KEY,
-                                      lKeystream))
-        {
-            return false;
-        }
-
-        for (uint8_t i = 0; i < 16; i++)
-            oEncryptedKey[i] = iGatewayKey[i] ^ lKeystream[i];
-
-        return true;
+        return IoHomeCrypto::crypt2WKeyXor(lKeyInitData, sizeof(lKeyInitData),
+                                           iDeviceChallenge, iGatewayKey,
+                                           IOHC_TRANSFER_KEY, oEncryptedKey);
     }
 
     uint8_t buildGatewayDiscoverAnswerFrame(uint8_t *oBuffer,
@@ -1935,12 +1926,10 @@ void IoHomeController::loop()
                 {
                     uint8_t lLaunchData[1 + sizeof(mPairingChallenge)] = {static_cast<uint8_t>(IoHomeCommand::LaunchKeyTransfer)};
                     memcpy(lLaunchData + 1, mPairingChallenge, sizeof(mPairingChallenge));
-                    uint8_t lKeystream[16];
-                    if (IoHomeCrypto::crypt2WKey(lLaunchData, sizeof(lLaunchData), mPairingChallenge, IOHC_TRANSFER_KEY, lKeystream))
+                    if (IoHomeCrypto::crypt2WKeyXor(lLaunchData, sizeof(lLaunchData),
+                                                    mPairingChallenge, mRxFrame.data,
+                                                    IOHC_TRANSFER_KEY, mPairPulledKey))
                     {
-                        for (uint8_t i = 0; i < 16; i++)
-                            mPairPulledKey[i] = mRxFrame.data[i] ^ lKeystream[i];
-
                         mPairPulledKeyFrame = mRxFrame;
                         mState = ControllerState::PairSendPullKeyChallenge;
                     }
@@ -3372,14 +3361,13 @@ void IoHomeController::processPairSendKeyTransfer()
     mTxFrame.hasHmac = false;
 
     const uint8_t lKeyInitData[1] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
-    uint8_t lKeystream[16];
-    if (!IoHomeCrypto::crypt2WKey(lKeyInitData, sizeof(lKeyInitData), mPairingChallenge, IOHC_TRANSFER_KEY, lKeystream))
+    if (!IoHomeCrypto::crypt2WKeyXor(lKeyInitData, sizeof(lKeyInitData),
+                                     mPairingChallenge, mSystemKey,
+                                     IOHC_TRANSFER_KEY, lEncryptedKey))
     {
         mState = ControllerState::PairFailed;
         return;
     }
-    for (int i = 0; i < 16; i++)
-        lEncryptedKey[i] = mSystemKey[i] ^ lKeystream[i];
 
     // Put encrypted key as frame data
     memcpy(mTxFrame.data, lEncryptedKey, 16);
@@ -4985,13 +4973,11 @@ void IoHomeController::processPassiveFrame()
             lPairNodeId == mPassivePairNodeId)
         {
             const uint8_t lKeyInitData[1] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
-            uint8_t lKeystream[16];
-            if (IoHomeCrypto::crypt2WKey(lKeyInitData, sizeof(lKeyInitData), mPassiveChallenge, IOHC_TRANSFER_KEY, lKeystream))
+            uint8_t lExtractedKey[16];
+            if (IoHomeCrypto::crypt2WKeyXor(lKeyInitData, sizeof(lKeyInitData),
+                                            mPassiveChallenge, mRxFrame.data,
+                                            IOHC_TRANSFER_KEY, lExtractedKey))
             {
-                uint8_t lExtractedKey[16];
-                for (int k = 0; k < 16; k++)
-                    lExtractedKey[k] = mRxFrame.data[k] ^ lKeystream[k];
-
                 mPassiveKeyResult.valid = true;
                 mPassiveKeyResult.nodeId = mPassivePairNodeId;
                 memcpy(mPassiveKeyResult.key, lExtractedKey, sizeof(mPassiveKeyResult.key));

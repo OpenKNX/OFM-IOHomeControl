@@ -146,20 +146,35 @@ namespace IoHomeCrypto
         return (lRet == 0);
     }
 
-    bool crypt2WKey(const uint8_t *iFrameData, size_t iDataLen,
-                    const uint8_t iChallenge[6], const uint8_t iKey[16], uint8_t oOutput[16])
+    bool derive2WKeystream(const uint8_t *iFrameData, size_t iDataLen,
+                           const uint8_t iChallenge[6], const uint8_t iAesKey[16],
+                           uint8_t oKeystream[16])
     {
-        // Construct IV from frame data and challenge
+        if (!iFrameData || !iChallenge || !iAesKey || !oKeystream)
+            return false;
+
+        // Construct IV from frame data and challenge.
         uint8_t lIv[16];
         constructIv2W(iFrameData, iDataLen, iChallenge, lIv);
 
-        // Encrypt IV with the key to get the keystream
-        uint8_t lKeystream[16];
-        if (!aes128Encrypt(lIv, iKey, lKeystream))
+        // Encrypt IV with the selected AES key to get the 2W keystream.
+        return aes128Encrypt(lIv, iAesKey, oKeystream);
+    }
+
+    bool crypt2WKeyXor(const uint8_t *iFrameData, size_t iDataLen,
+                       const uint8_t iChallenge[6], const uint8_t iInputKey[16],
+                       const uint8_t iXorAesKey[16], uint8_t oOutputKey[16])
+    {
+        if (!iInputKey || !oOutputKey)
             return false;
 
-        // Output is provided externally — caller XORs as needed
-        memcpy(oOutput, lKeystream, 16);
+        uint8_t lKeystream[16];
+        if (!derive2WKeystream(iFrameData, iDataLen, iChallenge, iXorAesKey, lKeystream))
+            return false;
+
+        for (uint8_t i = 0; i < 16; i++)
+            oOutputKey[i] = iInputKey[i] ^ lKeystream[i];
+
         return true;
     }
 
