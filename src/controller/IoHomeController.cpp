@@ -38,6 +38,32 @@ namespace
     constexpr bool kIsSX1262Radio = false;
 #endif
 
+    const char *pairing2WModeName(Pairing2WMode iMode)
+    {
+        switch (iMode)
+        {
+        case Pairing2WMode::DiscoveryConfirmation:
+            return "discovery-confirm";
+        case Pairing2WMode::LaunchKeyTransfer:
+            return "launch-key";
+        case Pairing2WMode::PullKey:
+            return "pull-key";
+        case Pairing2WMode::Normal:
+        default:
+            return "normal";
+        }
+    }
+
+    bool isExperimentalPairing2WMode(Pairing2WMode iMode)
+    {
+        return iMode != Pairing2WMode::Normal;
+    }
+
+    bool isNormal2WPairingModeAllowed(Pairing2WMode iMode, bool iExplicitDiagnosticMode)
+    {
+        return iMode == Pairing2WMode::Normal || iExplicitDiagnosticMode;
+    }
+
     bool isTrackedStatusPollCommand(const IoHomeQueueEntry &iCmd)
     {
         return iCmd.active &&
@@ -893,9 +919,37 @@ IoHomecontrolChannel *IoHomeController::oneWayProfileForChannel(IoHomecontrolCha
 
 bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId)
 {
+    return startPairingInternal(iChannelIndex, iKnownNodeId, Pairing2WMode::Normal, false);
+}
+
+bool IoHomeController::startPairingExperimental(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing2WMode iMode)
+{
+    if (!isExperimentalPairing2WMode(iMode))
+    {
+        mLastPairStartStatus = PairStartStatus::Failed;
+        mLastPairStartBlockedState = mState;
+        logInfoP("Pairing: refusing diagnostic 2W pairing with normal mode; use startPairing() for the frozen default path");
+        return false;
+    }
+
+    return startPairingInternal(iChannelIndex, iKnownNodeId, iMode, true);
+}
+
+bool IoHomeController::startPairingInternal(uint8_t iChannelIndex,
+                                            uint32_t iKnownNodeId,
+                                            Pairing2WMode iMode,
+                                            bool iExplicitDiagnosticMode)
+{
     mLastPairStartStatus = PairStartStatus::Ok;
     mLastPairStartBlockedState = mState;
-    mPairing2WMode = Pairing2WMode::Normal;
+
+    if (!isNormal2WPairingModeAllowed(iMode, iExplicitDiagnosticMode))
+    {
+        mLastPairStartStatus = PairStartStatus::Failed;
+        logInfoP("Pairing: refusing non-normal 2W mode %s without explicit diagnostic entry point",
+                 pairing2WModeName(iMode));
+        return false;
+    }
 
     if (mState >= ControllerState::PairSendDiscovery &&
         mState <= ControllerState::PairFailed)
@@ -922,6 +976,8 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
         startReceive();
     }
 
+    mPairing2WMode = Pairing2WMode::Normal;
+    mPairing2WExperimental = false;
     mPairing1WStage = 0;
     mPairing1WBroadcastType = mDefault1WBroadcastType;
     mPairingChannel = iChannelIndex;
@@ -942,6 +998,14 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(iChannelIndex) : nullptr;
     if (lCh && lCh->is1W())
     {
+        if (isExperimentalPairing2WMode(iMode))
+        {
+            mLastPairStartStatus = PairStartStatus::Failed;
+            logInfoP("Pairing: refusing experimental 2W mode %s for 1W channel %u",
+                     pairing2WModeName(iMode), static_cast<unsigned>(iChannelIndex + 1));
+            return false;
+        }
+
         mPairing1WBroadcastType = lCh->getConfigured1WBroadcastType();
         uint32_t lKnownNodeId = iKnownNodeId & 0x00FFFFFF;
         if (lKnownNodeId == 0)
@@ -970,36 +1034,27 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
         return true;
     }
 
+    mPairing2WMode = iMode;
+    mPairing2WExperimental = iExplicitDiagnosticMode && isExperimentalPairing2WMode(iMode);
     mState = ControllerState::PairSendDiscovery;
     if (mPairDiagnosticTraceEnabled)
     {
-        logInfoP("PairDiag: starting 2W pairing ch=%u known=0x%06X", static_cast<unsigned>(iChannelIndex + 1), iKnownNodeId & 0x00FFFFFF);
+        logInfoP("PairDiag: starting 2W pairing ch=%u known=0x%06X mode=%s entry=%s path=%s",
+                 static_cast<unsigned>(iChannelIndex + 1),
+                 iKnownNodeId & 0x00FFFFFF,
+                 pairing2WModeName(mPairing2WMode),
+                 mPairing2WExperimental ? "pair2w-exp" : "normal/ETS",
+                 mPairing2WExperimental ? "experimental" : "0x28->0x29->0x31->0x3C->0x32->0x33/0x2D->optional-0x6F");
         tracePairDiagnosticStateChange();
     }
+    else if (mPairing2WExperimental)
+    {
+        logInfoP("Pairing: explicit diagnostic 2W mode=%s ch=%u known=0x%06X",
+                 pairing2WModeName(mPairing2WMode),
+                 static_cast<unsigned>(iChannelIndex + 1),
+                 iKnownNodeId & 0x00FFFFFF);
+    }
     return true;
-}
-
-bool IoHomeController::startPairingExperimental(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing2WMode iMode)
-{
-    if (iMode == Pairing2WMode::Normal)
-        return startPairing(iChannelIndex, iKnownNodeId);
-
-    IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(iChannelIndex) : nullptr;
-    if (lCh && lCh->is1W())
-    {
-        mLastPairStartStatus = PairStartStatus::Failed;
-        mLastPairStartBlockedState = mState;
-        return false;
-    }
-
-    const bool lOk = startPairing(iChannelIndex, iKnownNodeId);
-    if (lOk)
-    {
-        mPairing2WMode = iMode;
-        logInfoP("Pairing: experimental 2W mode enabled: %u",
-                 static_cast<unsigned>(mPairing2WMode));
-    }
-    return lOk;
 }
 
 bool IoHomeController::startPairingWithType(uint8_t iChannelIndex, uint32_t iKnownNodeId, uint8_t iBroadcastType)
@@ -1912,29 +1967,47 @@ void IoHomeController::loop()
                     mDiscoveredNodeId = mRxFrame.getSrcNodeId();
                     mPairingFreqIdx = mLastResponseFreqIdx;
 
-                    // Default laberning-style path:
+                    // Frozen default laberning-style path:
                     // 0x28 DiscoverRequest -> 0x29/0x2B DiscoverResponse
-                    // -> 0x31 KeyInitTransfer -> 0x3C -> 0x32 -> 0x33.
-                    // Experimental branches are only reachable via explicit
-                    // diagnostic pairing modes.
-                    switch (mPairing2WMode)
+                    // -> 0x31 KeyInitTransfer -> 0x3C -> 0x32 -> 0x33/0x2D
+                    // -> optional 0x6F SetConfig1. Experimental branches are
+                    // quarantined behind startPairingExperimental(), currently
+                    // exposed only by the explicit `pair2w-exp` diagnostic command.
+                    if (!mPairing2WExperimental)
                     {
-                    case Pairing2WMode::DiscoveryConfirmation:
-                        mState = ControllerState::PairSendDiscoveryConfirmation;
-                        break;
-
-                    case Pairing2WMode::LaunchKeyTransfer:
-                        mState = ControllerState::PairSendLaunchKeyTransfer;
-                        break;
-
-                    case Pairing2WMode::PullKey:
-                        mState = ControllerState::PairSendPullKeyChallenge;
-                        break;
-
-                    case Pairing2WMode::Normal:
-                    default:
+                        if (mPairing2WMode != Pairing2WMode::Normal)
+                        {
+                            logInfoP("Pairing: refusing non-normal 2W mode %s on normal/ETS path; continuing with frozen normal sequence",
+                                     pairing2WModeName(mPairing2WMode));
+                            mPairing2WMode = Pairing2WMode::Normal;
+                        }
                         mState = ControllerState::PairSendKeyInit;
-                        break;
+                    }
+                    else
+                    {
+                        switch (mPairing2WMode)
+                        {
+                        case Pairing2WMode::DiscoveryConfirmation:
+                            mState = ControllerState::PairSendDiscoveryConfirmation;
+                            break;
+
+                        case Pairing2WMode::LaunchKeyTransfer:
+                            mState = ControllerState::PairSendLaunchKeyTransfer;
+                            break;
+
+                        case Pairing2WMode::PullKey:
+                            mState = ControllerState::PairSendPullKeyChallenge;
+                            break;
+
+                        case Pairing2WMode::Normal:
+                        default:
+                            logInfoP("Pairing: invalid diagnostic 2W mode %s; falling back to frozen normal sequence",
+                                     pairing2WModeName(mPairing2WMode));
+                            mPairing2WExperimental = false;
+                            mPairing2WMode = Pairing2WMode::Normal;
+                            mState = ControllerState::PairSendKeyInit;
+                            break;
+                        }
                     }
                 }
             }

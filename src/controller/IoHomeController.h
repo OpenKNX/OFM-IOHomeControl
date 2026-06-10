@@ -485,6 +485,7 @@ private:
   uint8_t mPairing1WBroadcastType = 2;
   uint8_t mDefault1WBroadcastType = 2;
   Pairing2WMode mPairing2WMode = Pairing2WMode::Normal;
+  bool mPairing2WExperimental = false; // true only when entered via explicit pair2w-exp diagnostic command
 
   // Receive-side authentication state
   IoHomeFrame mPendingAuthFrame; // saved unsolicited frame awaiting verification
@@ -572,6 +573,10 @@ private:
   void processTx1WRepeat();
   void processWaitResponse();
   void processResponse();
+  bool startPairingInternal(uint8_t iChannelIndex,
+                            uint32_t iKnownNodeId,
+                            Pairing2WMode iMode,
+                            bool iExplicitDiagnosticMode);
 
   void processPairSendDiscovery();
   void processPairWaitDiscoveryResponse();
