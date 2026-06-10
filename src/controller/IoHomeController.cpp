@@ -3289,9 +3289,13 @@ bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
 
 void IoHomeController::processPairSendKeyInit()
 {
-    // Send KeyInitTransfer (0x31) to discovered device to begin key exchange
+    // Send KeyInitTransfer (0x31) to discovered device to begin key exchange.
+    // Reference-compatible 2W pairing uses an initial START frame with the
+    // LOW_POWER bit set and a long preamble so low-power actuators wake up
+    // before answering with ChallengeRequest (0x3C).
     mTxFrame.init();
     mTxFrame.setStart2W();
+    mTxFrame.setLowPower(true);
     mTxFrame.setSrcNode(mOwnNodeId);
     mTxFrame.setDestNode(mDiscoveredNodeId);
     mTxFrame.commandId = IoHomeCommand::KeyInitTransfer;
@@ -3355,9 +3359,13 @@ void IoHomeController::processPairSendKeyTransfer()
     uint8_t lEncryptedKey[16];
 
     mTxFrame.init();
-    mTxFrame.ctrlByte0 = 0; // continuation frame: no START, no END (per nicolas5000)
+    // KeyTransfer (0x32) is the continuation frame after 0x31. It must not
+    // inherit the long-preamble/LOW_POWER TX conditions from KeyInitTransfer.
+    // Keep START/END clear and LOW_POWER clear, then transmit with an explicit
+    // short preamble below. This matches the normal 2W exchange path and avoids
+    // actuators ignoring the encrypted key transfer.
+    mTxFrame.ctrlByte0 = 0;
     mTxFrame.ctrlByte1 = 0x00;
-    mTxFrame.setLowPower(true);
     mTxFrame.setSrcNode(mOwnNodeId);
     mTxFrame.setDestNode(mDiscoveredNodeId);
     mTxFrame.commandId = IoHomeCommand::KeyTransfer;
@@ -3383,7 +3391,7 @@ void IoHomeController::processPairSendKeyTransfer()
     mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3408,9 +3416,11 @@ void IoHomeController::processPairSendKeyTransferAuthResponse()
 {
     IoHomeFrame lFrame;
     lFrame.init();
+    // 2W ChallengeResponse (0x3D) is an authenticated continuation response.
+    // Keep LOW_POWER clear and use the short-preamble helper below; this avoids
+    // changing normal 2W auth TX timing and does not affect the separate 1W path.
     lFrame.ctrlByte0 = 0;
     lFrame.ctrlByte1 = 0x00;
-    lFrame.setLowPower(true);
     lFrame.setSrcNode(mOwnNodeId);
     lFrame.setDestNode(mDiscoveredNodeId);
     lFrame.commandId = IoHomeCommand::ChallengeResponse;
