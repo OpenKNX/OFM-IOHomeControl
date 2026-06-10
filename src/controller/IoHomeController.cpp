@@ -422,6 +422,24 @@ namespace
         lFrame.dataLen = 3;
         return lFrame.serialize(oBuffer, iBufferLen);
     }
+
+    bool buildSetConfig1(IoHomeFrame &oFrame, uint32_t iOwnNodeId, uint32_t iDestNodeId)
+    {
+        static constexpr uint8_t kSetConfig1Payload[] = {0xE0, 0x10, 0x0A, 0x08, 0x00};
+        static_assert(sizeof(kSetConfig1Payload) <= IOHC_FRAME_MAX_DATA,
+                      "SetConfig1 payload exceeds IoHomeFrame data capacity");
+
+        oFrame.init();
+        oFrame.setStart2W();
+        oFrame.setLowPower(true);
+        oFrame.setSrcNode(iOwnNodeId);
+        oFrame.setDestNode(iDestNodeId);
+        oFrame.commandId = IoHomeCommand::SetConfig1;
+        memcpy(oFrame.data, kSetConfig1Payload, sizeof(kSetConfig1Payload));
+        oFrame.dataLen = sizeof(kSetConfig1Payload);
+        oFrame.hasHmac = false;
+        return true;
+    }
 }
 
 IoHomeController::IoHomeController()
@@ -3631,19 +3649,12 @@ void IoHomeController::processPairWaitKeyTransferConfirmation()
 
 void IoHomeController::processPairSendSetConfig1()
 {
-    mPairSetConfigRequest.init();
-    mPairSetConfigRequest.setStart2W();
-    mPairSetConfigRequest.setLowPower(true);
-    mPairSetConfigRequest.setSrcNode(mOwnNodeId);
-    mPairSetConfigRequest.setDestNode(mDiscoveredNodeId);
-    mPairSetConfigRequest.commandId = IoHomeCommand::SetConfig1;
-    mPairSetConfigRequest.data[0] = 0xE0;
-    mPairSetConfigRequest.data[1] = 0x10;
-    mPairSetConfigRequest.data[2] = 0x0A;
-    mPairSetConfigRequest.data[3] = 0x08;
-    mPairSetConfigRequest.data[4] = 0x00;
-    mPairSetConfigRequest.dataLen = 5;
-    mPairSetConfigRequest.hasHmac = false;
+    if (!buildSetConfig1(mPairSetConfigRequest, mOwnNodeId, mDiscoveredNodeId))
+    {
+        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (build error)", mDiscoveredNodeId);
+        mState = ControllerState::PairComplete;
+        return;
+    }
 
     const uint32_t lSetConfigFreq = IOHC_FREQ_2;
     const RadioError lPrepErr = configureTxRadio(preambleForFrame(mPairSetConfigRequest, TxContext::InitialStartFrame), &lSetConfigFreq);
@@ -3651,7 +3662,7 @@ void IoHomeController::processPairSendSetConfig1()
         return;
     if (lPrepErr != RadioError::None)
     {
-        logDebugP("Pairing: failed to send SetConfig1 to 0x%06X", mDiscoveredNodeId);
+        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (radio prep error)", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
         return;
     }
@@ -3671,13 +3682,13 @@ void IoHomeController::processPairSendSetConfig1()
         }
         else
         {
-            logDebugP("Pairing: failed to send SetConfig1 to 0x%06X", mDiscoveredNodeId);
+            logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (TX error)", mDiscoveredNodeId);
             mState = ControllerState::PairComplete;
         }
     }
     else
     {
-        logDebugP("Pairing: failed to send SetConfig1 to 0x%06X", mDiscoveredNodeId);
+        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (serialize error)", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
     }
 }
@@ -3689,13 +3700,14 @@ void IoHomeController::processPairWaitSetConfig1Response()
         return;
     if (lRxErr != RadioError::None)
     {
+        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (RX setup error)", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
         return;
     }
 
     if (millis() - mStateTimer > 2000)
     {
-        logDebugP("Pairing: SetConfig1 timed out for 0x%06X", mDiscoveredNodeId);
+        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (timeout)", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
     }
 }
@@ -3711,15 +3723,15 @@ void IoHomeController::interpretSetConfig1Result(bool iFinalResponse)
     }
     else if (mRxFrame.commandId == IoHomeCommand::ErrorResponse)
     {
-        logInfoP(iFinalResponse ? "Pairing: device 0x%06X rejected automatic status feedback"
-                                : "Pairing: device 0x%06X does not support automatic status feedback",
+        logInfoP(iFinalResponse ? "Pairing: paired, SetConfig1 failed for 0x%06X (device rejected automatic status feedback)"
+                                : "Pairing: paired, SetConfig1 failed for 0x%06X (device does not support automatic status feedback)",
                  mDiscoveredNodeId);
     }
     else
     {
-        logDebugP(iFinalResponse ? "Pairing: unexpected final SetConfig1 response 0x%02X from 0x%06X"
-                                 : "Pairing: unexpected SetConfig1 response 0x%02X from 0x%06X",
-                  static_cast<uint8_t>(mRxFrame.commandId), mDiscoveredNodeId);
+        logInfoP(iFinalResponse ? "Pairing: paired, SetConfig1 failed for 0x%06X (unexpected final response 0x%02X)"
+                                : "Pairing: paired, SetConfig1 failed for 0x%06X (unexpected response 0x%02X)",
+                 mDiscoveredNodeId, static_cast<uint8_t>(mRxFrame.commandId));
     }
 
     mState = ControllerState::PairComplete;
@@ -3743,7 +3755,7 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
         !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
                                     mPairSetConfigChallenge, mSystemKey, lFrame.data))
     {
-        logDebugP("Pairing: failed to build SetConfig1 challenge response for 0x%06X", mDiscoveredNodeId);
+        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (auth build error)", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
         return;
     }
@@ -3757,7 +3769,7 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
         return;
     if (lPrepErr != RadioError::None)
     {
-        logDebugP("Pairing: failed to send SetConfig1 challenge response to 0x%06X", mDiscoveredNodeId);
+        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (auth radio prep error)", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
         return;
     }
@@ -3777,13 +3789,13 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
         }
         else
         {
-            logDebugP("Pairing: failed to send SetConfig1 challenge response to 0x%06X", mDiscoveredNodeId);
+            logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (auth TX error)", mDiscoveredNodeId);
             mState = ControllerState::PairComplete;
         }
     }
     else
     {
-        logDebugP("Pairing: failed to send SetConfig1 challenge response to 0x%06X", mDiscoveredNodeId);
+        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (auth serialize error)", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
     }
 }
@@ -3795,13 +3807,14 @@ void IoHomeController::processPairWaitSetConfig1FinalResponse()
         return;
     if (lRxErr != RadioError::None)
     {
+        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (final RX setup error)", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
         return;
     }
 
     if (millis() - mStateTimer > 2000)
     {
-        logDebugP("Pairing: final SetConfig1 response timed out for 0x%06X", mDiscoveredNodeId);
+        logInfoP("Pairing: paired, SetConfig1 failed for 0x%06X (final timeout)", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
     }
 }
