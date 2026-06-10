@@ -187,10 +187,9 @@ RadioError RadioSX1276::configure()
     writeRegister(REG_PREAMBLEMSB, 0x00);
     writeRegister(REG_PREAMBLELSB, 0x08);
 
-    // Sync word: 0x55 0xFF 0x33 (3-byte on-air sync, per nicolas5000)
-    // With IoHomeOn=1, SyncSize = number of sync bytes (not SyncSize+1)
-    // So SyncSize=2 means 2 bytes (0xFF 0x33); the 0x55 is the last preamble byte
-    writeRegister(REG_SYNCCONFIG, 0x52); // AutoRestart=WaitPLL_Off, Sync on, SyncSize=2
+    // SyncSize=2 matches 2 sync bytes: 0x55 0xFF.
+    // 0x33 is kept as the 3rd on-air/power-frame byte as in the working SX1276 reference.
+    writeRegister(REG_SYNCCONFIG, (readRegister(REG_SYNCCONFIG) & 0xF8) | 0x02);
     writeRegister(REG_SYNCVALUE1, IOHC_SYNC_WORD[0]);
     writeRegister(REG_SYNCVALUE2, IOHC_SYNC_WORD[1]);
     writeRegister(REG_SYNCVALUE3, IOHC_SYNC_WORD[2]);
@@ -501,8 +500,10 @@ void RadioSX1276::configureStandardMode()
 {
     setMode(RF_OPMODE_STANDBY);
 
-    // Restore 3-byte io-homecontrol sync word
-    writeRegister(REG_SYNCCONFIG, 0x52); // AutoRestart=WaitPLL_Off, Sync on, 3 bytes
+    // Restore io-homecontrol sync semantics:
+    // SyncSize=2 matches 2 sync bytes: 0x55 0xFF.
+    // 0x33 is kept as the 3rd on-air/power-frame byte as in the working SX1276 reference.
+    writeRegister(REG_SYNCCONFIG, (readRegister(REG_SYNCCONFIG) & 0xF8) | 0x02);
     writeRegister(REG_SYNCVALUE1, IOHC_SYNC_WORD[0]);
     writeRegister(REG_SYNCVALUE2, IOHC_SYNC_WORD[1]);
     writeRegister(REG_SYNCVALUE3, IOHC_SYNC_WORD[2]);
