@@ -104,17 +104,6 @@ namespace
         }
     }
 
-    size_t buildHmacInput(const IoHomeFrame &iFrame, uint8_t *oBuffer, size_t iBufferLen)
-    {
-        const size_t lLen = static_cast<size_t>(iFrame.dataLen) + 1;
-        if (iBufferLen < lLen)
-            return 0;
-
-        oBuffer[0] = static_cast<uint8_t>(iFrame.commandId);
-        if (iFrame.dataLen > 0)
-            memcpy(oBuffer + 1, iFrame.data, iFrame.dataLen);
-        return lLen;
-    }
 
     bool rawPositionToPercent(uint16_t iRaw, float &oPercent)
     {
@@ -346,12 +335,21 @@ namespace
         if (iMemCmd == 0 || iMemData == nullptr || iMemDataLen == 0)
             return 0;
 
+        if (iMemDataLen > IOHC_FRAME_MAX_DATA)
+            return 0;
+
+        IoHomeFrame lAuthenticatedFrame;
+        lAuthenticatedFrame.init();
+        lAuthenticatedFrame.commandId = static_cast<IoHomeCommand>(iMemCmd);
+        memcpy(lAuthenticatedFrame.data, iMemData, iMemDataLen);
+        lAuthenticatedFrame.dataLen = iMemDataLen;
+
         uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA] = {};
-        lHmacInput[0] = iMemCmd;
-        memcpy(lHmacInput + 1, iMemData, iMemDataLen);
+        const size_t lHmacInputLen = lAuthenticatedFrame.buildAuthTranscript(lHmacInput, sizeof(lHmacInput));
 
         uint8_t lHmac[IOHC_HMAC_SIZE];
-        if (!IoHomeCrypto::createHmac2W(lHmacInput, 1 + iMemDataLen,
+        if (lHmacInputLen == 0 ||
+            !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
                                         iPeerChallenge, iGatewayKey, lHmac))
         {
             return 0;
@@ -1962,10 +1960,10 @@ void IoHomeController::loop()
                 {
                     uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
                     uint8_t lExpected[IOHC_HMAC_SIZE];
-                    lHmacInput[0] = static_cast<uint8_t>(mPairPulledKeyFrame.commandId);
-                    memcpy(lHmacInput + 1, mPairPulledKeyFrame.data, mPairPulledKeyFrame.dataLen);
+                    const size_t lHmacInputLen = mPairPulledKeyFrame.buildAuthTranscript(lHmacInput, sizeof(lHmacInput));
 
-                    if (IoHomeCrypto::createHmac2W(lHmacInput, 1 + mPairPulledKeyFrame.dataLen,
+                    if (lHmacInputLen > 0 &&
+                        IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
                                                    mPairPullAuthChallenge, mPairPulledKey, lExpected))
                     {
                         uint8_t lDiff = 0;
@@ -2057,7 +2055,7 @@ void IoHomeController::loop()
                         if (lCh && mRxFrame.dataLen == IOHC_HMAC_SIZE)
                         {
                             uint8_t lFrameData[1 + IOHC_FRAME_MAX_DATA] = {0};
-                            const size_t lFrameDataLen = buildHmacInput(mPendingAuthFrame, lFrameData, sizeof(lFrameData));
+                            const size_t lFrameDataLen = mPendingAuthFrame.buildAuthTranscript(lFrameData, sizeof(lFrameData));
 
                             if (lFrameDataLen > 0 &&
                                 IoHomeCrypto::verifyHmac(lFrameData,
@@ -2509,7 +2507,7 @@ void IoHomeController::processResponse()
 
         // Build HMAC over {original_cmd_id, original_data...} with challenge and key
         uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
-        const size_t lHmacInputLen = buildHmacInput(mTxFrame, lHmacInput, sizeof(lHmacInput));
+        const size_t lHmacInputLen = mTxFrame.buildAuthTranscript(lHmacInput, sizeof(lHmacInput));
 
         if (lHmacInputLen == 0 ||
             !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
@@ -3426,7 +3424,7 @@ void IoHomeController::processPairSendKeyTransferAuthResponse()
     lFrame.commandId = IoHomeCommand::ChallengeResponse;
 
     uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
-    const size_t lHmacInputLen = buildHmacInput(mTxFrame, lHmacInput, sizeof(lHmacInput));
+    const size_t lHmacInputLen = mTxFrame.buildAuthTranscript(lHmacInput, sizeof(lHmacInput));
     if (lHmacInputLen == 0 ||
         !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
                                     mPairKeyTransferChallenge, mSystemKey, lFrame.data))
@@ -3588,7 +3586,7 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
     lFrame.commandId = IoHomeCommand::ChallengeResponse;
 
     uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
-    const size_t lHmacInputLen = buildHmacInput(mPairSetConfigRequest, lHmacInput, sizeof(lHmacInput));
+    const size_t lHmacInputLen = mPairSetConfigRequest.buildAuthTranscript(lHmacInput, sizeof(lHmacInput));
 
     if (lHmacInputLen == 0 ||
         !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
@@ -4600,7 +4598,7 @@ void IoHomeController::dispatchRxFrame()
                 }
 
                 uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA] = {0};
-                const size_t lHmacInputLen = buildHmacInput(mRxFrame, lHmacInput, sizeof(lHmacInput));
+                const size_t lHmacInputLen = mRxFrame.buildAuthTranscript(lHmacInput, sizeof(lHmacInput));
                 if (lHmacInputLen == 0 ||
                     !IoHomeCrypto::verifyHmac(lHmacInput, lHmacInputLen,
                                               mRxFrame.hmac, lChallenge, lCh->getEncryptionKey()))

@@ -114,12 +114,31 @@ const std::string IoHomecontrolChannel::logPrefix()
 
 void IoHomecontrolChannel::setup()
 {
+    const uint8_t lProtocolMode = static_cast<uint8_t>(ParamIOHC_IOHCProtocolMode);
+    const uint32_t lOneWayTargetNodeId = static_cast<uint32_t>(ParamIOHC_IOHCOneWayTargetNodeId) & 0x00FFFFFF;
+    const uint8_t lOneWayBroadcastType = static_cast<uint8_t>(ParamIOHC_IOHCOneWayBroadcastType);
+    const uint8_t lOneWayProfileChannel = static_cast<uint8_t>(ParamIOHC_IOHCOneWayProfileChannel);
+    const uint8_t lOneWayManufacturer = static_cast<uint8_t>(ParamIOHC_IOHCOneWayManufacturer);
+
+    logInfoP("ETS config: active=%u protocol=%u (%s) oneWayTarget=0x%06X oneWayType=%u oneWayProfile=%u oneWayMfg=0x%02X",
+             ParamIOHC_IOHCActive ? 1U : 0U,
+             static_cast<unsigned>(lProtocolMode),
+             lProtocolMode == 1 ? "1W" : "2W",
+             static_cast<unsigned long>(lOneWayTargetNodeId),
+             static_cast<unsigned>(lOneWayBroadcastType),
+             static_cast<unsigned>(lOneWayProfileChannel),
+             static_cast<unsigned>(lOneWayManufacturer));
+
     // Check if channel is active in ETS
     if (!ParamIOHC_IOHCActive)
     {
-        logDebugP("Channel disabled in ETS");
+        logInfoP("Channel disabled in ETS - protocol and 1W settings will not be applied");
         return;
     }
+
+    if (lProtocolMode != 0 && lProtocolMode != 1)
+        logInfoP("Unexpected ETS protocol mode %u - treating as 2W", static_cast<unsigned>(lProtocolMode));
+
     mStatusPollTimer = 0;
     mNextStatusPollMs = 0;
     mPollTrackingDeadlineMs = 0;
@@ -131,16 +150,26 @@ void IoHomecontrolChannel::setup()
     loadSceneConfiguration();
 
     // Apply protocol mode from ETS (Feature 4: 1W/2W per channel)
-    setIs1W(ParamIOHC_IOHCProtocolMode == 1);
-    setConfigured1WTargetNodeId(static_cast<uint32_t>(ParamIOHC_IOHCOneWayTargetNodeId));
+    setIs1W(lProtocolMode == 1);
+    setConfigured1WTargetNodeId(lOneWayTargetNodeId);
     setConfigured1WBroadcastType(resolveOneWayBroadcastType(
-        static_cast<uint8_t>(ParamIOHC_IOHCOneWayBroadcastType),
+        lOneWayBroadcastType,
         static_cast<uint8_t>(ParamIOHC_IOHCDeviceType)));
-    const uint8_t lProfileChannel = static_cast<uint8_t>(ParamIOHC_IOHCOneWayProfileChannel);
+    const uint8_t lProfileChannel = lOneWayProfileChannel;
     setConfigured1WProfileChannel(lProfileChannel == 0 ? 0xFF : static_cast<uint8_t>(lProfileChannel - 1));
-    mConfigured1WManufacturer = static_cast<uint8_t>(ParamIOHC_IOHCOneWayManufacturer);
+    mConfigured1WManufacturer = lOneWayManufacturer;
     if (mConfigured1WManufacturer != 0)
         setOneWayControllerManufacturer(mConfigured1WManufacturer);
+
+    if (mIs1W && mConfigured1WTargetNodeId == 0)
+        logInfoP("Channel is configured as 1W but has no ETS 1W target node; pairing must provide a target node explicitly");
+
+    logInfoP("Applied protocol config: %s target=0x%06X broadcastType=%u profile=%s manufacturer=0x%02X",
+             mIs1W ? "1W" : "2W",
+             static_cast<unsigned long>(mConfigured1WTargetNodeId),
+             static_cast<unsigned>(mConfigured1WBroadcastType),
+             mConfigured1WProfileChannel == 0xFF ? "own" : "linked",
+             static_cast<unsigned>(mOneWayControllerManufacturer));
 
     logDebugP("Setup (type=%d, poll=%ds, open=%.1fs, close=%.1fs, invert=%d, powerOn=%d, scenes=%d, 1w=%d, 1wTarget=%06X, 1wType=%u, 1wProfile=%u)",
               ParamIOHC_IOHCDeviceType, ParamIOHC_IOHCPollInterval,

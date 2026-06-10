@@ -53,7 +53,22 @@ public:
   void onPassiveKeyCaptured(const IoHomeController::PassiveKeyResult &iResult);
 
 private:
+  struct FlashChannelState
+  {
+    bool valid = false;
+    bool paired = false;
+    bool is1W = false;
+    bool lowPower2W = true;
+    uint32_t nodeId = 0;
+    uint8_t key[16] = {};
+    uint16_t sequence1W = 0;
+    uint32_t oneWayControllerNodeId = 0;
+    uint8_t oneWayControllerKey[16] = {};
+    uint8_t oneWayControllerManufacturer = 2;
+  };
+
   IoHomecontrolChannel *mChannels[IOHC_ChannelCount] = {};
+  FlashChannelState mPendingFlashChannels[IOHC_ChannelCount] = {};
   uint8_t mNumChannels = 0;
   IoHomeController mController;
   IoHomeRemoteMap mRemoteMap;
@@ -120,6 +135,9 @@ private:
   void initOneWayControllerProfiles();
   void consolidateOneWayProfileSequences();
   void applyOneWayControllerConfiguration();
+  uint8_t configuredChannelCount() const;
+  void restoreChannelFlashState(uint8_t iIndex, const FlashChannelState &iState);
+  void applyPendingFlashChannelState();
   uint8_t oneWayProfileIndex(IoHomecontrolChannel *iProfile) const;
   bool oneWayProfileUsedByPairedChannel(IoHomecontrolChannel *iProfile) const;
   uint8_t countPairedChannels() const;

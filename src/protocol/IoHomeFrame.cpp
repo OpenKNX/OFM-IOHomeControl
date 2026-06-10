@@ -91,6 +91,18 @@ uint8_t IoHomeFrame::totalLength() const
     return lLen;
 }
 
+size_t IoHomeFrame::buildAuthTranscript(uint8_t *oBuffer, size_t iBufferLen) const
+{
+    const size_t lLen = static_cast<size_t>(dataLen) + 1;
+    if (oBuffer == nullptr || iBufferLen < lLen)
+        return 0;
+
+    oBuffer[0] = static_cast<uint8_t>(commandId);
+    if (dataLen > 0)
+        memcpy(oBuffer + 1, data, dataLen);
+    return lLen;
+}
+
 uint8_t IoHomeFrame::serialize(uint8_t *oBuffer, uint8_t iMaxLen) const
 {
     // io-homecontrol CTRL0 length field is awkward in 1W mode:

@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <stddef.h>
 #include "IoHomeCommands.h"
 #include "IoHomeCrypto.h"
 
@@ -76,6 +77,11 @@ struct IoHomeFrame
     // Serialize frame to byte buffer for TX
     // Returns number of bytes written, or 0 on error
     uint8_t serialize(uint8_t *oBuffer, uint8_t iMaxLen) const;
+
+    // Build canonical 2W authentication transcript for ChallengeResponse (0x3D).
+    // The transcript is exactly: original command id + original command data.
+    // It intentionally excludes CTRL bytes, addresses, CRC, HMAC and the 0x3D wrapper.
+    size_t buildAuthTranscript(uint8_t *oBuffer, size_t iBufferLen) const;
 
     // Deserialize an exact protocol frame from a received byte buffer.
     // Strict mode: no CRC bytes and no extra transport bytes are accepted.
