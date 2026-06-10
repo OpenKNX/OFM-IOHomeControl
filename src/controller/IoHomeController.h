@@ -366,6 +366,29 @@ public:
   // Get current state
   ControllerState state() const;
 
+  // Pure 2W exchange classification helpers. These intentionally only inspect
+  // the original request and the candidate response; they do not touch radio
+  // state, timers, retries, or channel state. Unit tests can call these directly.
+  enum class FirstResponseDisposition : uint8_t
+  {
+    Ignore,
+    DirectComplete,
+    NeedAuth
+  };
+
+  enum class FinalResponseDisposition : uint8_t
+  {
+    Ignore,
+    Accept
+  };
+
+  static bool frameMatchesExchangeEndpoints(const IoHomeFrame &iRequest,
+                                            const IoHomeFrame &iCandidate);
+  static FirstResponseDisposition classifyFirstResponse(const IoHomeFrame &iRequest,
+                                                        const IoHomeFrame &iCandidate);
+  static FinalResponseDisposition classifyFinalResponse(const IoHomeFrame &iRequest,
+                                                        const IoHomeFrame &iCandidate);
+
   // Radio RSSI of last received packet
   int16_t lastRssi() const;
 

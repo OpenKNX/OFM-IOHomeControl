@@ -544,6 +544,36 @@ const Radio &IoHomeController::radio() const
     return mRadio;
 }
 
+bool IoHomeController::frameMatchesExchangeEndpoints(const IoHomeFrame &iRequest,
+                                                     const IoHomeFrame &iCandidate)
+{
+    return iCandidate.getSrcNodeId() == iRequest.getDestNodeId() &&
+           iCandidate.getDestNodeId() == iRequest.getSrcNodeId();
+}
+
+IoHomeController::FirstResponseDisposition
+IoHomeController::classifyFirstResponse(const IoHomeFrame &iRequest,
+                                        const IoHomeFrame &iCandidate)
+{
+    if (!frameMatchesExchangeEndpoints(iRequest, iCandidate))
+        return FirstResponseDisposition::Ignore;
+
+    if (iCandidate.commandId == IoHomeCommand::ChallengeRequest)
+        return FirstResponseDisposition::NeedAuth;
+
+    return FirstResponseDisposition::DirectComplete;
+}
+
+IoHomeController::FinalResponseDisposition
+IoHomeController::classifyFinalResponse(const IoHomeFrame &iRequest,
+                                        const IoHomeFrame &iCandidate)
+{
+    if (!frameMatchesExchangeEndpoints(iRequest, iCandidate))
+        return FinalResponseDisposition::Ignore;
+
+    return FinalResponseDisposition::Accept;
+}
+
 RadioError IoHomeController::startReceive()
 {
     return mRadio.startReceive();
@@ -2474,90 +2504,147 @@ void IoHomeController::processWaitResponse()
 
 void IoHomeController::processResponse()
 {
-    // Check for challenge-response authentication (0x3C) for authenticated 2W commands
-    if (mRxFrame.commandId == IoHomeCommand::ChallengeRequest &&
-        mCurrentCmd.active && !mAuthResponseSent &&
-        mRxFrame.dataLen >= 6)
-    {
-        // Device challenges our authenticated command — build and send ChallengeResponse (0x3D)
-        // HMAC input: {original command ID} + {original command data}
-        // Challenge: first 6 bytes of the 0x3C payload
-        // Key: channel encryption key (from queue entry)
-        uint8_t lChallenge[6];
-        memcpy(lChallenge, mRxFrame.data, 6);
+    auto continueWaitingForMatchingResponse = [this](const char *iReason) {
+        logDebugP("Ignoring non-matching exchange response (%s): cmd=0x%02X src=0x%06X dst=0x%06X expected src=0x%06X dst=0x%06X",
+                  iReason,
+                  static_cast<uint8_t>(mRxFrame.commandId),
+                  static_cast<unsigned long>(mRxFrame.getSrcNodeId()),
+                  static_cast<unsigned long>(mRxFrame.getDestNodeId()),
+                  static_cast<unsigned long>(mTxFrame.getDestNodeId()),
+                  static_cast<unsigned long>(mTxFrame.getSrcNodeId()));
+        mState = ControllerState::WaitResponse;
+        startReceive();
+    };
 
-        IoHomeFrame lFrame;
-        lFrame.init();
-        lFrame.ctrlByte0 = 0; // continuation frame (per nicolas5000)
-        lFrame.ctrlByte1 = 0x00;
-        lFrame.setLowPower(resolveLowPower2W(mCurrentCmd.destNodeId));
-        lFrame.setSrcNode(mOwnNodeId);
-        lFrame.setDestNode(mCurrentCmd.destNodeId);
-        lFrame.commandId = IoHomeCommand::ChallengeResponse;
-
-        // Build HMAC over {original_cmd_id, original_data...} with challenge and key
-        uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
-        const size_t lHmacInputLen = mTxFrame.buildAuthTranscript(lHmacInput, sizeof(lHmacInput));
-
-        if (lHmacInputLen == 0 ||
-            !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
-                                        lChallenge, mCurrentCmd.encKey, lFrame.data))
-        {
-            const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
-            mCurrentCmd.active = false;
+    auto completeCurrentExchange = [this]() {
+        dispatchRxFrame();
+        mCurrentCmd.active = false;
+        mWaitingFinalResponse = false;
+        mSawChallenge = false;
+        mAuthResponseSent = false;
+        mRetryAtMs = 0;
+        mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
+        if (mState == ControllerState::ProcessResponse)
             mState = ControllerState::Idle;
-            notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
+    };
+
+    if (!mCurrentCmd.active)
+    {
+        dispatchRxFrame();
+        if (mState == ControllerState::ProcessResponse)
+            mState = ControllerState::Idle;
+        return;
+    }
+
+    if (mWaitingFinalResponse)
+    {
+        if (classifyFinalResponse(mTxFrame, mRxFrame) == FinalResponseDisposition::Ignore)
+        {
+            continueWaitingForMatchingResponse("final");
             return;
         }
 
-        lFrame.dataLen = IOHC_HMAC_SIZE;
-        lFrame.hasHmac = false;
+        completeCurrentExchange();
+        return;
+    }
 
-        uint8_t lLen = lFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
-        if (lLen > 0)
+    const FirstResponseDisposition lFirstDisposition = classifyFirstResponse(mTxFrame, mRxFrame);
+    if (lFirstDisposition == FirstResponseDisposition::Ignore)
+    {
+        continueWaitingForMatchingResponse("first");
+        return;
+    }
+
+    if (lFirstDisposition == FirstResponseDisposition::DirectComplete)
+    {
+        completeCurrentExchange();
+        return;
+    }
+
+    // NeedAuth: challenge-response authentication (0x3C) for authenticated 2W commands.
+    if (mAuthResponseSent || mRxFrame.dataLen < 6)
+    {
+        continueWaitingForMatchingResponse("invalid-auth-challenge");
+        return;
+    }
+
+    // Device challenges our authenticated command — build and send ChallengeResponse (0x3D).
+    // HMAC input: {original command ID} + {original command data}
+    // Challenge: first 6 bytes of the 0x3C payload
+    // Key: channel encryption key (from queue entry)
+    uint8_t lChallenge[6];
+    memcpy(lChallenge, mRxFrame.data, 6);
+
+    IoHomeFrame lFrame;
+    lFrame.init();
+    lFrame.ctrlByte0 = 0; // continuation frame (per reference)
+    lFrame.ctrlByte1 = 0x00;
+    lFrame.setLowPower(resolveLowPower2W(mCurrentCmd.destNodeId));
+    lFrame.setSrcNode(mOwnNodeId);
+    lFrame.setDestNode(mCurrentCmd.destNodeId);
+    lFrame.commandId = IoHomeCommand::ChallengeResponse;
+
+    // Build HMAC over {original_cmd_id, original_data...} with challenge and key.
+    uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
+    const size_t lHmacInputLen = mTxFrame.buildAuthTranscript(lHmacInput, sizeof(lHmacInput));
+
+    if (lHmacInputLen == 0 ||
+        !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
+                                    lChallenge, mCurrentCmd.encKey, lFrame.data))
+    {
+        const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
+        mCurrentCmd.active = false;
+        mWaitingFinalResponse = false;
+        mSawChallenge = false;
+        mAuthResponseSent = false;
+        mState = ControllerState::Idle;
+        notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
+        return;
+    }
+
+    lFrame.dataLen = IOHC_HMAC_SIZE;
+    lFrame.hasHmac = false;
+
+    uint8_t lLen = lFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
+    if (lLen > 0)
+    {
+        const RadioError lErr = startTransmitWithPreamble(mTxBuffer, lLen,
+                                                          preambleForFrame(lFrame, TxContext::AuthResponse));
+        if (lErr == RadioError::None)
         {
-            const RadioError lErr = startTransmitWithPreamble(mTxBuffer, lLen,
-                                                              preambleForFrame(lFrame, TxContext::AuthResponse));
-            if (lErr == RadioError::None)
-            {
-                mAuthResponseSent = true;
-                mWaitingFinalResponse = true;
-                mSawChallenge = true;
-                mResponseTimeoutMs = IOHC_RX_FINAL_TIMEOUT_MS;
-                mRetryAtMs = 0;
-                mStateTimer = millis();
-                mState = ControllerState::TxInProgress; // will transition to WaitResponse when TX done
-            }
-            else if (lErr == RadioError::Busy)
-            {
-                return;
-            }
-            else
-            {
-                const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
-                mCurrentCmd.active = false;
-                mState = ControllerState::Idle;
-                notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
-            }
+            mAuthResponseSent = true;
+            mWaitingFinalResponse = true;
+            mSawChallenge = true;
+            mResponseTimeoutMs = IOHC_RX_FINAL_TIMEOUT_MS;
+            mRetryAtMs = 0;
+            mStateTimer = millis();
+            mState = ControllerState::TxInProgress; // will transition to WaitResponse when TX done
+        }
+        else if (lErr == RadioError::Busy)
+        {
+            return;
         }
         else
         {
             const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
             mCurrentCmd.active = false;
+            mWaitingFinalResponse = false;
+            mSawChallenge = false;
+            mAuthResponseSent = false;
             mState = ControllerState::Idle;
             notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
         }
-        return;
     }
-
-    dispatchRxFrame();
-    mCurrentCmd.active = false;
-    mWaitingFinalResponse = false;
-    mSawChallenge = false;
-    mRetryAtMs = 0;
-    mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
-    if (mState == ControllerState::ProcessResponse)
+    else
+    {
+        const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
+        mCurrentCmd.active = false;
+        mWaitingFinalResponse = false;
+        mSawChallenge = false;
+        mAuthResponseSent = false;
         mState = ControllerState::Idle;
+        notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
+    }
 }
 
 // --- Pairing state handlers ---
