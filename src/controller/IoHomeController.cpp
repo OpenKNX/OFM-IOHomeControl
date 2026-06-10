@@ -32,7 +32,6 @@ namespace
     constexpr uint16_t kGatewayInfoDeviceType = 0x0002;
     constexpr uint8_t kGatewayDiscoverManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Overkiz);
     constexpr uint8_t kGatewayInfoManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
-    constexpr uint16_t kPositionRawTolerance = 100;
 #if defined(RADIO_SX1262) || defined(TEST_NATIVE)
     constexpr bool kIsSX1262Radio = true;
 #else
@@ -132,21 +131,6 @@ namespace
     }
 
 
-    bool rawPositionToPercent(uint16_t iRaw, float &oPercent)
-    {
-        if (iRaw > IOHC_POSITION_MAX)
-            return false;
-
-        oPercent = (float)iRaw * 100.0f / IOHC_POSITION_MAX;
-        if (oPercent > 100.0f)
-            oPercent = 100.0f;
-        return true;
-    }
-
-    bool rawPositionNear(uint16_t iA, uint16_t iB)
-    {
-        return (iA > iB) ? ((iA - iB) <= kPositionRawTolerance) : ((iB - iA) <= kPositionRawTolerance);
-    }
 
     uint32_t passivePairNodeFromFrame(const IoHomeFrame &iFrame)
     {
@@ -178,39 +162,18 @@ namespace
         const uint16_t lTargetRaw = readU16BE(iData, iTargetOffset);
         const uint16_t lCurrentRaw = readU16BE(iData, iCurrentOffset);
 
-        float lCurrentPercent = 0.0f;
-        bool lHasCurrentPosition = rawPositionToPercent(lCurrentRaw, lCurrentPercent);
+        const IoHomeController::PositionDecodeResult lDecoded =
+            IoHomeController::decodePositionStatus(lTargetRaw, lCurrentRaw, iStopped);
 
-        float lTargetPercent = 0.0f;
-        bool lHasTargetPosition = rawPositionToPercent(lTargetRaw, lTargetPercent);
-        if (!lHasTargetPosition && iStopped && lHasCurrentPosition)
-        {
-            lTargetPercent = lCurrentPercent;
-            lHasTargetPosition = true;
-        }
-        if (!lHasCurrentPosition && iStopped && lHasTargetPosition)
-        {
-            lCurrentPercent = lTargetPercent;
-            lHasCurrentPosition = true;
-        }
+        if (lDecoded.hasTargetPosition)
+            iChannel->onTargetPositionFeedback(lDecoded.targetPositionPercent);
+        if (lDecoded.hasCurrentPosition)
+            iChannel->onPositionFeedback(lDecoded.currentPositionPercent);
 
-        bool lMoving = !iStopped;
-        if (lMoving && lHasCurrentPosition && lHasTargetPosition &&
-            lTargetRaw <= IOHC_POSITION_MAX &&
-            rawPositionNear(lCurrentRaw, lTargetRaw))
-        {
-            lMoving = false;
-        }
-
-        if (lHasTargetPosition)
-            iChannel->onTargetPositionFeedback(lTargetPercent);
-        if (lHasCurrentPosition)
-            iChannel->onPositionFeedback(lCurrentPercent);
-
-        iChannel->onStatusUpdate(lMoving);
-        iChannel->logStatusSummary(lCurrentPercent, lHasCurrentPosition,
-                                   lTargetPercent, lHasTargetPosition,
-                                   lMoving);
+        iChannel->onStatusUpdate(lDecoded.moving);
+        iChannel->logStatusSummary(lDecoded.currentPositionPercent, lDecoded.hasCurrentPosition,
+                                   lDecoded.targetPositionPercent, lDecoded.hasTargetPosition,
+                                   lDecoded.moving);
     }
 
     void applyPrivateBatteryInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData, uint8_t iDataLen)
@@ -238,14 +201,10 @@ namespace
             return;
 
         const uint16_t lTiltRaw = readU16BE(iData, 13);
-        if (lTiltRaw > IOHC_POSITION_MAX)
+        float lTiltPercent = 0.0f;
+        if (!IoHomeController::decodeTiltRaw(lTiltRaw, lTiltPercent))
             return;
 
-        float lTiltPercent = 100.0f - ((float)lTiltRaw * 100.0f / IOHC_POSITION_MAX);
-        if (lTiltPercent < 0.0f)
-            lTiltPercent = 0.0f;
-        if (lTiltPercent > 100.0f)
-            lTiltPercent = 100.0f;
         iChannel->onSlatFeedback(lTiltPercent);
     }
 
@@ -258,14 +217,10 @@ namespace
             return;
 
         const uint16_t lTiltRaw = readU16BE(iData, 13);
-        if (lTiltRaw > IOHC_POSITION_MAX)
+        float lTiltPercent = 0.0f;
+        if (!IoHomeController::decodeTiltRaw(lTiltRaw, lTiltPercent))
             return;
 
-        float lTiltPercent = 100.0f - ((float)lTiltRaw * 100.0f / IOHC_POSITION_MAX);
-        if (lTiltPercent < 0.0f)
-            lTiltPercent = 0.0f;
-        if (lTiltPercent > 100.0f)
-            lTiltPercent = 100.0f;
         iChannel->onSlatFeedback(lTiltPercent);
     }
 
@@ -621,6 +576,74 @@ IoHomeController::classifyFinalResponse(const IoHomeFrame &iRequest,
         return FinalResponseDisposition::Ignore;
 
     return FinalResponseDisposition::Accept;
+}
+
+bool IoHomeController::rawPositionToPercent(uint16_t iRaw, float &oPercent)
+{
+    if (iRaw > IOHC_POSITION_MAX)
+        return false;
+
+    oPercent = (float)iRaw * 100.0f / IOHC_POSITION_MAX;
+    if (oPercent > 100.0f)
+        oPercent = 100.0f;
+    return true;
+}
+
+bool IoHomeController::rawPositionNear(uint16_t iA, uint16_t iB)
+{
+    return (iA > iB) ? ((iA - iB) <= kPositionRawTolerance)
+                     : ((iB - iA) <= kPositionRawTolerance);
+}
+
+IoHomeController::PositionDecodeResult
+IoHomeController::decodePositionStatus(uint16_t iTargetRaw,
+                                       uint16_t iCurrentRaw,
+                                       bool iStopped)
+{
+    PositionDecodeResult lResult = {};
+
+    lResult.hasCurrentPosition = rawPositionToPercent(iCurrentRaw, lResult.currentPositionPercent);
+    lResult.hasTargetPosition = rawPositionToPercent(iTargetRaw, lResult.targetPositionPercent);
+
+    // Some io-homecontrol status payloads report marker values such as 0xD200
+    // or 0xD400 in the target field when stopped. Match the reference behavior:
+    // keep the actual current position and mirror it as target instead of
+    // reporting an invalid/unknown target.
+    if (!lResult.hasTargetPosition && iStopped && lResult.hasCurrentPosition)
+    {
+        lResult.targetPositionPercent = lResult.currentPositionPercent;
+        lResult.hasTargetPosition = true;
+    }
+
+    // Conversely, if the current position is not usable but the target is valid
+    // and the actuator reports stopped, treat the current position as the target.
+    if (!lResult.hasCurrentPosition && iStopped && lResult.hasTargetPosition)
+    {
+        lResult.currentPositionPercent = lResult.targetPositionPercent;
+        lResult.hasCurrentPosition = true;
+    }
+
+    lResult.moving = !iStopped;
+    if (lResult.moving && lResult.hasCurrentPosition && lResult.hasTargetPosition &&
+        rawPositionNear(iCurrentRaw, iTargetRaw))
+    {
+        lResult.moving = false;
+    }
+
+    return lResult;
+}
+
+bool IoHomeController::decodeTiltRaw(uint16_t iRaw, float &oPercent)
+{
+    if (iRaw > IOHC_POSITION_MAX)
+        return false;
+
+    oPercent = 100.0f - ((float)iRaw * 100.0f / IOHC_POSITION_MAX);
+    if (oPercent < 0.0f)
+        oPercent = 0.0f;
+    if (oPercent > 100.0f)
+        oPercent = 100.0f;
+    return true;
 }
 
 RadioError IoHomeController::startReceive()

@@ -402,6 +402,26 @@ public:
   static FinalResponseDisposition classifyFinalResponse(const IoHomeFrame &iRequest,
                                                         const IoHomeFrame &iCandidate);
 
+  // Pure status/position decoding helpers. These freeze the reference-compatible
+  // raw position rules independently of channel callbacks and radio state.
+  static constexpr uint16_t kPositionRawTolerance = 100;
+
+  struct PositionDecodeResult
+  {
+    bool hasTargetPosition;
+    float targetPositionPercent;
+    bool hasCurrentPosition;
+    float currentPositionPercent;
+    bool moving;
+  };
+
+  static bool rawPositionToPercent(uint16_t iRaw, float &oPercent);
+  static bool rawPositionNear(uint16_t iA, uint16_t iB);
+  static PositionDecodeResult decodePositionStatus(uint16_t iTargetRaw,
+                                                   uint16_t iCurrentRaw,
+                                                   bool iStopped);
+  static bool decodeTiltRaw(uint16_t iRaw, float &oPercent);
+
   // Radio RSSI of last received packet
   int16_t lastRssi() const;
 
