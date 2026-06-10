@@ -13,6 +13,7 @@
 #define IOHC_RX_FINAL_TIMEOUT_MS 500
 #define IOHC_RETRY_GAP_MS 250
 #define IOHC_AUTH_DWELL_MS_SX1262 90
+#define IOHC_AUTH_PREAMBLE_SX1262 64
 #define IOHC_PAIR_TIMEOUT_MS 30000
 #define IOHC_DUTY_CYCLE_WINDOW_MS 3600000 // 1 hour
 #define IOHC_RX_SCAN_INTERVAL_US 2700     // ~2.7ms frequency scan interval (per nicolas5000)
@@ -372,6 +373,13 @@ public:
   const Radio &radio() const;
 
 private:
+  enum class TxContext : uint8_t
+  {
+    InitialStartFrame,
+    ContinuationFrame,
+    AuthResponse
+  };
+
   enum class DiscoverySendPhase : uint8_t
   {
     SetFrequency,
@@ -615,6 +623,8 @@ private:
   uint8_t buildStatusUpdateResponse(uint32_t iDestNodeId, uint8_t *oBuffer, uint8_t iBufferLen) const;
 
   // Configure TX-side radio settings without blocking on BUSY.
+  uint16_t preambleForFrame(const IoHomeFrame &iFrame, TxContext iContext) const;
+  bool radioIsSX1262() const;
   RadioError configureTxRadio(uint16_t iPreambleSymbols, const uint32_t *iFrequencyHz = nullptr);
   RadioError startTransmitWithPreamble(const uint8_t *iBuffer, uint8_t iLen,
                                        uint16_t iPreambleSymbols,

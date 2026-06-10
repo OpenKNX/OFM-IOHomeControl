@@ -1858,7 +1858,7 @@ void IoHomeController::loop()
     if (mRadio.isPacketAvailable())
     {
         uint8_t lLen = mRadio.readPacket(mRxBuffer, sizeof(mRxBuffer));
-        if (lLen > 0 && mRxFrame.deserializeFrame(mRxBuffer, lLen))
+        if (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen))
         {
             // Record which frequency the response came on
             mLastResponseFreqIdx = mCurrentFreqIdx;
@@ -2285,8 +2285,9 @@ void IoHomeController::processTxPending()
                  lHex.c_str());
     }
 
-    // Set preamble based on frame type: START frames need long preamble for low-power devices
-    bool lIsStartFrame = (mTxFrame.ctrlByte0 & IOHC_CTRL0_START);
+    const bool lIsStartFrame = (mTxFrame.ctrlByte0 & IOHC_CTRL0_START) != 0;
+    const TxContext lTxContext = lIsStartFrame ? TxContext::InitialStartFrame
+                                               : TxContext::ContinuationFrame;
     if (!(mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W))
     {
         mWaitingFinalResponse = false;
@@ -2294,7 +2295,7 @@ void IoHomeController::processTxPending()
         mResponseTimeoutMs = lIsStartFrame ? IOHC_RX_TIMEOUT_MS : IOHC_RX_FINAL_TIMEOUT_MS;
         mRetryAtMs = 0;
     }
-    const RadioError lPrepErr = configureTxRadio(lIsStartFrame ? IOHC_PREAMBLE_LONG : IOHC_PREAMBLE_SHORT);
+    const RadioError lPrepErr = configureTxRadio(preambleForFrame(mTxFrame, lTxContext));
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -2516,7 +2517,7 @@ void IoHomeController::processResponse()
         if (lLen > 0)
         {
             const RadioError lErr = startTransmitWithPreamble(mTxBuffer, lLen,
-                                                              authResponsePreamble());
+                                                              preambleForFrame(lFrame, TxContext::AuthResponse));
             if (lErr == RadioError::None)
             {
                 mAuthResponseSent = true;
@@ -2608,9 +2609,9 @@ void IoHomeController::processPairSendDiscovery()
         return;
     }
     updateCurrentFrequencyIndex(lDiscoveryFreq);
-    const RadioError lPrepErr = mRadio.setPreambleLengthBlocking(IOHC_PREAMBLE_LONG);
+    const RadioError lPrepErr = mRadio.setPreambleLengthBlocking(preambleForFrame(mTxFrame, TxContext::InitialStartFrame));
 #else
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lDiscoveryFreq);
+    const RadioError lPrepErr = configureTxRadio(preambleForFrame(mTxFrame, TxContext::InitialStartFrame), &lDiscoveryFreq);
 #endif
     if (lPrepErr == RadioError::Busy)
         return;
@@ -2695,9 +2696,9 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
         return;
     }
     updateCurrentFrequencyIndex(lConfirmationFreq);
-    const RadioError lPrepErr = mRadio.setPreambleLengthBlocking(IOHC_PREAMBLE_LONG);
+    const RadioError lPrepErr = mRadio.setPreambleLengthBlocking(preambleForFrame(mTxFrame, TxContext::InitialStartFrame));
 #else
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lConfirmationFreq);
+    const RadioError lPrepErr = configureTxRadio(preambleForFrame(mTxFrame, TxContext::InitialStartFrame), &lConfirmationFreq);
 #endif
     if (lPrepErr == RadioError::Busy)
         return;
@@ -2774,7 +2775,7 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
     mPairLaunchKeyTransferFrame.dataLen = sizeof(mPairingChallenge);
     mPairLaunchKeyTransferFrame.hasHmac = false;
 
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG);
+    const RadioError lPrepErr = configureTxRadio(preambleForFrame(mPairLaunchKeyTransferFrame, TxContext::InitialStartFrame));
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -3289,7 +3290,7 @@ void IoHomeController::processPairSendKeyInit()
     mTxFrame.dataLen = 0;
     mTxFrame.hasHmac = false;
 
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG);
+    const RadioError lPrepErr = configureTxRadio(preambleForFrame(mTxFrame, TxContext::InitialStartFrame));
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -3377,7 +3378,8 @@ void IoHomeController::processPairSendKeyTransfer()
     mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startTransmitWithPreamble(mTxBuffer, mTxLen,
+                                                          preambleForFrame(mTxFrame, TxContext::ContinuationFrame));
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3427,7 +3429,8 @@ void IoHomeController::processPairSendKeyTransferAuthResponse()
     mTxLen = lFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startTransmitWithPreamble(mTxBuffer, mTxLen,
+                                                          preambleForFrame(lFrame, TxContext::AuthResponse));
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3483,7 +3486,7 @@ void IoHomeController::processPairSendSetConfig1()
     mPairSetConfigRequest.hasHmac = false;
 
     const uint32_t lSetConfigFreq = IOHC_FREQ_2;
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lSetConfigFreq);
+    const RadioError lPrepErr = configureTxRadio(preambleForFrame(mPairSetConfigRequest, TxContext::InitialStartFrame), &lSetConfigFreq);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -3589,7 +3592,7 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
     lFrame.hasHmac = false;
 
     const uint32_t lSetConfigFreq = IOHC_FREQ_2;
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_SHORT, &lSetConfigFreq);
+    const RadioError lPrepErr = configureTxRadio(preambleForFrame(lFrame, TxContext::AuthResponse), &lSetConfigFreq);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -3691,7 +3694,7 @@ void IoHomeController::processDiscovery()
         }
         else if (mDiscoverySendPhase == DiscoverySendPhase::SetPreamble)
         {
-            lPrepErr = mRadio.setPreambleLengthBlocking(IOHC_PREAMBLE_LONG);
+            lPrepErr = mRadio.setPreambleLengthBlocking(preambleForFrame(mTxFrame, TxContext::InitialStartFrame));
             if (lPrepErr == RadioError::None)
             {
                 mDiscoveryTimingTrace.preambleReadyUs = micros();
@@ -3708,7 +3711,7 @@ void IoHomeController::processDiscovery()
             return;
         }
 #else
-        const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lDiscoveryFreq);
+        const RadioError lPrepErr = configureTxRadio(preambleForFrame(mTxFrame, TxContext::InitialStartFrame), &lDiscoveryFreq);
         if (lPrepErr == RadioError::Busy)
             return;
         if (lPrepErr != RadioError::None)
@@ -3837,7 +3840,8 @@ void IoHomeController::processScanSending()
     mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startTransmitWithPreamble(mTxBuffer, mTxLen,
+                                                          preambleForFrame(mTxFrame, TxContext::InitialStartFrame));
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3874,7 +3878,7 @@ void IoHomeController::processScanWaitResponse()
     if (mRadio.isPacketAvailable())
     {
         uint8_t lLen = mRadio.readPacket(mRxBuffer, sizeof(mRxBuffer));
-        if (lLen > 0 && mRxFrame.deserializeFrame(mRxBuffer, lLen))
+        if (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen))
         {
             if (mRxFrame.getSrcNodeId() == mScanTargetNode)
             {
@@ -3941,6 +3945,29 @@ uint32_t IoHomeController::currentTxTimeoutMs() const
     return IOHC_TX_TIMEOUT_MS;
 }
 
+uint16_t IoHomeController::preambleForFrame(const IoHomeFrame &iFrame, TxContext iContext) const
+{
+    (void)iFrame;
+
+    // Central io-homecontrol TX preamble policy, matching the reference:
+    // - initial START frames wake low-power devices with a long preamble
+    // - continuation frames, key-transfer continuation frames, and SX1276 auth
+    //   responses use the short preamble
+    // - SX1262 auth responses use the empirically required dwell/preamble value
+    if (iContext == TxContext::InitialStartFrame)
+        return IOHC_PREAMBLE_LONG;
+
+    if (iContext == TxContext::AuthResponse && radioIsSX1262())
+        return IOHC_AUTH_PREAMBLE_SX1262;
+
+    return IOHC_PREAMBLE_SHORT;
+}
+
+bool IoHomeController::radioIsSX1262() const
+{
+    return kIsSX1262Radio;
+}
+
 RadioError IoHomeController::configureTxRadio(uint16_t iPreambleSymbols, const uint32_t *iFrequencyHz)
 {
     if (iFrequencyHz != nullptr)
@@ -3960,16 +3987,19 @@ RadioError IoHomeController::configureTxRadio(uint16_t iPreambleSymbols, const u
 RadioError IoHomeController::startShortPreambleTransmit(const uint8_t *iBuffer, uint8_t iLen,
                                                         bool iTrackDutyCycle)
 {
-    return startTransmitWithPreamble(iBuffer, iLen, IOHC_PREAMBLE_SHORT, iTrackDutyCycle);
+    IoHomeFrame lFrame;
+    lFrame.init();
+    return startTransmitWithPreamble(iBuffer, iLen,
+                                     preambleForFrame(lFrame, TxContext::ContinuationFrame),
+                                     iTrackDutyCycle);
 }
 
 uint16_t IoHomeController::authResponsePreamble() const
 {
-#if defined(RADIO_SX1262) || defined(TEST_NATIVE)
-    return 64;
-#else
-    return IOHC_PREAMBLE_SHORT;
-#endif
+    IoHomeFrame lFrame;
+    lFrame.init();
+    lFrame.commandId = IoHomeCommand::ChallengeResponse;
+    return preambleForFrame(lFrame, TxContext::AuthResponse);
 }
 
 RadioError IoHomeController::startTransmitWithPreamble(const uint8_t *iBuffer, uint8_t iLen,
@@ -5211,7 +5241,7 @@ void IoHomeController::processGatewayWaitChallenge()
                                               mGatewayPeerChallenge, mGatewayKey);
     if (mTxLen == 0)
         return;
-    if (startShortPreambleTransmit(mTxBuffer, mTxLen, true) != RadioError::None)
+    if (startTransmitWithPreamble(mTxBuffer, mTxLen, authResponsePreamble(), true) != RadioError::None)
         return;
 
     bool lKnownDevice = false;
