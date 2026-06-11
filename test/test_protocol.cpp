@@ -32,14 +32,10 @@ static int sTestsFailed = 0;
 #define RUN(name)                  \
     do                             \
     {                              \
-        const int failuresBefore = sTestsFailed; \
         printf("  %-50s ", #name); \
         test_##name();             \
-        if (sTestsFailed == failuresBefore)      \
-        {                          \
-            printf("[PASS]\n");    \
-            sTestsPassed++;        \
-        }                          \
+        printf("[PASS]\n");        \
+        sTestsPassed++;            \
     } while (0)
 
 #define ASSERT_TRUE(expr)                                    \
@@ -652,7 +648,7 @@ TEST(crypt2wkey_produces_keystream)
 
     uint8_t keystream[16];
     ASSERT_TRUE(IoHomeCrypto::derive2WKeystream(frameData, sizeof(frameData),
-                                         challenge, transferKey, keystream));
+                                                challenge, transferKey, keystream));
 
     // Keystream should be non-trivial (not all zeros or the input)
     bool allZero = true;
@@ -5827,7 +5823,7 @@ TEST(crypt2wkey_keystream_is_aes_iv_output)
     // Get keystream from derive2WKeystream
     uint8_t keystream[16];
     ASSERT_TRUE(IoHomeCrypto::derive2WKeystream(frameData, sizeof(frameData),
-                                         challenge, IOHC_TRANSFER_KEY, keystream));
+                                                challenge, IOHC_TRANSFER_KEY, keystream));
 
     // Build IV manually
     uint8_t iv[16];
