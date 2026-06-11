@@ -25,6 +25,34 @@ static void delay(unsigned long) {}
 namespace
 {
     constexpr uint8_t kPair1WFreqIdx = 1;
+    constexpr uint32_t kNormal2WTxFreqHz = IOHC_FREQ_2;
+    constexpr uint8_t kUnknownIohcChannel = 0;
+
+    uint8_t frequencyIndexForHz(uint32_t iFreqHz)
+    {
+        for (uint8_t i = 0; i < IOHC_NUM_FREQUENCIES; i++)
+        {
+            if (IOHC_FREQUENCIES[i] == iFreqHz)
+                return i;
+        }
+        return 0;
+    }
+
+    uint8_t iohcChannelNumberForFrequency(uint32_t iFreqHz)
+    {
+        switch (iFreqHz)
+        {
+        case IOHC_FREQ_1:
+            return 1;
+        case IOHC_FREQ_2:
+            return 2;
+        case IOHC_FREQ_3:
+            return 3;
+        default:
+            return kUnknownIohcChannel;
+        }
+    }
+
     constexpr uint8_t kGatewayNameLen = 16;
     constexpr char kGatewayName[] = "MY_GATEWAY";
     constexpr uint8_t kGatewayDiscoverInfo = 0xCC;
@@ -434,7 +462,7 @@ IoHomeController::IoHomeController()
       mState(ControllerState::Idle), mStateTimer(0),
       mCurrentFreqIdx(0), mQueueHead(0), mQueueTail(0),
       mPairingChannel(0), mDiscoveredNodeId(0),
-      mPairingFreqIdx(0), mPairingStartTime(0),
+      mPairingFreqIdx(frequencyIndexForHz(kNormal2WTxFreqHz)), mPairingStartTime(0),
       mDiscoverySendPhase(DiscoverySendPhase::SetFrequency),
       mDiscoveryTimingTrace{},
       mDiscoverySPE(false),
@@ -927,7 +955,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mPairing1WStage = 0;
     mPairing1WBroadcastType = mDefault1WBroadcastType;
     mPairingChannel = iChannelIndex;
-    mPairingFreqIdx = 0;
+    mPairingFreqIdx = frequencyIndexForHz(kNormal2WTxFreqHz);
     mPairingStartTime = millis();
     memset(mPairingChallenge, 0, sizeof(mPairingChallenge)); // will be filled by device's ChallengeRequest
     memset(mPairSetConfigChallenge, 0, sizeof(mPairSetConfigChallenge));
@@ -1673,6 +1701,48 @@ void IoHomeController::tracePairDiagnosticCompactRx(const IoHomeRadioHealth &iHe
              static_cast<unsigned>(iHealth.lastRxLen));
 }
 
+void IoHomeController::tracePairDiagnosticTx2W(const IoHomeFrame &iFrame, uint16_t iPreambleSymbols) const
+{
+    if (!mPairDiagnosticTraceEnabled || ((iFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0))
+        return;
+
+    const uint32_t lFreqHz = (mCurrentFreqIdx < IOHC_NUM_FREQUENCIES) ? IOHC_FREQUENCIES[mCurrentFreqIdx] : 0;
+    logInfoP("tx2w: ch=%u freq=%lu cmd=0x%02X preamble=%u start=%u lp=%u",
+             static_cast<unsigned>(iohcChannelNumberForFrequency(lFreqHz)),
+             static_cast<unsigned long>(lFreqHz),
+             static_cast<unsigned>(static_cast<uint8_t>(iFrame.commandId)),
+             static_cast<unsigned>(iPreambleSymbols),
+             (iFrame.ctrlByte0 & IOHC_CTRL0_START) ? 1U : 0U,
+             (iFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) ? 1U : 0U);
+}
+
+RadioError IoHomeController::configureNormal2WTxRadio(uint16_t iPreambleSymbols)
+{
+    const uint32_t lTxFreq = kNormal2WTxFreqHz;
+    return configureTxRadio(iPreambleSymbols, &lTxFreq);
+}
+
+void IoHomeController::serviceRxScan()
+{
+    if (!mRxScanEnabled || mRadio.state() != RadioState::Receiving)
+        return;
+
+    const uint32_t lNow = micros();
+    if (lNow - mRxScanLastSwitch < mRxScanIntervalUs)
+        return;
+
+    if (mRadio.isPreambleDetected())
+        return;
+
+    const uint8_t lNextFreqIdx = (mCurrentFreqIdx + 1) % IOHC_NUM_FREQUENCIES;
+    if (mRadio.setFrequency(IOHC_FREQUENCIES[lNextFreqIdx]) == RadioError::None)
+    {
+        mCurrentFreqIdx = lNextFreqIdx;
+        if (mRadio.startReceive() == RadioError::None)
+            mRxScanLastSwitch = lNow;
+    }
+}
+
 void IoHomeController::logPairDiagnosticStatus() const
 {
     const uint32_t lPairFreqHz = (mPairingFreqIdx < IOHC_NUM_FREQUENCIES) ? IOHC_FREQUENCIES[mPairingFreqIdx] : 0;
@@ -1909,25 +1979,10 @@ void IoHomeController::loop()
         }
     }
 
-    // Multi-frequency RX scanning: cycle through frequencies during idle/passive listening
-    if (mRxScanEnabled &&
-        (mState == ControllerState::Idle || mState == ControllerState::PassiveListening))
-    {
-        uint32_t lNow = micros();
-        if (lNow - mRxScanLastSwitch >= mRxScanIntervalUs)
-        {
-            if (!mRadio.isPreambleDetected()) // don't switch mid-packet
-            {
-                uint8_t lNextFreqIdx = (mCurrentFreqIdx + 1) % IOHC_NUM_FREQUENCIES;
-                if (mRadio.setFrequency(IOHC_FREQUENCIES[lNextFreqIdx]) == RadioError::None)
-                {
-                    mCurrentFreqIdx = lNextFreqIdx;
-                    if (mRadio.startReceive() == RadioError::None)
-                        mRxScanLastSwitch = lNow;
-                }
-            }
-        }
-    }
+    // Multi-frequency RX scanning: cycle through frequencies only while listening.
+    // TX-side paths explicitly select their protocol channel before transmitting.
+    if (mState == ControllerState::Idle || mState == ControllerState::PassiveListening)
+        serviceRxScan();
 
     // Check for incoming packets in any state
     if (mRadio.isPacketAvailable())
@@ -2339,7 +2394,9 @@ void IoHomeController::processIdle()
 
 void IoHomeController::processTxPending()
 {
-    if (!isDutyCycleOk())
+    const bool lIs1WFrame = ((mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0);
+    const uint8_t lTxDutyFreqIdx = lIs1WFrame ? mCurrentFreqIdx : frequencyIndexForHz(kNormal2WTxFreqHz);
+    if (!isDutyCycleOk(lTxDutyFreqIdx))
         return; // wait for duty cycle to clear
 
     mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
@@ -2349,7 +2406,7 @@ void IoHomeController::processTxPending()
         return;
     }
 
-    if (mPairDiagnosticTraceEnabled && ((mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0))
+    if (mPairDiagnosticTraceEnabled && lIs1WFrame)
     {
         const std::string lHex = hexDump(mTxBuffer, mTxLen);
         logInfoP("PairDiag: 1W tx cmd=%s(0x%02X) len=%u seq=%u src=0x%06X dst=0x%06X hex=%s",
@@ -2363,16 +2420,18 @@ void IoHomeController::processTxPending()
                  lHex.c_str());
     }
 
-    // Set preamble based on frame type: START frames need long preamble for low-power devices
+    // Set preamble based on frame type: START frames need long preamble for low-power devices.
+    // Normal 2W controller-originated TX is always sent on CH2; RX scanning remains separate.
     bool lIsStartFrame = (mTxFrame.ctrlByte0 & IOHC_CTRL0_START);
-    if (!(mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W))
+    const uint16_t lPreamble = lIsStartFrame ? IOHC_PREAMBLE_LONG : IOHC_PREAMBLE_SHORT;
+    if (!lIs1WFrame)
     {
         mWaitingFinalResponse = false;
         mSawChallenge = false;
         mResponseTimeoutMs = lIsStartFrame ? IOHC_RX_TIMEOUT_MS : IOHC_RX_FINAL_TIMEOUT_MS;
         mRetryAtMs = 0;
     }
-    const RadioError lPrepErr = configureTxRadio(lIsStartFrame ? IOHC_PREAMBLE_LONG : IOHC_PREAMBLE_SHORT);
+    const RadioError lPrepErr = lIs1WFrame ? configureTxRadio(lPreamble) : configureNormal2WTxRadio(lPreamble);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -2380,6 +2439,9 @@ void IoHomeController::processTxPending()
         mState = ControllerState::Idle;
         return;
     }
+
+    if (!lIs1WFrame)
+        tracePairDiagnosticTx2W(mTxFrame, lPreamble);
 
     RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
     if (lErr == RadioError::None)
@@ -2410,6 +2472,7 @@ void IoHomeController::processTxInProgress()
             return;
         }
 
+        mRxScanLastSwitch = micros();
         mStateTimer = millis();
         mState = ControllerState::WaitResponse;
         return;
@@ -2447,6 +2510,7 @@ void IoHomeController::processTxInProgress()
                 mState = ControllerState::Idle;
                 return;
             }
+            mRxScanLastSwitch = micros();
             mStateTimer = millis();
             mState = ControllerState::WaitResponse;
         }
@@ -2496,9 +2560,11 @@ void IoHomeController::processWaitResponse()
         millis() - mStateTimer < IOHC_AUTH_DWELL_MS_SX1262)
     {
         // After sending 0x3D stay in RX on the same channel for a short dwell
-        // before allowing timeout-driven hop/retry handling.
+        // before allowing RX scan/retry handling.
         return;
     }
+
+    serviceRxScan();
 
     if (millis() - mStateTimer >= mResponseTimeoutMs)
     {
@@ -2513,10 +2579,8 @@ void IoHomeController::processWaitResponse()
 
         mRetryAtMs = 0;
 
-        // No response — retry on next frequency or give up
-        if (!hopFrequency())
-            return;
-
+        // No response — retry the controller-originated 2W command on CH2.
+        // RX may scan/hop while waiting, but TX must not be moved to CH1/CH3.
         if (mCurrentCmd.active && mCurrentCmd.retries < IOHC_MAX_RETRIES)
         {
             const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
@@ -2593,8 +2657,20 @@ void IoHomeController::processResponse()
         uint8_t lLen = lFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
         if (lLen > 0)
         {
-            const RadioError lErr = startTransmitWithPreamble(mTxBuffer, lLen,
-                                                              authResponsePreamble());
+            const uint16_t lPreamble = authResponsePreamble();
+            const RadioError lPrepErr = configureNormal2WTxRadio(lPreamble);
+            if (lPrepErr == RadioError::Busy)
+                return;
+            if (lPrepErr != RadioError::None)
+            {
+                const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
+                mCurrentCmd.active = false;
+                mState = ControllerState::Idle;
+                notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
+                return;
+            }
+            tracePairDiagnosticTx2W(lFrame, lPreamble);
+            const RadioError lErr = mRadio.startTransmit(mTxBuffer, lLen);
             if (lErr == RadioError::None)
             {
                 mAuthResponseSent = true;
@@ -2675,7 +2751,7 @@ void IoHomeController::processPairSendDiscovery()
         mTxFrame.dataLen = 0;
     }
 
-    const uint32_t lDiscoveryFreq = IOHC_FREQUENCIES[mPairingFreqIdx];
+    const uint32_t lDiscoveryFreq = kNormal2WTxFreqHz;
 #if defined(RADIO_SX1262)
     const RadioError lFreqErr = mRadio.setFrequencyBlocking(lDiscoveryFreq);
     if (lFreqErr != RadioError::None)
@@ -2701,6 +2777,7 @@ void IoHomeController::processPairSendDiscovery()
     mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
+        tracePairDiagnosticTx2W(mTxFrame, IOHC_PREAMBLE_LONG);
 #if defined(RADIO_SX1262)
         const RadioError lErr = mRadio.startTransmitBlocking(mTxBuffer, mTxLen);
 #else
@@ -2737,10 +2814,11 @@ void IoHomeController::processPairWaitDiscoveryResponse()
         return;
     }
 
-    if (millis() - mStateTimer > 2000) // 2s timeout per frequency
+    serviceRxScan();
+
+    if (millis() - mStateTimer > 2000) // retry cadence; TX stays on CH2
     {
-        // Hop to next frequency and retry
-        mPairingFreqIdx = (mPairingFreqIdx + 1) % IOHC_NUM_FREQUENCIES;
+        mPairingFreqIdx = frequencyIndexForHz(kNormal2WTxFreqHz);
         mState = ControllerState::PairSendDiscovery;
     }
 }
@@ -2761,7 +2839,7 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
     mTxFrame.dataLen = 0;
     mTxFrame.hasHmac = false;
 
-    const uint32_t lConfirmationFreq = IOHC_FREQUENCIES[mPairingFreqIdx];
+    const uint32_t lConfirmationFreq = kNormal2WTxFreqHz;
 #if defined(RADIO_SX1262)
     const RadioError lFreqErr = mRadio.setFrequencyBlocking(lConfirmationFreq);
     if (lFreqErr != RadioError::None)
@@ -2789,6 +2867,7 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
     mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
+        tracePairDiagnosticTx2W(mTxFrame, IOHC_PREAMBLE_LONG);
 #if defined(RADIO_SX1262)
         const RadioError lErr = mRadio.startTransmitBlocking(mTxBuffer, mTxLen);
 #else
@@ -2827,6 +2906,8 @@ void IoHomeController::processPairWaitDiscoveryConfirmationAck()
         return;
     }
 
+    serviceRxScan();
+
     if (millis() - mStateTimer > 1000)
     {
         logDebugP("Pairing: discovery confirmation ack timed out for 0x%06X, falling back to push flow", mDiscoveredNodeId);
@@ -2852,7 +2933,7 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
     mPairLaunchKeyTransferFrame.dataLen = sizeof(mPairingChallenge);
     mPairLaunchKeyTransferFrame.hasHmac = false;
 
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG);
+    const RadioError lPrepErr = configureNormal2WTxRadio(IOHC_PREAMBLE_LONG);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -2865,6 +2946,7 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
     mTxLen = mPairLaunchKeyTransferFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
+        tracePairDiagnosticTx2W(mPairLaunchKeyTransferFrame, IOHC_PREAMBLE_LONG);
         const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
@@ -2899,6 +2981,8 @@ void IoHomeController::processPairWaitLaunchKeyTransfer()
         return;
     }
 
+    serviceRxScan();
+
     if (millis() - mStateTimer > 1000)
     {
         logDebugP("Pairing: pulled key transfer timed out for 0x%06X, falling back to push flow", mDiscoveredNodeId);
@@ -2924,7 +3008,17 @@ void IoHomeController::processPairSendPullKeyChallenge()
     uint8_t lLen = lFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (lLen > 0)
     {
-        const RadioError lErr = startShortPreambleTransmit(mTxBuffer, lLen);
+        const RadioError lPrepErr = configureNormal2WTxRadio(IOHC_PREAMBLE_SHORT);
+        if (lPrepErr == RadioError::Busy)
+            return;
+        if (lPrepErr != RadioError::None)
+        {
+            logDebugP("Pairing: failed to challenge pulled key for 0x%06X, falling back to push flow", mDiscoveredNodeId);
+            mState = ControllerState::PairSendKeyInit;
+            return;
+        }
+        tracePairDiagnosticTx2W(lFrame, IOHC_PREAMBLE_SHORT);
+        const RadioError lErr = mRadio.startTransmit(mTxBuffer, lLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -2957,6 +3051,8 @@ void IoHomeController::processPairWaitPullKeyChallengeResponse()
         mState = ControllerState::PairSendKeyInit;
         return;
     }
+
+    serviceRxScan();
 
     if (millis() - mStateTimer > IOHC_RX_TIMEOUT_MS)
     {
@@ -3367,7 +3463,7 @@ void IoHomeController::processPairSendKeyInit()
     mTxFrame.dataLen = 0;
     mTxFrame.hasHmac = false;
 
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG);
+    const RadioError lPrepErr = configureNormal2WTxRadio(IOHC_PREAMBLE_LONG);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -3379,6 +3475,7 @@ void IoHomeController::processPairSendKeyInit()
     mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
+        tracePairDiagnosticTx2W(mTxFrame, IOHC_PREAMBLE_LONG);
         const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
@@ -3410,6 +3507,8 @@ void IoHomeController::processPairWaitDeviceChallenge()
         mState = ControllerState::PairFailed;
         return;
     }
+
+    serviceRxScan();
 
     if (millis() - mStateTimer > 5000) // 5s timeout for device challenge
     {
@@ -3455,7 +3554,16 @@ void IoHomeController::processPairSendKeyTransfer()
     mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
+        const RadioError lPrepErr = configureNormal2WTxRadio(IOHC_PREAMBLE_SHORT);
+        if (lPrepErr == RadioError::Busy)
+            return;
+        if (lPrepErr != RadioError::None)
+        {
+            mState = ControllerState::PairFailed;
+            return;
+        }
+        tracePairDiagnosticTx2W(mTxFrame, IOHC_PREAMBLE_SHORT);
+        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3505,7 +3613,16 @@ void IoHomeController::processPairSendKeyTransferAuthResponse()
     mTxLen = lFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
+        const RadioError lPrepErr = configureNormal2WTxRadio(IOHC_PREAMBLE_SHORT);
+        if (lPrepErr == RadioError::Busy)
+            return;
+        if (lPrepErr != RadioError::None)
+        {
+            mState = ControllerState::PairFailed;
+            return;
+        }
+        tracePairDiagnosticTx2W(lFrame, IOHC_PREAMBLE_SHORT);
+        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -3536,6 +3653,8 @@ void IoHomeController::processPairWaitKeyTransferConfirmation()
         mState = ControllerState::PairFailed;
         return;
     }
+
+    serviceRxScan();
 
     if (millis() - mStateTimer > 5000) // 5s timeout
     {
@@ -3574,6 +3693,7 @@ void IoHomeController::processPairSendSetConfig1()
     mTxLen = mPairSetConfigRequest.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
+        tracePairDiagnosticTx2W(mPairSetConfigRequest, IOHC_PREAMBLE_LONG);
         const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
@@ -3607,6 +3727,8 @@ void IoHomeController::processPairWaitSetConfig1Response()
         mState = ControllerState::PairComplete;
         return;
     }
+
+    serviceRxScan();
 
     if (millis() - mStateTimer > 2000)
     {
@@ -3680,6 +3802,7 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
     mTxLen = lFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
+        tracePairDiagnosticTx2W(lFrame, IOHC_PREAMBLE_SHORT);
         const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
@@ -3713,6 +3836,8 @@ void IoHomeController::processPairWaitSetConfig1FinalResponse()
         mState = ControllerState::PairComplete;
         return;
     }
+
+    serviceRxScan();
 
     if (millis() - mStateTimer > 2000)
     {
@@ -4145,7 +4270,10 @@ RadioError IoHomeController::ensureReceiveAfterTransmit()
     if (mRadio.state() == RadioState::Receiving)
         return RadioError::None;
 
-    return mRadio.startReceive();
+    const RadioError lRxErr = mRadio.startReceive();
+    if (lRxErr == RadioError::None)
+        mRxScanLastSwitch = micros();
+    return lRxErr;
 }
 
 void IoHomeController::updateCurrentFrequencyIndex(uint32_t iFrequencyHz)

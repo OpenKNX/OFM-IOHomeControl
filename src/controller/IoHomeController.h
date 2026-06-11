@@ -622,6 +622,7 @@ private:
   void tracePairDiagnosticStateChange();
   void tracePairDiagnosticCompactPair() const;
   void tracePairDiagnosticCompactRx(const IoHomeRadioHealth &iHealth) const;
+  void tracePairDiagnosticTx2W(const IoHomeFrame &iFrame, uint16_t iPreambleSymbols) const;
   void tracePairDiagnosticFrame(const char *iPrefix, const IoHomeFrame &iFrame, uint8_t iFreqIdx, int16_t iRssi) const;
   void tracePairDiagnosticDiscoveryInterpretation(const IoHomeFrame &iFrame, uint8_t iFreqIdx) const;
   void processIdle();
@@ -711,6 +712,8 @@ private:
   uint16_t preambleForFrame(const IoHomeFrame &iFrame, TxContext iContext) const;
   bool radioIsSX1262() const;
   RadioError configureTxRadio(uint16_t iPreambleSymbols, const uint32_t *iFrequencyHz = nullptr);
+  RadioError configureNormal2WTxRadio(uint16_t iPreambleSymbols);
+  void serviceRxScan();
   bool waitForLbtClear(LbtContext iContext);
   RadioError startRadioTransmit(const uint8_t *iBuffer, uint8_t iLen, LbtContext iLbtContext);
   RadioError startTransmitWithPreamble(const uint8_t *iBuffer, uint8_t iLen,
