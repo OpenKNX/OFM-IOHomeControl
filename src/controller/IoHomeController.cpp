@@ -1977,6 +1977,19 @@ void IoHomeController::tracePairDiagnosticTx2W(const IoHomeFrame &iFrame, uint16
              (iFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) ? 1U : 0U);
 }
 
+void IoHomeController::trace1WRepeatPlan(const char *iContext) const
+{
+    if (!mPairDiagnosticTraceEnabled)
+        return;
+
+    logInfoP("1w repeat: ctx=%s total=%u gap=%ums firstPre=%u repeatPre=%u",
+             iContext ? iContext : "1w",
+             static_cast<unsigned>(IOHC_1W_REPEAT_COUNT + 1U),
+             static_cast<unsigned>(IOHC_1W_REPEAT_INTERVAL_MS),
+             static_cast<unsigned>(IOHC_PREAMBLE_LONG),
+             static_cast<unsigned>(IOHC_PREAMBLE_SHORT));
+}
+
 bool IoHomeController::createAndTraceHmac1W(const uint8_t *iTranscript, uint8_t iTranscriptLen,
                                             uint16_t iSequenceNum, const uint8_t iControllerKey[16],
                                             uint8_t oHmac[IOHC_HMAC_SIZE]) const
@@ -2714,6 +2727,7 @@ void IoHomeController::processTxPending()
                  mTxFrame.getSrcNodeId(),
                  mTxFrame.getDestNodeId(),
                  lHex.c_str());
+        trace1WRepeatPlan("tx1w");
     }
 
     // Set preamble based on frame type: START frames need long preamble for low-power devices.
@@ -2825,10 +2839,17 @@ void IoHomeController::processTx1WRepeat()
     if (millis() - mTx1WRepeatTimer < IOHC_1W_REPEAT_INTERVAL_MS)
         return; // wait for interval
 
-    // Re-send same buffer with short preamble (repeats don't need long preamble)
+    // Re-send same buffer with the reference short repeat preamble.
     const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
     if (lErr == RadioError::None)
     {
+        if (mPairDiagnosticTraceEnabled)
+        {
+            logInfoP("PairDiag: 1W repeat tx remaining=%u len=%u pre=%u",
+                     static_cast<unsigned>(mTx1WRepeatRemaining),
+                     static_cast<unsigned>(mTxLen),
+                     static_cast<unsigned>(IOHC_PREAMBLE_SHORT));
+        }
         mStateTimer = millis();
         mState = ControllerState::TxInProgress;
     }
@@ -3427,6 +3448,7 @@ void IoHomeController::processPairSend1WAnnounce()
                  mTxFrame.getSrcNodeId(),
                  mTxFrame.getDestNodeId(),
                  lHex.c_str());
+        trace1WRepeatPlan("1w announce");
     }
 
     const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
@@ -3521,6 +3543,7 @@ void IoHomeController::processPairSend1WRemove()
                  mTxFrame.getSrcNodeId(),
                  mTxFrame.getDestNodeId(),
                  lHex.c_str());
+        trace1WRepeatPlan("1w remove");
     }
 
     const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
@@ -3653,6 +3676,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
                      static_cast<unsigned>(lProfile->getOneWayControllerManufacturer()),
                      static_cast<unsigned>(mCurrentFreqIdx),
                      static_cast<unsigned long>(IOHC_FREQ_2));
+            trace1WRepeatPlan("1w key");
             const std::string lHex = hexDump(mTxBuffer, mTxLen);
             logInfoP("PairDiag: 1W key tx hex=%s", lHex.c_str());
         }
@@ -3717,31 +3741,16 @@ bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
 
         mTx1WRepeatTimer = 0;
 
-        RadioError lErr = RadioError::None;
-        const bool lPairingRepeat = (mState == ControllerState::PairWait1WAnnounce ||
-                                     mState == ControllerState::PairWait1WRemove ||
-                                     mState == ControllerState::PairWait1WKeyTransfer);
-        if (lPairingRepeat)
+        // Reference 1W timing: the first TX uses the long wake-up preamble,
+        // then all three repeats use the short preamble with a 40 ms gap.
+        RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
+        if (mPairDiagnosticTraceEnabled && lErr == RadioError::None)
         {
-            // During 1W learning, keep the long preamble on all repeats.
-            // Short-repeat remotes are fine for normal button commands, but
-            // learning mode is more timing-sensitive.
-            const uint32_t lPair1WFreq = IOHC_FREQ_2;
-            lErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lPair1WFreq);
-            if (lErr == RadioError::None)
-                lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
-            if (mPairDiagnosticTraceEnabled && lErr == RadioError::None)
-            {
-                logInfoP("PairDiag: 1W pair repeat tx state=%s remaining=%u len=%u pre=%u",
-                         stateName(mState),
-                         static_cast<unsigned>(mTx1WRepeatRemaining),
-                         static_cast<unsigned>(mTxLen),
-                         static_cast<unsigned>(IOHC_PREAMBLE_LONG));
-            }
-        }
-        else
-        {
-            lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
+            logInfoP("PairDiag: 1W pair repeat tx state=%s remaining=%u len=%u pre=%u",
+                     stateName(mState),
+                     static_cast<unsigned>(mTx1WRepeatRemaining),
+                     static_cast<unsigned>(mTxLen),
+                     static_cast<unsigned>(IOHC_PREAMBLE_SHORT));
         }
 
         if (lErr == RadioError::None)

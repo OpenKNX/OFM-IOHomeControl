@@ -5229,11 +5229,19 @@ TEST(test_1w_execute_with_slat)
 TEST(test_1w_repeat_count_constant)
 {
     ASSERT_EQ(IOHC_1W_REPEAT_COUNT, 3);
+    ASSERT_EQ(IOHC_1W_REPEAT_COUNT + 1, 4); // first TX + three repeats
 }
 
 TEST(test_1w_repeat_interval_constant)
 {
     ASSERT_EQ(IOHC_1W_REPEAT_INTERVAL_MS, 40);
+}
+
+TEST(test_1w_repeat_preamble_constants)
+{
+    ASSERT_EQ(IOHC_PREAMBLE_LONG, 1024);
+    ASSERT_EQ(IOHC_PREAMBLE_SHORT, 8);
+    ASSERT_TRUE(IOHC_PREAMBLE_LONG > IOHC_PREAMBLE_SHORT);
 }
 
 TEST(test_1w_activate_mode_payload_layout)
@@ -8024,6 +8032,111 @@ TEST(controller_default_1w_execute_uses_standard_vent_layout)
     ASSERT_TRUE(lFrame.hasHmac);
 }
 
+TEST(controller_1w_execute_repeats_first_long_then_three_short)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    ioHomeTestSetMillis(0);
+    ioHomeTestSetMicros(0);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setNodeId(lDeviceNodeId);
+    lChannel.setEncryptionKey(lKey);
+    lChannel.setIs1W(true);
+    lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+    lChannel.setOneWayControllerKey(lKey);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 0xD2));
+    lController.loop(); // Idle -> TxPending
+    lController.loop(); // TxPending -> TxInProgress, first TX
+    ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+
+    lController.loop(); // TxInProgress -> Tx1WRepeat
+    ASSERT_EQ(lController.state(), ControllerState::Tx1WRepeat);
+
+    for (uint8_t i = 0; i < IOHC_1W_REPEAT_COUNT; i++)
+    {
+        ioHomeTestAdvanceMillis(IOHC_1W_REPEAT_INTERVAL_MS - 1);
+        lController.loop();
+        ASSERT_EQ(lController.radio().testTransmitCount(), static_cast<uint32_t>(i + 1));
+
+        ioHomeTestAdvanceMillis(1);
+        lController.loop();
+        ASSERT_EQ(lController.radio().testTransmitCount(), static_cast<uint32_t>(i + 2));
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
+
+        lController.loop(); // finish repeat TX and either schedule next repeat or go idle
+    }
+
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
+    ASSERT_EQ(lController.state(), ControllerState::Idle);
+}
+
+TEST(controller_1w_pairing_repeats_first_long_then_short)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    // Keep the native clock away from 0 because the controller uses 0 as the
+    // "no repeat timer armed" sentinel for the blind 1W pairing wait path.
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.setSystemKey(lKey);
+    lController.init();
+    lChannel.setIs1W(true);
+    lChannel.setConfigured1WTargetNodeId(lDeviceNodeId);
+    lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+    lChannel.setOneWayControllerKey(lKey);
+
+    ASSERT_TRUE(lController.startPairing(0, lDeviceNodeId));
+    lController.loop(); // PairSend1WAnnounce, first TX
+    ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+
+    lController.loop(); // PairWait1WAnnounce schedules the first repeat
+    ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
+
+    for (uint8_t i = 0; i < IOHC_1W_REPEAT_COUNT; i++)
+    {
+        const uint32_t lExpectedBeforeRepeat = static_cast<uint32_t>(i + 1);
+        const uint32_t lExpectedAfterRepeat = static_cast<uint32_t>(i + 2);
+
+        ioHomeTestAdvanceMillis(IOHC_1W_REPEAT_INTERVAL_MS - 1);
+        lController.loop();
+        ASSERT_EQ(lController.radio().testTransmitCount(), lExpectedBeforeRepeat);
+
+        ioHomeTestAdvanceMillis(1);
+        lController.loop();
+        ASSERT_EQ(lController.radio().testTransmitCount(), lExpectedAfterRepeat);
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
+
+        lController.loop(); // finish repeat TX and schedule next repeat or complete
+    }
+
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
+}
+
 TEST(controller_default_1w_execute_matches_reference_payloads)
 {
     struct TestCase
@@ -8733,6 +8846,7 @@ int main()
     printf("\n1W repeat and payload variants:\n");
     RUN(test_1w_repeat_count_constant);
     RUN(test_1w_repeat_interval_constant);
+    RUN(test_1w_repeat_preamble_constants);
     RUN(test_1w_activate_mode_payload_layout);
     RUN(test_1w_activate_mode_hmac_input_6bytes);
     RUN(test_1w_execute_16byte_payload_layout);
@@ -8789,6 +8903,8 @@ int main()
     RUN(controller_2w_initial_response_wait_uses_retry_gap);
     RUN(controller_2w_final_response_wait_and_sx1262_dwell);
     RUN(controller_default_1w_execute_uses_standard_vent_layout);
+    RUN(controller_1w_execute_repeats_first_long_then_three_short);
+    RUN(controller_1w_pairing_repeats_first_long_then_short);
     RUN(controller_default_1w_execute_matches_reference_payloads);
     RUN(controller_1w_channel_broadcast_type3_uses_typed_destination_for_pairing_and_runtime);
     RUN(controller_1w_channel_profiles_are_independent);

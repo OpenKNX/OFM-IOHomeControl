@@ -28,14 +28,15 @@
 
 class IoHomecontrolChannel;
 
-// 1W destination policy for remote-style broadcasts. Normal control uses the
-// configured/profile device type; diagnostics can force all or an exact node.
+// 1W destination policy for queued commands.
+// ProfileTyped is the normal/default path and resolves dst=((type << 6) | 0x3F).
+// All/ExplicitType/Exact are diagnostic override paths.
 enum class OneWayDestinationMode : uint8_t
 {
-  ProfileTyped = 0, // dst = ((configured type << 6) | 0x3F)
-  ExplicitType = 1, // dst = ((oneWayBroadcastType << 6) | 0x3F)
-  All = 2,          // dst = 0x00003F
-  Exact = 3         // dst = oneWayExactDestination
+  ProfileTyped = 0,
+  ExplicitType = 1,
+  All = 2,
+  Exact = 3
 };
 
 // Queued command entry
@@ -56,11 +57,11 @@ struct IoHomeQueueEntry
   uint16_t oneWayMain;        // main[2] value, e.g. 0x0000=open, 0xC800=close, 0xD200=stop
   uint8_t oneWayFp1;
   uint8_t oneWayFp2;
-  uint8_t oneWayBroadcastType;              // target type: dst = ((type << 6) | 0x3F)
-  bool oneWayBroadcastTypeExplicit;         // legacy alias: true when destination mode is ExplicitType
-  OneWayDestinationMode oneWayDestinationMode;
-  uint32_t oneWayExactDestination;          // only used when oneWayDestinationMode == Exact
-  bool twoWayTilt;                          // true: 2W tilt-only Execute payload
+  uint8_t oneWayBroadcastType;      // target type: dst = ((type << 6) | 0x3F)
+  bool oneWayBroadcastTypeExplicit; // true when the caller explicitly requested a typed 1W broadcast target
+  OneWayDestinationMode oneWayDestinationMode; // normal/profile typed, all, exact, or explicit type
+  uint32_t oneWayExactDestination;             // exact 24-bit 1W dst for diagnostics
+  bool twoWayTilt;                  // true: 2W tilt-only Execute payload
   uint8_t twoWayTiltPercent;
   uint8_t retries;
   bool active;
@@ -204,13 +205,11 @@ public:
   bool sendOneWayExecuteWithType(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                  uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
                                  uint8_t iBroadcastType);
-
-  // Queue a standard 1W Execute command with a diagnostic destination override.
   bool sendOneWayExecuteWithDestination(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                         uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
                                         OneWayDestinationMode iDestinationMode,
-                                        uint8_t iBroadcastType = 0,
-                                        uint32_t iExactDestination = 0);
+                                        uint8_t iBroadcastType,
+                                        uint32_t iExactDestination);
 
   // Set device name (authenticated 2W command: 0x52 → 0x3C → 0x3D → 0x53)
   bool sendSetName(uint32_t iDestNodeId, const uint8_t *iEncKey,
@@ -229,10 +228,8 @@ public:
   bool startPairingExperimental(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing2WMode iMode);
   // Start the standard 1W learning flow with an explicit broadcast type override.
   bool startPairingWithType(uint8_t iChannelIndex, uint32_t iKnownNodeId, uint8_t iBroadcastType);
-  // Diagnostic 1W add-only flow: send SendKey1W (0x30) without the announce (0x2E).
-  bool startPairing1WAddOnly(uint8_t iChannelIndex, uint32_t iKnownNodeId = 0);
-  // Explicit 1W removal flow: send RemoveController (0x39) only.
-  bool startPairing1WRemove(uint8_t iChannelIndex, uint32_t iKnownNodeId = 0);
+  bool startPairing1WAddOnly(uint8_t iChannelIndex, uint32_t iKnownNodeId);
+  bool startPairing1WRemove(uint8_t iChannelIndex, uint32_t iKnownNodeId);
   PairStartStatus lastPairStartStatus() const;
   ControllerState lastPairStartBlockedState() const;
 
@@ -552,8 +549,8 @@ private:
   IoHomeFrame mPairPulledKeyFrame;
   uint8_t mPairPulledKey[16];
   uint8_t mPairPullAuthChallenge[6];
-  uint8_t mPairing1WStage = 0; // 0=Announce(0x2E), 1=Add(0x30), 2=explicit Remove(0x39)
-  uint8_t mRequestedPairing1WMode = 0; // 0=announce+add, 1=add-only, 2=remove-only
+  uint8_t mPairing1WStage = 0; // 0=announce(0x2E), 1=add/send-key(0x30), 2=remove(0x39)
+  uint8_t mRequestedPairing1WMode = 0; // 0=announce-add, 1=add-only, 2=remove-only
   uint8_t mPairing1WBroadcastType = 2;
   uint8_t mDefault1WBroadcastType = 2;
   Pairing2WMode mPairing2WMode = Pairing2WMode::Normal;
@@ -649,6 +646,7 @@ private:
   void tracePairDiagnosticCompactPair() const;
   void tracePairDiagnosticCompactRx(const IoHomeRadioHealth &iHealth) const;
   void tracePairDiagnosticTx2W(const IoHomeFrame &iFrame, uint16_t iPreambleSymbols) const;
+  void trace1WRepeatPlan(const char *iContext) const;
   bool createAndTraceHmac1W(const uint8_t *iTranscript, uint8_t iTranscriptLen,
                             uint16_t iSequenceNum, const uint8_t iControllerKey[16],
                             uint8_t oHmac[IOHC_HMAC_SIZE]) const;
