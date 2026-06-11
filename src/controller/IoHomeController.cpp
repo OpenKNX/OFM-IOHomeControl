@@ -1956,6 +1956,34 @@ void IoHomeController::tracePairDiagnosticTx2W(const IoHomeFrame &iFrame, uint16
              (iFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) ? 1U : 0U);
 }
 
+bool IoHomeController::createAndTraceHmac1W(const uint8_t *iTranscript, uint8_t iTranscriptLen,
+                                            uint16_t iSequenceNum, const uint8_t iControllerKey[16],
+                                            uint8_t oHmac[IOHC_HMAC_SIZE]) const
+{
+    uint8_t lIv[16];
+    if (!IoHomeCrypto::createHmac1WWithIv(iTranscript, iTranscriptLen,
+                                          iSequenceNum, iControllerKey,
+                                          lIv, oHmac))
+    {
+        return false;
+    }
+
+    if (mPairDiagnosticTraceEnabled && iTranscript && iTranscriptLen > 0)
+    {
+        const std::string lTranscriptHex = hexDump(iTranscript, iTranscriptLen);
+        const std::string lIvHex = hexDump(lIv, sizeof(lIv));
+        const std::string lHmacHex = hexDump(oHmac, IOHC_HMAC_SIZE);
+        logInfoP("1w crypto: cmd=0x%02X transcript=%s seq=0x%04X iv=%s hmac=%s",
+                 static_cast<unsigned>(iTranscript[0]),
+                 lTranscriptHex.c_str(),
+                 static_cast<unsigned>(iSequenceNum),
+                 lIvHex.c_str(),
+                 lHmacHex.c_str());
+    }
+
+    return true;
+}
+
 RadioError IoHomeController::configureNormal2WTxRadio(uint16_t iPreambleSymbols)
 {
     const uint32_t lTxFreq = kNormal2WTxFreqHz;
@@ -3351,7 +3379,7 @@ void IoHomeController::processPairSend1WAnnounce()
     mTxFrame.data[2] = lSeq & 0xFF;
     mTxFrame.dataLen = 3;
     uint8_t lHmacInput[2] = {static_cast<uint8_t>(mTxFrame.commandId), 0x00};
-    if (!IoHomeCrypto::createHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
+    if (!createAndTraceHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
     {
         mState = ControllerState::PairFailed;
         return;
@@ -3445,7 +3473,7 @@ void IoHomeController::processPairSend1WRemove()
     mTxFrame.data[2] = lSeq & 0xFF;
     mTxFrame.dataLen = 3;
     uint8_t lHmacInput[2] = {static_cast<uint8_t>(mTxFrame.commandId), 0x00};
-    if (!IoHomeCrypto::createHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
+    if (!createAndTraceHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
     {
         mState = ControllerState::PairFailed;
         return;
@@ -4680,7 +4708,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 uint8_t lHmacIn[7];
                 lHmacIn[0] = static_cast<uint8_t>(mTxFrame.commandId);
                 memcpy(lHmacIn + 1, mTxFrame.data, 6);
-                IoHomeCrypto::createHmac1W(lHmacIn, sizeof(lHmacIn), lSeq, lProfileKey, mTxFrame.hmac);
+                if (!createAndTraceHmac1W(lHmacIn, sizeof(lHmacIn), lSeq, lProfileKey, mTxFrame.hmac))
+                    return false;
                 mTxFrame.hasHmac = true;
             }
             else if (iEntry.oneWayRawExecute)
@@ -4699,7 +4728,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 uint8_t lHmacIn[1 + IOHC_1W_RAW_EXEC_MAX_DATA];
                 lHmacIn[0] = static_cast<uint8_t>(mTxFrame.commandId);
                 memcpy(lHmacIn + 1, mTxFrame.data, iEntry.oneWayRawLen);
-                IoHomeCrypto::createHmac1W(lHmacIn, 1 + iEntry.oneWayRawLen, lSeq, lProfileKey, mTxFrame.hmac);
+                if (!createAndTraceHmac1W(lHmacIn, 1 + iEntry.oneWayRawLen, lSeq, lProfileKey, mTxFrame.hmac))
+                    return false;
                 mTxFrame.hasHmac = true;
             }
             else if (iEntry.oneWayButton)
@@ -4725,7 +4755,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 uint8_t lHmacIn[7];
                 lHmacIn[0] = static_cast<uint8_t>(mTxFrame.commandId);
                 memcpy(lHmacIn + 1, mTxFrame.data, 6);
-                IoHomeCrypto::createHmac1W(lHmacIn, sizeof(lHmacIn), lSeq, lProfileKey, mTxFrame.hmac);
+                if (!createAndTraceHmac1W(lHmacIn, sizeof(lHmacIn), lSeq, lProfileKey, mTxFrame.hmac))
+                    return false;
                 mTxFrame.hasHmac = true;
             }
             else if (iEntry.param3 != 0xFF)
@@ -4749,7 +4780,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 uint8_t lHmacIn[9];
                 lHmacIn[0] = static_cast<uint8_t>(mTxFrame.commandId);
                 memcpy(lHmacIn + 1, mTxFrame.data, 8);
-                IoHomeCrypto::createHmac1W(lHmacIn, 9, lSeq, lProfileKey, mTxFrame.hmac);
+                if (!createAndTraceHmac1W(lHmacIn, 9, lSeq, lProfileKey, mTxFrame.hmac))
+                    return false;
                 mTxFrame.hasHmac = true;
             }
             else
@@ -4788,7 +4820,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 uint8_t lHmacIn[7];
                 lHmacIn[0] = static_cast<uint8_t>(mTxFrame.commandId);
                 memcpy(lHmacIn + 1, mTxFrame.data, 6);
-                IoHomeCrypto::createHmac1W(lHmacIn, 7, lSeq, lProfileKey, mTxFrame.hmac);
+                if (!createAndTraceHmac1W(lHmacIn, 7, lSeq, lProfileKey, mTxFrame.hmac))
+                    return false;
                 mTxFrame.hasHmac = true;
             }
             mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
@@ -4904,7 +4937,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             uint8_t lHmacInAM[6];
             lHmacInAM[0] = static_cast<uint8_t>(mTxFrame.commandId); // 0x01
             memcpy(lHmacInAM + 1, mTxFrame.data, 5);
-            IoHomeCrypto::createHmac1W(lHmacInAM, 6, lSeqAM, lProfile->getOneWayControllerKey(), mTxFrame.hmac);
+            if (!createAndTraceHmac1W(lHmacInAM, 6, lSeqAM, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
+                return false;
             mTxFrame.hasHmac = true;
             mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
         }

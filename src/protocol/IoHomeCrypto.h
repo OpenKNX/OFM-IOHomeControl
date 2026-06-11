@@ -56,10 +56,22 @@ namespace IoHomeCrypto
                     const uint8_t iReceivedHmac[6], const uint8_t *iChallenge,
                     const uint8_t iSystemKey[16]);
 
-    // 1W HMAC: create and verify using sequence number instead of challenge
+    // 1W HMAC: create and verify using sequence number instead of challenge.
+    // iFrameData is the command transcript only: command byte + command payload
+    // before the appended 1W sequence/HMAC. Do not include RF header bytes,
+    // source/destination, appended sequence bytes, or appended HMAC bytes.
     bool createHmac1W(const uint8_t *iFrameData, size_t iDataLen,
                       uint16_t iSequenceNum, const uint8_t iControllerKey[16],
                       uint8_t oHmac[6]);
+
+    // Same as createHmac1W(), but also returns the exact IV used for AES.
+    // Useful for pairdiag/capture comparison.
+    bool createHmac1WWithIv(const uint8_t *iFrameData, size_t iDataLen,
+                            uint16_t iSequenceNum, const uint8_t iControllerKey[16],
+                            uint8_t oIv[16], uint8_t oHmac[6]);
+
+    // Byte-exact 1W crypto regression tests against fixed reference vectors.
+    bool selfTest1WReferenceVectors();
 
     bool verifyHmac1W(const uint8_t *iFrameData, size_t iDataLen,
                       uint16_t iSequenceNum, const uint8_t iReceivedHmac[6],

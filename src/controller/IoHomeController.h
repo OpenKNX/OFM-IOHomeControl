@@ -649,6 +649,9 @@ private:
   void tracePairDiagnosticCompactPair() const;
   void tracePairDiagnosticCompactRx(const IoHomeRadioHealth &iHealth) const;
   void tracePairDiagnosticTx2W(const IoHomeFrame &iFrame, uint16_t iPreambleSymbols) const;
+  bool createAndTraceHmac1W(const uint8_t *iTranscript, uint8_t iTranscriptLen,
+                            uint16_t iSequenceNum, const uint8_t iControllerKey[16],
+                            uint8_t oHmac[IOHC_HMAC_SIZE]) const;
   void tracePairDiagnosticFrame(const char *iPrefix, const IoHomeFrame &iFrame, uint8_t iFreqIdx, int16_t iRssi) const;
   void tracePairDiagnosticDiscoveryInterpretation(const IoHomeFrame &iFrame, uint8_t iFreqIdx) const;
   void processIdle();

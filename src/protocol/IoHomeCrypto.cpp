@@ -213,19 +213,30 @@ namespace IoHomeCrypto
         // Bytes 12-15: remain 0x55 padding
     }
 
+    bool createHmac1WWithIv(const uint8_t *iFrameData, size_t iDataLen,
+                            uint16_t iSequenceNum, const uint8_t iControllerKey[16],
+                            uint8_t oIv[16], uint8_t oHmac[6])
+    {
+        if (!iFrameData || !iControllerKey || !oIv || !oHmac)
+            return false;
+
+        constructIv1W(iFrameData, iDataLen, iSequenceNum, oIv);
+
+        uint8_t lEncrypted[16];
+        if (!aes128Encrypt(oIv, iControllerKey, lEncrypted))
+            return false;
+
+        memcpy(oHmac, lEncrypted, 6);
+        return true;
+    }
+
     bool createHmac1W(const uint8_t *iFrameData, size_t iDataLen,
                       uint16_t iSequenceNum, const uint8_t iControllerKey[16],
                       uint8_t oHmac[6])
     {
         uint8_t lIv[16];
-        constructIv1W(iFrameData, iDataLen, iSequenceNum, lIv);
-
-        uint8_t lEncrypted[16];
-        if (!aes128Encrypt(lIv, iControllerKey, lEncrypted))
-            return false;
-
-        memcpy(oHmac, lEncrypted, 6);
-        return true;
+        return createHmac1WWithIv(iFrameData, iDataLen, iSequenceNum,
+                                  iControllerKey, lIv, oHmac);
     }
 
     bool verifyHmac1W(const uint8_t *iFrameData, size_t iDataLen,
@@ -266,6 +277,82 @@ namespace IoHomeCrypto
     {
         // Decrypt is identical to encrypt for single-block CFB128 (same XOR operation)
         return encrypt1WKey(iEncrypted, iTransferKey, iNodeAddress, oKey);
+    }
+
+    namespace
+    {
+        bool bytesEqual(const uint8_t *iA, const uint8_t *iB, size_t iLen)
+        {
+            uint8_t lDiff = 0;
+            for (size_t i = 0; i < iLen; i++)
+                lDiff |= iA[i] ^ iB[i];
+            return lDiff == 0;
+        }
+    }
+
+    bool selfTest1WReferenceVectors()
+    {
+        // These vectors lock the rspaargaren/Velocet 1W rule:
+        // IV input is command transcript only.  It does not include ctrl0/ctrl1,
+        // source, destination, appended sequence bytes or appended HMAC bytes.
+        static const uint8_t kKey[16] = {
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+            0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F};
+
+        struct Vector
+        {
+            const char *name;
+            const uint8_t *transcript;
+            uint8_t transcriptLen;
+            uint16_t sequence;
+            uint8_t expectedIv[16];
+            uint8_t expectedHmac[6];
+        };
+
+        static const uint8_t kPair2E[] = {0x2E, 0x00};
+        static const uint8_t kRemove39[] = {0x39, 0x00};
+        static const uint8_t kExecOpen[] = {0x00, 0x01, 0x43, 0x00, 0x00, 0x00, 0x00};
+        static const uint8_t kExecStop[] = {0x00, 0x01, 0x43, 0xD2, 0x00, 0x00, 0x00};
+        static const uint8_t kMode1[] = {0x01, 0x01, 0x43, 0x05, 0x00, 0x11};
+
+        static const Vector kVectors[] = {
+            {"pair_2e00", kPair2E, sizeof(kPair2E), 0x1234,
+             {0x2E, 0x00, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x00, 0xB8, 0x12, 0x34, 0x55, 0x55, 0x55, 0x55},
+             {0xDE, 0x69, 0x31, 0xC2, 0x49, 0x48}},
+            {"remove_3900", kRemove39, sizeof(kRemove39), 0x1234,
+             {0x39, 0x00, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x00, 0xE4, 0x12, 0x34, 0x55, 0x55, 0x55, 0x55},
+             {0x00, 0x00, 0x76, 0xFC, 0x28, 0x9C}},
+            {"execute_open", kExecOpen, sizeof(kExecOpen), 0x1234,
+             {0x00, 0x01, 0x43, 0x00, 0x00, 0x00, 0x00, 0x55, 0x08, 0x20, 0x12, 0x34, 0x55, 0x55, 0x55, 0x55},
+             {0x55, 0x92, 0xF0, 0x26, 0xA2, 0xEC}},
+            {"execute_stop", kExecStop, sizeof(kExecStop), 0x1234,
+             {0x00, 0x01, 0x43, 0xD2, 0x00, 0x00, 0x00, 0x55, 0x05, 0x00, 0x12, 0x34, 0x55, 0x55, 0x55, 0x55},
+             {0xFA, 0x9B, 0xD2, 0x86, 0xF0, 0x75}},
+            {"mode1", kMode1, sizeof(kMode1), 0x1234,
+             {0x01, 0x01, 0x43, 0x05, 0x00, 0x11, 0x55, 0x55, 0x04, 0x5A, 0x12, 0x34, 0x55, 0x55, 0x55, 0x55},
+             {0x7A, 0x5A, 0xDB, 0x9E, 0x5B, 0xA0}},
+        };
+
+        for (const Vector &lVector : kVectors)
+        {
+            uint8_t lIv[16];
+            uint8_t lHmac[6];
+
+            constructIv1W(lVector.transcript, lVector.transcriptLen,
+                          lVector.sequence, lIv);
+            if (!bytesEqual(lIv, lVector.expectedIv, sizeof(lVector.expectedIv)))
+                return false;
+
+            if (!createHmac1WWithIv(lVector.transcript, lVector.transcriptLen,
+                                    lVector.sequence, kKey, lIv, lHmac))
+                return false;
+            if (!bytesEqual(lIv, lVector.expectedIv, sizeof(lVector.expectedIv)))
+                return false;
+            if (!bytesEqual(lHmac, lVector.expectedHmac, sizeof(lVector.expectedHmac)))
+                return false;
+        }
+
+        return true;
     }
 
 } // namespace IoHomeCrypto
