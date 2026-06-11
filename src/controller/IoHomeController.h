@@ -63,6 +63,7 @@ struct IoHomeQueueEntry
   bool oneWayBroadcastTypeExplicit; // true when the caller explicitly requested a typed 1W broadcast target
   OneWayDestinationMode oneWayDestinationMode; // normal/profile typed, all, exact, or explicit type
   uint32_t oneWayExactDestination;             // exact 24-bit 1W dst for diagnostics
+  uint8_t sourceChannelIndex;                  // 0xFF when not queued from a concrete channel
   bool twoWayTilt;                  // true: 2W tilt-only Execute payload
   uint8_t twoWayTiltPercent;
   uint8_t retries;
@@ -193,6 +194,13 @@ public:
   bool sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
                    IoHomeCommand iCmd, uint8_t iParam, uint8_t iParam2, uint8_t iParam3);
 
+  // Queue a command for a concrete 1W channel profile. This path does not
+  // require a bound actuator node ID; targetNode=0 is a valid broadcast-only
+  // virtual remote profile and still serializes to the typed/all 1W destination.
+  bool sendChannelCommand(IoHomecontrolChannel *iChannel,
+                          IoHomeCommand iCmd, uint8_t iParam,
+                          uint8_t iParam2 = 0xFF, uint8_t iParam3 = 0xFF);
+
   // Explicit 1W position convention helpers. UI/Open percent uses 100=open;
   // raw IOHC closedness uses 0=open and 100=closed. The generic Execute
   // builder consumes raw closedness percent.
@@ -203,16 +211,22 @@ public:
   // Codes from known 1W remotes: 0x0000=up, 0x0001=down, 0x0002=stop,
   // 0x0003=my/prog, 0x00FE=release, 0x00FF=alternative stop.
   bool sendOneWayButton(uint32_t iDestNodeId, const uint8_t *iEncKey, uint16_t iButtonCode);
+  bool sendOneWayChannelButton(IoHomecontrolChannel *iChannel, uint16_t iButtonCode);
 
   // Queue an exact 1W Execute payload. The controller appends sequence + HMAC.
   bool sendOneWayRawExecute(uint32_t iDestNodeId, const uint8_t *iEncKey,
                             const uint8_t *iPayload, uint8_t iPayloadLen);
+  bool sendOneWayChannelRawExecute(IoHomecontrolChannel *iChannel,
+                                   const uint8_t *iPayload, uint8_t iPayloadLen);
 
   // Queue a standard 1W Execute command with an explicit broadcast type:
   // payload = 01 43 main[2] fp1 fp2, then sequence + HMAC are appended.
   bool sendOneWayExecuteWithType(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                  uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
                                  uint8_t iBroadcastType);
+  bool sendOneWayChannelExecuteWithType(IoHomecontrolChannel *iChannel,
+                                        uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
+                                        uint8_t iBroadcastType);
   bool sendOneWayExecuteWithDestination(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                         uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
                                         OneWayDestinationMode iDestinationMode,
@@ -783,6 +797,8 @@ private:
   bool queuePop(IoHomeQueueEntry &oEntry);
   bool queueEmpty() const;
   IoHomecontrolChannel *channelForNode(uint32_t iNodeId) const;
+  uint8_t channelIndexFor(IoHomecontrolChannel *iChannel) const;
+  IoHomecontrolChannel *channelForQueueEntry(const IoHomeQueueEntry &iEntry) const;
   bool resolveLowPower2W(uint32_t iNodeId) const;
   IoHomecontrolChannel *oneWayProfileForNode(uint32_t iNodeId) const;
   uint8_t oneWayBroadcastTypeForNode(uint32_t iNodeId) const;

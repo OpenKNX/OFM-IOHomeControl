@@ -2251,8 +2251,9 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc help", "Show io-homecontrol commands");
     openknx.console.printHelpLine("iohc status", "Show all channel status");
     openknx.console.printHelpLine("iohc status NN", "Show channel NN detail");
-    openknx.console.printHelpLine("iohc pair NN [ADDR]", "Start pairing; 1W uses ETS target or hex ADDR override");
-    openknx.console.printHelpLine("iohc pair1w NN [ADDR] announce-add|add-only", "Start explicit 1W add flow");
+    openknx.console.printHelpLine("iohc pair NN [ADDR]", "Start pairing; 1W ADDR is optional/binding only");
+    openknx.console.printHelpLine("iohc pair1w NN [ADDR] announce-add|add-only", "Start explicit 1W add flow; ADDR optional");
+    openknx.console.printHelpLine("iohc bind1w NN ADDR", "Bind/rebind a 1W broadcast profile to an actuator node");
     openknx.console.printHelpLine("iohc remove1w NN [ADDR]", "Send explicit 1W RemoveController only");
     openknx.console.printHelpLine("iohc pair2w-exp NN MODE [ADDR]", "Diagnostic-only 2W pairing mode: discovery-confirm|launch-key|pull-key");
     openknx.console.printHelpLine("iohc pair cancel", "Cancel ongoing pairing");
@@ -2407,8 +2408,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             if (parseChannelIndex(lSub.substr(7, 2), mNumChannels, lIdx))
             {
                 IoHomecontrolChannel *lCh = mChannels[lIdx];
+                const bool lOneWayBroadcastOnly = lCh->is1W() && !lCh->isPaired() && lCh->getConfigured1WTargetNodeId() == 0;
                 logInfoP("Ch%02d: %s device=0x%06X%s", lIdx + 1,
-                         lCh->isPaired() ? "PAIRED" : "unpaired",
+                         lOneWayBroadcastOnly ? "1W-BROADCAST" : (lCh->isPaired() ? "PAIRED" : "unpaired"),
                          lCh->getNodeId(),
                          lCh->is1W() ? " [1W]" : " [2W]");
                 if (lCh->is1W())
@@ -2418,12 +2420,14 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                     logInfoP("  2W identity: node=0x%06X key=%s",
                              mController.getOwnNodeId(),
                              keyStateText(mController.getSystemKey()));
-                    logInfoP("  1W remote: profile=ch%02u node=0x%06X key=%s type=%u target=0x%06X mfg=0x%02X seq=0x%04X reserved=0x%04X",
+                    const uint32_t lBoundTarget = lCh->isPaired() ? lCh->getNodeId() : lCh->getConfigured1WTargetNodeId();
+                    logInfoP("  1W remote: profile=ch%02u node=0x%06X key=%s type=%u target=%s0x%06X mfg=0x%02X seq=0x%04X reserved=0x%04X",
                              static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1),
                              lProfile ? lProfile->getOneWayControllerNodeId() : 0,
                              lProfile ? keyStateText(lProfile->getOneWayControllerKey()) : "missing",
                              static_cast<unsigned>(lCh->getConfigured1WBroadcastType()),
-                             static_cast<unsigned long>(lCh->isPaired() ? lCh->getNodeId() : lCh->getConfigured1WTargetNodeId()),
+                             lBoundTarget == 0 ? "broadcast-only/no-bind " : "",
+                             static_cast<unsigned long>(lBoundTarget),
                              static_cast<unsigned>(lProfile ? lProfile->getOneWayControllerManufacturer() : 0),
                              static_cast<unsigned>(lProfile ? lProfile->getSequence1W() : 0),
                              static_cast<unsigned>(lProfile ? lProfile->getReservedSequence1W() : 0));
@@ -2459,8 +2463,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 if (lCh->is1W())
                 {
                     IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(lCh);
+                    const bool lOneWayBroadcastOnly = !lCh->isPaired() && lCh->getConfigured1WTargetNodeId() == 0;
                     logInfoP("Ch%02d: %s [1W] device=0x%06X remote=0x%06X key=%s type=%u mfg=0x%02X seq=0x%04X", i + 1,
-                             lCh->isPaired() ? "PAIRED" : "unpaired",
+                             lOneWayBroadcastOnly ? "1W-BROADCAST" : (lCh->isPaired() ? "PAIRED" : "unpaired"),
                              lCh->isPaired() ? lCh->getNodeId() : lCh->getConfigured1WTargetNodeId(),
                              lProfile ? lProfile->getOneWayControllerNodeId() : 0,
                              lProfile ? keyStateText(lProfile->getOneWayControllerKey()) : "missing",
@@ -2792,6 +2797,32 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         return true;
     }
 
+    if (lSub.rfind("bind1w", 0) == 0)
+    {
+        std::string lArgs = trimSpaces(lSub.length() > strlen("bind1w") ? lSub.substr(strlen("bind1w")) : "");
+        std::string lChanText;
+        std::string lAddrText;
+        uint8_t lIdx = 0;
+        uint32_t lNodeId = 0;
+        if (!takeToken(lArgs, lChanText) || !takeToken(lArgs, lAddrText) || !lArgs.empty() ||
+            !parseChannelIndex(lChanText, mNumChannels, lIdx) || !parseHex24(lAddrText, lNodeId) || lNodeId == 0)
+        {
+            openknx.console.printHelpLine("iohc bind1w NN ADDR", "Bind/rebind a 1W broadcast profile to an actuator node");
+            return true;
+        }
+        if (!mChannels[lIdx] || !mChannels[lIdx]->is1W())
+        {
+            logInfoP("Channel %u is not configured for 1W.", static_cast<unsigned>(lIdx + 1));
+            return true;
+        }
+
+        mChannels[lIdx]->setConfigured1WTargetNodeId(lNodeId);
+        mChannels[lIdx]->setNodeId(lNodeId);
+        openknx.flash.save();
+        logInfoP("1W channel %u bound to actuator 0x%06X", static_cast<unsigned>(lIdx + 1), lNodeId & 0x00FFFFFF);
+        return true;
+    }
+
     if (lSub.rfind("pair1w-type", 0) == 0)
     {
         std::string lArgs = trimSpaces(lSub.length() > strlen("pair1w-type") ? lSub.substr(strlen("pair1w-type")) : "");
@@ -2888,8 +2919,6 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                      lAddOnly ? "add-only" : "announce-add",
                      static_cast<unsigned>(lIdx + 1),
                      lNodeId & 0x00FFFFFF);
-        else if (mController.lastPairStartStatus() == IoHomeController::PairStartStatus::Missing1WTarget)
-            logInfoP("1W pairing needs an ETS target node ID or: iohc pair1w %02d AABBCC announce-add", lIdx + 1);
         else
             logInfoP("1W %s pairing failed to start for channel %u",
                      lAddOnly ? "add-only" : "announce-add",
@@ -2960,11 +2989,6 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             return true;
         }
         IoHomecontrolChannel *lCh = mChannels[lIdx];
-        if (!lCh->isPaired())
-        {
-            logInfoP("Channel %u not paired", static_cast<unsigned>(lIdx + 1));
-            return true;
-        }
         if (!lCh->is1W())
         {
             logInfoP("Channel %u is not in 1W mode", static_cast<unsigned>(lIdx + 1));
@@ -3013,7 +3037,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             return true;
         }
 
-        if (mController.sendOneWayExecuteWithType(lCh->getNodeId(), lCh->getEncryptionKey(), lMain, lFp1, lFp2, static_cast<uint8_t>(lType)))
+        if (mController.sendOneWayChannelExecuteWithType(lCh, lMain, lFp1, lFp2, static_cast<uint8_t>(lType)))
             logInfoP("Sent 1W %s main=0x%04X type=%u dst=0x%06X to channel %u", lName, static_cast<unsigned>(lMain), static_cast<unsigned>(lType), mController.oneWayBroadcastTarget(static_cast<uint8_t>(lType)), static_cast<unsigned>(lIdx + 1));
         else
             logInfoP("Failed to queue 1W %s for channel %u", lName, static_cast<unsigned>(lIdx + 1));
@@ -3102,11 +3126,6 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                         logInfoP("1W pairing started for channel %d", lIdx + 1);
                     else
                         logInfoP("Pairing started for channel %d", lIdx + 1);
-                }
-                else if (mChannels[lIdx]->is1W() && lNodeId == 0 && !mChannels[lIdx]->isPaired() &&
-                         mChannels[lIdx]->getConfigured1WTargetNodeId() == 0)
-                {
-                    logInfoP("1W pairing needs an ETS target node ID or: iohc pair %02d AABBCC", lIdx + 1);
                 }
                 else
                 {
@@ -3219,11 +3238,6 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         }
 
         IoHomecontrolChannel *lCh = mChannels[lIdx];
-        if (!lCh->isPaired())
-        {
-            logInfoP("Channel %d not paired", lIdx + 1);
-            return true;
-        }
         if (!lCh->is1W())
         {
             logInfoP("Channel %d is not in 1W mode", lIdx + 1);
@@ -3241,7 +3255,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 return true;
             }
 
-            if (mController.sendOneWayRawExecute(lCh->getNodeId(), lCh->getEncryptionKey(), lPayload, lPayloadLen))
+            if (mController.sendOneWayChannelRawExecute(lCh, lPayload, lPayloadLen))
                 logInfoP("Sent raw 1W Execute payload len=%u to channel %d", static_cast<unsigned>(lPayloadLen), lIdx + 1);
             else
                 logInfoP("Failed to queue raw 1W Execute payload len=%u for channel %d", static_cast<unsigned>(lPayloadLen), lIdx + 1);
@@ -3306,9 +3320,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 
         bool lQueued = false;
         if (lUseStandard1WExecute)
-            lQueued = mController.sendCommand(lCh->getNodeId(), lCh->getEncryptionKey(), IoHomeCommand::Execute, lExecuteParam);
+            lQueued = mController.sendChannelCommand(lCh, IoHomeCommand::Execute, lExecuteParam);
         else
-            lQueued = mController.sendOneWayButton(lCh->getNodeId(), lCh->getEncryptionKey(), static_cast<uint16_t>(lCodeValue));
+            lQueued = mController.sendOneWayChannelButton(lCh, static_cast<uint16_t>(lCodeValue));
 
         if (lQueued)
             logInfoP("Sent 1W button %s (0x%04X) to channel %d", lButtonName, static_cast<unsigned>(lCodeValue), lIdx + 1);
@@ -3327,7 +3341,14 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 parseUnsignedDecimal(lSub.substr(8), lPosValue) && lPosValue <= 100)
             {
                 const uint8_t lPos = static_cast<uint8_t>(lPosValue);
-                if (mChannels[lIdx]->isPaired())
+                if (mChannels[lIdx]->is1W())
+                {
+                    if (mController.sendChannelCommand(mChannels[lIdx], IoHomeCommand::Execute, lPos))
+                        logInfoP("Sent 1W position %d%% to channel %d", lPos, lIdx + 1);
+                    else
+                        logInfoP("Failed to queue 1W position %d%% for channel %d", lPos, lIdx + 1);
+                }
+                else if (mChannels[lIdx]->isPaired())
                 {
                     mController.sendCommand(mChannels[lIdx]->getNodeId(),
                                             mChannels[lIdx]->getEncryptionKey(),

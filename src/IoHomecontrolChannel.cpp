@@ -185,7 +185,7 @@ void IoHomecontrolChannel::setup()
 
 void IoHomecontrolChannel::loop()
 {
-    if (!mPaired)
+    if (!mPaired || (mIs1W && mNodeId == 0))
         return;
 
     if (!ParamIOHC_IOHCActive)
@@ -729,43 +729,56 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
     mTargetPosition = clampPercent(iPercent);
     uint8_t lParam = (uint8_t)(iPercent + 0.5f);
     const bool lQueued = mIs1W
-                             ? mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lParam, iSlatPercent)
+                             ? mController.sendChannelCommand(this, IoHomeCommand::Execute, lParam, iSlatPercent)
                              : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lParam);
     if (!lQueued)
         return;
 
     startTravelEstimation(mTargetPosition);
-    startStatusPollTracking(defaultTrackedStatusPollDelayMs());
+    if (!mIs1W || mNodeId != 0)
+        startStatusPollTracking(defaultTrackedStatusPollDelayMs());
 }
 
 void IoHomecontrolChannel::sendUpDown(bool iDown)
 {
     logDebugP("Send %s", iDown ? "DOWN" : "UP");
     uint8_t lPercent = iDown ? 100 : 0;
-    if (!mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lPercent))
+    const bool lQueued = mIs1W
+                             ? mController.sendChannelCommand(this, IoHomeCommand::Execute, lPercent)
+                             : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lPercent);
+    if (!lQueued)
         return;
 
     startTravelEstimation((float)lPercent);
-    startStatusPollTracking(defaultTrackedStatusPollDelayMs());
+    if (!mIs1W || mNodeId != 0)
+        startStatusPollTracking(defaultTrackedStatusPollDelayMs());
 }
 
 void IoHomecontrolChannel::sendStop()
 {
     logDebugP("Send STOP");
     stopTravelEstimation(true);
-    if (!mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD2))
+    const bool lQueued = mIs1W
+                             ? mController.sendChannelCommand(this, IoHomeCommand::Execute, 0xD2)
+                             : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD2);
+    if (!lQueued)
         return;
 
-    startStatusPollTracking(defaultTrackedStatusPollDelayMs());
+    if (!mIs1W || mNodeId != 0)
+        startStatusPollTracking(defaultTrackedStatusPollDelayMs());
 }
 
 void IoHomecontrolChannel::sendFavorite()
 {
     logDebugP("Send FAVORITE");
-    if (!mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD8))
+    const bool lQueued = mIs1W
+                             ? mController.sendChannelCommand(this, IoHomeCommand::Execute, 0xD8)
+                             : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD8);
+    if (!lQueued)
         return;
 
-    startStatusPollTracking(defaultTrackedStatusPollDelayMs());
+    if (!mIs1W || mNodeId != 0)
+        startStatusPollTracking(defaultTrackedStatusPollDelayMs());
 }
 
 void IoHomecontrolChannel::sendSlatCommand(float iPercent)
@@ -782,13 +795,19 @@ void IoHomecontrolChannel::sendSlatCommand(float iPercent)
 
     uint8_t lPosParam = (uint8_t)(mCurrentPosition + 0.5f);
     uint8_t lSlatParam = (uint8_t)(lSlatPercent + 0.5f);
-    if (mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lPosParam, lSlatParam))
+    const bool lQueued = mIs1W
+                             ? mController.sendChannelCommand(this, IoHomeCommand::Execute, lPosParam, lSlatParam)
+                             : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lPosParam, lSlatParam);
+    if (lQueued && (!mIs1W || mNodeId != 0))
         startStatusPollTracking(defaultTrackedStatusPollDelayMs());
 }
 
 bool IoHomecontrolChannel::requestStatus()
 {
     logDebugP("Request status");
+
+    if (mIs1W && mNodeId == 0)
+        return false;
 
     if (!mIs1W && isTiltCapableDeviceType())
     {

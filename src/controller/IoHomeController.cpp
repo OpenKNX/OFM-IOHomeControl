@@ -1125,6 +1125,65 @@ bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
     lEntry.oneWayBroadcastTypeExplicit = false;
     lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
     lEntry.oneWayExactDestination = 0;
+    lEntry.sourceChannelIndex = 0xFF;
+    lEntry.retries = 0;
+    lEntry.active = true;
+    return queuePush(lEntry);
+}
+
+bool IoHomeController::sendChannelCommand(IoHomecontrolChannel *iChannel,
+                                          IoHomeCommand iCmd, uint8_t iParam,
+                                          uint8_t iParam2, uint8_t iParam3)
+{
+    if (!iChannel || !iChannel->is1W())
+        return false;
+    IoHomecontrolChannel *lProfileChannel = oneWayProfileForChannel(iChannel);
+    if (!lProfileChannel || !lProfileChannel->hasOneWayControllerIdentity())
+        return false;
+
+    IoHomeQueueEntry lEntry;
+    memset(&lEntry, 0, sizeof(lEntry));
+    lEntry.destNodeId = iChannel->getNodeId(); // may be 0 for virtual/broadcast-only profiles
+    lEntry.encKey = iChannel->getEncryptionKey();
+    lEntry.command = iCmd;
+    lEntry.param = iParam;
+    lEntry.param2 = iParam2;
+    lEntry.param3 = iParam3;
+    lEntry.oneWayButton = false;
+    lEntry.oneWayButtonCode = 0;
+    lEntry.oneWayRawExecute = false;
+    lEntry.oneWayRawLen = 0;
+    lEntry.oneWayBroadcastType = iChannel->getConfigured1WBroadcastType();
+    const OneWayCommandProfile lOneWayProfile = oneWayCommandProfileForType(lEntry.oneWayBroadcastType);
+    lEntry.oneWayAcei = lOneWayProfile.acei;
+    lEntry.oneWayFp1 = lOneWayProfile.fp1;
+    lEntry.oneWayFp2 = lOneWayProfile.fp2;
+    if (iCmd == IoHomeCommand::Execute && iParam3 == 0xFF)
+    {
+        lEntry.oneWayStandardExecute = true;
+        if (iParam <= 100)
+        {
+            const uint8_t lRawClosedPercent = iParam;
+            lEntry.oneWayMain = rawClosedPercentToOneWayMain(lRawClosedPercent);
+            if (iParam2 != 0xFF)
+            {
+                lEntry.oneWayFp1 = 0x80;
+                lEntry.oneWayFp2 = iParam2 * 2U;
+            }
+        }
+        else if (iParam == 0xD8 && iParam2 == 0x03)
+        {
+            lEntry.oneWayMain = IOHC_POSITION_VENT;
+        }
+        else
+        {
+            lEntry.oneWayMain = static_cast<uint16_t>(iParam) << 8;
+        }
+    }
+    lEntry.oneWayBroadcastTypeExplicit = false;
+    lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
+    lEntry.oneWayExactDestination = 0;
+    lEntry.sourceChannelIndex = channelIndexFor(iChannel);
     lEntry.retries = 0;
     lEntry.active = true;
     return queuePush(lEntry);
@@ -1152,6 +1211,41 @@ bool IoHomeController::sendOneWayButton(uint32_t iDestNodeId, const uint8_t *iEn
     lEntry.oneWayBroadcastTypeExplicit = false;
     lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
     lEntry.oneWayExactDestination = 0;
+    lEntry.sourceChannelIndex = 0xFF;
+    lEntry.retries = 0;
+    lEntry.active = true;
+    return queuePush(lEntry);
+}
+
+bool IoHomeController::sendOneWayChannelButton(IoHomecontrolChannel *iChannel, uint16_t iButtonCode)
+{
+    if (!iChannel || !iChannel->is1W())
+        return false;
+    IoHomecontrolChannel *lProfileChannel = oneWayProfileForChannel(iChannel);
+    if (!lProfileChannel || !lProfileChannel->hasOneWayControllerIdentity())
+        return false;
+
+    IoHomeQueueEntry lEntry;
+    memset(&lEntry, 0, sizeof(lEntry));
+    lEntry.destNodeId = iChannel->getNodeId();
+    lEntry.encKey = iChannel->getEncryptionKey();
+    lEntry.command = IoHomeCommand::Execute;
+    lEntry.param = 0xFF;
+    lEntry.param2 = 0xFF;
+    lEntry.param3 = 0xFF;
+    lEntry.oneWayButton = true;
+    lEntry.oneWayButtonCode = iButtonCode;
+    lEntry.oneWayRawExecute = false;
+    lEntry.oneWayRawLen = 0;
+    lEntry.oneWayBroadcastType = iChannel->getConfigured1WBroadcastType();
+    const OneWayCommandProfile lOneWayProfile = oneWayCommandProfileForType(lEntry.oneWayBroadcastType);
+    lEntry.oneWayAcei = lOneWayProfile.acei;
+    lEntry.oneWayFp1 = lOneWayProfile.fp1;
+    lEntry.oneWayFp2 = lOneWayProfile.fp2;
+    lEntry.oneWayBroadcastTypeExplicit = false;
+    lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
+    lEntry.oneWayExactDestination = 0;
+    lEntry.sourceChannelIndex = channelIndexFor(iChannel);
     lEntry.retries = 0;
     lEntry.active = true;
     return queuePush(lEntry);
@@ -1183,6 +1277,45 @@ bool IoHomeController::sendOneWayRawExecute(uint32_t iDestNodeId, const uint8_t 
     lEntry.oneWayBroadcastTypeExplicit = false;
     lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
     lEntry.oneWayExactDestination = 0;
+    lEntry.sourceChannelIndex = 0xFF;
+    memcpy(lEntry.oneWayRawData, iPayload, iPayloadLen);
+    lEntry.retries = 0;
+    lEntry.active = true;
+    return queuePush(lEntry);
+}
+
+bool IoHomeController::sendOneWayChannelRawExecute(IoHomecontrolChannel *iChannel,
+                                                   const uint8_t *iPayload, uint8_t iPayloadLen)
+{
+    if (!iChannel || !iChannel->is1W())
+        return false;
+    IoHomecontrolChannel *lProfileChannel = oneWayProfileForChannel(iChannel);
+    if (!lProfileChannel || !lProfileChannel->hasOneWayControllerIdentity())
+        return false;
+    if (iPayload == nullptr || iPayloadLen == 0 || iPayloadLen > IOHC_1W_RAW_EXEC_MAX_DATA)
+        return false;
+
+    IoHomeQueueEntry lEntry;
+    memset(&lEntry, 0, sizeof(lEntry));
+    lEntry.destNodeId = iChannel->getNodeId();
+    lEntry.encKey = iChannel->getEncryptionKey();
+    lEntry.command = IoHomeCommand::Execute;
+    lEntry.param = 0xFF;
+    lEntry.param2 = 0xFF;
+    lEntry.param3 = 0xFF;
+    lEntry.oneWayButton = false;
+    lEntry.oneWayButtonCode = 0;
+    lEntry.oneWayRawExecute = true;
+    lEntry.oneWayRawLen = iPayloadLen;
+    lEntry.oneWayBroadcastType = iChannel->getConfigured1WBroadcastType();
+    const OneWayCommandProfile lOneWayProfile = oneWayCommandProfileForType(lEntry.oneWayBroadcastType);
+    lEntry.oneWayAcei = lOneWayProfile.acei;
+    lEntry.oneWayFp1 = lOneWayProfile.fp1;
+    lEntry.oneWayFp2 = lOneWayProfile.fp2;
+    lEntry.oneWayBroadcastTypeExplicit = false;
+    lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
+    lEntry.oneWayExactDestination = 0;
+    lEntry.sourceChannelIndex = channelIndexFor(iChannel);
     memcpy(lEntry.oneWayRawData, iPayload, iPayloadLen);
     lEntry.retries = 0;
     lEntry.active = true;
@@ -1196,6 +1329,37 @@ bool IoHomeController::sendOneWayExecuteWithType(uint32_t iDestNodeId, const uin
     return sendOneWayExecuteWithDestination(iDestNodeId, iEncKey, iMain, iFp1, iFp2,
                                             OneWayDestinationMode::ExplicitType,
                                             iBroadcastType, 0);
+}
+
+bool IoHomeController::sendOneWayChannelExecuteWithType(IoHomecontrolChannel *iChannel,
+                                                           uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
+                                                           uint8_t iBroadcastType)
+{
+    if (!iChannel || !iChannel->is1W())
+        return false;
+    IoHomecontrolChannel *lProfileChannel = oneWayProfileForChannel(iChannel);
+    if (!lProfileChannel || !lProfileChannel->hasOneWayControllerIdentity())
+        return false;
+
+    const OneWayCommandProfile lProfile = oneWayCommandProfileForType(iBroadcastType);
+    IoHomeQueueEntry lEntry;
+    memset(&lEntry, 0, sizeof(lEntry));
+    lEntry.destNodeId = iChannel->getNodeId();
+    lEntry.encKey = iChannel->getEncryptionKey();
+    lEntry.command = IoHomeCommand::Execute;
+    lEntry.oneWayStandardExecute = true;
+    lEntry.oneWayMain = iMain;
+    lEntry.oneWayAcei = lProfile.acei;
+    lEntry.oneWayFp1 = iFp1;
+    lEntry.oneWayFp2 = iFp2;
+    lEntry.oneWayBroadcastType = iBroadcastType & 0x3F;
+    lEntry.oneWayBroadcastTypeExplicit = true;
+    lEntry.oneWayDestinationMode = OneWayDestinationMode::ExplicitType;
+    lEntry.oneWayExactDestination = 0;
+    lEntry.sourceChannelIndex = channelIndexFor(iChannel);
+    lEntry.retries = 0;
+    lEntry.active = true;
+    return queuePush(lEntry);
 }
 
 bool IoHomeController::sendOneWayExecuteWithDestination(uint32_t iDestNodeId, const uint8_t *iEncKey,
@@ -1237,6 +1401,7 @@ bool IoHomeController::sendOneWayExecuteWithTemplate(uint32_t iDestNodeId, const
     lEntry.oneWayBroadcastTypeExplicit = (iDestinationMode == OneWayDestinationMode::ExplicitType);
     lEntry.oneWayDestinationMode = iDestinationMode;
     lEntry.oneWayExactDestination = iExactDestination & 0x00FFFFFF;
+    lEntry.sourceChannelIndex = 0xFF;
     lEntry.retries = 0;
     lEntry.active = true;
     return queuePush(lEntry);
@@ -1374,6 +1539,9 @@ IoHomecontrolChannel *IoHomeController::channelForNode(uint32_t iNodeId) const
         return nullptr;
 
     const uint32_t lNodeId = iNodeId & 0x00FFFFFF;
+    if (lNodeId == 0)
+        return nullptr;
+
     for (uint8_t i = 0; i < IOHC_ChannelCount; i++)
     {
         IoHomecontrolChannel *lCh = mModule->getChannel(i);
@@ -1381,6 +1549,30 @@ IoHomecontrolChannel *IoHomeController::channelForNode(uint32_t iNodeId) const
             return lCh;
     }
     return nullptr;
+}
+
+uint8_t IoHomeController::channelIndexFor(IoHomecontrolChannel *iChannel) const
+{
+    if (!mModule || !iChannel)
+        return 0xFF;
+
+    for (uint8_t i = 0; i < IOHC_ChannelCount; i++)
+    {
+        if (mModule->getChannel(i) == iChannel)
+            return i;
+    }
+    return 0xFF;
+}
+
+IoHomecontrolChannel *IoHomeController::channelForQueueEntry(const IoHomeQueueEntry &iEntry) const
+{
+    if (mModule && iEntry.sourceChannelIndex < IOHC_ChannelCount)
+    {
+        IoHomecontrolChannel *lCh = mModule->getChannel(iEntry.sourceChannelIndex);
+        if (lCh)
+            return lCh;
+    }
+    return channelForNode(iEntry.destNodeId);
 }
 
 bool IoHomeController::resolveLowPower2W(uint32_t iNodeId) const
@@ -1500,12 +1692,9 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
             else
                 lKnownNodeId = lCh->getConfigured1WTargetNodeId();
         }
-        if (lKnownNodeId == 0)
-        {
-            mLastPairStartStatus = PairStartStatus::Missing1WTarget;
-            return false;
-        }
-
+        // For 1W, the actuator node ID is not part of the on-air Add/SendKey
+        // transaction. A zero target is a valid virtual/broadcast-only remote
+        // profile: SendKey1W still carries remote src + typed/all broadcast dst.
         mDiscoveredNodeId = lKnownNodeId;
         // Reference-compatible 1W add flow: announce (0x2E) followed by
         // SendKey1W (0x30). RemoveController (0x39) is only sent by the
@@ -1529,9 +1718,10 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
         }
         if (mPairDiagnosticTraceEnabled)
         {
-            logInfoP("PairDiag: starting 1W %s ch=%u target=0x%06X",
+            logInfoP("PairDiag: starting 1W %s ch=%u target=%s0x%06X",
                      lMode == 2 ? "remove" : (lMode == 1 ? "add-only" : "announce-add"),
                      static_cast<unsigned>(iChannelIndex + 1),
+                     mDiscoveredNodeId == 0 ? "broadcast-only " : "",
                      mDiscoveredNodeId);
             tracePairDiagnosticStateChange();
         }
@@ -3900,7 +4090,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
     // to 16 bytes. The actuator then stores "remoteNode + key" and accepts later
     // 1W commands from this source address.
     uint32_t lRemoteNodeId = lProfile->getOneWayControllerNodeId();
-    if (lRemoteNodeId == 0 || lRemoteNodeId == mDiscoveredNodeId)
+    if (lRemoteNodeId == 0 || (mDiscoveredNodeId != 0 && lRemoteNodeId == mDiscoveredNodeId))
     {
         logInfoP("Pairing: refusing 1W SendKey1W because remote/controller node is invalid remote=0x%06X device=0x%06X",
                  lRemoteNodeId,
@@ -3997,12 +4187,19 @@ void IoHomeController::processPairWait1WKeyTransfer()
         if (lCh)
         {
             IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lCh);
-            lCh->setNodeId(mDiscoveredNodeId);
+            if (mDiscoveredNodeId != 0)
+                lCh->setNodeId(mDiscoveredNodeId);
+            else
+                lCh->setConfigured1WTargetNodeId(0);
             if (lProfile)
                 lCh->setEncryptionKey(lProfile->getOneWayControllerKey());
             openknx.flash.save();
-            logInfoP("Pairing: 1W learn flow sent for 0x%06X on channel %d (no device ACK in 1W mode)",
-                     mDiscoveredNodeId, mPairingChannel + 1);
+            if (mDiscoveredNodeId != 0)
+                logInfoP("Pairing: 1W learn flow sent for 0x%06X on channel %d (no device ACK in 1W mode)",
+                         mDiscoveredNodeId, mPairingChannel + 1);
+            else
+                logInfoP("Pairing: 1W broadcast profile sent on channel %d without bound target node (no device ACK in 1W mode)",
+                         mPairingChannel + 1);
         }
     }
 }
@@ -4925,20 +5122,10 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
     {
     case IoHomeCommand::Execute:
     {
-        // Check if target channel uses 1W protocol
-        IoHomecontrolChannel *lTargetCh = nullptr;
-        if (mModule)
-        {
-            for (uint8_t i = 0; i < IOHC_ChannelCount; i++)
-            {
-                IoHomecontrolChannel *lCh = mModule->getChannel(i);
-                if (lCh && lCh->isPaired() && lCh->getNodeId() == iEntry.destNodeId)
-                {
-                    lTargetCh = lCh;
-                    break;
-                }
-            }
-        }
+        // Check if the command was queued for a 1W channel. 1W virtual
+        // remote profiles may have target node 0, so do not depend solely on
+        // node-id lookup or isPaired() here.
+        IoHomecontrolChannel *lTargetCh = channelForQueueEntry(iEntry);
 
         if (lTargetCh && lTargetCh->is1W())
         {
@@ -5153,20 +5340,10 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 
     case IoHomeCommand::ActivateMode:
     {
-        // Check if target channel uses 1W protocol
-        IoHomecontrolChannel *lTargetChAM = nullptr;
-        if (mModule)
-        {
-            for (uint8_t i = 0; i < IOHC_ChannelCount; i++)
-            {
-                IoHomecontrolChannel *lCh = mModule->getChannel(i);
-                if (lCh && lCh->isPaired() && lCh->getNodeId() == iEntry.destNodeId)
-                {
-                    lTargetChAM = lCh;
-                    break;
-                }
-            }
-        }
+        // Check if the command was queued for a 1W channel. 1W virtual
+        // remote profiles may have target node 0, so do not depend solely on
+        // node-id lookup or isPaired() here.
+        IoHomecontrolChannel *lTargetChAM = channelForQueueEntry(iEntry);
 
         if (lTargetChAM && lTargetChAM->is1W())
         {
@@ -5285,7 +5462,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 
     case IoHomeCommand::SendKey1W:
     {
-        IoHomecontrolChannel *lProfile = oneWayProfileForNode(iEntry.destNodeId);
+        IoHomecontrolChannel *lChannel = channelForQueueEntry(iEntry);
+        IoHomecontrolChannel *lProfile = lChannel ? oneWayProfileForChannel(lChannel) : oneWayProfileForNode(iEntry.destNodeId);
         if (!lProfile || !lProfile->hasOneWayControllerIdentity())
             return false;
         // 1W key transfer: 1W mode, 20-byte payload
@@ -5298,7 +5476,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         uint8_t lEncKey1W[16];
         uint32_t lRemoteNodeId = lProfile->getOneWayControllerNodeId();
         const uint32_t lDeviceNodeId = iEntry.destNodeId & 0x00FFFFFF;
-        if (lRemoteNodeId == 0 || lRemoteNodeId == lDeviceNodeId)
+        if (lRemoteNodeId == 0 || (lDeviceNodeId != 0 && lRemoteNodeId == lDeviceNodeId))
         {
             logInfoP("1W SendKey1W: refusing invalid key IV address remote=0x%06X device=0x%06X",
                      lRemoteNodeId,

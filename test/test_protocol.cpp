@@ -6545,6 +6545,140 @@ TEST(controller_default_1w_pairing_uses_type0_all)
     ASSERT_TRUE(lFrame.hasHmac);
 }
 
+TEST(controller_1w_pairing_allows_add_without_target_node)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setIs1W(true);
+    lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+    lChannel.setOneWayControllerKey(lKey);
+    lChannel.setEncryptionKey(lKey);
+
+    ASSERT_EQ(lChannel.getNodeId(), 0U);
+    ASSERT_EQ(lChannel.getConfigured1WTargetNodeId(), 0U);
+    ASSERT_TRUE(lController.startPairing1WAddOnly(0, 0));
+
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_EQ(lPacket.size(), 29);
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
+    ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+    ASSERT_EQ(lFrame.dataLen, 20);
+    ASSERT_TRUE(!lFrame.hasHmac);
+}
+
+TEST(controller_1w_sendkey_frame_identical_with_known_or_unknown_target)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    uint8_t lUnknownTargetPacket[IOHC_FRAME_BUFFER_SIZE] = {};
+    uint8_t lUnknownTargetLen = 0;
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setIs1W(true);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+        lChannel.setEncryptionKey(lKey);
+
+        ASSERT_TRUE(lController.startPairing1WAddOnly(0, 0));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        lUnknownTargetLen = static_cast<uint8_t>(lPacket.size());
+        memcpy(lUnknownTargetPacket, lPacket.data(), lUnknownTargetLen);
+    }
+
+    uint8_t lKnownTargetPacket[IOHC_FRAME_BUFFER_SIZE] = {};
+    uint8_t lKnownTargetLen = 0;
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setIs1W(true);
+        lChannel.setConfigured1WTargetNodeId(lDeviceNodeId);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+        lChannel.setEncryptionKey(lKey);
+
+        ASSERT_TRUE(lController.startPairing1WAddOnly(0, lDeviceNodeId));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        lKnownTargetLen = static_cast<uint8_t>(lPacket.size());
+        memcpy(lKnownTargetPacket, lPacket.data(), lKnownTargetLen);
+    }
+
+    ASSERT_EQ(lUnknownTargetLen, lKnownTargetLen);
+    ASSERT_MEM_EQ(lUnknownTargetPacket, lKnownTargetPacket, lUnknownTargetLen);
+}
+
+TEST(controller_1w_virtual_channel_execute_allowed_without_target_node)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setIs1W(true);
+    lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+    lChannel.setOneWayControllerKey(lKey);
+    lChannel.setEncryptionKey(lKey);
+
+    ASSERT_EQ(lChannel.getNodeId(), 0U);
+    ASSERT_TRUE(lController.sendChannelCommand(&lChannel, IoHomeCommand::Execute, 0xD2));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    lController.loop();
+
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lPacket.empty());
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
+    ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+    ASSERT_EQ(lFrame.dataLen, 8);
+    ASSERT_TRUE(lFrame.hasHmac);
+}
+
 TEST(controller_1w_key_frame_uses_profile_manufacturer_without_hmac)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -9528,6 +9662,9 @@ int main()
     RUN(gateway_controller_key_transfer_uses_configured_gateway_key);
     RUN(gateway_controller_challenge_response_tracks_paired_device);
     RUN(controller_default_1w_pairing_uses_type0_all);
+    RUN(controller_1w_pairing_allows_add_without_target_node);
+    RUN(controller_1w_sendkey_frame_identical_with_known_or_unknown_target);
+    RUN(controller_1w_virtual_channel_execute_allowed_without_target_node);
     RUN(controller_default_2w_pairing_uses_key_init_after_discovery);
     RUN(controller_experimental_2w_pairing_can_use_discovery_confirmation);
     RUN(controller_2w_pairing_succeeds_when_setconfig1_times_out);
