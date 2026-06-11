@@ -30,7 +30,8 @@ class IoHomecontrolChannel;
 
 // 1W destination policy for queued commands.
 // ProfileTyped is the normal/default path and resolves dst=((type << 6) | 0x3F).
-// All/ExplicitType/Exact are diagnostic override paths.
+// The reference-compatible default type is 0 (“All”), therefore dst=0x00003F.
+// Explicit type 2/3 and Exact remain ETS/console/diagnostic override paths.
 enum class OneWayDestinationMode : uint8_t
 {
   ProfileTyped = 0,
@@ -563,8 +564,8 @@ private:
   uint8_t mPairPullAuthChallenge[6];
   uint8_t mPairing1WStage = 0; // 0=announce(0x2E), 1=add/send-key(0x30), 2=remove(0x39)
   uint8_t mRequestedPairing1WMode = 0; // 0=announce-add, 1=add-only, 2=remove-only
-  uint8_t mPairing1WBroadcastType = 2;
-  uint8_t mDefault1WBroadcastType = 2;
+  uint8_t mPairing1WBroadcastType = 0;
+  uint8_t mDefault1WBroadcastType = 0;
   Pairing2WMode mPairing2WMode = Pairing2WMode::Normal;
   bool mPairing2WExperimental = false; // true only when entered via explicit pair2w-exp diagnostic command
 

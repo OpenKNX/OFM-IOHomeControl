@@ -12,12 +12,15 @@ namespace
 
     uint8_t resolveOneWayBroadcastType(uint8_t iConfiguredType, uint8_t iDeviceType)
     {
+        (void)iDeviceType;
         if (iConfiguredType != 0xFF)
             return iConfiguredType & 0x3F;
 
-        // Known Cyril-compatible targets: type 2 for shutters/blinds and
-        // type 3 for awnings. Preserve type 2 as fallback for other types.
-        return (iDeviceType == 3 || iDeviceType == 9) ? 3 : 2;
+        // Reference-compatible rspaargaren/iohomecontrol default:
+        // type 0 is the generic “All” target and serializes to 0x00003F via
+        // dst = ((type << 6) | 0x3F).  Typed targets such as 2 (shutter/blind)
+        // and 3 (awning) remain explicit ETS/console/diagnostic choices.
+        return 0;
     }
 
     float clampPercent(float iValue)

@@ -892,7 +892,7 @@ IoHomeController::IoHomeController()
       mDiscoveryTimingTrace{},
       mDiscoverySPE(false),
       mPairing1WStage(0), mRequestedPairing1WMode(0),
-      mPairing1WBroadcastType(2), mDefault1WBroadcastType(2),
+      mPairing1WBroadcastType(0), mDefault1WBroadcastType(0),
       mAuthSrcNodeId(0), mAuthChannelIdx(0),
       mStatusAckDestNodeId(0), mStatusAckFreqIdx(0),
       mPassiveMode(false), mPassivePairNodeId(0),

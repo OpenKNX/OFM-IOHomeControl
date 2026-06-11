@@ -117,7 +117,7 @@ private:
   uint8_t mConfigured1WProfileChannel = 0xFF; // 0xFF = own profile
   bool mIs1W = false;                         // true if channel uses 1W protocol
   uint32_t mConfigured1WTargetNodeId = 0;
-  uint8_t mConfigured1WBroadcastType = 2;
+  uint8_t mConfigured1WBroadcastType = 0;
   float mCurrentPosition = 0.0f;
   float mCurrentSlat = 0.0f;
   bool mIsMoving = false;

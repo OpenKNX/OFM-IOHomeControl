@@ -6496,7 +6496,7 @@ TEST(gateway_controller_challenge_response_tracks_paired_device)
     ASSERT_EQ(lController.getGatewayPairedNodeId(0), lDeviceNodeId);
 }
 
-TEST(controller_default_1w_pairing_uses_standard_type2)
+TEST(controller_default_1w_pairing_uses_type0_all)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -6517,11 +6517,11 @@ TEST(controller_default_1w_pairing_uses_standard_type2)
     lChannel.setOneWayControllerNodeId(lRemoteNodeId);
     lChannel.setOneWayControllerKey(lKey);
 
-    ASSERT_EQ(lController.getOneWayBroadcastType(), 2);
+    ASSERT_EQ(lController.getOneWayBroadcastType(), 0);
     ASSERT_EQ(lChannel.getOneWayControllerManufacturer(), static_cast<uint8_t>(IoHomeManufacturer::Somfy));
     lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Velux));
     ASSERT_EQ(lChannel.getOneWayControllerManufacturer(), static_cast<uint8_t>(IoHomeManufacturer::Velux));
-    ASSERT_EQ(lController.oneWayBroadcastTarget(lController.getOneWayBroadcastType()), 0x0000BF);
+    ASSERT_EQ(lController.oneWayBroadcastTarget(lController.getOneWayBroadcastType()), 0x00003F);
     ASSERT_EQ(lController.oneWayBroadcastTarget(0), 0x00003F);
     ASSERT_EQ(lController.oneWayBroadcastTarget(3), 0x0000FF);
     ASSERT_TRUE(lController.startPairing(0, lDeviceNodeId));
@@ -6536,7 +6536,7 @@ TEST(controller_default_1w_pairing_uses_standard_type2)
     ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Discover2ERequest);
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
-    ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BF);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
     ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
     ASSERT_EQ(lFrame.dataLen, 3);
     ASSERT_EQ(lFrame.data[1], 0x00);
@@ -6564,6 +6564,9 @@ TEST(controller_1w_key_frame_uses_profile_manufacturer_without_hmac)
     lChannel.setOneWayControllerNodeId(lRemoteNodeId);
     lChannel.setOneWayControllerKey(lKey);
     lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Velux));
+    // This test intentionally verifies the explicit type-2 / shutter target path.
+    // The reference-compatible default is type 0 / All, covered separately.
+    lChannel.setConfigured1WBroadcastType(2);
 
     ASSERT_TRUE(lController.sendCommand(0x7E9E6E, lKey, IoHomeCommand::SendKey1W,
                                         0x02, 0x00, 0x01));
@@ -8341,7 +8344,7 @@ TEST(controller_default_1w_execute_uses_standard_vent_layout)
     ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
-    ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BF); // default shutter/blind type 2
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F); // default type 0 / All target
     ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
     ASSERT_EQ(lFrame.dataLen, 8);
     ASSERT_EQ(lFrame.data[0], IOHC_ORIGINATOR_USER);
@@ -8598,6 +8601,153 @@ TEST(controller_1w_execute_template_can_override_acei_fp_and_destination)
     ASSERT_EQ(lFrame.data[4], 0x12);
     ASSERT_EQ(lFrame.data[5], 0x34);
     ASSERT_TRUE(lFrame.hasHmac);
+}
+
+TEST(controller_1w_destination_modes_cover_default_typed_all_and_exact)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    // Default/ProfileTyped: unspecified channel type now stays type 0 (“All”).
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setNodeId(lDeviceNodeId);
+        lChannel.setEncryptionKey(lKey);
+        lChannel.setIs1W(true);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+
+        ASSERT_EQ(lChannel.getConfigured1WBroadcastType(), 0);
+        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 0xD8, 0x03));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        lController.loop();
+
+        IoHomeFrame lFrame;
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+    }
+
+    // Explicit configured type 2 remains the shutter/blind typed target.
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setNodeId(lDeviceNodeId);
+        lChannel.setEncryptionKey(lKey);
+        lChannel.setIs1W(true);
+        lChannel.setConfigured1WBroadcastType(2);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+
+        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 0xD8, 0x03));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        lController.loop();
+
+        IoHomeFrame lFrame;
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BF);
+    }
+
+    // Explicit type 3 remains the awning typed target.
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setNodeId(lDeviceNodeId);
+        lChannel.setEncryptionKey(lKey);
+        lChannel.setIs1W(true);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+
+        ASSERT_TRUE(lController.sendOneWayExecuteWithType(lDeviceNodeId, lKey, IOHC_POSITION_VENT, 0x00, 0x00, 3));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        lController.loop();
+
+        IoHomeFrame lFrame;
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lFrame.getDestNodeId(), 0x0000FF);
+    }
+
+    // All mode forces rspaargaren type 0 destination even if a type parameter is supplied.
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setNodeId(lDeviceNodeId);
+        lChannel.setEncryptionKey(lKey);
+        lChannel.setIs1W(true);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+
+        ASSERT_TRUE(lController.sendOneWayExecuteWithDestination(lDeviceNodeId, lKey,
+                                                                 IOHC_POSITION_VENT, 0x00, 0x00,
+                                                                 OneWayDestinationMode::All,
+                                                                 3, 0));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        lController.loop();
+
+        IoHomeFrame lFrame;
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+    }
+
+    // Exact mode bypasses typed broadcast calculation for diagnostics/captured targets.
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setNodeId(lDeviceNodeId);
+        lChannel.setEncryptionKey(lKey);
+        lChannel.setIs1W(true);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+
+        ASSERT_TRUE(lController.sendOneWayExecuteWithDestination(lDeviceNodeId, lKey,
+                                                                 IOHC_POSITION_VENT, 0x00, 0x00,
+                                                                 OneWayDestinationMode::Exact,
+                                                                 3, 0x123456));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        lController.loop();
+
+        IoHomeFrame lFrame;
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lFrame.getDestNodeId(), 0x123456);
+    }
 }
 
 TEST(controller_1w_channel_broadcast_type3_uses_typed_destination_for_pairing_and_runtime)
@@ -9377,7 +9527,7 @@ int main()
     RUN(gateway_controller_discover_request_from_idle);
     RUN(gateway_controller_key_transfer_uses_configured_gateway_key);
     RUN(gateway_controller_challenge_response_tracks_paired_device);
-    RUN(controller_default_1w_pairing_uses_standard_type2);
+    RUN(controller_default_1w_pairing_uses_type0_all);
     RUN(controller_default_2w_pairing_uses_key_init_after_discovery);
     RUN(controller_experimental_2w_pairing_can_use_discovery_confirmation);
     RUN(controller_2w_pairing_succeeds_when_setconfig1_times_out);
@@ -9415,6 +9565,7 @@ int main()
     RUN(controller_1w_ui_open_position_conversion_matches_raw_closed_main);
     RUN(controller_default_1w_execute_matches_reference_payloads);
     RUN(controller_1w_execute_template_can_override_acei_fp_and_destination);
+    RUN(controller_1w_destination_modes_cover_default_typed_all_and_exact);
     RUN(controller_1w_channel_broadcast_type3_uses_typed_destination_for_pairing_and_runtime);
     RUN(controller_1w_channel_profiles_are_independent);
     RUN(controller_1w_execute_uses_remote_identity_not_2w_gateway_identity);

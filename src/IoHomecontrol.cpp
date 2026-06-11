@@ -2272,7 +2272,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc 1wctrl NN reuse2w [MFG]", "Diagnostic only: copy the 2W identity into the 1W profile");
     openknx.console.printHelpLine("iohc 1wqr NN QRHEX", "Import a Situo QR controller identity into the effective channel profile");
     openknx.console.printHelpLine("iohc 1wnew NN", "Generate a new own 1W controller profile for an unpaired channel");
-    openknx.console.printHelpLine("iohc 1wtype TYPE", "Set default 1W broadcast type: 0=all, 2=roller shutter, 3=awning");
+    openknx.console.printHelpLine("iohc 1wtype TYPE", "Set default 1W type: 0=All/rspaargaren default, 2=shutter, 3=awning");
     openknx.console.printHelpLine("iohc 1wmfg NN ID", "Set manufacturer of the effective channel 1W profile");
     openknx.console.printHelpLine("iohc pair1w-type NN ADDR TYPE", "1W pair with explicit broadcast type");
     openknx.console.printHelpLine("iohc send1w-type NN open|close|stop|vent|force [TYPE]", "Send 1W Execute with explicit broadcast type");
@@ -2746,7 +2746,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         uint32_t lType = 0;
         if (lArg.empty() || !parseUnsignedDecimal(lArg, lType) || lType > 63)
         {
-            openknx.console.printHelpLine("iohc 1wtype TYPE", "Set default 1W broadcast type: 0=all, 2=roller shutter, 3=awning");
+            openknx.console.printHelpLine("iohc 1wtype TYPE", "Set default 1W type: 0=All/rspaargaren default, 2=shutter, 3=awning");
             return true;
         }
         mController.setOneWayBroadcastType(static_cast<uint8_t>(lType));
@@ -2819,7 +2819,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             !parseHex24(lAddrText, lNodeId) ||
             !parseUnsignedDecimal(lTypeText, lType) || lType > 63)
         {
-            logInfoP("Usage: iohc pair1w-type NN ADDR TYPE (TYPE 0..63; common 0/2/3)");
+            logInfoP("Usage: iohc pair1w-type NN ADDR TYPE (TYPE 0=All/rspaargaren default, 2=shutter, 3=awning, 0..63 allowed)");
             return true;
         }
 

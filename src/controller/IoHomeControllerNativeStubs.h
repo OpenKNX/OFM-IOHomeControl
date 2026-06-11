@@ -264,7 +264,9 @@ private:
   bool mPaired = false;
   bool mLowPower2W = true;
   uint32_t mConfigured1WTargetNodeId = 0;
-  uint8_t mConfigured1WBroadcastType = 2;
+  // TEST_NATIVE mirrors the production channel default: unspecified 1W type is
+  // type 0 / All, which serializes to destination 0x00003F.
+  uint8_t mConfigured1WBroadcastType = 0;
   bool mHasPositionFeedback = false;
   float mPositionFeedback = 0.0f;
   bool mHasTargetPositionFeedback = false;
