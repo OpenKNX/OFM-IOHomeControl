@@ -106,6 +106,27 @@ namespace
         return lOut;
     }
 
+    bool build1WSendKey(IoHomeFrame &oFrame,
+                        const uint8_t iEncryptedKey[16],
+                        uint8_t iManufacturer,
+                        uint16_t iSequence)
+    {
+        if (!iEncryptedKey)
+            return false;
+
+        // Reference-compatible 0x30 Add/SendKey frame payload:
+        // encryptedKey[16] + manufacturer + 0x01 + sequence[2].
+        // This command is intentionally unauthenticated: no appended 1W HMAC.
+        memcpy(oFrame.data, iEncryptedKey, 16);
+        oFrame.data[16] = iManufacturer;
+        oFrame.data[17] = 0x01;
+        oFrame.data[18] = static_cast<uint8_t>((iSequence >> 8) & 0xFF);
+        oFrame.data[19] = static_cast<uint8_t>(iSequence & 0xFF);
+        oFrame.dataLen = 20;
+        oFrame.hasHmac = false;
+        return true;
+    }
+
     const char *pairingModeName(Pairing2WMode iMode, ControllerState iState)
     {
         switch (iState)
@@ -2683,10 +2704,11 @@ void IoHomeController::processTxPending()
     if (mPairDiagnosticTraceEnabled && lIs1WFrame)
     {
         const std::string lHex = hexDump(mTxBuffer, mTxLen);
-        logInfoP("PairDiag: 1W tx cmd=%s(0x%02X) len=%u seq=%u src=0x%06X dst=0x%06X hex=%s",
-                 commandName(mTxFrame.commandId),
+        logInfoP("PairDiag: tx1w cmd=0x%02X name=%s len=%u hasHmac=%u seq=%u src=0x%06X dst=0x%06X hex=%s",
                  static_cast<unsigned>(mTxFrame.commandId),
+                 commandName(mTxFrame.commandId),
                  static_cast<unsigned>(mTxLen),
+                 mTxFrame.hasHmac ? 1U : 0U,
                  static_cast<unsigned>(mTxFrame.dataLen >= 2 ? ((static_cast<uint16_t>(mTxFrame.data[mTxFrame.dataLen - 2]) << 8) | mTxFrame.data[mTxFrame.dataLen - 1])
                                                              : 0),
                  mTxFrame.getSrcNodeId(),
@@ -3607,16 +3629,11 @@ void IoHomeController::processPairSend1WKeyTransfer()
 
     uint16_t lSeq = lProfile->incrementSequence1W();
     openknx.flash.save();
-    memcpy(mTxFrame.data, lEncryptedKey, sizeof(lEncryptedKey));
-    mTxFrame.data[16] = lProfile->getOneWayControllerManufacturer();
-    mTxFrame.data[17] = 0x01;
-    mTxFrame.data[18] = (lSeq >> 8) & 0xFF;
-    mTxFrame.data[19] = lSeq & 0xFF;
-    mTxFrame.dataLen = 20;
-
-    // The 1W learning key frame is encryptedKey[16] + manufacturer + 0x01 +
-    // sequence[2] and does not append a 1W HMAC.
-    mTxFrame.hasHmac = false;
+    if (!build1WSendKey(mTxFrame, lEncryptedKey, lProfile->getOneWayControllerManufacturer(), lSeq))
+    {
+        mState = ControllerState::PairFailed;
+        return;
+    }
 
     mTxLen = mTxFrame.serialize1W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
@@ -3624,8 +3641,9 @@ void IoHomeController::processPairSend1WKeyTransfer()
         if (mPairDiagnosticTraceEnabled)
         {
             tracePairDiagnosticCompactPair();
-            logInfoP("PairDiag: 1W key tx prepared len=%u seq=%u remote=0x%06X device=0x%06X src=0x%06X dst=0x%06X type=%u mfg=0x%02X freq=%u %luHz",
+            logInfoP("PairDiag: tx1w cmd=0x30 len=%u hasHmac=%u seq=%u remote=0x%06X device=0x%06X src=0x%06X dst=0x%06X type=%u mfg=0x%02X freq=%u %luHz",
                      static_cast<unsigned>(mTxLen),
+                     mTxFrame.hasHmac ? 1U : 0U,
                      static_cast<unsigned>(lSeq),
                      lRemoteNodeId,
                      mDiscoveredNodeId,
@@ -5079,14 +5097,10 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                      lDeviceNodeId,
                      lEncKeyHex.c_str());
         }
-        memcpy(mTxFrame.data, lEncKey1W, 16);
-        mTxFrame.data[16] = lProfile->getOneWayControllerManufacturer();
-        mTxFrame.data[17] = 0x01;                                           // controller marker
-        mTxFrame.data[18] = (iEntry.param2 != 0xFF) ? iEntry.param2 : 0x00; // sequence high
-        mTxFrame.data[19] = (iEntry.param3 != 0xFF) ? iEntry.param3 : 0x00; // sequence low
-        mTxFrame.dataLen = 20;
-
-        mTxFrame.hasHmac = false;
+        const uint16_t lSequence = (static_cast<uint16_t>((iEntry.param2 != 0xFF) ? iEntry.param2 : 0x00) << 8) |
+                                  static_cast<uint16_t>((iEntry.param3 != 0xFF) ? iEntry.param3 : 0x00);
+        if (!build1WSendKey(mTxFrame, lEncKey1W, lProfile->getOneWayControllerManufacturer(), lSequence))
+            return false;
         mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
         break;
     }

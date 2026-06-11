@@ -4050,31 +4050,74 @@ TEST(write_private_2w_rejects_appended_hmac)
     ASSERT_TRUE(!deserializeFrameForTest(parsed, buf, len));
 }
 
-TEST(send_key_1w_has_hmac)
+TEST(send_key_1w_unauthenticated_29_bytes)
 {
-    // 1W frame with SendKey1W (0x30) should detect HMAC
-    // Max frame: 32 bytes = 9 header + data + 6 HMAC → max 17 data bytes
     IoHomeFrame frame;
     frame.init();
-    frame.ctrlByte0 = IOHC_CTRL0_START | IOHC_CTRL0_MODE_1W;
-    frame.ctrlByte1 = 0x01;
+    frame.set1WMode();
+    frame.setFrameOrder(IOHC_CTRL0_ORDER_END);
+    frame.ctrlByte1 = 0x00;
     frame.setSrcNode(0x485B37);
-    frame.setDestNode(0x123456);
+    frame.setDestNode(0x0000BF);
     frame.commandId = IoHomeCommand::SendKey1W;
-    memset(frame.data, 0x42, 17); // 16B key + 1B manufacturer
-    frame.dataLen = 17;
-    memset(frame.hmac, 0xBB, IOHC_HMAC_SIZE);
-    frame.hasHmac = true;
 
-    uint8_t buf[32];
-    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
-    ASSERT_TRUE(len > 0);
+    for (uint8_t i = 0; i < 16; i++)
+        frame.data[i] = static_cast<uint8_t>(0xA0 + i);
+    frame.data[16] = static_cast<uint8_t>(IoHomeManufacturer::Velux);
+    frame.data[17] = 0x01;
+    frame.data[18] = 0x12;
+    frame.data[19] = 0x34;
+    frame.dataLen = 20;
+    frame.hasHmac = false;
+
+    uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
+    ASSERT_EQ(len, 29);
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_MODE_1W) != 0);
+    ASSERT_EQ((buf[0] & IOHC_CTRL0_LEN_MASK) + 1, 29);
+    ASSERT_EQ(buf[8], static_cast<uint8_t>(IoHomeCommand::SendKey1W));
 
     IoHomeFrame parsed;
     ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
-    ASSERT_TRUE(parsed.hasHmac);
-    ASSERT_EQ(parsed.dataLen, 17);
+    ASSERT_EQ(parsed.commandId, IoHomeCommand::SendKey1W);
+    ASSERT_TRUE((parsed.ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0);
+    ASSERT_TRUE(!parsed.hasHmac);
+    ASSERT_EQ(parsed.dataLen, 20);
+    ASSERT_MEM_EQ(parsed.data, frame.data, 20);
 }
+
+TEST(send_key_1w_rejects_appended_hmac)
+{
+    IoHomeFrame frame;
+    frame.init();
+    frame.set1WMode();
+    frame.setFrameOrder(IOHC_CTRL0_ORDER_END);
+    frame.setSrcNode(0x485B37);
+    frame.setDestNode(0x0000BF);
+    frame.commandId = IoHomeCommand::SendKey1W;
+    memset(frame.data, 0x42, 20);
+    frame.dataLen = 20;
+    memset(frame.hmac, 0xBB, IOHC_HMAC_SIZE);
+    frame.hasHmac = true;
+
+    uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
+    ASSERT_EQ(serializeFrameForTest(frame, buf, sizeof(buf)), 0);
+
+    // A manually appended HMAC outside the declared 29-byte frame must also be
+    // rejected by the parser.
+    frame.hasHmac = false;
+    frame.dataLen = 19;
+    ASSERT_EQ(serializeFrameForTest(frame, buf, sizeof(buf)), 0);
+
+    frame.dataLen = 20;
+    const uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
+    ASSERT_EQ(len, 29);
+    memset(buf + len, 0xBB, IOHC_HMAC_SIZE);
+
+    IoHomeFrame parsed;
+    ASSERT_TRUE(!deserializeFrameForTest(parsed, buf, len + IOHC_HMAC_SIZE));
+}
+
 
 TEST(frame_1w_execute_has_hmac)
 {
@@ -5886,107 +5929,56 @@ TEST(aes_consistency_across_multiple_calls)
 
 TEST(integration_1w_key_transfer_flow)
 {
-    // Full 1W pairing flow simulation:
-    //   1. Controller → Device: RemoveController (0x39) with HMAC
-    //   2. Controller → Device: SendKey1W (0x30) with encrypted key + HMAC
-    //
-    // The 1W key transfer uses the DEVICE's node address as AES IV so that
-    // only that device can decrypt the system key. Working references also
-    // place the device node into the 0x30 source field on the wire, with
-    // 0x00003F as the broadcast target.
+    // Full 1W key-transfer frame simulation:
+    //   SendKey1W (0x30) carries encryptedKey[16] + manufacturer + 0x01 + sequence[2].
+    //   It is unauthenticated and serializes to exactly 29 bytes.
+    //   The key-encryption IV is based on the remote/controller source node.
 
-    const uint32_t lGWNodeId = 0x1A380B;
-    const uint32_t lDevNodeId = 0x485B37;
+    const uint32_t lRemoteNodeId = 0x1A380B;
+    const uint8_t lRemoteNodeAddr[3] = {0x1A, 0x38, 0x0B};
+    const uint8_t lDeviceNodeAddr[3] = {0x48, 0x5B, 0x37};
     const uint8_t lSystemKey[16] = {
         0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x89,
         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
-    const uint8_t lDevNodeAddr[3] = {0x48, 0x5B, 0x37}; // extracted from lDevNodeId
     const uint16_t lSequence = 0x0042;
 
-    // --- Step 1: RemoveController (0x39) ---
-    // Broadcast to 0x00003F, no HMAC (pre-pairing command)
-    IoHomeFrame lRemoveFrame;
-    lRemoveFrame.init();
-    lRemoveFrame.set1WMode();
-    lRemoveFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
-    lRemoveFrame.setSrcNode(lGWNodeId);
-    lRemoveFrame.setDestNode(0x00003F);
-    lRemoveFrame.commandId = IoHomeCommand::RemoveController;
-    lRemoveFrame.data[0] = 0x00;
-    lRemoveFrame.dataLen = 1;
-    lRemoveFrame.hasHmac = false;
-
-    uint8_t lBuf[IOHC_FRAME_BUFFER_SIZE]; // 36 bytes max (supports 1W SendKey1W with HMAC)
-    uint8_t lLen = serializeFrameForTest(lRemoveFrame, lBuf, sizeof(lBuf));
-    ASSERT_EQ(lLen, 10); // 9 header + 1 data
-
-    IoHomeFrame lParsed;
-    ASSERT_TRUE(deserializeFrameForTest(lParsed, lBuf, lLen));
-    ASSERT_EQ((uint8_t)lParsed.commandId, 0x39);
-    ASSERT_TRUE((lParsed.ctrlByte0 & IOHC_CTRL0_MODE_1W));
-    ASSERT_EQ(lParsed.getDestNodeId(), 0x00003F);
-    ASSERT_EQ(lParsed.getSrcNodeId(), lGWNodeId);
-    ASSERT_EQ(lParsed.dataLen, 1);
-    ASSERT_EQ(lParsed.data[0], 0x00);
-
-    // --- Step 2: SendKey1W (0x30) with encrypted key ---
-    // KEY ENCRYPTION: IV must be DEVICE's node address (NOT gateway's)
     uint8_t lEncryptedKey[16];
     ASSERT_TRUE(IoHomeCrypto::encrypt1WKey(lSystemKey, IOHC_TRANSFER_KEY,
-                                           lDevNodeAddr, lEncryptedKey));
+                                           lRemoteNodeAddr, lEncryptedKey));
 
-    // Verify encryption used device address (not gateway address)
     uint8_t lWrongKey[16];
-    const uint8_t lGWNodeAddr[3] = {
-        (lGWNodeId >> 16) & 0xFF,
-        (lGWNodeId >> 8) & 0xFF,
-        lGWNodeId & 0xFF};
     ASSERT_TRUE(IoHomeCrypto::encrypt1WKey(lSystemKey, IOHC_TRANSFER_KEY,
-                                           lGWNodeAddr, lWrongKey));
-    // Key encrypted with device address != key encrypted with gateway address
+                                           lDeviceNodeAddr, lWrongKey));
     ASSERT_TRUE(memcmp(lEncryptedKey, lWrongKey, 16) != 0);
 
-    // Build SendKey1W frame: {encrypted_key[16], manufacturer, 0x01, seq[0], seq[1]}
     IoHomeFrame lKeyTransferFrame;
     lKeyTransferFrame.init();
     lKeyTransferFrame.set1WMode();
     lKeyTransferFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
-    lKeyTransferFrame.setSrcNode(lDevNodeId);
-    lKeyTransferFrame.setDestNode(0x00003F);
+    lKeyTransferFrame.setSrcNode(lRemoteNodeId);
+    lKeyTransferFrame.setDestNode(0x0000BF); // type=2 typed broadcast target
     lKeyTransferFrame.commandId = IoHomeCommand::SendKey1W;
     memcpy(lKeyTransferFrame.data, lEncryptedKey, 16);
     lKeyTransferFrame.data[16] = static_cast<uint8_t>(IoHomeManufacturer::Velux);
-    lKeyTransferFrame.data[17] = 0x01; // data flag
+    lKeyTransferFrame.data[17] = 0x01;
     lKeyTransferFrame.data[18] = (lSequence >> 8) & 0xFF;
     lKeyTransferFrame.data[19] = lSequence & 0xFF;
     lKeyTransferFrame.dataLen = 20;
+    lKeyTransferFrame.hasHmac = false;
 
-    // HMAC input: {0x30, encrypted_key[16]} (17 bytes)
-    // HMAC is computed with DEVICE's node address-based IV (via constructIv1W with seq)
-    uint8_t lHmacInput[17];
-    lHmacInput[0] = static_cast<uint8_t>(IoHomeCommand::SendKey1W);
-    memcpy(lHmacInput + 1, lEncryptedKey, 16);
-    ASSERT_TRUE(IoHomeCrypto::createHmac1W(lHmacInput, sizeof(lHmacInput),
-                                           lSequence, lSystemKey,
-                                           lKeyTransferFrame.hmac));
-    lKeyTransferFrame.hasHmac = true;
+    uint8_t lBuf[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t lLen = serializeFrameForTest(lKeyTransferFrame, lBuf, sizeof(lBuf));
+    ASSERT_EQ(lLen, 29);
+    ASSERT_EQ((lBuf[0] & IOHC_CTRL0_LEN_MASK) + 1, 29);
+    ASSERT_TRUE((lBuf[0] & IOHC_CTRL0_MODE_1W) != 0);
+    ASSERT_EQ(lBuf[8], static_cast<uint8_t>(IoHomeCommand::SendKey1W));
 
-    lLen = serializeFrameForTest(lKeyTransferFrame, lBuf, sizeof(lBuf));
-    ASSERT_TRUE(lLen > 0);
-    ASSERT_EQ(lBuf[2], 0x00);
-    ASSERT_EQ(lBuf[3], 0x00);
-    ASSERT_EQ(lBuf[4], 0x3F);
-    ASSERT_EQ(lBuf[5], lDevNodeAddr[0]);
-    ASSERT_EQ(lBuf[6], lDevNodeAddr[1]);
-    ASSERT_EQ(lBuf[7], lDevNodeAddr[2]);
-
-    // --- Step 3: Parse and verify ---
+    IoHomeFrame lParsed;
     ASSERT_TRUE(deserializeFrameForTest(lParsed, lBuf, lLen));
-    ASSERT_EQ((uint8_t)lParsed.commandId, 0x30);
-    ASSERT_TRUE((lParsed.ctrlByte0 & IOHC_CTRL0_MODE_1W));
-    ASSERT_TRUE(lParsed.hasHmac);
-    ASSERT_EQ(lParsed.getDestNodeId(), 0x00003F);
-    ASSERT_EQ(lParsed.getSrcNodeId(), lDevNodeId);
+    ASSERT_EQ(lParsed.commandId, IoHomeCommand::SendKey1W);
+    ASSERT_TRUE(!lParsed.hasHmac);
+    ASSERT_EQ(lParsed.getDestNodeId(), 0x0000BF);
+    ASSERT_EQ(lParsed.getSrcNodeId(), lRemoteNodeId);
     ASSERT_EQ(lParsed.dataLen, 20);
     ASSERT_MEM_EQ(lParsed.data, lEncryptedKey, 16);
     ASSERT_EQ(lParsed.data[16], 0x01);
@@ -5994,57 +5986,47 @@ TEST(integration_1w_key_transfer_flow)
     ASSERT_EQ(lParsed.data[18], (lSequence >> 8) & 0xFF);
     ASSERT_EQ(lParsed.data[19], lSequence & 0xFF);
 
-    // --- Step 4: Verify HMAC on receive side ---
-    ASSERT_TRUE(IoHomeCrypto::verifyHmac1W(lHmacInput, sizeof(lHmacInput),
-                                           lSequence, lKeyTransferFrame.hmac,
-                                           lSystemKey));
-
-    // --- Step 5: Device decrypts key ---
-    // Device uses its own node address to decrypt
     uint8_t lDecryptedKey[16];
     ASSERT_TRUE(IoHomeCrypto::decrypt1WKey(lEncryptedKey, IOHC_TRANSFER_KEY,
-                                           lDevNodeAddr, lDecryptedKey));
+                                           lRemoteNodeAddr, lDecryptedKey));
     ASSERT_MEM_EQ(lDecryptedKey, lSystemKey, 16);
 
-    // --- Step 6: Wrong address fails to decrypt ---
-    uint8_t lWrongDecrypted[16];
     ASSERT_TRUE(IoHomeCrypto::decrypt1WKey(lEncryptedKey, IOHC_TRANSFER_KEY,
-                                           lGWNodeAddr, lWrongDecrypted));
-    ASSERT_TRUE(memcmp(lWrongDecrypted, lSystemKey, 16) != 0);
+                                           lDeviceNodeAddr, lDecryptedKey));
+    ASSERT_TRUE(memcmp(lDecryptedKey, lSystemKey, 16) != 0);
 }
 
 TEST(integration_1w_key_transfer_wrong_iv_rejected)
 {
-    // Critical security test: if the controller accidentally uses its own
-    // node address as the IV instead of the device's address, the device
-    // cannot decrypt the key. This test verifies that the correct behavior
-    // requires the device's address.
+    // Critical compatibility test: 1W SendKey encryption must use the
+    // remote/controller node as IV address. Encrypting with the actuator/device
+    // address must not decrypt correctly with the remote IV.
 
     const uint8_t lSystemKey[16] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
                                     0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10};
-    const uint8_t lDevAddr[3] = {0xDE, 0xAD, 0xBE};
-    const uint8_t lGWAddr[3] = {0x00, 0x11, 0x22};
+    const uint8_t lRemoteAddr[3] = {0xDE, 0xAD, 0xBE};
+    const uint8_t lDeviceAddr[3] = {0x00, 0x11, 0x22};
 
-    uint8_t lEncryptedWithDev[16];
-    uint8_t lEncryptedWithGW[16];
+    uint8_t lEncryptedWithRemote[16];
+    uint8_t lEncryptedWithDevice[16];
 
     ASSERT_TRUE(IoHomeCrypto::encrypt1WKey(lSystemKey, IOHC_TRANSFER_KEY,
-                                           lDevAddr, lEncryptedWithDev));
+                                           lRemoteAddr, lEncryptedWithRemote));
     ASSERT_TRUE(IoHomeCrypto::encrypt1WKey(lSystemKey, IOHC_TRANSFER_KEY,
-                                           lGWAddr, lEncryptedWithGW));
+                                           lDeviceAddr, lEncryptedWithDevice));
 
-    // Different IVs produce different ciphertext
-    ASSERT_TRUE(memcmp(lEncryptedWithDev, lEncryptedWithGW, 16) != 0);
+    // Different IVs produce different ciphertext.
+    ASSERT_TRUE(memcmp(lEncryptedWithRemote, lEncryptedWithDevice, 16) != 0);
 
-    // Device can decrypt key encrypted with its own address
+    // Remote/controller IV decrypts the correctly encrypted key.
     uint8_t lDecrypted[16];
-    ASSERT_TRUE(IoHomeCrypto::decrypt1WKey(lEncryptedWithDev, IOHC_TRANSFER_KEY,
-                                           lDevAddr, lDecrypted));
+    ASSERT_TRUE(IoHomeCrypto::decrypt1WKey(lEncryptedWithRemote, IOHC_TRANSFER_KEY,
+                                           lRemoteAddr, lDecrypted));
     ASSERT_MEM_EQ(lDecrypted, lSystemKey, 16);
 
-    // Device CANNOT decrypt key encrypted with wrong address
-    ASSERT_TRUE(IoHomeCrypto::decrypt1WKey(lEncryptedWithGW, IOHC_TRANSFER_KEY,
-                                           lDevAddr, lDecrypted));
+    // Remote/controller IV cannot decrypt a key encrypted with device IV.
+    ASSERT_TRUE(IoHomeCrypto::decrypt1WKey(lEncryptedWithDevice, IOHC_TRANSFER_KEY,
+                                           lRemoteAddr, lDecrypted));
     ASSERT_TRUE(memcmp(lDecrypted, lSystemKey, 16) != 0);
 }
 
@@ -8635,9 +8617,10 @@ int main()
     RUN(launch_key_transfer_enum);
     RUN(remove_controller_enum);
 
-    printf("\nHMAC detection for new commands:\n");
+    printf("\nHMAC/frame auth detection for new commands:\n");
     RUN(write_private_2w_rejects_appended_hmac);
-    RUN(send_key_1w_has_hmac);
+    RUN(send_key_1w_unauthenticated_29_bytes);
+    RUN(send_key_1w_rejects_appended_hmac);
     RUN(frame_1w_execute_has_hmac);
 
     printf("\nAddress classes:\n");
