@@ -2,7 +2,7 @@
 
 OpenKNX firmware module for the direct integration of **Velux, Somfy and other io-homecontrol devices** into KNX. The module uses an ESP32 together with an SX1276 or SX1262 868 MHz radio and does not require an external manufacturer gateway.
 
-This implementation combines protocol research and practical implementation work from several community projects. The main protocol documentation and reference implementation is [Velocet/iown-homecontrol](https://github.com/Velocet/iown-homecontrol). Additional implementation references are listed in [Related protocol sources](#related-protocol-sources).
+This implementation combines protocol research and practical implementation work from several community projects. The main protocol documentation and 2W reference implementation is [Velocet/iown-homecontrol](https://github.com/Velocet/iown-homecontrol). The 1W remote-profile behavior is cross-checked against [rspaargaren/iohomecontrol](https://github.com/rspaargaren/iohomecontrol) and RF captures. Additional implementation references are listed in [Related protocol sources](#related-protocol-sources).
 
 ## Supported Devices
 
@@ -36,7 +36,8 @@ The protocol implementation covers manufacturers such as Velux, Somfy, Atlantic,
 - **Direction inversion** per channel for different mounting orientations
 - **Protocol mode** selectable per channel (2-way bidirectional or 1-way unidirectional)
 - **Independent persistent 1W controller profiles** per channel, with explicit profile sharing for 1W groups
-- **Configurable 1W broadcast type and controller manufacturer**, plus Situo QR identity import
+- **Strictly separated 2W and 1W identities** — 1W remotes use their own node address/key and never silently reuse the 2W gateway identity
+- **Configurable typed 1W broadcast destinations and controller manufacturer**, plus Situo QR identity import
 - **Device pairing/unpairing** via ETS workflows, function properties, or service console
 - **Automatic status polling** with configurable intervals (30s – 30min); after pairing, the module also tries to enable device-driven status updates when the device supports them
 - **Position estimation** during travel using configurable opening/closing times and linear interpolation
@@ -58,8 +59,19 @@ The protocol implementation covers manufacturers such as Velux, Somfy, Atlantic,
 - **Network scan** with per-node packet statistics and RSSI tracking; observation-only
 - **Encrypted discovery (SPE)** for scanning already-paired devices
 - **Flash persistence** of 2W identity/pairing data and complete per-channel 1W controller profiles
+- **Byte-exact protocol self-tests** for serializer boundaries, 1W/2W crypto vectors and key-transfer transcripts
 
-For 2W, the module uses one global controller node ID and system key. For 1W, each channel uses a Cyril-style virtual remote profile containing its own controller address, key, sequence counter, and manufacturer. Channels that should control the same 1W group can explicitly share one profile. The 1W sequence counter is persisted after every generated frame, and new/imported profiles use sequence `1` for their first frame.
+For 2W, the module uses one global controller node ID and system key. For 1W, each channel uses a Cyril-style virtual remote profile containing its own controller address, key, sequence counter, reserved sequence watermark, type and manufacturer. Channels that should control the same 1W group can explicitly share one profile. Normal 1W commands reserve sequence numbers ahead in flash instead of saving after every frame; pairing/add/remove still force an immediate persistence update. New/imported profiles use sequence `1` for their first frame.
+
+### 1W protocol notes
+
+The 1W path follows the reference remote model more closely than older gateway-derived implementations:
+
+- 1W pairing/add sends an announce/add flow (`0x2E` followed by unauthenticated `0x30 SendKey1W`). `0x39 RemoveController` is only sent by explicit remove flows.
+- `0x30 SendKey1W` is a 29-byte frame: 9-byte header plus `encryptedKey[16] + manufacturer + 0x01 + sequence[2]`, with no appended 1W HMAC.
+- Normal 1W commands use typed broadcast destinations by default, computed as `dst=((type << 6) | 0x3F)`. Type `0` remains the explicit all-device target.
+- Normal 1W control uses the raw io-homecontrol closedness convention internally (`0=open`, `100=closed`). UI/KNX open percentages are converted explicitly at the channel boundary.
+- 1W radio transmission uses four total sends by default: one long-preamble first TX followed by three short-preamble repeats with 40 ms spacing.
 
 ## Hardware Requirements
 
@@ -154,6 +166,17 @@ ETS parameters, communication objects, DPTs, pairing workflows, scenes and user-
 
 The firmware provides an `iohc` serial console for commissioning, service and bench diagnostics. The commands intended for normal commissioning and service are documented in the application description to avoid duplicating ETS/user documentation here.
 
+Useful diagnostic entry points include:
+
+- `iohc status` / `iohc status NN` — show 2W identity and per-channel 1W remote identity separately.
+- `iohc 1wctrl status` / `iohc 1wctrl NN status` — show effective 1W profile, type, manufacturer, sequence and reserved sequence.
+- `iohc pair1w NN [ADDR] add-only|announce-add` — test reference-style 1W add flows without inserting `0x39` automatically.
+- `iohc remove1w NN [ADDR]` — send the explicit 1W remove flow.
+- `iohc send1w-type NN open|close|stop|vent|force [TYPE|dst=typed|dst=all|dst=exact ADDR]` — test typed/all/exact 1W destinations.
+- `iohc 1wctrl NN reuse2w [MFG]` — diagnostic-only command to intentionally reuse the 2W identity for a 1W profile.
+- `iohc pairdiag on|off|status` — show compact pairing, TX, crypto, key, repeat and sequence diagnostics.
+- `iohc proto selftest` — run byte-exact protocol self-tests on-device.
+
 
 ## Function Properties (advanced)
 
@@ -164,7 +187,7 @@ ETS function property interface (objectIndex=160, propertyId=10).
 |------|-----------------|------------------|-------------|
 | 0x10 | `cmd, channel[, nodeIdHi, nodeIdMid, nodeIdLo]` | `status` | Start pairing on the selected channel. The optional 3-byte node ID override is used for 1W commissioning. |
 | 0x11 | `cmd` | `status` | Cancel the active pairing session. |
-| 0x12 | `cmd, channel` | `paired, nodeIdHi, nodeIdMid, nodeIdLo, controllerState, lastPairStartStatus, profileChannel, profileNodeHi, profileNodeMid, profileNodeLo, manufacturer, sequenceHi, sequenceLo, broadcastType` | Read pairing state plus the effective 1W profile diagnostics for one channel. The profile fields are unused and should be ignored for 2W channels. |
+| 0x12 | `cmd, channel` | `paired, nodeIdHi, nodeIdMid, nodeIdLo, controllerState, lastPairStartStatus, profileChannel, profileNodeHi, profileNodeMid, profileNodeLo, manufacturer, sequenceHi, sequenceLo, broadcastType` | Read pairing state plus the effective 1W profile diagnostics for one channel. The profile fields are unused and should be ignored for 2W channels. The sequence field reports the active profile sequence; the console status additionally shows the reserved high-water sequence. |
 | 0x13 | `cmd, channel` | `status` | Unpair the selected channel, erase the stored key, and persist the change. |
 | 0x15 | `cmd, channel` | `status` | Generate a new own 1W controller profile. Rejected for shared profiles or while any paired channel uses the profile. |
 | 0x20 | `cmd, channel, percent` | `status` | Test helper for sending a position command to an already paired device. |
@@ -223,7 +246,7 @@ This OFM defines a **single channel template** (`IoHomecontrol.templ.xml`). The 
 IoHomecontrol (OpenKNX::Module)
 ├── IoHomecontrolChannel[0..15] (OpenKNX::Channel)  — one per paired device
 │   ├── Pairing data (node ID, encryption key, challenge)
-│   ├── Persistent 1W virtual-remote profile (controller ID, key, sequence, manufacturer)
+│   ├── Persistent 1W virtual-remote profile (controller ID, key, sequence reserve, type, manufacturer)
 │   ├── Position tracking (current, target, opening/closing time)
 │   ├── Status polling (interval, timer)
 │   ├── Thermostat state (temperature, mode, presence — Cozy devices)
@@ -233,10 +256,11 @@ IoHomecontrol (OpenKNX::Module)
     ├── Radio (SX1276 or SX1262 via compile-time selection)
     ├── Command Queue (8 entries, circular buffer)
     ├── State Machine (Idle → TxPending → TX → WaitResponse → Process)
-    ├── Pairing State Machine (Discovery → Confirm/ACK → PullKey attempt → KeyInit → KeyTransfer → Confirm)
+    ├── Pairing State Machine (2W discovery/key-transfer/auth; 1W announce/add/remove)
     ├── Network Scan (passive packet capture, per-node stats; observation-only)
     ├── Remote Observation (track remotes, link to devices)
     ├── Passive Key Sniff (explicit session, retained capture result)
+    ├── Protocol Builders (centralized 1W/2W frame templates)
     ├── IoHomeFrame (frame serialization/deserialization, 9–32 bytes)
     └── IoHomeCrypto (AES-128 ECB, HMAC, CRC-16 Kermit, IV construction)
 ```
@@ -248,19 +272,22 @@ IoHomecontrol (OpenKNX::Module)
 - **Challenge-response** protocol for bidirectional verification
 - **Per-device encryption keys** derived during pairing
 - **2W system key** (16 bytes) generated per module, persisted in flash
-- **Independent 1W controller keys and monotonic sequence counters**, persisted per profile
-- **CRC-16 Kermit** checksum on all frames
-- Replay protection via 2W challenge freshness and persistent 1W sequence counters
+- **Independent 1W controller keys and monotonic sequence counters**, persisted per profile with reserved high-water sequence windows
+- **Dedicated 1W key-transfer encryption** based on the 1W remote/controller node address
+- **CRC-16 Kermit** checksum on explicit raw/diagnostic frame paths
+- Replay protection via 2W challenge freshness and persistent 1W sequence reservations
 
 ## Radio Protocol
 
 - Modulation: 2-FSK, 38.4 kbps, no shaping
 - Bandwidth: 250 kHz, deviation: 19.2 kHz
 - Frequencies: 868.25 / 868.95 / 869.85 MHz (3-channel hopping)
-- Preamble: 1024 symbols (START frames), 8 symbols (follow-up)
+- Preamble: 1024 symbols for long/first transmissions, 8 symbols for short follow-up/repeat transmissions
 - Sync word: 0xFF 0x33 (preceded by 0x55 preamble anchor byte)
 - Packet format: variable length, hardware CRC (CCITT), io-homecontrol mode enabled
-- Frame size: 9–32 bytes
+- Frame size: 9–32 bytes; authenticated 1W frames declare the appended HMAC in CTRL0
+- 2W `0x3D` ChallengeResponse carries HMAC bytes as command data, not as an appended frame HMAC
+- 1W `0x30 SendKey1W` is unauthenticated and remains exactly 29 bytes total
 - 1W frames use the low-power flag and type-dependent broadcast destinations
 
 ## Related protocol sources
