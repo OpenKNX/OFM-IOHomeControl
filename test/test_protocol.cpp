@@ -2898,47 +2898,53 @@ TEST(frame_deserialize_challenge_response_data)
 }
 
 // =====================================================================
-// 57. Retry frame: no START flag on retries
+// 57. 2W frame-order semantics
 // =====================================================================
 
-TEST(retry_frame_no_start_flag)
+TEST(key_transfer_is_continuation_frame)
 {
-    // First attempt should have START flag
-    IoHomeFrame frame1;
-    frame1.init();
-    frame1.setStart2W();
-    ASSERT_TRUE((frame1.ctrlByte0 & IOHC_CTRL0_START) != 0);
+    IoHomeFrame frame;
+    frame.init();
+    frame.ctrlByte0 = 0;    // no START, no END: true 2W continuation
+    frame.ctrlByte1 = 0x00;
+    frame.setSrcNode(0x1A380B);
+    frame.setDestNode(0x485B37);
+    frame.commandId = IoHomeCommand::KeyTransfer;
+    for (uint8_t i = 0; i < 16; i++)
+        frame.data[i] = i;
+    frame.dataLen = 16;
+    frame.hasHmac = false;
 
-    // Retry (continuation): no START, 2W mode
-    IoHomeFrame frame2;
-    frame2.init();
-    frame2.ctrlByte0 = 0;    // no START, no END
-    frame2.ctrlByte1 = 0x01; // protocol version 1
-    ASSERT_TRUE((frame2.ctrlByte0 & IOHC_CTRL0_START) == 0);
-    ASSERT_TRUE((frame2.ctrlByte0 & IOHC_CTRL0_MODE_1W) == 0); // 2W mode
+    uint8_t buf[32];
+    const uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
+    ASSERT_TRUE(len > 0);
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_START) == 0);
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_END) == 0);
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_MODE_1W) == 0);
+}
 
-    // Both should serialize successfully
-    frame1.setSrcNode(0x1A380B);
-    frame1.setDestNode(0x485B37);
-    frame1.commandId = IoHomeCommand::GetName;
-    frame1.dataLen = 0;
-    frame1.hasHmac = false;
+TEST(challenge_response_is_continuation_frame)
+{
+    IoHomeFrame frame;
+    frame.init();
+    frame.ctrlByte0 = 0;    // no START, no END: true 2W continuation
+    frame.ctrlByte1 = 0x00;
+    frame.setSrcNode(0x1A380B);
+    frame.setDestNode(0x485B37);
+    frame.commandId = IoHomeCommand::ChallengeResponse;
+    const uint8_t hmacData[IOHC_HMAC_SIZE] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
+    memcpy(frame.data, hmacData, sizeof(hmacData));
+    frame.dataLen = sizeof(hmacData);
+    frame.hasHmac = false;
 
-    frame2.setSrcNode(0x1A380B);
-    frame2.setDestNode(0x485B37);
-    frame2.commandId = IoHomeCommand::GetName;
-    frame2.dataLen = 0;
-    frame2.hasHmac = false;
-
-    uint8_t buf1[32], buf2[32];
-    uint8_t len1 = serializeFrameForTest(frame1, buf1, sizeof(buf1));
-    uint8_t len2 = serializeFrameForTest(frame2, buf2, sizeof(buf2));
-    ASSERT_TRUE(len1 > 0);
-    ASSERT_TRUE(len2 > 0);
-
-    // Verify START flag preserved in serialized output
-    ASSERT_TRUE((buf1[0] & IOHC_CTRL0_START) != 0);
-    ASSERT_TRUE((buf2[0] & IOHC_CTRL0_START) == 0);
+    uint8_t buf[32];
+    const uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
+    ASSERT_TRUE(len > 0);
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_START) == 0);
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_END) == 0);
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_MODE_1W) == 0);
+    ASSERT_EQ(buf[8], static_cast<uint8_t>(IoHomeCommand::ChallengeResponse));
+    ASSERT_MEM_EQ(buf + 9, hmacData, sizeof(hmacData));
 }
 
 // =====================================================================
@@ -6752,6 +6758,113 @@ static bool queueControllerResponse(IoHomeController &iController,
     return true;
 }
 
+static bool retryKeepsStartForQueued2WCommand(IoHomeCommand iCommand, uint8_t iParam)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+
+    if (!lController.sendCommand(lDeviceNodeId, lKey, iCommand, iParam))
+        return false;
+
+    IoHomeFrame lFirstFrame;
+    if (!transmitQueuedControllerFrame(lController, lFirstFrame))
+        return false;
+    if ((lFirstFrame.ctrlByte0 & IOHC_CTRL0_START) == 0)
+        return false;
+    if (lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_LONG)
+        return false;
+
+    lController.loop(); // TxInProgress -> WaitResponse
+    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    lController.loop(); // timeout reached: arm retry gap
+    ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
+    lController.loop(); // retry gap elapsed: rebuild frame and enter TxPending
+    if (lController.state() != ControllerState::TxPending)
+        return false;
+
+    lController.radio().testClearTransmittedPacket();
+    lController.loop(); // TxPending -> TxInProgress, retry TX
+
+    const auto &lRetryPacket = lController.radio().testLastTransmittedPacket();
+    if (lRetryPacket.empty())
+        return false;
+    if (lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_LONG)
+        return false;
+
+    IoHomeFrame lRetryFrame;
+    if (!deserializeFrameForTest(lRetryFrame, lRetryPacket.data(), static_cast<uint8_t>(lRetryPacket.size())))
+        return false;
+
+    return (lRetryFrame.ctrlByte0 & IOHC_CTRL0_START) != 0 &&
+           (lRetryFrame.ctrlByte0 & IOHC_CTRL0_END) == 0 &&
+           (lRetryFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) == 0 &&
+           lRetryFrame.commandId == lFirstFrame.commandId &&
+           lRetryFrame.dataLen == lFirstFrame.dataLen &&
+           memcmp(lRetryFrame.data, lFirstFrame.data, lFirstFrame.dataLen) == 0;
+}
+
+static bool retryKeepsStartForQueued2WSetName()
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+
+    const char lName[] = "Bedroom";
+    if (!lController.sendSetName(lDeviceNodeId, lKey, lName, static_cast<uint8_t>(strlen(lName))))
+        return false;
+
+    IoHomeFrame lFirstFrame;
+    if (!transmitQueuedControllerFrame(lController, lFirstFrame))
+        return false;
+    if (lFirstFrame.commandId != IoHomeCommand::SetName ||
+        (lFirstFrame.ctrlByte0 & IOHC_CTRL0_START) == 0 ||
+        lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_LONG)
+        return false;
+
+    lController.loop(); // TxInProgress -> WaitResponse
+    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    lController.loop(); // timeout reached: arm retry gap
+    ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
+    lController.loop(); // retry gap elapsed: rebuild frame and enter TxPending
+    if (lController.state() != ControllerState::TxPending)
+        return false;
+
+    lController.radio().testClearTransmittedPacket();
+    lController.loop(); // TxPending -> TxInProgress, retry TX
+
+    const auto &lRetryPacket = lController.radio().testLastTransmittedPacket();
+    if (lRetryPacket.empty() || lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_LONG)
+        return false;
+
+    IoHomeFrame lRetryFrame;
+    if (!deserializeFrameForTest(lRetryFrame, lRetryPacket.data(), static_cast<uint8_t>(lRetryPacket.size())))
+        return false;
+
+    return (lRetryFrame.ctrlByte0 & IOHC_CTRL0_START) != 0 &&
+           (lRetryFrame.ctrlByte0 & IOHC_CTRL0_END) == 0 &&
+           (lRetryFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) == 0 &&
+           lRetryFrame.commandId == IoHomeCommand::SetName &&
+           lRetryFrame.dataLen == lFirstFrame.dataLen &&
+           memcmp(lRetryFrame.data, lFirstFrame.data, lFirstFrame.dataLen) == 0;
+}
+
 static void buildPrivateResponseFrame(IoHomeFrame &oFrame,
                                       uint32_t iRemoteNodeId,
                                       uint32_t iDeviceNodeId,
@@ -8116,6 +8229,14 @@ TEST(controller_2w_initial_response_wait_uses_retry_gap)
     ASSERT_EQ(lController.radio().testTransmitCount(), 2U);
 }
 
+TEST(retry_preserves_start_flag_for_2w_request)
+{
+    ASSERT_TRUE(retryKeepsStartForQueued2WCommand(IoHomeCommand::Execute, 50));
+    ASSERT_TRUE(retryKeepsStartForQueued2WCommand(IoHomeCommand::Private, 0x03));
+    ASSERT_TRUE(retryKeepsStartForQueued2WCommand(IoHomeCommand::GetName, 0x00));
+    ASSERT_TRUE(retryKeepsStartForQueued2WSetName());
+}
+
 TEST(controller_2w_final_response_wait_and_sx1262_dwell)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -9020,8 +9141,9 @@ int main()
     printf("\nChallengeResponse HMAC detection:\n");
     RUN(frame_deserialize_challenge_response_data);
 
-    printf("\nRetry frame START flag:\n");
-    RUN(retry_frame_no_start_flag);
+    printf("\n2W frame-order semantics:\n");
+    RUN(key_transfer_is_continuation_frame);
+    RUN(challenge_response_is_continuation_frame);
 
     printf("\nReceive-side auth challenge frame:\n");
     RUN(receive_auth_challenge_frame);
@@ -9285,6 +9407,7 @@ int main()
     RUN(controller_2w_challenge_response_can_clear_low_power_for_mains_device);
     RUN(controller_status_update_receive_auth_uses_saved_command_data);
     RUN(controller_2w_initial_response_wait_uses_retry_gap);
+    RUN(retry_preserves_start_flag_for_2w_request);
     RUN(controller_2w_final_response_wait_and_sx1262_dwell);
     RUN(controller_default_1w_execute_uses_standard_vent_layout);
     RUN(controller_1w_execute_repeats_first_long_then_three_short);

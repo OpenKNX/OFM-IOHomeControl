@@ -4909,16 +4909,13 @@ void IoHomeController::updateCurrentFrequencyIndex(uint32_t iFrequencyHz)
 bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 {
     mTxFrame.init();
-    if (iEntry.retries == 0)
-    {
-        mTxFrame.setStart2W(); // START flag only on first attempt
-    }
-    else
-    {
-        // Continuation frame: 2W mode, no START flag
-        mTxFrame.ctrlByte0 = 0;
-        mTxFrame.ctrlByte1 = 0x00; // version 0, matching real gateway behavior
-    }
+    // A retry after no 2W response is a fresh attempt at the same request,
+    // not the next frame in a multi-frame exchange. Keep the original
+    // controller-originated request order independent of retry count so START
+    // frames keep using the long preamble on every retry. True continuation
+    // frames such as 0x32 KeyTransfer and 0x3D ChallengeResponse are built by
+    // their dedicated protocol helpers and bypass this queued-command path.
+    mTxFrame.setStart2W();
     mTxFrame.setSrcNode(mOwnNodeId);
     mTxFrame.setDestNode(iEntry.destNodeId);
     mTxFrame.setLowPower(resolveLowPower2W(iEntry.destNodeId));
