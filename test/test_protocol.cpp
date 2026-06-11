@@ -2978,6 +2978,236 @@ TEST(receive_auth_challenge_frame)
     ASSERT_TRUE(!parsed.hasHmac);
 }
 
+
+// =====================================================================
+// Reference byte-vector regression tests
+// =====================================================================
+
+TEST(byte_vector_2w_execute_position_50_payload)
+{
+    IoHomeFrame frame;
+    frame.init();
+    frame.setStart2W();
+    frame.setSrcNode(0x831F2A);
+    frame.setDestNode(0x7E9E6E);
+    frame.commandId = IoHomeCommand::Execute;
+
+    const uint8_t expectedPayload[] = {0x01, 0x67, 0x64, 0x00, 0x80, 0xD8, 0x06, 0x00};
+    memcpy(frame.data, expectedPayload, sizeof(expectedPayload));
+    frame.dataLen = sizeof(expectedPayload);
+    frame.hasHmac = false;
+
+    uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
+    ASSERT_EQ(len, 17);
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_START) != 0);
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_MODE_1W) == 0);
+    ASSERT_EQ(buf[8], static_cast<uint8_t>(IoHomeCommand::Execute));
+    ASSERT_MEM_EQ(buf + 9, expectedPayload, sizeof(expectedPayload));
+
+    IoHomeFrame parsed;
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
+    ASSERT_EQ(parsed.commandId, IoHomeCommand::Execute);
+    ASSERT_EQ(parsed.dataLen, sizeof(expectedPayload));
+    ASSERT_MEM_EQ(parsed.data, expectedPayload, sizeof(expectedPayload));
+}
+
+TEST(byte_vector_2w_execute_stop_and_favorite_payloads)
+{
+    struct Vector
+    {
+        uint8_t commandValue;
+        uint8_t expectedPayload[6];
+    };
+
+    const Vector vectors[] = {
+        {0xD2, {0x01, 0x67, 0xD2, 0x00, 0x00, 0x00}},
+        {0xD8, {0x01, 0x67, 0xD8, 0x00, 0x00, 0x00}},
+    };
+
+    for (const Vector &v : vectors)
+    {
+        IoHomeFrame frame;
+        frame.init();
+        frame.setStart2W();
+        frame.setSrcNode(0x831F2A);
+        frame.setDestNode(0x7E9E6E);
+        frame.commandId = IoHomeCommand::Execute;
+        memcpy(frame.data, v.expectedPayload, sizeof(v.expectedPayload));
+        frame.dataLen = sizeof(v.expectedPayload);
+        frame.hasHmac = false;
+
+        uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
+        const uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
+        ASSERT_EQ(len, 15);
+        ASSERT_EQ(buf[8], static_cast<uint8_t>(IoHomeCommand::Execute));
+        ASSERT_EQ(buf[11], v.commandValue);
+        ASSERT_MEM_EQ(buf + 9, v.expectedPayload, sizeof(v.expectedPayload));
+    }
+}
+
+TEST(byte_vector_2w_key_transfer_encrypted_key_from_key_init)
+{
+    const uint8_t systemKey[16] = {
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
+        0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE};
+    const uint8_t keyChallenge[6] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC};
+    const uint8_t keyInitTranscript[] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
+    const uint8_t expectedEncryptedKey[16] = {
+        0x10, 0x0F, 0x0F, 0xC2, 0xE1, 0x96, 0xA3, 0x95,
+        0x76, 0x13, 0xD7, 0xAB, 0x9C, 0xFD, 0x83, 0x31};
+
+    uint8_t encryptedKey[16];
+    ASSERT_TRUE(IoHomeCrypto::crypt2WKeyXor(keyInitTranscript, sizeof(keyInitTranscript),
+                                            keyChallenge, systemKey,
+                                            IOHC_TRANSFER_KEY, encryptedKey));
+    ASSERT_MEM_EQ(encryptedKey, expectedEncryptedKey, sizeof(expectedEncryptedKey));
+
+    IoHomeFrame frame;
+    frame.init();
+    frame.ctrlByte0 = IOHC_CTRL0_ORDER_SINGLE; // 0x32 is a continuation frame, not a fresh START request.
+    frame.ctrlByte1 = 0x00;
+    frame.setSrcNode(0x831F2A);
+    frame.setDestNode(0x7E9E6E);
+    frame.commandId = IoHomeCommand::KeyTransfer;
+    memcpy(frame.data, encryptedKey, sizeof(encryptedKey));
+    frame.dataLen = sizeof(encryptedKey);
+    frame.hasHmac = false;
+
+    uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
+    ASSERT_EQ(len, 25);
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_START) == 0);
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_END) == 0);
+    ASSERT_EQ(buf[8], static_cast<uint8_t>(IoHomeCommand::KeyTransfer));
+    ASSERT_MEM_EQ(buf + 9, expectedEncryptedKey, sizeof(expectedEncryptedKey));
+}
+
+TEST(byte_vector_2w_challenge_response_hmac_is_command_data)
+{
+    const uint8_t hmacData[6] = {0x8D, 0x35, 0xDC, 0x56, 0x37, 0xF4};
+
+    IoHomeFrame frame;
+    frame.init();
+    frame.ctrlByte0 = IOHC_CTRL0_ORDER_SINGLE; // continuation/auth response, not a START request
+    frame.ctrlByte1 = 0x00;
+    frame.setSrcNode(0x831F2A);
+    frame.setDestNode(0x7E9E6E);
+    frame.commandId = IoHomeCommand::ChallengeResponse;
+    memcpy(frame.data, hmacData, sizeof(hmacData));
+    frame.dataLen = sizeof(hmacData);
+    frame.hasHmac = false;
+
+    uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
+    ASSERT_EQ(len, 15);
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_START) == 0);
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_END) == 0);
+    ASSERT_EQ((buf[0] & IOHC_CTRL0_LEN_MASK) + 1, 15);
+    ASSERT_EQ(buf[8], static_cast<uint8_t>(IoHomeCommand::ChallengeResponse));
+    ASSERT_MEM_EQ(buf + 9, hmacData, sizeof(hmacData));
+
+    IoHomeFrame parsed;
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
+    ASSERT_EQ(parsed.commandId, IoHomeCommand::ChallengeResponse);
+    ASSERT_EQ(parsed.dataLen, sizeof(hmacData));
+    ASSERT_TRUE(!parsed.hasHmac);
+    ASSERT_MEM_EQ(parsed.data, hmacData, sizeof(hmacData));
+}
+
+TEST(byte_vector_1w_execute_00_14_hmac_transcript)
+{
+    const uint8_t key[16] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F};
+    const uint16_t sequence = 0x1234;
+    const uint8_t transcript[] = {
+        static_cast<uint8_t>(IoHomeCommand::Execute),
+        IOHC_ORIGINATOR_USER,
+        IOHC_ACEI_1W,
+        0x64, 0x00,
+        0x00, 0x00};
+    const uint8_t expectedIv[16] = {
+        0x00, 0x01, 0x43, 0x64, 0x00, 0x00, 0x00, 0x55,
+        0x0E, 0x60, 0x12, 0x34, 0x55, 0x55, 0x55, 0x55};
+    const uint8_t expectedHmac[6] = {0x76, 0x8D, 0xA9, 0x52, 0x4C, 0x3F};
+
+    uint8_t iv[16];
+    uint8_t hmac[6];
+    ASSERT_TRUE(IoHomeCrypto::createHmac1WWithIv(transcript, sizeof(transcript),
+                                                 sequence, key, iv, hmac));
+    ASSERT_MEM_EQ(iv, expectedIv, sizeof(expectedIv));
+    ASSERT_MEM_EQ(hmac, expectedHmac, sizeof(expectedHmac));
+
+    IoHomeFrame frame;
+    frame.init();
+    frame.set1WMode();
+    frame.setFrameOrder(IOHC_CTRL0_ORDER_END);
+    frame.ctrlByte1 = 0x00;
+    frame.setSrcNode(0x831F2A);
+    frame.setDestNode(0x00003F);
+    frame.commandId = IoHomeCommand::Execute;
+    frame.data[0] = IOHC_ORIGINATOR_USER;
+    frame.data[1] = IOHC_ACEI_1W;
+    frame.data[2] = 0x64;
+    frame.data[3] = 0x00;
+    frame.data[4] = 0x00;
+    frame.data[5] = 0x00;
+    frame.data[6] = static_cast<uint8_t>((sequence >> 8) & 0xFF);
+    frame.data[7] = static_cast<uint8_t>(sequence & 0xFF);
+    frame.dataLen = 8;
+    memcpy(frame.hmac, hmac, sizeof(hmac));
+    frame.hasHmac = true;
+
+    uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
+    ASSERT_EQ(len, 23);
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_MODE_1W) != 0);
+    ASSERT_EQ((buf[0] & IOHC_CTRL0_LEN_MASK) + 1, 23);
+    ASSERT_EQ(buf[8], static_cast<uint8_t>(IoHomeCommand::Execute));
+    ASSERT_MEM_EQ(buf + 9, transcript + 1, 6);
+    ASSERT_EQ(buf[15], 0x12);
+    ASSERT_EQ(buf[16], 0x34);
+    ASSERT_MEM_EQ(buf + 17, expectedHmac, sizeof(expectedHmac));
+}
+
+TEST(byte_vector_1w_sendkey_30_payload_20_bytes_no_hmac)
+{
+    const uint8_t encryptedKey[16] = {
+        0x2D, 0x36, 0xBD, 0x8B, 0x4D, 0x4F, 0xB1, 0xE1,
+        0xA1, 0xB3, 0x09, 0x9B, 0x39, 0x4D, 0x3A, 0x9E};
+    const uint8_t expectedPayload[20] = {
+        0x2D, 0x36, 0xBD, 0x8B, 0x4D, 0x4F, 0xB1, 0xE1,
+        0xA1, 0xB3, 0x09, 0x9B, 0x39, 0x4D, 0x3A, 0x9E,
+        static_cast<uint8_t>(IoHomeManufacturer::Velux), 0x01, 0x12, 0x34};
+
+    IoHomeFrame frame;
+    frame.init();
+    frame.set1WMode();
+    frame.setFrameOrder(IOHC_CTRL0_ORDER_END);
+    frame.ctrlByte1 = 0x00;
+    frame.setSrcNode(0xB60D1A);
+    frame.setDestNode(0x00003F);
+    frame.commandId = IoHomeCommand::SendKey1W;
+    memcpy(frame.data, expectedPayload, sizeof(expectedPayload));
+    frame.dataLen = sizeof(expectedPayload);
+    frame.hasHmac = false;
+
+    uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
+    ASSERT_EQ(len, 29);
+    ASSERT_EQ((buf[0] & IOHC_CTRL0_LEN_MASK) + 1, 29);
+    ASSERT_EQ(buf[8], static_cast<uint8_t>(IoHomeCommand::SendKey1W));
+    ASSERT_MEM_EQ(buf + 9, expectedPayload, sizeof(expectedPayload));
+
+    IoHomeFrame parsed;
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
+    ASSERT_EQ(parsed.commandId, IoHomeCommand::SendKey1W);
+    ASSERT_EQ(parsed.dataLen, 20);
+    ASSERT_TRUE(!parsed.hasHmac);
+    ASSERT_MEM_EQ(parsed.data, expectedPayload, sizeof(expectedPayload));
+}
+
 // =====================================================================
 // Integration Tests
 // =====================================================================
@@ -8511,6 +8741,208 @@ TEST(retry_preserves_start_flag_for_2w_request)
     ASSERT_TRUE(retryKeepsStartForQueued2WSetName());
 }
 
+
+TEST(byte_vector_controller_2w_execute_payloads_and_retry_start)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    struct Vector
+    {
+        uint8_t param;
+        uint8_t expectedLen;
+        uint8_t expectedPayload[8];
+    };
+
+    const Vector vectors[] = {
+        {50, 8, {0x01, 0x67, 0x64, 0x00, 0x80, 0xD8, 0x06, 0x00}},
+        {0xD2, 6, {0x01, 0x67, 0xD2, 0x00, 0x00, 0x00, 0x00, 0x00}},
+        {0xD8, 6, {0x01, 0x67, 0xD8, 0x00, 0x00, 0x00, 0x00, 0x00}},
+    };
+
+    for (const Vector &v : vectors)
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, lDeviceNodeId, lKey);
+
+        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, v.param));
+
+        IoHomeFrame lFirstFrame;
+        ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFirstFrame));
+        ASSERT_EQ(lFirstFrame.commandId, IoHomeCommand::Execute);
+        ASSERT_TRUE((lFirstFrame.ctrlByte0 & IOHC_CTRL0_START) != 0);
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+        ASSERT_EQ(lFirstFrame.dataLen, v.expectedLen);
+        ASSERT_MEM_EQ(lFirstFrame.data, v.expectedPayload, v.expectedLen);
+
+        lController.loop(); // TxInProgress -> WaitResponse
+        ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+        lController.loop(); // timeout reached: arm retry gap
+        ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
+        lController.loop(); // retry gap elapsed: rebuild frame and enter TxPending
+        ASSERT_EQ(lController.state(), ControllerState::TxPending);
+
+        lController.radio().testClearTransmittedPacket();
+        lController.loop(); // retry TX
+
+        const auto &lRetryPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(!lRetryPacket.empty());
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+
+        IoHomeFrame lRetryFrame;
+        ASSERT_TRUE(deserializeFrameForTest(lRetryFrame, lRetryPacket.data(), static_cast<uint8_t>(lRetryPacket.size())));
+        ASSERT_TRUE((lRetryFrame.ctrlByte0 & IOHC_CTRL0_START) != 0);
+        ASSERT_EQ(lRetryFrame.commandId, IoHomeCommand::Execute);
+        ASSERT_EQ(lRetryFrame.dataLen, v.expectedLen);
+        ASSERT_MEM_EQ(lRetryFrame.data, v.expectedPayload, v.expectedLen);
+    }
+}
+
+TEST(byte_vector_controller_1w_default_and_typed_targets)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    struct Vector
+    {
+        uint8_t configuredType;
+        uint32_t expectedDest;
+    };
+
+    const Vector vectors[] = {
+        {0, 0x00003F},
+        {2, 0x0000BF},
+        {3, 0x0000FF},
+    };
+
+    for (const Vector &v : vectors)
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setNodeId(lDeviceNodeId);
+        lChannel.setEncryptionKey(lKey);
+        lChannel.setIs1W(true);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+        lChannel.setConfigured1WBroadcastType(v.configuredType);
+
+        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 0xD8, 0x03));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        lController.loop();
+
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(!lPacket.empty());
+
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
+        ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
+        ASSERT_EQ(lFrame.getDestNodeId(), v.expectedDest);
+        ASSERT_TRUE(lFrame.hasHmac);
+    }
+}
+
+TEST(byte_vector_controller_1w_sendkey_no_hmac_and_20_byte_payload)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setIs1W(true);
+    lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+    lChannel.setOneWayControllerKey(lKey);
+    lChannel.setEncryptionKey(lKey);
+    lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Velux));
+
+    ASSERT_TRUE(lController.startPairing1WAddOnly(0, 0));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_EQ(lPacket.size(), 29);
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
+    ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+    ASSERT_EQ(lFrame.dataLen, 20);
+    ASSERT_TRUE(!lFrame.hasHmac);
+    ASSERT_EQ(lFrame.data[16], static_cast<uint8_t>(IoHomeManufacturer::Velux));
+    ASSERT_EQ(lFrame.data[17], 0x01);
+}
+
+TEST(byte_vector_controller_1w_repeat_plan_long_then_three_short_40ms)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    ASSERT_EQ(IOHC_1W_REPEAT_COUNT, 3);
+    ASSERT_EQ(IOHC_1W_REPEAT_INTERVAL_MS, 40);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setNodeId(lDeviceNodeId);
+    lChannel.setEncryptionKey(lKey);
+    lChannel.setIs1W(true);
+    lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+    lChannel.setOneWayControllerKey(lKey);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 0xD2));
+    lController.loop();
+    lController.loop();
+    ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+
+    lController.loop();
+    for (uint8_t i = 0; i < IOHC_1W_REPEAT_COUNT; i++)
+    {
+        ioHomeTestAdvanceMillis(IOHC_1W_REPEAT_INTERVAL_MS - 1);
+        lController.loop();
+        ASSERT_EQ(lController.radio().testTransmitCount(), static_cast<uint32_t>(i + 1));
+
+        ioHomeTestAdvanceMillis(1);
+        lController.loop();
+        ASSERT_EQ(lController.radio().testTransmitCount(), static_cast<uint32_t>(i + 2));
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
+        lController.loop();
+    }
+
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
+}
+
+
 TEST(controller_2w_final_response_wait_and_sx1262_dwell)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -9569,6 +10001,14 @@ int main()
     printf("\nReceive-side auth challenge frame:\n");
     RUN(receive_auth_challenge_frame);
 
+    printf("\nReference byte-vector regression tests:\n");
+    RUN(byte_vector_2w_execute_position_50_payload);
+    RUN(byte_vector_2w_execute_stop_and_favorite_payloads);
+    RUN(byte_vector_2w_key_transfer_encrypted_key_from_key_init);
+    RUN(byte_vector_2w_challenge_response_hmac_is_command_data);
+    RUN(byte_vector_1w_execute_00_14_hmac_transcript);
+    RUN(byte_vector_1w_sendkey_30_payload_20_bytes_no_hmac);
+
     printf("\n--- Integration Tests ---\n");
 
     printf("\nExecute → StatusUpdate flow:\n");
@@ -9834,6 +10274,10 @@ int main()
     RUN(controller_status_update_receive_auth_uses_saved_command_data);
     RUN(controller_2w_initial_response_wait_uses_retry_gap);
     RUN(retry_preserves_start_flag_for_2w_request);
+    RUN(byte_vector_controller_2w_execute_payloads_and_retry_start);
+    RUN(byte_vector_controller_1w_default_and_typed_targets);
+    RUN(byte_vector_controller_1w_sendkey_no_hmac_and_20_byte_payload);
+    RUN(byte_vector_controller_1w_repeat_plan_long_then_three_short_40ms);
     RUN(controller_2w_final_response_wait_and_sx1262_dwell);
     RUN(controller_default_1w_execute_uses_standard_vent_layout);
     RUN(controller_1w_execute_repeats_first_long_then_three_short);
