@@ -3,7 +3,7 @@ cSpell:words knxprod Rollladen Lamellenposition Garagentor Vorhangschiene Lüftu
 cSpell:words Abfrageintervall Szenensteuerung Langzeitbetrieb Fensterkontakt Betriebsmodus Anwesenheit
 cSpell:words Sollwert Rückmeldung Szenenaktion Szenenposition Gerätetyp Batterielevel Signalstärke
 cSpell:words Sonnenschutz unidirektional bidirektional Pairing Modulstatus Beobachtete Szenenlamelle
-cSpell:words Szenenmodus Szenentemperatur Szenenzustand
+cSpell:words Szenenmodus Szenentemperatur Szenenzustand Sequenzreserve Reservefenster SendKey
 -->
 
 # Applikationsbeschreibung io-homecontrol
@@ -100,7 +100,7 @@ Sicherheit und Kommunikation
 
 * AES-128 verschlüsselte bidirektionale Kommunikation
 * Challenge-Response-Authentifizierung
-* Cyril-kompatible 1W-Controllerprofile mit persistentem Sequenzzähler und Low-Power-Flag
+* Cyril-kompatible 1W-Controllerprofile mit getrennter Controller-Identität, Sequenzreserve und Low-Power-Flag
 * 3-Kanal Frequency-Hopping (868.25 / 868.95 / 869.85 MHz)
 * EU Duty-Cycle-Compliance mit Sub-Band-Tracking
 * Automatische Wiederholversuche (bis zu 3 Versuche, Frequenzwechsel)
@@ -123,7 +123,7 @@ Weitere Features
 * Richtung invertieren pro Kanal
 * Getrennte Öffnungs- und Schließzeiten pro Kanal für lineare Positionsschätzung während der Fahrt
 * Verhalten nach Neustart konfigurierbar (Nichts tun / Status abfragen / Letzte Position anfahren)
-* 2W-Pairing-Daten sowie vollständige 1W-Controllerprofile persistent im Flash gespeichert
+* 2W-Pairing-Daten sowie vollständige 1W-Controllerprofile inklusive reserviertem Sequenzzähler persistent im Flash gespeichert
 
 
 
@@ -181,16 +181,22 @@ Zusätzlich gibt es auf der globalen Seite **Allgemein** eine **Pairing-Übersic
 
 > Alle ETS-Pairing-Aktionen erfordern eine aktive ETS-Onlineverbindung zum Gerät. Nach dem Entfernen des Pairings ist das Gerät über diesen Kanal nicht mehr steuerbar, bis ein erneutes Pairing durchgeführt wurde.
 
+Im 1W-Modus sind Anlernen und Entfernen getrennte Abläufe: Anlernen sendet standardmäßig `0x2E` und anschließend den unauthentifizierten `0x30 SendKey1W`; Entfernen sendet ausschließlich `0x39 RemoveController`. `0x39` wird nicht automatisch vor `0x30` eingefügt.
+
 ### **Pairing über die serielle Konsole**
 
 Alternativ kann das Pairing über die serielle Konsole durchgeführt werden.
 
 * `iohc pair NN` — Startet das Pairing für Kanal NN (1-16)
 * `iohc pair NN AABBCC` — Startet 1W-Pairing mit bekannter Node-ID (Hex)
+* `iohc pair1w NN [ADDR] announce-add` — Startet den 1W-Referenzablauf `0x2E` → `0x30`
+* `iohc pair1w NN [ADDR] add-only` — Sendet nur `0x30 SendKey1W` für Diagnosezwecke
+* `iohc remove1w NN [ADDR]` — Sendet nur `0x39 RemoveController`
 * `iohc pair cancel` — Bricht einen laufenden Pairing-Vorgang ab
 * `iohc unpair NN` — Entfernt das Pairing für Kanal NN
 * `iohc 1wctrl status` — Zeigt die wirksamen 1W-Controllerprofile
-* `iohc 1wctrl NN status` — Zeigt das wirksame Profil eines einzelnen 1W-Kanals
+* `iohc 1wctrl NN status` — Zeigt das wirksame Profil eines einzelnen 1W-Kanals inklusive Sequenzreserve
+* `iohc 1wctrl NN reuse2w [MFG]` — Diagnosebefehl zur expliziten Übernahme der 2W-Identität als 1W-Profil
 * `iohc 1wqr NN QRHEX` — Importiert Adresse und Schlüssel einer Situo-QR-Identität in das wirksame Profil
 * `iohc 1wnew NN` — Erzeugt für einen ungepaarten Kanal ein neues eigenes 1W-Profil
 
@@ -232,13 +238,15 @@ Bei Auswahl von 1W erscheinen zusätzliche Felder:
 * **1W Controller-Hersteller**: Herstellerkennung des eigenen Controllerprofils. Bei einem geteilten Profil gilt der Hersteller des Profilkanals.
 * **1W Profil teilen mit Kanal**: `0` verwendet ein eigenes Profil. Eine Kanalnummer lässt mehrere Kanäle dieselbe 1W-Fernbedienungsidentität und denselben Sequenzzähler verwenden.
 
-Die globale Controller-Adresse und der globale Systemschlüssel gehören ausschließlich zur 2W-Identität. Jeder 1W-Kanal erhält stattdessen standardmäßig ein eigenes persistentes Controllerprofil aus zufälliger Adresse, 16-Byte-Schlüssel, Sequenzzähler und Hersteller. Dieses Verhalten entspricht dem Profilmodell der Cyril-Referenzimplementierung.
+Die globale Controller-Adresse und der globale Systemschlüssel gehören ausschließlich zur 2W-Identität. Jeder 1W-Kanal erhält stattdessen standardmäßig ein eigenes persistentes Controllerprofil aus Controller-Adresse, 16-Byte-Schlüssel, Hersteller, Broadcast-Typ, Zielgerät, Sequenzzähler und reserviertem Sequenzzähler. Dieses Verhalten entspricht dem Profilmodell der Cyril-Referenzimplementierung. Eine fehlende 1W-Identität wird nicht stillschweigend aus der 2W-Identität abgeleitet; eine Wiederverwendung der 2W-Identität ist nur über einen expliziten Diagnosebefehl vorgesehen.
 
-Der Sequenzzähler wird vor jedem neuen 1W-Telegramm erhöht und danach sofort persistent gespeichert. Das erste Telegramm einer neu erzeugten oder neu importierten Identität verwendet Sequenz `1`. Alle 1W-Telegramme setzen das Low-Power-Flag und verwenden den konfigurierten Broadcast-Typ für Pairing und normale Befehle.
+Der Sequenzzähler wird vor jedem neuen 1W-Telegramm erhöht. Im Flash wird nicht nach jedem normalen Befehl gespeichert, sondern ein vorausreservierter Sequenzwert abgelegt. Nach einem Neustart wird mit dieser Reserve fortgesetzt, damit kein bereits gesendeter Sequenzwert wiederverwendet wird. Pairing, Add/SendKey und Remove reservieren und speichern sofort; normale Befehle speichern nur beim Überschreiten des Reservefensters. Das erste Telegramm einer neu erzeugten oder neu importierten Identität verwendet Sequenz `1`. Alle 1W-Telegramme setzen das Low-Power-Flag und verwenden standardmäßig den konfigurierten typabhängigen Broadcast-Typ für Pairing und normale Befehle.
 
-Mehrere Kanäle können ein Profil explizit teilen. Sie verwenden dann dieselbe Adresse, denselben Schlüssel, denselben Hersteller und denselben Sequenzzähler. Ungültige oder zyklische Profilverweise fallen auf das eigene Profil zurück; identische importierte Profile werden intern auf einen gemeinsamen Sequenzzähler zusammengeführt.
+Mehrere Kanäle können ein Profil explizit teilen. Sie verwenden dann dieselbe Adresse, denselben Schlüssel, denselben Hersteller, denselben Broadcast-Typ und denselben Sequenzzähler einschließlich Sequenzreserve. Ungültige oder zyklische Profilverweise fallen auf das eigene Profil zurück; identische importierte Profile werden intern auf einen gemeinsamen Sequenzzähler zusammengeführt.
 
 Eine vorhandene Somfy-Situo-QR-Controlleridentität kann über `iohc 1wqr NN QRHEX` importiert werden. Erwartet werden mindestens 20 Hex-Bytes im Aufbau `Typ + Adresse[3] + Schlüssel[16]`; die drei Adressbytes werden für die Funkadresse umgekehrt. Der QR-Code liefert damit Controller-Adresse und Schlüssel. Der Hersteller bleibt ein lokaler Profilwert und wird über ETS oder Konsole festgelegt; neue automatisch erzeugte Profile verwenden ohne ETS-Override zunächst Somfy. Die Online-Aktion und die Servicekonsole ändern keine Profilidentität, solange ein gepaarter Kanal das Profil verwendet. Eine geänderte ETS-Profilzuordnung oder Profilidentität erfordert anschließend ein erneutes Pairing der betroffenen Aktoren.
+
+Im 1W-Modus werden normale Fahrbefehle als vier Funkübertragungen gesendet: eine erste Übertragung mit langer Präambel und anschließend drei Wiederholungen mit kurzer Präambel im Abstand von ca. 40 ms. Das 1W-Anlernen verwendet den Referenzablauf `0x2E` (Announce/PairAuth) gefolgt von `0x30` (SendKey). `0x30` enthält `encryptedKey[16] + Hersteller + 0x01 + Sequenz[2]`, ist 29 Byte lang und besitzt keinen angehängten 1W-HMAC. Ein Entfernen wird getrennt über `0x39` gesendet und ist kein automatischer Zwischenschritt beim Anlernen.
 
 > Im 1W-Modus stehen keine Positionsrückmeldung, kein Batterielevel und keine Signalstärke vom Gerät zur Verfügung. Die Positionsschätzung erfolgt ausschließlich anhand der konfigurierten Fahrzeiten.
 
@@ -251,6 +259,8 @@ Eine vorhandene Somfy-Situo-QR-Controlleridentität kann über `iohc 1wqr NN QRH
 Position wird als Prozentwert (0-100%) über DPT 5.001 gesteuert:
 * **0%** = vollständig geöffnet / oben / eingefahren
 * **100%** = vollständig geschlossen / unten / ausgefahren
+
+Intern verwendet das 1W-Protokoll denselben Rohwert als geschlossene Position (`rawClosedPercent`): `0` bedeutet offen, `100` bedeutet geschlossen. Wo eine Bedienoberfläche einen Öffnungswert im Sinn von `100% = offen` liefert, wird dieser an der Kanalgrenze explizit in `rawClosedPercent = 100 - uiOpenPercent` umgerechnet. Die Diagnose kann beide Werte anzeigen, z.B. `uiOpen=75 rawClosed=25 main=3200`.
 
 Zusätzlich stehen Auf/Ab (DPT 1.008) und Stopp (DPT 1.001) als Befehle zur Verfügung.
 
@@ -472,11 +482,11 @@ Bei Auswahl von 1W erscheint zusätzlich:
 
 Die dezimale Node-ID des Zielgeräts. Sie muss bekannt sein und kann beispielsweise über den Netzwerk-Scan ermittelt werden. Wertebereich: 0 bis 16777215 (24 Bit). 0 bedeutet "nicht gesetzt".
 
-Die Node-ID wird für Pairing und Kanalzuordnung benötigt. Normale 1W-Befehle werden an die aus dem Broadcast-Typ gebildete Gruppenadresse gesendet.
+Die Node-ID wird für Pairing und Kanalzuordnung benötigt. Normale 1W-Befehle werden an die aus dem Broadcast-Typ gebildete Gruppenadresse gesendet; der Key-Transfer verwendet dieselbe Zieladress-Policy.
 
 #### **1W Broadcast-Typ**
 
-Bestimmt die Broadcast-Adresse für Pairing und Befehle. Die automatische Auswahl verwendet Typ 3 für Markisen und horizontalen Sonnenschutz sowie Typ 2 für die übrigen Gerätetypen. Für Diagnose und Sondergeräte können Typ 0, Typ 2 oder Typ 3 explizit gewählt werden.
+Bestimmt die Broadcast-Adresse für Pairing und Befehle. Die automatische Auswahl verwendet Typ 3 für Markisen und horizontalen Sonnenschutz sowie Typ 2 für die übrigen Gerätetypen. Daraus wird `dst = ((Typ << 6) | 0x3F)` gebildet, z.B. Typ 2 = `0x0000BF`, Typ 3 = `0x0000FF`, Typ 0 = `0x00003F`. Für Diagnose und Sondergeräte können Typ 0, Typ 2, Typ 3 oder eine exakte Zieladresse explizit gewählt werden.
 
 #### **1W Controller-Hersteller**
 
@@ -484,9 +494,9 @@ Bestimmt die Herstellerkennung des eigenen Controllerprofils. Die Kennung wird b
 
 #### **1W Profil teilen mit Kanal**
 
-Mit `0` besitzt der Kanal eine eigene virtuelle Fernbedienungsidentität. Durch Angabe eines anderen, als 1W konfigurierten Kanals teilen beide Kanäle Controller-Adresse, Schlüssel, Hersteller und Sequenzzähler. Dies ist für Aktoren gedacht, die als gemeinsame 1W-Gruppe mit derselben Fernbedienung angelernt wurden. Ungültige oder zyklische Verweise fallen auf das eigene Profil zurück.
+Mit `0` besitzt der Kanal eine eigene virtuelle Fernbedienungsidentität. Durch Angabe eines anderen, als 1W konfigurierten Kanals teilen beide Kanäle Controller-Adresse, Schlüssel, Hersteller, Broadcast-Typ und Sequenzzähler inklusive Sequenzreserve. Dies ist für Aktoren gedacht, die als gemeinsame 1W-Gruppe mit derselben Fernbedienung angelernt wurden. Ungültige oder zyklische Verweise fallen auf das eigene Profil zurück.
 
-Über die ETS-Online-Aktion **Neues eigenes 1W-Controllerprofil erzeugen** kann eine neue zufällige Identität erzeugt werden. Die Aktion ist nur für ein eigenes Profil möglich und wird abgelehnt, solange irgendein gepaarter Kanal dieses Profil verwendet. Das erste danach gesendete Telegramm verwendet Sequenz `1`.
+Über die ETS-Online-Aktion **Neues eigenes 1W-Controllerprofil erzeugen** kann eine neue zufällige Identität erzeugt werden. Die Aktion ist nur für ein eigenes Profil möglich und wird abgelehnt, solange irgendein gepaarter Kanal dieses Profil verwendet. Das erste danach gesendete Telegramm verwendet Sequenz `1`; gleichzeitig wird ein Sequenzbereich vorausreserviert, um Wiederholungen nach einem Neustart zu vermeiden.
 
 <!-- DOC -->
 <!-- DOC HelpContext="IOHC-Anzahl-Szenen" -->
@@ -585,7 +595,8 @@ Die folgenden Tabellen enthalten die Befehle für reguläre Inbetriebnahme und S
 | Befehl | Beschreibung |
 |--------|-------------|
 | `iohc help` | Zeigt verfügbare Befehle |
-| `iohc status` | Zeigt Pairing-Status aller Kanäle |
+| `iohc proto selftest` | Führt bytegenaue Protokoll-Selbsttests für 1W/2W-Krypto, Frame-Längen und Serializer-Grenzen aus |
+| `iohc status` | Zeigt Pairing-Status aller Kanäle inklusive getrennter 2W- und 1W-Identitätsdaten |
 | `iohc status NN` | Zeigt Details für Kanal NN |
 
 ### **Pairing-Befehle**
@@ -594,6 +605,9 @@ Die folgenden Tabellen enthalten die Befehle für reguläre Inbetriebnahme und S
 |--------|-------------|
 | `iohc pair NN` | Startet Pairing für Kanal NN |
 | `iohc pair NN AABBCC` | Startet 1W-Pairing mit bekannter Node-ID (Hex) |
+| `iohc pair1w NN [ADDR] announce-add` | Startet den 1W-Referenzablauf mit `0x2E` gefolgt von `0x30` |
+| `iohc pair1w NN [ADDR] add-only` | Sendet nur den 1W-Key-Transfer `0x30` für Diagnosezwecke |
+| `iohc remove1w NN [ADDR]` | Sendet nur `0x39 RemoveController` für 1W; es folgt kein `0x30` |
 | `iohc pair cancel` | Bricht laufenden Pairing-Vorgang ab |
 | `iohc unpair NN` | Entfernt Pairing für Kanal NN |
 
@@ -607,14 +621,15 @@ Die folgenden Tabellen enthalten die Befehle für reguläre Inbetriebnahme und S
 | `iohc set1w NN` | Setzt Kanal auf 1W-Modus |
 | `iohc set2w NN` | Setzt Kanal auf 2W-Modus |
 | `iohc 1wctrl status` | Zeigt alle wirksamen 1W-Controllerprofile |
-| `iohc 1wctrl NN status` | Zeigt das wirksame Profil eines einzelnen 1W-Kanals |
+| `iohc 1wctrl NN status` | Zeigt das wirksame Profil eines einzelnen 1W-Kanals inklusive Sequenzreserve |
 | `iohc 1wctrl NN ADDR HEX32 [MFG]` | Setzt Adresse, Schlüssel und optional Hersteller des wirksamen Profils |
+| `iohc 1wctrl NN reuse2w [MFG]` | Diagnosebefehl: übernimmt explizit die 2W-Identität als 1W-Profil |
 | `iohc 1wqr NN QRHEX` | Importiert Adresse und Schlüssel einer Situo-QR-Controlleridentität in das wirksame Profil |
 | `iohc 1wnew NN` | Erzeugt ein neues eigenes Profil, sofern es von keinem gepaarten Kanal verwendet wird |
 | `iohc 1wmfg NN ID` | Setzt den Hersteller des wirksamen Profils |
 | `iohc 1wtype TYPE` | Setzt den globalen 1W-Broadcast-Fallback; übliche Werte sind 0, 2 und 3 |
 | `iohc pair1w-type NN ADDR TYPE` | Startet 1W-Pairing mit explizitem Broadcast-Typ |
-| `iohc send1w-type NN open\|close\|stop\|vent\|force [TYPE]` | Sendet einen 1W-Befehl mit explizitem Broadcast-Typ |
+| `iohc send1w-type NN open\|close\|stop\|vent\|force [TYPE\|dst=typed\|dst=all\|dst=exact ADDR]` | Sendet einen 1W-Befehl mit explizitem Broadcast-Typ oder Zieladress-Override |
 
 `iohc set1w` und `iohc set2w` ändern den Modus nur zur Laufzeit für Diagnosezwecke. Nach einem Neustart gilt wieder die ETS-Konfiguration.
 
@@ -625,7 +640,7 @@ Die folgenden Tabellen enthalten die Befehle für reguläre Inbetriebnahme und S
 | `iohc send1wbtn NN up\|down\|stop\|my\|prog\|release\|stop2` | Sendet einen bekannten 1W-Fernbedienungstastencode |
 | `iohc raw1w NN HEX` | Sendet einen rohen 1W-Tastencode |
 | `iohc execraw NN HEX` | Sendet einen exakten 1W-Execute-Payload; Sequenz und HMAC werden ergänzt |
-| `iohc pairdiag on\|off\|status` | Aktiviert oder zeigt ausführliche Pairing-Diagnose |
+| `iohc pairdiag on\|off\|status` | Aktiviert oder zeigt ausführliche Pairing-Diagnose inklusive 1W-Sequenzreserve, HMAC-/Key-Diagnose, Wiederholplan und TX-Ziel |
 
 ### **Thermostat-Befehle (Atlantic Cozy)**
 
