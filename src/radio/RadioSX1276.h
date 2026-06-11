@@ -48,6 +48,8 @@ public:
   uint32_t irqCount() const;
   uint32_t rxPayloadReadyPollCount() const;
   uint32_t rxFifoOverrunCount() const;
+  uint32_t rxFifoEmptyCount() const;
+  uint32_t rxCrcFailCount() const;
   uint8_t lastRxLen() const;
   uint16_t lastRxIrqStatus() const;
   uint16_t lastIrqStatus() const;
@@ -83,6 +85,8 @@ private:
   uint32_t mIrqCount;
   uint32_t mRxPayloadReadyPollCount;
   uint32_t mRxFifoOverrunCount;
+  uint32_t mRxFifoEmptyCount;
+  uint32_t mRxCrcFailCount;
   uint8_t mLastRxLen;
   uint16_t mLastRxIrqStatus;
   uint16_t mLastIrqStatus;
@@ -111,4 +115,7 @@ private:
 
   // Calibrate radio oscillator
   void calibrate();
+
+  // Compact configuration read-back for pair/radio diagnostics.
+  void logConfigDump();
 };

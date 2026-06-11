@@ -52,7 +52,8 @@ RadioSX1276::RadioSX1276()
       mInitialized(false), mState(RadioState::Idle),
       mLastRssi(0), mCurrentFreq(0), mPreviousStandardFrequency(IOHC_FREQ_2), mEms2Mode(false),
       mTxStartCount(0), mTxDoneCount(0), mRxStartCount(0), mIrqCount(0),
-      mRxPayloadReadyPollCount(0), mRxFifoOverrunCount(0), mLastRxLen(0),
+      mRxPayloadReadyPollCount(0), mRxFifoOverrunCount(0), mRxFifoEmptyCount(0),
+      mRxCrcFailCount(0), mLastRxLen(0),
       mLastRxIrqStatus(0), mLastIrqStatus(0), mLastOpStatusBefore(0), mLastOpStatusAfter(0),
       mLastTxSetStatus(0), mLastTxIrqImmediate(0), mDio0Fired(false)
 {
@@ -235,7 +236,45 @@ RadioError RadioSX1276::configure()
     uint8_t lPllHop = readRegister(REG_PLLHOP);
     writeRegister(REG_PLLHOP, lPllHop | RF_PLLHOP_FASTHOP_ON);
 
+    logConfigDump();
+
     return RadioError::None;
+}
+
+void RadioSX1276::logConfigDump()
+{
+    if (!mInitialized)
+        return;
+
+    const uint8_t lOpMode = readRegister(REG_OPMODE);
+    const uint8_t lPacketConfig1 = readRegister(REG_PACKETCONFIG1);
+    const uint8_t lPacketConfig2 = readRegister(REG_PACKETCONFIG2);
+    const uint8_t lSyncConfig = readRegister(REG_SYNCCONFIG);
+    const uint8_t lSyncValue1 = readRegister(REG_SYNCVALUE1);
+    const uint8_t lSyncValue2 = readRegister(REG_SYNCVALUE2);
+    const uint8_t lSyncValue3 = readRegister(REG_SYNCVALUE3);
+    const uint8_t lDioMapping1 = readRegister(REG_DIOMAPPING1);
+    const uint8_t lDioMapping2 = readRegister(REG_DIOMAPPING2);
+    const uint16_t lBitRate = (static_cast<uint16_t>(readRegister(REG_BITRATEMSB)) << 8) |
+                              readRegister(REG_BITRATELSB);
+    const uint16_t lFdev = (static_cast<uint16_t>(readRegister(REG_FDEVMSB)) << 8) |
+                           readRegister(REG_FDEVLSB);
+    const uint8_t lRxBw = readRegister(REG_RXBW);
+
+    logInfoP("SX1276 cfg: op=0x%02X pc1=0x%02X pc2=0x%02X sync=%02X/%02X/%02X/%02X dio=%02X/%02X br=%04X fdev=%04X rxBw=%02X freq=%lu",
+             lOpMode,
+             lPacketConfig1,
+             lPacketConfig2,
+             lSyncConfig,
+             lSyncValue1,
+             lSyncValue2,
+             lSyncValue3,
+             lDioMapping1,
+             lDioMapping2,
+             lBitRate,
+             lFdev,
+             lRxBw,
+             static_cast<unsigned long>(mCurrentFreq));
 }
 
 RadioError RadioSX1276::setFrequency(uint32_t iFreqHz)
@@ -375,6 +414,7 @@ bool RadioSX1276::isPacketAvailable()
     const bool lDio0Fired = mDio0Fired;
     const bool lPayloadReady = (lIrqStatus & RF_IRQFLAGS2_PAYLOADREADY) != 0;
 
+
     // The working reference polls PayloadReady in addition to DIO state.
     // This keeps RX reliable if the ESP32 ISR is missed, DIO0 was already
     // high before polling, or DIO0 wiring/mapping is marginal.
@@ -423,9 +463,17 @@ uint8_t RadioSX1276::readPacket(uint8_t *oBuffer, uint8_t iMaxLen)
     // Record RSSI at packet-read time for diagnostics.
     mLastRssi = -(readRegister(REG_RSSIVALUE) / 2);
 
+    if ((lIrqStatus & RF_IRQFLAGS2_PAYLOADREADY) != 0 &&
+        (lIrqStatus & RF_IRQFLAGS2_CRCOK) == 0)
+    {
+        mRxCrcFailCount++;
+    }
+
     // Read packet from FIFO (with IoHomeOn=1, read until FIFO empty).
     uint8_t lLen = readFifo(oBuffer, iMaxLen);
     mLastRxLen = lLen;
+    if (lLen == 0)
+        mRxFifoEmptyCount++;
 
     if ((lIrqStatus & RF_IRQFLAGS2_FIFOOVERRUN) != 0)
     {
@@ -505,6 +553,16 @@ uint32_t RadioSX1276::rxPayloadReadyPollCount() const
 uint32_t RadioSX1276::rxFifoOverrunCount() const
 {
     return mRxFifoOverrunCount;
+}
+
+uint32_t RadioSX1276::rxFifoEmptyCount() const
+{
+    return mRxFifoEmptyCount;
+}
+
+uint32_t RadioSX1276::rxCrcFailCount() const
+{
+    return mRxCrcFailCount;
 }
 
 uint8_t RadioSX1276::lastRxLen() const

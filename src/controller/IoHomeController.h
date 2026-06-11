@@ -352,6 +352,11 @@ public:
     uint32_t irqPollHitCount;
     uint32_t preambleOnlyIrqCount;
     uint32_t rxReadFailCount;
+    uint32_t rxFifoOverrunCount;
+    uint32_t rxFifoEmptyCount;
+    uint32_t rxParseFailCount;
+    uint8_t lastRxLen;
+    uint16_t lastRxIrqStatus;
     uint16_t lastIrqStatus;
     uint8_t lastOpStatusBefore;
     uint8_t lastOpStatusAfter;
@@ -488,6 +493,7 @@ private:
   uint8_t mTxBuffer[IOHC_FRAME_BUFFER_SIZE];
   uint8_t mTxLen;
   uint8_t mRxBuffer[IOHC_FRAME_BUFFER_SIZE];
+  uint32_t mRxParseFailCount;
 
   // 1W repeat transmission state
   uint8_t mTx1WRepeatRemaining = 0; // remaining 1W repeats (0 = done)
@@ -614,6 +620,8 @@ private:
   const std::string logPrefix() const;
   bool isPairDiagnosticState(ControllerState iState) const;
   void tracePairDiagnosticStateChange();
+  void tracePairDiagnosticCompactPair() const;
+  void tracePairDiagnosticCompactRx(const IoHomeRadioHealth &iHealth) const;
   void tracePairDiagnosticFrame(const char *iPrefix, const IoHomeFrame &iFrame, uint8_t iFreqIdx, int16_t iRssi) const;
   void tracePairDiagnosticDiscoveryInterpretation(const IoHomeFrame &iFrame, uint8_t iFreqIdx) const;
   void processIdle();

@@ -77,6 +77,34 @@ namespace
         return lOut;
     }
 
+    const char *pairingModeName(Pairing2WMode iMode, ControllerState iState)
+    {
+        switch (iState)
+        {
+        case ControllerState::PairSend1WRemove:
+        case ControllerState::PairWait1WRemove:
+        case ControllerState::PairSend1WKeyTransfer:
+        case ControllerState::PairWait1WKeyTransfer:
+            return "1w";
+        default:
+            break;
+        }
+
+        switch (iMode)
+        {
+        case Pairing2WMode::Normal:
+            return "normal";
+        case Pairing2WMode::DiscoveryConfirmation:
+            return "discovery-confirmation";
+        case Pairing2WMode::LaunchKeyTransfer:
+            return "launch-key-transfer";
+        case Pairing2WMode::PullKey:
+            return "pull-key";
+        default:
+            return "unknown";
+        }
+    }
+
     bool isPairDiagnosticCommand(IoHomeCommand iCommand)
     {
         switch (iCommand)
@@ -433,6 +461,7 @@ IoHomeController::IoHomeController()
       mLastPairDiagnosticTraceState(ControllerState::Idle)
 {
     memset(mSystemKey, 0, sizeof(mSystemKey));
+    mRxParseFailCount = 0;
     memset(mCmdQueue, 0, sizeof(mCmdQueue));
     memset(mTxTimeAccum, 0, sizeof(mTxTimeAccum));
     memset(mPairingChallenge, 0, sizeof(mPairingChallenge));
@@ -1612,6 +1641,36 @@ void IoHomeController::tracePairDiagnosticStateChange()
              lElapsedMs,
              mDiscoverySPE ? 1 : 0,
              mRxScanEnabled ? 1 : 0);
+    tracePairDiagnosticCompactPair();
+}
+
+void IoHomeController::tracePairDiagnosticCompactPair() const
+{
+    if (!mPairDiagnosticTraceEnabled)
+        return;
+
+    const uint32_t lPairFreqHz = (mPairingFreqIdx < IOHC_NUM_FREQUENCIES) ? IOHC_FREQUENCIES[mPairingFreqIdx] : 0;
+    logInfoP("pair: mode=%s state=%s ch=%u freq=%lu node=0x%06X",
+             pairingModeName(mPairing2WMode, mState),
+             stateName(mState),
+             static_cast<unsigned>(mPairingChannel + 1),
+             static_cast<unsigned long>(lPairFreqHz),
+             mDiscoveredNodeId);
+}
+
+void IoHomeController::tracePairDiagnosticCompactRx(const IoHomeRadioHealth &iHealth) const
+{
+    if (!mPairDiagnosticTraceEnabled)
+        return;
+
+    logInfoP("rx: dio0=%lu irqPoll=%lu overrun=%lu fifoEmpty=%lu parseFail=%lu crcFail=%lu lastLen=%u",
+             static_cast<unsigned long>(iHealth.irqCount),
+             static_cast<unsigned long>(iHealth.irqPollHitCount),
+             static_cast<unsigned long>(iHealth.rxFifoOverrunCount),
+             static_cast<unsigned long>(iHealth.rxFifoEmptyCount),
+             static_cast<unsigned long>(iHealth.rxParseFailCount),
+             static_cast<unsigned long>(iHealth.crcErrorCount),
+             static_cast<unsigned>(iHealth.lastRxLen));
 }
 
 void IoHomeController::logPairDiagnosticStatus() const
@@ -1649,6 +1708,8 @@ void IoHomeController::logPairDiagnosticStatus() const
              static_cast<unsigned long>(lHealth.rxStartCount),
              static_cast<unsigned long>(lHealth.crcErrorCount),
              static_cast<unsigned long>(lHealth.timeoutCount));
+    tracePairDiagnosticCompactPair();
+    tracePairDiagnosticCompactRx(lHealth);
 }
 
 void IoHomeController::resetDiscoveryTimingTrace()
@@ -1748,6 +1809,11 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
     lHealth.irqPollHitCount = 0;
     lHealth.preambleOnlyIrqCount = 0;
     lHealth.rxReadFailCount = 0;
+    lHealth.rxFifoOverrunCount = 0;
+    lHealth.rxFifoEmptyCount = 0;
+    lHealth.rxParseFailCount = mRxParseFailCount;
+    lHealth.lastRxLen = 0;
+    lHealth.lastRxIrqStatus = 0;
     lHealth.lastIrqStatus = 0;
     lHealth.lastOpStatusBefore = 0;
     lHealth.lastOpStatusAfter = 0;
@@ -1785,6 +1851,12 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
     lHealth.txDoneCount = mRadio.txDoneCount();
     lHealth.rxStartCount = mRadio.rxStartCount();
     lHealth.irqCount = mRadio.irqCount();
+    lHealth.irqPollHitCount = mRadio.rxPayloadReadyPollCount();
+    lHealth.rxFifoOverrunCount = mRadio.rxFifoOverrunCount();
+    lHealth.rxFifoEmptyCount = mRadio.rxFifoEmptyCount();
+    lHealth.crcErrorCount = mRadio.rxCrcFailCount();
+    lHealth.lastRxLen = mRadio.lastRxLen();
+    lHealth.lastRxIrqStatus = mRadio.lastRxIrqStatus();
     lHealth.lastIrqStatus = mRadio.lastIrqStatus();
     lHealth.lastOpStatusBefore = mRadio.lastOpStatusBefore();
     lHealth.lastOpStatusAfter = mRadio.lastOpStatusAfter();
@@ -1861,7 +1933,10 @@ void IoHomeController::loop()
     if (mRadio.isPacketAvailable())
     {
         uint8_t lLen = mRadio.readPacket(mRxBuffer, sizeof(mRxBuffer));
-        if (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen))
+        bool lParsed = (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen));
+        if (lLen > 0 && !lParsed)
+            mRxParseFailCount++;
+        if (lParsed)
         {
             // Record which frequency the response came on
             mLastResponseFreqIdx = mCurrentFreqIdx;
@@ -3877,7 +3952,10 @@ void IoHomeController::processScanWaitResponse()
     if (mRadio.isPacketAvailable())
     {
         uint8_t lLen = mRadio.readPacket(mRxBuffer, sizeof(mRxBuffer));
-        if (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen))
+        bool lParsed = (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen));
+        if (lLen > 0 && !lParsed)
+            mRxParseFailCount++;
+        if (lParsed)
         {
             if (mRxFrame.getSrcNodeId() == mScanTargetNode)
             {
