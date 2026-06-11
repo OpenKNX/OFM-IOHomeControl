@@ -28,6 +28,16 @@
 
 class IoHomecontrolChannel;
 
+// 1W destination policy for remote-style broadcasts. Normal control uses the
+// configured/profile device type; diagnostics can force all or an exact node.
+enum class OneWayDestinationMode : uint8_t
+{
+  ProfileTyped = 0, // dst = ((configured type << 6) | 0x3F)
+  ExplicitType = 1, // dst = ((oneWayBroadcastType << 6) | 0x3F)
+  All = 2,          // dst = 0x00003F
+  Exact = 3         // dst = oneWayExactDestination
+};
+
 // Queued command entry
 struct IoHomeQueueEntry
 {
@@ -46,9 +56,11 @@ struct IoHomeQueueEntry
   uint16_t oneWayMain;        // main[2] value, e.g. 0x0000=open, 0xC800=close, 0xD200=stop
   uint8_t oneWayFp1;
   uint8_t oneWayFp2;
-  uint8_t oneWayBroadcastType;      // target type: dst = ((type << 6) | 0x3F)
-  bool oneWayBroadcastTypeExplicit; // true when the caller explicitly requested a typed 1W broadcast target
-  bool twoWayTilt;                  // true: 2W tilt-only Execute payload
+  uint8_t oneWayBroadcastType;              // target type: dst = ((type << 6) | 0x3F)
+  bool oneWayBroadcastTypeExplicit;         // legacy alias: true when destination mode is ExplicitType
+  OneWayDestinationMode oneWayDestinationMode;
+  uint32_t oneWayExactDestination;          // only used when oneWayDestinationMode == Exact
+  bool twoWayTilt;                          // true: 2W tilt-only Execute payload
   uint8_t twoWayTiltPercent;
   uint8_t retries;
   bool active;
@@ -192,6 +204,13 @@ public:
   bool sendOneWayExecuteWithType(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                  uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
                                  uint8_t iBroadcastType);
+
+  // Queue a standard 1W Execute command with a diagnostic destination override.
+  bool sendOneWayExecuteWithDestination(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                                        uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
+                                        OneWayDestinationMode iDestinationMode,
+                                        uint8_t iBroadcastType = 0,
+                                        uint32_t iExactDestination = 0);
 
   // Set device name (authenticated 2W command: 0x52 → 0x3C → 0x3D → 0x53)
   bool sendSetName(uint32_t iDestNodeId, const uint8_t *iEncKey,
@@ -752,4 +771,5 @@ private:
   bool resolveLowPower2W(uint32_t iNodeId) const;
   IoHomecontrolChannel *oneWayProfileForNode(uint32_t iNodeId) const;
   uint8_t oneWayBroadcastTypeForNode(uint32_t iNodeId) const;
+  uint32_t oneWayDestinationForEntry(const IoHomeQueueEntry &iEntry) const;
 };

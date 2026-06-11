@@ -824,6 +824,8 @@ bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
     }
     lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
     lEntry.oneWayBroadcastTypeExplicit = false;
+    lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
+    lEntry.oneWayExactDestination = 0;
     lEntry.retries = 0;
     lEntry.active = true;
     return queuePush(lEntry);
@@ -845,6 +847,8 @@ bool IoHomeController::sendOneWayButton(uint32_t iDestNodeId, const uint8_t *iEn
     lEntry.oneWayRawLen = 0;
     lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
     lEntry.oneWayBroadcastTypeExplicit = false;
+    lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
+    lEntry.oneWayExactDestination = 0;
     lEntry.retries = 0;
     lEntry.active = true;
     return queuePush(lEntry);
@@ -870,6 +874,8 @@ bool IoHomeController::sendOneWayRawExecute(uint32_t iDestNodeId, const uint8_t 
     lEntry.oneWayRawLen = iPayloadLen;
     lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
     lEntry.oneWayBroadcastTypeExplicit = false;
+    lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
+    lEntry.oneWayExactDestination = 0;
     memcpy(lEntry.oneWayRawData, iPayload, iPayloadLen);
     lEntry.retries = 0;
     lEntry.active = true;
@@ -879,6 +885,17 @@ bool IoHomeController::sendOneWayRawExecute(uint32_t iDestNodeId, const uint8_t 
 bool IoHomeController::sendOneWayExecuteWithType(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                                  uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
                                                  uint8_t iBroadcastType)
+{
+    return sendOneWayExecuteWithDestination(iDestNodeId, iEncKey, iMain, iFp1, iFp2,
+                                            OneWayDestinationMode::ExplicitType,
+                                            iBroadcastType, 0);
+}
+
+bool IoHomeController::sendOneWayExecuteWithDestination(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                                                        uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
+                                                        OneWayDestinationMode iDestinationMode,
+                                                        uint8_t iBroadcastType,
+                                                        uint32_t iExactDestination)
 {
     if (iEncKey == nullptr)
         return false;
@@ -892,8 +909,12 @@ bool IoHomeController::sendOneWayExecuteWithType(uint32_t iDestNodeId, const uin
     lEntry.oneWayMain = iMain;
     lEntry.oneWayFp1 = iFp1;
     lEntry.oneWayFp2 = iFp2;
-    lEntry.oneWayBroadcastType = iBroadcastType & 0x3F;
-    lEntry.oneWayBroadcastTypeExplicit = true;
+    lEntry.oneWayBroadcastType = (iDestinationMode == OneWayDestinationMode::ProfileTyped)
+                                     ? oneWayBroadcastTypeForNode(iDestNodeId)
+                                     : (iBroadcastType & 0x3F);
+    lEntry.oneWayBroadcastTypeExplicit = (iDestinationMode == OneWayDestinationMode::ExplicitType);
+    lEntry.oneWayDestinationMode = iDestinationMode;
+    lEntry.oneWayExactDestination = iExactDestination & 0x00FFFFFF;
     lEntry.retries = 0;
     lEntry.active = true;
     return queuePush(lEntry);
@@ -968,6 +989,8 @@ bool IoHomeController::sendTiltCommand(uint32_t iDestNodeId, const uint8_t *iEnc
     lEntry.param3 = 0xFF;
     lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
     lEntry.oneWayBroadcastTypeExplicit = false;
+    lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
+    lEntry.oneWayExactDestination = 0;
     lEntry.twoWayTilt = true;
     lEntry.twoWayTiltPercent = iTiltPercent;
     lEntry.retries = 0;
@@ -1003,6 +1026,24 @@ uint8_t IoHomeController::oneWayBroadcastTypeForNode(uint32_t iNodeId) const
 {
     IoHomecontrolChannel *lCh = channelForNode(iNodeId);
     return lCh ? lCh->getConfigured1WBroadcastType() : mDefault1WBroadcastType;
+}
+
+uint32_t IoHomeController::oneWayDestinationForEntry(const IoHomeQueueEntry &iEntry) const
+{
+    switch (iEntry.oneWayDestinationMode)
+    {
+    case OneWayDestinationMode::All:
+        return oneWayBroadcastTarget(0);
+    case OneWayDestinationMode::Exact:
+        return iEntry.oneWayExactDestination & 0x00FFFFFF;
+    case OneWayDestinationMode::ExplicitType:
+        return oneWayBroadcastTarget(iEntry.oneWayBroadcastType);
+    case OneWayDestinationMode::ProfileTyped:
+    default:
+        // Default 1W behavior follows the rspaargaren forgePacket() target rule:
+        //   dst = ((type << 6) | 0x3F).  Type 0 intentionally remains 0x00003F.
+        return oneWayBroadcastTarget(iEntry.oneWayBroadcastType);
+    }
 }
 
 IoHomecontrolChannel *IoHomeController::channelForNode(uint32_t iNodeId) const
@@ -4613,11 +4654,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 return false;
             const uint8_t *lProfileKey = lProfile->getOneWayControllerKey();
             mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
-            // Keep the legacy default 1W target at 0x00003F for actuator control.
-            // Only explicit typed send paths override this destination.
-            mTxFrame.setDestNode(iEntry.oneWayBroadcastTypeExplicit
-                                     ? oneWayBroadcastTarget(iEntry.oneWayBroadcastType)
-                                     : 0x00003F);
+            mTxFrame.setDestNode(oneWayDestinationForEntry(iEntry));
             mTxFrame.set1WMode();
             mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END); // START+END both set
 
@@ -4847,9 +4884,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
             // 1W ActivateMode (_p0x01_13): origin(1)+acei(1)+main(1)+fp1(1)+fp2(1)+seq(2)+hmac(6) = 13B
             // Note: main is 1 byte (not 2!) in _p0x01_13
-            mTxFrame.setDestNode(iEntry.oneWayBroadcastTypeExplicit
-                                     ? oneWayBroadcastTarget(iEntry.oneWayBroadcastType)
-                                     : 0x00003F);
+            mTxFrame.setDestNode(oneWayDestinationForEntry(iEntry));
             mTxFrame.set1WMode();
             mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
 
@@ -4979,9 +5014,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             static_cast<uint8_t>((lRemoteNodeId >> 8) & 0xFF),
             static_cast<uint8_t>(lRemoteNodeId & 0xFF)};
         mTxFrame.setSrcNode(lRemoteNodeId);
-        mTxFrame.setDestNode(iEntry.oneWayBroadcastTypeExplicit
-                                 ? oneWayBroadcastTarget(iEntry.oneWayBroadcastType)
-                                 : 0x00003F);
+        mTxFrame.setDestNode(oneWayDestinationForEntry(iEntry));
         IoHomeCrypto::encrypt1WKey(lProfile->getOneWayControllerKey(), IOHC_TRANSFER_KEY, lRemoteNodeAddr, lEncKey1W);
         memcpy(mTxFrame.data, lEncKey1W, 16);
         mTxFrame.data[16] = lProfile->getOneWayControllerManufacturer();
