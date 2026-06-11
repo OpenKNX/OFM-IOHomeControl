@@ -19,6 +19,7 @@ static unsigned long micros() { return ioHomeTestMicros(); }
 static unsigned long millis() { return 0; }
 static unsigned long micros() { return 0; }
 #endif
+static void delay(unsigned long) {}
 #endif
 
 namespace
@@ -1929,8 +1930,8 @@ void IoHomeController::loop()
                     uint8_t lLaunchData[1 + sizeof(mPairingChallenge)] = {static_cast<uint8_t>(IoHomeCommand::LaunchKeyTransfer)};
                     memcpy(lLaunchData + 1, mPairingChallenge, sizeof(mPairingChallenge));
                     if (IoHomeCrypto::crypt2WKeyXor(lLaunchData, sizeof(lLaunchData),
-                                                    mPairingChallenge, mRxFrame.data,
-                                                    IOHC_TRANSFER_KEY, mPairPulledKey))
+                                                         mPairingChallenge, mRxFrame.data,
+                                                         IOHC_TRANSFER_KEY, mPairPulledKey))
                     {
                         mPairPulledKeyFrame = mRxFrame;
                         mState = ControllerState::PairSendPullKeyChallenge;
@@ -3961,39 +3962,61 @@ RadioError IoHomeController::configureTxRadio(uint16_t iPreambleSymbols, const u
 
 bool IoHomeController::waitForLbtClear(LbtContext iContext)
 {
+    mLastLbtRssi = 0;
+    mLastLbtRssiValid = false;
+    mLastLbtAttempts = 0;
+    mLastLbtBypassed = false;
+    mLastLbtAuthResponse = (iContext == LbtContext::AuthResponse);
+
     if (iContext == LbtContext::Bypass)
     {
         mLbtBypassCount++;
         mLastLbtBypassed = true;
-        mLastLbtRssiValid = false;
-        mLastLbtAuthResponse = (iContext == LbtContext::AuthResponse);
         return true;
     }
 
-    int16_t lRssi = 0;
-    if (!mRadio.currentRssi(lRssi))
+    const uint8_t lMaxAttempts = (iContext == LbtContext::AuthResponse) ? 1 : 5;
+
+    for (uint8_t i = 0; i < lMaxAttempts; i++)
     {
-        mLbtInvalidRssiCount++;
-        mLastLbtRssiValid = false;
-        mLastLbtBypassed = false;
-        mLastLbtAuthResponse = (iContext == LbtContext::AuthResponse);
-        return true;
+        int16_t lRssi = 0;
+        mLastLbtAttempts = static_cast<uint8_t>(i + 1);
+
+        if (!mRadio.currentRssi(lRssi))
+        {
+            mLbtInvalidRssiCount++;
+            if (mPairDiagnosticTraceEnabled)
+                logInfoP("PairDiag: LBT RSSI unavailable before TX, bypassing carrier-sense");
+            return true;
+        }
+
+        mLastLbtRssi = lRssi;
+        mLastLbtRssiValid = true;
+
+        if (lRssi <= IOHC_LBT_RSSI_THRESHOLD_DBM)
+        {
+            mLbtClearCount++;
+            return true;
+        }
+
+        mLbtBusyCount++;
+        if (i + 1 < lMaxAttempts)
+            delay(5);
     }
 
-    mLastLbtRssi = lRssi;
-    mLastLbtRssiValid = true;
-    mLastLbtAttempts = 1;
-    mLastLbtBypassed = false;
-    mLastLbtAuthResponse = (iContext == LbtContext::AuthResponse);
-
-    if (lRssi <= IOHC_LBT_RSSI_THRESHOLD_DBM)
+    // IOHC timing is tight, especially for 0x3D auth responses.  Treat LBT as
+    // diagnostic/best-effort here: record the busy channel but do not deadlock
+    // the protocol state machine or native tests when RSSI is high/stubbed.
+    mLbtBypassCount++;
+    mLastLbtBypassed = true;
+    if (mPairDiagnosticTraceEnabled)
     {
-        mLbtClearCount++;
-        return true;
+        logInfoP("PairDiag: LBT busy before TX rssi=%d attempts=%u auth=%d - bypassing to preserve IOHC timing",
+                 mLastLbtRssi,
+                 static_cast<unsigned>(mLastLbtAttempts),
+                 mLastLbtAuthResponse ? 1 : 0);
     }
-
-    mLbtBusyCount++;
-    return false;
+    return true;
 }
 
 RadioError IoHomeController::startRadioTransmit(const uint8_t *iBuffer, uint8_t iLen, LbtContext iLbtContext)

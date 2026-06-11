@@ -32,10 +32,14 @@ static int sTestsFailed = 0;
 #define RUN(name)                  \
     do                             \
     {                              \
+        const int failuresBefore = sTestsFailed; \
         printf("  %-50s ", #name); \
         test_##name();             \
-        printf("[PASS]\n");        \
-        sTestsPassed++;            \
+        if (sTestsFailed == failuresBefore)      \
+        {                          \
+            printf("[PASS]\n");    \
+            sTestsPassed++;        \
+        }                          \
     } while (0)
 
 #define ASSERT_TRUE(expr)                                    \
@@ -63,6 +67,37 @@ static void hexdump(const char *label, const uint8_t *data, size_t len)
     printf("\n");
 }
 
+static uint8_t serializeFrameForTest(const IoHomeFrame &frame, uint8_t *buffer, uint8_t maxLen)
+{
+    if (frame.hasCrc)
+        return frame.serializeRawWithCrc(buffer, maxLen);
+    if ((frame.ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0)
+        return frame.serialize1W(buffer, maxLen);
+    return frame.serialize2W(buffer, maxLen);
+}
+
+static uint8_t serialize2WWithAppendedHmacForRejectTest(const IoHomeFrame &frame, uint8_t *buffer, uint8_t maxLen)
+{
+    IoHomeFrame base = frame;
+    base.hasHmac = false;
+    base.hasCrc = false;
+    const uint8_t len = base.serialize2W(buffer, maxLen);
+    if (len == 0 || maxLen < len + IOHC_HMAC_SIZE)
+        return 0;
+    memcpy(buffer + len, frame.hmac, IOHC_HMAC_SIZE);
+    return len + IOHC_HMAC_SIZE;
+}
+
+static bool deserializeFrameForTest(IoHomeFrame &frame, const uint8_t *buffer, uint8_t len)
+{
+    return frame.deserializeFrame(buffer, len);
+}
+
+static bool deserializeRawWithOptionalCrcForTest(IoHomeFrame &frame, const uint8_t *buffer, uint8_t len)
+{
+    return frame.deserializeRawWithOptionalCrc(buffer, len);
+}
+
 #ifdef TEST_NATIVE
 static void initGatewayControllerForTest(IoHomeController &oController,
                                          IoHomecontrol &oModule,
@@ -83,7 +118,7 @@ static bool queueGatewayRequestAndLoop(IoHomeController &iController,
                                        IoHomeFrame &oResponse)
 {
     uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE];
-    const uint8_t lLen = iRequest.serialize(lBuffer, sizeof(lBuffer));
+    const uint8_t lLen = serializeFrameForTest(iRequest, lBuffer, sizeof(lBuffer));
     if (lLen == 0)
         return false;
 
@@ -95,7 +130,7 @@ static bool queueGatewayRequestAndLoop(IoHomeController &iController,
     if (lPacket.empty())
         return false;
 
-    return oResponse.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size()));
+    return deserializeFrameForTest(oResponse, lPacket.data(), static_cast<uint8_t>(lPacket.size()));
 }
 
 static void buildGatewayDiscoverRequest(IoHomeFrame &oFrame, uint32_t iDeviceNodeId)
@@ -339,7 +374,7 @@ TEST(frame_serialize_minimal)
     ASSERT_EQ(frame.totalLength(), 9);
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_EQ(len, 9);
 
     // ctrl0: START(0x40) | (9-1=8 & 0x1F) = 0x48
@@ -372,12 +407,12 @@ TEST(frame_roundtrip_with_data)
     original.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = original.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(original, buf, sizeof(buf));
     ASSERT_EQ(len, 9 + 2); // header + data = 11
 
     // Deserialize
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ(parsed.getSrcNodeId(), 0xAABBCC);
     ASSERT_EQ(parsed.getDestNodeId(), 0x112233);
     ASSERT_EQ((uint8_t)parsed.commandId, 0x00); // Execute
@@ -399,10 +434,10 @@ TEST(frame_roundtrip_no_hmac)
     original.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = original.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(original, buf, sizeof(buf));
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ(parsed.getSrcNodeId(), 0x112233);
     ASSERT_EQ(parsed.getDestNodeId(), 0x445566);
     ASSERT_EQ((uint8_t)parsed.commandId, 0x50);
@@ -414,14 +449,14 @@ TEST(frame_deserialize_rejects_too_short)
 {
     uint8_t buf[8] = {0};
     IoHomeFrame frame;
-    ASSERT_TRUE(!frame.deserialize(buf, 8)); // min is 9
+    ASSERT_TRUE(!deserializeFrameForTest(frame, buf, 8)); // min is 9
 }
 
 TEST(frame_deserialize_rejects_too_long)
 {
     uint8_t buf[33] = {0};
     IoHomeFrame frame;
-    ASSERT_TRUE(!frame.deserialize(buf, 33)); // max is 32
+    ASSERT_TRUE(!deserializeFrameForTest(frame, buf, 33)); // max is 32
 }
 
 TEST(frame_2w_rejects_oversized_declared_length)
@@ -437,11 +472,11 @@ TEST(frame_2w_rejects_oversized_declared_length)
     frame.dataLen = IOHC_FRAME_MAX_DATA + 1;
 
     uint8_t buf[40] = {0};
-    const uint8_t len = frame.serialize(buf, sizeof(buf));
+    const uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_EQ(len, 0);
 
     buf[0] = static_cast<uint8_t>(IOHC_CTRL0_START | ((IOHC_FRAME_MAX_SIZE_2W - 1) & IOHC_CTRL0_LEN_MASK));
-    ASSERT_TRUE(!frame.deserialize(buf, IOHC_FRAME_MAX_SIZE_2W + 1));
+    ASSERT_TRUE(!deserializeFrameForTest(frame, buf, IOHC_FRAME_MAX_SIZE_2W + 1));
 }
 
 // =====================================================================
@@ -467,7 +502,7 @@ TEST(frame_deserialize_smoove_origin_packet)
     };
 
     IoHomeFrame frame;
-    ASSERT_TRUE(frame.deserialize(packet, sizeof(packet)));
+    ASSERT_TRUE(deserializeFrameForTest(frame, packet, sizeof(packet)));
     ASSERT_EQ(frame.getSrcNodeId(), 0x485B37);
     ASSERT_EQ(frame.getDestNodeId(), 0x00003F);
     ASSERT_EQ((uint8_t)frame.commandId, 0x00); // Execute
@@ -492,7 +527,7 @@ TEST(frame_deserialize_1w_execute_real_capture_from_box)
         0xC6, 0x00, 0xBC, 0x4F, 0x2E, 0xB6};
 
     IoHomeFrame frame;
-    ASSERT_TRUE(frame.deserialize(packet, sizeof(packet)));
+    ASSERT_TRUE(deserializeFrameForTest(frame, packet, sizeof(packet)));
     ASSERT_EQ(frame.getSrcNodeId(), 0x9A5CA0);
     ASSERT_EQ(frame.getDestNodeId(), 0x00003F);
     ASSERT_EQ((uint8_t)frame.commandId, 0x00);
@@ -523,7 +558,7 @@ TEST(frame_rejects_sx1262_parse_fail_capture)
         0x11, 0x60, 0x4A, 0x10, 0x85, 0x93, 0xF9, 0xFF};
 
     IoHomeFrame frame;
-    ASSERT_TRUE(!frame.deserialize(packet, sizeof(packet)));
+    ASSERT_TRUE(!deserializeFrameForTest(frame, packet, sizeof(packet)));
 }
 
 // =====================================================================
@@ -604,7 +639,7 @@ TEST(hmac_wrong_key_rejects)
 }
 
 // =====================================================================
-// 7. Key encryption (crypt2WKey)
+// 7. Key transfer keystream / XOR helpers
 // =====================================================================
 
 TEST(crypt2wkey_produces_keystream)
@@ -616,7 +651,7 @@ TEST(crypt2wkey_produces_keystream)
         0x16, 0xAA, 0x47, 0x39, 0x49, 0x88, 0x43, 0x73};
 
     uint8_t keystream[16];
-    ASSERT_TRUE(IoHomeCrypto::crypt2WKey(frameData, sizeof(frameData),
+    ASSERT_TRUE(IoHomeCrypto::derive2WKeystream(frameData, sizeof(frameData),
                                          challenge, transferKey, keystream));
 
     // Keystream should be non-trivial (not all zeros or the input)
@@ -629,10 +664,7 @@ TEST(crypt2wkey_produces_keystream)
 
 TEST(crypt2wkey_xor_roundtrip)
 {
-    // Encrypt system key: keystream = crypt2WKey(..., transferKey)
-    // encrypted = systemKey XOR keystream
-    // Decrypt: keystream2 = crypt2WKey(same args, transferKey)
-    // decrypted = encrypted XOR keystream2 → should equal systemKey
+    // Key transfer encryption/decryption must use the explicit XOR helper.
     const uint8_t frameData[] = {0x31};
     const uint8_t challenge[6] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC};
     const uint8_t transferKey[16] = {
@@ -642,36 +674,28 @@ TEST(crypt2wkey_xor_roundtrip)
         0xAB, 0xCD, 0xEF, 0x01, 0x02, 0x03, 0x04, 0x05,
         0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x12, 0x13};
 
-    // Encrypt
-    uint8_t keystream[16];
-    ASSERT_TRUE(IoHomeCrypto::crypt2WKey(frameData, sizeof(frameData),
-                                         challenge, transferKey, keystream));
     uint8_t encrypted[16];
-    for (int i = 0; i < 16; i++)
-        encrypted[i] = systemKey[i] ^ keystream[i];
-
-    // Decrypt (same operation — XOR is symmetric)
-    uint8_t keystream2[16];
-    ASSERT_TRUE(IoHomeCrypto::crypt2WKey(frameData, sizeof(frameData),
-                                         challenge, transferKey, keystream2));
-    // Keystreams must match
-    ASSERT_MEM_EQ(keystream, keystream2, 16);
+    ASSERT_TRUE(IoHomeCrypto::crypt2WKeyXor(frameData, sizeof(frameData),
+                                            challenge, systemKey,
+                                            transferKey, encrypted));
+    ASSERT_MEM_NEQ(encrypted, systemKey, 16);
 
     uint8_t decrypted[16];
-    for (int i = 0; i < 16; i++)
-        decrypted[i] = encrypted[i] ^ keystream2[i];
+    ASSERT_TRUE(IoHomeCrypto::crypt2WKeyXor(frameData, sizeof(frameData),
+                                            challenge, encrypted,
+                                            transferKey, decrypted));
     ASSERT_MEM_EQ(decrypted, systemKey, 16);
 }
 
 // =====================================================================
-// 8. Cross-validation: HMAC uses same IV as crypt2WKey
+// 8. Cross-validation: HMAC uses same IV as derive2WKeystream
 // =====================================================================
 
 TEST(hmac_and_crypt_share_iv)
 {
-    // Both createHmac2W and crypt2WKey call constructIv2W with the same
+    // Both createHmac2W and derive2WKeystream call constructIv2W with the same
     // frame data and challenge. Verify by checking that the keystream
-    // from crypt2WKey has the same first 6 bytes as the HMAC output
+    // from derive2WKeystream has the same first 6 bytes as the HMAC output
     // when using the same key.
     const uint8_t frameData[] = {0x48, 0x01, 0x00, 0x00, 0x3B, 0xAA, 0xBB, 0xCC, 0x00};
     const uint8_t challenge[6] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC};
@@ -683,9 +707,9 @@ TEST(hmac_and_crypt_share_iv)
     ASSERT_TRUE(IoHomeCrypto::createHmac2W(frameData, sizeof(frameData), challenge, key, hmac));
 
     uint8_t keystream[16];
-    ASSERT_TRUE(IoHomeCrypto::crypt2WKey(frameData, sizeof(frameData), challenge, key, keystream));
+    ASSERT_TRUE(IoHomeCrypto::derive2WKeystream(frameData, sizeof(frameData), challenge, key, keystream));
 
-    // HMAC is first 6 bytes of AES(IV, key), crypt2WKey returns full 16 bytes
+    // HMAC is first 6 bytes of AES(IV, key), derive2WKeystream returns full 16 bytes
     ASSERT_MEM_EQ(hmac, keystream, 6);
 }
 
@@ -838,11 +862,12 @@ TEST(frame_deserialize_rejects_2w_appended_hmac)
     orig.hasHmac = true;
 
     uint8_t buf[32];
-    uint8_t len = orig.serialize(buf, sizeof(buf));
+    uint8_t len = serialize2WWithAppendedHmacForRejectTest(orig, buf, sizeof(buf));
+    ASSERT_TRUE(len > 0);
     ASSERT_EQ((buf[0] & IOHC_CTRL0_LEN_MASK) + 1, 11);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(!parsed.deserialize(buf, len));
+    ASSERT_TRUE(!deserializeFrameForTest(parsed, buf, len));
 }
 
 TEST(frame_deserialize_status_update_2w_keeps_payload)
@@ -860,10 +885,10 @@ TEST(frame_deserialize_status_update_2w_keeps_payload)
     orig.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = orig.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(orig, buf, sizeof(buf));
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_TRUE(!parsed.hasHmac);
     ASSERT_EQ(parsed.dataLen, sizeof(expectedData));
     ASSERT_MEM_EQ(parsed.data, expectedData, sizeof(expectedData));
@@ -888,10 +913,10 @@ TEST(frame_deserialize_getname_2w_no_hmac)
     orig.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = orig.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(orig, buf, sizeof(buf));
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_TRUE(!parsed.hasHmac);
     ASSERT_EQ(parsed.dataLen, 5);
     ASSERT_EQ(parsed.data[0], 'H');
@@ -910,7 +935,7 @@ TEST(frame_deserialize_1w_execute_no_hmac)
     };
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, sizeof(buf)));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, sizeof(buf)));
     bool is1W = (parsed.ctrlByte0 & 0x20) != 0;
     ASSERT_TRUE(is1W);
     ASSERT_TRUE(!parsed.hasHmac);
@@ -955,8 +980,8 @@ TEST(crypt2wkey_reference_vector)
 
     // Now compute the keystream with the transfer key and verify it's deterministic
     uint8_t keystream1[16], keystream2[16];
-    ASSERT_TRUE(IoHomeCrypto::crypt2WKey(frameData, 1, challenge, IOHC_TRANSFER_KEY, keystream1));
-    ASSERT_TRUE(IoHomeCrypto::crypt2WKey(frameData, 1, challenge, IOHC_TRANSFER_KEY, keystream2));
+    ASSERT_TRUE(IoHomeCrypto::derive2WKeystream(frameData, 1, challenge, IOHC_TRANSFER_KEY, keystream1));
+    ASSERT_TRUE(IoHomeCrypto::derive2WKeystream(frameData, 1, challenge, IOHC_TRANSFER_KEY, keystream2));
     ASSERT_MEM_EQ(keystream1, keystream2, 16);
 
     // Print for cross-checking against reference implementation
@@ -966,35 +991,22 @@ TEST(crypt2wkey_reference_vector)
 
 TEST(crypt2wkey_full_key_exchange_simulation)
 {
-    // Simulate the full key exchange as both gateway and device would see it:
-    // 1. Gateway has systemKey, device has transferKey
-    // 2. Device sends challenge
-    // 3. Gateway encrypts: encrypted = systemKey XOR crypt2WKey(frame, challenge, transferKey)
-    // 4. Device decrypts: decrypted = encrypted XOR crypt2WKey(frame, challenge, transferKey)
-    // 5. decrypted must equal systemKey
-
+    // Simulate the full symmetric key exchange through crypt2WKeyXor().
     const uint8_t systemKey[16] = {
         0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x89,
         0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
     const uint8_t challenge[6] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC};
-
     const uint8_t frameData[] = {0x31};
 
-    // Gateway side: encrypt
-    uint8_t keystream[16];
-    ASSERT_TRUE(IoHomeCrypto::crypt2WKey(frameData, sizeof(frameData),
-                                         challenge, IOHC_TRANSFER_KEY, keystream));
     uint8_t encrypted[16];
-    for (int i = 0; i < 16; i++)
-        encrypted[i] = systemKey[i] ^ keystream[i];
+    ASSERT_TRUE(IoHomeCrypto::crypt2WKeyXor(frameData, sizeof(frameData),
+                                            challenge, systemKey,
+                                            IOHC_TRANSFER_KEY, encrypted));
 
-    // Device side: decrypt with same parameters
-    uint8_t keystream_dev[16];
-    ASSERT_TRUE(IoHomeCrypto::crypt2WKey(frameData, sizeof(frameData),
-                                         challenge, IOHC_TRANSFER_KEY, keystream_dev));
     uint8_t decrypted[16];
-    for (int i = 0; i < 16; i++)
-        decrypted[i] = encrypted[i] ^ keystream_dev[i];
+    ASSERT_TRUE(IoHomeCrypto::crypt2WKeyXor(frameData, sizeof(frameData),
+                                            challenge, encrypted,
+                                            IOHC_TRANSFER_KEY, decrypted));
 
     ASSERT_MEM_EQ(decrypted, systemKey, 16);
 }
@@ -1036,12 +1048,10 @@ TEST(velocet_vector_2w_push_key_exchange)
     const uint8_t expectedHmac[6] = {0x8D, 0x35, 0xDC, 0x56, 0x37, 0xF4};
 
     const uint8_t frameData[1] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
-    uint8_t keystream[16];
-    ASSERT_TRUE(IoHomeCrypto::crypt2WKey(frameData, sizeof(frameData), keyChallenge, IOHC_TRANSFER_KEY, keystream));
-
     uint8_t encrypted[16];
-    for (uint8_t i = 0; i < sizeof(encrypted); i++)
-        encrypted[i] = systemKey[i] ^ keystream[i];
+    ASSERT_TRUE(IoHomeCrypto::crypt2WKeyXor(frameData, sizeof(frameData),
+                                            keyChallenge, systemKey,
+                                            IOHC_TRANSFER_KEY, encrypted));
     ASSERT_MEM_EQ(encrypted, expectedEncrypted, sizeof(expectedEncrypted));
 
     uint8_t hmacInput[17];
@@ -1068,12 +1078,10 @@ TEST(velocet_vector_2w_pull_key_exchange)
     const uint8_t frameData[7] = {
         static_cast<uint8_t>(IoHomeCommand::LaunchKeyTransfer),
         0xA1, 0xB2, 0xC3, 0xD4, 0xE5, 0xF6};
-    uint8_t keystream[16];
-    ASSERT_TRUE(IoHomeCrypto::crypt2WKey(frameData, sizeof(frameData), keyChallenge, IOHC_TRANSFER_KEY, keystream));
-
     uint8_t encrypted[16];
-    for (uint8_t i = 0; i < sizeof(encrypted); i++)
-        encrypted[i] = systemKey[i] ^ keystream[i];
+    ASSERT_TRUE(IoHomeCrypto::crypt2WKeyXor(frameData, sizeof(frameData),
+                                            keyChallenge, systemKey,
+                                            IOHC_TRANSFER_KEY, encrypted));
     ASSERT_MEM_EQ(encrypted, expectedEncrypted, sizeof(expectedEncrypted));
 
     uint8_t hmacInput[17];
@@ -1102,16 +1110,15 @@ TEST(frame_length_field_min)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_EQ(len, 9);
     ASSERT_EQ(buf[0] & 0x1F, 8); // 9-1 = 8
 }
 
 TEST(frame_length_field_with_hmac)
 {
-    // Per io-homecontrol spec: HMAC is APPENDED after declared frame length.
-    // Declared length = 9 header + 2 data = 11 → ctrl0 length field = 10
-    // Total transmitted = 11 + 6 HMAC = 17 bytes
+    // 2W appended HMAC is no longer serialized by the protocol frame layer.
+    // A 0x3D ChallengeResponse carries the 6-byte HMAC as normal data instead.
     IoHomeFrame frame;
     frame.init();
     frame.setStart2W();
@@ -1125,9 +1132,8 @@ TEST(frame_length_field_with_hmac)
     frame.hasHmac = true;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
-    ASSERT_EQ(len, 17);
-    ASSERT_EQ(buf[0] & 0x1F, 10); // declared len 11 - 1 = 10 (HMAC not in declared length)
+    uint8_t len = frame.serialize2W(buf, sizeof(buf));
+    ASSERT_EQ(len, 0);
 }
 
 TEST(frame_length_field_max)
@@ -1144,13 +1150,13 @@ TEST(frame_length_field_max)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_EQ(len, 32);
     ASSERT_EQ(buf[0] & 0x1F, 31); // 32-1 = 31
 
     // Roundtrip
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ(parsed.dataLen, 23);
 }
 
@@ -1205,10 +1211,10 @@ TEST(position_decoding_from_frame)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_TRUE(!parsed.hasHmac);
 
     // Decode per reference: current position at data[7:8]
@@ -1338,12 +1344,12 @@ TEST(frame_execute_with_slat)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_EQ(len, 9 + 10); // header + 10 data = 19
 
     // Deserialize
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ(parsed.dataLen, 10);
     ASSERT_TRUE(!parsed.hasHmac);
 
@@ -1476,7 +1482,7 @@ TEST(frame_discover_spe_request)
     ASSERT_EQ(frame.totalLength(), 21); // 9 + 12
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_EQ(len, 21);
 
     // Verify command byte
@@ -1484,7 +1490,7 @@ TEST(frame_discover_spe_request)
 
     // Deserialize
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x2A);
     ASSERT_EQ(parsed.dataLen, 12);
     ASSERT_MEM_EQ(parsed.data, challenge, 6);
@@ -1517,19 +1523,19 @@ TEST(position_special_values_encoding)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     uint16_t posRaw = ((uint16_t)parsed.data[0] << 8) | parsed.data[1];
     ASSERT_EQ(posRaw, IOHC_POSITION_STOP);
 
     // Serialize a FAVORITE frame
     frame.data[0] = (IOHC_POSITION_FAVORITE >> 8) & 0xFF;
     frame.data[1] = IOHC_POSITION_FAVORITE & 0xFF;
-    len = frame.serialize(buf, sizeof(buf));
+    len = serializeFrameForTest(frame, buf, sizeof(buf));
 
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     posRaw = ((uint16_t)parsed.data[0] << 8) | parsed.data[1];
     ASSERT_EQ(posRaw, IOHC_POSITION_FAVORITE);
 }
@@ -1746,7 +1752,7 @@ TEST(private_response_real_capture_from_box)
         0x08, 0x42, 0xE3, 0x01, 0x00, 0x00};
 
     IoHomeFrame frame;
-    ASSERT_TRUE(frame.deserialize(packet, sizeof(packet)));
+    ASSERT_TRUE(deserializeFrameForTest(frame, packet, sizeof(packet)));
     ASSERT_EQ(frame.getDestNodeId(), 0x0842E3);
     ASSERT_EQ(frame.getSrcNodeId(), 0x904C09);
     ASSERT_EQ((uint8_t)frame.commandId, 0x04);
@@ -1789,9 +1795,9 @@ TEST(ctrl1_beacon_flag)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_TRUE((parsed.ctrlByte1 & IOHC_CTRL1_BEACON) != 0);
     // Version should still be 0
     ASSERT_EQ(parsed.ctrlByte1 & IOHC_CTRL1_VER_MASK, 0x00);
@@ -1812,9 +1818,9 @@ TEST(ctrl1_routed_flag)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_TRUE((parsed.ctrlByte1 & IOHC_CTRL1_ROUTED) != 0);
 }
 
@@ -1833,9 +1839,9 @@ TEST(ctrl1_low_power_flag)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_TRUE((parsed.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
 }
 
@@ -1854,9 +1860,9 @@ TEST(ctrl1_ack_flag)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_TRUE((parsed.ctrlByte1 & IOHC_CTRL1_ACK) != 0);
 }
 
@@ -1875,9 +1881,9 @@ TEST(ctrl1_combined_flags)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_TRUE((parsed.ctrlByte1 & IOHC_CTRL1_ROUTED) != 0);
     ASSERT_TRUE((parsed.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
     ASSERT_TRUE((parsed.ctrlByte1 & IOHC_CTRL1_ACK) != 0);
@@ -1899,9 +1905,9 @@ TEST(ctrl1_version_field)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ(parsed.ctrlByte1 & IOHC_CTRL1_VER_MASK, 0x02);
 }
 
@@ -1922,11 +1928,11 @@ TEST(ctrl0_end_flag)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_TRUE((parsed.ctrlByte0 & IOHC_CTRL0_END) != 0);
     ASSERT_TRUE((parsed.ctrlByte0 & IOHC_CTRL0_START) == 0);
 }
@@ -1948,10 +1954,10 @@ TEST(ctrl0_start_and_end)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_TRUE((parsed.ctrlByte0 & IOHC_CTRL0_START) != 0);
     ASSERT_TRUE((parsed.ctrlByte0 & IOHC_CTRL0_END) != 0);
     ASSERT_TRUE(!(parsed.ctrlByte0 & IOHC_CTRL0_MODE_1W)); // 2W
@@ -1978,11 +1984,11 @@ TEST(error_response_frame)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_EQ(len, 9 + 2); // no HMAC
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0xFE);
     ASSERT_EQ(parsed.dataLen, 2);
     ASSERT_EQ(parsed.data[0], 0x01); // error code
@@ -2032,10 +2038,10 @@ TEST(general_info1_response_decode)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x55);
 
     // Decode per our controller logic
@@ -2085,10 +2091,10 @@ TEST(get_name_response_frame)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x51);
     ASSERT_EQ(parsed.dataLen, nameLen);
     ASSERT_MEM_EQ(parsed.data, name, nameLen);
@@ -2109,11 +2115,11 @@ TEST(get_name_max_length)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_EQ(len, 9 + 20); // 29 bytes, within 32 max
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ(parsed.dataLen, 20);
 
     // Simulate channel name copy with null termination
@@ -2146,10 +2152,10 @@ TEST(discovery_response_frame)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x29);
     ASSERT_EQ(parsed.getSrcNodeId(), 0x485B37);
     ASSERT_EQ(parsed.getDestNodeId(), 0x1A380B);
@@ -2170,10 +2176,10 @@ TEST(discovery_spe_response_frame)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x2B);
     ASSERT_EQ(parsed.getSrcNodeId(), 0x485B37);
 }
@@ -2342,10 +2348,10 @@ TEST(private_response_frame_no_hmac)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x04);
     ASSERT_EQ(parsed.dataLen, 8);
     ASSERT_TRUE(!parsed.hasHmac); // 0x04 does not get HMAC split
@@ -2371,10 +2377,10 @@ TEST(challenge_request_frame)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x3C);
     ASSERT_EQ(parsed.dataLen, 6);
     ASSERT_MEM_EQ(parsed.data, challenge, 6);
@@ -2404,10 +2410,10 @@ TEST(challenge_response_frame)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x3D);
     ASSERT_TRUE(!parsed.hasHmac);
     ASSERT_EQ(parsed.dataLen, 6);
@@ -2431,11 +2437,11 @@ TEST(key_init_transfer_frame)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_EQ(len, 9); // minimal frame
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x31);
     ASSERT_EQ(parsed.dataLen, 0);
 }
@@ -2460,11 +2466,11 @@ TEST(key_transfer_frame)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_EQ(len, 9 + 16); // 25 bytes
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x32);
     ASSERT_EQ(parsed.dataLen, 16);
     ASSERT_TRUE(!parsed.hasHmac);
@@ -2490,10 +2496,10 @@ TEST(confirmation_frame)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x2C);
     ASSERT_EQ(parsed.data[0], 0x01);
 }
@@ -2522,11 +2528,11 @@ TEST(status_update_response_frame)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x72);
     ASSERT_EQ(parsed.dataLen, 2);
     ASSERT_EQ(parsed.data[0], 0x05);
@@ -2852,11 +2858,11 @@ TEST(private_command_payload)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x03);
     ASSERT_EQ(parsed.dataLen, 3);
     ASSERT_EQ(parsed.data[0], 0x03);
@@ -2884,11 +2890,11 @@ TEST(frame_deserialize_challenge_response_data)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x3D);
     ASSERT_TRUE(!parsed.hasHmac);
     ASSERT_EQ(parsed.dataLen, sizeof(hmacData));
@@ -2929,8 +2935,8 @@ TEST(retry_frame_no_start_flag)
     frame2.hasHmac = false;
 
     uint8_t buf1[32], buf2[32];
-    uint8_t len1 = frame1.serialize(buf1, sizeof(buf1));
-    uint8_t len2 = frame2.serialize(buf2, sizeof(buf2));
+    uint8_t len1 = serializeFrameForTest(frame1, buf1, sizeof(buf1));
+    uint8_t len2 = serializeFrameForTest(frame2, buf2, sizeof(buf2));
     ASSERT_TRUE(len1 > 0);
     ASSERT_TRUE(len2 > 0);
 
@@ -2959,11 +2965,11 @@ TEST(receive_auth_challenge_frame)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x3C);
     ASSERT_EQ(parsed.dataLen, 6);
     ASSERT_MEM_EQ(parsed.data, challenge, 6);
@@ -3010,7 +3016,7 @@ TEST(integration_execute_status_flow)
 
     // Serialize to get frame bytes for HMAC (without HMAC — this is what HMAC covers)
     uint8_t txBufNoHmac[32];
-    uint8_t txLenNoHmac = txFrame.serialize(txBufNoHmac, sizeof(txBufNoHmac));
+    uint8_t txLenNoHmac = serializeFrameForTest(txFrame, txBufNoHmac, sizeof(txBufNoHmac));
     ASSERT_TRUE(txLenNoHmac > 0);
 
     // Create HMAC over the frame-without-HMAC bytes
@@ -3019,12 +3025,12 @@ TEST(integration_execute_status_flow)
 
     // Re-serialize for transmission without appended HMAC bytes.
     uint8_t txBuf[32];
-    uint8_t txLen = txFrame.serialize(txBuf, sizeof(txBuf));
+    uint8_t txLen = serializeFrameForTest(txFrame, txBuf, sizeof(txBuf));
     ASSERT_EQ(txLen, 9 + 8); // header + 8 data = 17
 
     // Deserialize on "device side"
     IoHomeFrame rxOnDevice;
-    ASSERT_TRUE(rxOnDevice.deserialize(txBuf, txLen));
+    ASSERT_TRUE(deserializeFrameForTest(rxOnDevice, txBuf, txLen));
     ASSERT_EQ(rxOnDevice.getSrcNodeId(), gwNode);
     ASSERT_EQ(rxOnDevice.getDestNodeId(), devNode);
     ASSERT_EQ((uint8_t)rxOnDevice.commandId, 0x00);
@@ -3062,15 +3068,15 @@ TEST(integration_execute_status_flow)
     // Add HMAC to response
     uint8_t respBufNoHmac[32];
     respFrame.hasHmac = false;
-    uint8_t respLenNoHmac = respFrame.serialize(respBufNoHmac, sizeof(respBufNoHmac));
+    uint8_t respLenNoHmac = serializeFrameForTest(respFrame, respBufNoHmac, sizeof(respBufNoHmac));
     uint8_t respHmac[IOHC_HMAC_SIZE] = {0};
     IoHomeCrypto::createHmac2W(respBufNoHmac, respLenNoHmac, challenge, sysKey, respHmac);
     uint8_t respBuf[32];
-    uint8_t respLen = respFrame.serialize(respBuf, sizeof(respBuf));
+    uint8_t respLen = serializeFrameForTest(respFrame, respBuf, sizeof(respBuf));
 
     // Gateway receives and deserializes
     IoHomeFrame rxOnGw;
-    ASSERT_TRUE(rxOnGw.deserialize(respBuf, respLen));
+    ASSERT_TRUE(deserializeFrameForTest(rxOnGw, respBuf, respLen));
     ASSERT_EQ(rxOnGw.getSrcNodeId(), devNode);
     ASSERT_TRUE(!rxOnGw.hasHmac);
 
@@ -3119,11 +3125,11 @@ TEST(integration_key_exchange)
     discReq.commandId = IoHomeCommand::DiscoverRequest;
     discReq.dataLen = 0;
     discReq.hasHmac = false;
-    uint8_t len = discReq.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(discReq, buf, sizeof(buf));
     ASSERT_EQ(len, 9);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x28);
 
     // --- Step 2: DiscoverResponse (device responds) ---
@@ -3136,9 +3142,9 @@ TEST(integration_key_exchange)
     discResp.commandId = IoHomeCommand::DiscoverResponse;
     discResp.dataLen = 0;
     discResp.hasHmac = false;
-    len = discResp.serialize(buf, sizeof(buf));
+    len = serializeFrameForTest(discResp, buf, sizeof(buf));
 
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     uint32_t discoveredNode = parsed.getSrcNodeId();
     ASSERT_EQ(discoveredNode, devNode);
 
@@ -3151,9 +3157,9 @@ TEST(integration_key_exchange)
     keyInit.commandId = IoHomeCommand::KeyInitTransfer;
     keyInit.dataLen = 0;
     keyInit.hasHmac = false;
-    len = keyInit.serialize(buf, sizeof(buf));
+    len = serializeFrameForTest(keyInit, buf, sizeof(buf));
 
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x31);
 
     // --- Step 4: ChallengeRequest (device sends challenge) ---
@@ -3168,9 +3174,9 @@ TEST(integration_key_exchange)
     memcpy(chalReq.data, devChallenge, 6);
     chalReq.dataLen = 6;
     chalReq.hasHmac = false;
-    len = chalReq.serialize(buf, sizeof(buf));
+    len = serializeFrameForTest(chalReq, buf, sizeof(buf));
 
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x3C);
     ASSERT_EQ(parsed.dataLen, 6);
     uint8_t receivedChallenge[6];
@@ -3189,35 +3195,31 @@ TEST(integration_key_exchange)
     keyXfer.hasHmac = false;
     const uint8_t keyInitData[] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
 
-    // Encrypt system key using transfer key + challenge
-    uint8_t keystream[16];
-    ASSERT_TRUE(IoHomeCrypto::crypt2WKey(keyInitData, sizeof(keyInitData), receivedChallenge,
-                                         IOHC_TRANSFER_KEY, keystream));
+    // Encrypt system key using transfer key + challenge.
     uint8_t encryptedKey[16];
-    for (int i = 0; i < 16; i++)
-        encryptedKey[i] = systemKey[i] ^ keystream[i];
+    ASSERT_TRUE(IoHomeCrypto::crypt2WKeyXor(keyInitData, sizeof(keyInitData),
+                                            receivedChallenge, systemKey,
+                                            IOHC_TRANSFER_KEY, encryptedKey));
 
     memcpy(keyXfer.data, encryptedKey, 16);
     keyXfer.dataLen = 16;
     keyXfer.hasHmac = false;
 
     uint8_t xferBuf[32];
-    uint8_t xferLen = keyXfer.serialize(xferBuf, sizeof(xferBuf));
+    uint8_t xferLen = serializeFrameForTest(keyXfer, xferBuf, sizeof(xferBuf));
     ASSERT_EQ(xferLen, 9 + 16); // 25 bytes
 
     // Device side: deserialize and decrypt
-    ASSERT_TRUE(parsed.deserialize(xferBuf, xferLen));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, xferBuf, xferLen));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x32);
     ASSERT_EQ(parsed.dataLen, 16);
     ASSERT_TRUE(!parsed.hasHmac);
 
-    // Device decrypts: get keystream with same params
-    uint8_t devKeystream[16];
-    ASSERT_TRUE(IoHomeCrypto::crypt2WKey(keyInitData, sizeof(keyInitData), receivedChallenge,
-                                         IOHC_TRANSFER_KEY, devKeystream));
+    // Device decrypts with the same symmetric XOR helper.
     uint8_t decryptedKey[16];
-    for (int i = 0; i < 16; i++)
-        decryptedKey[i] = parsed.data[i] ^ devKeystream[i];
+    ASSERT_TRUE(IoHomeCrypto::crypt2WKeyXor(keyInitData, sizeof(keyInitData),
+                                            receivedChallenge, parsed.data,
+                                            IOHC_TRANSFER_KEY, decryptedKey));
 
     // Decrypted key must match original system key
     ASSERT_MEM_EQ(decryptedKey, systemKey, 16);
@@ -3234,8 +3236,8 @@ TEST(integration_key_exchange)
     memcpy(postKeyChal.data, postKeyChallenge, 6);
     postKeyChal.dataLen = 6;
     postKeyChal.hasHmac = false;
-    len = postKeyChal.serialize(buf, sizeof(buf));
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    len = serializeFrameForTest(postKeyChal, buf, sizeof(buf));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
 
     uint8_t keyTransferHmacInput[1 + 16] = {static_cast<uint8_t>(IoHomeCommand::KeyTransfer)};
     memcpy(keyTransferHmacInput + 1, encryptedKey, 16);
@@ -3253,8 +3255,8 @@ TEST(integration_key_exchange)
     memcpy(keyTransferAuth.data, keyTransferHmac, 6);
     keyTransferAuth.dataLen = 6;
     keyTransferAuth.hasHmac = false;
-    len = keyTransferAuth.serialize(buf, sizeof(buf));
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    len = serializeFrameForTest(keyTransferAuth, buf, sizeof(buf));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x3D);
     ASSERT_EQ(parsed.dataLen, 6);
     ASSERT_TRUE(!parsed.hasHmac);
@@ -3271,9 +3273,9 @@ TEST(integration_key_exchange)
     confirm.data[0] = 0x01; // success
     confirm.dataLen = 1;
     confirm.hasHmac = false;
-    len = confirm.serialize(buf, sizeof(buf));
+    len = serializeFrameForTest(confirm, buf, sizeof(buf));
 
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x2C);
     ASSERT_EQ(parsed.data[0], 0x01);
     ASSERT_EQ(parsed.getSrcNodeId(), devNode);
@@ -3315,10 +3317,10 @@ TEST(integration_challenge_lifecycle)
     txFrame.hasHmac = false;
 
     uint8_t txBuf[32];
-    uint8_t txLen = txFrame.serialize(txBuf, sizeof(txBuf));
-    IoHomeCrypto::createHmac2W(txBuf, txLen, challenge, sysKey, txFrame.hmac);
-    txFrame.hasHmac = true;
-    txLen = txFrame.serialize(txBuf, sizeof(txBuf));
+    uint8_t txLen = serializeFrameForTest(txFrame, txBuf, sizeof(txBuf));
+    uint8_t txHmac[IOHC_HMAC_SIZE] = {0};
+    IoHomeCrypto::createHmac2W(txBuf, txLen, challenge, sysKey, txHmac);
+    ASSERT_TRUE(txLen > 0);
 
     // Store challenge (simulating channel state)
     uint8_t storedChallenge[6];
@@ -3338,15 +3340,15 @@ TEST(integration_challenge_lifecycle)
     respFrame.hasHmac = false;
 
     uint8_t respBufNoHmac[32];
-    uint8_t respLenNoHmac = respFrame.serialize(respBufNoHmac, sizeof(respBufNoHmac));
+    uint8_t respLenNoHmac = serializeFrameForTest(respFrame, respBufNoHmac, sizeof(respBufNoHmac));
     uint8_t respHmac[IOHC_HMAC_SIZE] = {0};
     IoHomeCrypto::createHmac2W(respBufNoHmac, respLenNoHmac, storedChallenge, sysKey, respHmac);
     uint8_t respBuf[32];
-    uint8_t respLen = respFrame.serialize(respBuf, sizeof(respBuf));
+    uint8_t respLen = serializeFrameForTest(respFrame, respBuf, sizeof(respBuf));
 
     // Step 2b: Verify HMAC with stored challenge — should pass
     IoHomeFrame rxFrame;
-    ASSERT_TRUE(rxFrame.deserialize(respBuf, respLen));
+    ASSERT_TRUE(deserializeFrameForTest(rxFrame, respBuf, respLen));
     ASSERT_TRUE(!rxFrame.hasHmac);
 
     // Check pending challenge is non-zero
@@ -3401,7 +3403,7 @@ TEST(integration_discovery_scan)
     discReq.commandId = IoHomeCommand::DiscoverRequest;
     discReq.dataLen = 0;
     discReq.hasHmac = false;
-    uint8_t len = discReq.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(discReq, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     // Device 1 responds
@@ -3414,10 +3416,10 @@ TEST(integration_discovery_scan)
     resp1.commandId = IoHomeCommand::DiscoverResponse;
     resp1.dataLen = 0;
     resp1.hasHmac = false;
-    len = resp1.serialize(buf, sizeof(buf));
+    len = serializeFrameForTest(resp1, buf, sizeof(buf));
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     uint32_t discovered1 = parsed.getSrcNodeId();
     ASSERT_EQ(discovered1, dev1);
 
@@ -3431,9 +3433,9 @@ TEST(integration_discovery_scan)
     resp2.commandId = IoHomeCommand::DiscoverResponse;
     resp2.dataLen = 0;
     resp2.hasHmac = false;
-    len = resp2.serialize(buf, sizeof(buf));
+    len = serializeFrameForTest(resp2, buf, sizeof(buf));
 
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     uint32_t discovered2 = parsed.getSrcNodeId();
     ASSERT_EQ(discovered2, dev2);
 
@@ -3461,10 +3463,10 @@ TEST(integration_device_info_query)
     nameReq.commandId = IoHomeCommand::GetName;
     nameReq.dataLen = 0;
     nameReq.hasHmac = false;
-    uint8_t len = nameReq.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(nameReq, buf, sizeof(buf));
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x50);
 
     // --- GetName response ---
@@ -3479,9 +3481,9 @@ TEST(integration_device_info_query)
     memcpy(nameResp.data, devName, strlen(devName));
     nameResp.dataLen = strlen(devName);
     nameResp.hasHmac = false;
-    len = nameResp.serialize(buf, sizeof(buf));
+    len = serializeFrameForTest(nameResp, buf, sizeof(buf));
 
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     char nameBuf[21] = {};
     uint8_t copyLen = (parsed.dataLen < 20) ? parsed.dataLen : 20;
     memcpy(nameBuf, parsed.data, copyLen);
@@ -3496,9 +3498,9 @@ TEST(integration_device_info_query)
     info1Req.commandId = IoHomeCommand::GetGeneralInfo1;
     info1Req.dataLen = 0;
     info1Req.hasHmac = false;
-    len = info1Req.serialize(buf, sizeof(buf));
+    len = serializeFrameForTest(info1Req, buf, sizeof(buf));
 
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x54);
 
     // --- GetGeneralInfo1 response ---
@@ -3515,9 +3517,9 @@ TEST(integration_device_info_query)
     info1Resp.data[2] = 0x02;
     info1Resp.dataLen = 3;
     info1Resp.hasHmac = false;
-    len = info1Resp.serialize(buf, sizeof(buf));
+    len = serializeFrameForTest(info1Resp, buf, sizeof(buf));
 
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     uint16_t devType = (parsed.data[0] | ((uint16_t)parsed.data[1] << 8)) & 0x3FF;
     uint8_t mfg = parsed.data[2];
     ASSERT_EQ(devType, 0x01); // venetian blind
@@ -3532,9 +3534,9 @@ TEST(integration_device_info_query)
     info3Req.commandId = IoHomeCommand::GetGeneralInfo3;
     info3Req.dataLen = 0;
     info3Req.hasHmac = false;
-    len = info3Req.serialize(buf, sizeof(buf));
+    len = serializeFrameForTest(info3Req, buf, sizeof(buf));
 
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x58);
 }
 
@@ -3587,11 +3589,12 @@ TEST(integration_retry_then_success)
     txFrame.dataLen = 8;
 
     uint8_t txBufNoHmac2[32];
-    uint8_t txLenNoHmac2 = txFrame.serialize(txBufNoHmac2, sizeof(txBufNoHmac2));
-    IoHomeCrypto::createHmac2W(txBufNoHmac2, txLenNoHmac2, challenge, sysKey, txFrame.hmac);
-    txFrame.hasHmac = true;
+    uint8_t txLenNoHmac2 = serializeFrameForTest(txFrame, txBufNoHmac2, sizeof(txBufNoHmac2));
+    uint8_t txHmac2[IOHC_HMAC_SIZE] = {0};
+    IoHomeCrypto::createHmac2W(txBufNoHmac2, txLenNoHmac2, challenge, sysKey, txHmac2);
     uint8_t txBuf2[32];
-    uint8_t txLen2 = txFrame.serialize(txBuf2, sizeof(txBuf2));
+    uint8_t txLen2 = serializeFrameForTest(txFrame, txBuf2, sizeof(txBuf2));
+    ASSERT_TRUE(txLen2 > 0);
 
     // Device responds on freq 2
     IoHomeFrame respFrame;
@@ -3610,15 +3613,15 @@ TEST(integration_retry_then_success)
 
     uint8_t respBufNoHmac2[32];
     respFrame.hasHmac = false;
-    uint8_t respLenNoHmac2 = respFrame.serialize(respBufNoHmac2, sizeof(respBufNoHmac2));
+    uint8_t respLenNoHmac2 = serializeFrameForTest(respFrame, respBufNoHmac2, sizeof(respBufNoHmac2));
     uint8_t respHmac2[IOHC_HMAC_SIZE] = {0};
     IoHomeCrypto::createHmac2W(respBufNoHmac2, respLenNoHmac2, challenge, sysKey, respHmac2);
     uint8_t respBuf2[32];
-    uint8_t respLen2 = respFrame.serialize(respBuf2, sizeof(respBuf2));
+    uint8_t respLen2 = serializeFrameForTest(respFrame, respBuf2, sizeof(respBuf2));
 
     // Verify response
     IoHomeFrame rxFrame;
-    ASSERT_TRUE(rxFrame.deserialize(respBuf2, respLen2));
+    ASSERT_TRUE(deserializeFrameForTest(rxFrame, respBuf2, respLen2));
     ASSERT_TRUE(IoHomeCrypto::verifyHmac(respBufNoHmac2, respLenNoHmac2,
                                          respHmac2, challenge, sysKey));
 
@@ -3707,11 +3710,11 @@ TEST(acei_in_execute_frame)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ(parsed.data[0], IOHC_ORIGINATOR_USER);
     ASSERT_EQ(parsed.data[1], IOHC_ACEI_DEFAULT);
 }
@@ -3745,11 +3748,11 @@ TEST(activate_mode_frame)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x01);
     ASSERT_EQ(parsed.dataLen, 13);
     ASSERT_TRUE(!parsed.hasHmac);
@@ -3777,11 +3780,11 @@ TEST(activate_mode_2w_rejects_appended_hmac)
     frame.hasHmac = true;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serialize2WWithAppendedHmacForRejectTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(!parsed.deserialize(buf, len));
+    ASSERT_TRUE(!deserializeFrameForTest(parsed, buf, len));
 }
 
 // =====================================================================
@@ -3825,9 +3828,9 @@ TEST(activate_mode_vent_frame)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ(parsed.data[2], 0xD8);
     ASSERT_EQ(parsed.data[3], 0x03);
 }
@@ -4026,11 +4029,11 @@ TEST(write_private_2w_rejects_appended_hmac)
     frame.hasHmac = true;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serialize2WWithAppendedHmacForRejectTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(!parsed.deserialize(buf, len));
+    ASSERT_TRUE(!deserializeFrameForTest(parsed, buf, len));
 }
 
 TEST(send_key_1w_has_hmac)
@@ -4050,11 +4053,11 @@ TEST(send_key_1w_has_hmac)
     frame.hasHmac = true;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_TRUE(parsed.hasHmac);
     ASSERT_EQ(parsed.dataLen, 17);
 }
@@ -4082,11 +4085,11 @@ TEST(frame_1w_execute_has_hmac)
     frame.hasHmac = true;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_TRUE(parsed.hasHmac);
     ASSERT_EQ(parsed.dataLen, 8);
 }
@@ -4289,11 +4292,11 @@ TEST(direct_command_2w_rejects_appended_hmac)
     frame.hasHmac = true;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serialize2WWithAppendedHmacForRejectTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(!parsed.deserialize(buf, len));
+    ASSERT_TRUE(!deserializeFrameForTest(parsed, buf, len));
 }
 
 TEST(scan_command_list_includes_direct)
@@ -4368,12 +4371,12 @@ TEST(crc_serialize_appends_two_bytes)
     // Without CRC
     frame.hasCrc = false;
     uint8_t buf1[32];
-    uint8_t len1 = frame.serialize(buf1, sizeof(buf1));
+    uint8_t len1 = serializeFrameForTest(frame, buf1, sizeof(buf1));
 
     // With CRC
     frame.hasCrc = true;
     uint8_t buf2[32];
-    uint8_t len2 = frame.serialize(buf2, sizeof(buf2));
+    uint8_t len2 = serializeFrameForTest(frame, buf2, sizeof(buf2));
 
     ASSERT_EQ(len2, len1 + 2);
 }
@@ -4394,11 +4397,11 @@ TEST(crc_roundtrip)
     frame.hasCrc = true;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeRawWithOptionalCrcForTest(parsed, buf, len));
     ASSERT_TRUE(parsed.hasCrc);
     ASSERT_EQ(parsed.dataLen, 3);
     ASSERT_EQ(parsed.data[0], 0x03);
@@ -4418,14 +4421,14 @@ TEST(crc_mismatch_rejects)
     frame.hasCrc = true;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     // Tamper with CRC (last 2 bytes)
     buf[len - 1] ^= 0xFF;
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(!parsed.deserialize(buf, len));
+    ASSERT_TRUE(!deserializeRawWithOptionalCrcForTest(parsed, buf, len));
 }
 
 TEST(crc_value_matches_kermit)
@@ -4443,7 +4446,7 @@ TEST(crc_value_matches_kermit)
     frame.hasCrc = true;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
 
     // CRC should be over all bytes except the last 2
     uint16_t expected = IoHomeCrypto::crc16Kermit(buf, len - 2);
@@ -5331,11 +5334,11 @@ void test_setname_frame_layout()
 
     // Serialize round-trip
     uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ(static_cast<uint8_t>(parsed.commandId), 0x52);
     ASSERT_EQ(parsed.dataLen, 16);
     ASSERT_TRUE(memcmp(parsed.data, frame.data, 16) == 0);
@@ -5395,11 +5398,11 @@ void test_identify_frame_layout()
     frame.hasHmac = false;
 
     uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ(parsed.commandId, IoHomeCommand::Identify);
     ASSERT_TRUE(parsed.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
     ASSERT_EQ(parsed.dataLen, 2);
@@ -5814,16 +5817,16 @@ TEST(hmac_2w_cross_algorithm_validation)
 
 TEST(crypt2wkey_keystream_is_aes_iv_output)
 {
-    // crypt2WKey returns the AES(IV, transferKey) keystream.
+    // derive2WKeystream returns the AES(IV, transferKey) keystream.
     // This must be the raw AES output — no XOR with the key.
     // The caller XORs with the system key to get the encrypted key.
 
     const uint8_t frameData[] = {0x31};
     const uint8_t challenge[6] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC};
 
-    // Get keystream from crypt2WKey
+    // Get keystream from derive2WKeystream
     uint8_t keystream[16];
-    ASSERT_TRUE(IoHomeCrypto::crypt2WKey(frameData, sizeof(frameData),
+    ASSERT_TRUE(IoHomeCrypto::derive2WKeystream(frameData, sizeof(frameData),
                                          challenge, IOHC_TRANSFER_KEY, keystream));
 
     // Build IV manually
@@ -5838,7 +5841,7 @@ TEST(crypt2wkey_keystream_is_aes_iv_output)
     }
     memcpy(iv + 10, challenge, 6);
 
-    // crypt2WKey keystream = AES(IV, transferKey)
+    // derive2WKeystream keystream = AES(IV, transferKey)
     uint8_t expected[16];
     ASSERT_TRUE(IoHomeCrypto::aes128Encrypt(iv, IOHC_TRANSFER_KEY, expected));
     ASSERT_MEM_EQ(keystream, expected, 16);
@@ -5901,11 +5904,11 @@ TEST(integration_1w_key_transfer_flow)
     lRemoveFrame.hasHmac = false;
 
     uint8_t lBuf[IOHC_FRAME_BUFFER_SIZE]; // 36 bytes max (supports 1W SendKey1W with HMAC)
-    uint8_t lLen = lRemoveFrame.serialize(lBuf, sizeof(lBuf));
+    uint8_t lLen = serializeFrameForTest(lRemoveFrame, lBuf, sizeof(lBuf));
     ASSERT_EQ(lLen, 10); // 9 header + 1 data
 
     IoHomeFrame lParsed;
-    ASSERT_TRUE(lParsed.deserialize(lBuf, lLen));
+    ASSERT_TRUE(deserializeFrameForTest(lParsed, lBuf, lLen));
     ASSERT_EQ((uint8_t)lParsed.commandId, 0x39);
     ASSERT_TRUE((lParsed.ctrlByte0 & IOHC_CTRL0_MODE_1W));
     ASSERT_EQ(lParsed.getDestNodeId(), 0x00003F);
@@ -5955,7 +5958,7 @@ TEST(integration_1w_key_transfer_flow)
                                            lKeyTransferFrame.hmac));
     lKeyTransferFrame.hasHmac = true;
 
-    lLen = lKeyTransferFrame.serialize(lBuf, sizeof(lBuf));
+    lLen = serializeFrameForTest(lKeyTransferFrame, lBuf, sizeof(lBuf));
     ASSERT_TRUE(lLen > 0);
     ASSERT_EQ(lBuf[2], 0x00);
     ASSERT_EQ(lBuf[3], 0x00);
@@ -5965,7 +5968,7 @@ TEST(integration_1w_key_transfer_flow)
     ASSERT_EQ(lBuf[7], lDevNodeAddr[2]);
 
     // --- Step 3: Parse and verify ---
-    ASSERT_TRUE(lParsed.deserialize(lBuf, lLen));
+    ASSERT_TRUE(deserializeFrameForTest(lParsed, lBuf, lLen));
     ASSERT_EQ((uint8_t)lParsed.commandId, 0x30);
     ASSERT_TRUE((lParsed.ctrlByte0 & IOHC_CTRL0_MODE_1W));
     ASSERT_TRUE(lParsed.hasHmac);
@@ -6059,12 +6062,12 @@ TEST(gateway_discover_answer_frame_layout)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     // Deserialize and verify
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ(parsed.commandId, IoHomeCommand::DiscoverResponse);
     ASSERT_EQ(parsed.getSrcNodeId(), 0x112233);
     ASSERT_EQ(parsed.getDestNodeId(), 0x445566);
@@ -6074,21 +6077,24 @@ TEST(gateway_discover_answer_frame_layout)
 
 TEST(gateway_key_transfer_encryption)
 {
-    // Simulate 2W key transfer (pull mode):
-    // 1. Device sends 0x38 with 6-byte challenge
-    // 2. Gateway encrypts its stack key using transfer key + challenge IV
-
+    // Simulate 2W key transfer: gateway encrypts its key with the transfer key.
     const uint8_t lChallenge[6] = {0x10, 0x21, 0x32, 0x43, 0x54, 0x65};
-    const uint8_t lKeyInitData[1] = {0x31}; // KeyInitTransfer command
+    const uint8_t lKeyInitData[1] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
+    const uint8_t lGatewayKey[16] = {
+        0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x11, 0x22, 0x33,
+        0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB};
 
-    // Encrypt gateway key using transfer key + challenge IV
     uint8_t lEncryptedKey[16];
-    bool lOk = IoHomeCrypto::crypt2WKey(lKeyInitData, sizeof(lKeyInitData),
-                                        lChallenge, IOHC_TRANSFER_KEY, lEncryptedKey);
-    ASSERT_TRUE(lOk);
+    ASSERT_TRUE(IoHomeCrypto::crypt2WKeyXor(lKeyInitData, sizeof(lKeyInitData),
+                                            lChallenge, lGatewayKey,
+                                            IOHC_TRANSFER_KEY, lEncryptedKey));
+    ASSERT_MEM_NEQ(lEncryptedKey, lGatewayKey, 16);
 
-    // Verify the keystream differs from the challenge
-    ASSERT_NE(lEncryptedKey[0], lChallenge[0]);
+    uint8_t lDecryptedKey[16];
+    ASSERT_TRUE(IoHomeCrypto::crypt2WKeyXor(lKeyInitData, sizeof(lKeyInitData),
+                                            lChallenge, lEncryptedKey,
+                                            IOHC_TRANSFER_KEY, lDecryptedKey));
+    ASSERT_MEM_EQ(lDecryptedKey, lGatewayKey, 16);
 }
 
 TEST(gateway_challenge_answer_hmac)
@@ -6143,12 +6149,12 @@ TEST(gateway_name_response_content)
     frame.hasHmac = false;
 
     uint8_t buf[32];
-    uint8_t len = frame.serialize(buf, sizeof(buf));
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
     ASSERT_TRUE(len > 0);
 
     // Verify content
     IoHomeFrame parsed;
-    ASSERT_TRUE(parsed.deserialize(buf, len));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ(parsed.commandId, IoHomeCommand::GetNameResponse);
     ASSERT_EQ(parsed.dataLen, 16);
     // First 10 bytes should be "MY_GATEWAY"
@@ -6220,14 +6226,11 @@ TEST(gateway_controller_key_transfer_uses_configured_gateway_key)
     ASSERT_EQ(lResponse.dataLen, 16);
 
     const uint8_t lKeyInitData[1] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
-    uint8_t lKeystream[16];
-    ASSERT_TRUE(IoHomeCrypto::crypt2WKey(lKeyInitData, sizeof(lKeyInitData),
-                                         lLaunchChallenge, IOHC_TRANSFER_KEY,
-                                         lKeystream));
-
     uint8_t lExpectedEncryptedKey[16];
-    for (int i = 0; i < 16; i++)
-        lExpectedEncryptedKey[i] = lGatewayKey[i] ^ lKeystream[i];
+    ASSERT_TRUE(IoHomeCrypto::crypt2WKeyXor(lKeyInitData, sizeof(lKeyInitData),
+                                            lLaunchChallenge, lGatewayKey,
+                                            IOHC_TRANSFER_KEY,
+                                            lExpectedEncryptedKey));
 
     ASSERT_MEM_EQ(lResponse.data, lExpectedEncryptedKey, 16);
     ASSERT_EQ(lController.getGatewayPairedDeviceCount(), 0);
@@ -6321,7 +6324,7 @@ TEST(controller_default_1w_pairing_uses_standard_type2)
     ASSERT_TRUE(!lPacket.empty());
 
     IoHomeFrame lFrame;
-    ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Discover2ERequest);
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
     ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BF);
@@ -6363,7 +6366,7 @@ TEST(controller_1w_key_frame_uses_profile_manufacturer_without_hmac)
     ASSERT_EQ(lPacket.size(), 29);
 
     IoHomeFrame lFrame;
-    ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
     ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
@@ -6401,7 +6404,7 @@ TEST(controller_2w_command_defaults_to_low_power)
     ASSERT_TRUE(!lPacket.empty());
 
     IoHomeFrame lFrame;
-    ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
     ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
 }
@@ -6435,7 +6438,7 @@ TEST(controller_2w_command_can_clear_low_power_for_mains_device)
     ASSERT_TRUE(!lPacket.empty());
 
     IoHomeFrame lFrame;
-    ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
     ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
 }
@@ -6468,7 +6471,7 @@ TEST(controller_send_identify_builds_authenticated_payload)
     ASSERT_TRUE(!lPacket.empty());
 
     IoHomeFrame lFrame;
-    ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Identify);
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
     ASSERT_EQ(lFrame.getDestNodeId(), lDeviceNodeId);
@@ -6529,14 +6532,14 @@ static bool transmitQueuedControllerFrame(IoHomeController &iController,
     const auto &lPacket = iController.radio().testLastTransmittedPacket();
     if (lPacket.empty())
         return false;
-    return oFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size()));
+    return deserializeFrameForTest(oFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size()));
 }
 
 static bool queueControllerResponse(IoHomeController &iController,
                                     const IoHomeFrame &iFrame)
 {
     uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE];
-    const uint8_t lLen = iFrame.serialize(lBuffer, sizeof(lBuffer));
+    const uint8_t lLen = serializeFrameForTest(iFrame, lBuffer, sizeof(lBuffer));
     if (lLen == 0)
         return false;
 
@@ -6642,7 +6645,7 @@ static bool advancePairingToWaitKeyTransferConfirmation(IoHomeController &iContr
     IoHomeFrame lDiscoverResponse;
     buildDiscoverResponseFrame(lDiscoverResponse, iRemoteNodeId, iDeviceNodeId);
     uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE];
-    const uint8_t lLen = lDiscoverResponse.serialize(lBuffer, sizeof(lBuffer));
+    const uint8_t lLen = serializeFrameForTest(lDiscoverResponse, lBuffer, sizeof(lBuffer));
     if (lLen == 0)
         return false;
 
@@ -6652,7 +6655,7 @@ static bool advancePairingToWaitKeyTransferConfirmation(IoHomeController &iContr
 
     const auto &lKeyInitPacket = iController.radio().testLastTransmittedPacket();
     if (lKeyInitPacket.empty() ||
-        !lFrame.deserialize(lKeyInitPacket.data(), static_cast<uint8_t>(lKeyInitPacket.size())) ||
+        !deserializeFrameForTest(lFrame, lKeyInitPacket.data(), static_cast<uint8_t>(lKeyInitPacket.size())) ||
         lFrame.commandId != IoHomeCommand::KeyInitTransfer)
         return false;
 
@@ -6663,7 +6666,7 @@ static bool advancePairingToWaitKeyTransferConfirmation(IoHomeController &iContr
 
     const auto &lKeyTransferPacket = iController.radio().testLastTransmittedPacket();
     if (lKeyTransferPacket.empty() ||
-        !lFrame.deserialize(lKeyTransferPacket.data(), static_cast<uint8_t>(lKeyTransferPacket.size())) ||
+        !deserializeFrameForTest(lFrame, lKeyTransferPacket.data(), static_cast<uint8_t>(lKeyTransferPacket.size())) ||
         lFrame.commandId != IoHomeCommand::KeyTransfer)
         return false;
 
@@ -6685,7 +6688,7 @@ static bool queueKeyTransferConfirmationAndCaptureSetConfig1(IoHomeController &i
     if (lSetConfigPacket.empty())
         return false;
 
-    return oSetConfig1Frame.deserialize(lSetConfigPacket.data(), static_cast<uint8_t>(lSetConfigPacket.size()));
+    return deserializeFrameForTest(oSetConfig1Frame, lSetConfigPacket.data(), static_cast<uint8_t>(lSetConfigPacket.size()));
 }
 
 TEST(controller_default_2w_pairing_uses_key_init_after_discovery)
@@ -6712,7 +6715,7 @@ TEST(controller_default_2w_pairing_uses_key_init_after_discovery)
     IoHomeFrame lDiscoverResponse;
     buildDiscoverResponseFrame(lDiscoverResponse, lRemoteNodeId, lDeviceNodeId);
     uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE];
-    const uint8_t lLen = lDiscoverResponse.serialize(lBuffer, sizeof(lBuffer));
+    const uint8_t lLen = serializeFrameForTest(lDiscoverResponse, lBuffer, sizeof(lBuffer));
     ASSERT_TRUE(lLen > 0);
 
     lController.radio().testClearTransmittedPacket();
@@ -6723,7 +6726,7 @@ TEST(controller_default_2w_pairing_uses_key_init_after_discovery)
     ASSERT_TRUE(!lPacket.empty());
 
     IoHomeFrame lKeyInitFrame;
-    ASSERT_TRUE(lKeyInitFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_TRUE(deserializeFrameForTest(lKeyInitFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lKeyInitFrame.commandId, IoHomeCommand::KeyInitTransfer);
     ASSERT_EQ(lKeyInitFrame.getSrcNodeId(), lRemoteNodeId);
     ASSERT_EQ(lKeyInitFrame.getDestNodeId(), lDeviceNodeId);
@@ -6754,7 +6757,7 @@ TEST(controller_experimental_2w_pairing_can_use_discovery_confirmation)
     IoHomeFrame lDiscoverResponse;
     buildDiscoverResponseFrame(lDiscoverResponse, lRemoteNodeId, lDeviceNodeId);
     uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE];
-    const uint8_t lLen = lDiscoverResponse.serialize(lBuffer, sizeof(lBuffer));
+    const uint8_t lLen = serializeFrameForTest(lDiscoverResponse, lBuffer, sizeof(lBuffer));
     ASSERT_TRUE(lLen > 0);
 
     lController.radio().testClearTransmittedPacket();
@@ -6765,7 +6768,7 @@ TEST(controller_experimental_2w_pairing_can_use_discovery_confirmation)
     ASSERT_TRUE(!lPacket.empty());
 
     IoHomeFrame lConfirmationFrame;
-    ASSERT_TRUE(lConfirmationFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_TRUE(deserializeFrameForTest(lConfirmationFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lConfirmationFrame.commandId, IoHomeCommand::Confirmation);
     ASSERT_EQ(lConfirmationFrame.getSrcNodeId(), lRemoteNodeId);
     ASSERT_EQ(lConfirmationFrame.getDestNodeId(), lDeviceNodeId);
@@ -6921,7 +6924,7 @@ TEST(controller_2w_pairing_setconfig1_auth_challenge_completes_on_final_reject)
     const auto &lAuthPacket = lController.radio().testLastTransmittedPacket();
     ASSERT_TRUE(!lAuthPacket.empty());
     IoHomeFrame lAuthResponse;
-    ASSERT_TRUE(lAuthResponse.deserialize(lAuthPacket.data(), static_cast<uint8_t>(lAuthPacket.size())));
+    ASSERT_TRUE(deserializeFrameForTest(lAuthResponse, lAuthPacket.data(), static_cast<uint8_t>(lAuthPacket.size())));
     ASSERT_EQ(lAuthResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_EQ(lController.state(), ControllerState::PairWaitSetConfig1FinalResponse);
 
@@ -7222,7 +7225,7 @@ static bool queueControllerPassiveFrame(IoHomeController &iController,
                                         const IoHomeFrame &iFrame)
 {
     uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE];
-    const uint8_t lLen = iFrame.serialize(lBuffer, sizeof(lBuffer));
+    const uint8_t lLen = serializeFrameForTest(iFrame, lBuffer, sizeof(lBuffer));
     if (lLen == 0)
         return false;
 
@@ -7280,9 +7283,10 @@ static void buildPassiveKeyTransferFrame(IoHomeFrame &oFrame,
                                          const uint8_t iSystemKey[16])
 {
     const uint8_t lKeyInitData[1] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
-    uint8_t lKeystream[16];
-    ASSERT_TRUE(IoHomeCrypto::crypt2WKey(lKeyInitData, sizeof(lKeyInitData),
-                                         iChallenge, IOHC_TRANSFER_KEY, lKeystream));
+    uint8_t lEncryptedKey[16];
+    ASSERT_TRUE(IoHomeCrypto::crypt2WKeyXor(lKeyInitData, sizeof(lKeyInitData),
+                                            iChallenge, iSystemKey,
+                                            IOHC_TRANSFER_KEY, lEncryptedKey));
 
     oFrame.init();
     oFrame.ctrlByte0 = IOHC_CTRL0_END;
@@ -7290,8 +7294,7 @@ static void buildPassiveKeyTransferFrame(IoHomeFrame &oFrame,
     oFrame.setSrcNode(iRemoteNodeId);
     oFrame.setDestNode(iDeviceNodeId);
     oFrame.commandId = IoHomeCommand::KeyTransfer;
-    for (uint8_t i = 0; i < 16; i++)
-        oFrame.data[i] = iSystemKey[i] ^ lKeystream[i];
+    memcpy(oFrame.data, lEncryptedKey, sizeof(lEncryptedKey));
     oFrame.dataLen = 16;
     oFrame.hasHmac = false;
 }
@@ -7458,7 +7461,7 @@ static bool buildChallengeRequestPacket(uint32_t iRemoteNodeId,
     lChallengeFrame.dataLen = 6;
     lChallengeFrame.hasHmac = false;
 
-    oLen = lChallengeFrame.serialize(oBuffer, IOHC_FRAME_BUFFER_SIZE);
+    oLen = serializeFrameForTest(lChallengeFrame, oBuffer, IOHC_FRAME_BUFFER_SIZE);
     return oLen > 0;
 }
 
@@ -7492,7 +7495,7 @@ static bool sendExecuteAndAnswerChallenge(IoHomeController &iController,
     const auto &lPacket = iController.radio().testLastTransmittedPacket();
     if (lPacket.empty())
         return false;
-    return oChallengeResponse.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size()));
+    return deserializeFrameForTest(oChallengeResponse, lPacket.data(), static_cast<uint8_t>(lPacket.size()));
 }
 
 static void buildStatusUpdateFrame(IoHomeFrame &oFrame,
@@ -7623,7 +7626,7 @@ TEST(controller_status_update_receive_auth_uses_saved_command_data)
                            lStatusData, sizeof(lStatusData));
 
     uint8_t lStatusBuffer[IOHC_FRAME_BUFFER_SIZE];
-    const uint8_t lStatusLen = lStatusFrame.serialize(lStatusBuffer, sizeof(lStatusBuffer));
+    const uint8_t lStatusLen = serializeFrameForTest(lStatusFrame, lStatusBuffer, sizeof(lStatusBuffer));
     ASSERT_TRUE(lStatusLen > 0);
 
     lController.radio().testClearTransmittedPacket();
@@ -7633,7 +7636,7 @@ TEST(controller_status_update_receive_auth_uses_saved_command_data)
     IoHomeFrame lChallengeRequest;
     const auto &lChallengePacket = lController.radio().testLastTransmittedPacket();
     ASSERT_TRUE(!lChallengePacket.empty());
-    ASSERT_TRUE(lChallengeRequest.deserialize(lChallengePacket.data(), static_cast<uint8_t>(lChallengePacket.size())));
+    ASSERT_TRUE(deserializeFrameForTest(lChallengeRequest, lChallengePacket.data(), static_cast<uint8_t>(lChallengePacket.size())));
     ASSERT_EQ(lChallengeRequest.commandId, IoHomeCommand::ChallengeRequest);
     ASSERT_EQ(lChallengeRequest.dataLen, 6);
     ASSERT_TRUE(!lChannel.testHasStatusUpdate());
@@ -7644,8 +7647,7 @@ TEST(controller_status_update_receive_auth_uses_saved_command_data)
                                 lStatusData, sizeof(lStatusData),
                                 lChallengeRequest.data, lKey);
     uint8_t lChallengeResponseBuffer[IOHC_FRAME_BUFFER_SIZE];
-    const uint8_t lChallengeResponseLen = lChallengeResponse.serialize(lChallengeResponseBuffer,
-                                                                       sizeof(lChallengeResponseBuffer));
+    const uint8_t lChallengeResponseLen = serializeFrameForTest(lChallengeResponse, lChallengeResponseBuffer, sizeof(lChallengeResponseBuffer));
     ASSERT_TRUE(lChallengeResponseLen > 0);
 
     lController.radio().testClearTransmittedPacket();
@@ -7655,7 +7657,7 @@ TEST(controller_status_update_receive_auth_uses_saved_command_data)
     IoHomeFrame lAckFrame;
     const auto &lAckPacket = lController.radio().testLastTransmittedPacket();
     ASSERT_TRUE(!lAckPacket.empty());
-    ASSERT_TRUE(lAckFrame.deserialize(lAckPacket.data(), static_cast<uint8_t>(lAckPacket.size())));
+    ASSERT_TRUE(deserializeFrameForTest(lAckFrame, lAckPacket.data(), static_cast<uint8_t>(lAckPacket.size())));
     ASSERT_EQ(lAckFrame.commandId, IoHomeCommand::StatusUpdateResponse);
     ASSERT_EQ(lAckFrame.dataLen, 2);
     ASSERT_EQ(lAckFrame.data[0], 0x05);
@@ -7789,7 +7791,7 @@ TEST(controller_general_info2_response_uses_selector_before_tilt_decode)
         IoHomeFrame lResponse;
         buildGeneralInfo2ResponseFrame(lResponse, lRemoteNodeId, lDeviceNodeId, lData, sizeof(lData));
         uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE];
-        const uint8_t lLen = lResponse.serialize(lBuffer, sizeof(lBuffer));
+        const uint8_t lLen = serializeFrameForTest(lResponse, lBuffer, sizeof(lBuffer));
         ASSERT_TRUE(lLen > 0);
 
         lController.radio().testQueueReceivedPacket(lBuffer, lLen);
@@ -7815,7 +7817,7 @@ TEST(controller_general_info2_response_uses_selector_before_tilt_decode)
         IoHomeFrame lResponse;
         buildGeneralInfo2ResponseFrame(lResponse, lRemoteNodeId, lDeviceNodeId, lData, sizeof(lData));
         uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE];
-        const uint8_t lLen = lResponse.serialize(lBuffer, sizeof(lBuffer));
+        const uint8_t lLen = serializeFrameForTest(lResponse, lBuffer, sizeof(lBuffer));
         ASSERT_TRUE(lLen > 0);
 
         lController.radio().testQueueReceivedPacket(lBuffer, lLen);
@@ -7845,8 +7847,10 @@ TEST(controller_status_poll_failure_after_challenge_notifies_channel)
     IoHomeFrame lTxFrame;
     ASSERT_TRUE(transmitQueuedControllerFrame(lController, lTxFrame));
     ASSERT_EQ(lTxFrame.commandId, IoHomeCommand::Private);
-    ASSERT_EQ(lTxFrame.dataLen, 1);
+    ASSERT_EQ(lTxFrame.dataLen, 3);
     ASSERT_EQ(lTxFrame.data[0], 0x03);
+    ASSERT_EQ(lTxFrame.data[1], 0x00);
+    ASSERT_EQ(lTxFrame.data[2], 0x00);
 
     IoHomeFrame lChallengeRequest;
     buildPairChallengeRequestFrame(lChallengeRequest, lRemoteNodeId, lDeviceNodeId, kChallenge);
@@ -8009,7 +8013,7 @@ TEST(controller_default_1w_execute_uses_standard_vent_layout)
     ASSERT_TRUE(!lPacket.empty());
 
     IoHomeFrame lFrame;
-    ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
     ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
@@ -8070,7 +8074,7 @@ TEST(controller_default_1w_execute_matches_reference_payloads)
         ASSERT_TRUE(!lPacket.empty());
 
         IoHomeFrame lFrame;
-        ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
         ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
         ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
         ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
@@ -8109,7 +8113,7 @@ TEST(controller_1w_channel_broadcast_type3_keeps_pairing_typed_but_defaults_runt
 
         IoHomeFrame lFrame;
         const auto &lPacket = lController.radio().testLastTransmittedPacket();
-        ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
         ASSERT_EQ(lFrame.getDestNodeId(), 0x0000FF);
     }
 
@@ -8135,7 +8139,7 @@ TEST(controller_1w_channel_broadcast_type3_keeps_pairing_typed_but_defaults_runt
 
         IoHomeFrame lFrame;
         const auto &lPacket = lController.radio().testLastTransmittedPacket();
-        ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
         ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
     }
 
@@ -8161,7 +8165,7 @@ TEST(controller_1w_channel_broadcast_type3_keeps_pairing_typed_but_defaults_runt
 
         IoHomeFrame lFrame;
         const auto &lPacket = lController.radio().testLastTransmittedPacket();
-        ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
         ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
     }
 
@@ -8187,7 +8191,7 @@ TEST(controller_1w_channel_broadcast_type3_keeps_pairing_typed_but_defaults_runt
 
         IoHomeFrame lFrame;
         const auto &lPacket = lController.radio().testLastTransmittedPacket();
-        ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
         ASSERT_EQ(lFrame.getDestNodeId(), 0x0000FF);
     }
 }
@@ -8253,7 +8257,7 @@ TEST(controller_1w_shared_profile_uses_owner_sequence_and_identity)
 
     IoHomeFrame lFrame;
     const auto &lPacket = lController.radio().testLastTransmittedPacket();
-    ASSERT_TRUE(lFrame.deserialize(lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.getSrcNodeId(), 0x810001);
     ASSERT_EQ(lOwner.getSequence1W(), 11);
     ASSERT_EQ(lShared.getSequence1W(), 0);
@@ -8374,7 +8378,7 @@ int main()
     RUN(hmac_wrong_key_rejects);
     RUN(hmac_deterministic);
 
-    printf("\nKey encryption (crypt2WKey):\n");
+    printf("\nKey transfer keystream / XOR helpers:\n");
     RUN(crypt2wkey_produces_keystream);
     RUN(crypt2wkey_xor_roundtrip);
     RUN(hmac_and_crypt_share_iv);
