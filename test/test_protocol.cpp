@@ -5095,14 +5095,36 @@ TEST(test_1w_acei_constant)
 
 TEST(test_1w_execute_position_encoding)
 {
-    // 1W position encoding: val = position × 2
-    ASSERT_EQ(0 * 2, 0x00);   // 0% = open
-    ASSERT_EQ(50 * 2, 0x64);  // 50%
-    ASSERT_EQ(100 * 2, 0xC8); // 100% = closed
+    // 1W standard Execute uses raw IOHC closedness percent, not UI open percent:
+    //   rawClosed=0   -> open
+    //   rawClosed=100 -> closed
+    ASSERT_EQ(0 * 2, 0x00);   // rawClosed 0% = open
+    ASSERT_EQ(50 * 2, 0x64);  // rawClosed 50%
+    ASSERT_EQ(100 * 2, 0xC8); // rawClosed 100% = closed
+
+    ASSERT_EQ(IoHomeController::rawClosedPercentToOneWayMain(0), 0x0000);
+    ASSERT_EQ(IoHomeController::rawClosedPercentToOneWayMain(50), 0x6400);
+    ASSERT_EQ(IoHomeController::rawClosedPercentToOneWayMain(100), 0xC800);
 
     // Special positions (raw values, not multiplied)
     ASSERT_EQ((uint8_t)0xD2, 0xD2); // STOP
     ASSERT_EQ((uint8_t)0xD8, 0xD8); // FAVORITE
+}
+
+TEST(test_1w_position_convention_helpers)
+{
+    // UI/Home-Assistant-style open percent uses 100=open. Convert it at the
+    // caller/channel boundary before passing a low-level raw IOHC Execute value.
+    ASSERT_EQ(IoHomeController::uiOpenPercentToRawClosedPercent(100), 0);
+    ASSERT_EQ(IoHomeController::uiOpenPercentToRawClosedPercent(75), 25);
+    ASSERT_EQ(IoHomeController::uiOpenPercentToRawClosedPercent(50), 50);
+    ASSERT_EQ(IoHomeController::uiOpenPercentToRawClosedPercent(0), 100);
+    ASSERT_EQ(IoHomeController::uiOpenPercentToRawClosedPercent(200), 0);
+
+    const uint8_t lUiOpenPercent = 75;
+    const uint8_t lRawClosedPercent = IoHomeController::uiOpenPercentToRawClosedPercent(lUiOpenPercent);
+    ASSERT_EQ(lRawClosedPercent, 25);
+    ASSERT_EQ(IoHomeController::rawClosedPercentToOneWayMain(lRawClosedPercent), 0x3200);
 }
 
 TEST(test_1w_execute_payload_layout)
@@ -5110,11 +5132,11 @@ TEST(test_1w_execute_payload_layout)
     // Simulate 1W Execute payload construction (matching rspaargaren _p0x00_14)
     // Wire: origin(1) + acei(1) + main(2) + fp1(1) + fp2(1) + seq(2) + hmac(6) = 14 bytes
     uint8_t data[8]; // data portion before HMAC
-    uint8_t position = 75; // 75%
+    uint8_t rawClosedPercent = 75; // raw IOHC closedness, not UI open percent
 
-    data[0] = IOHC_ORIGINATOR_USER; // origin = 0x01
-    data[1] = IOHC_ACEI_1W;         // acei = 0x43
-    data[2] = position * 2;         // main high = 150
+    data[0] = IOHC_ORIGINATOR_USER;       // origin = 0x01
+    data[1] = IOHC_ACEI_1W;               // acei = 0x43
+    data[2] = rawClosedPercent * 2;       // main high = 150
     data[3] = 0x00;                 // main low
     data[4] = 0x00;                 // fp1
     data[5] = 0x00;                 // fp2
@@ -8137,6 +8159,45 @@ TEST(controller_1w_pairing_repeats_first_long_then_short)
     ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
 }
 
+TEST(controller_1w_ui_open_position_conversion_matches_raw_closed_main)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setNodeId(lDeviceNodeId);
+    lChannel.setEncryptionKey(lKey);
+    lChannel.setIs1W(true);
+    lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+    lChannel.setOneWayControllerKey(lKey);
+
+    const uint8_t lUiOpenPercent = 75;
+    const uint8_t lRawClosedPercent = IoHomeController::uiOpenPercentToRawClosedPercent(lUiOpenPercent);
+    ASSERT_EQ(lRawClosedPercent, 25);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, lRawClosedPercent));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    lController.loop();
+
+    IoHomeFrame lFrame;
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
+    ASSERT_EQ(lFrame.dataLen, 8);
+    ASSERT_EQ(lFrame.data[2], 0x32);
+    ASSERT_EQ(lFrame.data[3], 0x00);
+}
+
 TEST(controller_default_1w_execute_matches_reference_payloads)
 {
     struct TestCase
@@ -8837,6 +8898,7 @@ int main()
     printf("\n1W Execute payload:\n");
     RUN(test_1w_acei_constant);
     RUN(test_1w_execute_position_encoding);
+    RUN(test_1w_position_convention_helpers);
     RUN(test_1w_execute_payload_layout);
     RUN(test_1w_execute_hmac_input_7bytes);
     RUN(test_1w_sequence_increment);
@@ -8905,6 +8967,7 @@ int main()
     RUN(controller_default_1w_execute_uses_standard_vent_layout);
     RUN(controller_1w_execute_repeats_first_long_then_three_short);
     RUN(controller_1w_pairing_repeats_first_long_then_short);
+    RUN(controller_1w_ui_open_position_conversion_matches_raw_closed_main);
     RUN(controller_default_1w_execute_matches_reference_payloads);
     RUN(controller_1w_channel_broadcast_type3_uses_typed_destination_for_pairing_and_runtime);
     RUN(controller_1w_channel_profiles_are_independent);

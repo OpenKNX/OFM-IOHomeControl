@@ -127,6 +127,22 @@ namespace
         return true;
     }
 
+    bool oneWayMainToRawClosedPercent(uint16_t iMain, uint8_t &oRawClosedPercent)
+    {
+        if (iMain > IOHC_POSITION_MAX)
+            return false;
+
+        // Standard 1W Execute main value is raw IOHC closedness percent × 2
+        // in the high byte: 0x0000=open, 0x6400=50%, 0xC800=closed.
+        const uint8_t lHigh = static_cast<uint8_t>((iMain >> 8) & 0xFF);
+        const uint8_t lLow = static_cast<uint8_t>(iMain & 0xFF);
+        if (lLow != 0 || (lHigh & 0x01) != 0)
+            return false;
+
+        oRawClosedPercent = static_cast<uint8_t>(lHigh / 2U);
+        return oRawClosedPercent <= 100;
+    }
+
     const char *pairingModeName(Pairing2WMode iMode, ControllerState iState)
     {
         switch (iState)
@@ -786,6 +802,20 @@ RadioError IoHomeController::startReceive()
     return mRadio.startReceive();
 }
 
+uint8_t IoHomeController::uiOpenPercentToRawClosedPercent(uint8_t iUiOpenPercent)
+{
+    if (iUiOpenPercent > 100)
+        iUiOpenPercent = 100;
+    return static_cast<uint8_t>(100U - iUiOpenPercent);
+}
+
+uint16_t IoHomeController::rawClosedPercentToOneWayMain(uint8_t iRawClosedPercent)
+{
+    if (iRawClosedPercent > 100)
+        iRawClosedPercent = 100;
+    return static_cast<uint16_t>(static_cast<uint16_t>(iRawClosedPercent) * 2U) << 8;
+}
+
 void IoHomeController::sleep()
 {
     mRadio.sleep();
@@ -823,11 +853,17 @@ bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
     if (iCmd == IoHomeCommand::Execute && iParam3 == 0xFF)
     {
         // Use the standard 14-byte 1W Execute layout by default.
+        // The low-level Execute parameter is raw IOHC closedness percent:
+        //   rawClosed=0 -> main=0000 (open)
+        //   rawClosed=100 -> main=C800 (closed)
+        // If a caller has UI/Home-Assistant-style open percentage, convert at
+        // that boundary via uiOpenPercentToRawClosedPercent() before queuing.
         // The flag is ignored for 2W channels.
         lEntry.oneWayStandardExecute = true;
         if (iParam <= 100)
         {
-            lEntry.oneWayMain = static_cast<uint16_t>(iParam * 2U) << 8;
+            const uint8_t lRawClosedPercent = iParam;
+            lEntry.oneWayMain = rawClosedPercentToOneWayMain(lRawClosedPercent);
             if (iParam2 != 0xFF)
             {
                 lEntry.oneWayFp1 = 0x80;
@@ -4732,11 +4768,25 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             {
                 // Standard 1W Execute:
                 // payload before sequence/HMAC = 01 43 main[2] fp1 fp2.
-                // Examples: open=0000, close=C800, stop=D200, vent=D803, force=6400.
+                // main[2] is raw IOHC closedness percent, not UI open percent:
+                //   rawClosed=0   -> 0000 (fully open)
+                //   rawClosed=50  -> 6400
+                //   rawClosed=100 -> C800 (fully closed)
+                //   STOP          -> D200
                 mTxFrame.data[2] = (iEntry.oneWayMain >> 8) & 0xFF;
                 mTxFrame.data[3] = iEntry.oneWayMain & 0xFF;
                 mTxFrame.data[4] = iEntry.oneWayFp1;
                 mTxFrame.data[5] = iEntry.oneWayFp2;
+
+                uint8_t lRawClosedPercent = 0;
+                if (mPairDiagnosticTraceEnabled && oneWayMainToRawClosedPercent(iEntry.oneWayMain, lRawClosedPercent))
+                {
+                    const uint8_t lUiOpenPercent = static_cast<uint8_t>(100U - lRawClosedPercent);
+                    logInfoP("1w pos: uiOpen=%u rawClosed=%u main=%04X",
+                             static_cast<unsigned>(lUiOpenPercent),
+                             static_cast<unsigned>(lRawClosedPercent),
+                             static_cast<unsigned>(iEntry.oneWayMain));
+                }
 
                 uint16_t lSeq = lProfile->incrementSequence1W();
                 openknx.flash.save();

@@ -54,7 +54,7 @@ struct IoHomeQueueEntry
   uint8_t oneWayRawData[IOHC_1W_RAW_EXEC_MAX_DATA];
   uint8_t oneWayRawLen;
   bool oneWayStandardExecute; // true: standard 14-byte 1W Execute payload mapping
-  uint16_t oneWayMain;        // main[2] value, e.g. 0x0000=open, 0xC800=close, 0xD200=stop
+  uint16_t oneWayMain;        // low-level raw IOHC main[2], e.g. 0x0000=open, 0xC800=closed, 0xD200=stop
   uint8_t oneWayFp1;
   uint8_t oneWayFp2;
   uint8_t oneWayBroadcastType;      // target type: dst = ((type << 6) | 0x3F)
@@ -190,6 +190,12 @@ public:
                    IoHomeCommand iCmd, uint8_t iParam, uint8_t iParam2);
   bool sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
                    IoHomeCommand iCmd, uint8_t iParam, uint8_t iParam2, uint8_t iParam3);
+
+  // Explicit 1W position convention helpers. UI/Open percent uses 100=open;
+  // raw IOHC closedness uses 0=open and 100=closed. The generic Execute
+  // builder consumes raw closedness percent.
+  static uint8_t uiOpenPercentToRawClosedPercent(uint8_t iUiOpenPercent);
+  static uint16_t rawClosedPercentToOneWayMain(uint8_t iRawClosedPercent);
 
   // Queue a 1W raw/button-style Execute command.
   // Codes from known 1W remotes: 0x0000=up, 0x0001=down, 0x0002=stop,
