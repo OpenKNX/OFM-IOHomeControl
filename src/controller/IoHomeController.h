@@ -54,6 +54,7 @@ struct IoHomeQueueEntry
   uint8_t oneWayRawData[IOHC_1W_RAW_EXEC_MAX_DATA];
   uint8_t oneWayRawLen;
   bool oneWayStandardExecute; // true: standard 14-byte 1W Execute payload mapping
+  uint8_t oneWayAcei;         // ACEI byte for reference/default 1W Execute/Activate templates
   uint16_t oneWayMain;        // low-level raw IOHC main[2], e.g. 0x0000=open, 0xC800=closed, 0xD200=stop
   uint8_t oneWayFp1;
   uint8_t oneWayFp2;
@@ -216,6 +217,11 @@ public:
                                         OneWayDestinationMode iDestinationMode,
                                         uint8_t iBroadcastType,
                                         uint32_t iExactDestination);
+  bool sendOneWayExecuteWithTemplate(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                                     uint8_t iAcei, uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
+                                     OneWayDestinationMode iDestinationMode,
+                                     uint8_t iBroadcastType,
+                                     uint32_t iExactDestination);
 
   // Set device name (authenticated 2W command: 0x52 → 0x3C → 0x3D → 0x53)
   bool sendSetName(uint32_t iDestNodeId, const uint8_t *iEncKey,

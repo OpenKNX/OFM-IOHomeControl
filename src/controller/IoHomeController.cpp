@@ -106,7 +106,7 @@ namespace
         return lOut;
     }
 
-    bool build1WSendKey(IoHomeFrame &oFrame,
+    bool build1WSendKey30(IoHomeFrame &oFrame,
                         const uint8_t iEncryptedKey[16],
                         uint8_t iManufacturer,
                         uint16_t iSequence)
@@ -141,6 +141,108 @@ namespace
 
         oRawClosedPercent = static_cast<uint8_t>(lHigh / 2U);
         return oRawClosedPercent <= 100;
+    }
+
+
+    struct OneWayCommandProfile
+    {
+        uint8_t acei;
+        uint8_t fp1;
+        uint8_t fp2;
+        uint8_t destinationType;
+        bool rawPreferred;
+    };
+
+    OneWayCommandProfile oneWayCommandProfileForType(uint8_t iBroadcastType)
+    {
+        const uint8_t lType = iBroadcastType & 0x3F;
+        switch (lType)
+        {
+        case 2: // shutter/blind default
+            return {IOHC_ACEI_1W, 0x00, 0x00, 2, false};
+        case 3: // awning default
+            return {IOHC_ACEI_1W, 0x00, 0x00, 3, false};
+        default: // light/unknown: keep typed destination, raw path remains available for deviations
+            return {IOHC_ACEI_1W, 0x00, 0x00, lType, true};
+        }
+    }
+
+    bool build1WExecute14(IoHomeFrame &oFrame, const OneWayCommandProfile &iProfile,
+                          uint16_t iMain, uint8_t iFp1, uint8_t iFp2, uint16_t iSequence)
+    {
+        // Reference _p0x00_14 wire shape before HMAC:
+        // origin + acei + main[2] + fp1 + fp2 + sequence[2].
+        oFrame.data[0] = IOHC_ORIGINATOR_USER;
+        oFrame.data[1] = iProfile.acei;
+        oFrame.data[2] = static_cast<uint8_t>((iMain >> 8) & 0xFF);
+        oFrame.data[3] = static_cast<uint8_t>(iMain & 0xFF);
+        oFrame.data[4] = iFp1;
+        oFrame.data[5] = iFp2;
+        oFrame.data[6] = static_cast<uint8_t>((iSequence >> 8) & 0xFF);
+        oFrame.data[7] = static_cast<uint8_t>(iSequence & 0xFF);
+        oFrame.dataLen = 8;
+        oFrame.hasHmac = true;
+        return true;
+    }
+
+    bool build1WExecute16(IoHomeFrame &oFrame, const OneWayCommandProfile &iProfile,
+                          uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
+                          uint8_t iData0, uint8_t iData1, uint16_t iSequence)
+    {
+        // Reference/diagnostic extended _p0x00_16 wire shape before HMAC:
+        // origin + acei + main[2] + fp1 + fp2 + data[2] + sequence[2].
+        oFrame.data[0] = IOHC_ORIGINATOR_USER;
+        oFrame.data[1] = iProfile.acei;
+        oFrame.data[2] = static_cast<uint8_t>((iMain >> 8) & 0xFF);
+        oFrame.data[3] = static_cast<uint8_t>(iMain & 0xFF);
+        oFrame.data[4] = iFp1;
+        oFrame.data[5] = iFp2;
+        oFrame.data[6] = iData0;
+        oFrame.data[7] = iData1;
+        oFrame.data[8] = static_cast<uint8_t>((iSequence >> 8) & 0xFF);
+        oFrame.data[9] = static_cast<uint8_t>(iSequence & 0xFF);
+        oFrame.dataLen = 10;
+        oFrame.hasHmac = true;
+        return true;
+    }
+
+    bool build1WActivateMode13(IoHomeFrame &oFrame, const OneWayCommandProfile &iProfile,
+                               uint8_t iMain, uint8_t iFp1, uint8_t iFp2, uint16_t iSequence)
+    {
+        // Reference _p0x01_13 wire shape before HMAC:
+        // origin + acei + main[1] + fp1 + fp2 + sequence[2].
+        oFrame.data[0] = IOHC_ORIGINATOR_USER;
+        oFrame.data[1] = iProfile.acei;
+        oFrame.data[2] = iMain;
+        oFrame.data[3] = iFp1;
+        oFrame.data[4] = iFp2;
+        oFrame.data[5] = static_cast<uint8_t>((iSequence >> 8) & 0xFF);
+        oFrame.data[6] = static_cast<uint8_t>(iSequence & 0xFF);
+        oFrame.dataLen = 7;
+        oFrame.hasHmac = true;
+        return true;
+    }
+
+    bool build1WPair2E(IoHomeFrame &oFrame, uint16_t iSequence)
+    {
+        oFrame.commandId = IoHomeCommand::Discover2ERequest;
+        oFrame.data[0] = 0x00;
+        oFrame.data[1] = static_cast<uint8_t>((iSequence >> 8) & 0xFF);
+        oFrame.data[2] = static_cast<uint8_t>(iSequence & 0xFF);
+        oFrame.dataLen = 3;
+        oFrame.hasHmac = true;
+        return true;
+    }
+
+    bool build1WRemove39(IoHomeFrame &oFrame, uint16_t iSequence)
+    {
+        oFrame.commandId = IoHomeCommand::RemoveController;
+        oFrame.data[0] = 0x00;
+        oFrame.data[1] = static_cast<uint8_t>((iSequence >> 8) & 0xFF);
+        oFrame.data[2] = static_cast<uint8_t>(iSequence & 0xFF);
+        oFrame.dataLen = 3;
+        oFrame.hasHmac = true;
+        return true;
     }
 
     const char *pairingModeName(Pairing2WMode iMode, ControllerState iState)
@@ -850,6 +952,11 @@ bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
     lEntry.oneWayButtonCode = 0;
     lEntry.oneWayRawExecute = false;
     lEntry.oneWayRawLen = 0;
+    lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
+    const OneWayCommandProfile lOneWayProfile = oneWayCommandProfileForType(lEntry.oneWayBroadcastType);
+    lEntry.oneWayAcei = lOneWayProfile.acei;
+    lEntry.oneWayFp1 = lOneWayProfile.fp1;
+    lEntry.oneWayFp2 = lOneWayProfile.fp2;
     if (iCmd == IoHomeCommand::Execute && iParam3 == 0xFF)
     {
         // Use the standard 14-byte 1W Execute layout by default.
@@ -879,7 +986,6 @@ bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
             lEntry.oneWayMain = static_cast<uint16_t>(iParam) << 8;
         }
     }
-    lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
     lEntry.oneWayBroadcastTypeExplicit = false;
     lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
     lEntry.oneWayExactDestination = 0;
@@ -903,6 +1009,10 @@ bool IoHomeController::sendOneWayButton(uint32_t iDestNodeId, const uint8_t *iEn
     lEntry.oneWayRawExecute = false;
     lEntry.oneWayRawLen = 0;
     lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
+    const OneWayCommandProfile lOneWayProfile = oneWayCommandProfileForType(lEntry.oneWayBroadcastType);
+    lEntry.oneWayAcei = lOneWayProfile.acei;
+    lEntry.oneWayFp1 = lOneWayProfile.fp1;
+    lEntry.oneWayFp2 = lOneWayProfile.fp2;
     lEntry.oneWayBroadcastTypeExplicit = false;
     lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
     lEntry.oneWayExactDestination = 0;
@@ -930,6 +1040,10 @@ bool IoHomeController::sendOneWayRawExecute(uint32_t iDestNodeId, const uint8_t 
     lEntry.oneWayRawExecute = true;
     lEntry.oneWayRawLen = iPayloadLen;
     lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
+    const OneWayCommandProfile lOneWayProfile = oneWayCommandProfileForType(lEntry.oneWayBroadcastType);
+    lEntry.oneWayAcei = lOneWayProfile.acei;
+    lEntry.oneWayFp1 = lOneWayProfile.fp1;
+    lEntry.oneWayFp2 = lOneWayProfile.fp2;
     lEntry.oneWayBroadcastTypeExplicit = false;
     lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
     lEntry.oneWayExactDestination = 0;
@@ -954,6 +1068,20 @@ bool IoHomeController::sendOneWayExecuteWithDestination(uint32_t iDestNodeId, co
                                                         uint8_t iBroadcastType,
                                                         uint32_t iExactDestination)
 {
+    const uint8_t lResolvedType = (iDestinationMode == OneWayDestinationMode::ProfileTyped)
+                                      ? oneWayBroadcastTypeForNode(iDestNodeId)
+                                      : (iBroadcastType & 0x3F);
+    const OneWayCommandProfile lProfile = oneWayCommandProfileForType(lResolvedType);
+    return sendOneWayExecuteWithTemplate(iDestNodeId, iEncKey, lProfile.acei, iMain, iFp1, iFp2,
+                                         iDestinationMode, iBroadcastType, iExactDestination);
+}
+
+bool IoHomeController::sendOneWayExecuteWithTemplate(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                                                     uint8_t iAcei, uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
+                                                     OneWayDestinationMode iDestinationMode,
+                                                     uint8_t iBroadcastType,
+                                                     uint32_t iExactDestination)
+{
     if (iEncKey == nullptr)
         return false;
 
@@ -964,6 +1092,7 @@ bool IoHomeController::sendOneWayExecuteWithDestination(uint32_t iDestNodeId, co
     lEntry.command = IoHomeCommand::Execute;
     lEntry.oneWayStandardExecute = true;
     lEntry.oneWayMain = iMain;
+    lEntry.oneWayAcei = iAcei;
     lEntry.oneWayFp1 = iFp1;
     lEntry.oneWayFp2 = iFp2;
     lEntry.oneWayBroadcastType = (iDestinationMode == OneWayDestinationMode::ProfileTyped)
@@ -3475,12 +3604,8 @@ void IoHomeController::processPairSend1WAnnounce()
     // 1W Pair/announce frame matching rspaargaren reference:
     //   cmd=0x2E, data=0x00, sequence[2], hmac[6]
     // HMAC input is cmd + data (2 bytes), sequence is supplied separately.
-    mTxFrame.commandId = IoHomeCommand::Discover2ERequest;
     const uint16_t lSeq = nextSequence1W(lProfile, true);
-    mTxFrame.data[0] = 0x00;
-    mTxFrame.data[1] = (lSeq >> 8) & 0xFF;
-    mTxFrame.data[2] = lSeq & 0xFF;
-    mTxFrame.dataLen = 3;
+    build1WPair2E(mTxFrame, lSeq);
     uint8_t lHmacInput[2] = {static_cast<uint8_t>(mTxFrame.commandId), 0x00};
     if (!createAndTraceHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
     {
@@ -3569,12 +3694,8 @@ void IoHomeController::processPairSend1WRemove()
     // Explicit 1W Remove frame only:
     //   cmd=0x39, data=0x00, sequence[2], hmac[6]
     // This state is never entered by the normal add/learn flow.
-    mTxFrame.commandId = IoHomeCommand::RemoveController;
     const uint16_t lSeq = nextSequence1W(lProfile, true);
-    mTxFrame.data[0] = 0x00;
-    mTxFrame.data[1] = (lSeq >> 8) & 0xFF;
-    mTxFrame.data[2] = lSeq & 0xFF;
-    mTxFrame.dataLen = 3;
+    build1WRemove39(mTxFrame, lSeq);
     uint8_t lHmacInput[2] = {static_cast<uint8_t>(mTxFrame.commandId), 0x00};
     if (!createAndTraceHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
     {
@@ -3710,7 +3831,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
     }
 
     uint16_t lSeq = nextSequence1W(lProfile, true);
-    if (!build1WSendKey(mTxFrame, lEncryptedKey, lProfile->getOneWayControllerManufacturer(), lSeq))
+    if (!build1WSendKey30(mTxFrame, lEncryptedKey, lProfile->getOneWayControllerManufacturer(), lSeq))
     {
         mState = ControllerState::PairFailed;
         return;
@@ -4795,11 +4916,6 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 //   rawClosed=50  -> 6400
                 //   rawClosed=100 -> C800 (fully closed)
                 //   STOP          -> D200
-                mTxFrame.data[2] = (iEntry.oneWayMain >> 8) & 0xFF;
-                mTxFrame.data[3] = iEntry.oneWayMain & 0xFF;
-                mTxFrame.data[4] = iEntry.oneWayFp1;
-                mTxFrame.data[5] = iEntry.oneWayFp2;
-
                 uint8_t lRawClosedPercent = 0;
                 if (mPairDiagnosticTraceEnabled && oneWayMainToRawClosedPercent(iEntry.oneWayMain, lRawClosedPercent))
                 {
@@ -4811,9 +4927,11 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 }
 
                 uint16_t lSeq = nextSequence1W(lProfile, false);
-                mTxFrame.data[6] = (lSeq >> 8) & 0xFF;
-                mTxFrame.data[7] = lSeq & 0xFF;
-                mTxFrame.dataLen = 8;
+                OneWayCommandProfile lProfileTemplate = oneWayCommandProfileForType(iEntry.oneWayBroadcastType);
+                lProfileTemplate.acei = iEntry.oneWayAcei ? iEntry.oneWayAcei : lProfileTemplate.acei;
+                if (!build1WExecute14(mTxFrame, lProfileTemplate, iEntry.oneWayMain,
+                                      iEntry.oneWayFp1, iEntry.oneWayFp2, lSeq))
+                    return false;
 
                 uint8_t lHmacIn[7];
                 lHmacIn[0] = static_cast<uint8_t>(mTxFrame.commandId);
@@ -4849,15 +4967,11 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 //   0x00FE = Button Released, 0x00FF = alternative Stop
                 // Payload before sequence/HMAC:
                 //   origin(1) + acei(1) + buttonCode[2] + fp1(0) + fp2(0)
-                mTxFrame.data[2] = (iEntry.oneWayButtonCode >> 8) & 0xFF;
-                mTxFrame.data[3] = iEntry.oneWayButtonCode & 0xFF;
-                mTxFrame.data[4] = 0x00;
-                mTxFrame.data[5] = 0x00;
-
                 uint16_t lSeq = nextSequence1W(lProfile, false);
-                mTxFrame.data[6] = (lSeq >> 8) & 0xFF;
-                mTxFrame.data[7] = lSeq & 0xFF;
-                mTxFrame.dataLen = 8;
+                OneWayCommandProfile lProfileTemplate = oneWayCommandProfileForType(iEntry.oneWayBroadcastType);
+                lProfileTemplate.acei = iEntry.oneWayAcei ? iEntry.oneWayAcei : lProfileTemplate.acei;
+                if (!build1WExecute14(mTxFrame, lProfileTemplate, iEntry.oneWayButtonCode, 0x00, 0x00, lSeq))
+                    return false;
 
                 // 1W HMAC input excludes the appended sequence bytes and HMAC.
                 uint8_t lHmacIn[7];
@@ -4871,17 +4985,13 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             {
                 // Extended 16-byte format (_p0x00_16):
                 // origin(1)+acei(1)+main[2]+fp1(1)+fp2(1)+data[2]+seq(2)+hmac(6) = 16B
-                mTxFrame.data[2] = iEntry.param;  // main high byte
-                mTxFrame.data[3] = 0x00;          // main low byte
-                mTxFrame.data[4] = iEntry.param2; // fp1
-                mTxFrame.data[5] = iEntry.param3; // fp2
-                mTxFrame.data[6] = 0x00;          // data[0]
-                mTxFrame.data[7] = 0x00;          // data[1]
-
                 uint16_t lSeq = nextSequence1W(lProfile, false);
-                mTxFrame.data[8] = (lSeq >> 8) & 0xFF;
-                mTxFrame.data[9] = lSeq & 0xFF;
-                mTxFrame.dataLen = 10;
+                OneWayCommandProfile lProfileTemplate = oneWayCommandProfileForType(iEntry.oneWayBroadcastType);
+                lProfileTemplate.acei = iEntry.oneWayAcei ? iEntry.oneWayAcei : lProfileTemplate.acei;
+                if (!build1WExecute16(mTxFrame, lProfileTemplate,
+                                      static_cast<uint16_t>(iEntry.param) << 8,
+                                      iEntry.param2, iEntry.param3, 0x00, 0x00, lSeq))
+                    return false;
 
                 // HMAC input: cmd(1) + origin+acei+main[2]+fp1+fp2+data[2] = 9 bytes
                 uint8_t lHmacIn[9];
@@ -4895,32 +5005,28 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             {
                 // Standard 14-byte format (_p0x00_14):
                 // origin(1)+acei(1)+main[2]+fp1(1)+fp2(1)+seq(2)+hmac(6) = 14B
+                uint16_t lMain = 0;
+                uint8_t lFp1 = 0x00;
+                uint8_t lFp2 = 0x00;
                 if (iEntry.param <= 100)
                 {
-                    mTxFrame.data[2] = iEntry.param * 2; // position × 2 (0=open, 200=closed)
-                    mTxFrame.data[3] = 0x00;
+                    lMain = rawClosedPercentToOneWayMain(iEntry.param);
+                    if (iEntry.param2 != 0xFF)
+                    {
+                        lFp1 = 0x80;
+                        lFp2 = static_cast<uint8_t>(iEntry.param2 * 2U);
+                    }
                 }
                 else
                 {
-                    mTxFrame.data[2] = iEntry.param; // special (STOP=0xD2, FAVORITE=0xD8)
-                    mTxFrame.data[3] = 0x00;
-                }
-
-                if (iEntry.param <= 100 && iEntry.param2 != 0xFF)
-                {
-                    mTxFrame.data[4] = 0x80;              // FP1: slat flag
-                    mTxFrame.data[5] = iEntry.param2 * 2; // FP2: slat × 2
-                }
-                else
-                {
-                    mTxFrame.data[4] = 0x00;
-                    mTxFrame.data[5] = 0x00;
+                    lMain = static_cast<uint16_t>(iEntry.param) << 8;
                 }
 
                 uint16_t lSeq = nextSequence1W(lProfile, false);
-                mTxFrame.data[6] = (lSeq >> 8) & 0xFF;
-                mTxFrame.data[7] = lSeq & 0xFF;
-                mTxFrame.dataLen = 8;
+                OneWayCommandProfile lProfileTemplate = oneWayCommandProfileForType(iEntry.oneWayBroadcastType);
+                lProfileTemplate.acei = iEntry.oneWayAcei ? iEntry.oneWayAcei : lProfileTemplate.acei;
+                if (!build1WExecute14(mTxFrame, lProfileTemplate, lMain, lFp1, lFp2, lSeq))
+                    return false;
 
                 // 1W HMAC: input = cmd(1) + origin+acei+main[2]+fp1+fp2 = 7 bytes
                 uint8_t lHmacIn[7];
@@ -5027,16 +5133,12 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             mTxFrame.set1WMode();
             mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
 
-            mTxFrame.data[0] = IOHC_ORIGINATOR_USER;                           // 0x01
-            mTxFrame.data[1] = IOHC_ACEI_1W;                                   // 0x43
-            mTxFrame.data[2] = iEntry.param;                                   // main (1 byte)
-            mTxFrame.data[3] = (iEntry.param2 != 0xFF) ? iEntry.param2 : 0x01; // fp1
-            mTxFrame.data[4] = 0x00;                                           // fp2
-
             uint16_t lSeqAM = nextSequence1W(lProfile, false);
-            mTxFrame.data[5] = (lSeqAM >> 8) & 0xFF;
-            mTxFrame.data[6] = lSeqAM & 0xFF;
-            mTxFrame.dataLen = 7;
+            OneWayCommandProfile lProfileTemplate = oneWayCommandProfileForType(iEntry.oneWayBroadcastType);
+            lProfileTemplate.acei = iEntry.oneWayAcei ? iEntry.oneWayAcei : lProfileTemplate.acei;
+            const uint8_t lActivateFp1 = (iEntry.param2 != 0xFF) ? iEntry.param2 : 0x01;
+            if (!build1WActivateMode13(mTxFrame, lProfileTemplate, iEntry.param, lActivateFp1, 0x00, lSeqAM))
+                return false;
 
             // HMAC input: cmd(1) + origin+acei+main+fp1+fp2 = 6 bytes
             uint8_t lHmacInAM[6];
@@ -5174,7 +5276,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         }
         const uint16_t lSequence = (static_cast<uint16_t>((iEntry.param2 != 0xFF) ? iEntry.param2 : 0x00) << 8) |
                                   static_cast<uint16_t>((iEntry.param3 != 0xFF) ? iEntry.param3 : 0x00);
-        if (!build1WSendKey(mTxFrame, lEncKey1W, lProfile->getOneWayControllerManufacturer(), lSequence))
+        if (!build1WSendKey30(mTxFrame, lEncKey1W, lProfile->getOneWayControllerManufacturer(), lSequence))
             return false;
         mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
         break;

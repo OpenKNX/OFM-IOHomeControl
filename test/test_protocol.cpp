@@ -8254,6 +8254,53 @@ TEST(controller_default_1w_execute_matches_reference_payloads)
     }
 }
 
+
+TEST(controller_1w_execute_template_can_override_acei_fp_and_destination)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setNodeId(lDeviceNodeId);
+    lChannel.setEncryptionKey(lKey);
+    lChannel.setIs1W(true);
+    lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+    lChannel.setOneWayControllerKey(lKey);
+
+    ASSERT_TRUE(lController.sendOneWayExecuteWithTemplate(lDeviceNodeId, lKey,
+                                                          0xE7, IOHC_POSITION_VENT, 0x12, 0x34,
+                                                          OneWayDestinationMode::ExplicitType,
+                                                          6, 0));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    lController.loop();
+
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lPacket.empty());
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x0001BF); // explicit type 6 typed broadcast
+    ASSERT_EQ(lFrame.dataLen, 8);
+    ASSERT_EQ(lFrame.data[0], IOHC_ORIGINATOR_USER);
+    ASSERT_EQ(lFrame.data[1], 0xE7);
+    ASSERT_EQ(lFrame.data[2], 0xD8);
+    ASSERT_EQ(lFrame.data[3], 0x03);
+    ASSERT_EQ(lFrame.data[4], 0x12);
+    ASSERT_EQ(lFrame.data[5], 0x34);
+    ASSERT_TRUE(lFrame.hasHmac);
+}
+
 TEST(controller_1w_channel_broadcast_type3_uses_typed_destination_for_pairing_and_runtime)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -9016,6 +9063,7 @@ int main()
     RUN(controller_1w_pairing_repeats_first_long_then_short);
     RUN(controller_1w_ui_open_position_conversion_matches_raw_closed_main);
     RUN(controller_default_1w_execute_matches_reference_payloads);
+    RUN(controller_1w_execute_template_can_override_acei_fp_and_destination);
     RUN(controller_1w_channel_broadcast_type3_uses_typed_destination_for_pairing_and_runtime);
     RUN(controller_1w_channel_profiles_are_independent);
     RUN(channel_1w_sequence_reserve_window_reduces_flash_saves);
