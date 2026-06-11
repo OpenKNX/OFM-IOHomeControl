@@ -4173,7 +4173,14 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             {"CRC tamper reject", false},
             {"HMAC tamper reject", false},
             {"0x32 encrypted key only", false},
-            {"0x32 auth via 0x3D", false}};
+            {"0x32 auth via 0x3D", false},
+            {"2W crypto vector", false},
+            {"2W frame lengths", false},
+            {"0x31 IV transcript", false},
+            {"1W HMAC vectors", false},
+            {"1W key capture vector", false},
+            {"1W Execute length", false},
+            {"1W SendKey length", false}};
         uint8_t lOkCount = 0;
 
         IoHomeFrame lTx2W;
@@ -4404,6 +4411,111 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                          lParsedKeyTransferAuth.dataLen == IOHC_HMAC_SIZE &&
                          !lParsedKeyTransferAuth.hasHmac && lParsedKeyTransferAuth.hasCrc &&
                          memcmp(lParsedKeyTransferAuth.data, lKeyTransferAuth.data, IOHC_HMAC_SIZE) == 0;
+
+
+        // Byte-exact known vectors shared with the native protocol tests. These
+        // keep the on-device console self-test useful when no host test runner is
+        // available.
+        static const uint8_t kVectorSystemKey[16] = {
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
+            0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE};
+        static const uint8_t kVector2WKeyChallenge[6] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC};
+        static const uint8_t kVector2WAuthChallenge[6] = {0x0A, 0x1B, 0x2C, 0x3D, 0x4E, 0x5F};
+        static const uint8_t kExpected2WEncryptedKey[16] = {
+            0x10, 0x0F, 0x0F, 0xC2, 0xE1, 0x96, 0xA3, 0x95,
+            0x76, 0x13, 0xD7, 0xAB, 0x9C, 0xFD, 0x83, 0x31};
+        static const uint8_t kExpected2WHmac[IOHC_HMAC_SIZE] = {0x8D, 0x35, 0xDC, 0x56, 0x37, 0xF4};
+        static const uint8_t kKeyInitTranscript[1] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
+        static const uint8_t kExpectedKeyInitIv[16] = {
+            0x31, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
+            0x00, 0x62, 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC};
+
+        uint8_t lVector2WEncryptedKey[16] = {0};
+        uint8_t lVector2WHmacInput[1 + sizeof(kExpected2WEncryptedKey)] = {static_cast<uint8_t>(IoHomeCommand::KeyTransfer)};
+        uint8_t lVector2WHmac[IOHC_HMAC_SIZE] = {0};
+        memcpy(lVector2WHmacInput + 1, kExpected2WEncryptedKey, sizeof(kExpected2WEncryptedKey));
+        lChecks[18].ok = IoHomeCrypto::crypt2WKeyXor(kKeyInitTranscript, sizeof(kKeyInitTranscript),
+                                                     kVector2WKeyChallenge, kVectorSystemKey,
+                                                     IOHC_TRANSFER_KEY, lVector2WEncryptedKey) &&
+                         memcmp(lVector2WEncryptedKey, kExpected2WEncryptedKey, sizeof(kExpected2WEncryptedKey)) == 0 &&
+                         IoHomeCrypto::createHmac2W(lVector2WHmacInput, sizeof(lVector2WHmacInput),
+                                                    kVector2WAuthChallenge, kVectorSystemKey, lVector2WHmac) &&
+                         memcmp(lVector2WHmac, kExpected2WHmac, sizeof(kExpected2WHmac)) == 0;
+
+        lChecks[19].ok = (lLen2W == IOHC_FRAME_MIN_SIZE + sizeof(kFrame2WData)) &&
+                         ((lBuffer2W[0] & IOHC_CTRL0_LEN_MASK) + 1 == lLen2W) &&
+                         (lChallengeResponseNoCrcLen == IOHC_FRAME_MIN_SIZE + IOHC_HMAC_SIZE) &&
+                         ((lChallengeResponseNoCrcBuffer[0] & IOHC_CTRL0_LEN_MASK) + 1 == lChallengeResponseNoCrcLen) &&
+                         (lKeyTransferLen == IOHC_FRAME_MIN_SIZE + sizeof(kEncrypted2WKey) + IOHC_CRC_SIZE);
+
+        uint8_t lKeyInitIv[16] = {0};
+        IoHomeCrypto::constructIv2W(kKeyInitTranscript, sizeof(kKeyInitTranscript),
+                                    kVector2WKeyChallenge, lKeyInitIv);
+        lChecks[20].ok = memcmp(lKeyInitIv, kExpectedKeyInitIv, sizeof(kExpectedKeyInitIv)) == 0;
+
+        lChecks[21].ok = IoHomeCrypto::selfTest1WReferenceVectors();
+
+        static const uint8_t kExpected1WEncryptedKey[16] = {
+            0x82, 0x60, 0x89, 0xF3, 0x44, 0xCB, 0xCC, 0xAB,
+            0x84, 0x26, 0xCE, 0x7C, 0x12, 0x51, 0xB8, 0xE0};
+        static const uint8_t kExpected1WSendKeyHmac[IOHC_HMAC_SIZE] = {0x2D, 0x49, 0x8F, 0xBF, 0x1F, 0x7C};
+        static const uint8_t kCaptureNodeAddress[3] = {0x48, 0x5B, 0x37};
+        uint8_t lVector1WEncryptedKey[16] = {0};
+        uint8_t lVector1WDecryptedKey[16] = {0};
+        uint8_t lVector1WHmacInput[1 + sizeof(kExpected1WEncryptedKey)] = {static_cast<uint8_t>(IoHomeCommand::SendKey1W)};
+        uint8_t lVector1WHmac[IOHC_HMAC_SIZE] = {0};
+        memcpy(lVector1WHmacInput + 1, kExpected1WEncryptedKey, sizeof(kExpected1WEncryptedKey));
+        lChecks[22].ok = IoHomeCrypto::encrypt1WKey(kVectorSystemKey, IOHC_TRANSFER_KEY,
+                                                    kCaptureNodeAddress, lVector1WEncryptedKey) &&
+                         memcmp(lVector1WEncryptedKey, kExpected1WEncryptedKey, sizeof(kExpected1WEncryptedKey)) == 0 &&
+                         IoHomeCrypto::decrypt1WKey(lVector1WEncryptedKey, IOHC_TRANSFER_KEY,
+                                                    kCaptureNodeAddress, lVector1WDecryptedKey) &&
+                         memcmp(lVector1WDecryptedKey, kVectorSystemKey, sizeof(kVectorSystemKey)) == 0 &&
+                         IoHomeCrypto::createHmac1W(lVector1WHmacInput, sizeof(lVector1WHmacInput),
+                                                    0x1A2B, kVectorSystemKey, lVector1WHmac) &&
+                         memcmp(lVector1WHmac, kExpected1WSendKeyHmac, sizeof(kExpected1WSendKeyHmac)) == 0;
+
+        IoHomeFrame lBoundary1WExecute;
+        lBoundary1WExecute.init();
+        lBoundary1WExecute.set1WMode();
+        lBoundary1WExecute.setFrameOrder(IOHC_CTRL0_ORDER_END);
+        lBoundary1WExecute.ctrlByte1 = 0x00;
+        lBoundary1WExecute.setSrcNode(kSrcNodeId);
+        lBoundary1WExecute.setDestNode(kDestNodeId);
+        lBoundary1WExecute.commandId = IoHomeCommand::Execute;
+        memcpy(lBoundary1WExecute.data, kFrame1WData, sizeof(kFrame1WData));
+        lBoundary1WExecute.dataLen = sizeof(kFrame1WData);
+        memcpy(lBoundary1WExecute.hmac, lTx1W.hmac, IOHC_HMAC_SIZE);
+        lBoundary1WExecute.hasHmac = true;
+        lBoundary1WExecute.hasCrc = false;
+        uint8_t lBoundary1WExecuteBuffer[IOHC_FRAME_BUFFER_SIZE] = {0};
+        const uint8_t lBoundary1WExecuteLen = lBoundary1WExecute.serialize1W(lBoundary1WExecuteBuffer, sizeof(lBoundary1WExecuteBuffer));
+        lChecks[23].ok = (lBoundary1WExecuteLen == IOHC_FRAME_MIN_SIZE + sizeof(kFrame1WData) + IOHC_HMAC_SIZE) &&
+                         ((lBoundary1WExecuteBuffer[0] & IOHC_CTRL0_LEN_MASK) + 1 == lBoundary1WExecuteLen) &&
+                         ((lBoundary1WExecuteBuffer[0] & IOHC_CTRL0_MODE_1W) != 0);
+
+        IoHomeFrame lBoundary1WSendKey;
+        lBoundary1WSendKey.init();
+        lBoundary1WSendKey.set1WMode();
+        lBoundary1WSendKey.setFrameOrder(IOHC_CTRL0_ORDER_END);
+        lBoundary1WSendKey.ctrlByte1 = 0x00;
+        lBoundary1WSendKey.setSrcNode(kSrcNodeId);
+        lBoundary1WSendKey.setDestNode(kDestNodeId);
+        lBoundary1WSendKey.commandId = IoHomeCommand::SendKey1W;
+        memcpy(lBoundary1WSendKey.data, kExpected1WEncryptedKey, sizeof(kExpected1WEncryptedKey));
+        lBoundary1WSendKey.data[16] = static_cast<uint8_t>(IoHomeManufacturer::Velux);
+        lBoundary1WSendKey.data[17] = 0x01;
+        lBoundary1WSendKey.data[18] = static_cast<uint8_t>((kSeq1W >> 8) & 0xFF);
+        lBoundary1WSendKey.data[19] = static_cast<uint8_t>(kSeq1W & 0xFF);
+        lBoundary1WSendKey.dataLen = 20;
+        lBoundary1WSendKey.hasHmac = false;
+        uint8_t lBoundary1WSendKeyBuffer[IOHC_FRAME_BUFFER_SIZE] = {0};
+        const uint8_t lBoundary1WSendKeyLen = lBoundary1WSendKey.serialize1W(lBoundary1WSendKeyBuffer, sizeof(lBoundary1WSendKeyBuffer));
+        lBoundary1WSendKey.hasHmac = true;
+        lChecks[24].ok = (lBoundary1WSendKeyLen == 29) &&
+                         ((lBoundary1WSendKeyBuffer[0] & IOHC_CTRL0_MODE_1W) != 0) &&
+                         ((lBoundary1WSendKeyBuffer[0] & IOHC_CTRL0_LEN_MASK) + 1 == lBoundary1WSendKeyLen) &&
+                         (lBoundary1WSendKey.serialize1W(lBoundary1WSendKeyBuffer, sizeof(lBoundary1WSendKeyBuffer)) == 0);
 
         for (const auto &lCheck : lChecks)
         {
