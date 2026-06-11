@@ -3665,22 +3665,40 @@ void IoHomeController::processPairWaitKeyTransferConfirmation()
 
 void IoHomeController::processPairSendSetConfig1()
 {
-    mPairSetConfigRequest.init();
-    mPairSetConfigRequest.setStart2W();
-    mPairSetConfigRequest.setLowPower(true);
-    mPairSetConfigRequest.setSrcNode(mOwnNodeId);
-    mPairSetConfigRequest.setDestNode(mDiscoveredNodeId);
-    mPairSetConfigRequest.commandId = IoHomeCommand::SetConfig1;
-    mPairSetConfigRequest.data[0] = 0xE0;
-    mPairSetConfigRequest.data[1] = 0x10;
-    mPairSetConfigRequest.data[2] = 0x0A;
-    mPairSetConfigRequest.data[3] = 0x08;
-    mPairSetConfigRequest.data[4] = 0x00;
-    mPairSetConfigRequest.dataLen = 5;
-    mPairSetConfigRequest.hasHmac = false;
+    IoHomeQueueEntry lSetConfig = {};
+    lSetConfig.destNodeId = mDiscoveredNodeId;
+    lSetConfig.encKey = mSystemKey;
+    lSetConfig.command = IoHomeCommand::SetConfig1;
+    lSetConfig.param = 0xFF;
+    lSetConfig.param2 = 0xFF;
+    lSetConfig.param3 = 0xFF;
+    lSetConfig.retries = 0;
+    lSetConfig.active = true;
 
-    const uint32_t lSetConfigFreq = IOHC_FREQ_2;
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lSetConfigFreq);
+    if (!buildTxFrame(lSetConfig))
+    {
+        logDebugP("Pairing: failed to build SetConfig1 for 0x%06X", mDiscoveredNodeId);
+        mState = ControllerState::PairComplete;
+        return;
+    }
+
+    mPairSetConfigRequest = mTxFrame;
+
+    if (mPairDiagnosticTraceEnabled)
+    {
+        const std::string lPayloadHex = hexDump(mPairSetConfigRequest.data, mPairSetConfigRequest.dataLen);
+        logInfoP("PairDiag: SetConfig1 payload=%s", lPayloadHex.c_str());
+    }
+
+    mTxLen = mPairSetConfigRequest.serialize2W(mTxBuffer, sizeof(mTxBuffer));
+    if (mTxLen == 0)
+    {
+        logDebugP("Pairing: failed to serialize SetConfig1 for 0x%06X", mDiscoveredNodeId);
+        mState = ControllerState::PairComplete;
+        return;
+    }
+
+    const RadioError lPrepErr = configureNormal2WTxRadio(IOHC_PREAMBLE_LONG);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -3690,25 +3708,16 @@ void IoHomeController::processPairSendSetConfig1()
         return;
     }
 
-    mTxLen = mPairSetConfigRequest.serialize2W(mTxBuffer, sizeof(mTxBuffer));
-    if (mTxLen > 0)
+    tracePairDiagnosticTx2W(mPairSetConfigRequest, IOHC_PREAMBLE_LONG);
+    const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    if (lErr == RadioError::None)
     {
-        tracePairDiagnosticTx2W(mPairSetConfigRequest, IOHC_PREAMBLE_LONG);
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
-        if (lErr == RadioError::None)
-        {
-            mStateTimer = millis();
-            mState = ControllerState::PairWaitSetConfig1Response;
-        }
-        else if (lErr == RadioError::Busy)
-        {
-            return;
-        }
-        else
-        {
-            logDebugP("Pairing: failed to send SetConfig1 to 0x%06X", mDiscoveredNodeId);
-            mState = ControllerState::PairComplete;
-        }
+        mStateTimer = millis();
+        mState = ControllerState::PairWaitSetConfig1Response;
+    }
+    else if (lErr == RadioError::Busy)
+    {
+        return;
     }
     else
     {
@@ -3775,6 +3784,12 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
 
     uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
     const size_t lHmacInputLen = buildHmacInput(mPairSetConfigRequest, lHmacInput, sizeof(lHmacInput));
+
+    if (mPairDiagnosticTraceEnabled && lHmacInputLen > 0)
+    {
+        const std::string lTranscriptHex = hexDump(lHmacInput, static_cast<uint8_t>(lHmacInputLen));
+        logInfoP("PairDiag: SetConfig1 auth transcript=%s", lTranscriptHex.c_str());
+    }
 
     if (lHmacInputLen == 0 ||
         !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
@@ -4548,6 +4563,23 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         if (mTxFrame.dataLen == 4)
             mTxFrame.data[3] = 0x00;
         mTxFrame.hasHmac = false;
+        break;
+
+    case IoHomeCommand::SetConfig1:
+        // Pairing post-configuration command, built through the same 2W
+        // command builder path as normal authenticated 2W commands. The
+        // laberning reference sends 0x6F as a START frame with no LOW_POWER
+        // flag and authenticates it by answering 0x3C with HMAC over
+        // {0x6F, E0, 10, 0A, 08, 00}.
+        mTxFrame.setLowPower(false);
+        mTxFrame.data[0] = 0xE0;
+        mTxFrame.data[1] = 0x10;
+        mTxFrame.data[2] = 0x0A;
+        mTxFrame.data[3] = 0x08;
+        mTxFrame.data[4] = 0x00;
+        mTxFrame.dataLen = 5;
+        mTxFrame.hasHmac = false;
+        mAuthResponseSent = false;
         break;
 
     case IoHomeCommand::Identify:
