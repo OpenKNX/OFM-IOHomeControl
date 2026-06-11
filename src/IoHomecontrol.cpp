@@ -40,6 +40,30 @@ namespace
         return iChar == ' ' || iChar == '\t';
     }
 
+    bool keyHasNonZeroByte(const uint8_t *iKey, size_t iLen = 16)
+    {
+        if (!iKey)
+            return false;
+        for (size_t i = 0; i < iLen; i++)
+        {
+            if (iKey[i] != 0)
+                return true;
+        }
+        return false;
+    }
+
+    const char *keyStateText(const uint8_t *iKey)
+    {
+        return keyHasNonZeroByte(iKey) ? "set" : "missing";
+    }
+
+    bool identityEquals2W(uint32_t iNodeId, const uint8_t *iKey, uint32_t iTwoWayNodeId, const uint8_t *iTwoWayKey)
+    {
+        return (iNodeId & 0x00FFFFFF) == (iTwoWayNodeId & 0x00FFFFFF) &&
+               iNodeId != 0 && iKey && iTwoWayKey &&
+               memcmp(iKey, iTwoWayKey, 16) == 0;
+    }
+
     bool parseUnsignedDecimal(const std::string &iText, uint32_t &oValue)
     {
         size_t lPos = 0;
@@ -655,20 +679,23 @@ void IoHomecontrol::initOneWayControllerProfiles()
 
         if (!lProfile->hasOneWayControllerIdentity())
         {
-            // Legacy versions used the global 2W identity for every 1W channel.
-            // Preserve an existing pairing before generating a new independent profile.
-            if (lChannel->isPaired() && mController.getOwnNodeId() != 0)
+            // 1W remotes are first-class identities. Do not silently reuse the
+            // global 2W gateway/controller node/key here; that is available only
+            // through the explicit diagnostic command `iohc 1wctrl NN reuse2w`.
+            if (lChannel->isPaired())
             {
-                lProfile->setOneWayControllerNodeId(mController.getOwnNodeId());
-                lProfile->setOneWayControllerKey(mController.getSystemKey());
-                if (lProfile->getOneWayControllerManufacturer() == 0)
-                    lProfile->setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Somfy));
-                lChanged = true;
+                logInfoP("1W ch%u has a paired target but no independent 1W remote profile; generating a new remote identity, re-learn may be required",
+                         static_cast<unsigned>(i + 1));
             }
-            else
-            {
-                lChanged |= generateOneWayControllerProfile(lProfile);
-            }
+            lChanged |= generateOneWayControllerProfile(lProfile);
+        }
+        else if (identityEquals2W(lProfile->getOneWayControllerNodeId(),
+                                  lProfile->getOneWayControllerKey(),
+                                  mController.getOwnNodeId(),
+                                  mController.getSystemKey()))
+        {
+            logInfoP("1W profile ch%u explicitly uses the 2W identity; generate/import a separate 1W profile for normal operation",
+                     static_cast<unsigned>(oneWayProfileIndex(lProfile) + 1));
         }
 
         lChannel->setEncryptionKey(lProfile->getOneWayControllerKey());
@@ -691,6 +718,14 @@ void IoHomecontrol::applyOneWayControllerConfiguration()
             continue;
         if (lProfile == lChannel && lChannel->getConfigured1WManufacturer() != 0)
             lProfile->setOneWayControllerManufacturer(lChannel->getConfigured1WManufacturer());
+        if (identityEquals2W(lProfile->getOneWayControllerNodeId(),
+                             lProfile->getOneWayControllerKey(),
+                             mController.getOwnNodeId(),
+                             mController.getSystemKey()))
+        {
+            logInfoP("1W ch%u effective profile reuses 2W identity; this is diagnostic/legacy only",
+                     static_cast<unsigned>(i + 1));
+        }
         lChannel->setEncryptionKey(lProfile->getOneWayControllerKey());
     }
 }
@@ -2019,8 +2054,11 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
             if ((lFlags & 0x02) && lIdx < mNumChannels)
             {
-                mChannels[lIdx]->setOneWayControllerNodeId(mController.getOwnNodeId());
-                mChannels[lIdx]->setOneWayControllerKey(mController.getSystemKey());
+                // Legacy v6-v8 did not store a first-class 1W remote identity.
+                // Keep the sequence high-water value, but do not synthesize the
+                // 1W remote from the global 2W identity. initOneWayControllerProfiles()
+                // will generate/import an independent profile unless the user
+                // explicitly requests diagnostic reuse2w.
                 mChannels[lIdx]->setSequence1W(lSeq);
             }
             if ((lFlags & 0x01) && lIdx < mNumChannels)
@@ -2231,6 +2269,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc set1w NN", "Mark channel NN as 1W (one-way)");
     openknx.console.printHelpLine("iohc set2w NN", "Mark channel NN as 2W (two-way)");
     openknx.console.printHelpLine("iohc 1wctrl status|NN [ADDR HEX32 [MFG]]", "Show or set the effective channel 1W controller profile");
+    openknx.console.printHelpLine("iohc 1wctrl NN reuse2w [MFG]", "Diagnostic only: copy the 2W identity into the 1W profile");
     openknx.console.printHelpLine("iohc 1wqr NN QRHEX", "Import a Situo QR controller identity into the effective channel profile");
     openknx.console.printHelpLine("iohc 1wnew NN", "Generate a new own 1W controller profile for an unpaired channel");
     openknx.console.printHelpLine("iohc 1wtype TYPE", "Set default 1W broadcast type: 0=all, 2=roller shutter, 3=awning");
@@ -2368,15 +2407,33 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             if (parseChannelIndex(lSub.substr(7, 2), mNumChannels, lIdx))
             {
                 IoHomecontrolChannel *lCh = mChannels[lIdx];
-                logInfoP("Ch%02d: %s NodeId=%06X%s", lIdx + 1,
+                logInfoP("Ch%02d: %s device=0x%06X%s", lIdx + 1,
                          lCh->isPaired() ? "PAIRED" : "unpaired",
                          lCh->getNodeId(),
-                         lCh->is1W() ? " [1W]" : "");
+                         lCh->is1W() ? " [1W]" : " [2W]");
                 if (lCh->is1W())
                 {
-                    logInfoP("  1W seq=%d", lCh->getSequence1W());
-                    if (!lCh->isPaired() && lCh->getConfigured1WTargetNodeId() != 0)
-                        logInfoP("  1W target=%06X", lCh->getConfigured1WTargetNodeId());
+                    IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(lCh);
+                    const uint8_t lProfileIndex = oneWayProfileIndex(lProfile);
+                    logInfoP("  2W identity: node=0x%06X key=%s",
+                             mController.getOwnNodeId(),
+                             keyStateText(mController.getSystemKey()));
+                    logInfoP("  1W remote: profile=ch%02u node=0x%06X key=%s type=%u target=0x%06X mfg=0x%02X seq=0x%04X reserved=0x%04X",
+                             static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1),
+                             lProfile ? lProfile->getOneWayControllerNodeId() : 0,
+                             lProfile ? keyStateText(lProfile->getOneWayControllerKey()) : "missing",
+                             static_cast<unsigned>(lCh->getConfigured1WBroadcastType()),
+                             static_cast<unsigned long>(lCh->isPaired() ? lCh->getNodeId() : lCh->getConfigured1WTargetNodeId()),
+                             static_cast<unsigned>(lProfile ? lProfile->getOneWayControllerManufacturer() : 0),
+                             static_cast<unsigned>(lProfile ? lProfile->getSequence1W() : 0),
+                             static_cast<unsigned>(lProfile ? lProfile->getReservedSequence1W() : 0));
+                }
+                else
+                {
+                    logInfoP("  2W device: node=0x%06X key=%s lowPower=%u",
+                             lCh->getNodeId(),
+                             keyStateText(lCh->getEncryptionKey()),
+                             lCh->isLowPower2W() ? 1U : 0U);
                 }
                 if (iDebugKo)
                     openknx.console.writeDiagnoseKo("Ch%02d %s %06X", lIdx + 1,
@@ -2393,22 +2450,30 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             logInfoP("Auto-SPE post-pair discovery: %s%s",
                      mAutoSpeDiscoveryAfterPairing ? "on" : "off",
                      mPendingPostPairSpeDiscovery ? " (pending)" : "");
+            logInfoP("2W identity: node=0x%06X key=%s",
+                     mController.getOwnNodeId(),
+                     keyStateText(mController.getSystemKey()));
             for (uint8_t i = 0; i < mNumChannels; i++)
             {
                 IoHomecontrolChannel *lCh = mChannels[i];
-                if (lCh->is1W() && !lCh->isPaired() && lCh->getConfigured1WTargetNodeId() != 0)
+                if (lCh->is1W())
                 {
-                    logInfoP("Ch%02d: %s NodeId=%06X [1W target=%06X]", i + 1,
+                    IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(lCh);
+                    logInfoP("Ch%02d: %s [1W] device=0x%06X remote=0x%06X key=%s type=%u mfg=0x%02X seq=0x%04X", i + 1,
                              lCh->isPaired() ? "PAIRED" : "unpaired",
-                             lCh->getNodeId(),
-                             lCh->getConfigured1WTargetNodeId());
+                             lCh->isPaired() ? lCh->getNodeId() : lCh->getConfigured1WTargetNodeId(),
+                             lProfile ? lProfile->getOneWayControllerNodeId() : 0,
+                             lProfile ? keyStateText(lProfile->getOneWayControllerKey()) : "missing",
+                             static_cast<unsigned>(lCh->getConfigured1WBroadcastType()),
+                             static_cast<unsigned>(lProfile ? lProfile->getOneWayControllerManufacturer() : 0),
+                             static_cast<unsigned>(lProfile ? lProfile->getSequence1W() : 0));
                 }
                 else
                 {
-                    logInfoP("Ch%02d: %s NodeId=%06X%s", i + 1,
+                    logInfoP("Ch%02d: %s [2W] node=0x%06X key=%s", i + 1,
                              lCh->isPaired() ? "PAIRED" : "unpaired",
                              lCh->getNodeId(),
-                             lCh->is1W() ? " [1W]" : "");
+                             keyStateText(lCh->getEncryptionKey()));
                 }
             }
         }
@@ -2449,13 +2514,15 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                     continue;
                 IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(lCh);
                 const uint8_t lProfileIndex = oneWayProfileIndex(lProfile);
-                logInfoP("1W ch%02u profile=ch%02u remote=0x%06X key=%s seq=%u mfg=0x%02X",
+                logInfoP("1W ch%02u profile=ch%02u remote=0x%06X key=%s type=%u mfg=0x%02X seq=0x%04X reserved=0x%04X",
                          static_cast<unsigned>(i + 1),
                          static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1),
                          lProfile ? lProfile->getOneWayControllerNodeId() : 0,
-                         lProfile && lProfile->hasOneWayControllerIdentity() ? "set" : "missing",
+                         lProfile ? keyStateText(lProfile->getOneWayControllerKey()) : "missing",
+                         static_cast<unsigned>(lCh->getConfigured1WBroadcastType()),
+                         static_cast<unsigned>(lProfile ? lProfile->getOneWayControllerManufacturer() : 0),
                          static_cast<unsigned>(lProfile ? lProfile->getSequence1W() : 0),
-                         static_cast<unsigned>(lProfile ? lProfile->getOneWayControllerManufacturer() : 0));
+                         static_cast<unsigned>(lProfile ? lProfile->getReservedSequence1W() : 0));
             }
             return true;
         }
@@ -2479,15 +2546,64 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         }
         IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(mChannels[lIdx]);
         const uint8_t lProfileIndex = oneWayProfileIndex(lProfile);
+
+        std::string lFirstArg = lArg;
+        std::string lRemainingArg;
+        const size_t lFirstSpace = lFirstArg.find_first_of(" \t");
+        if (lFirstSpace != std::string::npos)
+        {
+            lRemainingArg = trimSpaces(lFirstArg.substr(lFirstSpace + 1));
+            lFirstArg = trimSpaces(lFirstArg.substr(0, lFirstSpace));
+        }
+
+        if (lFirstArg == "reuse2w")
+        {
+            uint32_t lManufacturer = lProfile ? lProfile->getOneWayControllerManufacturer() : static_cast<uint8_t>(IoHomeManufacturer::Somfy);
+            if (!lRemainingArg.empty() && (!parseUnsignedDecimal(lRemainingArg, lManufacturer) || lManufacturer > 0xFF))
+            {
+                openknx.console.printHelpLine("iohc 1wctrl NN reuse2w [MFG]", "Diagnostic only: copy the 2W identity into the 1W profile");
+                return true;
+            }
+            if (!lProfile || mController.getOwnNodeId() == 0 || !keyHasNonZeroByte(mController.getSystemKey()))
+            {
+                logInfoP("Cannot reuse 2W identity: 2W node/key missing or no 1W profile available.");
+                return true;
+            }
+            if (oneWayProfileUsedByPairedChannel(lProfile) &&
+                !identityEquals2W(lProfile->getOneWayControllerNodeId(),
+                                  lProfile->getOneWayControllerKey(),
+                                  mController.getOwnNodeId(),
+                                  mController.getSystemKey()))
+            {
+                logInfoP("Cannot replace profile ch%02u while a channel using it is paired.",
+                         static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1));
+                return true;
+            }
+            lProfile->setOneWayControllerNodeId(mController.getOwnNodeId());
+            lProfile->setOneWayControllerKey(mController.getSystemKey());
+            lProfile->setOneWayControllerManufacturer(static_cast<uint8_t>(lManufacturer));
+            openknx.flash.save();
+            logInfoP("Diagnostic: 1W profile ch%02u now reuses the 2W identity remote=0x%06X key=%s mfg=0x%02X",
+                     static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1),
+                     lProfile->getOneWayControllerNodeId(),
+                     keyStateText(lProfile->getOneWayControllerKey()),
+                     static_cast<unsigned>(lProfile->getOneWayControllerManufacturer()));
+            return true;
+        }
+
         if (lArg.empty() || lArg == "status")
         {
-            logInfoP("1W ch%02u effective profile=ch%02u remote=0x%06X key=%s seq=%u mfg=0x%02X",
+            logInfoP("1W ch%02u effective profile=ch%02u remote=0x%06X key=%s type=%u mfg=0x%02X seq=0x%04X reserved=0x%04X; 2W node=0x%06X key=%s",
                      static_cast<unsigned>(lIdx + 1),
                      static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1),
                      lProfile ? lProfile->getOneWayControllerNodeId() : 0,
-                     lProfile && lProfile->hasOneWayControllerIdentity() ? "set" : "missing",
+                     lProfile ? keyStateText(lProfile->getOneWayControllerKey()) : "missing",
+                     static_cast<unsigned>(mChannels[lIdx]->getConfigured1WBroadcastType()),
+                     static_cast<unsigned>(lProfile ? lProfile->getOneWayControllerManufacturer() : 0),
                      static_cast<unsigned>(lProfile ? lProfile->getSequence1W() : 0),
-                     static_cast<unsigned>(lProfile ? lProfile->getOneWayControllerManufacturer() : 0));
+                     static_cast<unsigned>(lProfile ? lProfile->getReservedSequence1W() : 0),
+                     mController.getOwnNodeId(),
+                     keyStateText(mController.getSystemKey()));
             return true;
         }
 
@@ -2498,6 +2614,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             (!lArg.empty() && !takeToken(lArg, lManufacturerText)) || !lArg.empty())
         {
             openknx.console.printHelpLine("iohc 1wctrl NN ADDR HEX32 [MFG]", "Set the effective channel 1W controller profile");
+            openknx.console.printHelpLine("iohc 1wctrl NN reuse2w [MFG]", "Diagnostic only: copy the 2W identity into the 1W profile");
             return true;
         }
         uint32_t lRemoteNodeId = 0;
@@ -2526,7 +2643,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if (lChangedIdentity)
             lProfile->setSequence1W(0);
         openknx.flash.save();
-        logInfoP("1W profile ch%02u saved: remote=0x%06X key=set seq=%u mfg=0x%02X",
+        logInfoP("1W profile ch%02u saved: remote=0x%06X key=set seq=0x%04X mfg=0x%02X",
                  static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1),
                  lRemoteNodeId, static_cast<unsigned>(lProfile->getSequence1W()),
                  static_cast<unsigned>(lProfile->getOneWayControllerManufacturer()));

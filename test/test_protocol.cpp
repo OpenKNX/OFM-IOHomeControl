@@ -8443,6 +8443,49 @@ TEST(controller_1w_channel_profiles_are_independent)
     ASSERT_EQ(lChannel2.getSequence1W(), 20);
 }
 
+TEST(controller_1w_execute_uses_remote_identity_not_2w_gateway_identity)
+{
+    const uint32_t lGatewayNodeId = 0x112233;
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lGatewayKey[16] = {
+        0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80,
+        0x90, 0xA0, 0xB0, 0xC0, 0xD0, 0xE0, 0xF0, 0x00};
+    const uint8_t lRemoteKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lGatewayNodeId);
+    lController.setSystemKey(lGatewayKey);
+    lController.init();
+
+    lChannel.setNodeId(lDeviceNodeId);
+    lChannel.setEncryptionKey(lRemoteKey);
+    lChannel.setIs1W(true);
+    lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+    lChannel.setOneWayControllerKey(lRemoteKey);
+    lChannel.setConfigured1WBroadcastType(2);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lRemoteKey, IoHomeCommand::Execute, 0xD8, 0x03));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    lController.loop();
+
+    IoHomeFrame lFrame;
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lPacket.empty());
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
+    ASSERT_NE(lFrame.getSrcNodeId(), lGatewayNodeId);
+    ASSERT_MEM_NEQ(lRemoteKey, lGatewayKey, 16);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BF);
+}
+
 
 TEST(channel_1w_sequence_reserve_window_reduces_flash_saves)
 {
@@ -9066,6 +9109,7 @@ int main()
     RUN(controller_1w_execute_template_can_override_acei_fp_and_destination);
     RUN(controller_1w_channel_broadcast_type3_uses_typed_destination_for_pairing_and_runtime);
     RUN(controller_1w_channel_profiles_are_independent);
+    RUN(controller_1w_execute_uses_remote_identity_not_2w_gateway_identity);
     RUN(channel_1w_sequence_reserve_window_reduces_flash_saves);
     RUN(channel_1w_sequence_reboot_uses_reserved_high_water);
     RUN(controller_1w_shared_profile_uses_owner_sequence_and_identity);
