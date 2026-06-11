@@ -185,6 +185,12 @@ namespace
         return true;
     }
 
+    bool build1WExecute(IoHomeFrame &oFrame, const OneWayCommandProfile &iProfile,
+                        uint16_t iMain, uint8_t iFp1, uint8_t iFp2, uint16_t iSequence)
+    {
+        return build1WExecute14(oFrame, iProfile, iMain, iFp1, iFp2, iSequence);
+    }
+
     bool build1WExecute16(IoHomeFrame &oFrame, const OneWayCommandProfile &iProfile,
                           uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
                           uint8_t iData0, uint8_t iData1, uint16_t iSequence)
@@ -243,6 +249,22 @@ namespace
         oFrame.dataLen = 3;
         oFrame.hasHmac = true;
         return true;
+    }
+
+    bool build1WPairAuth(IoHomeFrame &oFrame, uint16_t iSequence)
+    {
+        return build1WPair2E(oFrame, iSequence);
+    }
+
+    bool build1WRemove(IoHomeFrame &oFrame, uint16_t iSequence)
+    {
+        return build1WRemove39(oFrame, iSequence);
+    }
+
+    bool build1WSendKey(IoHomeFrame &oFrame, const uint8_t iEncryptedKey[16],
+                        uint8_t iManufacturer, uint16_t iSequence)
+    {
+        return build1WSendKey30(oFrame, iEncryptedKey, iManufacturer, iSequence);
     }
 
     const char *pairingModeName(Pairing2WMode iMode, ControllerState iState)
@@ -692,6 +714,120 @@ namespace
     {
         static constexpr uint8_t kSetConfig1Payload[] = {0xE0, 0x10, 0x0A, 0x08, 0x00};
         return copy2WPayload(oData, oLen, kSetConfig1Payload, static_cast<uint8_t>(sizeof(kSetConfig1Payload)));
+    }
+
+    bool build2WDiscover(IoHomeFrame &oFrame, uint32_t iSrcNodeId, bool iSpeDiscovery, const uint8_t iSystemKey[16])
+    {
+        oFrame.init();
+        oFrame.setStart2W();
+        oFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
+        oFrame.setSrcNode(iSrcNodeId);
+        oFrame.setDestBroadcast();
+        oFrame.hasHmac = false;
+
+        if (!iSpeDiscovery)
+        {
+            oFrame.commandId = IoHomeCommand::DiscoverRequest;
+            oFrame.dataLen = 0;
+            return true;
+        }
+
+        if (iSystemKey == nullptr)
+            return false;
+
+        oFrame.commandId = IoHomeCommand::DiscoverSPERequest;
+        uint8_t lChallenge[6];
+        IoHomeCrypto::generateChallenge(lChallenge);
+        memcpy(oFrame.data, lChallenge, sizeof(lChallenge));
+
+        uint8_t lHmac[IOHC_HMAC_SIZE];
+        if (!IoHomeCrypto::createHmac2W(lChallenge, sizeof(lChallenge),
+                                        lChallenge, iSystemKey, lHmac))
+            return false;
+
+        memcpy(oFrame.data + sizeof(lChallenge), lHmac, sizeof(lHmac));
+        oFrame.dataLen = sizeof(lChallenge) + sizeof(lHmac);
+        return true;
+    }
+
+    bool build2WKeyInit(IoHomeFrame &oFrame, uint32_t iSrcNodeId, uint32_t iDestNodeId)
+    {
+        oFrame.init();
+        oFrame.setStart2W();
+        oFrame.setLowPower(true);
+        oFrame.setSrcNode(iSrcNodeId);
+        oFrame.setDestNode(iDestNodeId);
+        oFrame.commandId = IoHomeCommand::KeyInitTransfer;
+        oFrame.dataLen = 0;
+        oFrame.hasHmac = false;
+        return true;
+    }
+
+    bool build2WKeyTransfer(IoHomeFrame &oFrame, uint32_t iSrcNodeId, uint32_t iDestNodeId,
+                            const uint8_t iPairingChallenge[6], const uint8_t iSystemKey[16])
+    {
+        if (iPairingChallenge == nullptr || iSystemKey == nullptr)
+            return false;
+
+        uint8_t lEncryptedKey[16];
+        const uint8_t lKeyInitTranscript[1] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
+        if (!IoHomeCrypto::crypt2WKeyXor(lKeyInitTranscript, sizeof(lKeyInitTranscript),
+                                         iPairingChallenge, iSystemKey,
+                                         IOHC_TRANSFER_KEY, lEncryptedKey))
+            return false;
+
+        oFrame.init();
+        // 0x32 is a continuation frame. Keep START/END and LOW_POWER clear.
+        oFrame.ctrlByte0 = 0;
+        oFrame.ctrlByte1 = 0x00;
+        oFrame.setSrcNode(iSrcNodeId);
+        oFrame.setDestNode(iDestNodeId);
+        oFrame.commandId = IoHomeCommand::KeyTransfer;
+        memcpy(oFrame.data, lEncryptedKey, sizeof(lEncryptedKey));
+        oFrame.dataLen = sizeof(lEncryptedKey);
+        oFrame.hasHmac = false;
+        return true;
+    }
+
+    bool build2WChallengeResponse(IoHomeFrame &oFrame, uint32_t iSrcNodeId, uint32_t iDestNodeId,
+                                  bool iLowPower, const IoHomeFrame &iAuthenticatedRequest,
+                                  const uint8_t iChallenge[6], const uint8_t iKey[16])
+    {
+        if (iChallenge == nullptr || iKey == nullptr)
+            return false;
+
+        uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
+        const size_t lHmacInputLen = buildHmacInput(iAuthenticatedRequest, lHmacInput, sizeof(lHmacInput));
+        if (lHmacInputLen == 0)
+            return false;
+
+        oFrame.init();
+        // 0x3D carries the 6-byte HMAC as normal data in a 2W continuation frame.
+        oFrame.ctrlByte0 = 0;
+        oFrame.ctrlByte1 = 0x00;
+        oFrame.setLowPower(iLowPower);
+        oFrame.setSrcNode(iSrcNodeId);
+        oFrame.setDestNode(iDestNodeId);
+        oFrame.commandId = IoHomeCommand::ChallengeResponse;
+        if (!IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen, iChallenge, iKey, oFrame.data))
+            return false;
+        oFrame.dataLen = IOHC_HMAC_SIZE;
+        oFrame.hasHmac = false;
+        return true;
+    }
+
+    bool build2WSetConfig1(IoHomeFrame &oFrame, uint32_t iSrcNodeId, uint32_t iDestNodeId)
+    {
+        oFrame.init();
+        oFrame.setStart2W();
+        oFrame.setLowPower(false);
+        oFrame.setSrcNode(iSrcNodeId);
+        oFrame.setDestNode(iDestNodeId);
+        oFrame.commandId = IoHomeCommand::SetConfig1;
+        if (!build2WSetConfig1Payload(oFrame.data, oFrame.dataLen))
+            return false;
+        oFrame.hasHmac = false;
+        return true;
     }
 
 #if defined(TEST_NATIVE)
@@ -3127,29 +3263,16 @@ void IoHomeController::processResponse()
         mCurrentCmd.active && !mAuthResponseSent &&
         mRxFrame.dataLen >= 6)
     {
-        // Device challenges our authenticated command — build and send ChallengeResponse (0x3D)
-        // HMAC input: {original command ID} + {original command data}
-        // Challenge: first 6 bytes of the 0x3C payload
-        // Key: channel encryption key (from queue entry)
+        // Device challenges our authenticated command — build and send ChallengeResponse (0x3D).
+        // The centralized builder keeps 0x3D as a continuation frame and puts
+        // the HMAC bytes into data[], never as appended 2W HMAC.
         uint8_t lChallenge[6];
-        memcpy(lChallenge, mRxFrame.data, 6);
+        memcpy(lChallenge, mRxFrame.data, sizeof(lChallenge));
 
         IoHomeFrame lFrame;
-        lFrame.init();
-        lFrame.ctrlByte0 = 0; // continuation frame (per nicolas5000)
-        lFrame.ctrlByte1 = 0x00;
-        lFrame.setLowPower(resolveLowPower2W(mCurrentCmd.destNodeId));
-        lFrame.setSrcNode(mOwnNodeId);
-        lFrame.setDestNode(mCurrentCmd.destNodeId);
-        lFrame.commandId = IoHomeCommand::ChallengeResponse;
-
-        // Build HMAC over {original_cmd_id, original_data...} with challenge and key
-        uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
-        const size_t lHmacInputLen = buildHmacInput(mTxFrame, lHmacInput, sizeof(lHmacInput));
-
-        if (lHmacInputLen == 0 ||
-            !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
-                                        lChallenge, mCurrentCmd.encKey, lFrame.data))
+        if (!build2WChallengeResponse(lFrame, mOwnNodeId, mCurrentCmd.destNodeId,
+                                      resolveLowPower2W(mCurrentCmd.destNodeId),
+                                      mTxFrame, lChallenge, mCurrentCmd.encKey))
         {
             const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
             mCurrentCmd.active = false;
@@ -3231,31 +3354,11 @@ void IoHomeController::processPairSendDiscovery()
         return;
     }
 
-    // Build discovery frame
-    mTxFrame.init();
-    mTxFrame.setStart2W();
-    mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END); // standalone: START+END (per nicolas5000)
-    mTxFrame.setSrcNode(mOwnNodeId);
-    mTxFrame.setDestBroadcast();
-    mTxFrame.hasHmac = false;
-
-    if (mDiscoverySPE)
+    // Build discovery frame through the centralized 2W builder.
+    if (!build2WDiscover(mTxFrame, mOwnNodeId, mDiscoverySPE, mSystemKey))
     {
-        mTxFrame.commandId = IoHomeCommand::DiscoverSPERequest;
-        // SPE discovery payload: 6B random challenge + 6B HMAC(challenge, systemKey)
-        uint8_t lChallenge[6];
-        IoHomeCrypto::generateChallenge(lChallenge);
-        memcpy(mTxFrame.data, lChallenge, 6);
-        // Compute HMAC over the challenge using system key
-        uint8_t lHmac[6];
-        IoHomeCrypto::createHmac2W(lChallenge, 6, lChallenge, mSystemKey, lHmac);
-        memcpy(mTxFrame.data + 6, lHmac, 6);
-        mTxFrame.dataLen = 12;
-    }
-    else
-    {
-        mTxFrame.commandId = IoHomeCommand::DiscoverRequest;
-        mTxFrame.dataLen = 0;
+        mState = ControllerState::PairFailed;
+        return;
     }
 
     const uint32_t lDiscoveryFreq = kNormal2WTxFreqHz;
@@ -3605,7 +3708,7 @@ void IoHomeController::processPairSend1WAnnounce()
     //   cmd=0x2E, data=0x00, sequence[2], hmac[6]
     // HMAC input is cmd + data (2 bytes), sequence is supplied separately.
     const uint16_t lSeq = nextSequence1W(lProfile, true);
-    build1WPair2E(mTxFrame, lSeq);
+    build1WPairAuth(mTxFrame, lSeq);
     uint8_t lHmacInput[2] = {static_cast<uint8_t>(mTxFrame.commandId), 0x00};
     if (!createAndTraceHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
     {
@@ -3695,7 +3798,7 @@ void IoHomeController::processPairSend1WRemove()
     //   cmd=0x39, data=0x00, sequence[2], hmac[6]
     // This state is never entered by the normal add/learn flow.
     const uint16_t lSeq = nextSequence1W(lProfile, true);
-    build1WRemove39(mTxFrame, lSeq);
+    build1WRemove(mTxFrame, lSeq);
     uint8_t lHmacInput[2] = {static_cast<uint8_t>(mTxFrame.commandId), 0x00};
     if (!createAndTraceHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
     {
@@ -3831,7 +3934,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
     }
 
     uint16_t lSeq = nextSequence1W(lProfile, true);
-    if (!build1WSendKey30(mTxFrame, lEncryptedKey, lProfile->getOneWayControllerManufacturer(), lSeq))
+    if (!build1WSendKey(mTxFrame, lEncryptedKey, lProfile->getOneWayControllerManufacturer(), lSeq))
     {
         mState = ControllerState::PairFailed;
         return;
@@ -4005,14 +4108,11 @@ void IoHomeController::processPairSendKeyInit()
     // Reference-compatible 2W pairing uses an initial START frame with the
     // LOW_POWER bit set and a long preamble so low-power actuators wake up
     // before answering with ChallengeRequest (0x3C).
-    mTxFrame.init();
-    mTxFrame.setStart2W();
-    mTxFrame.setLowPower(true);
-    mTxFrame.setSrcNode(mOwnNodeId);
-    mTxFrame.setDestNode(mDiscoveredNodeId);
-    mTxFrame.commandId = IoHomeCommand::KeyInitTransfer;
-    mTxFrame.dataLen = 0;
-    mTxFrame.hasHmac = false;
+    if (!build2WKeyInit(mTxFrame, mOwnNodeId, mDiscoveredNodeId))
+    {
+        mState = ControllerState::PairFailed;
+        return;
+    }
 
     const RadioError lPrepErr = configureNormal2WTxRadio(IOHC_PREAMBLE_LONG);
     if (lPrepErr == RadioError::Busy)
@@ -4070,37 +4170,15 @@ void IoHomeController::processPairWaitDeviceChallenge()
 
 void IoHomeController::processPairSendKeyTransfer()
 {
-    // Encrypt system key using transfer key + device's challenge
-    uint8_t lEncryptedKey[16];
-
-    mTxFrame.init();
-    // KeyTransfer (0x32) is the continuation frame after 0x31. It must not
-    // inherit the long-preamble/LOW_POWER TX conditions from KeyInitTransfer.
-    // Keep START/END clear and LOW_POWER clear, then transmit with an explicit
-    // short preamble below. This matches the normal 2W exchange path and avoids
-    // actuators ignoring the encrypted key transfer.
-    mTxFrame.ctrlByte0 = 0;
-    mTxFrame.ctrlByte1 = 0x00;
-    mTxFrame.setSrcNode(mOwnNodeId);
-    mTxFrame.setDestNode(mDiscoveredNodeId);
-    mTxFrame.commandId = IoHomeCommand::KeyTransfer;
-
-    mTxFrame.dataLen = 0;
-    mTxFrame.hasHmac = false;
-
-    const uint8_t lKeyInitData[1] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
-    if (!IoHomeCrypto::crypt2WKeyXor(lKeyInitData, sizeof(lKeyInitData),
-                                     mPairingChallenge, mSystemKey,
-                                     IOHC_TRANSFER_KEY, lEncryptedKey))
+    // KeyTransfer (0x32) is the continuation frame after 0x31. The centralized
+    // builder keeps START/END and LOW_POWER clear and encrypts the system key
+    // using the 0x31-only key-transfer transcript.
+    if (!build2WKeyTransfer(mTxFrame, mOwnNodeId, mDiscoveredNodeId,
+                            mPairingChallenge, mSystemKey))
     {
         mState = ControllerState::PairFailed;
         return;
     }
-
-    // Put encrypted key as frame data
-    memcpy(mTxFrame.data, lEncryptedKey, 16);
-    mTxFrame.dataLen = 16;
-    mTxFrame.hasHmac = false;
 
     mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
@@ -4138,21 +4216,11 @@ void IoHomeController::processPairSendKeyTransfer()
 void IoHomeController::processPairSendKeyTransferAuthResponse()
 {
     IoHomeFrame lFrame;
-    lFrame.init();
     // 2W ChallengeResponse (0x3D) is an authenticated continuation response.
     // Keep LOW_POWER clear and use the short-preamble helper below; this avoids
     // changing normal 2W auth TX timing and does not affect the separate 1W path.
-    lFrame.ctrlByte0 = 0;
-    lFrame.ctrlByte1 = 0x00;
-    lFrame.setSrcNode(mOwnNodeId);
-    lFrame.setDestNode(mDiscoveredNodeId);
-    lFrame.commandId = IoHomeCommand::ChallengeResponse;
-
-    uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
-    const size_t lHmacInputLen = buildHmacInput(mTxFrame, lHmacInput, sizeof(lHmacInput));
-    if (lHmacInputLen == 0 ||
-        !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
-                                    mPairKeyTransferChallenge, mSystemKey, lFrame.data))
+    if (!build2WChallengeResponse(lFrame, mOwnNodeId, mDiscoveredNodeId, false,
+                                  mTxFrame, mPairKeyTransferChallenge, mSystemKey))
     {
         mState = ControllerState::PairFailed;
         return;
@@ -4216,17 +4284,7 @@ void IoHomeController::processPairWaitKeyTransferConfirmation()
 
 void IoHomeController::processPairSendSetConfig1()
 {
-    IoHomeQueueEntry lSetConfig = {};
-    lSetConfig.destNodeId = mDiscoveredNodeId;
-    lSetConfig.encKey = mSystemKey;
-    lSetConfig.command = IoHomeCommand::SetConfig1;
-    lSetConfig.param = 0xFF;
-    lSetConfig.param2 = 0xFF;
-    lSetConfig.param3 = 0xFF;
-    lSetConfig.retries = 0;
-    lSetConfig.active = true;
-
-    if (!buildTxFrame(lSetConfig))
+    if (!build2WSetConfig1(mTxFrame, mOwnNodeId, mDiscoveredNodeId))
     {
         logDebugP("Pairing: failed to build SetConfig1 for 0x%06X", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
@@ -4325,13 +4383,6 @@ void IoHomeController::interpretSetConfig1Result(bool iFinalResponse)
 void IoHomeController::processPairSendSetConfig1AuthResponse()
 {
     IoHomeFrame lFrame;
-    lFrame.init();
-    lFrame.ctrlByte0 = 0;
-    lFrame.ctrlByte1 = 0x00;
-    lFrame.setLowPower(true);
-    lFrame.setSrcNode(mOwnNodeId);
-    lFrame.setDestNode(mDiscoveredNodeId);
-    lFrame.commandId = IoHomeCommand::ChallengeResponse;
 
     uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
     const size_t lHmacInputLen = buildHmacInput(mPairSetConfigRequest, lHmacInput, sizeof(lHmacInput));
@@ -4342,9 +4393,8 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
         logInfoP("PairDiag: SetConfig1 auth transcript=%s", lTranscriptHex.c_str());
     }
 
-    if (lHmacInputLen == 0 ||
-        !IoHomeCrypto::createHmac2W(lHmacInput, lHmacInputLen,
-                                    mPairSetConfigChallenge, mSystemKey, lFrame.data))
+    if (!build2WChallengeResponse(lFrame, mOwnNodeId, mDiscoveredNodeId, true,
+                                  mPairSetConfigRequest, mPairSetConfigChallenge, mSystemKey))
     {
         logDebugP("Pairing: failed to build SetConfig1 challenge response for 0x%06X", mDiscoveredNodeId);
         mState = ControllerState::PairComplete;
@@ -4929,7 +4979,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 uint16_t lSeq = nextSequence1W(lProfile, false);
                 OneWayCommandProfile lProfileTemplate = oneWayCommandProfileForType(iEntry.oneWayBroadcastType);
                 lProfileTemplate.acei = iEntry.oneWayAcei ? iEntry.oneWayAcei : lProfileTemplate.acei;
-                if (!build1WExecute14(mTxFrame, lProfileTemplate, iEntry.oneWayMain,
+                if (!build1WExecute(mTxFrame, lProfileTemplate, iEntry.oneWayMain,
                                       iEntry.oneWayFp1, iEntry.oneWayFp2, lSeq))
                     return false;
 
@@ -4970,7 +5020,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 uint16_t lSeq = nextSequence1W(lProfile, false);
                 OneWayCommandProfile lProfileTemplate = oneWayCommandProfileForType(iEntry.oneWayBroadcastType);
                 lProfileTemplate.acei = iEntry.oneWayAcei ? iEntry.oneWayAcei : lProfileTemplate.acei;
-                if (!build1WExecute14(mTxFrame, lProfileTemplate, iEntry.oneWayButtonCode, 0x00, 0x00, lSeq))
+                if (!build1WExecute(mTxFrame, lProfileTemplate, iEntry.oneWayButtonCode, 0x00, 0x00, lSeq))
                     return false;
 
                 // 1W HMAC input excludes the appended sequence bytes and HMAC.
@@ -5025,7 +5075,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 uint16_t lSeq = nextSequence1W(lProfile, false);
                 OneWayCommandProfile lProfileTemplate = oneWayCommandProfileForType(iEntry.oneWayBroadcastType);
                 lProfileTemplate.acei = iEntry.oneWayAcei ? iEntry.oneWayAcei : lProfileTemplate.acei;
-                if (!build1WExecute14(mTxFrame, lProfileTemplate, lMain, lFp1, lFp2, lSeq))
+                if (!build1WExecute(mTxFrame, lProfileTemplate, lMain, lFp1, lFp2, lSeq))
                     return false;
 
                 // 1W HMAC: input = cmd(1) + origin+acei+main[2]+fp1+fp2 = 7 bytes
@@ -5276,7 +5326,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         }
         const uint16_t lSequence = (static_cast<uint16_t>((iEntry.param2 != 0xFF) ? iEntry.param2 : 0x00) << 8) |
                                   static_cast<uint16_t>((iEntry.param3 != 0xFF) ? iEntry.param3 : 0x00);
-        if (!build1WSendKey30(mTxFrame, lEncKey1W, lProfile->getOneWayControllerManufacturer(), lSequence))
+        if (!build1WSendKey(mTxFrame, lEncKey1W, lProfile->getOneWayControllerManufacturer(), lSequence))
             return false;
         mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
         break;
