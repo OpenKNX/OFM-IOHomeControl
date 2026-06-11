@@ -2,6 +2,7 @@
 
 #ifdef TEST_NATIVE
 #include "IoHomeControllerNativeStubs.h"
+#include <assert.h>
 #else
 #include "../IoHomecontrol.h"
 #include "../IoHomecontrolChannel.h"
@@ -455,6 +456,153 @@ namespace
         lFrame.dataLen = 3;
         return lFrame.serialize2W(oBuffer, iBufferLen);
     }
+
+    bool copy2WPayload(uint8_t *oData, uint8_t &oLen, const uint8_t *iTemplate, uint8_t iTemplateLen)
+    {
+        if (oData == nullptr || iTemplate == nullptr || iTemplateLen > IOHC_FRAME_MAX_DATA)
+            return false;
+
+        memcpy(oData, iTemplate, iTemplateLen);
+        oLen = iTemplateLen;
+        return true;
+    }
+
+    bool build2WExecutePositionPayload(uint8_t iPositionPercent, uint8_t *oData, uint8_t &oLen)
+    {
+        if (oData == nullptr || iPositionPercent > 100)
+            return false;
+
+        // Reference template: 01 67 <pos*2> 00 80 D8 06 00
+        oData[0] = IOHC_ORIGINATOR_USER;
+        oData[1] = IOHC_ACEI_DEFAULT;
+        oData[2] = static_cast<uint8_t>(iPositionPercent * 2U);
+        oData[3] = 0x00;
+        oData[4] = 0x80;
+        oData[5] = 0xD8;
+        oData[6] = 0x06;
+        oData[7] = 0x00;
+        oLen = 8;
+        return true;
+    }
+
+    bool build2WExecuteSpecialPayload(uint8_t iSpecialPosition, uint8_t *oData, uint8_t &oLen)
+    {
+        if (oData == nullptr)
+            return false;
+
+        // Reference template: 01 67 <D2/D8> 00 00 00
+        oData[0] = IOHC_ORIGINATOR_USER;
+        oData[1] = IOHC_ACEI_DEFAULT;
+        oData[2] = iSpecialPosition;
+        oData[3] = 0x00;
+        oData[4] = 0x00;
+        oData[5] = 0x00;
+        oLen = 6;
+        return true;
+    }
+
+    bool build2WExecuteTiltPayload(uint8_t iTiltPercent, uint8_t *oData, uint8_t &oLen)
+    {
+        if (oData == nullptr || iTiltPercent > 100)
+            return false;
+
+        const uint16_t lTiltRaw = static_cast<uint16_t>(
+            (static_cast<uint32_t>(100U - iTiltPercent) * IOHC_POSITION_MAX) / 100U);
+
+        // Reference template: 01 E7 D4 00 20 <tiltRawHi> <tiltRawLo> 00
+        oData[0] = IOHC_ORIGINATOR_USER;
+        oData[1] = 0xE7;
+        oData[2] = 0xD4;
+        oData[3] = 0x00;
+        oData[4] = 0x20;
+        oData[5] = static_cast<uint8_t>((lTiltRaw >> 8) & 0xFF);
+        oData[6] = static_cast<uint8_t>(lTiltRaw & 0xFF);
+        oData[7] = 0x00;
+        oLen = 8;
+        return true;
+    }
+
+    bool build2WPrivatePayload(uint8_t iParam, uint8_t iParam2, uint8_t iParam3,
+                               uint8_t *oData, uint8_t &oLen)
+    {
+        static constexpr uint8_t kPrivateStatusPayload[] = {0x03, 0x00, 0x00};
+        static constexpr uint8_t kPrivateTiltStatusPayload[] = {0x03, 0x20, 0x01, 0x00};
+
+        if (iParam == 0x03 && iParam2 == 0xFF && iParam3 == 0xFF)
+            return copy2WPayload(oData, oLen, kPrivateStatusPayload, static_cast<uint8_t>(sizeof(kPrivateStatusPayload)));
+
+        if (iParam == 0x03 && iParam2 == 0x20 && iParam3 == 0x01)
+            return copy2WPayload(oData, oLen, kPrivateTiltStatusPayload, static_cast<uint8_t>(sizeof(kPrivateTiltStatusPayload)));
+
+        if (oData == nullptr)
+            return false;
+
+        // Preserve non-reference diagnostic/battery Private variants.
+        oData[0] = iParam;
+        oData[1] = (iParam2 != 0xFF) ? iParam2 : 0x00;
+        oData[2] = (iParam3 != 0xFF) ? iParam3 : 0x00;
+        oLen = (iParam2 != 0xFF || iParam3 != 0xFF) ? 4 : 3;
+        if (oLen == 4)
+            oData[3] = 0x00;
+        return true;
+    }
+
+    bool build2WSetConfig1Payload(uint8_t *oData, uint8_t &oLen)
+    {
+        static constexpr uint8_t kSetConfig1Payload[] = {0xE0, 0x10, 0x0A, 0x08, 0x00};
+        return copy2WPayload(oData, oLen, kSetConfig1Payload, static_cast<uint8_t>(sizeof(kSetConfig1Payload)));
+    }
+
+#if defined(TEST_NATIVE)
+    bool payloadEquals(const uint8_t *iActual, size_t iActualLen,
+                       const uint8_t *iExpected, size_t iExpectedLen)
+    {
+        return iActualLen == iExpectedLen && memcmp(iActual, iExpected, iExpectedLen) == 0;
+    }
+
+    bool run2WPayloadTemplateSelfTest()
+    {
+        uint8_t lPayload[IOHC_FRAME_MAX_DATA] = {};
+        uint8_t lLen = 0;
+
+        static constexpr uint8_t kExecutePosition50[] = {0x01, 0x67, 0x64, 0x00, 0x80, 0xD8, 0x06, 0x00};
+        if (!build2WExecutePositionPayload(50, lPayload, lLen) ||
+            !payloadEquals(lPayload, lLen, kExecutePosition50, sizeof(kExecutePosition50)))
+            return false;
+
+        static constexpr uint8_t kExecuteStop[] = {0x01, 0x67, 0xD2, 0x00, 0x00, 0x00};
+        if (!build2WExecuteSpecialPayload(0xD2, lPayload, lLen) ||
+            !payloadEquals(lPayload, lLen, kExecuteStop, sizeof(kExecuteStop)))
+            return false;
+
+        static constexpr uint8_t kExecuteFavorite[] = {0x01, 0x67, 0xD8, 0x00, 0x00, 0x00};
+        if (!build2WExecuteSpecialPayload(0xD8, lPayload, lLen) ||
+            !payloadEquals(lPayload, lLen, kExecuteFavorite, sizeof(kExecuteFavorite)))
+            return false;
+
+        static constexpr uint8_t kExecuteTilt50[] = {0x01, 0xE7, 0xD4, 0x00, 0x20, 0x64, 0x00, 0x00};
+        if (!build2WExecuteTiltPayload(50, lPayload, lLen) ||
+            !payloadEquals(lPayload, lLen, kExecuteTilt50, sizeof(kExecuteTilt50)))
+            return false;
+
+        static constexpr uint8_t kPrivateStatus[] = {0x03, 0x00, 0x00};
+        if (!build2WPrivatePayload(0x03, 0xFF, 0xFF, lPayload, lLen) ||
+            !payloadEquals(lPayload, lLen, kPrivateStatus, sizeof(kPrivateStatus)))
+            return false;
+
+        static constexpr uint8_t kPrivateTiltStatus[] = {0x03, 0x20, 0x01, 0x00};
+        if (!build2WPrivatePayload(0x03, 0x20, 0x01, lPayload, lLen) ||
+            !payloadEquals(lPayload, lLen, kPrivateTiltStatus, sizeof(kPrivateTiltStatus)))
+            return false;
+
+        static constexpr uint8_t kSetConfig1[] = {0xE0, 0x10, 0x0A, 0x08, 0x00};
+        if (!build2WSetConfig1Payload(lPayload, lLen) ||
+            !payloadEquals(lPayload, lLen, kSetConfig1, sizeof(kSetConfig1)))
+            return false;
+
+        return true;
+    }
+#endif
 }
 
 IoHomeController::IoHomeController()
@@ -488,6 +636,12 @@ IoHomeController::IoHomeController()
       mPairDiagnosticTraceEnabled(false),
       mLastPairDiagnosticTraceState(ControllerState::Idle)
 {
+#if defined(TEST_NATIVE)
+    const bool lPayloadTemplateSelfTestOk = run2WPayloadTemplateSelfTest();
+    assert(lPayloadTemplateSelfTestOk);
+    (void)lPayloadTemplateSelfTestOk;
+#endif
+
     memset(mSystemKey, 0, sizeof(mSystemKey));
     mRxParseFailCount = 0;
     memset(mCmdQueue, 0, sizeof(mCmdQueue));
@@ -4494,56 +4648,22 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         }
         else
         {
-            // 2W Execute: challenge-response authentication
-            // Payload format (from reference: io-rts-esp32):
-            // Byte 0: 0x01 (originator: user remote control)
-            // Byte 1: 0x67 (ACEI priority: user level 2)
-            // For normal positions (0-100%):
-            //   Byte 2: position × 2 (0=open, 200=closed)
-            //   Byte 3-7: {0x00, 0x80, 0xD8, 0x06, 0x00}
-            //   Total: 8 bytes
-            // For special positions (STOP=0xD2, FAVORITE=0xD8):
-            //   Byte 2: raw special value
-            //   Byte 3-5: {0x00, 0x00, 0x00}
-            //   Total: 6 bytes
-
-            mTxFrame.data[0] = IOHC_ORIGINATOR_USER; // originator: user
-            mTxFrame.data[1] = IOHC_ACEI_DEFAULT;    // ACEI priority
-
+            // 2W Execute: challenge-response authentication. Keep the
+            // payload bytes in the central reference-template builders above.
             if (iEntry.twoWayTilt)
             {
-                const uint16_t lTiltRaw = static_cast<uint16_t>(
-                    (static_cast<uint32_t>(100 - iEntry.twoWayTiltPercent) * IOHC_POSITION_MAX) / 100U);
-
-                mTxFrame.data[0] = IOHC_ORIGINATOR_USER;
-                mTxFrame.data[1] = 0xE7;
-                mTxFrame.data[2] = 0xD4;
-                mTxFrame.data[3] = 0x00;
-                mTxFrame.data[4] = 0x20;
-                mTxFrame.data[5] = (lTiltRaw >> 8) & 0xFF;
-                mTxFrame.data[6] = lTiltRaw & 0xFF;
-                mTxFrame.data[7] = 0x00;
-                mTxFrame.dataLen = 8;
+                if (!build2WExecuteTiltPayload(iEntry.twoWayTiltPercent, mTxFrame.data, mTxFrame.dataLen))
+                    return false;
             }
             else if (iEntry.param <= 100)
             {
-                // Normal position (0-100%)
-                mTxFrame.data[2] = iEntry.param * 2;
-                mTxFrame.data[3] = 0x00;
-                mTxFrame.data[4] = 0x80;
-                mTxFrame.data[5] = 0xD8;
-                mTxFrame.data[6] = 0x06; // standard mode (0x05 = quiet)
-                mTxFrame.data[7] = 0x00;
-                mTxFrame.dataLen = 8;
+                if (!build2WExecutePositionPayload(iEntry.param, mTxFrame.data, mTxFrame.dataLen))
+                    return false;
             }
             else
             {
-                // Special position (STOP=0xD2, FAVORITE=0xD8)
-                mTxFrame.data[2] = iEntry.param;
-                mTxFrame.data[3] = 0x00;
-                mTxFrame.data[4] = 0x00;
-                mTxFrame.data[5] = 0x00;
-                mTxFrame.dataLen = 6;
+                if (!build2WExecuteSpecialPayload(iEntry.param, mTxFrame.data, mTxFrame.dataLen))
+                    return false;
             }
 
             // 2W Execute: authenticated via challenge-response (per nicolas5000/rspaargaren)
@@ -4554,14 +4674,13 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         break;
     }
     case IoHomeCommand::Private:
-        // Private query variants observed in the io-rts-esp32 protocol:
-        // 03 00 00 = status, 06/09 = battery, 03 20 01 00 = tilt status.
-        mTxFrame.data[0] = iEntry.param;
-        mTxFrame.data[1] = (iEntry.param2 != 0xFF) ? iEntry.param2 : 0x00;
-        mTxFrame.data[2] = (iEntry.param3 != 0xFF) ? iEntry.param3 : 0x00;
-        mTxFrame.dataLen = (iEntry.param2 != 0xFF || iEntry.param3 != 0xFF) ? 4 : 3;
-        if (mTxFrame.dataLen == 4)
-            mTxFrame.data[3] = 0x00;
+        // Private reference templates and legacy variants are centralized in
+        // build2WPrivatePayload(). Known reference forms:
+        //   03 00 00       = status
+        //   03 20 01 00    = tilt status
+        if (!build2WPrivatePayload(iEntry.param, iEntry.param2, iEntry.param3,
+                                   mTxFrame.data, mTxFrame.dataLen))
+            return false;
         mTxFrame.hasHmac = false;
         break;
 
@@ -4572,12 +4691,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         // flag and authenticates it by answering 0x3C with HMAC over
         // {0x6F, E0, 10, 0A, 08, 00}.
         mTxFrame.setLowPower(false);
-        mTxFrame.data[0] = 0xE0;
-        mTxFrame.data[1] = 0x10;
-        mTxFrame.data[2] = 0x0A;
-        mTxFrame.data[3] = 0x08;
-        mTxFrame.data[4] = 0x00;
-        mTxFrame.dataLen = 5;
+        if (!build2WSetConfig1Payload(mTxFrame.data, mTxFrame.dataLen))
+            return false;
         mTxFrame.hasHmac = false;
         mAuthResponseSent = false;
         break;
