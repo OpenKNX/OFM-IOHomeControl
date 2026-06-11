@@ -1823,10 +1823,10 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
 }
 
 // --- Flash persistence ---
-// Layout v10: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
+// Layout v11: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
 // default 1W broadcastType(1) + numChannels(1) +
 // per-channel: index(1) + flags(1) + actuatorNodeId(3) + actuatorKey(16) +
-// 1W seq(2) + 1W controllerNodeId(3) + 1W controllerKey(16) +
+// 1W reservedSeq(2) + 1W controllerNodeId(3) + 1W controllerKey(16) +
 // 1W manufacturer(1) = 43 bytes + remoteMap
 // flags: bit0=paired, bit1=is1W, bit2=2W low-power
 
@@ -1837,7 +1837,7 @@ uint16_t IoHomecontrol::flashSize()
 
 void IoHomecontrol::writeFlash()
 {
-    openknx.flash.writeByte(10); // format version 10 (v9 + 2W low-power flag)
+    openknx.flash.writeByte(11); // format version 11 (v10 + 1W reserved sequence watermark)
 
     // Write system key
     const uint8_t *lSysKey = mController.getSystemKey();
@@ -1869,7 +1869,7 @@ void IoHomecontrol::writeFlash()
         const uint8_t *lKey = mChannels[i]->getEncryptionKey();
         for (uint8_t k = 0; k < 16; k++)
             openknx.flash.writeByte(lKey[k]);
-        uint16_t lSeq = mChannels[i]->getSequence1W();
+        uint16_t lSeq = mChannels[i]->getReservedSequence1W();
         openknx.flash.writeByte((lSeq >> 8) & 0xFF);
         openknx.flash.writeByte(lSeq & 0xFF);
         const uint32_t lControllerNodeId = mChannels[i]->getOneWayControllerNodeId();
@@ -1907,7 +1907,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
     uint8_t lVersion = openknx.flash.readByte();
 
-    if (lVersion == 10 || lVersion == 9)
+    if (lVersion == 11 || lVersion == 10 || lVersion == 9)
     {
         if (iSize < kFlashHeaderV9)
             return;
@@ -1942,7 +1942,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
             uint8_t lKey[16];
             for (uint8_t k = 0; k < 16; k++)
                 lKey[k] = openknx.flash.readByte();
-            const uint16_t lSeq = ((uint16_t)openknx.flash.readByte() << 8) | openknx.flash.readByte();
+            const uint16_t lSeq = ((uint16_t)openknx.flash.readByte() << 8) | openknx.flash.readByte(); // v11: reserved/high-water sequence; v9/v10: last stored sequence
             const uint32_t lControllerNodeId = ((uint32_t)openknx.flash.readByte() << 16) |
                                                ((uint32_t)openknx.flash.readByte() << 8) |
                                                (uint32_t)openknx.flash.readByte();
@@ -2236,7 +2236,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc 1wtype TYPE", "Set default 1W broadcast type: 0=all, 2=roller shutter, 3=awning");
     openknx.console.printHelpLine("iohc 1wmfg NN ID", "Set manufacturer of the effective channel 1W profile");
     openknx.console.printHelpLine("iohc pair1w-type NN ADDR TYPE", "1W pair with explicit broadcast type");
-    openknx.console.printHelpLine("iohc send1w-type NN open|close|stop|vent|force [TYPE|dst=typed|dst=all|dst=exact ADDR]", "Send 1W Execute with destination override");
+    openknx.console.printHelpLine("iohc send1w-type NN open|close|stop|vent|force [TYPE]", "Send 1W Execute with explicit broadcast type");
     openknx.console.printHelpLine("iohc cozy temp NN TT", "Set thermostat temp (TT=tenths, 70-280)");
     openknx.console.printHelpLine("iohc cozy mode NN MM", "Set thermostat mode (0-3)");
     openknx.console.printHelpLine("iohc cozy presence NN 0/1", "Set presence on/off");
@@ -2824,13 +2824,17 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     if (lSub.rfind("send1w-type", 0) == 0)
     {
         std::string lArgs = trimSpaces(lSub.length() > strlen("send1w-type") ? lSub.substr(strlen("send1w-type")) : "");
-        std::string lChanText;
-        std::string lAction;
-        if (!takeToken(lArgs, lChanText) || !takeToken(lArgs, lAction))
+        size_t lSpace1 = lArgs.find_first_of(" \t");
+        if (lSpace1 == std::string::npos)
         {
-            openknx.console.printHelpLine("iohc send1w-type NN open|close|stop|vent|force [TYPE|dst=typed|dst=all|dst=exact ADDR]", "Send 1W Execute with destination override");
+            openknx.console.printHelpLine("iohc send1w-type NN open|close|stop|vent|force [TYPE]", "Send 1W Execute with explicit broadcast type");
             return true;
         }
+        std::string lChanText = lArgs.substr(0, lSpace1);
+        std::string lRest = trimSpaces(lArgs.substr(lSpace1 + 1));
+        size_t lSpace2 = lRest.find_first_of(" \t");
+        std::string lAction = (lSpace2 == std::string::npos) ? lRest : lRest.substr(0, lSpace2);
+        std::string lTypeText = (lSpace2 == std::string::npos) ? "" : trimSpaces(lRest.substr(lSpace2 + 1));
 
         uint8_t lIdx = 0;
         if (!parseChannelIndex(lChanText, mNumChannels, lIdx))
@@ -2850,66 +2854,11 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             return true;
         }
 
-        OneWayDestinationMode lDestMode = OneWayDestinationMode::ProfileTyped;
-        uint32_t lType = lCh->getConfigured1WBroadcastType();
-        uint32_t lExactDst = 0;
-
-        while (!lArgs.empty())
+        uint32_t lType = mController.getOneWayBroadcastType();
+        if (!lTypeText.empty() && (!parseUnsignedDecimal(lTypeText, lType) || lType > 63))
         {
-            std::string lToken;
-            takeToken(lArgs, lToken);
-            if (lToken == "dst=typed" || lToken == "typed")
-            {
-                lDestMode = OneWayDestinationMode::ProfileTyped;
-                lType = lCh->getConfigured1WBroadcastType();
-            }
-            else if (lToken == "dst=all" || lToken == "all")
-            {
-                lDestMode = OneWayDestinationMode::All;
-                lType = 0;
-            }
-            else if (lToken == "dst=exact" || lToken == "exact")
-            {
-                std::string lAddrText;
-                if (!takeToken(lArgs, lAddrText) || !parseHex24(lAddrText, lExactDst))
-                {
-                    logInfoP("Usage: iohc send1w-type NN open|close|stop|vent|force dst=exact AABBCC");
-                    return true;
-                }
-                lDestMode = OneWayDestinationMode::Exact;
-            }
-            else if (lToken.rfind("dst=", 0) == 0)
-            {
-                const std::string lDstValue = lToken.substr(4);
-                if (lDstValue == "typed")
-                {
-                    lDestMode = OneWayDestinationMode::ProfileTyped;
-                    lType = lCh->getConfigured1WBroadcastType();
-                }
-                else if (lDstValue == "all")
-                {
-                    lDestMode = OneWayDestinationMode::All;
-                    lType = 0;
-                }
-                else if (!parseHex24(lDstValue, lExactDst))
-                {
-                    logInfoP("Invalid 1W dst override: %s", lToken.c_str());
-                    return true;
-                }
-                else
-                {
-                    lDestMode = OneWayDestinationMode::Exact;
-                }
-            }
-            else if (parseUnsignedDecimal(lToken, lType) && lType <= 63)
-            {
-                lDestMode = OneWayDestinationMode::ExplicitType;
-            }
-            else
-            {
-                logInfoP("Usage: iohc send1w-type NN open|close|stop|vent|force [TYPE|dst=typed|dst=all|dst=exact ADDR]");
-                return true;
-            }
+            logInfoP("Invalid 1W type: %s", lTypeText.c_str());
+            return true;
         }
 
         uint16_t lMain = 0;
@@ -2943,44 +2892,12 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         }
         else
         {
-            logInfoP("Usage: iohc send1w-type NN open|close|stop|vent|force [TYPE|dst=typed|dst=all|dst=exact ADDR]");
+            logInfoP("Usage: iohc send1w-type NN open|close|stop|vent|force [TYPE]");
             return true;
         }
 
-        uint32_t lDst = 0;
-        const char *lDstModeName = "typed";
-        switch (lDestMode)
-        {
-        case OneWayDestinationMode::All:
-            lDst = mController.oneWayBroadcastTarget(0);
-            lDstModeName = "all";
-            break;
-        case OneWayDestinationMode::Exact:
-            lDst = lExactDst & 0x00FFFFFF;
-            lDstModeName = "exact";
-            break;
-        case OneWayDestinationMode::ExplicitType:
-            lDst = mController.oneWayBroadcastTarget(static_cast<uint8_t>(lType));
-            lDstModeName = "type";
-            break;
-        case OneWayDestinationMode::ProfileTyped:
-        default:
-            lType = lCh->getConfigured1WBroadcastType();
-            lDst = mController.oneWayBroadcastTarget(static_cast<uint8_t>(lType));
-            lDstModeName = "typed";
-            break;
-        }
-
-        if (mController.sendOneWayExecuteWithDestination(lCh->getNodeId(), lCh->getEncryptionKey(),
-                                                         lMain, lFp1, lFp2, lDestMode,
-                                                         static_cast<uint8_t>(lType), lExactDst))
-            logInfoP("Sent 1W %s main=0x%04X dstMode=%s type=%u dst=0x%06X to channel %u",
-                     lName,
-                     static_cast<unsigned>(lMain),
-                     lDstModeName,
-                     static_cast<unsigned>(lType),
-                     static_cast<unsigned>(lDst),
-                     static_cast<unsigned>(lIdx + 1));
+        if (mController.sendOneWayExecuteWithType(lCh->getNodeId(), lCh->getEncryptionKey(), lMain, lFp1, lFp2, static_cast<uint8_t>(lType)))
+            logInfoP("Sent 1W %s main=0x%04X type=%u dst=0x%06X to channel %u", lName, static_cast<unsigned>(lMain), static_cast<unsigned>(lType), mController.oneWayBroadcastTarget(static_cast<uint8_t>(lType)), static_cast<unsigned>(lIdx + 1));
         else
             logInfoP("Failed to queue 1W %s for channel %u", lName, static_cast<unsigned>(lIdx + 1));
         return true;

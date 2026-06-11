@@ -2125,6 +2125,31 @@ void IoHomeController::resetDiscoveryTimingTrace()
     memset(&mDiscoveryTimingTrace, 0, sizeof(mDiscoveryTimingTrace));
 }
 
+uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool iForceFlashSave)
+{
+    if (!iProfile)
+        return 0;
+
+    bool lFlashSaveRequired = false;
+    const uint16_t lUsedSequence = iProfile->incrementSequence1W(iForceFlashSave, lFlashSaveRequired);
+    const uint16_t lNextSequence = static_cast<uint16_t>(lUsedSequence + 1U);
+    const uint16_t lReservedSequence = iProfile->getReservedSequence1W();
+
+    if (lFlashSaveRequired)
+        openknx.flash.save();
+
+    if (mPairDiagnosticTraceEnabled)
+    {
+        logInfoP("1w seq: used=0x%04X next=0x%04X reserved=0x%04X saved=%u",
+                 static_cast<unsigned>(lUsedSequence),
+                 static_cast<unsigned>(lNextSequence),
+                 static_cast<unsigned>(lReservedSequence),
+                 lFlashSaveRequired ? 1U : 0U);
+    }
+
+    return lUsedSequence;
+}
+
 void IoHomeController::logDiscoveryTimingTrace(const char *iReason, unsigned long iListenElapsedMs) const
 {
     if (!mPairDiagnosticTraceEnabled)
@@ -3451,8 +3476,7 @@ void IoHomeController::processPairSend1WAnnounce()
     //   cmd=0x2E, data=0x00, sequence[2], hmac[6]
     // HMAC input is cmd + data (2 bytes), sequence is supplied separately.
     mTxFrame.commandId = IoHomeCommand::Discover2ERequest;
-    const uint16_t lSeq = lProfile->incrementSequence1W();
-    openknx.flash.save();
+    const uint16_t lSeq = nextSequence1W(lProfile, true);
     mTxFrame.data[0] = 0x00;
     mTxFrame.data[1] = (lSeq >> 8) & 0xFF;
     mTxFrame.data[2] = lSeq & 0xFF;
@@ -3546,8 +3570,7 @@ void IoHomeController::processPairSend1WRemove()
     //   cmd=0x39, data=0x00, sequence[2], hmac[6]
     // This state is never entered by the normal add/learn flow.
     mTxFrame.commandId = IoHomeCommand::RemoveController;
-    const uint16_t lSeq = lProfile->incrementSequence1W();
-    openknx.flash.save();
+    const uint16_t lSeq = nextSequence1W(lProfile, true);
     mTxFrame.data[0] = 0x00;
     mTxFrame.data[1] = (lSeq >> 8) & 0xFF;
     mTxFrame.data[2] = lSeq & 0xFF;
@@ -3686,8 +3709,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
                  lEncKeyHex.c_str());
     }
 
-    uint16_t lSeq = lProfile->incrementSequence1W();
-    openknx.flash.save();
+    uint16_t lSeq = nextSequence1W(lProfile, true);
     if (!build1WSendKey(mTxFrame, lEncryptedKey, lProfile->getOneWayControllerManufacturer(), lSeq))
     {
         mState = ControllerState::PairFailed;
@@ -4788,8 +4810,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                              static_cast<unsigned>(iEntry.oneWayMain));
                 }
 
-                uint16_t lSeq = lProfile->incrementSequence1W();
-                openknx.flash.save();
+                uint16_t lSeq = nextSequence1W(lProfile, false);
                 mTxFrame.data[6] = (lSeq >> 8) & 0xFF;
                 mTxFrame.data[7] = lSeq & 0xFF;
                 mTxFrame.dataLen = 8;
@@ -4808,8 +4829,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 // comparison and command discovery, e.g. 0000/00FE/0143....
                 memcpy(mTxFrame.data, iEntry.oneWayRawData, iEntry.oneWayRawLen);
 
-                uint16_t lSeq = lProfile->incrementSequence1W();
-                openknx.flash.save();
+                uint16_t lSeq = nextSequence1W(lProfile, false);
                 mTxFrame.data[iEntry.oneWayRawLen] = (lSeq >> 8) & 0xFF;
                 mTxFrame.data[iEntry.oneWayRawLen + 1] = lSeq & 0xFF;
                 mTxFrame.dataLen = iEntry.oneWayRawLen + 2;
@@ -4834,8 +4854,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 mTxFrame.data[4] = 0x00;
                 mTxFrame.data[5] = 0x00;
 
-                uint16_t lSeq = lProfile->incrementSequence1W();
-                openknx.flash.save();
+                uint16_t lSeq = nextSequence1W(lProfile, false);
                 mTxFrame.data[6] = (lSeq >> 8) & 0xFF;
                 mTxFrame.data[7] = lSeq & 0xFF;
                 mTxFrame.dataLen = 8;
@@ -4859,8 +4878,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 mTxFrame.data[6] = 0x00;          // data[0]
                 mTxFrame.data[7] = 0x00;          // data[1]
 
-                uint16_t lSeq = lProfile->incrementSequence1W();
-                openknx.flash.save();
+                uint16_t lSeq = nextSequence1W(lProfile, false);
                 mTxFrame.data[8] = (lSeq >> 8) & 0xFF;
                 mTxFrame.data[9] = lSeq & 0xFF;
                 mTxFrame.dataLen = 10;
@@ -4899,8 +4917,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                     mTxFrame.data[5] = 0x00;
                 }
 
-                uint16_t lSeq = lProfile->incrementSequence1W();
-                openknx.flash.save();
+                uint16_t lSeq = nextSequence1W(lProfile, false);
                 mTxFrame.data[6] = (lSeq >> 8) & 0xFF;
                 mTxFrame.data[7] = lSeq & 0xFF;
                 mTxFrame.dataLen = 8;
@@ -5016,8 +5033,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             mTxFrame.data[3] = (iEntry.param2 != 0xFF) ? iEntry.param2 : 0x01; // fp1
             mTxFrame.data[4] = 0x00;                                           // fp2
 
-            uint16_t lSeqAM = lProfile->incrementSequence1W();
-            openknx.flash.save();
+            uint16_t lSeqAM = nextSequence1W(lProfile, false);
             mTxFrame.data[5] = (lSeqAM >> 8) & 0xFF;
             mTxFrame.data[6] = lSeqAM & 0xFF;
             mTxFrame.dataLen = 7;

@@ -2,6 +2,8 @@
 #include "OpenKNX.h"
 #include "knxprod.h"
 
+#define IOHC_1W_SEQUENCE_RESERVE_WINDOW 16
+
 class IoHomeController;
 
 class IoHomecontrolChannel : public OpenKNX::Channel
@@ -57,8 +59,11 @@ public:
 
   // 1W protocol state
   uint16_t getSequence1W() const;
+  uint16_t getReservedSequence1W() const;
   void setSequence1W(uint16_t iSeq);
+  void setReservedSequence1W(uint16_t iSeq);
   uint16_t incrementSequence1W();
+  uint16_t incrementSequence1W(bool iForceReserve, bool &oFlashSaveRequired);
   void setOneWayControllerNodeId(uint32_t iNodeId);
   uint32_t getOneWayControllerNodeId() const;
   void setOneWayControllerKey(const uint8_t *iKey);
@@ -103,7 +108,8 @@ private:
   uint8_t mLastChallenge[6] = {}; // challenge sent with last authenticated command
   bool mPaired = false;
   bool mLowPower2W = true;  // Battery/solar-safe default for 2W devices
-  uint16_t mSequence1W = 0; // 1W monotonic sequence counter (persisted)
+  uint16_t mSequence1W = 0;         // 1W last used sequence counter
+  uint16_t mReservedSequence1W = 0; // highest sequence persisted/reserved ahead in flash
   uint32_t mOneWayControllerNodeId = 0;
   uint8_t mOneWayControllerKey[16] = {};
   uint8_t mOneWayControllerManufacturer = 2;  // Somfy

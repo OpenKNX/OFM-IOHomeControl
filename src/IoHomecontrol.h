@@ -61,7 +61,7 @@ private:
     bool lowPower2W = true;
     uint32_t nodeId = 0;
     uint8_t key[16] = {};
-    uint16_t sequence1W = 0;
+    uint16_t sequence1W = 0; // persisted reserved/high-water sequence
     uint32_t oneWayControllerNodeId = 0;
     uint8_t oneWayControllerKey[16] = {};
     uint8_t oneWayControllerManufacturer = 2;

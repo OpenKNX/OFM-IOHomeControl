@@ -657,8 +657,36 @@ const uint8_t *IoHomecontrolChannel::getLastChallenge() const
 }
 
 uint16_t IoHomecontrolChannel::getSequence1W() const { return mSequence1W; }
-void IoHomecontrolChannel::setSequence1W(uint16_t iSeq) { mSequence1W = iSeq; }
-uint16_t IoHomecontrolChannel::incrementSequence1W() { return ++mSequence1W; }
+uint16_t IoHomecontrolChannel::getReservedSequence1W() const { return mReservedSequence1W; }
+void IoHomecontrolChannel::setSequence1W(uint16_t iSeq)
+{
+    mSequence1W = iSeq;
+    mReservedSequence1W = iSeq;
+}
+void IoHomecontrolChannel::setReservedSequence1W(uint16_t iSeq)
+{
+    mReservedSequence1W = iSeq;
+}
+uint16_t IoHomecontrolChannel::incrementSequence1W()
+{
+    bool lSaveRequired = false;
+    return incrementSequence1W(false, lSaveRequired);
+}
+uint16_t IoHomecontrolChannel::incrementSequence1W(bool iForceReserve, bool &oFlashSaveRequired)
+{
+    const uint16_t lNext = static_cast<uint16_t>(mSequence1W + 1U);
+    mSequence1W = lNext;
+
+    // mReservedSequence1W is the highest sequence value already made safe in
+    // flash. Reserve another small window before using a value at/above that
+    // watermark, so a power loss cannot replay the just-transmitted sequence.
+    const int16_t lRemainingReserved = static_cast<int16_t>(mReservedSequence1W - mSequence1W);
+    oFlashSaveRequired = iForceReserve || mReservedSequence1W == 0 || lRemainingReserved <= 0;
+    if (oFlashSaveRequired)
+        mReservedSequence1W = static_cast<uint16_t>(mSequence1W + IOHC_1W_SEQUENCE_RESERVE_WINDOW);
+
+    return mSequence1W;
+}
 void IoHomecontrolChannel::setOneWayControllerNodeId(uint32_t iNodeId) { mOneWayControllerNodeId = iNodeId & 0x00FFFFFF; }
 uint32_t IoHomecontrolChannel::getOneWayControllerNodeId() const { return mOneWayControllerNodeId; }
 void IoHomecontrolChannel::setOneWayControllerKey(const uint8_t *iKey)

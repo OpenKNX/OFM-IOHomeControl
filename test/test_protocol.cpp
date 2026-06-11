@@ -8396,6 +8396,53 @@ TEST(controller_1w_channel_profiles_are_independent)
     ASSERT_EQ(lChannel2.getSequence1W(), 20);
 }
 
+
+TEST(channel_1w_sequence_reserve_window_reduces_flash_saves)
+{
+    IoHomecontrolChannel lChannel;
+    lChannel.setSequence1W(0);
+
+    uint16_t lLastUsed = 0;
+    uint8_t lSaveRequests = 0;
+    for (uint8_t i = 0; i < 100; i++)
+    {
+        bool lSaveRequired = false;
+        lLastUsed = lChannel.incrementSequence1W(false, lSaveRequired);
+        if (lSaveRequired)
+            lSaveRequests++;
+    }
+
+    ASSERT_EQ(lLastUsed, 100);
+    ASSERT_TRUE(lSaveRequests > 0);
+    ASSERT_TRUE(lSaveRequests < 100);
+    ASSERT_TRUE(lSaveRequests <= 7);
+    ASSERT_TRUE(static_cast<int16_t>(lChannel.getReservedSequence1W() - lChannel.getSequence1W()) > 0);
+}
+
+TEST(channel_1w_sequence_reboot_uses_reserved_high_water)
+{
+    IoHomecontrolChannel lChannel;
+    lChannel.setSequence1W(100);
+
+    bool lSaveRequired = false;
+    const uint16_t lUsedBeforePowerLoss = lChannel.incrementSequence1W(false, lSaveRequired);
+    ASSERT_TRUE(lSaveRequired);
+    ASSERT_EQ(lUsedBeforePowerLoss, 101);
+    const uint16_t lReservedBeforePowerLoss = lChannel.getReservedSequence1W();
+    ASSERT_TRUE(static_cast<int16_t>(lReservedBeforePowerLoss - lUsedBeforePowerLoss) > 0);
+
+    IoHomecontrolChannel lAfterReboot;
+    // Flash stores the reserved/high-water sequence, not merely the last used
+    // value. Restoring that value must skip ahead before the next TX.
+    lAfterReboot.setSequence1W(lReservedBeforePowerLoss);
+    bool lRebootSaveRequired = false;
+    const uint16_t lFirstUsedAfterReboot = lAfterReboot.incrementSequence1W(false, lRebootSaveRequired);
+
+    ASSERT_TRUE(lRebootSaveRequired);
+    ASSERT_TRUE(lFirstUsedAfterReboot > lUsedBeforePowerLoss);
+    ASSERT_TRUE(static_cast<int16_t>(lAfterReboot.getReservedSequence1W() - lFirstUsedAfterReboot) > 0);
+}
+
 TEST(controller_1w_shared_profile_uses_owner_sequence_and_identity)
 {
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -8971,6 +9018,8 @@ int main()
     RUN(controller_default_1w_execute_matches_reference_payloads);
     RUN(controller_1w_channel_broadcast_type3_uses_typed_destination_for_pairing_and_runtime);
     RUN(controller_1w_channel_profiles_are_independent);
+    RUN(channel_1w_sequence_reserve_window_reduces_flash_saves);
+    RUN(channel_1w_sequence_reboot_uses_reserved_high_water);
     RUN(controller_1w_shared_profile_uses_owner_sequence_and_identity);
     RUN(controller_1w_identical_imported_profiles_share_first_sequence_owner);
     RUN(controller_1w_invalid_or_cyclic_profile_reference_falls_back_to_own);

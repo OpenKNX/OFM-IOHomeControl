@@ -10,6 +10,10 @@
 #define IOHC_ChannelCount 16
 #endif
 
+#ifndef IOHC_1W_SEQUENCE_RESERVE_WINDOW
+#define IOHC_1W_SEQUENCE_RESERVE_WINDOW 16
+#endif
+
 #ifndef logInfoP
 #define logInfoP(...) \
   do                  \
@@ -127,8 +131,27 @@ public:
   const uint8_t *getLastChallenge() const { return mLastChallenge; }
 
   uint16_t getSequence1W() const { return mSequence1W; }
-  void setSequence1W(uint16_t iSequence) { mSequence1W = iSequence; }
-  uint16_t incrementSequence1W() { return ++mSequence1W; }
+  uint16_t getReservedSequence1W() const { return mReservedSequence1W; }
+  void setSequence1W(uint16_t iSequence)
+  {
+    mSequence1W = iSequence;
+    mReservedSequence1W = iSequence;
+  }
+  void setReservedSequence1W(uint16_t iSequence) { mReservedSequence1W = iSequence; }
+  uint16_t incrementSequence1W()
+  {
+    bool lSaveRequired = false;
+    return incrementSequence1W(false, lSaveRequired);
+  }
+  uint16_t incrementSequence1W(bool iForceReserve, bool &oFlashSaveRequired)
+  {
+    mSequence1W = static_cast<uint16_t>(mSequence1W + 1U);
+    const int16_t lRemainingReserved = static_cast<int16_t>(mReservedSequence1W - mSequence1W);
+    oFlashSaveRequired = iForceReserve || mReservedSequence1W == 0 || lRemainingReserved <= 0;
+    if (oFlashSaveRequired)
+      mReservedSequence1W = static_cast<uint16_t>(mSequence1W + IOHC_1W_SEQUENCE_RESERVE_WINDOW);
+    return mSequence1W;
+  }
   void setOneWayControllerNodeId(uint32_t iNodeId) { mOneWayControllerNodeId = iNodeId & 0x00FFFFFF; }
   uint32_t getOneWayControllerNodeId() const { return mOneWayControllerNodeId; }
   void setOneWayControllerKey(const uint8_t *iKey)
@@ -231,6 +254,7 @@ private:
   uint8_t mEncKey[16] = {};
   uint8_t mLastChallenge[6] = {};
   uint16_t mSequence1W = 0;
+  uint16_t mReservedSequence1W = 0;
   uint32_t mOneWayControllerNodeId = 0;
   uint8_t mOneWayControllerKey[16] = {};
   uint8_t mOneWayControllerManufacturer = 2;

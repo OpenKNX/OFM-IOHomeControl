@@ -656,6 +656,7 @@ private:
   bool createAndTraceHmac1W(const uint8_t *iTranscript, uint8_t iTranscriptLen,
                             uint16_t iSequenceNum, const uint8_t iControllerKey[16],
                             uint8_t oHmac[IOHC_HMAC_SIZE]) const;
+  uint16_t nextSequence1W(IoHomecontrolChannel *iProfile, bool iForceFlashSave);
   void tracePairDiagnosticFrame(const char *iPrefix, const IoHomeFrame &iFrame, uint8_t iFreqIdx, int16_t iRssi) const;
   void tracePairDiagnosticDiscoveryInterpretation(const IoHomeFrame &iFrame, uint8_t iFreqIdx) const;
   void processIdle();
