@@ -306,6 +306,32 @@ namespace
         return false;
     }
 
+    bool parsePairing1WMode(const std::string &iText, Pairing1WMode &oMode)
+    {
+        const std::string lMode = trimSpaces(iText);
+        if (lMode == "announce-only" || lMode == "announce")
+        {
+            oMode = Pairing1WMode::AnnounceOnly;
+            return true;
+        }
+        if (lMode == "add-only" || lMode == "add")
+        {
+            oMode = Pairing1WMode::AddOnly;
+            return true;
+        }
+        if (lMode == "announce-add" || lMode == "pair")
+        {
+            oMode = Pairing1WMode::AnnounceAdd;
+            return true;
+        }
+        if (lMode == "remove" || lMode == "remove-only")
+        {
+            oMode = Pairing1WMode::Remove;
+            return true;
+        }
+        return false;
+    }
+
     bool takeToken(std::string &ioText, std::string &oToken)
     {
         ioText = trimSpaces(ioText);
@@ -1699,11 +1725,33 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
             }
             const bool lExplicitOneWayRequest = lNodeId != 0;
 
-            logInfoP("ETS: start pairing request ch=%d len=%u runtime=%s target=0x%06X",
+            Pairing1WMode lOneWayMode = Pairing1WMode::AnnounceAdd;
+            if (length >= 6)
+            {
+                switch (data[5])
+                {
+                case 0x01:
+                    lOneWayMode = Pairing1WMode::AnnounceOnly;
+                    break;
+                case 0x02:
+                    lOneWayMode = Pairing1WMode::AddOnly;
+                    break;
+                case 0x03:
+                    lOneWayMode = Pairing1WMode::Remove;
+                    break;
+                case 0x00:
+                default:
+                    lOneWayMode = Pairing1WMode::AnnounceAdd;
+                    break;
+                }
+            }
+
+            logInfoP("ETS: start pairing request ch=%d len=%u runtime=%s target=0x%06X mode=%s",
                      lChannel + 1,
                      static_cast<unsigned>(length),
                      mChannels[lChannel]->is1W() ? "1W" : "2W",
-                     lNodeId & 0x00FFFFFF);
+                     lNodeId & 0x00FFFFFF,
+                     mChannels[lChannel]->is1W() ? IoHomeController::pairing1WModeName(lOneWayMode) : "2w");
             if (lExplicitOneWayRequest && !mChannels[lChannel]->is1W())
             {
                 logInfoP("ETS: explicit 1W target supplied for channel %d while runtime protocol is 2W; forcing 1W for this channel",
@@ -1713,7 +1761,9 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
                 openknx.flash.save();
             }
 
-            bool lStarted = mController.startPairing(lChannel, lNodeId);
+            bool lStarted = mChannels[lChannel]->is1W()
+                                ? mController.startPairing1W(lChannel, lNodeId, lOneWayMode)
+                                : mController.startPairing(lChannel, lNodeId);
             resultData[0] = lStarted ? 0x00 : 0x02;
             if (!lStarted)
             {
@@ -1737,7 +1787,8 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
             if (lStarted)
             {
                 if (mChannels[lChannel]->is1W())
-                    logInfoP("ETS: 1W pairing started for channel %d", lChannel + 1);
+                    logInfoP("ETS: 1W pairing started for channel %d mode=%s",
+                             lChannel + 1, IoHomeController::pairing1WModeName(lOneWayMode));
                 else
                     logInfoP("ETS: pairing started for channel %d", lChannel + 1);
             }
@@ -1781,7 +1832,8 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
             resultData[11] = (lSequence >> 8) & 0xFF;
             resultData[12] = lSequence & 0xFF;
             resultData[13] = mChannels[lChannel]->getConfigured1WBroadcastType();
-            resultLength = 14;
+            resultData[14] = static_cast<uint8_t>(mController.lastPairing1WMode());
+            resultLength = 15;
             return true;
         }
         break;
@@ -2252,9 +2304,9 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc status", "Show all channel status");
     openknx.console.printHelpLine("iohc status NN", "Show channel NN detail");
     openknx.console.printHelpLine("iohc pair NN [ADDR]", "Start pairing; 1W ADDR is optional/binding only");
-    openknx.console.printHelpLine("iohc pair1w NN [ADDR] announce-add|add-only", "Start explicit 1W add flow; ADDR optional");
+    openknx.console.printHelpLine("iohc pair1w NN [ADDR] announce-only|add-only|announce-add|remove", "Explicit 1W mode; ADDR optional");
     openknx.console.printHelpLine("iohc bind1w NN ADDR", "Bind/rebind a 1W broadcast profile to an actuator node");
-    openknx.console.printHelpLine("iohc remove1w NN [ADDR]", "Send explicit 1W RemoveController only");
+    openknx.console.printHelpLine("iohc remove1w NN [ADDR]", "Alias for: pair1w NN [ADDR] remove");
     openknx.console.printHelpLine("iohc pair2w-exp NN MODE [ADDR]", "Diagnostic-only 2W pairing mode: discovery-confirm|launch-key|pull-key");
     openknx.console.printHelpLine("iohc pair cancel", "Cancel ongoing pairing");
     openknx.console.printHelpLine("iohc pairdiag on|off|status", "Verbose pairing/discovery diagnostics");
@@ -2421,7 +2473,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                              mController.getOwnNodeId(),
                              keyStateText(mController.getSystemKey()));
                     const uint32_t lBoundTarget = lCh->isPaired() ? lCh->getNodeId() : lCh->getConfigured1WTargetNodeId();
-                    logInfoP("  1W remote: profile=ch%02u node=0x%06X key=%s type=%u target=%s0x%06X mfg=0x%02X seq=0x%04X reserved=0x%04X",
+                    logInfoP("  1W remote: profile=ch%02u node=0x%06X key=%s type=%u target=%s0x%06X mfg=0x%02X seq=0x%04X reserved=0x%04X lastPairMode=%s",
                              static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1),
                              lProfile ? lProfile->getOneWayControllerNodeId() : 0,
                              lProfile ? keyStateText(lProfile->getOneWayControllerKey()) : "missing",
@@ -2430,7 +2482,8 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                              static_cast<unsigned long>(lBoundTarget),
                              static_cast<unsigned>(lProfile ? lProfile->getOneWayControllerManufacturer() : 0),
                              static_cast<unsigned>(lProfile ? lProfile->getSequence1W() : 0),
-                             static_cast<unsigned>(lProfile ? lProfile->getReservedSequence1W() : 0));
+                             static_cast<unsigned>(lProfile ? lProfile->getReservedSequence1W() : 0),
+                             IoHomeController::pairing1WModeName(mController.lastPairing1WMode()));
                 }
                 else
                 {
@@ -2464,14 +2517,15 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 {
                     IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(lCh);
                     const bool lOneWayBroadcastOnly = !lCh->isPaired() && lCh->getConfigured1WTargetNodeId() == 0;
-                    logInfoP("Ch%02d: %s [1W] device=0x%06X remote=0x%06X key=%s type=%u mfg=0x%02X seq=0x%04X", i + 1,
+                    logInfoP("Ch%02d: %s [1W] device=0x%06X remote=0x%06X key=%s type=%u mfg=0x%02X seq=0x%04X lastPairMode=%s", i + 1,
                              lOneWayBroadcastOnly ? "1W-BROADCAST" : (lCh->isPaired() ? "PAIRED" : "unpaired"),
                              lCh->isPaired() ? lCh->getNodeId() : lCh->getConfigured1WTargetNodeId(),
                              lProfile ? lProfile->getOneWayControllerNodeId() : 0,
                              lProfile ? keyStateText(lProfile->getOneWayControllerKey()) : "missing",
                              static_cast<unsigned>(lCh->getConfigured1WBroadcastType()),
                              static_cast<unsigned>(lProfile ? lProfile->getOneWayControllerManufacturer() : 0),
-                             static_cast<unsigned>(lProfile ? lProfile->getSequence1W() : 0));
+                             static_cast<unsigned>(lProfile ? lProfile->getSequence1W() : 0),
+                             IoHomeController::pairing1WModeName(mController.lastPairing1WMode()));
                 }
                 else
                 {
@@ -2857,9 +2911,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         mChannels[lIdx]->setIs1W(true);
         const bool lOk = mController.startPairingWithType(lIdx, lNodeId, static_cast<uint8_t>(lType));
         if (lOk)
-            logInfoP("1W pairing started ch=%u target=0x%06X type=%u dst=0x%06X", static_cast<unsigned>(lIdx + 1), lNodeId, static_cast<unsigned>(lType), mController.oneWayBroadcastTarget(static_cast<uint8_t>(lType)));
+            logInfoP("1W mode=announce-add pairing started ch=%u target=0x%06X type=%u dst=0x%06X", static_cast<unsigned>(lIdx + 1), lNodeId, static_cast<unsigned>(lType), mController.oneWayBroadcastTarget(static_cast<uint8_t>(lType)));
         else
-            logInfoP("1W pairing failed to start for channel %u", static_cast<unsigned>(lIdx + 1));
+            logInfoP("1W mode=announce-add pairing failed to start for channel %u", static_cast<unsigned>(lIdx + 1));
         return true;
     }
 
@@ -2869,7 +2923,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         std::string lChanText;
         if (!takeToken(lArgs, lChanText))
         {
-            logInfoP("Usage: iohc pair1w NN [ADDR] announce-add|add-only");
+            logInfoP("Usage: iohc pair1w NN [ADDR] announce-only|add-only|announce-add|remove");
             return true;
         }
 
@@ -2881,28 +2935,38 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         }
 
         uint32_t lNodeId = 0;
-        bool lAddOnly = false;
+        Pairing1WMode lMode = Pairing1WMode::AnnounceAdd;
+        bool lModeSeen = false;
         while (!lArgs.empty())
         {
             std::string lToken;
             takeToken(lArgs, lToken);
-            if (lToken == "announce-add")
+            Pairing1WMode lParsedMode = Pairing1WMode::AnnounceAdd;
+            if (parsePairing1WMode(lToken, lParsedMode))
             {
-                lAddOnly = false;
-            }
-            else if (lToken == "add-only")
-            {
-                lAddOnly = true;
+                if (lModeSeen)
+                {
+                    logInfoP("Only one 1W pairing mode may be supplied.");
+                    return true;
+                }
+                lMode = lParsedMode;
+                lModeSeen = true;
             }
             else if (lNodeId == 0 && parseHex24(lToken, lNodeId))
             {
-                // Parsed explicit target address.
+                // Parsed optional actuator association address.
             }
             else
             {
-                logInfoP("Usage: iohc pair1w NN [ADDR] announce-add|add-only");
+                logInfoP("Usage: iohc pair1w NN [ADDR] announce-only|add-only|announce-add|remove");
                 return true;
             }
+        }
+
+        if (!lModeSeen)
+        {
+            logInfoP("Usage: iohc pair1w NN [ADDR] announce-only|add-only|announce-add|remove");
+            return true;
         }
 
         mChannels[lIdx]->setIs1W(true);
@@ -2912,16 +2976,15 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             openknx.flash.save();
         }
 
-        const bool lOk = lAddOnly ? mController.startPairing1WAddOnly(lIdx, lNodeId)
-                                  : mController.startPairing(lIdx, lNodeId);
+        const bool lOk = mController.startPairing1W(lIdx, lNodeId, lMode);
         if (lOk)
-            logInfoP("1W %s pairing started ch=%u target=0x%06X",
-                     lAddOnly ? "add-only" : "announce-add",
+            logInfoP("1W mode=%s pairing started ch=%u target=0x%06X",
+                     IoHomeController::pairing1WModeName(lMode),
                      static_cast<unsigned>(lIdx + 1),
                      lNodeId & 0x00FFFFFF);
         else
-            logInfoP("1W %s pairing failed to start for channel %u",
-                     lAddOnly ? "add-only" : "announce-add",
+            logInfoP("1W mode=%s pairing failed to start for channel %u",
+                     IoHomeController::pairing1WModeName(lMode),
                      static_cast<unsigned>(lIdx + 1));
         return true;
     }
@@ -2959,11 +3022,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 
         const bool lOk = mController.startPairing1WRemove(lIdx, lNodeId);
         if (lOk)
-            logInfoP("1W remove started ch=%u target=0x%06X", static_cast<unsigned>(lIdx + 1), lNodeId & 0x00FFFFFF);
-        else if (mController.lastPairStartStatus() == IoHomeController::PairStartStatus::Missing1WTarget)
-            logInfoP("1W remove needs an ETS target node ID or: iohc remove1w %02d AABBCC", lIdx + 1);
+            logInfoP("1W mode=remove started ch=%u target=0x%06X", static_cast<unsigned>(lIdx + 1), lNodeId & 0x00FFFFFF);
         else
-            logInfoP("1W remove failed to start for channel %u", static_cast<unsigned>(lIdx + 1));
+            logInfoP("1W mode=remove failed to start for channel %u", static_cast<unsigned>(lIdx + 1));
         return true;
     }
 
@@ -3123,7 +3184,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 if (lOk)
                 {
                     if (mChannels[lIdx]->is1W())
-                        logInfoP("1W pairing started for channel %d", lIdx + 1);
+                        logInfoP("1W mode=announce-add pairing started for channel %d (default pair command)", lIdx + 1);
                     else
                         logInfoP("Pairing started for channel %d", lIdx + 1);
                 }

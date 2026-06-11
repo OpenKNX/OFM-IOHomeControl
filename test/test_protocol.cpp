@@ -6496,6 +6496,143 @@ TEST(gateway_controller_challenge_response_tracks_paired_device)
     ASSERT_EQ(lController.getGatewayPairedNodeId(0), lDeviceNodeId);
 }
 
+static void initOneWayPairingModeControllerForTest(IoHomeController &oController,
+                                                   IoHomecontrol &oModule,
+                                                   IoHomecontrolChannel &oChannel,
+                                                   uint32_t iRemoteNodeId,
+                                                   uint32_t iDeviceNodeId,
+                                                   const uint8_t iKey[16])
+{
+    oModule.testSetChannel(0, &oChannel);
+    oController.setModule(&oModule);
+    oController.setOwnNodeId(iRemoteNodeId);
+    oController.setSystemKey(iKey);
+    oController.init();
+    oChannel.setIs1W(true);
+    oChannel.setConfigured1WTargetNodeId(iDeviceNodeId);
+    oChannel.setOneWayControllerNodeId(iRemoteNodeId);
+    oChannel.setOneWayControllerKey(iKey);
+    oChannel.setEncryptionKey(iKey);
+}
+
+static void finishCurrentBlind1WPairingTxForTest(IoHomeController &iController)
+{
+    // Finish the long-preamble first TX and the configured short-preamble repeats.
+    iController.loop();
+    for (uint8_t i = 0; i < IOHC_1W_REPEAT_COUNT; i++)
+    {
+        ioHomeTestAdvanceMillis(IOHC_1W_REPEAT_INTERVAL_MS);
+        iController.loop(); // send short-preamble repeat
+        iController.loop(); // finish repeat TX and schedule next state/repeat
+    }
+}
+
+TEST(controller_1w_pairing_modes_command_sequences)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    struct TestCase
+    {
+        Pairing1WMode mode;
+        IoHomeCommand firstCommand;
+        bool hasSecondCommand;
+        IoHomeCommand secondCommand;
+    };
+
+    const TestCase lCases[] = {
+        {Pairing1WMode::AnnounceOnly, IoHomeCommand::Discover2ERequest, false, IoHomeCommand::SendKey1W},
+        {Pairing1WMode::AddOnly, IoHomeCommand::SendKey1W, false, IoHomeCommand::SendKey1W},
+        {Pairing1WMode::AnnounceAdd, IoHomeCommand::Discover2ERequest, true, IoHomeCommand::SendKey1W},
+        {Pairing1WMode::Remove, IoHomeCommand::RemoveController, false, IoHomeCommand::SendKey1W},
+    };
+
+    for (const TestCase &lCase : lCases)
+    {
+        ioHomeTestSetMillis(1000);
+        ioHomeTestSetMicros(1000000);
+
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initOneWayPairingModeControllerForTest(lController, lModule, lChannel,
+                                               lRemoteNodeId, lDeviceNodeId, lKey);
+
+        ASSERT_TRUE(lController.startPairing1W(0, lDeviceNodeId, lCase.mode));
+        ASSERT_EQ(lController.lastPairing1WMode(), lCase.mode);
+
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+
+        IoHomeFrame lFirstFrame;
+        const auto &lFirstPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(!lFirstPacket.empty());
+        ASSERT_TRUE(deserializeFrameForTest(lFirstFrame, lFirstPacket.data(), static_cast<uint8_t>(lFirstPacket.size())));
+        ASSERT_EQ(lFirstFrame.commandId, lCase.firstCommand);
+
+        finishCurrentBlind1WPairingTxForTest(lController);
+
+        if (lCase.hasSecondCommand)
+        {
+            ASSERT_EQ(lController.state(), ControllerState::PairSend1WKeyTransfer);
+            lController.radio().testClearTransmittedPacket();
+            lController.loop();
+            IoHomeFrame lSecondFrame;
+            const auto &lSecondPacket = lController.radio().testLastTransmittedPacket();
+            ASSERT_TRUE(!lSecondPacket.empty());
+            ASSERT_TRUE(deserializeFrameForTest(lSecondFrame, lSecondPacket.data(), static_cast<uint8_t>(lSecondPacket.size())));
+            ASSERT_EQ(lSecondFrame.commandId, lCase.secondCommand);
+            ASSERT_EQ(lSecondFrame.commandId, IoHomeCommand::SendKey1W);
+            ASSERT_TRUE(!lSecondFrame.hasHmac);
+        }
+        else
+        {
+            ASSERT_TRUE(lController.state() == ControllerState::PairComplete ||
+                        lController.state() == ControllerState::Idle);
+            lController.loop();
+            ASSERT_EQ(lController.state(), ControllerState::Idle);
+        }
+    }
+}
+
+TEST(controller_1w_announce_only_does_not_send_sendkey_after_repeats)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initOneWayPairingModeControllerForTest(lController, lModule, lChannel,
+                                           lRemoteNodeId, lDeviceNodeId, lKey);
+
+    ASSERT_TRUE(lController.startPairing1WAnnounceOnly(0, lDeviceNodeId));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
+
+    finishCurrentBlind1WPairingTxForTest(lController);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
+
+    IoHomeFrame lLastFrame;
+    const auto &lLastPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(deserializeFrameForTest(lLastFrame, lLastPacket.data(), static_cast<uint8_t>(lLastPacket.size())));
+    ASSERT_EQ(lLastFrame.commandId, IoHomeCommand::Discover2ERequest);
+
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::Idle);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
+}
+
 TEST(controller_default_1w_pairing_uses_type0_all)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -9661,6 +9798,8 @@ int main()
     RUN(gateway_controller_discover_request_from_idle);
     RUN(gateway_controller_key_transfer_uses_configured_gateway_key);
     RUN(gateway_controller_challenge_response_tracks_paired_device);
+    RUN(controller_1w_pairing_modes_command_sequences);
+    RUN(controller_1w_announce_only_does_not_send_sendkey_after_repeats);
     RUN(controller_default_1w_pairing_uses_type0_all);
     RUN(controller_1w_pairing_allows_add_without_target_node);
     RUN(controller_1w_sendkey_frame_identical_with_known_or_unknown_target);

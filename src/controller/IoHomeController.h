@@ -40,6 +40,20 @@ enum class OneWayDestinationMode : uint8_t
   Exact = 3
 };
 
+// First-class 1W pairing/add/remove operation.
+// These modes map directly to the rspaargaren/iohomecontrol user operations:
+//   announce-only -> 0x2E only
+//   add-only      -> 0x30 only
+//   announce-add  -> 0x2E then 0x30
+//   remove        -> 0x39 only
+enum class Pairing1WMode : uint8_t
+{
+  AnnounceAdd = 0,
+  AnnounceOnly = 1,
+  AddOnly = 2,
+  Remove = 3
+};
+
 // Queued command entry
 struct IoHomeQueueEntry
 {
@@ -253,12 +267,19 @@ public:
   // Start pairing process for a channel
   bool startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId = 0);
   bool startPairingExperimental(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing2WMode iMode);
-  // Start the standard 1W learning flow with an explicit broadcast type override.
-  bool startPairingWithType(uint8_t iChannelIndex, uint32_t iKnownNodeId, uint8_t iBroadcastType);
+  // Start explicit 1W pairing/add/remove operations.
+  bool startPairing1W(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing1WMode iMode);
+  bool startPairing1WAnnounceOnly(uint8_t iChannelIndex, uint32_t iKnownNodeId);
   bool startPairing1WAddOnly(uint8_t iChannelIndex, uint32_t iKnownNodeId);
+  bool startPairing1WAnnounceAdd(uint8_t iChannelIndex, uint32_t iKnownNodeId);
   bool startPairing1WRemove(uint8_t iChannelIndex, uint32_t iKnownNodeId);
+  // Start a 1W learning flow with an explicit broadcast type override.
+  bool startPairingWithType(uint8_t iChannelIndex, uint32_t iKnownNodeId, uint8_t iBroadcastType,
+                            Pairing1WMode iMode = Pairing1WMode::AnnounceAdd);
   PairStartStatus lastPairStartStatus() const;
   ControllerState lastPairStartBlockedState() const;
+  Pairing1WMode lastPairing1WMode() const;
+  static const char *pairing1WModeName(Pairing1WMode iMode);
 
   // Cancel ongoing pairing
   void cancelPairing();
@@ -577,7 +598,8 @@ private:
   uint8_t mPairPulledKey[16];
   uint8_t mPairPullAuthChallenge[6];
   uint8_t mPairing1WStage = 0; // 0=announce(0x2E), 1=add/send-key(0x30), 2=remove(0x39)
-  uint8_t mRequestedPairing1WMode = 0; // 0=announce-add, 1=add-only, 2=remove-only
+  Pairing1WMode mRequestedPairing1WMode = Pairing1WMode::AnnounceAdd;
+  Pairing1WMode mPairing1WMode = Pairing1WMode::AnnounceAdd;
   uint8_t mPairing1WBroadcastType = 0;
   uint8_t mDefault1WBroadcastType = 0;
   Pairing2WMode mPairing2WMode = Pairing2WMode::Normal;

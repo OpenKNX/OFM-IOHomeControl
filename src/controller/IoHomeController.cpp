@@ -106,6 +106,22 @@ namespace
         return lOut;
     }
 
+    const char *pairing1WCommandSequence(Pairing1WMode iMode)
+    {
+        switch (iMode)
+        {
+        case Pairing1WMode::AnnounceOnly:
+            return "0x2E";
+        case Pairing1WMode::AddOnly:
+            return "0x30";
+        case Pairing1WMode::Remove:
+            return "0x39";
+        case Pairing1WMode::AnnounceAdd:
+        default:
+            return "0x2E,0x30";
+        }
+    }
+
     bool build1WSendKey30(IoHomeFrame &oFrame,
                         const uint8_t iEncryptedKey[16],
                         uint8_t iManufacturer,
@@ -891,7 +907,9 @@ IoHomeController::IoHomeController()
       mDiscoverySendPhase(DiscoverySendPhase::SetFrequency),
       mDiscoveryTimingTrace{},
       mDiscoverySPE(false),
-      mPairing1WStage(0), mRequestedPairing1WMode(0),
+      mPairing1WStage(0),
+      mRequestedPairing1WMode(Pairing1WMode::AnnounceAdd),
+      mPairing1WMode(Pairing1WMode::AnnounceAdd),
       mPairing1WBroadcastType(0), mDefault1WBroadcastType(0),
       mAuthSrcNodeId(0), mAuthChannelIdx(0),
       mStatusAckDestNodeId(0), mStatusAckFreqIdx(0),
@@ -1696,39 +1714,48 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
         // transaction. A zero target is a valid virtual/broadcast-only remote
         // profile: SendKey1W still carries remote src + typed/all broadcast dst.
         mDiscoveredNodeId = lKnownNodeId;
-        // Reference-compatible 1W add flow: announce (0x2E) followed by
-        // SendKey1W (0x30). RemoveController (0x39) is only sent by the
-        // explicit remove1w command and is never inserted into the add flow.
-        const uint8_t lMode = mRequestedPairing1WMode;
-        mRequestedPairing1WMode = 0;
-        if (lMode == 2)
+        // First-class 1W operations are explicit and map directly to the
+        // reference flow: 0x2E announce, 0x30 add/send-key, 0x39 remove.
+        const Pairing1WMode lMode = mRequestedPairing1WMode;
+        mPairing1WMode = lMode;
+        mRequestedPairing1WMode = Pairing1WMode::AnnounceAdd;
+        switch (lMode)
         {
+        case Pairing1WMode::Remove:
             mPairing1WStage = 2;
             mState = ControllerState::PairSend1WRemove;
-        }
-        else if (lMode == 1)
-        {
+            break;
+        case Pairing1WMode::AddOnly:
             mPairing1WStage = 1;
             mState = ControllerState::PairSend1WKeyTransfer;
-        }
-        else
-        {
+            break;
+        case Pairing1WMode::AnnounceOnly:
+        case Pairing1WMode::AnnounceAdd:
+        default:
             mPairing1WStage = 0;
             mState = ControllerState::PairSend1WAnnounce;
+            break;
         }
+
+        logInfoP("Pairing: 1W mode=%s sequence=%s ch=%u target=%s0x%06X",
+                 pairing1WModeName(lMode),
+                 pairing1WCommandSequence(lMode),
+                 static_cast<unsigned>(iChannelIndex + 1),
+                 mDiscoveredNodeId == 0 ? "broadcast-only " : "",
+                 mDiscoveredNodeId);
         if (mPairDiagnosticTraceEnabled)
         {
-            logInfoP("PairDiag: starting 1W %s ch=%u target=%s0x%06X",
-                     lMode == 2 ? "remove" : (lMode == 1 ? "add-only" : "announce-add"),
-                     static_cast<unsigned>(iChannelIndex + 1),
-                     mDiscoveredNodeId == 0 ? "broadcast-only " : "",
-                     mDiscoveredNodeId);
+            logInfoP("PairDiag: starting 1W mode=%s sequence=%s state=%s",
+                     pairing1WModeName(lMode),
+                     pairing1WCommandSequence(lMode),
+                     stateName(mState));
             tracePairDiagnosticStateChange();
         }
         return true;
     }
 
-    mRequestedPairing1WMode = 0;
+    mPairing1WMode = Pairing1WMode::AnnounceAdd;
+    mRequestedPairing1WMode = Pairing1WMode::AnnounceAdd;
     mState = ControllerState::PairSendDiscovery;
     if (mPairDiagnosticTraceEnabled)
     {
@@ -1761,36 +1788,46 @@ bool IoHomeController::startPairingExperimental(uint8_t iChannelIndex, uint32_t 
     return lOk;
 }
 
-bool IoHomeController::startPairingWithType(uint8_t iChannelIndex, uint32_t iKnownNodeId, uint8_t iBroadcastType)
+bool IoHomeController::startPairing1W(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing1WMode iMode)
 {
+    mRequestedPairing1WMode = iMode;
     const bool lOk = startPairing(iChannelIndex, iKnownNodeId);
-    if (lOk)
-    {
-        mPairing1WStage = 0;
-        mPairing1WBroadcastType = iBroadcastType & 0x3F;
-        if (mPairDiagnosticTraceEnabled)
-            logInfoP("PairDiag: 1W pairing type override enabled type=%u target=0x%06X",
-                     static_cast<unsigned>(mPairing1WBroadcastType),
-                     oneWayBroadcastTarget(mPairing1WBroadcastType));
-    }
+    if (!lOk)
+        mRequestedPairing1WMode = Pairing1WMode::AnnounceAdd;
     return lOk;
+}
+
+bool IoHomeController::startPairing1WAnnounceOnly(uint8_t iChannelIndex, uint32_t iKnownNodeId)
+{
+    return startPairing1W(iChannelIndex, iKnownNodeId, Pairing1WMode::AnnounceOnly);
 }
 
 bool IoHomeController::startPairing1WAddOnly(uint8_t iChannelIndex, uint32_t iKnownNodeId)
 {
-    mRequestedPairing1WMode = 1;
-    const bool lOk = startPairing(iChannelIndex, iKnownNodeId);
-    if (!lOk)
-        mRequestedPairing1WMode = 0;
-    return lOk;
+    return startPairing1W(iChannelIndex, iKnownNodeId, Pairing1WMode::AddOnly);
+}
+
+bool IoHomeController::startPairing1WAnnounceAdd(uint8_t iChannelIndex, uint32_t iKnownNodeId)
+{
+    return startPairing1W(iChannelIndex, iKnownNodeId, Pairing1WMode::AnnounceAdd);
 }
 
 bool IoHomeController::startPairing1WRemove(uint8_t iChannelIndex, uint32_t iKnownNodeId)
 {
-    mRequestedPairing1WMode = 2;
-    const bool lOk = startPairing(iChannelIndex, iKnownNodeId);
-    if (!lOk)
-        mRequestedPairing1WMode = 0;
+    return startPairing1W(iChannelIndex, iKnownNodeId, Pairing1WMode::Remove);
+}
+
+bool IoHomeController::startPairingWithType(uint8_t iChannelIndex, uint32_t iKnownNodeId, uint8_t iBroadcastType, Pairing1WMode iMode)
+{
+    const bool lOk = startPairing1W(iChannelIndex, iKnownNodeId, iMode);
+    if (lOk)
+    {
+        mPairing1WBroadcastType = iBroadcastType & 0x3F;
+        logInfoP("Pairing: 1W mode=%s explicit type=%u target=0x%06X",
+                 pairing1WModeName(mPairing1WMode),
+                 static_cast<unsigned>(mPairing1WBroadcastType),
+                 oneWayBroadcastTarget(mPairing1WBroadcastType));
+    }
     return lOk;
 }
 
@@ -1802,6 +1839,11 @@ IoHomeController::PairStartStatus IoHomeController::lastPairStartStatus() const
 ControllerState IoHomeController::lastPairStartBlockedState() const
 {
     return mLastPairStartBlockedState;
+}
+
+Pairing1WMode IoHomeController::lastPairing1WMode() const
+{
+    return mPairing1WMode;
 }
 
 void IoHomeController::cancelPairing()
@@ -2230,6 +2272,22 @@ const char *IoHomeController::commandName(IoHomeCommand iCmd)
         return "ErrorResponse";
     default:
         return "Unknown";
+    }
+}
+
+const char *IoHomeController::pairing1WModeName(Pairing1WMode iMode)
+{
+    switch (iMode)
+    {
+    case Pairing1WMode::AnnounceOnly:
+        return "announce-only";
+    case Pairing1WMode::AddOnly:
+        return "add-only";
+    case Pairing1WMode::Remove:
+        return "remove";
+    case Pairing1WMode::AnnounceAdd:
+    default:
+        return "announce-add";
     }
 }
 
@@ -3918,7 +3976,8 @@ void IoHomeController::processPairSend1WAnnounce()
     {
         tracePairDiagnosticCompactPair();
         const std::string lHex = hexDump(mTxBuffer, mTxLen);
-        logInfoP("PairDiag: 1W announce tx cmd=%s(0x%02X) len=%u seq=%u src=0x%06X dst=0x%06X hex=%s",
+        logInfoP("PairDiag: 1W mode=%s announce tx cmd=%s(0x%02X) len=%u seq=%u src=0x%06X dst=0x%06X hex=%s",
+                 pairing1WModeName(mPairing1WMode),
                  commandName(mTxFrame.commandId),
                  static_cast<unsigned>(static_cast<uint8_t>(mTxFrame.commandId)),
                  static_cast<unsigned>(mTxLen),
@@ -3945,10 +4004,22 @@ void IoHomeController::processPairSend1WAnnounce()
 
 void IoHomeController::processPairWait1WAnnounce()
 {
-    if (!processPairWait1WBlind(ControllerState::PairSend1WKeyTransfer))
+    const ControllerState lNextState = (mPairing1WMode == Pairing1WMode::AnnounceOnly)
+                                          ? ControllerState::PairComplete
+                                          : ControllerState::PairSend1WKeyTransfer;
+    if (!processPairWait1WBlind(lNextState))
         return;
+
     if (mState == ControllerState::PairSend1WKeyTransfer)
+    {
         mPairing1WStage = 1;
+    }
+    else if (mState == ControllerState::PairComplete)
+    {
+        logInfoP("Pairing: 1W mode=%s complete for channel %d (0x30 SendKey not sent)",
+                 pairing1WModeName(mPairing1WMode),
+                 mPairingChannel + 1);
+    }
 }
 
 void IoHomeController::processPairSend1WRemove()
@@ -4008,7 +4079,8 @@ void IoHomeController::processPairSend1WRemove()
     {
         tracePairDiagnosticCompactPair();
         const std::string lHex = hexDump(mTxBuffer, mTxLen);
-        logInfoP("PairDiag: 1W remove tx cmd=%s(0x%02X) len=%u seq=%u src=0x%06X dst=0x%06X hex=%s",
+        logInfoP("PairDiag: 1W mode=%s remove tx cmd=%s(0x%02X) len=%u seq=%u src=0x%06X dst=0x%06X hex=%s",
+                 pairing1WModeName(mPairing1WMode),
                  commandName(mTxFrame.commandId),
                  static_cast<unsigned>(static_cast<uint8_t>(mTxFrame.commandId)),
                  static_cast<unsigned>(mTxLen),
@@ -4045,7 +4117,8 @@ void IoHomeController::processPairWait1WRemove()
         {
             lCh->setNodeId(0);
             openknx.flash.save();
-            logInfoP("Pairing: explicit 1W remove sent for channel %d (no 0x30 key transfer follows)",
+            logInfoP("Pairing: 1W mode=%s complete for channel %d (no 0x30 key transfer follows)",
+                     pairing1WModeName(mPairing1WMode),
                      mPairingChannel + 1);
         }
     }
@@ -4136,7 +4209,8 @@ void IoHomeController::processPairSend1WKeyTransfer()
         if (mPairDiagnosticTraceEnabled)
         {
             tracePairDiagnosticCompactPair();
-            logInfoP("PairDiag: tx1w cmd=0x30 len=%u hasHmac=%u seq=%u remote=0x%06X device=0x%06X src=0x%06X dst=0x%06X type=%u mfg=0x%02X freq=%u %luHz",
+            logInfoP("PairDiag: mode=%s tx1w cmd=0x30 len=%u hasHmac=%u seq=%u remote=0x%06X device=0x%06X src=0x%06X dst=0x%06X type=%u mfg=0x%02X freq=%u %luHz",
+                     pairing1WModeName(mPairing1WMode),
                      static_cast<unsigned>(mTxLen),
                      mTxFrame.hasHmac ? 1U : 0U,
                      static_cast<unsigned>(lSeq),
@@ -4195,10 +4269,12 @@ void IoHomeController::processPairWait1WKeyTransfer()
                 lCh->setEncryptionKey(lProfile->getOneWayControllerKey());
             openknx.flash.save();
             if (mDiscoveredNodeId != 0)
-                logInfoP("Pairing: 1W learn flow sent for 0x%06X on channel %d (no device ACK in 1W mode)",
+                logInfoP("Pairing: 1W mode=%s complete for 0x%06X on channel %d (no device ACK in 1W mode)",
+                         pairing1WModeName(mPairing1WMode),
                          mDiscoveredNodeId, mPairingChannel + 1);
             else
-                logInfoP("Pairing: 1W broadcast profile sent on channel %d without bound target node (no device ACK in 1W mode)",
+                logInfoP("Pairing: 1W mode=%s broadcast profile sent on channel %d without bound target node (no device ACK in 1W mode)",
+                         pairing1WModeName(mPairing1WMode),
                          mPairingChannel + 1);
         }
     }
