@@ -2214,6 +2214,8 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc status", "Show all channel status");
     openknx.console.printHelpLine("iohc status NN", "Show channel NN detail");
     openknx.console.printHelpLine("iohc pair NN [ADDR]", "Start pairing; 1W uses ETS target or hex ADDR override");
+    openknx.console.printHelpLine("iohc pair1w NN [ADDR] announce-add|add-only", "Start explicit 1W add flow");
+    openknx.console.printHelpLine("iohc remove1w NN [ADDR]", "Send explicit 1W RemoveController only");
     openknx.console.printHelpLine("iohc pair2w-exp NN MODE [ADDR]", "Diagnostic-only 2W pairing mode: discovery-confirm|launch-key|pull-key");
     openknx.console.printHelpLine("iohc pair cancel", "Cancel ongoing pairing");
     openknx.console.printHelpLine("iohc pairdiag on|off|status", "Verbose pairing/discovery diagnostics");
@@ -2710,6 +2712,112 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             logInfoP("1W pairing started ch=%u target=0x%06X type=%u dst=0x%06X", static_cast<unsigned>(lIdx + 1), lNodeId, static_cast<unsigned>(lType), mController.oneWayBroadcastTarget(static_cast<uint8_t>(lType)));
         else
             logInfoP("1W pairing failed to start for channel %u", static_cast<unsigned>(lIdx + 1));
+        return true;
+    }
+
+    if (lSub == "pair1w" || lSub.rfind("pair1w ", 0) == 0)
+    {
+        std::string lArgs = trimSpaces(lSub.length() > strlen("pair1w") ? lSub.substr(strlen("pair1w")) : "");
+        std::string lChanText;
+        if (!takeToken(lArgs, lChanText))
+        {
+            logInfoP("Usage: iohc pair1w NN [ADDR] announce-add|add-only");
+            return true;
+        }
+
+        uint8_t lIdx = 0;
+        if (!parseChannelIndex(lChanText, mNumChannels, lIdx))
+        {
+            logInfoP("Invalid channel: %s", lChanText.c_str());
+            return true;
+        }
+
+        uint32_t lNodeId = 0;
+        bool lAddOnly = false;
+        while (!lArgs.empty())
+        {
+            std::string lToken;
+            takeToken(lArgs, lToken);
+            if (lToken == "announce-add")
+            {
+                lAddOnly = false;
+            }
+            else if (lToken == "add-only")
+            {
+                lAddOnly = true;
+            }
+            else if (lNodeId == 0 && parseHex24(lToken, lNodeId))
+            {
+                // Parsed explicit target address.
+            }
+            else
+            {
+                logInfoP("Usage: iohc pair1w NN [ADDR] announce-add|add-only");
+                return true;
+            }
+        }
+
+        mChannels[lIdx]->setIs1W(true);
+        if (lNodeId != 0)
+        {
+            mChannels[lIdx]->setConfigured1WTargetNodeId(lNodeId);
+            openknx.flash.save();
+        }
+
+        const bool lOk = lAddOnly ? mController.startPairing1WAddOnly(lIdx, lNodeId)
+                                  : mController.startPairing(lIdx, lNodeId);
+        if (lOk)
+            logInfoP("1W %s pairing started ch=%u target=0x%06X",
+                     lAddOnly ? "add-only" : "announce-add",
+                     static_cast<unsigned>(lIdx + 1),
+                     lNodeId & 0x00FFFFFF);
+        else if (mController.lastPairStartStatus() == IoHomeController::PairStartStatus::Missing1WTarget)
+            logInfoP("1W pairing needs an ETS target node ID or: iohc pair1w %02d AABBCC announce-add", lIdx + 1);
+        else
+            logInfoP("1W %s pairing failed to start for channel %u",
+                     lAddOnly ? "add-only" : "announce-add",
+                     static_cast<unsigned>(lIdx + 1));
+        return true;
+    }
+
+    if (lSub == "remove1w" || lSub.rfind("remove1w ", 0) == 0)
+    {
+        std::string lArgs = trimSpaces(lSub.length() > strlen("remove1w") ? lSub.substr(strlen("remove1w")) : "");
+        std::string lChanText;
+        if (!takeToken(lArgs, lChanText))
+        {
+            logInfoP("Usage: iohc remove1w NN [ADDR]");
+            return true;
+        }
+
+        uint8_t lIdx = 0;
+        if (!parseChannelIndex(lChanText, mNumChannels, lIdx))
+        {
+            logInfoP("Invalid channel: %s", lChanText.c_str());
+            return true;
+        }
+
+        uint32_t lNodeId = 0;
+        if (!lArgs.empty() && !parseHex24(lArgs, lNodeId))
+        {
+            logInfoP("Invalid node address: %s", lArgs.c_str());
+            return true;
+        }
+
+        mChannels[lIdx]->setIs1W(true);
+        if (lNodeId != 0)
+        {
+            mChannels[lIdx]->setConfigured1WTargetNodeId(lNodeId);
+            openknx.flash.save();
+        }
+
+        const bool lOk = mController.startPairing1WRemove(lIdx, lNodeId);
+        if (lOk)
+            logInfoP("1W remove started ch=%u target=0x%06X", static_cast<unsigned>(lIdx + 1), lNodeId & 0x00FFFFFF);
+        else if (mController.lastPairStartStatus() == IoHomeController::PairStartStatus::Missing1WTarget)
+            logInfoP("1W remove needs an ETS target node ID or: iohc remove1w %02d AABBCC", lIdx + 1);
+        else
+            logInfoP("1W remove failed to start for channel %u", static_cast<unsigned>(lIdx + 1));
         return true;
     }
 

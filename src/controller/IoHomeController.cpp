@@ -110,6 +110,8 @@ namespace
     {
         switch (iState)
         {
+        case ControllerState::PairSend1WAnnounce:
+        case ControllerState::PairWait1WAnnounce:
         case ControllerState::PairSend1WRemove:
         case ControllerState::PairWait1WRemove:
         case ControllerState::PairSend1WKeyTransfer:
@@ -614,7 +616,7 @@ IoHomeController::IoHomeController()
       mDiscoverySendPhase(DiscoverySendPhase::SetFrequency),
       mDiscoveryTimingTrace{},
       mDiscoverySPE(false),
-      mPairing1WStage(0),
+      mPairing1WStage(0), mRequestedPairing1WMode(0),
       mPairing1WBroadcastType(2), mDefault1WBroadcastType(2),
       mAuthSrcNodeId(0), mAuthChannelIdx(0),
       mStatusAckDestNodeId(0), mStatusAckFreqIdx(0),
@@ -1142,18 +1144,38 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
         }
 
         mDiscoveredNodeId = lKnownNodeId;
-        // Standard 1W learning flow: authenticated Pair + Remove followed by
-        // an unauthenticated SendKey1W payload.
-        mPairing1WStage = 0;
-        mState = ControllerState::PairSend1WRemove;
+        // Reference-compatible 1W add flow: announce (0x2E) followed by
+        // SendKey1W (0x30). RemoveController (0x39) is only sent by the
+        // explicit remove1w command and is never inserted into the add flow.
+        const uint8_t lMode = mRequestedPairing1WMode;
+        mRequestedPairing1WMode = 0;
+        if (lMode == 2)
+        {
+            mPairing1WStage = 2;
+            mState = ControllerState::PairSend1WRemove;
+        }
+        else if (lMode == 1)
+        {
+            mPairing1WStage = 1;
+            mState = ControllerState::PairSend1WKeyTransfer;
+        }
+        else
+        {
+            mPairing1WStage = 0;
+            mState = ControllerState::PairSend1WAnnounce;
+        }
         if (mPairDiagnosticTraceEnabled)
         {
-            logInfoP("PairDiag: starting 1W pairing ch=%u target=0x%06X", static_cast<unsigned>(iChannelIndex + 1), mDiscoveredNodeId);
+            logInfoP("PairDiag: starting 1W %s ch=%u target=0x%06X",
+                     lMode == 2 ? "remove" : (lMode == 1 ? "add-only" : "announce-add"),
+                     static_cast<unsigned>(iChannelIndex + 1),
+                     mDiscoveredNodeId);
             tracePairDiagnosticStateChange();
         }
         return true;
     }
 
+    mRequestedPairing1WMode = 0;
     mState = ControllerState::PairSendDiscovery;
     if (mPairDiagnosticTraceEnabled)
     {
@@ -1198,6 +1220,24 @@ bool IoHomeController::startPairingWithType(uint8_t iChannelIndex, uint32_t iKno
                      static_cast<unsigned>(mPairing1WBroadcastType),
                      oneWayBroadcastTarget(mPairing1WBroadcastType));
     }
+    return lOk;
+}
+
+bool IoHomeController::startPairing1WAddOnly(uint8_t iChannelIndex, uint32_t iKnownNodeId)
+{
+    mRequestedPairing1WMode = 1;
+    const bool lOk = startPairing(iChannelIndex, iKnownNodeId);
+    if (!lOk)
+        mRequestedPairing1WMode = 0;
+    return lOk;
+}
+
+bool IoHomeController::startPairing1WRemove(uint8_t iChannelIndex, uint32_t iKnownNodeId)
+{
+    mRequestedPairing1WMode = 2;
+    const bool lOk = startPairing(iChannelIndex, iKnownNodeId);
+    if (!lOk)
+        mRequestedPairing1WMode = 0;
     return lOk;
 }
 
@@ -1672,6 +1712,10 @@ const char *IoHomeController::stateName(ControllerState iState)
         return "PairSendPullKeyChallenge";
     case ControllerState::PairWaitPullKeyChallengeResponse:
         return "PairWaitPullKeyChallengeResponse";
+    case ControllerState::PairSend1WAnnounce:
+        return "PairSend1WAnnounce";
+    case ControllerState::PairWait1WAnnounce:
+        return "PairWait1WAnnounce";
     case ControllerState::PairSend1WRemove:
         return "PairSend1WRemove";
     case ControllerState::PairWait1WRemove:
@@ -1832,12 +1876,13 @@ void IoHomeController::tracePairDiagnosticCompactPair() const
         return;
 
     const uint32_t lPairFreqHz = (mPairingFreqIdx < IOHC_NUM_FREQUENCIES) ? IOHC_FREQUENCIES[mPairingFreqIdx] : 0;
-    logInfoP("pair: mode=%s state=%s ch=%u freq=%lu node=0x%06X",
+    logInfoP("pair: mode=%s state=%s ch=%u freq=%lu node=0x%06X cmd=0x%02X",
              pairingModeName(mPairing2WMode, mState),
              stateName(mState),
              static_cast<unsigned>(mPairingChannel + 1),
              static_cast<unsigned long>(lPairFreqHz),
-             mDiscoveredNodeId);
+             mDiscoveredNodeId,
+             static_cast<unsigned>(static_cast<uint8_t>(mTxFrame.commandId)));
 }
 
 void IoHomeController::tracePairDiagnosticCompactRx(const IoHomeRadioHealth &iHealth) const
@@ -2429,6 +2474,12 @@ void IoHomeController::loop()
         break;
     case ControllerState::PairWaitPullKeyChallengeResponse:
         processPairWaitPullKeyChallengeResponse();
+        break;
+    case ControllerState::PairSend1WAnnounce:
+        processPairSend1WAnnounce();
+        break;
+    case ControllerState::PairWait1WAnnounce:
+        processPairWait1WAnnounce();
         break;
     case ControllerState::PairSend1WRemove:
         processPairSend1WRemove();
@@ -3215,6 +3266,100 @@ void IoHomeController::processPairWaitPullKeyChallengeResponse()
     }
 }
 
+void IoHomeController::processPairSend1WAnnounce()
+{
+    if (millis() - mPairingStartTime > IOHC_PAIR_TIMEOUT_MS)
+    {
+        mState = ControllerState::PairFailed;
+        return;
+    }
+
+    mCurrentFreqIdx = kPair1WFreqIdx;
+    const uint32_t lPair1WFreq = IOHC_FREQ_2;
+    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lPair1WFreq);
+    if (lPrepErr == RadioError::Busy)
+        return;
+    if (lPrepErr != RadioError::None)
+    {
+        mState = ControllerState::PairFailed;
+        return;
+    }
+
+    IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(mPairingChannel) : nullptr;
+    IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lCh);
+    if (!lCh || !lProfile || !lProfile->hasOneWayControllerIdentity())
+    {
+        mState = ControllerState::PairFailed;
+        return;
+    }
+
+    mTxFrame.init();
+    mTxFrame.set1WMode();
+    mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
+    mTxFrame.setDestNode(oneWayBroadcastTarget(mPairing1WBroadcastType));
+    mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
+
+    // 1W Pair/announce frame matching rspaargaren reference:
+    //   cmd=0x2E, data=0x00, sequence[2], hmac[6]
+    // HMAC input is cmd + data (2 bytes), sequence is supplied separately.
+    mTxFrame.commandId = IoHomeCommand::Discover2ERequest;
+    const uint16_t lSeq = lProfile->incrementSequence1W();
+    openknx.flash.save();
+    mTxFrame.data[0] = 0x00;
+    mTxFrame.data[1] = (lSeq >> 8) & 0xFF;
+    mTxFrame.data[2] = lSeq & 0xFF;
+    mTxFrame.dataLen = 3;
+    uint8_t lHmacInput[2] = {static_cast<uint8_t>(mTxFrame.commandId), 0x00};
+    if (!IoHomeCrypto::createHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
+    {
+        mState = ControllerState::PairFailed;
+        return;
+    }
+    mTxFrame.hasHmac = true;
+
+    mTxLen = mTxFrame.serialize1W(mTxBuffer, sizeof(mTxBuffer));
+    if (mTxLen == 0)
+    {
+        mState = ControllerState::PairFailed;
+        return;
+    }
+
+    if (mPairDiagnosticTraceEnabled)
+    {
+        tracePairDiagnosticCompactPair();
+        const std::string lHex = hexDump(mTxBuffer, mTxLen);
+        logInfoP("PairDiag: 1W announce tx cmd=%s(0x%02X) len=%u seq=%u src=0x%06X dst=0x%06X hex=%s",
+                 commandName(mTxFrame.commandId),
+                 static_cast<unsigned>(static_cast<uint8_t>(mTxFrame.commandId)),
+                 static_cast<unsigned>(mTxLen),
+                 static_cast<unsigned>(lSeq),
+                 mTxFrame.getSrcNodeId(),
+                 mTxFrame.getDestNodeId(),
+                 lHex.c_str());
+    }
+
+    const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    if (lErr == RadioError::None)
+    {
+        mStateTimer = millis();
+        mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
+        mTx1WRepeatTimer = 0;
+        mState = ControllerState::PairWait1WAnnounce;
+    }
+    else if (lErr != RadioError::Busy)
+    {
+        mState = ControllerState::PairFailed;
+    }
+}
+
+void IoHomeController::processPairWait1WAnnounce()
+{
+    if (!processPairWait1WBlind(ControllerState::PairSend1WKeyTransfer))
+        return;
+    if (mState == ControllerState::PairSend1WKeyTransfer)
+        mPairing1WStage = 1;
+}
+
 void IoHomeController::processPairSend1WRemove()
 {
     if (millis() - mPairingStartTime > IOHC_PAIR_TIMEOUT_MS)
@@ -3234,106 +3379,68 @@ void IoHomeController::processPairSend1WRemove()
         return;
     }
 
-    mTxFrame.init();
-    mTxFrame.set1WMode();
-    mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
-    mTxFrame.setDestNode(oneWayBroadcastTarget(mPairing1WBroadcastType));
-
-    uint16_t lSeq = 0;
     IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(mPairingChannel) : nullptr;
     IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lCh);
-    if (!lProfile || !lProfile->hasOneWayControllerIdentity())
+    if (!lCh || !lProfile || !lProfile->hasOneWayControllerIdentity())
     {
         mState = ControllerState::PairFailed;
         return;
     }
+
+    mTxFrame.init();
+    mTxFrame.set1WMode();
+    mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
+    mTxFrame.setDestNode(oneWayBroadcastTarget(mPairing1WBroadcastType));
     mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
 
-    if (mPairing1WStage == 0)
+    // Explicit 1W Remove frame only:
+    //   cmd=0x39, data=0x00, sequence[2], hmac[6]
+    // This state is never entered by the normal add/learn flow.
+    mTxFrame.commandId = IoHomeCommand::RemoveController;
+    const uint16_t lSeq = lProfile->incrementSequence1W();
+    openknx.flash.save();
+    mTxFrame.data[0] = 0x00;
+    mTxFrame.data[1] = (lSeq >> 8) & 0xFF;
+    mTxFrame.data[2] = lSeq & 0xFF;
+    mTxFrame.dataLen = 3;
+    uint8_t lHmacInput[2] = {static_cast<uint8_t>(mTxFrame.commandId), 0x00};
+    if (!IoHomeCrypto::createHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
     {
-        // 1W Pair/Auth frame:
-        //   cmd=0x2E, data=0x00, sequence[2], hmac[6]
-        // HMAC input is cmd + data (2 bytes), sequence is supplied separately.
-        if (!lCh)
-        {
-            mState = ControllerState::PairFailed;
-            return;
-        }
-        mTxFrame.commandId = IoHomeCommand::Discover2ERequest;
-        lSeq = lProfile->incrementSequence1W();
-        openknx.flash.save();
-        mTxFrame.data[0] = 0x00;
-        mTxFrame.data[1] = (lSeq >> 8) & 0xFF;
-        mTxFrame.data[2] = lSeq & 0xFF;
-        mTxFrame.dataLen = 3;
-        uint8_t lHmacInput[2] = {static_cast<uint8_t>(mTxFrame.commandId), 0x00};
-        if (!IoHomeCrypto::createHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
-        {
-            mState = ControllerState::PairFailed;
-            return;
-        }
-        mTxFrame.hasHmac = true;
+        mState = ControllerState::PairFailed;
+        return;
     }
-    else
-    {
-        // 1W Remove frame:
-        //   cmd=0x39, data=0x00, sequence[2], hmac[6]
-        if (!lCh)
-        {
-            mState = ControllerState::PairFailed;
-            return;
-        }
-        mTxFrame.commandId = IoHomeCommand::RemoveController;
-        lSeq = lProfile->incrementSequence1W();
-        openknx.flash.save();
-        mTxFrame.data[0] = 0x00;
-        mTxFrame.data[1] = (lSeq >> 8) & 0xFF;
-        mTxFrame.data[2] = lSeq & 0xFF;
-        mTxFrame.dataLen = 3;
-        uint8_t lHmacInput[2] = {static_cast<uint8_t>(mTxFrame.commandId), 0x00};
-        if (!IoHomeCrypto::createHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
-        {
-            mState = ControllerState::PairFailed;
-            return;
-        }
-        mTxFrame.hasHmac = true;
-    }
+    mTxFrame.hasHmac = true;
 
     mTxLen = mTxFrame.serialize1W(mTxBuffer, sizeof(mTxBuffer));
-    if (mTxLen > 0)
+    if (mTxLen == 0)
     {
-        if (mPairDiagnosticTraceEnabled)
-        {
-            const std::string lHex = hexDump(mTxBuffer, mTxLen);
-            logInfoP("PairDiag: 1W pre-key tx cmd=%s(0x%02X) stage=%u len=%u seq=%u src=0x%06X dst=0x%06X hex=%s",
-                     commandName(mTxFrame.commandId),
-                     static_cast<unsigned>(static_cast<uint8_t>(mTxFrame.commandId)),
-                     static_cast<unsigned>(mPairing1WStage),
-                     static_cast<unsigned>(mTxLen),
-                     static_cast<unsigned>(lSeq),
-                     mTxFrame.getSrcNodeId(),
-                     mTxFrame.getDestNodeId(),
-                     lHex.c_str());
-        }
-
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
-        if (lErr == RadioError::None)
-        {
-            mStateTimer = millis();
-            mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
-            mTx1WRepeatTimer = 0;
-            mState = ControllerState::PairWait1WRemove;
-        }
-        else if (lErr == RadioError::Busy)
-        {
-            return;
-        }
-        else
-        {
-            mState = ControllerState::PairFailed;
-        }
+        mState = ControllerState::PairFailed;
+        return;
     }
-    else
+
+    if (mPairDiagnosticTraceEnabled)
+    {
+        tracePairDiagnosticCompactPair();
+        const std::string lHex = hexDump(mTxBuffer, mTxLen);
+        logInfoP("PairDiag: 1W remove tx cmd=%s(0x%02X) len=%u seq=%u src=0x%06X dst=0x%06X hex=%s",
+                 commandName(mTxFrame.commandId),
+                 static_cast<unsigned>(static_cast<uint8_t>(mTxFrame.commandId)),
+                 static_cast<unsigned>(mTxLen),
+                 static_cast<unsigned>(lSeq),
+                 mTxFrame.getSrcNodeId(),
+                 mTxFrame.getDestNodeId(),
+                 lHex.c_str());
+    }
+
+    const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    if (lErr == RadioError::None)
+    {
+        mStateTimer = millis();
+        mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
+        mTx1WRepeatTimer = 0;
+        mState = ControllerState::PairWait1WRemove;
+    }
+    else if (lErr != RadioError::Busy)
     {
         mState = ControllerState::PairFailed;
     }
@@ -3341,19 +3448,20 @@ void IoHomeController::processPairSend1WRemove()
 
 void IoHomeController::processPairWait1WRemove()
 {
-    if (mPairing1WStage == 0)
-    {
-        if (!processPairWait1WBlind(ControllerState::PairSend1WRemove))
-            return;
-        if (mState == ControllerState::PairSend1WRemove)
-            mPairing1WStage = 1;
+    if (!processPairWait1WBlind(ControllerState::PairComplete))
         return;
-    }
 
-    if (!processPairWait1WBlind(ControllerState::PairSend1WKeyTransfer))
-        return;
-    if (mState == ControllerState::PairSend1WKeyTransfer)
-        mPairing1WStage = 2;
+    if (mState == ControllerState::PairComplete && mModule)
+    {
+        IoHomecontrolChannel *lCh = mModule->getChannel(mPairingChannel);
+        if (lCh)
+        {
+            lCh->setNodeId(0);
+            openknx.flash.save();
+            logInfoP("Pairing: explicit 1W remove sent for channel %d (no 0x30 key transfer follows)",
+                     mPairingChannel + 1);
+        }
+    }
 }
 
 void IoHomeController::processPairSend1WKeyTransfer()
@@ -3434,6 +3542,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
     {
         if (mPairDiagnosticTraceEnabled)
         {
+            tracePairDiagnosticCompactPair();
             logInfoP("PairDiag: 1W key tx prepared len=%u seq=%u remote=0x%06X device=0x%06X src=0x%06X dst=0x%06X type=%u mfg=0x%02X freq=%u %luHz",
                      static_cast<unsigned>(mTxLen),
                      static_cast<unsigned>(lSeq),
@@ -3510,7 +3619,8 @@ bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
         mTx1WRepeatTimer = 0;
 
         RadioError lErr = RadioError::None;
-        const bool lPairingRepeat = (mState == ControllerState::PairWait1WRemove ||
+        const bool lPairingRepeat = (mState == ControllerState::PairWait1WAnnounce ||
+                                     mState == ControllerState::PairWait1WRemove ||
                                      mState == ControllerState::PairWait1WKeyTransfer);
         if (lPairingRepeat)
         {

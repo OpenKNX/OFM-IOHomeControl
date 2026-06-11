@@ -90,6 +90,8 @@ enum class ControllerState : uint8_t
   PairWaitLaunchKeyTransfer,
   PairSendPullKeyChallenge,
   PairWaitPullKeyChallengeResponse,
+  PairSend1WAnnounce,
+  PairWait1WAnnounce,
   PairSend1WRemove,
   PairWait1WRemove,
   PairSend1WKeyTransfer,
@@ -208,6 +210,10 @@ public:
   bool startPairingExperimental(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing2WMode iMode);
   // Start the standard 1W learning flow with an explicit broadcast type override.
   bool startPairingWithType(uint8_t iChannelIndex, uint32_t iKnownNodeId, uint8_t iBroadcastType);
+  // Diagnostic 1W add-only flow: send SendKey1W (0x30) without the announce (0x2E).
+  bool startPairing1WAddOnly(uint8_t iChannelIndex, uint32_t iKnownNodeId = 0);
+  // Explicit 1W removal flow: send RemoveController (0x39) only.
+  bool startPairing1WRemove(uint8_t iChannelIndex, uint32_t iKnownNodeId = 0);
   PairStartStatus lastPairStartStatus() const;
   ControllerState lastPairStartBlockedState() const;
 
@@ -527,7 +533,8 @@ private:
   IoHomeFrame mPairPulledKeyFrame;
   uint8_t mPairPulledKey[16];
   uint8_t mPairPullAuthChallenge[6];
-  uint8_t mPairing1WStage = 0; // 0=Pair(0x2E), 1=Remove(0x39), 2=Add(0x30)
+  uint8_t mPairing1WStage = 0; // 0=Announce(0x2E), 1=Add(0x30), 2=explicit Remove(0x39)
+  uint8_t mRequestedPairing1WMode = 0; // 0=announce+add, 1=add-only, 2=remove-only
   uint8_t mPairing1WBroadcastType = 2;
   uint8_t mDefault1WBroadcastType = 2;
   Pairing2WMode mPairing2WMode = Pairing2WMode::Normal;
@@ -644,6 +651,8 @@ private:
   void processPairWaitLaunchKeyTransfer();
   void processPairSendPullKeyChallenge();
   void processPairWaitPullKeyChallengeResponse();
+  void processPairSend1WAnnounce();
+  void processPairWait1WAnnounce();
   void processPairSend1WRemove();
   void processPairWait1WRemove();
   void processPairSend1WKeyTransfer();
