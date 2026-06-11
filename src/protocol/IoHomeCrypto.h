@@ -71,7 +71,13 @@ namespace IoHomeCrypto
                             uint8_t oIv[16], uint8_t oHmac[6]);
 
     // Byte-exact 1W crypto regression tests against fixed reference vectors.
+    // Covers 1W HMAC transcript/IV handling and 1W key-encryption IV handling.
     bool selfTest1WReferenceVectors();
+
+    // Byte-exact 1W SendKey/Add key encryption test.
+    // Locks the rule that the repeated-node IV uses the remote/controller node,
+    // not the actuator/discovered node.
+    bool selfTest1WKeyEncryptionVectors();
 
     bool verifyHmac1W(const uint8_t *iFrameData, size_t iDataLen,
                       uint16_t iSequenceNum, const uint8_t iReceivedHmac[6],

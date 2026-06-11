@@ -3574,6 +3574,9 @@ void IoHomeController::processPairSend1WKeyTransfer()
     uint32_t lRemoteNodeId = lProfile->getOneWayControllerNodeId();
     if (lRemoteNodeId == 0 || lRemoteNodeId == mDiscoveredNodeId)
     {
+        logInfoP("Pairing: refusing 1W SendKey1W because remote/controller node is invalid remote=0x%06X device=0x%06X",
+                 lRemoteNodeId,
+                 mDiscoveredNodeId);
         mState = ControllerState::PairFailed;
         return;
     }
@@ -3591,6 +3594,15 @@ void IoHomeController::processPairSend1WKeyTransfer()
     {
         mState = ControllerState::PairFailed;
         return;
+    }
+
+    if (mPairDiagnosticTraceEnabled)
+    {
+        const std::string lEncKeyHex = hexDump(lEncryptedKey, sizeof(lEncryptedKey));
+        logInfoP("1w key: remote=0x%06X device=0x%06X ivAddr=remote encKey=%s",
+                 lRemoteNodeId,
+                 mDiscoveredNodeId,
+                 lEncKeyHex.c_str());
     }
 
     uint16_t lSeq = lProfile->incrementSequence1W();
@@ -5043,13 +5055,30 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         // is the remote/controller source address, not the actuator address.
         uint8_t lEncKey1W[16];
         uint32_t lRemoteNodeId = lProfile->getOneWayControllerNodeId();
+        const uint32_t lDeviceNodeId = iEntry.destNodeId & 0x00FFFFFF;
+        if (lRemoteNodeId == 0 || lRemoteNodeId == lDeviceNodeId)
+        {
+            logInfoP("1W SendKey1W: refusing invalid key IV address remote=0x%06X device=0x%06X",
+                     lRemoteNodeId,
+                     lDeviceNodeId);
+            return false;
+        }
         uint8_t lRemoteNodeAddr[3] = {
             static_cast<uint8_t>((lRemoteNodeId >> 16) & 0xFF),
             static_cast<uint8_t>((lRemoteNodeId >> 8) & 0xFF),
             static_cast<uint8_t>(lRemoteNodeId & 0xFF)};
         mTxFrame.setSrcNode(lRemoteNodeId);
         mTxFrame.setDestNode(oneWayDestinationForEntry(iEntry));
-        IoHomeCrypto::encrypt1WKey(lProfile->getOneWayControllerKey(), IOHC_TRANSFER_KEY, lRemoteNodeAddr, lEncKey1W);
+        if (!IoHomeCrypto::encrypt1WKey(lProfile->getOneWayControllerKey(), IOHC_TRANSFER_KEY, lRemoteNodeAddr, lEncKey1W))
+            return false;
+        if (mPairDiagnosticTraceEnabled)
+        {
+            const std::string lEncKeyHex = hexDump(lEncKey1W, sizeof(lEncKey1W));
+            logInfoP("1w key: remote=0x%06X device=0x%06X ivAddr=remote encKey=%s",
+                     lRemoteNodeId,
+                     lDeviceNodeId,
+                     lEncKeyHex.c_str());
+        }
         memcpy(mTxFrame.data, lEncKey1W, 16);
         mTxFrame.data[16] = lProfile->getOneWayControllerManufacturer();
         mTxFrame.data[17] = 0x01;                                           // controller marker

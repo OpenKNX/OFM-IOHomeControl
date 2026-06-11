@@ -256,13 +256,16 @@ namespace IoHomeCrypto
     bool encrypt1WKey(const uint8_t iKey[16], const uint8_t iTransferKey[16],
                       const uint8_t iNodeAddress[3], uint8_t oEncrypted[16])
     {
-        // Build IV: repeat 3-byte node address to fill 16 bytes
+        // Build IV: repeat the 3-byte 1W remote/controller node address to fill 16 bytes.
         // {n0,n1,n2, n0,n1,n2, n0,n1,n2, n0,n1,n2, n0,n1,n2, n0}
+        // This is the iv=remote-node rule used by rspaargaren's ESP32 AES-CFB128 path.
+        // Do not pass the actuator/discovered node here for SendKey1W/Add.
         uint8_t lIv[16];
         for (int i = 0; i < 16; i++)
             lIv[i] = iNodeAddress[i % 3];
 
-        // CFB128: encrypt IV, XOR with key
+        // ESP32 AES-CFB128 with iv_offset=0 on exactly one 16-byte block is:
+        // encryptedKey = clearKey XOR AES128_encrypt(repeatedNodeIv, transferKey).
         uint8_t lKeystream[16];
         if (!aes128Encrypt(lIv, iTransferKey, lKeystream))
             return false;
@@ -288,6 +291,52 @@ namespace IoHomeCrypto
                 lDiff |= iA[i] ^ iB[i];
             return lDiff == 0;
         }
+    }
+
+    bool selfTest1WKeyEncryptionVectors()
+    {
+        // Vector from rspaargaren extras/1W.json sample entry b60d1a.
+        // It locks the SendKey1W/Add rule: IV address = 1W remote/controller node.
+        static const uint8_t kTransferKey[16] = {
+            0x34, 0xC3, 0x46, 0x6E, 0xD8, 0x8F, 0x4E, 0x8E,
+            0x16, 0xAA, 0x47, 0x39, 0x49, 0x88, 0x43, 0x73};
+        static const uint8_t kRemoteNode[3] = {0xB6, 0x0D, 0x1A};
+        static const uint8_t kClearKey[16] = {
+            0x49, 0x56, 0x38, 0x73, 0x41, 0x7A, 0x63, 0x33,
+            0x4E, 0x7A, 0x63, 0x6B, 0x52, 0x64, 0x48, 0x53};
+        static const uint8_t kExpectedIv[16] = {
+            0xB6, 0x0D, 0x1A, 0xB6, 0x0D, 0x1A, 0xB6, 0x0D,
+            0x1A, 0xB6, 0x0D, 0x1A, 0xB6, 0x0D, 0x1A, 0xB6};
+        static const uint8_t kExpectedEncryptedKey[16] = {
+            0x2D, 0x36, 0xBD, 0x8B, 0x4D, 0x4F, 0xB1, 0xE1,
+            0xA1, 0xB3, 0x09, 0x9B, 0x39, 0x4D, 0x3A, 0x9E};
+
+        uint8_t lIv[16];
+        for (int i = 0; i < 16; i++)
+            lIv[i] = kRemoteNode[i % 3];
+        if (!bytesEqual(lIv, kExpectedIv, sizeof(kExpectedIv)))
+            return false;
+
+        // Explicit CFB128(single-block) equivalence check: AES(IV) XOR clearKey.
+        uint8_t lKeystream[16];
+        if (!aes128Encrypt(lIv, kTransferKey, lKeystream))
+            return false;
+        uint8_t lCfbEquivalent[16];
+        for (int i = 0; i < 16; i++)
+            lCfbEquivalent[i] = kClearKey[i] ^ lKeystream[i];
+        if (!bytesEqual(lCfbEquivalent, kExpectedEncryptedKey, sizeof(kExpectedEncryptedKey)))
+            return false;
+
+        uint8_t lEncrypted[16];
+        if (!encrypt1WKey(kClearKey, kTransferKey, kRemoteNode, lEncrypted))
+            return false;
+        if (!bytesEqual(lEncrypted, kExpectedEncryptedKey, sizeof(kExpectedEncryptedKey)))
+            return false;
+
+        uint8_t lDecrypted[16];
+        if (!decrypt1WKey(lEncrypted, kTransferKey, kRemoteNode, lDecrypted))
+            return false;
+        return bytesEqual(lDecrypted, kClearKey, sizeof(kClearKey));
     }
 
     bool selfTest1WReferenceVectors()
@@ -352,7 +401,7 @@ namespace IoHomeCrypto
                 return false;
         }
 
-        return true;
+        return selfTest1WKeyEncryptionVectors();
     }
 
 } // namespace IoHomeCrypto
