@@ -4119,6 +4119,184 @@ TEST(send_key_1w_rejects_appended_hmac)
 }
 
 
+TEST(serializer_boundary_2w_challenge_response_hmac_as_data)
+{
+    // 2W ChallengeResponse (0x3D) must carry the HMAC bytes as ordinary data.
+    // It must not use IoHomeFrame::hasHmac and must not append software CRC in
+    // the normal 2W serializer.
+    IoHomeFrame frame;
+    frame.init();
+    frame.ctrlByte0 = 0x00; // continuation frame, no START/END
+    frame.ctrlByte1 = 0x00;
+    frame.setSrcNode(0x485B37);
+    frame.setDestNode(0x123456);
+    frame.commandId = IoHomeCommand::ChallengeResponse;
+    const uint8_t expectedHmac[IOHC_HMAC_SIZE] = {0x10, 0x21, 0x32, 0x43, 0x54, 0x65};
+    memcpy(frame.data, expectedHmac, IOHC_HMAC_SIZE);
+    frame.dataLen = IOHC_HMAC_SIZE;
+    frame.hasHmac = false;
+    frame.hasCrc = false;
+
+    uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t len = frame.serialize2W(buf, sizeof(buf));
+    ASSERT_EQ(len, 15); // 9-byte header + 6 bytes command data
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_MODE_1W) == 0);
+    ASSERT_EQ((buf[0] & IOHC_CTRL0_LEN_MASK) + 1, 15);
+    ASSERT_EQ(buf[8], static_cast<uint8_t>(IoHomeCommand::ChallengeResponse));
+    ASSERT_MEM_EQ(buf + 9, expectedHmac, IOHC_HMAC_SIZE);
+
+    IoHomeFrame parsed;
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
+    ASSERT_EQ(parsed.commandId, IoHomeCommand::ChallengeResponse);
+    ASSERT_TRUE(!parsed.hasHmac);
+    ASSERT_TRUE(!parsed.hasCrc);
+    ASSERT_EQ(parsed.dataLen, IOHC_HMAC_SIZE);
+    ASSERT_MEM_EQ(parsed.data, expectedHmac, IOHC_HMAC_SIZE);
+
+    // The same frame with raw/diagnostic CRC is longer and must not be produced
+    // by serialize2W().
+    frame.hasCrc = true;
+    ASSERT_EQ(frame.serialize2W(buf, sizeof(buf)), 0);
+}
+
+TEST(serializer_boundary_2w_has_hmac_rejected)
+{
+    // Any 2W frame with hasHmac=true is invalid at the serializer boundary.
+    // 2W auth must be represented as 0x3D command data instead.
+    IoHomeFrame frame;
+    frame.init();
+    frame.setStart2W();
+    frame.setSrcNode(0x485B37);
+    frame.setDestNode(0x123456);
+    frame.commandId = IoHomeCommand::Execute;
+    frame.data[0] = 0x01;
+    frame.data[1] = 0x67;
+    frame.data[2] = 0x64;
+    frame.dataLen = 3;
+    memset(frame.hmac, 0xAA, IOHC_HMAC_SIZE);
+    frame.hasHmac = true;
+
+    uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
+    ASSERT_EQ(frame.serialize2W(buf, sizeof(buf)), 0);
+    ASSERT_EQ(serializeFrameForTest(frame, buf, sizeof(buf)), 0);
+
+    // Even ChallengeResponse must reject hasHmac=true. Its six HMAC bytes must
+    // be in data[], not in hmac[].
+    frame.commandId = IoHomeCommand::ChallengeResponse;
+    frame.dataLen = IOHC_HMAC_SIZE;
+    ASSERT_EQ(frame.serialize2W(buf, sizeof(buf)), 0);
+}
+
+TEST(serializer_boundary_1w_execute_hmac_declared_length)
+{
+    // Normal authenticated 1W Execute includes the appended 6-byte HMAC inside
+    // the CTRL0-declared protocol length.
+    IoHomeFrame frame;
+    frame.init();
+    frame.set1WMode();
+    frame.setFrameOrder(IOHC_CTRL0_ORDER_END);
+    frame.ctrlByte1 = 0x00;
+    frame.setSrcNode(0x485B37);
+    frame.setDestNode(0x0000BF);
+    frame.commandId = IoHomeCommand::Execute;
+    const uint8_t payload[8] = {0x01, 0x43, 0x00, 0x00, 0x00, 0x00, 0x12, 0x34};
+    const uint8_t expectedHmac[IOHC_HMAC_SIZE] = {0xA1, 0xB2, 0xC3, 0xD4, 0xE5, 0xF6};
+    memcpy(frame.data, payload, sizeof(payload));
+    memcpy(frame.hmac, expectedHmac, sizeof(expectedHmac));
+    frame.dataLen = sizeof(payload);
+    frame.hasHmac = true;
+
+    uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t len = frame.serialize1W(buf, sizeof(buf));
+    ASSERT_EQ(len, 23); // 9-byte header + 8-byte payload + 6-byte HMAC
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_MODE_1W) != 0);
+    ASSERT_EQ((buf[0] & IOHC_CTRL0_LEN_MASK) + 1, len);
+    ASSERT_EQ(buf[8], static_cast<uint8_t>(IoHomeCommand::Execute));
+    ASSERT_MEM_EQ(buf + 9, payload, sizeof(payload));
+    ASSERT_MEM_EQ(buf + 9 + sizeof(payload), expectedHmac, sizeof(expectedHmac));
+
+    IoHomeFrame parsed;
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
+    ASSERT_EQ(parsed.commandId, IoHomeCommand::Execute);
+    ASSERT_TRUE(parsed.hasHmac);
+    ASSERT_EQ(parsed.dataLen, sizeof(payload));
+    ASSERT_MEM_EQ(parsed.data, payload, sizeof(payload));
+    ASSERT_MEM_EQ(parsed.hmac, expectedHmac, sizeof(expectedHmac));
+}
+
+TEST(serializer_boundary_sendkey1w_unauthenticated_29)
+{
+    // SendKey1W (0x30) is the dedicated Add/SendKey frame: 9-byte header +
+    // encryptedKey[16] + manufacturer + 0x01 + sequence[2]. No HMAC is appended.
+    IoHomeFrame frame;
+    frame.init();
+    frame.set1WMode();
+    frame.setFrameOrder(IOHC_CTRL0_ORDER_END);
+    frame.ctrlByte1 = 0x00;
+    frame.setSrcNode(0x485B37);
+    frame.setDestNode(0x0000BF);
+    frame.commandId = IoHomeCommand::SendKey1W;
+    for (uint8_t i = 0; i < 16; i++)
+        frame.data[i] = static_cast<uint8_t>(0xC0 + i);
+    frame.data[16] = static_cast<uint8_t>(IoHomeManufacturer::Velux);
+    frame.data[17] = 0x01;
+    frame.data[18] = 0x5A;
+    frame.data[19] = 0xC3;
+    frame.dataLen = 20;
+    frame.hasHmac = false;
+
+    uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t len = frame.serialize1W(buf, sizeof(buf));
+    ASSERT_EQ(len, 29);
+    ASSERT_TRUE((buf[0] & IOHC_CTRL0_MODE_1W) != 0);
+    ASSERT_EQ((buf[0] & IOHC_CTRL0_LEN_MASK) + 1, 29);
+    ASSERT_EQ(buf[8], static_cast<uint8_t>(IoHomeCommand::SendKey1W));
+    ASSERT_MEM_EQ(buf + 9, frame.data, 20);
+
+    // Future accidental authenticated SendKey1W must fail immediately.
+    frame.hasHmac = true;
+    memset(frame.hmac, 0xEE, IOHC_HMAC_SIZE);
+    ASSERT_EQ(frame.serialize1W(buf, sizeof(buf)), 0);
+}
+
+TEST(serializer_boundary_raw_crc_explicit_only)
+{
+    // Normal protocol serializers reject CRC. Only the raw/diagnostic helper may
+    // append and later accept the transport CRC.
+    IoHomeFrame frame;
+    frame.init();
+    frame.setStart2W();
+    frame.setSrcNode(0x485B37);
+    frame.setDestNode(0x123456);
+    frame.commandId = IoHomeCommand::Private;
+    frame.data[0] = 0x03;
+    frame.data[1] = 0x00;
+    frame.data[2] = 0x00;
+    frame.dataLen = 3;
+    frame.hasHmac = false;
+
+    uint8_t normalBuf[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t normalLen = frame.serialize2W(normalBuf, sizeof(normalBuf));
+    ASSERT_EQ(normalLen, 12);
+
+    frame.hasCrc = true;
+    ASSERT_EQ(frame.serialize2W(normalBuf, sizeof(normalBuf)), 0);
+
+    uint8_t rawBuf[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t rawLen = frame.serializeRawWithCrc(rawBuf, sizeof(rawBuf));
+    ASSERT_EQ(rawLen, normalLen + IOHC_CRC_SIZE);
+    ASSERT_MEM_EQ(rawBuf, normalBuf, normalLen);
+
+    IoHomeFrame parsed;
+    ASSERT_TRUE(!deserializeFrameForTest(parsed, rawBuf, rawLen));
+    ASSERT_TRUE(deserializeRawWithOptionalCrcForTest(parsed, rawBuf, rawLen));
+    ASSERT_TRUE(parsed.hasCrc);
+    ASSERT_TRUE(!parsed.hasHmac);
+    ASSERT_EQ(parsed.commandId, IoHomeCommand::Private);
+    ASSERT_EQ(parsed.dataLen, 3);
+}
+
+
 TEST(frame_1w_execute_has_hmac)
 {
     // 1W Execute (0x00) should also detect HMAC
@@ -8933,6 +9111,13 @@ int main()
     RUN(send_key_1w_unauthenticated_29_bytes);
     RUN(send_key_1w_rejects_appended_hmac);
     RUN(frame_1w_execute_has_hmac);
+
+    printf("\nSerializer boundary tests:\n");
+    RUN(serializer_boundary_2w_challenge_response_hmac_as_data);
+    RUN(serializer_boundary_2w_has_hmac_rejected);
+    RUN(serializer_boundary_1w_execute_hmac_declared_length);
+    RUN(serializer_boundary_sendkey1w_unauthenticated_29);
+    RUN(serializer_boundary_raw_crc_explicit_only);
 
     printf("\nAddress classes:\n");
     RUN(address_class_group);
