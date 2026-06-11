@@ -3924,6 +3924,24 @@ TEST(hmac_1w_wrong_key_rejects)
     ASSERT_TRUE(!IoHomeCrypto::verifyHmac1W(frameData, 3, seq, hmac, key2));
 }
 
+TEST(hmac_1w_reference_vectors_selftest)
+{
+    // Runs the byte-exact 1W reference vectors from IoHomeCrypto.
+    // This locks down that the 1W HMAC transcript is command+payload only;
+    // ctrl0/ctrl1/source/destination/sequence/appended-HMAC must not be part
+    // of the IV checksum transcript.
+    ASSERT_TRUE(IoHomeCrypto::selfTest1WReferenceVectors());
+}
+
+TEST(encrypt_1w_key_reference_vectors_selftest)
+{
+    // Runs the byte-exact 1W SendKey encryption vector.
+    // This locks down that the key-encryption IV is based on the remote /
+    // controller node address and that the single-block CFB128 path is
+    // equivalent to AES-ECB(IV) XOR clearKey.
+    ASSERT_TRUE(IoHomeCrypto::selfTest1WKeyEncryptionVectors());
+}
+
 // --- 1W key encryption ---
 
 TEST(encrypt_1w_key_roundtrip)
@@ -5049,7 +5067,6 @@ TEST(test_1w_execute_payload_layout)
     // Simulate 1W Execute payload construction (matching rspaargaren _p0x00_14)
     // Wire: origin(1) + acei(1) + main(2) + fp1(1) + fp2(1) + seq(2) + hmac(6) = 14 bytes
     uint8_t data[8]; // data portion before HMAC
-    uint8_t hmac[6];
     uint8_t position = 75; // 75%
 
     data[0] = IOHC_ORIGINATOR_USER; // origin = 0x01
@@ -6365,7 +6382,7 @@ TEST(controller_1w_key_frame_uses_profile_manufacturer_without_hmac)
     ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
-    ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BF); // type 2 typed broadcast
     ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
     ASSERT_EQ(lFrame.dataLen, 20);
     ASSERT_EQ(lFrame.data[16], static_cast<uint8_t>(IoHomeManufacturer::Velux));
@@ -7953,7 +7970,8 @@ TEST(controller_2w_final_response_wait_and_sx1262_dwell)
     ioHomeTestAdvanceMillis(1);
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
-    ASSERT_EQ(lController.radio().rxStartCount(), lRxStartsBeforeDwell + 1);
+    // At dwell expiry RX scanning may restart immediately; before expiry it must not.
+    ASSERT_TRUE(lController.radio().rxStartCount() >= lRxStartsBeforeDwell + 1);
 
     ioHomeTestAdvanceMillis(IOHC_RX_FINAL_TIMEOUT_MS - IOHC_AUTH_DWELL_MS_SX1262 - 1);
     lController.loop();
@@ -8012,7 +8030,7 @@ TEST(controller_default_1w_execute_uses_standard_vent_layout)
     ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
-    ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BF); // default shutter/blind type 2
     ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
     ASSERT_EQ(lFrame.dataLen, 8);
     ASSERT_EQ(lFrame.data[0], IOHC_ORIGINATOR_USER);
@@ -8073,14 +8091,14 @@ TEST(controller_default_1w_execute_matches_reference_payloads)
         ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
         ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
         ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
-        ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+        ASSERT_EQ(lFrame.getDestNodeId(), 0x0000FF); // configured type 3 typed broadcast
         ASSERT_EQ(lFrame.dataLen, 8);
         ASSERT_MEM_EQ(lFrame.data, lCase.expectedData, sizeof(lCase.expectedData));
         ASSERT_TRUE(lFrame.hasHmac);
     }
 }
 
-TEST(controller_1w_channel_broadcast_type3_keeps_pairing_typed_but_defaults_runtime_to_legacy_group)
+TEST(controller_1w_channel_broadcast_type3_uses_typed_destination_for_pairing_and_runtime)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -8136,7 +8154,7 @@ TEST(controller_1w_channel_broadcast_type3_keeps_pairing_typed_but_defaults_runt
         IoHomeFrame lFrame;
         const auto &lPacket = lController.radio().testLastTransmittedPacket();
         ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
-        ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+        ASSERT_EQ(lFrame.getDestNodeId(), 0x0000FF);
     }
 
     {
@@ -8162,7 +8180,7 @@ TEST(controller_1w_channel_broadcast_type3_keeps_pairing_typed_but_defaults_runt
         IoHomeFrame lFrame;
         const auto &lPacket = lController.radio().testLastTransmittedPacket();
         ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
-        ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+        ASSERT_EQ(lFrame.getDestNodeId(), 0x0000FF);
     }
 
     {
@@ -8586,10 +8604,12 @@ int main()
     RUN(hmac_1w_create_verify_roundtrip);
     RUN(hmac_1w_different_seq_different_output);
     RUN(hmac_1w_wrong_key_rejects);
+    RUN(hmac_1w_reference_vectors_selftest);
 
     printf("\n1W key encryption:\n");
     RUN(encrypt_1w_key_roundtrip);
     RUN(encrypt_1w_key_iv_from_node_address);
+    RUN(encrypt_1w_key_reference_vectors_selftest);
 
     printf("\nAES Cross-Validation:\n");
     RUN(checksum_matches_velocet_python_reference);
@@ -8787,7 +8807,7 @@ int main()
     RUN(controller_2w_final_response_wait_and_sx1262_dwell);
     RUN(controller_default_1w_execute_uses_standard_vent_layout);
     RUN(controller_default_1w_execute_matches_reference_payloads);
-    RUN(controller_1w_channel_broadcast_type3_keeps_pairing_typed_but_defaults_runtime_to_legacy_group);
+    RUN(controller_1w_channel_broadcast_type3_uses_typed_destination_for_pairing_and_runtime);
     RUN(controller_1w_channel_profiles_are_independent);
     RUN(controller_1w_shared_profile_uses_owner_sequence_and_identity);
     RUN(controller_1w_identical_imported_profiles_share_first_sequence_owner);
