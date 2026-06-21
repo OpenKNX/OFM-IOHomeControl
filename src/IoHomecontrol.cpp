@@ -3504,6 +3504,11 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if (parseChannelIndex(lSub.substr(6, 2), mNumChannels, lIdx))
         {
             mChannels[lIdx]->setIs1W(true);
+            // Flipping a channel to 1W at runtime must provision a controller
+            // identity, just like the boot-time initOneWayControllerProfiles().
+            // Otherwise the channel stays remote=0/key=missing until the first
+            // pairing. ensureOneWayControllerProfile() persists what it generates.
+            ensureOneWayControllerProfile(mChannels[lIdx]);
             if (mChannels[lIdx]->isPaired())
                 openknx.flash.save();
             logInfoP("Channel %d set to 1W mode (seq=%d)", lIdx + 1, mChannels[lIdx]->getSequence1W());
