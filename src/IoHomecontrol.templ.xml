@@ -18,9 +18,7 @@
               <Parameter Id="%AID%_P-%TT%%CC%000" Name="IOHC%C%Name" ParameterType="%AID%_PT-IOHCText40Byte" Text="Beschreibung" Value="" />
 
               <!-- Pairing mode selector (P0) — standalone, outside Union -->
-              <Parameter Id="%AID%_P-%TT%%CC%010" Name="IOHC%C%PairingMode" ParameterType="%AID%_PT-IOHCPairingMode" Text="Pairing-Modus" Value="0">
-                <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
-              </Parameter>
+              <Parameter Id="%AID%_P-%TT%%CC%010" Name="IOHC%C%PairingMode" ParameterType="%AID%_PT-IOHCPairingMode" Text="Pairing-Modus" Value="0" />
               <Parameter Id="%AID%_P-%TT%%CC%012" Name="IOHC%C%PairingLastResult" ParameterType="%AID%_PT-IOHCText40Byte" Text="Letztes Pairing-Ergebnis" Value="Noch nicht abgefragt" Access="Read" />
               <Parameter Id="%AID%_P-%TT%%CC%013" Name="IOHC%C%PairedNodeIdDisplay" ParameterType="%AID%_PT-IOHCText40Byte" Text="Aktuell gepaarte Node-ID" Value="unbekannt" Access="Read" />
               <Parameter Id="%AID%_P-%TT%%CC%014" Name="IOHC%C%OneWaySummary" ParameterType="%AID%_PT-IOHCText40Byte" Text="Protokoll / Ziel" Value="Noch nicht gelesen" Access="Read" />

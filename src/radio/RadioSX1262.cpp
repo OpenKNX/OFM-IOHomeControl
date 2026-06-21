@@ -314,8 +314,10 @@ RadioError RadioSX1262::configure()
     // BitRate_param = 32 * 32000000 / 38400 = 26666 = 0x00682A (rounded: 0x006827)
     // Actually: BitRate_param = (32 * FXOSC) / BR = (32 * 32e6) / 38400 = 26666.67 → 26667
     // FreqDev_param = (FreqDev * 2^25) / Fxosc = (19200 * 33554432) / 32000000 = 20132.66 → 20133
-    // BW: map the nominal 250 kHz target to 0x17 = 312.0 kHz, matching the next
-    // SX1262 FSK bandwidth step above the requested bandwidth.
+    // BW: 0x19 = 312.0 kHz, the smallest SX1262 GFSK Rx bandwidth step that still
+    // passes the io-homecontrol signal (38.4 kbps, ±19.2 kHz dev). Matches the
+    // laberning/home_io_control SX1262 reference. NOTE: the datasheet RxBw codes are
+    // not monotonic by value — 0x17 is 5.8 kHz (far too narrow), not 312 kHz.
     // Pulse shape: 0x00 = no filter (no shaping, like SX1276)
     uint8_t lModParams[8];
     // BitRate: 3 bytes (MSB first) = 26667 = 0x00682B
@@ -325,10 +327,8 @@ RadioError RadioSX1262::configure()
     lModParams[2] = lBitRate & 0xFF;         // 0x2B
     // Pulse shape: 0x00 = no filter
     lModParams[3] = 0x00;
-    // Bandwidth: 0x17 = 312.0 kHz (closest SX1262 step at or above 250 kHz)
-    lModParams[4] = 0x17;
-    // Bandwidth: 0x0F = 232.3 kHz (closest to SX1276 250 kHz setting)
-    // lModParams[4] = 0x0F;
+    // Bandwidth: 0x19 = 312.0 kHz (per SX1262 datasheet RxBw table)
+    lModParams[4] = 0x19;
     // FreqDev: 3 bytes (MSB first) = 20133 = 0x004EA5
     uint32_t lFreqDev = 20133;
     lModParams[5] = (lFreqDev >> 16) & 0xFF; // 0x00
@@ -1164,7 +1164,7 @@ RadioError RadioSX1262::sendEms2Wake()
     lModParams[1] = (lBitRate >> 8) & 0xFF;
     lModParams[2] = lBitRate & 0xFF;
     lModParams[3] = 0x00; // no shaping
-    lModParams[4] = 0x17; // BW 312 kHz
+    lModParams[4] = 0x19; // BW 312 kHz (RxBw code; carrier is TX-only here)
     // FreqDev = 0 (unmodulated carrier)
     lModParams[5] = 0x00;
     lModParams[6] = 0x00;
