@@ -5701,8 +5701,22 @@ void IoHomeController::dispatchRxFrame()
                 return;
             }
 
-            // Verify HMAC on authenticated frames before trusting data
-            if (mRxFrame.hasHmac)
+            // Point 1 — destination filter: a frame that is not addressed to us
+            // cannot be a reply to a 2W challenge we issued. The peer's own 1W
+            // Discover/Execute frames are broadcast to group addresses (e.g.
+            // 0x0000BF / 0x00037F / 0x00003F), so silently ignore foreign-target
+            // authenticated traffic instead of running it through the challenge
+            // path and emitting a misleading "rejected" log. Non-authenticated
+            // broadcasts still fall through to the command switch below.
+            if (mRxFrame.hasHmac && lDestNode != mOwnNodeId)
+                break;
+
+            // Point 2 — 1W is one-way and has no challenge-response: a 1W channel's
+            // frames are self-authenticated via their embedded sequence number, not
+            // via a controller-issued challenge. Never apply the 2W challenge/HMAC
+            // gate to a 1W channel; only 2W frames addressed to us reach this block.
+            // Verify HMAC on authenticated frames before trusting data.
+            if (mRxFrame.hasHmac && !lCh->is1W())
             {
                 // Check that we have a pending challenge (not all zeros)
                 // All-zero challenge means no command was sent — reject as potential replay
@@ -5719,7 +5733,9 @@ void IoHomeController::dispatchRxFrame()
 
                 if (!lHasPendingChallenge)
                 {
-                    logInfoP("HMAC frame rejected: no pending challenge for node 0x%06X", lSrcNode);
+                    logInfoP("HMAC frame rejected: no pending challenge for node 0x%06X (cmd=%s/0x%02X dst=0x%06X)",
+                             lSrcNode, commandName(mRxFrame.commandId),
+                             static_cast<unsigned>(mRxFrame.commandId), lDestNode);
                     break;
                 }
 

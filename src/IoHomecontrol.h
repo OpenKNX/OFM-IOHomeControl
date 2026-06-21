@@ -75,6 +75,10 @@ private:
   IoHomecontrolChannel *mChannels[IOHC_ChannelCount] = {};
   FlashChannelState mPendingFlashChannels[IOHC_ChannelCount] = {};
   uint8_t mNumChannels = 0;
+  // The OpenKNX framework restores persisted flash via readFlash() AFTER setup() runs.
+  // Identity/profile generation must therefore be (re)applied once after the restore,
+  // otherwise a freshly generated 1W profile gets overwritten by the empty stored value.
+  bool mIdentityRestoreInitDone = false;
   IoHomeController mController;
   IoHomeRemoteMap mRemoteMap;
 

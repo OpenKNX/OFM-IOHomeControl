@@ -338,6 +338,16 @@ RadioError RadioSX1276::startTransmit(const uint8_t *iData, uint8_t iLen)
     // Enter standby to load FIFO
     setMode(RF_OPMODE_STANDBY);
 
+    // Clear the FIFO before loading the TX frame. RX and TX share the same FIFO,
+    // and during active pairing the peer transmits almost continuously, so an
+    // unread (or partially received) RX frame can still occupy the FIFO when we
+    // start transmitting. In io-homecontrol mode the radio interprets the first
+    // FIFO byte as the length, so stale RX bytes prepended to our payload corrupt
+    // the on-air length and PacketSent never asserts (observed as txStart>txDone
+    // and a TX timeout). Writing the FifoOverrun flag resets the FIFO and its
+    // pointers on the SX127x.
+    writeRegister(REG_IRQFLAGS2, RF_IRQFLAGS2_FIFOOVERRUN);
+
     // Keep packet mode configured for the maximum variable-length frame size.
     // In io-homecontrol mode (IoHomeOn=1) the SX1276 handles the length byte
     // internally. Leaving PayloadLength at 0xFF avoids blocking larger 1W frames
@@ -382,6 +392,12 @@ bool RadioSX1276::isTxDone()
         return false;
 
     const uint16_t lIrqStatus = readIrqStatus();
+    // Always reflect the most recent live IRQ read so a TX-timeout diagnostic
+    // shows the radio's actual state instead of the stale value captured right
+    // after startTransmit(). Without this the timeout log reported the
+    // immediate-after-start IRQ (e.g. 0x1020) even when the radio had since
+    // changed state, masking the real cause of a non-completing TX.
+    mLastIrqStatus = lIrqStatus;
     if (mDio0Fired)
     {
         mDio0Fired = false;
@@ -413,7 +429,6 @@ bool RadioSX1276::isPacketAvailable()
     const uint16_t lIrqStatus = readIrqStatus();
     const bool lDio0Fired = mDio0Fired;
     const bool lPayloadReady = (lIrqStatus & RF_IRQFLAGS2_PAYLOADREADY) != 0;
-
 
     // The working reference polls PayloadReady in addition to DIO state.
     // This keeps RX reliable if the ESP32 ISR is missed, DIO0 was already

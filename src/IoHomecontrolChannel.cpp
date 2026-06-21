@@ -195,6 +195,13 @@ void IoHomecontrolChannel::loop()
 
     updateEstimatedPosition();
 
+    // 1W (one-way) channels have no return path: the device never sends an
+    // authenticated status back, so any 2W status poll would fail forever and
+    // reschedule itself. Skip all status-poll handling for 1W; position is
+    // tracked purely by travel-time estimation above.
+    if (mIs1W)
+        return;
+
     if (mPollTrackingDeadlineMs != 0 &&
         timeReached(lNow, mPollTrackingDeadlineMs) &&
         mNextStatusPollMs == 0 &&
@@ -804,10 +811,12 @@ void IoHomecontrolChannel::sendSlatCommand(float iPercent)
 
 bool IoHomecontrolChannel::requestStatus()
 {
-    logDebugP("Request status");
-
-    if (mIs1W && mNodeId == 0)
+    // 1W is one-way: the device cannot answer a 2W status request, so never
+    // emit one (it would only trigger an endless failed-poll/retry loop).
+    if (mIs1W)
         return false;
+
+    logDebugP("Request status");
 
     if (!mIs1W && isTiltCapableDeviceType())
     {

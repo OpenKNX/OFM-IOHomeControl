@@ -24,6 +24,9 @@ function IOHC_getParameter(device, name) {
 function IOHC_setParameterValue(device, name, value) {
     var parameter = IOHC_getParameter(device, name);
     if (parameter) {
+        if (typeof value === "string" && value.length > 40) {
+            value = value.substring(0, 40);
+        }
         parameter.value = value;
     }
 }
@@ -350,7 +353,7 @@ function IOHC_generateOneWayProfile(device, online, progress, context) {
             throw new Error("io-homecontrol: Keine Antwort beim Erzeugen des 1W-Profils");
         }
         if (resp[0] == 0) {
-            IOHC_queryPairingInfo(device, online, progress, context, "Neues 1W-Profil erzeugt", "Eigenes Controllerprofil ist bereit zum Pairing");
+            IOHC_queryPairingInfo(device, online, progress, context, "Neues 1W-Profil erzeugt", "Eigenes 1W-Profil bereit");
             progress.setText("Neues eigenes 1W-Controllerprofil für Kanal " + (channelIndex + 1) + " erzeugt.");
             return;
         }

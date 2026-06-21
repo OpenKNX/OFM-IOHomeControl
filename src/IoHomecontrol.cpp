@@ -561,7 +561,9 @@ void IoHomecontrol::initSystemKey()
 {
     // The system key is generated once and persisted in flash alongside pairing data.
     // If no key exists yet (all zeros), generate a random one.
-    // The key is loaded by readFlash() before this point, so we only generate if still empty.
+    // NOTE: The OpenKNX framework restores flash via readFlash() AFTER setup(), so this is
+    // also re-run once from processAfterStartupDelay() to provision a key that survives the
+    // restore. The check below keeps it idempotent: a restored (non-zero) key is left intact.
     const uint8_t *lExisting = mController.getSystemKey();
     bool lAllZero = true;
     for (uint8_t i = 0; i < 16; i++)
@@ -1662,6 +1664,19 @@ void IoHomecontrol::processRadioDiagnostic()
 void IoHomecontrol::processAfterStartupDelay()
 {
     logDebugP("afterStartupDelay");
+
+    // The OpenKNX framework restores persisted flash via readFlash() AFTER setup() has run.
+    // Any identity/profile generated during setup() is therefore overwritten by the restore.
+    // Re-run the identity/profile provisioning exactly once here (after the restore) so a
+    // missing system key or empty 1W controller profile is (re)generated and persisted now.
+    if (!mIdentityRestoreInitDone)
+    {
+        mIdentityRestoreInitDone = true;
+        initSystemKey();
+        initOneWayControllerProfiles();
+        applyOneWayControllerConfiguration();
+    }
+
     mController.startReceive();
 
     // P2: Power-on behavior per channel
@@ -1670,6 +1685,9 @@ void IoHomecontrol::processAfterStartupDelay()
         if (!mChannels[i]->isPaired())
             continue;
 
+        // 1W channels are one-way and cannot be polled; the status-request
+        // power-on behavior is a no-op for them (requestStatus() returns false),
+        // while "restore last state" still applies via a position command below.
         uint8_t _channelIndex = i; // needed by ParamIOHC_* macros
         uint8_t lBehavior = ParamIOHC_IOHCPowerOnBeh;
         if (lBehavior == 1) // Status abfragen
