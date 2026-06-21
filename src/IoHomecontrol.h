@@ -49,6 +49,11 @@ public:
 
   IoHomeController &controller();
   IoHomecontrolChannel *getChannel(uint8_t iIndex);
+  // Make sure the (possibly linked) 1W controller profile for a channel owns a
+  // remote node id + key, generating one on demand if it is still empty. The
+  // ETS-configured manufacturer is preserved. Returns true when a usable
+  // identity is available afterwards.
+  bool ensureOneWayControllerProfile(IoHomecontrolChannel *iChannel);
   IoHomeRemoteMap &remoteMap();
   void onPassiveKeyCaptured(const IoHomeController::PassiveKeyResult &iResult);
 

@@ -123,9 +123,9 @@ namespace
     }
 
     bool build1WSendKey30(IoHomeFrame &oFrame,
-                        const uint8_t iEncryptedKey[16],
-                        uint8_t iManufacturer,
-                        uint16_t iSequence)
+                          const uint8_t iEncryptedKey[16],
+                          uint8_t iManufacturer,
+                          uint16_t iSequence)
     {
         if (!iEncryptedKey)
             return false;
@@ -158,7 +158,6 @@ namespace
         oRawClosedPercent = static_cast<uint8_t>(lHigh / 2U);
         return oRawClosedPercent <= 100;
     }
-
 
     struct OneWayCommandProfile
     {
@@ -1350,8 +1349,8 @@ bool IoHomeController::sendOneWayExecuteWithType(uint32_t iDestNodeId, const uin
 }
 
 bool IoHomeController::sendOneWayChannelExecuteWithType(IoHomecontrolChannel *iChannel,
-                                                           uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
-                                                           uint8_t iBroadcastType)
+                                                        uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
+                                                        uint8_t iBroadcastType)
 {
     if (!iChannel || !iChannel->is1W())
         return false;
@@ -1701,6 +1700,22 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(iChannelIndex) : nullptr;
     if (lCh && lCh->is1W())
     {
+        // A 1W remote can only build the authenticated 0x2E/0x30/0x39 frames
+        // once it owns a controller identity (remote node id + key). On a
+        // freshly ETS-configured channel that profile may still be empty, which
+        // previously failed silently in PairSend1WKeyTransfer (remote=0 /
+        // key=missing). Provision it on demand here, preserving the
+        // ETS-configured manufacturer.
+        if (mModule && !mModule->ensureOneWayControllerProfile(lCh))
+        {
+            mLastPairStartStatus = PairStartStatus::Failed;
+            mLastPairStartBlockedState = mState;
+            logInfoP("Pairing: 1W controller profile missing for ch%u and could not be generated; run 'iohc 1wnew %u' first",
+                     static_cast<unsigned>(iChannelIndex + 1),
+                     static_cast<unsigned>(iChannelIndex + 1));
+            return false;
+        }
+
         mPairing1WBroadcastType = lCh->getConfigured1WBroadcastType();
         uint32_t lKnownNodeId = iKnownNodeId & 0x00FFFFFF;
         if (lKnownNodeId == 0)
@@ -2936,8 +2951,8 @@ void IoHomeController::loop()
                     uint8_t lLaunchData[1 + sizeof(mPairingChallenge)] = {static_cast<uint8_t>(IoHomeCommand::LaunchKeyTransfer)};
                     memcpy(lLaunchData + 1, mPairingChallenge, sizeof(mPairingChallenge));
                     if (IoHomeCrypto::crypt2WKeyXor(lLaunchData, sizeof(lLaunchData),
-                                                         mPairingChallenge, mRxFrame.data,
-                                                         IOHC_TRANSFER_KEY, mPairPulledKey))
+                                                    mPairingChallenge, mRxFrame.data,
+                                                    IOHC_TRANSFER_KEY, mPairPulledKey))
                     {
                         mPairPulledKeyFrame = mRxFrame;
                         mState = ControllerState::PairSendPullKeyChallenge;
@@ -4005,8 +4020,8 @@ void IoHomeController::processPairSend1WAnnounce()
 void IoHomeController::processPairWait1WAnnounce()
 {
     const ControllerState lNextState = (mPairing1WMode == Pairing1WMode::AnnounceOnly)
-                                          ? ControllerState::PairComplete
-                                          : ControllerState::PairSend1WKeyTransfer;
+                                           ? ControllerState::PairComplete
+                                           : ControllerState::PairSend1WKeyTransfer;
     if (!processPairWait1WBlind(lNextState))
         return;
 
@@ -5240,7 +5255,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 OneWayCommandProfile lProfileTemplate = oneWayCommandProfileForType(iEntry.oneWayBroadcastType);
                 lProfileTemplate.acei = iEntry.oneWayAcei ? iEntry.oneWayAcei : lProfileTemplate.acei;
                 if (!build1WExecute(mTxFrame, lProfileTemplate, iEntry.oneWayMain,
-                                      iEntry.oneWayFp1, iEntry.oneWayFp2, lSeq))
+                                    iEntry.oneWayFp1, iEntry.oneWayFp2, lSeq))
                     return false;
 
                 uint8_t lHmacIn[7];
@@ -5576,7 +5591,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                      lEncKeyHex.c_str());
         }
         const uint16_t lSequence = (static_cast<uint16_t>((iEntry.param2 != 0xFF) ? iEntry.param2 : 0x00) << 8) |
-                                  static_cast<uint16_t>((iEntry.param3 != 0xFF) ? iEntry.param3 : 0x00);
+                                   static_cast<uint16_t>((iEntry.param3 != 0xFF) ? iEntry.param3 : 0x00);
         if (!build1WSendKey(mTxFrame, lEncKey1W, lProfile->getOneWayControllerManufacturer(), lSequence))
             return false;
         mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;

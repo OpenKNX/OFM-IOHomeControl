@@ -298,6 +298,14 @@ public:
     return (iIndex < IOHC_ChannelCount) ? mChannels[iIndex] : nullptr;
   }
 
+  // Native test stub: the real module auto-provisions a missing 1W controller
+  // profile here. Tests configure identities explicitly, so simply report
+  // whether a usable identity already exists.
+  bool ensureOneWayControllerProfile(IoHomecontrolChannel *iChannel)
+  {
+    return iChannel && iChannel->is1W() && iChannel->hasOneWayControllerIdentity();
+  }
+
   void testSetChannel(uint8_t iIndex, IoHomecontrolChannel *iChannel)
   {
     if (iIndex < IOHC_ChannelCount)

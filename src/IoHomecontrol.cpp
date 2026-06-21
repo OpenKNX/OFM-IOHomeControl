@@ -649,6 +649,40 @@ bool IoHomecontrol::generateOneWayControllerProfile(IoHomecontrolChannel *iChann
     return true;
 }
 
+bool IoHomecontrol::ensureOneWayControllerProfile(IoHomecontrolChannel *iChannel)
+{
+    if (!iChannel || !iChannel->is1W())
+        return false;
+
+    // Resolve the effective profile: a channel may share another channel's 1W
+    // remote identity (linked profile) or own its identity directly.
+    IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(iChannel);
+    if (!lProfile)
+        lProfile = iChannel;
+
+    if (lProfile->hasOneWayControllerIdentity())
+    {
+        // Keep the channel's working key in sync with the resolved profile.
+        iChannel->setEncryptionKey(lProfile->getOneWayControllerKey());
+        return true;
+    }
+
+    // The profile is empty (remote=0 / key=missing). Provision it on demand so
+    // ETS- or console-triggered 1W pairing can build the authenticated
+    // 0x2E/0x30/0x39 frames. generateOneWayControllerProfile() keeps a
+    // non-zero (ETS-configured) manufacturer untouched.
+    if (!generateOneWayControllerProfile(lProfile))
+        return false;
+
+    iChannel->setEncryptionKey(lProfile->getOneWayControllerKey());
+    openknx.flash.save();
+    logInfoP("Auto-generated missing 1W controller profile for channel %u (remote=0x%06X, mfg=0x%02X)",
+             static_cast<unsigned>(oneWayProfileIndex(lProfile) + 1),
+             static_cast<unsigned long>(lProfile->getOneWayControllerNodeId()),
+             static_cast<unsigned>(lProfile->getOneWayControllerManufacturer()));
+    return true;
+}
+
 void IoHomecontrol::consolidateOneWayProfileSequences()
 {
     for (uint8_t i = 0; i < mNumChannels; i++)
@@ -4493,7 +4527,6 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                          lParsedKeyTransferAuth.dataLen == IOHC_HMAC_SIZE &&
                          !lParsedKeyTransferAuth.hasHmac && lParsedKeyTransferAuth.hasCrc &&
                          memcmp(lParsedKeyTransferAuth.data, lKeyTransferAuth.data, IOHC_HMAC_SIZE) == 0;
-
 
         // Byte-exact known vectors shared with the native protocol tests. These
         // keep the on-device console self-test useful when no host test runner is
