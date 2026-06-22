@@ -22,14 +22,14 @@
 // future change of the ETS parameter structure breaks the build at compile time
 // instead of silently reading or writing the wrong bytes.
 #define IOHC_SCENE_PARAM(field, sceneIndex) \
-    IOHC_ParamCalcIndex(IOHC_IOHCScene1##field + (sceneIndex))
+    IOHC_ParamCalcIndex(IOHC_cScene1##field + (sceneIndex))
 
-#define IOHC_ASSERT_SCENE_LAYOUT(scene)                                                       \
-    static_assert(IOHC_IOHCScene##scene##Position - IOHC_IOHCScene1Position == ((scene) - 1), \
-                  "IO-Homecontrol scene Position parameters must keep a stride of 1");        \
-    static_assert(IOHC_IOHCScene##scene##Action - IOHC_IOHCScene1Action == ((scene) - 1),     \
-                  "IO-Homecontrol scene Action parameters must keep a stride of 1");          \
-    static_assert(IOHC_IOHCScene##scene##Slat - IOHC_IOHCScene1Slat == ((scene) - 1),         \
+#define IOHC_ASSERT_SCENE_LAYOUT(scene)                                                 \
+    static_assert(IOHC_cScene##scene##Position - IOHC_cScene1Position == ((scene) - 1), \
+                  "IO-Homecontrol scene Position parameters must keep a stride of 1");  \
+    static_assert(IOHC_cScene##scene##Action - IOHC_cScene1Action == ((scene) - 1),     \
+                  "IO-Homecontrol scene Action parameters must keep a stride of 1");    \
+    static_assert(IOHC_cScene##scene##Slat - IOHC_cScene1Slat == ((scene) - 1),         \
                   "IO-Homecontrol scene Slat parameters must keep a stride of 1")
 
 static_assert(IoHomecontrolChannel::kMaxSceneCount == 10,
@@ -160,14 +160,14 @@ const std::string IoHomecontrolChannel::logPrefix()
 
 void IoHomecontrolChannel::setup()
 {
-    const uint8_t lProtocolMode = static_cast<uint8_t>(ParamIOHC_IOHCProtocolMode);
-    const uint32_t lOneWayTargetNodeId = static_cast<uint32_t>(ParamIOHC_IOHCOneWayTargetNodeId) & 0x00FFFFFF;
-    const uint8_t lOneWayBroadcastType = static_cast<uint8_t>(ParamIOHC_IOHCOneWayBroadcastType);
-    const uint8_t lOneWayProfileChannel = static_cast<uint8_t>(ParamIOHC_IOHCOneWayProfileChannel);
-    const uint8_t lOneWayManufacturer = static_cast<uint8_t>(ParamIOHC_IOHCOneWayManufacturer);
+    const uint8_t lProtocolMode = static_cast<uint8_t>(ParamIOHC_cProtocolMode);
+    const uint32_t lOneWayTargetNodeId = static_cast<uint32_t>(ParamIOHC_cOneWayTargetNodeId) & 0x00FFFFFF;
+    const uint8_t lOneWayBroadcastType = static_cast<uint8_t>(ParamIOHC_cOneWayBroadcastType);
+    const uint8_t lOneWayProfileChannel = static_cast<uint8_t>(ParamIOHC_cOneWayProfileChannel);
+    const uint8_t lOneWayManufacturer = static_cast<uint8_t>(ParamIOHC_cOneWayManufacturer);
 
     logInfoP("ETS config: active=%u protocol=%u (%s) oneWayTarget=0x%06X oneWayType=%u oneWayProfile=%u oneWayMfg=0x%02X",
-             ParamIOHC_IOHCActive ? 1U : 0U,
+             ParamIOHC_cActive ? 1U : 0U,
              static_cast<unsigned>(lProtocolMode),
              lProtocolMode == 1 ? "1W" : "2W",
              static_cast<unsigned long>(lOneWayTargetNodeId),
@@ -176,7 +176,7 @@ void IoHomecontrolChannel::setup()
              static_cast<unsigned>(lOneWayManufacturer));
 
     // Check if channel is active in ETS
-    if (!ParamIOHC_IOHCActive)
+    if (!ParamIOHC_cActive)
     {
         logInfoP("Channel disabled in ETS - protocol and 1W settings will not be applied");
         return;
@@ -200,7 +200,7 @@ void IoHomecontrolChannel::setup()
     setConfigured1WTargetNodeId(lOneWayTargetNodeId);
     setConfigured1WBroadcastType(resolveOneWayBroadcastType(
         lOneWayBroadcastType,
-        static_cast<uint8_t>(ParamIOHC_IOHCDeviceType)));
+        static_cast<uint8_t>(ParamIOHC_cDeviceType)));
     const uint8_t lProfileChannel = lOneWayProfileChannel;
     setConfigured1WProfileChannel(lProfileChannel == 0 ? 0xFF : static_cast<uint8_t>(lProfileChannel - 1));
     mConfigured1WManufacturer = lOneWayManufacturer;
@@ -218,9 +218,9 @@ void IoHomecontrolChannel::setup()
              static_cast<unsigned>(mOneWayControllerManufacturer));
 
     logDebugP("Setup (type=%d, poll=%ds, open=%.1fs, close=%.1fs, invert=%d, powerOn=%d, scenes=%d, 1w=%d, 1wTarget=%06X, 1wType=%u, 1wProfile=%u)",
-              ParamIOHC_IOHCDeviceType, ParamIOHC_IOHCPollInterval,
-              ParamIOHC_IOHCOpeningTime, ParamIOHC_IOHCClosingTime,
-              ParamIOHC_IOHCInvertDir, ParamIOHC_IOHCPowerOnBeh,
+              ParamIOHC_cDeviceType, ParamIOHC_cPollInterval,
+              ParamIOHC_cOpeningTime, ParamIOHC_cClosingTime,
+              ParamIOHC_cInvertDir, ParamIOHC_cPowerOnBeh,
               getConfiguredSceneCount(), mIs1W ? 1 : 0,
               mConfigured1WTargetNodeId, static_cast<unsigned>(mConfigured1WBroadcastType),
               mConfigured1WProfileChannel == 0xFF ? 0U : static_cast<unsigned>(mConfigured1WProfileChannel + 1));
@@ -231,7 +231,7 @@ void IoHomecontrolChannel::loop()
     if (!mPaired || (mIs1W && mNodeId == 0))
         return;
 
-    if (!ParamIOHC_IOHCActive)
+    if (!ParamIOHC_cActive)
         return;
 
     const uint32_t lNow = millis();
@@ -268,7 +268,7 @@ void IoHomecontrolChannel::loop()
     }
 
     // Periodic status polling based on ETS config
-    uint16_t lPollSec = ParamIOHC_IOHCPollInterval;
+    uint16_t lPollSec = ParamIOHC_cPollInterval;
     if (lPollSec > 0 && !isStatusPollTrackingActive(lNow))
     {
         uint32_t lPollMs = (uint32_t)lPollSec * 1000;
@@ -300,7 +300,7 @@ void IoHomecontrolChannel::processInputKo(uint8_t iIoIndex, GroupObject &iKo)
     case IOHC_KoCHPosition:
     {
         float lPercent = (float)iKo.value(DPT_Scaling);
-        if (ParamIOHC_IOHCInvertDir)
+        if (ParamIOHC_cInvertDir)
             lPercent = 100.0f - lPercent;
         sendPositionCommand(lPercent);
         break;
@@ -308,7 +308,7 @@ void IoHomecontrolChannel::processInputKo(uint8_t iIoIndex, GroupObject &iKo)
     case IOHC_KoCHUpDown:
     {
         bool lDown = iKo.value(DPT_UpDown);
-        if (ParamIOHC_IOHCInvertDir)
+        if (ParamIOHC_cInvertDir)
             lDown = !lDown;
         sendUpDown(lDown);
         break;
@@ -929,7 +929,7 @@ void IoHomecontrolChannel::clearStatusPollTracking()
 
 uint32_t IoHomecontrolChannel::configuredStatusPollIntervalMs() const
 {
-    const uint16_t lPollSec = ParamIOHC_IOHCPollInterval;
+    const uint16_t lPollSec = ParamIOHC_cPollInterval;
     return (lPollSec > 0) ? (static_cast<uint32_t>(lPollSec) * 1000UL) : 0UL;
 }
 
@@ -951,19 +951,19 @@ bool IoHomecontrolChannel::isStatusPollTrackingActive(uint32_t iNowMs) const
 
 bool IoHomecontrolChannel::isOnOffDeviceType() const
 {
-    return ParamIOHC_IOHCDeviceType == 6 || ParamIOHC_IOHCDeviceType == 12;
+    return ParamIOHC_cDeviceType == 6 || ParamIOHC_cDeviceType == 12;
 }
 
 bool IoHomecontrolChannel::isLockDeviceType() const
 {
-    return ParamIOHC_IOHCDeviceType == 8;
+    return ParamIOHC_cDeviceType == 8;
 }
 
 bool IoHomecontrolChannel::isTiltCapableDeviceType() const
 {
     uint16_t lType = mDeviceType;
     if (lType == 0)
-        lType = static_cast<uint16_t>(ParamIOHC_IOHCDeviceType);
+        lType = static_cast<uint16_t>(ParamIOHC_cDeviceType);
 
     switch (static_cast<IoHomeDeviceType>(lType))
     {
@@ -998,7 +998,7 @@ bool IoHomecontrolChannel::restoreLastKnownStateAfterStartup()
 {
     bool lBinaryState = false;
 
-    switch (ParamIOHC_IOHCDeviceType)
+    switch (ParamIOHC_cDeviceType)
     {
     case 0:
     case 1:
@@ -1039,7 +1039,7 @@ bool IoHomecontrolChannel::restoreLastKnownStateAfterStartup()
     if (lReportedPosition > 100)
         return false;
 
-    float lDevicePosition = ParamIOHC_IOHCInvertDir ? (100.0f - lReportedPosition) : lReportedPosition;
+    float lDevicePosition = ParamIOHC_cInvertDir ? (100.0f - lReportedPosition) : lReportedPosition;
     mCurrentPosition = clampPercent(lDevicePosition);
     mTargetPosition = mCurrentPosition;
     mTravelDurationMs = 0;
@@ -1055,7 +1055,7 @@ void IoHomecontrolChannel::publishPositionFeedback(float iPositionPercent, bool 
 {
     mCurrentPosition = clampPercent(iPositionPercent);
 
-    float lReportPos = ParamIOHC_IOHCInvertDir ? (100.0f - mCurrentPosition) : mCurrentPosition;
+    float lReportPos = ParamIOHC_cInvertDir ? (100.0f - mCurrentPosition) : mCurrentPosition;
     getKo(IOHC_KoCHPositionFeedback).value((uint8_t)(lReportPos + 0.5f), DPT_Scaling);
     publishBinaryStatus();
 
@@ -1098,8 +1098,8 @@ void IoHomecontrolChannel::updateEstimatedPosition()
 
     float lPreviousPosition = mCurrentPosition;
     float lEstimatedPosition = snapPositionBoundary(clampPercent(estimateCurrentPosition()));
-    float lPreviousReported = ParamIOHC_IOHCInvertDir ? (100.0f - lPreviousPosition) : lPreviousPosition;
-    float lEstimatedReported = ParamIOHC_IOHCInvertDir ? (100.0f - lEstimatedPosition) : lEstimatedPosition;
+    float lPreviousReported = ParamIOHC_cInvertDir ? (100.0f - lPreviousPosition) : lPreviousPosition;
+    float lEstimatedReported = ParamIOHC_cInvertDir ? (100.0f - lEstimatedPosition) : lEstimatedPosition;
 
     mCurrentPosition = lEstimatedPosition;
     if ((uint8_t)(lEstimatedReported + 0.5f) != (uint8_t)(lPreviousReported + 0.5f))
@@ -1118,12 +1118,12 @@ void IoHomecontrolChannel::updateEstimatedPosition()
 
 float IoHomecontrolChannel::configuredOpeningTimeSeconds() const
 {
-    return ParamIOHC_IOHCOpeningTime > 0.0f ? ParamIOHC_IOHCOpeningTime : 0.0f;
+    return ParamIOHC_cOpeningTime > 0.0f ? ParamIOHC_cOpeningTime : 0.0f;
 }
 
 float IoHomecontrolChannel::configuredClosingTimeSeconds() const
 {
-    return ParamIOHC_IOHCClosingTime > 0.0f ? ParamIOHC_IOHCClosingTime : 0.0f;
+    return ParamIOHC_cClosingTime > 0.0f ? ParamIOHC_cClosingTime : 0.0f;
 }
 
 // --- P1: RSSI callback ---
@@ -1207,7 +1207,7 @@ uint8_t IoHomecontrolChannel::getSceneSlat(uint8_t iScene) const
 
 uint8_t IoHomecontrolChannel::getConfiguredSceneCount() const
 {
-    uint8_t lSceneCount = ParamIOHC_IOHCSceneCount;
+    uint8_t lSceneCount = ParamIOHC_cSceneCount;
     return lSceneCount > kMaxSceneCount ? kMaxSceneCount : lSceneCount;
 }
 
@@ -1230,7 +1230,7 @@ void IoHomecontrolChannel::loadSceneConfiguration()
 float IoHomecontrolChannel::sceneToDevicePosition(uint8_t iScenePosition) const
 {
     float lPosition = (float)iScenePosition;
-    if (ParamIOHC_IOHCInvertDir)
+    if (ParamIOHC_cInvertDir)
         lPosition = 100.0f - lPosition;
     return lPosition;
 }
@@ -1242,7 +1242,7 @@ uint8_t IoHomecontrolChannel::sceneToDeviceSlat(uint8_t iSceneSlat) const
 
 uint8_t IoHomecontrolChannel::currentPositionToSceneValue() const
 {
-    float lPosition = ParamIOHC_IOHCInvertDir ? (100.0f - mCurrentPosition) : mCurrentPosition;
+    float lPosition = ParamIOHC_cInvertDir ? (100.0f - mCurrentPosition) : mCurrentPosition;
     if (lPosition < 0.0f)
         lPosition = 0.0f;
     if (lPosition > 100.0f)
@@ -1309,7 +1309,7 @@ void IoHomecontrolChannel::handleSceneRecall(uint8_t iScene)
         return;
 
     uint8_t lSceneIndex = iScene - 1;
-    uint8_t lDeviceType = ParamIOHC_IOHCDeviceType;
+    uint8_t lDeviceType = ParamIOHC_cDeviceType;
 
     // Thermostat scenes: temperature + cozy mode
     if (lDeviceType == 5)
@@ -1381,7 +1381,7 @@ void IoHomecontrolChannel::handleSceneControl(uint8_t iControl)
         return;
 
     uint8_t lSceneIndex = lScene - 1;
-    uint8_t lDeviceType = ParamIOHC_IOHCDeviceType;
+    uint8_t lDeviceType = ParamIOHC_cDeviceType;
 
     // Thermostat/Licht/Schloss/Schalter: store not supported (ETS-configured only)
     if (lDeviceType == 5 || lDeviceType == 6 || lDeviceType == 8 || lDeviceType == 12)
@@ -1428,7 +1428,7 @@ void IoHomecontrolChannel::handleWindAlarm(bool iAlarm)
     if (iAlarm)
     {
         logDebugP("WIND/RAIN ALARM — safety action");
-        uint8_t lDevType = ParamIOHC_IOHCDeviceType;
+        uint8_t lDevType = ParamIOHC_cDeviceType;
         switch (lDevType)
         {
         case 2: // Fenster — close
@@ -1460,7 +1460,7 @@ void IoHomecontrolChannel::handleStepStop(bool iDown)
     else
     {
         // If idle, start moving
-        if (ParamIOHC_IOHCInvertDir)
+        if (ParamIOHC_cInvertDir)
             iDown = !iDown;
         sendUpDown(iDown);
     }

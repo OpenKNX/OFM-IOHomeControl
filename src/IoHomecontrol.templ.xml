@@ -15,35 +15,35 @@
           <Static>
             <Parameters>
               <!-- Per-channel parameters -->
-              <Parameter Id="%AID%_P-%TT%%CC%000" Name="IOHC%C%Name" ParameterType="%AID%_PT-IOHCText40Byte" Text="Beschreibung" Value="" />
+              <Parameter Id="%AID%_P-%TT%%CC%000" Name="c%C%Name" ParameterType="%AID%_PT-IOHCText40Byte" Text="Beschreibung" Value="" />
 
               <!-- Pairing mode selector (P0) — standalone, outside Union -->
-              <Parameter Id="%AID%_P-%TT%%CC%010" Name="IOHC%C%PairingMode" ParameterType="%AID%_PT-IOHCPairingMode" Text="Pairing-Modus" Value="0" />
-              <Parameter Id="%AID%_P-%TT%%CC%012" Name="IOHC%C%PairingLastResult" ParameterType="%AID%_PT-IOHCText40Byte" Text="Letztes Pairing-Ergebnis" Value="Noch nicht abgefragt" Access="Read" />
-              <Parameter Id="%AID%_P-%TT%%CC%013" Name="IOHC%C%PairedNodeIdDisplay" ParameterType="%AID%_PT-IOHCText40Byte" Text="Aktuell gepaarte Node-ID" Value="unbekannt" Access="Read" />
-              <Parameter Id="%AID%_P-%TT%%CC%014" Name="IOHC%C%OneWaySummary" ParameterType="%AID%_PT-IOHCText40Byte" Text="Protokoll / Ziel" Value="Noch nicht gelesen" Access="Read" />
-              <Parameter Id="%AID%_P-%TT%%CC%015" Name="IOHC%C%PairingDiag" ParameterType="%AID%_PT-IOHCText40Byte" Text="Letzte Pairing-Diagnose" Value="Noch keine Diagnose" Access="Read" />
+              <Parameter Id="%AID%_P-%TT%%CC%010" Name="c%C%PairingMode" ParameterType="%AID%_PT-IOHCPairingMode" Text="Pairing-Modus" Value="0" />
+              <Parameter Id="%AID%_P-%TT%%CC%012" Name="c%C%PairingLastResult" ParameterType="%AID%_PT-IOHCText40Byte" Text="Letztes Pairing-Ergebnis" Value="Noch nicht abgefragt" Access="Read" />
+              <Parameter Id="%AID%_P-%TT%%CC%013" Name="c%C%PairedNodeIdDisplay" ParameterType="%AID%_PT-IOHCText40Byte" Text="Aktuell gepaarte Node-ID" Value="unbekannt" Access="Read" />
+              <Parameter Id="%AID%_P-%TT%%CC%014" Name="c%C%OneWaySummary" ParameterType="%AID%_PT-IOHCText40Byte" Text="Protokoll / Ziel" Value="Noch nicht gelesen" Access="Read" />
+              <Parameter Id="%AID%_P-%TT%%CC%015" Name="c%C%PairingDiag" ParameterType="%AID%_PT-IOHCText40Byte" Text="Letzte Pairing-Diagnose" Value="Noch keine Diagnose" Access="Read" />
 
               <!-- Main configuration Union including 10 ETS-backed scene slots -->
               <Union SizeInBit="416">
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%001" Name="IOHC%C%Active" ParameterType="%AID%_PT-IOHCCheckBox" Offset="0" BitOffset="0" Text="Kanal aktiv" Value="1" />
-                <Parameter Id="%AID%_UP-%TT%%CC%002" Name="IOHC%C%DeviceType" ParameterType="%AID%_PT-IOHCDeviceType" Offset="1" BitOffset="0" Text="Gerätetyp" Value="1" />
-                <Parameter Id="%AID%_UP-%TT%%CC%003" Name="IOHC%C%PollInterval" ParameterType="%AID%_PT-IOHCPollInterval" Offset="2" BitOffset="0" Text="Status-Abfrageintervall (Fallback)" Value="300" />
+                <Parameter Id="%AID%_UP-%TT%%CC%001" Name="c%C%Active" ParameterType="%AID%_PT-IOHCCheckBox" Offset="0" BitOffset="0" Text="Kanal aktiv" Value="1" />
+                <Parameter Id="%AID%_UP-%TT%%CC%002" Name="c%C%DeviceType" ParameterType="%AID%_PT-IOHCDeviceType" Offset="1" BitOffset="0" Text="Gerätetyp" Value="1" />
+                <Parameter Id="%AID%_UP-%TT%%CC%003" Name="c%C%PollInterval" ParameterType="%AID%_PT-IOHCPollInterval" Offset="2" BitOffset="0" Text="Status-Abfrageintervall (Fallback)" Value="300" />
                 <!-- P2: Opening/closing time (seconds) -->
-                <Parameter Id="%AID%_UP-%TT%%CC%004" Name="IOHC%C%OpeningTime" ParameterType="%AID%_PT-IOHCTravelTime" Offset="4" BitOffset="0" Text="Öffnungszeit (Sekunden)" Value="30.0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%005" Name="IOHC%C%ClosingTime" ParameterType="%AID%_PT-IOHCTravelTime" Offset="8" BitOffset="0" Text="Schließzeit (Sekunden)" Value="30.0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%004" Name="c%C%OpeningTime" ParameterType="%AID%_PT-IOHCTravelTime" Offset="4" BitOffset="0" Text="Öffnungszeit (Sekunden)" Value="30.0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%005" Name="c%C%ClosingTime" ParameterType="%AID%_PT-IOHCTravelTime" Offset="8" BitOffset="0" Text="Schließzeit (Sekunden)" Value="30.0" />
                 <!-- P2: Invert direction -->
-                <Parameter Id="%AID%_UP-%TT%%CC%006" Name="IOHC%C%InvertDir" ParameterType="%AID%_PT-IOHCCheckBox" Offset="0" BitOffset="1" Text="Richtung invertieren" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%006" Name="c%C%InvertDir" ParameterType="%AID%_PT-IOHCCheckBox" Offset="0" BitOffset="1" Text="Richtung invertieren" Value="0" />
                 <!-- P2: Power-on behavior -->
-                <Parameter Id="%AID%_UP-%TT%%CC%007" Name="IOHC%C%PowerOnBeh" ParameterType="%AID%_PT-IOHCPowerOnBehavior" Offset="12" BitOffset="0" Text="Verhalten nach Neustart" Value="1" />
+                <Parameter Id="%AID%_UP-%TT%%CC%007" Name="c%C%PowerOnBeh" ParameterType="%AID%_PT-IOHCPowerOnBehavior" Offset="12" BitOffset="0" Text="Verhalten nach Neustart" Value="1" />
                 <!-- Protocol mode: 1W / 2W -->
-                <Parameter Id="%AID%_UP-%TT%%CC%009" Name="IOHC%C%ProtocolMode" ParameterType="%AID%_PT-IOHCProtocolMode" Offset="44" BitOffset="0" Text="Protokoll-Modus" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%011" Name="IOHC%C%OneWayTargetNodeId" ParameterType="%AID%_PT-IOHCOneWayTargetNodeId" Offset="45" BitOffset="0" Text="1W Aktor-Node-ID (dezimal, 0 = nicht gesetzt)" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%016" Name="IOHC%C%OneWayBroadcastType" ParameterType="%AID%_PT-IOHCOneWayBroadcastType" Offset="49" BitOffset="0" Text="1W Broadcast-Typ" Value="255" />
-                <Parameter Id="%AID%_UP-%TT%%CC%017" Name="IOHC%C%OneWayManufacturer" ParameterType="%AID%_PT-IOHCOneWayManufacturer" Offset="50" BitOffset="0" Text="1W Controller-Hersteller (eigenes Profil)" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%018" Name="IOHC%C%OneWayProfileChannel" ParameterType="%AID%_PT-IOHCOneWayProfileChannel" Offset="51" BitOffset="0" Text="1W Profil teilen mit Kanal (0 = eigenes)" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%020" Name="IOHC%C%SceneCount" ParameterType="%AID%_PT-IOHCSceneCount" Offset="13" BitOffset="0" Text="Anzahl Szenen" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%009" Name="c%C%ProtocolMode" ParameterType="%AID%_PT-IOHCProtocolMode" Offset="44" BitOffset="0" Text="Protokoll-Modus" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%011" Name="c%C%OneWayTargetNodeId" ParameterType="%AID%_PT-IOHCOneWayTargetNodeId" Offset="45" BitOffset="0" Text="1W Aktor-Node-ID (dezimal, 0 = nicht gesetzt)" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%016" Name="c%C%OneWayBroadcastType" ParameterType="%AID%_PT-IOHCOneWayBroadcastType" Offset="49" BitOffset="0" Text="1W Broadcast-Typ" Value="255" />
+                <Parameter Id="%AID%_UP-%TT%%CC%017" Name="c%C%OneWayManufacturer" ParameterType="%AID%_PT-IOHCOneWayManufacturer" Offset="50" BitOffset="0" Text="1W Controller-Hersteller (eigenes Profil)" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%018" Name="c%C%OneWayProfileChannel" ParameterType="%AID%_PT-IOHCOneWayProfileChannel" Offset="51" BitOffset="0" Text="1W Profil teilen mit Kanal (0 = eigenes)" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%020" Name="c%C%SceneCount" ParameterType="%AID%_PT-IOHCSceneCount" Offset="13" BitOffset="0" Text="Anzahl Szenen" Value="0" />
                 <!-- Scene slot parameters 1..10 are generated from IoHomecontrol.scene.part.xml. -->
                 <op:usePart name="IOHCScene" xpath="//Parameters/*" />
               </Union>

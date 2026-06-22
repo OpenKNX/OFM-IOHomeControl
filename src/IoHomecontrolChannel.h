@@ -16,6 +16,8 @@ public:
     Ventilation = 2,
   };
 
+  static constexpr uint8_t kMaxSceneCount = 10;
+
   IoHomecontrolChannel(uint8_t iIndex, IoHomeController &iController);
 
   const std::string name() override;
@@ -100,14 +102,12 @@ public:
   uint8_t getSceneSlat(uint8_t iScene) const;
 
 private:
-  static constexpr uint8_t kMaxSceneCount = 10;
-
   IoHomeController &mController;
   uint32_t mNodeId = 0;           // 3-byte (24-bit) remote device address
   uint8_t mEncKey[16] = {};       // AES-128 encryption key
   uint8_t mLastChallenge[6] = {}; // challenge sent with last authenticated command
   bool mPaired = false;
-  bool mLowPower2W = true;  // Battery/solar-safe default for 2W devices
+  bool mLowPower2W = true;          // Battery/solar-safe default for 2W devices
   uint16_t mSequence1W = 0;         // 1W last used sequence counter
   uint16_t mReservedSequence1W = 0; // highest sequence persisted/reserved ahead in flash
   uint32_t mOneWayControllerNodeId = 0;

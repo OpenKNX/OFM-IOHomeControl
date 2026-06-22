@@ -10,11 +10,11 @@ function IOHC_invokeFunctionProperty(online, data) {
 }
 
 function IOHC_getChannelPrefix(context) {
-    return "IOHC_IOHC" + context.channelIndex;
+    return "IOHC_c" + context.channelIndex;
 }
 
 function IOHC_getGlobalPrefix() {
-    return "IOHC_IOHC";
+    return "IOHC_";
 }
 
 function IOHC_getParameter(device, name) {

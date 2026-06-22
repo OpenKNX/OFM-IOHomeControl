@@ -23,12 +23,12 @@
 
            The overlays are intentional because the active interpretation
            depends on the selected device type. -->
-      <Parameter Id="%AID%_UP-%TT%%CC%%ID%" op:nowarn="true" Name="IOHC%C%Scene%SCENE%Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="%SCENE+13%" BitOffset="0" Text="Szene %SCENE% Position" Value="0" SuffixText=" %" />
-      <Parameter Id="%AID%_UP-%TT%%CC%%ID+10%" op:nowarn="true" Name="IOHC%C%Scene%SCENE%Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="%SCENE+23%" BitOffset="0" Text="Szene %SCENE% Aktion" Value="0" />
-      <Parameter Id="%AID%_UP-%TT%%CC%%ID+20%" op:nowarn="true" Name="IOHC%C%Scene%SCENE%Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="%SCENE+33%" BitOffset="0" Text="Szene %SCENE% Lamellenposition" Value="0" SuffixText=" %" />
-      <Parameter Id="%AID%_UP-%TT%%CC%%ID+30%" op:nowarn="true" Name="IOHC%C%Scene%SCENE%Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="%SCENE+13%" BitOffset="0" Text="Szene %SCENE% Temperatur" Value="20" SuffixText=" °C" />
-      <Parameter Id="%AID%_UP-%TT%%CC%%ID+40%" op:nowarn="true" Name="IOHC%C%Scene%SCENE%CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="%SCENE+23%" BitOffset="0" Text="Szene %SCENE% Modus" Value="0" />
-      <Parameter Id="%AID%_UP-%TT%%CC%%ID+50%" op:nowarn="true" Name="IOHC%C%Scene%SCENE%OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="%SCENE+13%" BitOffset="0" Text="Szene %SCENE% Zustand" Value="0" />
+      <Parameter Id="%AID%_UP-%TT%%CC%%ID%" op:nowarn="true" Name="c%C%Scene%SCENE%Position" ParameterType="%AID%_PT-IOHCScenePosition" Offset="%SCENE+13%" BitOffset="0" Text="Szene %SCENE% Position" Value="0" SuffixText=" %" />
+      <Parameter Id="%AID%_UP-%TT%%CC%%ID+10%" op:nowarn="true" Name="c%C%Scene%SCENE%Action" ParameterType="%AID%_PT-IOHCSceneAction" Offset="%SCENE+23%" BitOffset="0" Text="Szene %SCENE% Aktion" Value="0" />
+      <Parameter Id="%AID%_UP-%TT%%CC%%ID+20%" op:nowarn="true" Name="c%C%Scene%SCENE%Slat" ParameterType="%AID%_PT-IOHCScenePosition" Offset="%SCENE+33%" BitOffset="0" Text="Szene %SCENE% Lamellenposition" Value="0" SuffixText=" %" />
+      <Parameter Id="%AID%_UP-%TT%%CC%%ID+30%" op:nowarn="true" Name="c%C%Scene%SCENE%Temperature" ParameterType="%AID%_PT-IOHCSceneTemperature" Offset="%SCENE+13%" BitOffset="0" Text="Szene %SCENE% Temperatur" Value="20" SuffixText=" °C" />
+      <Parameter Id="%AID%_UP-%TT%%CC%%ID+40%" op:nowarn="true" Name="c%C%Scene%SCENE%CozyMode" ParameterType="%AID%_PT-IOHCSceneCozyMode" Offset="%SCENE+23%" BitOffset="0" Text="Szene %SCENE% Modus" Value="0" />
+      <Parameter Id="%AID%_UP-%TT%%CC%%ID+50%" op:nowarn="true" Name="c%C%Scene%SCENE%OnOff" ParameterType="%AID%_PT-IOHCSceneOnOff" Offset="%SCENE+13%" BitOffset="0" Text="Szene %SCENE% Zustand" Value="0" />
     </Parameters>
 
     <ParameterRefs>

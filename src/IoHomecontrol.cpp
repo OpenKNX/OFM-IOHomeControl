@@ -805,7 +805,7 @@ uint8_t IoHomecontrol::countPairedChannels() const
 
 uint8_t IoHomecontrol::configuredChannelCount() const
 {
-    return MIN(ParamIOHC_IOHCVisibleChannels, IOHC_ChannelCount);
+    return MIN(ParamIOHC_VisibleChannels, IOHC_ChannelCount);
 }
 
 void IoHomecontrol::restoreChannelFlashState(uint8_t iIndex, const FlashChannelState &iState)
@@ -984,7 +984,7 @@ void IoHomecontrol::setup()
     applyOneWayControllerConfiguration();
 
     // Report module status OK
-    KoIOHC_IOHC_Modulstatus.value(true, DPT_Switch);
+    KoIOHC_Modulstatus.value(true, DPT_Switch);
 
     mLastControllerState = mController.state();
     mLastPairedCount = countPairedChannels();
@@ -1018,7 +1018,7 @@ void IoHomecontrol::loop()
                              lState == ControllerState::DiscoveryListening);
     if (lDiscoveryActive != mLastDiscoveryActive)
     {
-        KoIOHC_IOHC_DiscoveryAktiv.value(lDiscoveryActive, DPT_Switch);
+        KoIOHC_DiscoveryAktiv.value(lDiscoveryActive, DPT_Switch);
         mLastDiscoveryActive = lDiscoveryActive;
     }
 
@@ -1026,18 +1026,18 @@ void IoHomecontrol::loop()
     bool lScanActive = mController.isNetworkScanActive();
     if (lScanActive != mLastScanActive)
     {
-        KoIOHC_IOHC_NetzwerkScanAktiv.value(lScanActive, DPT_Switch);
+        KoIOHC_NetzwerkScanAktiv.value(lScanActive, DPT_Switch);
         mLastScanActive = lScanActive;
     }
 
     // Remote observation: report observed remote addresses (KO#25, Feature 5)
-    if (ParamIOHC_IOHCRemoteObserve)
+    if (ParamIOHC_RemoteObserve)
     {
         uint8_t lObservedCount = mRemoteMap.observedCount();
         if (lObservedCount > mLastObservedCount)
         {
             uint32_t lAddr = mRemoteMap.observedAddress(lObservedCount - 1);
-            KoIOHC_IOHC_BeobachteteFernbedienung.value(lAddr, Dpt(12, 1));
+            KoIOHC_BeobachteteFernbedienung.value(lAddr, Dpt(12, 1));
             logDebugP("Observed remote: 0x%06X", lAddr);
         }
         mLastObservedCount = lObservedCount;
@@ -1689,7 +1689,7 @@ void IoHomecontrol::processAfterStartupDelay()
         // power-on behavior is a no-op for them (requestStatus() returns false),
         // while "restore last state" still applies via a position command below.
         uint8_t _channelIndex = i; // needed by ParamIOHC_* macros
-        uint8_t lBehavior = ParamIOHC_IOHCPowerOnBeh;
+        uint8_t lBehavior = ParamIOHC_cPowerOnBeh;
         if (lBehavior == 1) // Status abfragen
         {
             logDebugP("Ch%d: power-on -> request status", i + 1);
@@ -1710,19 +1710,19 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
     uint16_t lAsap = iKo.asap();
 
     // Global KO: Discovery trigger (KO#21)
-    if (lAsap == IOHC_KoIOHC_Discovery)
+    if (lAsap == IOHC_KoDiscovery)
     {
         if ((bool)iKo.value(DPT_Switch))
         {
             logDebugP("Discovery triggered via KNX");
             mController.startDiscovery();
-            KoIOHC_IOHC_DiscoveryAktiv.value(true, DPT_Switch);
+            KoIOHC_DiscoveryAktiv.value(true, DPT_Switch);
         }
         return;
     }
 
     // Global KO: Network Scan trigger (KO#23)
-    if (lAsap == IOHC_KoIOHC_NetzwerkScan)
+    if (lAsap == IOHC_KoNetzwerkScan)
     {
         bool lStart = (bool)iKo.value(DPT_Switch);
         if (lStart)
@@ -1735,7 +1735,7 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
             logDebugP("Network scan stopped via KNX");
             mController.stopNetworkScan();
         }
-        KoIOHC_IOHC_NetzwerkScanAktiv.value(lStart, DPT_Switch);
+        KoIOHC_NetzwerkScanAktiv.value(lStart, DPT_Switch);
         return;
     }
 
