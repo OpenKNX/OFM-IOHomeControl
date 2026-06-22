@@ -984,7 +984,7 @@ void IoHomecontrol::setup()
     applyOneWayControllerConfiguration();
 
     // Report module status OK
-    KoIOHC_Modulstatus.value(true, DPT_Switch);
+    KoIOHC_ModuleStatus.value(true, DPT_Switch);
 
     mLastControllerState = mController.state();
     mLastPairedCount = countPairedChannels();
@@ -1018,7 +1018,7 @@ void IoHomecontrol::loop()
                              lState == ControllerState::DiscoveryListening);
     if (lDiscoveryActive != mLastDiscoveryActive)
     {
-        KoIOHC_DiscoveryAktiv.value(lDiscoveryActive, DPT_Switch);
+        KoIOHC_DiscoveryActive.value(lDiscoveryActive, DPT_Switch);
         mLastDiscoveryActive = lDiscoveryActive;
     }
 
@@ -1026,7 +1026,7 @@ void IoHomecontrol::loop()
     bool lScanActive = mController.isNetworkScanActive();
     if (lScanActive != mLastScanActive)
     {
-        KoIOHC_NetzwerkScanAktiv.value(lScanActive, DPT_Switch);
+        KoIOHC_NetworkScanActive.value(lScanActive, DPT_Switch);
         mLastScanActive = lScanActive;
     }
 
@@ -1037,7 +1037,7 @@ void IoHomecontrol::loop()
         if (lObservedCount > mLastObservedCount)
         {
             uint32_t lAddr = mRemoteMap.observedAddress(lObservedCount - 1);
-            KoIOHC_BeobachteteFernbedienung.value(lAddr, Dpt(12, 1));
+            KoIOHC_ObservedRemote.value(lAddr, Dpt(12, 1));
             logDebugP("Observed remote: 0x%06X", lAddr);
         }
         mLastObservedCount = lObservedCount;
@@ -1716,13 +1716,13 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
         {
             logDebugP("Discovery triggered via KNX");
             mController.startDiscovery();
-            KoIOHC_DiscoveryAktiv.value(true, DPT_Switch);
+            KoIOHC_DiscoveryActive.value(true, DPT_Switch);
         }
         return;
     }
 
     // Global KO: Network Scan trigger (KO#23)
-    if (lAsap == IOHC_KoNetzwerkScan)
+    if (lAsap == IOHC_KoNetworkScan)
     {
         bool lStart = (bool)iKo.value(DPT_Switch);
         if (lStart)
@@ -1735,7 +1735,7 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
             logDebugP("Network scan stopped via KNX");
             mController.stopNetworkScan();
         }
-        KoIOHC_NetzwerkScanAktiv.value(lStart, DPT_Switch);
+        KoIOHC_NetworkScanActive.value(lStart, DPT_Switch);
         return;
     }
 
