@@ -5,6 +5,49 @@
 #include "knxprod.h"
 #include "OpenKNX.h"
 
+// ---------------------------------------------------------------------------
+// Scene parameter access
+//
+// The knxprod generator emits the per-scene ETS parameters as a flat block in
+// which each field (Position, Action, Slat) keeps a fixed stride of one byte
+// between consecutive scenes:
+//
+//   Scene1Position = 14, Scene2Position = 15, ... Scene10Position = 23
+//   Scene1Action   = 24, Scene2Action   = 25, ... Scene10Action   = 33
+//   Scene1Slat     = 34, Scene2Slat     = 35, ... Scene10Slat     = 43
+//
+// loadSceneConfiguration() and storeSceneStateToEts() exploit this layout by
+// indexing the first-scene constant with the (0-based) scene number. The macro
+// below makes that access explicit; the static_asserts pin the layout so that a
+// future change of the ETS parameter structure breaks the build at compile time
+// instead of silently reading or writing the wrong bytes.
+#define IOHC_SCENE_PARAM(field, sceneIndex) \
+    IOHC_ParamCalcIndex(IOHC_IOHCScene1##field + (sceneIndex))
+
+#define IOHC_ASSERT_SCENE_LAYOUT(scene)                                                       \
+    static_assert(IOHC_IOHCScene##scene##Position - IOHC_IOHCScene1Position == ((scene) - 1), \
+                  "IO-Homecontrol scene Position parameters must keep a stride of 1");        \
+    static_assert(IOHC_IOHCScene##scene##Action - IOHC_IOHCScene1Action == ((scene) - 1),     \
+                  "IO-Homecontrol scene Action parameters must keep a stride of 1");          \
+    static_assert(IOHC_IOHCScene##scene##Slat - IOHC_IOHCScene1Slat == ((scene) - 1),         \
+                  "IO-Homecontrol scene Slat parameters must keep a stride of 1")
+
+static_assert(IoHomecontrolChannel::kMaxSceneCount == 10,
+              "Scene layout asserts below cover scenes 1..10; update them when kMaxSceneCount changes");
+
+IOHC_ASSERT_SCENE_LAYOUT(2);
+IOHC_ASSERT_SCENE_LAYOUT(3);
+IOHC_ASSERT_SCENE_LAYOUT(4);
+IOHC_ASSERT_SCENE_LAYOUT(5);
+IOHC_ASSERT_SCENE_LAYOUT(6);
+IOHC_ASSERT_SCENE_LAYOUT(7);
+IOHC_ASSERT_SCENE_LAYOUT(8);
+IOHC_ASSERT_SCENE_LAYOUT(9);
+IOHC_ASSERT_SCENE_LAYOUT(10);
+
+#undef IOHC_ASSERT_SCENE_LAYOUT
+// ---------------------------------------------------------------------------
+
 namespace
 {
     constexpr uint32_t kTrackedStatusPollDefaultMs = 2000UL;
@@ -1178,9 +1221,9 @@ void IoHomecontrolChannel::loadSceneConfiguration()
     uint8_t lSceneCount = getConfiguredSceneCount();
     for (uint8_t i = 0; i < lSceneCount; i++)
     {
-        mScenePositions[i] = knx.paramByte(IOHC_ParamCalcIndex(IOHC_IOHCScene1Position + i));
-        mSceneActions[i] = static_cast<SceneAction>(knx.paramByte(IOHC_ParamCalcIndex(IOHC_IOHCScene1Action + i)));
-        mSceneSlats[i] = knx.paramByte(IOHC_ParamCalcIndex(IOHC_IOHCScene1Slat + i));
+        mScenePositions[i] = knx.paramByte(IOHC_SCENE_PARAM(Position, i));
+        mSceneActions[i] = static_cast<SceneAction>(knx.paramByte(IOHC_SCENE_PARAM(Action, i)));
+        mSceneSlats[i] = knx.paramByte(IOHC_SCENE_PARAM(Slat, i));
     }
 }
 
@@ -1222,8 +1265,8 @@ bool IoHomecontrolChannel::storeSceneStateToEts(uint8_t iSceneIndex, uint8_t iSc
     if (iSceneIndex >= getConfiguredSceneCount())
         return false;
 
-    uint8_t *lPositionData = knx.paramData(IOHC_ParamCalcIndex(IOHC_IOHCScene1Position + iSceneIndex));
-    uint8_t *lSlatData = knx.paramData(IOHC_ParamCalcIndex(IOHC_IOHCScene1Slat + iSceneIndex));
+    uint8_t *lPositionData = knx.paramData(IOHC_SCENE_PARAM(Position, iSceneIndex));
+    uint8_t *lSlatData = knx.paramData(IOHC_SCENE_PARAM(Slat, iSceneIndex));
     if (lPositionData == nullptr || lSlatData == nullptr)
         return false;
 
