@@ -2366,8 +2366,8 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc discover", "Broadcast discovery, list devices");
     openknx.console.printHelpLine("iohc discover spe", "Encrypted SPE/sub-device discovery");
     openknx.console.printHelpLine("iohc autospe on|off|status", "Runtime post-pair SPE discovery");
-    openknx.console.printHelpLine("iohc identify NN", "Ask paired 2W device NN to identify itself");
-    openknx.console.printHelpLine("iohc send NN PP", "Send position PP% to channel NN");
+    openknx.console.printHelpLine("iohc identify NN", "Ask paired 2W device NN to identify itself (alias: iohc id NN)");
+    openknx.console.printHelpLine("iohc send NN PP", "Send position PP% to channel NN (alias: iohc pos NN PP)");
     openknx.console.printHelpLine("iohc send1wbtn NN up|down|stop|my|prog|release|stop2", "Send 1W remote button command");
     openknx.console.printHelpLine("iohc raw1w NN HEX", "Send raw 1W button code, e.g. 0000/00FE/00FF");
     openknx.console.printHelpLine("iohc execraw NN HEX", "Send exact raw 1W Execute payload before seq/HMAC");
@@ -3210,6 +3210,8 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         {
             mController.cancelPairing();
             logInfoP("Pairing cancelled");
+            if (iDebugKo)
+                openknx.console.writeDiagnoseKo("Pair cancel");
             return true;
         }
         if (lSub.length() > 5)
@@ -3239,15 +3241,21 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                         logInfoP("1W mode=announce-add pairing started for channel %d (default pair command)", lIdx + 1);
                     else
                         logInfoP("Pairing started for channel %d", lIdx + 1);
+                    if (iDebugKo)
+                        openknx.console.writeDiagnoseKo("Pair ch%02d %s", lIdx + 1, mChannels[lIdx]->is1W() ? "1W" : "2W");
                 }
                 else
                 {
                     logInfoP("Pairing FAILED for channel %d", lIdx + 1);
+                    if (iDebugKo)
+                        openknx.console.writeDiagnoseKo("Pair ch%02d ER", lIdx + 1);
                 }
             }
             else
             {
                 logInfoP("Invalid channel: %s", lSub.substr(5).c_str());
+                if (iDebugKo)
+                    openknx.console.writeDiagnoseKo("Bad channel");
             }
         }
         return true;
@@ -3266,10 +3274,14 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 memset(const_cast<uint8_t *>(mChannels[lIdx]->getEncryptionKey()), 0, 16);
                 openknx.flash.save();
                 logInfoP("Channel %d unpaired", lIdx + 1);
+                if (iDebugKo)
+                    openknx.console.writeDiagnoseKo("Unpair ch%02d", lIdx + 1);
             }
             else
             {
                 logInfoP("Invalid channel: %s", lSub.substr(7).c_str());
+                if (iDebugKo)
+                    openknx.console.writeDiagnoseKo("Bad channel");
             }
         }
         return true;
@@ -3281,11 +3293,15 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         {
             logInfoP("Starting encrypted SPE discovery broadcast...");
             mController.startDiscovery(true);
+            if (iDebugKo)
+                openknx.console.writeDiagnoseKo("Discover SPE");
         }
         else
         {
             logInfoP("Starting discovery broadcast...");
             mController.startDiscovery();
+            if (iDebugKo)
+                openknx.console.writeDiagnoseKo("Discovery");
         }
         return true;
     }
@@ -3444,46 +3460,66 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         return true;
     }
 
-    if (lSub.substr(0, 4) == "send")
+    // "pos" is a short alias for "send" so the command still fits the 14-char
+    // diagnose-object input limit (e.g. "iohc pos 1 100"). Arguments are parsed
+    // by token, so a one- or two-digit channel and position both work.
+    if (lSub.substr(0, 4) == "send" || lSub.substr(0, 3) == "pos")
     {
-        if (lSub.length() > 8)
+        const size_t lPrefixLen = (lSub.substr(0, 3) == "pos") ? 3 : 4;
+        const std::string lArgs = trimSpaces(lSub.length() > lPrefixLen ? lSub.substr(lPrefixLen) : "");
+        const size_t lSpace = lArgs.find_first_of(" \t");
+        uint8_t lIdx = 0;
+        uint32_t lPosValue = 0;
+        if (lSpace != std::string::npos &&
+            parseChannelIndex(lArgs.substr(0, lSpace), mNumChannels, lIdx) &&
+            parseUnsignedDecimal(lArgs.substr(lSpace + 1), lPosValue) && lPosValue <= 100)
         {
-            uint8_t lIdx = 0;
-            uint32_t lPosValue = 0;
-            if (parseChannelIndex(lSub.substr(5, 2), mNumChannels, lIdx) &&
-                parseUnsignedDecimal(lSub.substr(8), lPosValue) && lPosValue <= 100)
+            const uint8_t lPos = static_cast<uint8_t>(lPosValue);
+            if (mChannels[lIdx]->is1W())
             {
-                const uint8_t lPos = static_cast<uint8_t>(lPosValue);
-                if (mChannels[lIdx]->is1W())
+                if (mController.sendChannelCommand(mChannels[lIdx], IoHomeCommand::Execute, lPos))
                 {
-                    if (mController.sendChannelCommand(mChannels[lIdx], IoHomeCommand::Execute, lPos))
-                        logInfoP("Sent 1W position %d%% to channel %d", lPos, lIdx + 1);
-                    else
-                        logInfoP("Failed to queue 1W position %d%% for channel %d", lPos, lIdx + 1);
-                }
-                else if (mChannels[lIdx]->isPaired())
-                {
-                    mController.sendCommand(mChannels[lIdx]->getNodeId(),
-                                            mChannels[lIdx]->getEncryptionKey(),
-                                            IoHomeCommand::Execute, lPos);
-                    logInfoP("Sent position %d%% to channel %d", lPos, lIdx + 1);
+                    logInfoP("Sent 1W position %d%% to channel %d", lPos, lIdx + 1);
+                    if (iDebugKo)
+                        openknx.console.writeDiagnoseKo("Ch%02d=%u%%", lIdx + 1, static_cast<unsigned>(lPos));
                 }
                 else
                 {
-                    logInfoP("Channel %d not paired", lIdx + 1);
+                    logInfoP("Failed to queue 1W position %d%% for channel %d", lPos, lIdx + 1);
+                    if (iDebugKo)
+                        openknx.console.writeDiagnoseKo("Ch%02d TX ER", lIdx + 1);
                 }
+            }
+            else if (mChannels[lIdx]->isPaired())
+            {
+                mController.sendCommand(mChannels[lIdx]->getNodeId(),
+                                        mChannels[lIdx]->getEncryptionKey(),
+                                        IoHomeCommand::Execute, lPos);
+                logInfoP("Sent position %d%% to channel %d", lPos, lIdx + 1);
+                if (iDebugKo)
+                    openknx.console.writeDiagnoseKo("Ch%02d=%u%%", lIdx + 1, static_cast<unsigned>(lPos));
             }
             else
             {
-                logInfoP("Invalid send command: %s", lSub.c_str());
+                logInfoP("Channel %d not paired", lIdx + 1);
+                if (iDebugKo)
+                    openknx.console.writeDiagnoseKo("Ch%02d no pair", lIdx + 1);
             }
+        }
+        else
+        {
+            logInfoP("Invalid send command: %s", lSub.c_str());
+            if (iDebugKo)
+                openknx.console.writeDiagnoseKo("Bad send cmd");
         }
         return true;
     }
 
-    if (lSub.rfind("identify", 0) == 0)
+    // "id" is a short alias for "identify" so it fits the 14-char diagnose limit.
+    if (lSub.rfind("identify", 0) == 0 || lSub.rfind("id", 0) == 0)
     {
-        std::string lArg = (lSub.length() > strlen("identify")) ? lSub.substr(strlen("identify")) : "";
+        const size_t lPrefixLen = (lSub.rfind("identify", 0) == 0) ? strlen("identify") : strlen("id");
+        std::string lArg = (lSub.length() > lPrefixLen) ? lSub.substr(lPrefixLen) : "";
         size_t lPos = 0;
         while (lPos < lArg.length() && isSpace(lArg[lPos]))
             lPos++;
@@ -3494,6 +3530,8 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if (lArg.empty() || !parseChannelIndex(lArg, mNumChannels, lIdx))
         {
             logInfoP("Usage: iohc identify NN");
+            if (iDebugKo)
+                openknx.console.writeDiagnoseKo("Use: id NN");
             return true;
         }
 
@@ -3501,18 +3539,30 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if (!lCh->isPaired())
         {
             logInfoP("Channel %d not paired", lIdx + 1);
+            if (iDebugKo)
+                openknx.console.writeDiagnoseKo("Ch%02d no pair", lIdx + 1);
             return true;
         }
         if (lCh->is1W())
         {
             logInfoP("Channel %d is in 1W mode; Identify is 2W only", lIdx + 1);
+            if (iDebugKo)
+                openknx.console.writeDiagnoseKo("Ident 2W only");
             return true;
         }
 
         if (mController.sendIdentify(lCh->getNodeId(), lCh->getEncryptionKey()))
+        {
             logInfoP("Sent Identify to channel %d", lIdx + 1);
+            if (iDebugKo)
+                openknx.console.writeDiagnoseKo("Ident ch%02d", lIdx + 1);
+        }
         else
+        {
             logInfoP("Failed to queue Identify for channel %d", lIdx + 1);
+            if (iDebugKo)
+                openknx.console.writeDiagnoseKo("Ident ch%02d ER", lIdx + 1);
+        }
         return true;
     }
 
@@ -3530,9 +3580,15 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             if (mChannels[lIdx]->isPaired())
                 openknx.flash.save();
             logInfoP("Channel %d set to 1W mode (seq=%d)", lIdx + 1, mChannels[lIdx]->getSequence1W());
+            if (iDebugKo)
+                openknx.console.writeDiagnoseKo("Ch%02d ->1W", lIdx + 1);
         }
         else
+        {
             logInfoP("Invalid channel: %s", lSub.substr(6).c_str());
+            if (iDebugKo)
+                openknx.console.writeDiagnoseKo("Bad channel");
+        }
         return true;
     }
 
@@ -3545,9 +3601,15 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             if (mChannels[lIdx]->isPaired())
                 openknx.flash.save();
             logInfoP("Channel %d set to 2W mode", lIdx + 1);
+            if (iDebugKo)
+                openknx.console.writeDiagnoseKo("Ch%02d ->2W", lIdx + 1);
         }
         else
+        {
             logInfoP("Invalid channel: %s", lSub.substr(6).c_str());
+            if (iDebugKo)
+                openknx.console.writeDiagnoseKo("Bad channel");
+        }
         return true;
     }
 
