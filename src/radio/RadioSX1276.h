@@ -14,6 +14,18 @@
 // SX1276 radio driver for io-homecontrol
 // Adapted from https://github.com/nicolas5000/io-rts-esp32 for Arduino SPI
 // Non-blocking design: TX/RX state polled via DIO0 pin
+//
+// SX1276 DIO usage (FSK packet mode). Each DIO is software-mappable via
+// RegDioMapping1/RegDioMapping2. This driver wires only DIO0 and DIO4; the
+// remaining lines are optional status outputs that can also be polled via SPI.
+//   DIO0 (used): PayloadReady -> RX packet-received interrupt
+//   DIO4 (used): PreambleDetect -> early RX activity / optional IRQ
+//   DIO1 (free): FIFO flow control - FifoLevel / FifoEmpty / FifoFull
+//                (needed for streaming frames larger than the 64-byte FIFO)
+//   DIO2 (free): FifoFull / RxReady(SyncAddress) / RxTimeout, or raw Data in
+//                continuous mode. SyncAddress fires slightly before PayloadReady.
+//   DIO3 (free): FifoEmpty / TxReady - precise TX timing and back-to-back TX
+// For single io-homecontrol frames that fit in the FIFO, DIO0 + DIO4 suffice.
 
 class RadioSX1276
 {

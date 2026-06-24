@@ -17,6 +17,19 @@
 // SX1262 radio driver for io-homecontrol
 // Command-based SPI interface (opcode + params), requires BUSY pin
 // Non-blocking design: TX/RX state polled via DIO1 IRQ flag
+//
+// SX1262 DIO usage. Unlike the SX1276, the SX1262 has no fixed-function DIO
+// mapping table: any interrupt (TxDone, RxDone, PreambleDetected, Timeout, ...)
+// can be routed to any DIO via the IRQ mask (SetDioIrqParams). DIO2 and DIO3
+// double as dedicated control outputs. BUSY is mandatory and signals that the
+// chip is processing a command.
+//   DIO1 (used):     general IRQ line - TxDone / RxDone / Timeout via IRQ mask
+//   BUSY (used):     command-busy flag, polled before each SPI transaction
+//   DIO2 (optional): RF switch control (SetDIO2AsRfSwitchCtrl) - drives an
+//                    external antenna TX/RX switch automatically
+//   DIO3 (optional): TCXO supply control (SetDIO3AsTCXOCtrl) - powers/sequences
+//                    a temperature-compensated oscillator
+// This driver wires DIO1 + BUSY; DIO2/DIO3 control depends on board hardware.
 
 enum class RadioSX1262InitError : uint8_t
 {
