@@ -16,11 +16,11 @@
 #define IOHC_AUTH_PREAMBLE_SX1262 64
 #define IOHC_PAIR_TIMEOUT_MS 30000
 #define IOHC_DUTY_CYCLE_WINDOW_MS 3600000 // 1 hour
-#define IOHC_LBT_RSSI_THRESHOLD_DBM -90    // clear channel threshold before TX
-#define IOHC_LBT_MAX_RETRIES 5             // normal TX: 5 * 5ms worst-case
-#define IOHC_LBT_AUTH_MAX_RETRIES 1        // auth responses must not be delayed too long
+#define IOHC_LBT_RSSI_THRESHOLD_DBM -90   // clear channel threshold before TX
+#define IOHC_LBT_MAX_RETRIES 5            // normal TX: 5 * 5ms worst-case
+#define IOHC_LBT_AUTH_MAX_RETRIES 1       // auth responses must not be delayed too long
 #define IOHC_LBT_RETRY_DELAY_MS 5
-#define IOHC_RX_SCAN_INTERVAL_US 2700     // ~2.7ms frequency scan interval (per nicolas5000)
+#define IOHC_RX_SCAN_INTERVAL_US 2700 // ~2.7ms frequency scan interval (per nicolas5000)
 // Maximum raw Execute payload bytes before appending the 1W sequence number.
 // Normal 1W authenticated frames include 6-byte HMAC in CTRL0 length, so keep
 // 9(header) + raw + 2(seq) + 6(hmac) <= IOHC_FRAME_BUFFER_SIZE.
@@ -73,12 +73,12 @@ struct IoHomeQueueEntry
   uint16_t oneWayMain;        // low-level raw IOHC main[2], e.g. 0x0000=open, 0xC800=closed, 0xD200=stop
   uint8_t oneWayFp1;
   uint8_t oneWayFp2;
-  uint8_t oneWayBroadcastType;      // target type: dst = ((type << 6) | 0x3F)
-  bool oneWayBroadcastTypeExplicit; // true when the caller explicitly requested a typed 1W broadcast target
+  uint8_t oneWayBroadcastType;                 // target type: dst = ((type << 6) | 0x3F)
+  bool oneWayBroadcastTypeExplicit;            // true when the caller explicitly requested a typed 1W broadcast target
   OneWayDestinationMode oneWayDestinationMode; // normal/profile typed, all, exact, or explicit type
   uint32_t oneWayExactDestination;             // exact 24-bit 1W dst for diagnostics
   uint8_t sourceChannelIndex;                  // 0xFF when not queued from a concrete channel
-  bool twoWayTilt;                  // true: 2W tilt-only Execute payload
+  bool twoWayTilt;                             // true: 2W tilt-only Execute payload
   uint8_t twoWayTiltPercent;
   uint8_t retries;
   bool active;
@@ -572,6 +572,13 @@ private:
   // TX timing diagnostics/guard. Long io-homecontrol preambles can exceed the
   // generic 500 ms TX timeout on SX1276, especially for 1W learn/key frames.
   uint16_t mCurrentTxPreambleSymbols = IOHC_PREAMBLE_SHORT;
+
+  // Live IRQ/FIFO trace for the 1W key transfer (0x30) TX (PairDiag only).
+  // Edge-logs the SX1276 FSK IRQ + OpMode registers while waiting for PacketSent
+  // so a stalled 0x30 (FIFO never drains) can be told apart from a clean TX.
+  uint32_t mPairDiag1WTxPollTimer = 0;    // millis of last poll sample (0 = none yet)
+  uint16_t mPairDiag1WTxLastIrq = 0xFFFF; // last sampled (irq1<<8)|irq2, 0xFFFF = none
+  uint8_t mPairDiag1WTxSampleCount = 0;   // logged edge samples this TX (capped)
 
   // 2W challenge-response auth state (for authenticated commands like SetName)
   bool mAuthResponseSent = false; // true after sending ChallengeResponse, reset on new command

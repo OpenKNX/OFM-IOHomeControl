@@ -4009,6 +4009,10 @@ void IoHomeController::processPairSend1WAnnounce()
         mStateTimer = millis();
         mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
         mTx1WRepeatTimer = 0;
+        // Arm the live 1W TX IRQ trace for the upcoming announce wait.
+        mPairDiag1WTxPollTimer = 0;
+        mPairDiag1WTxLastIrq = 0xFFFF;
+        mPairDiag1WTxSampleCount = 0;
         mState = ControllerState::PairWait1WAnnounce;
     }
     else if (lErr != RadioError::Busy)
@@ -4248,15 +4252,11 @@ void IoHomeController::processPairSend1WKeyTransfer()
             mStateTimer = millis();
             mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
             mTx1WRepeatTimer = 0;
+            // Arm the live 0x30 TX IRQ trace for the upcoming wait.
+            mPairDiag1WTxPollTimer = 0;
+            mPairDiag1WTxLastIrq = 0xFFFF;
+            mPairDiag1WTxSampleCount = 0;
             mState = ControllerState::PairWait1WKeyTransfer;
-        }
-        else if (lErr == RadioError::Busy)
-        {
-            return;
-        }
-        else
-        {
-            mState = ControllerState::PairFailed;
         }
     }
     else
@@ -4360,6 +4360,65 @@ bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
             mState = iNextState;
         }
         return true;
+    }
+
+    // Live IRQ/FIFO trace while a 1W blind TX (announce 0x2E / key 0x30 / remove
+    // 0x39) is in flight. These frames intermittently stall (PacketSent never
+    // asserts, the FIFO never drains) - notably under a heavy concurrent RX storm
+    // from a device broadcasting 0x2E. Edge-log the SX1276 FSK status registers so
+    // the on-hardware behaviour is visible. These are SX1276 FSK register
+    // addresses/bits; on other radios debugReadRegister() returns 0, so the trace
+    // is simply inert. This function only runs during the 1W blind waits.
+    if (mPairDiagnosticTraceEnabled &&
+        mTx1WRepeatTimer == 0 &&
+        mPairDiag1WTxSampleCount < 32 &&
+        (mPairDiag1WTxPollTimer == 0 || millis() - mPairDiag1WTxPollTimer >= 25))
+    {
+        constexpr uint8_t kRegOpMode = 0x01;
+        constexpr uint8_t kRegIrqFlags1 = 0x3E;
+        constexpr uint8_t kRegIrqFlags2 = 0x3F;
+        constexpr uint8_t kIrq2FifoEmpty = 0x40;
+        constexpr uint8_t kIrq2FifoLevel = 0x20;
+        constexpr uint8_t kIrq2PacketSent = 0x08;
+        // Command byte position in the serialized frame: ctrl0,ctrl1,dest[3],src[3],cmd.
+        constexpr uint8_t kCmdOffset = 8;
+        // TX-critical config registers (to catch a clobbered modem config).
+        constexpr uint8_t kRegBitrateMsb = 0x02;
+        constexpr uint8_t kRegBitrateLsb = 0x03;
+        constexpr uint8_t kRegPayloadLength = 0x32;
+        constexpr uint8_t kRegFifoThresh = 0x35;
+        constexpr uint8_t kRegPacketConfig2 = 0x3D;
+
+        mPairDiag1WTxPollTimer = millis();
+        const uint8_t lIrq1 = mRadio.debugReadRegister(kRegIrqFlags1);
+        const uint8_t lIrq2 = mRadio.debugReadRegister(kRegIrqFlags2);
+        const uint16_t lIrq = (static_cast<uint16_t>(lIrq1) << 8) | lIrq2;
+        if (lIrq != mPairDiag1WTxLastIrq)
+        {
+            mPairDiag1WTxLastIrq = lIrq;
+            const uint8_t lOp = mRadio.debugReadRegister(kRegOpMode);
+            const uint8_t lCmd = (mTxLen > kCmdOffset) ? mTxBuffer[kCmdOffset] : 0;
+            const uint16_t lBitrate = (static_cast<uint16_t>(mRadio.debugReadRegister(kRegBitrateMsb)) << 8) |
+                                      mRadio.debugReadRegister(kRegBitrateLsb);
+            logInfoP("PairDiag: 1W tx poll state=%s cmd=0x%02X t=%lums op=0x%02X txSt=0x%02X irq1=0x%02X irq2=0x%02X (FifoEmpty=%u FifoLevel=%u PacketSent=%u) len=%u byte0=0x%02X br=0x%04X payLen=0x%02X fifoThr=0x%02X pc2=0x%02X",
+                     stateName(mState),
+                     static_cast<unsigned>(lCmd),
+                     static_cast<unsigned long>(millis() - mStateTimer),
+                     static_cast<unsigned>(lOp),
+                     static_cast<unsigned>(mRadio.lastTxSetStatus()),
+                     static_cast<unsigned>(lIrq1),
+                     static_cast<unsigned>(lIrq2),
+                     (lIrq2 & kIrq2FifoEmpty) ? 1U : 0U,
+                     (lIrq2 & kIrq2FifoLevel) ? 1U : 0U,
+                     (lIrq2 & kIrq2PacketSent) ? 1U : 0U,
+                     static_cast<unsigned>(mTxLen),
+                     static_cast<unsigned>(mTxBuffer[0]),
+                     static_cast<unsigned>(lBitrate),
+                     static_cast<unsigned>(mRadio.debugReadRegister(kRegPayloadLength)),
+                     static_cast<unsigned>(mRadio.debugReadRegister(kRegFifoThresh)),
+                     static_cast<unsigned>(mRadio.debugReadRegister(kRegPacketConfig2)));
+            mPairDiag1WTxSampleCount++;
+        }
     }
 
     const uint32_t lTxTimeoutMs = currentTxTimeoutMs();
