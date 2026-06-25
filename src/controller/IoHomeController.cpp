@@ -3292,6 +3292,17 @@ void IoHomeController::processIdle()
 void IoHomeController::processTxPending()
 {
     const bool lIs1WFrame = ((mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0);
+    if (lIs1WFrame)
+    {
+        // Queued 1W commands emulate a handheld one-way remote. A real remote
+        // transmits each frame across all io-homecontrol channels (frequency
+        // agility) so the actuator - which scans the three frequencies - can
+        // catch it. Start on the canonical CH2 (the channel pairing uses)
+        // instead of the random channel the RX scan happened to leave the radio
+        // on, and hop across the channels for the repeats.
+        mCurrentFreqIdx = frequencyIndexForHz(kNormal2WTxFreqHz);
+        mTx1WHopFrequencies = true;
+    }
     const uint8_t lTxDutyFreqIdx = lIs1WFrame ? mCurrentFreqIdx : frequencyIndexForHz(kNormal2WTxFreqHz);
     if (!isDutyCycleOk(lTxDutyFreqIdx))
         return; // wait for duty cycle to clear
@@ -3330,7 +3341,8 @@ void IoHomeController::processTxPending()
         mResponseTimeoutMs = lIsStartFrame ? IOHC_RX_TIMEOUT_MS : IOHC_RX_FINAL_TIMEOUT_MS;
         mRetryAtMs = 0;
     }
-    const RadioError lPrepErr = lIs1WFrame ? configureTxRadio(lPreamble) : configureNormal2WTxRadio(lPreamble);
+    const uint32_t l1WTxFreqHz = IOHC_FREQUENCIES[mCurrentFreqIdx];
+    const RadioError lPrepErr = lIs1WFrame ? configureTxRadio(lPreamble, &l1WTxFreqHz) : configureNormal2WTxRadio(lPreamble);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -3428,16 +3440,32 @@ void IoHomeController::processTx1WRepeat()
     if (millis() - mTx1WRepeatTimer < IOHC_1W_REPEAT_INTERVAL_MS)
         return; // wait for interval
 
+    if (mTx1WHopFrequencies)
+    {
+        // Advance to the next io-homecontrol channel so the four transmissions
+        // of a queued 1W command cover all three frequencies, matching the
+        // frequency agility of a real one-way remote.
+        const uint8_t lNextFreqIdx = (mCurrentFreqIdx + 1) % IOHC_NUM_FREQUENCIES;
+        const RadioError lFreqErr = mRadio.setFrequency(IOHC_FREQUENCIES[lNextFreqIdx]);
+        if (lFreqErr == RadioError::Busy)
+            return; // radio busy: retry next loop without changing channel
+        if (lFreqErr == RadioError::None)
+            mCurrentFreqIdx = lNextFreqIdx;
+    }
+
     // Re-send same buffer with the reference short repeat preamble.
     const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
     if (lErr == RadioError::None)
     {
         if (mPairDiagnosticTraceEnabled)
         {
-            logInfoP("PairDiag: 1W repeat tx remaining=%u len=%u pre=%u",
+            const uint32_t lRepeatFreqHz = (mCurrentFreqIdx < IOHC_NUM_FREQUENCIES) ? IOHC_FREQUENCIES[mCurrentFreqIdx] : 0;
+            logInfoP("PairDiag: 1W repeat tx remaining=%u len=%u pre=%u ch=%u freq=%lu",
                      static_cast<unsigned>(mTx1WRepeatRemaining),
                      static_cast<unsigned>(mTxLen),
-                     static_cast<unsigned>(IOHC_PREAMBLE_SHORT));
+                     static_cast<unsigned>(IOHC_PREAMBLE_SHORT),
+                     static_cast<unsigned>(iohcChannelNumberForFrequency(lRepeatFreqHz)),
+                     static_cast<unsigned long>(lRepeatFreqHz));
         }
         mStateTimer = millis();
         mState = ControllerState::TxInProgress;
@@ -4009,6 +4037,7 @@ void IoHomeController::processPairSend1WAnnounce()
         mStateTimer = millis();
         mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
         mTx1WRepeatTimer = 0;
+        mTx1WHopFrequencies = false; // pairing announce stays on the fixed CH2
         // Arm the live 1W TX IRQ trace for the upcoming announce wait.
         mPairDiag1WTxPollTimer = 0;
         mPairDiag1WTxLastIrq = 0xFFFF;
@@ -4116,6 +4145,7 @@ void IoHomeController::processPairSend1WRemove()
         mStateTimer = millis();
         mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
         mTx1WRepeatTimer = 0;
+        mTx1WHopFrequencies = false; // pairing remove stays on the fixed CH2
         mState = ControllerState::PairWait1WRemove;
     }
     else if (lErr != RadioError::Busy)
@@ -4252,6 +4282,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
             mStateTimer = millis();
             mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
             mTx1WRepeatTimer = 0;
+            mTx1WHopFrequencies = false; // pairing key transfer stays on the fixed CH2
             // Arm the live 0x30 TX IRQ trace for the upcoming wait.
             mPairDiag1WTxPollTimer = 0;
             mPairDiag1WTxLastIrq = 0xFFFF;

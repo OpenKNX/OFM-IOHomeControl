@@ -568,6 +568,7 @@ private:
   // 1W repeat transmission state
   uint8_t mTx1WRepeatRemaining = 0; // remaining 1W repeats (0 = done)
   uint32_t mTx1WRepeatTimer = 0;    // millis timestamp for next repeat
+  bool mTx1WHopFrequencies = false; // queued 1W commands hop channels per repeat
 
   // TX timing diagnostics/guard. Long io-homecontrol preambles can exceed the
   // generic 500 ms TX timeout on SX1276, especially for 1W learn/key frames.
