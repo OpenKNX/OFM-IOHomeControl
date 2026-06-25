@@ -593,7 +593,7 @@ void IoHomecontrol::initSystemKey()
 #endif
         mController.setSystemKey(lKey);
         logDebugP("Generated new system key");
-        openknx.flash.save(); // persist immediately
+        openknx.flash.save(true); // persist immediately, bypass write throttle
     }
 }
 
@@ -677,7 +677,7 @@ bool IoHomecontrol::ensureOneWayControllerProfile(IoHomecontrolChannel *iChannel
         return false;
 
     iChannel->setEncryptionKey(lProfile->getOneWayControllerKey());
-    openknx.flash.save();
+    openknx.flash.save(true); // identity change is rare & critical: bypass write throttle
     logInfoP("Auto-generated missing 1W controller profile for channel %u (remote=0x%06X, mfg=0x%02X)",
              static_cast<unsigned>(oneWayProfileIndex(lProfile) + 1),
              static_cast<unsigned long>(lProfile->getOneWayControllerNodeId()),
@@ -765,7 +765,7 @@ void IoHomecontrol::initOneWayControllerProfiles()
 
     consolidateOneWayProfileSequences();
     if (lChanged)
-        openknx.flash.save();
+        openknx.flash.save(true); // setup-time identity change must not be throttled
 }
 
 void IoHomecontrol::applyOneWayControllerConfiguration()
@@ -978,10 +978,13 @@ void IoHomecontrol::setup()
     }
     applyPendingFlashChannelState();
 
-    // Initialize system key (may generate if first boot)
-    initSystemKey();
-    initOneWayControllerProfiles();
-    applyOneWayControllerConfiguration();
+    // IMPORTANT: Do NOT generate/persist the system key or 1W controller
+    // profiles here. The OpenKNX framework restores persisted flash via
+    // readFlash() only AFTER all setup() calls have run. Generating an identity
+    // now and saving it would overwrite the persisted pairing data in flash
+    // before it is restored, so a paired channel would come back unpaired.
+    // Identity/profile provisioning is therefore deferred to
+    // processAfterStartupDelay() (run exactly once after the restore).
 
     // Report module status OK
     KoIOHC_ModuleStatus.value(true, DPT_Switch);
@@ -1810,7 +1813,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
                          lChannel + 1);
                 mChannels[lChannel]->setIs1W(true);
                 mChannels[lChannel]->setConfigured1WTargetNodeId(lNodeId);
-                openknx.flash.save();
+                openknx.flash.save(true); // identity change is rare & critical: bypass write throttle
             }
 
             bool lStarted = mChannels[lChannel]->is1W()
@@ -1903,7 +1906,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
             memset(const_cast<uint8_t *>(mChannels[lChannel]->getEncryptionKey()), 0, 16);
             resultData[0] = 0x00;
             resultLength = 1;
-            openknx.flash.save();
+            openknx.flash.save(true); // unpair is rare & critical: bypass write throttle
             logInfoP("ETS: channel %d unpaired", lChannel + 1);
             return true;
         }
@@ -1927,7 +1930,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
                 else if (generateOneWayControllerProfile(lCh))
                 {
                     lCh->setEncryptionKey(lCh->getOneWayControllerKey());
-                    openknx.flash.save();
+                    openknx.flash.save(true); // identity change is rare & critical: bypass write throttle
                     resultData[0] = 0x00;
                     logInfoP("ETS: generated new 1W controller profile for channel %d", lChannel + 1);
                 }
@@ -2693,7 +2696,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             lProfile->setOneWayControllerNodeId(mController.getOwnNodeId());
             lProfile->setOneWayControllerKey(mController.getSystemKey());
             lProfile->setOneWayControllerManufacturer(static_cast<uint8_t>(lManufacturer));
-            openknx.flash.save();
+            openknx.flash.save(true); // identity change is rare & critical: bypass write throttle
             logInfoP("Diagnostic: 1W profile ch%02u now reuses the 2W identity remote=0x%06X key=%s mfg=0x%02X",
                      static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1),
                      lProfile->getOneWayControllerNodeId(),
@@ -2753,7 +2756,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         lProfile->setOneWayControllerManufacturer(static_cast<uint8_t>(lManufacturer));
         if (lChangedIdentity)
             lProfile->setSequence1W(0);
-        openknx.flash.save();
+        openknx.flash.save(true); // identity change is rare & critical: bypass write throttle
         logInfoP("1W profile ch%02u saved: remote=0x%06X key=set seq=0x%04X mfg=0x%02X",
                  static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1),
                  lRemoteNodeId, static_cast<unsigned>(lProfile->getSequence1W()),
@@ -2807,7 +2810,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         lProfile->setOneWayControllerKey(lKey);
         if (lChangedIdentity)
             lProfile->setSequence1W(0);
-        openknx.flash.save();
+        openknx.flash.save(true); // identity change is rare & critical: bypass write throttle
         logInfoP("1W QR imported into profile ch%02u: remote=0x%06X key=set seq=%u mfg=0x%02X",
                  static_cast<unsigned>(oneWayProfileIndex(lProfile) + 1), lRemoteNodeId,
                  static_cast<unsigned>(lProfile->getSequence1W()),
@@ -2843,7 +2846,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             return true;
         }
         lCh->setEncryptionKey(lCh->getOneWayControllerKey());
-        openknx.flash.save();
+        openknx.flash.save(true); // identity change is rare & critical: bypass write throttle
         logInfoP("Generated new own 1W profile ch%02u: remote=0x%06X key=set seq=%u mfg=0x%02X",
                  static_cast<unsigned>(lIdx + 1), lCh->getOneWayControllerNodeId(),
                  static_cast<unsigned>(lCh->getSequence1W()),
@@ -2861,7 +2864,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             return true;
         }
         mController.setOneWayBroadcastType(static_cast<uint8_t>(lType));
-        openknx.flash.save();
+        openknx.flash.save(true); // identity change is rare & critical: bypass write throttle
         logInfoP("1W default broadcast type set: type=%u target=0x%06X", static_cast<unsigned>(lType), mController.oneWayBroadcastTarget(static_cast<uint8_t>(lType)));
         return true;
     }
@@ -2896,7 +2899,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             return true;
         }
         lProfile->setOneWayControllerManufacturer(static_cast<uint8_t>(lManufacturer));
-        openknx.flash.save();
+        openknx.flash.save(true); // identity change is rare & critical: bypass write throttle
         logInfoP("1W profile ch%02u manufacturer set: 0x%02X",
                  static_cast<unsigned>(oneWayProfileIndex(lProfile) + 1),
                  static_cast<unsigned>(lManufacturer));
@@ -2924,7 +2927,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 
         mChannels[lIdx]->setConfigured1WTargetNodeId(lNodeId);
         mChannels[lIdx]->setNodeId(lNodeId);
-        openknx.flash.save();
+        openknx.flash.save(true); // binding is rare & critical: bypass write throttle
         logInfoP("1W channel %u bound to actuator 0x%06X", static_cast<unsigned>(lIdx + 1), lNodeId & 0x00FFFFFF);
         return true;
     }
@@ -3025,7 +3028,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if (lNodeId != 0)
         {
             mChannels[lIdx]->setConfigured1WTargetNodeId(lNodeId);
-            openknx.flash.save();
+            openknx.flash.save(true); // identity change is rare & critical: bypass write throttle
         }
 
         const bool lOk = mController.startPairing1W(lIdx, lNodeId, lMode);
@@ -3069,7 +3072,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if (lNodeId != 0)
         {
             mChannels[lIdx]->setConfigured1WTargetNodeId(lNodeId);
-            openknx.flash.save();
+            openknx.flash.save(true); // identity change is rare & critical: bypass write throttle
         }
 
         const bool lOk = mController.startPairing1WRemove(lIdx, lNodeId);
@@ -3231,7 +3234,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                              lNodeId & 0x00FFFFFF, lIdx + 1);
                     mChannels[lIdx]->setIs1W(true);
                     mChannels[lIdx]->setConfigured1WTargetNodeId(lNodeId);
-                    openknx.flash.save();
+                    openknx.flash.save(true); // identity change is rare & critical: bypass write throttle
                 }
 
                 bool lOk = mController.startPairing(lIdx, lNodeId);
@@ -3272,7 +3275,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 mChannels[lIdx]->setNodeId(0);
                 mChannels[lIdx]->setLowPower2W(true);
                 memset(const_cast<uint8_t *>(mChannels[lIdx]->getEncryptionKey()), 0, 16);
-                openknx.flash.save();
+                openknx.flash.save(true); // unpair is rare & critical: bypass write throttle
                 logInfoP("Channel %d unpaired", lIdx + 1);
                 if (iDebugKo)
                     openknx.console.writeDiagnoseKo("Unpair ch%02d", lIdx + 1);
@@ -3578,7 +3581,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             // pairing. ensureOneWayControllerProfile() persists what it generates.
             ensureOneWayControllerProfile(mChannels[lIdx]);
             if (mChannels[lIdx]->isPaired())
-                openknx.flash.save();
+                openknx.flash.save(true); // mode change on a paired channel: bypass write throttle
             logInfoP("Channel %d set to 1W mode (seq=%d)", lIdx + 1, mChannels[lIdx]->getSequence1W());
             if (iDebugKo)
                 openknx.console.writeDiagnoseKo("Ch%02d ->1W", lIdx + 1);
@@ -3599,7 +3602,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         {
             mChannels[lIdx]->setIs1W(false);
             if (mChannels[lIdx]->isPaired())
-                openknx.flash.save();
+                openknx.flash.save(true); // mode change on a paired channel: bypass write throttle
             logInfoP("Channel %d set to 2W mode", lIdx + 1);
             if (iDebugKo)
                 openknx.console.writeDiagnoseKo("Ch%02d ->2W", lIdx + 1);

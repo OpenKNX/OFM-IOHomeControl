@@ -3028,7 +3028,7 @@ void IoHomeController::loop()
                             lCh->setNodeId(mDiscoveredNodeId);
                             lCh->setLowPower2W(true);
                             lCh->setEncryptionKey(mSystemKey);
-                            openknx.flash.save();
+                            openknx.flash.save(true); // pairing is rare & critical: bypass write throttle
                         }
                     }
                     mState = ControllerState::PairSendSetConfig1;
@@ -4135,7 +4135,7 @@ void IoHomeController::processPairWait1WRemove()
         if (lCh)
         {
             lCh->setNodeId(0);
-            openknx.flash.save();
+            openknx.flash.save(true); // pairing is rare & critical: bypass write throttle
             logInfoP("Pairing: 1W mode=%s complete for channel %d (no 0x30 key transfer follows)",
                      pairing1WModeName(mPairing1WMode),
                      mPairingChannel + 1);
@@ -4282,7 +4282,7 @@ void IoHomeController::processPairWait1WKeyTransfer()
                 lCh->setConfigured1WTargetNodeId(0);
             if (lProfile)
                 lCh->setEncryptionKey(lProfile->getOneWayControllerKey());
-            openknx.flash.save();
+            openknx.flash.save(true); // pairing is rare & critical: bypass write throttle
             if (mDiscoveredNodeId != 0)
                 logInfoP("Pairing: 1W mode=%s complete for 0x%06X on channel %d (no device ACK in 1W mode)",
                          pairing1WModeName(mPairing1WMode),
