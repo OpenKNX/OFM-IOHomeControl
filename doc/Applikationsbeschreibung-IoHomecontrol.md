@@ -184,10 +184,10 @@ Zusätzlich gibt es auf der globalen Seite **Allgemein** eine **Pairing-Übersic
 
 Alternativ kann das Pairing über Konsolenbefehle durchgeführt werden – sowohl über das zentrale Diagnose-Objekt als auch über die serielle Konsole.
 
-* `iohc pair NN` — Startet das Pairing für Kanal NN (1-16)
-* `iohc pair NN AABBCC` — Startet 1W-Pairing mit bekannter Node-ID (Hex)
+* `iohcNN pair` — Startet das Pairing für Kanal NN (1-16)
+* `iohcNN pair AABBCC` — Startet 1W-Pairing mit bekannter Node-ID (Hex)
 * `iohc pair cancel` — Bricht einen laufenden Pairing-Vorgang ab
-* `iohc unpair NN` — Entfernt das Pairing für Kanal NN
+* `iohcNN unpair` — Entfernt das Pairing für Kanal NN
 
 ### **Pairing-Status**
 
@@ -510,42 +510,44 @@ Das Modul stellt Diagnose- und Pairing-Funktionen über Konsolenbefehle bereit. 
 * **Zentrales Diagnose-Objekt**: Die Befehle können über das zentrale OpenKNX-Diagnose-Kommunikationsobjekt gesendet werden; kompakte Statusantworten werden auf das Diagnose-Objekt zurückgeschrieben. Dies ist im normalen Betrieb der empfohlene Weg, da eine serielle Verbindung dort in der Regel nicht verfügbar ist.
 * **Serielle Konsole**: Während der Inbetriebnahme oder bei direktem Zugang zur Hardware können dieselben Befehle über die serielle Konsole abgesetzt werden. Ausführliche Diagnoseausgaben (z.B. Paket-Dumps) erscheinen ausschließlich in der seriellen Ausgabe.
 
+Bei kanalbezogenen Befehlen wird die Kanalnummer direkt an das Präfix angehängt (`iohcNN`, z.B. `iohc3 status`). So bleiben die wichtigsten Befehle innerhalb der Eingabegrenze des Diagnose-Objekts.
+
 ### **Allgemeine Befehle**
 
 | Befehl | Beschreibung |
 |--------|-------------|
 | `iohc help` | Zeigt verfügbare Befehle |
 | `iohc status` | Zeigt Pairing-Status aller Kanäle |
-| `iohc status NN` | Zeigt Details für Kanal NN |
+| `iohcNN status` | Zeigt Details für Kanal NN |
 
 ### **Pairing-Befehle**
 
 | Befehl | Beschreibung |
 |--------|-------------|
-| `iohc pair NN` | Startet Pairing für Kanal NN |
-| `iohc pair NN AABBCC` | Startet 1W-Pairing mit bekannter Node-ID (Hex) |
+| `iohcNN pair` | Startet Pairing für Kanal NN |
+| `iohcNN pair AABBCC` | Startet 1W-Pairing mit bekannter Node-ID (Hex) |
 | `iohc pair cancel` | Bricht laufenden Pairing-Vorgang ab |
-| `iohc unpair NN` | Entfernt Pairing für Kanal NN |
+| `iohcNN unpair` | Entfernt Pairing für Kanal NN |
 
 ### **Steuerungsbefehle**
 
 | Befehl | Beschreibung |
 |--------|-------------|
-| `iohc send NN PP` | Sendet Position PP% an Kanal NN |
+| `iohcNN send PP` | Sendet Position PP% an Kanal NN |
 | `iohc discover` | Startet Broadcast-Discovery-Scan |
-| `iohc set1w NN` | Setzt Kanal auf 1W-Modus |
-| `iohc set2w NN` | Setzt Kanal auf 2W-Modus |
+| `iohcNN set1w` | Setzt Kanal auf 1W-Modus |
+| `iohcNN set2w` | Setzt Kanal auf 2W-Modus |
 
 ### **Thermostat-Befehle (Atlantic Cozy)**
 
 | Befehl | Beschreibung |
 |--------|-------------|
-| `iohc cozy temp NN TT` | Setzt Temperatur (in Zehntel, z.B. 215 = 21,5°C) |
-| `iohc cozy mode NN MM` | Setzt Betriebsmodus |
-| `iohc cozy presence NN 0/1` | Setzt Anwesenheit |
-| `iohc cozy window NN 0/1` | Setzt Fensterkontakt |
-| `iohc cozy poweron NN` | Sendet Einschalt-Befehl |
-| `iohc cozy midnight NN` | Sendet Mitternachts-Zeitsync |
+| `iohcNN cozy temp TT` | Setzt Temperatur (in Zehntel, z.B. 215 = 21,5°C) |
+| `iohcNN cozy mode MM` | Setzt Betriebsmodus |
+| `iohcNN cozy presence 0/1` | Setzt Anwesenheit |
+| `iohcNN cozy window 0/1` | Setzt Fensterkontakt |
+| `iohcNN cozy poweron` | Sendet Einschalt-Befehl |
+| `iohcNN cozy midnight` | Sendet Mitternachts-Zeitsync |
 
 ### **Fernbedienungs-Befehle**
 

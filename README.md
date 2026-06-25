@@ -168,12 +168,12 @@ The firmware provides an `iohc` serial console for commissioning, service and be
 
 Useful diagnostic entry points include:
 
-- `iohc status` / `iohc status NN` — show 2W identity and per-channel 1W remote identity separately.
-- `iohc 1wctrl status` / `iohc 1wctrl NN status` — show effective 1W profile, type, manufacturer, sequence and reserved sequence.
-- `iohc pair1w NN [ADDR] add-only|announce-add` — test reference-style 1W add flows without inserting `0x39` automatically.
-- `iohc remove1w NN [ADDR]` — send the explicit 1W remove flow.
-- `iohc send1w-type NN open|close|stop|vent|force [TYPE|dst=typed|dst=all|dst=exact ADDR]` — test typed/all/exact 1W destinations.
-- `iohc 1wctrl NN reuse2w [MFG]` — diagnostic-only command to intentionally reuse the 2W identity for a 1W profile.
+- `iohc status` / `iohcNN status` — show 2W identity and per-channel 1W remote identity separately.
+- `iohc 1wctrl status` / `iohcNN 1wctrl status` — show effective 1W profile, type, manufacturer, sequence and reserved sequence.
+- `iohcNN pair1w [ADDR] add-only|announce-add` — test reference-style 1W add flows without inserting `0x39` automatically.
+- `iohcNN remove1w [ADDR]` — send the explicit 1W remove flow.
+- `iohcNN send1w-type open|close|stop|vent|force [TYPE|dst=typed|dst=all|dst=exact ADDR]` — test typed/all/exact 1W destinations.
+- `iohcNN 1wctrl reuse2w [MFG]` — diagnostic-only command to intentionally reuse the 2W identity for a 1W profile.
 - `iohc pairdiag on|off|status` — show compact pairing, TX, crypto, key, repeat and sequence diagnostics.
 - `iohc proto selftest` — run byte-exact protocol self-tests on-device.
 

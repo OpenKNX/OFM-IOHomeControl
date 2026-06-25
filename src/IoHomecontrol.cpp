@@ -743,7 +743,7 @@ void IoHomecontrol::initOneWayControllerProfiles()
         {
             // 1W remotes are first-class identities. Do not silently reuse the
             // global 2W gateway/controller node/key here; that is available only
-            // through the explicit diagnostic command `iohc 1wctrl NN reuse2w`.
+            // through the explicit diagnostic command `iohcNN 1wctrl reuse2w`.
             if (lChannel->isPaired())
             {
                 logInfoP("1W ch%u has a paired target but no independent 1W remote profile; generating a new remote identity, re-learn may be required",
@@ -2357,39 +2357,40 @@ void IoHomecontrol::showHelp()
 
     openknx.console.printHelpLine("iohc help", "Show io-homecontrol commands");
     openknx.console.printHelpLine("iohc status", "Show all channel status");
-    openknx.console.printHelpLine("iohc status NN", "Show channel NN detail");
-    openknx.console.printHelpLine("iohc pair NN [ADDR]", "Start pairing; 1W ADDR is optional/binding only");
-    openknx.console.printHelpLine("iohc pair1w NN [ADDR] announce-only|add-only|announce-add|remove", "Explicit 1W mode; ADDR optional");
-    openknx.console.printHelpLine("iohc bind1w NN ADDR", "Bind/rebind a 1W broadcast profile to an actuator node");
-    openknx.console.printHelpLine("iohc remove1w NN [ADDR]", "Alias for: pair1w NN [ADDR] remove");
-    openknx.console.printHelpLine("iohc pair2w-exp NN MODE [ADDR]", "Diagnostic-only 2W pairing mode: discovery-confirm|launch-key|pull-key");
+    openknx.console.printHelpLine("iohcNN status", "Show channel NN detail");
+    openknx.console.printHelpLine("iohcNN pair [ADDR]", "Start pairing; 1W ADDR is optional/binding only");
+    openknx.console.printHelpLine("iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove", "Explicit 1W mode; ADDR optional");
+    openknx.console.printHelpLine("iohcNN bind1w ADDR", "Bind/rebind a 1W broadcast profile to an actuator node");
+    openknx.console.printHelpLine("iohcNN remove1w [ADDR]", "Shortcut for: pair1w [ADDR] remove");
+    openknx.console.printHelpLine("iohcNN pair2w-exp MODE [ADDR]", "Diagnostic-only 2W pairing mode: discovery-confirm|launch-key|pull-key");
     openknx.console.printHelpLine("iohc pair cancel", "Cancel ongoing pairing");
     openknx.console.printHelpLine("iohc pairdiag on|off|status", "Verbose pairing/discovery diagnostics");
-    openknx.console.printHelpLine("iohc unpair NN", "Remove pairing for channel NN");
+    openknx.console.printHelpLine("iohcNN unpair", "Remove pairing for channel NN");
     openknx.console.printHelpLine("iohc discover", "Broadcast discovery, list devices");
     openknx.console.printHelpLine("iohc discover spe", "Encrypted SPE/sub-device discovery");
     openknx.console.printHelpLine("iohc autospe on|off|status", "Runtime post-pair SPE discovery");
-    openknx.console.printHelpLine("iohc identify NN", "Ask paired 2W device NN to identify itself (alias: iohc id NN)");
-    openknx.console.printHelpLine("iohc send NN PP", "Send position PP% to channel NN (alias: iohc pos NN PP)");
-    openknx.console.printHelpLine("iohc send1wbtn NN up|down|stop|my|prog|release|stop2", "Send 1W remote button command");
-    openknx.console.printHelpLine("iohc raw1w NN HEX", "Send raw 1W button code, e.g. 0000/00FE/00FF");
-    openknx.console.printHelpLine("iohc execraw NN HEX", "Send exact raw 1W Execute payload before seq/HMAC");
-    openknx.console.printHelpLine("iohc set1w NN", "Mark channel NN as 1W (one-way)");
-    openknx.console.printHelpLine("iohc set2w NN", "Mark channel NN as 2W (two-way)");
-    openknx.console.printHelpLine("iohc 1wctrl status|NN [ADDR HEX32 [MFG]]", "Show or set the effective channel 1W controller profile");
-    openknx.console.printHelpLine("iohc 1wctrl NN reuse2w [MFG]", "Diagnostic only: copy the 2W identity into the 1W profile");
-    openknx.console.printHelpLine("iohc 1wqr NN QRHEX", "Import a Situo QR controller identity into the effective channel profile");
-    openknx.console.printHelpLine("iohc 1wnew NN", "Generate a new own 1W controller profile for an unpaired channel");
+    openknx.console.printHelpLine("iohcNN identify", "Ask paired 2W device NN to identify itself");
+    openknx.console.printHelpLine("iohcNN send PP", "Send position PP% to channel NN");
+    openknx.console.printHelpLine("iohcNN send1wbtn up|down|stop|my|prog|release|stop2", "Send 1W remote button command");
+    openknx.console.printHelpLine("iohcNN raw1w HEX", "Send raw 1W button code, e.g. 0000/00FE/00FF");
+    openknx.console.printHelpLine("iohcNN execraw HEX", "Send exact raw 1W Execute payload before seq/HMAC");
+    openknx.console.printHelpLine("iohcNN set1w", "Mark channel NN as 1W (one-way)");
+    openknx.console.printHelpLine("iohcNN set2w", "Mark channel NN as 2W (two-way)");
+    openknx.console.printHelpLine("iohc 1wctrl status", "Show the effective 1W controller profile of all 1W channels");
+    openknx.console.printHelpLine("iohcNN 1wctrl [ADDR HEX32 [MFG]]", "Show or set the effective channel 1W controller profile");
+    openknx.console.printHelpLine("iohcNN 1wctrl reuse2w [MFG]", "Diagnostic only: copy the 2W identity into the 1W profile");
+    openknx.console.printHelpLine("iohcNN 1wqr QRHEX", "Import a Situo QR controller identity into the effective channel profile");
+    openknx.console.printHelpLine("iohcNN 1wnew", "Generate a new own 1W controller profile for an unpaired channel");
     openknx.console.printHelpLine("iohc 1wtype TYPE", "Set default 1W type: 0=All/rspaargaren default, 2=shutter, 3=awning");
-    openknx.console.printHelpLine("iohc 1wmfg NN ID", "Set manufacturer of the effective channel 1W profile");
-    openknx.console.printHelpLine("iohc pair1w-type NN ADDR TYPE", "1W pair with explicit broadcast type");
-    openknx.console.printHelpLine("iohc send1w-type NN open|close|stop|vent|force [TYPE]", "Send 1W Execute with explicit broadcast type");
-    openknx.console.printHelpLine("iohc cozy temp NN TT", "Set thermostat temp (TT=tenths, 70-280)");
-    openknx.console.printHelpLine("iohc cozy mode NN MM", "Set thermostat mode (0-3)");
-    openknx.console.printHelpLine("iohc cozy presence NN 0/1", "Set presence on/off");
-    openknx.console.printHelpLine("iohc cozy window NN 0/1", "Set window open/close");
-    openknx.console.printHelpLine("iohc cozy poweron NN", "Send power on");
-    openknx.console.printHelpLine("iohc cozy midnight NN", "Send midnight sync");
+    openknx.console.printHelpLine("iohcNN 1wmfg ID", "Set manufacturer of the effective channel 1W profile");
+    openknx.console.printHelpLine("iohcNN pair1w-type ADDR TYPE", "1W pair with explicit broadcast type");
+    openknx.console.printHelpLine("iohcNN send1w-type open|close|stop|vent|force [TYPE]", "Send 1W Execute with explicit broadcast type");
+    openknx.console.printHelpLine("iohcNN cozy temp TT", "Set thermostat temp (TT=tenths, 70-280)");
+    openknx.console.printHelpLine("iohcNN cozy mode MM", "Set thermostat mode (0-3)");
+    openknx.console.printHelpLine("iohcNN cozy presence 0/1", "Set presence on/off");
+    openknx.console.printHelpLine("iohcNN cozy window 0/1", "Set window open/close");
+    openknx.console.printHelpLine("iohcNN cozy poweron", "Send power on");
+    openknx.console.printHelpLine("iohcNN cozy midnight", "Send midnight sync");
     openknx.console.printHelpLine("iohc remote list", "List tracked remotes");
     openknx.console.printHelpLine("iohc remote add ADDR NAME", "Add remote (hex addr)");
     openknx.console.printHelpLine("iohc remote del ADDR", "Remove remote");
@@ -2428,12 +2429,42 @@ void IoHomecontrol::showHelp()
 
 bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 {
+    // Per-channel commands accept the compact channel-first form
+    // "iohcNN <cmd> ..." in addition to the canonical "iohc <cmd> NN ...".
+    // Placing the channel number directly after the prefix keeps the core
+    // per-channel commands within the 14-character diagnose-object input
+    // limit without needing command aliases. The channel-first form is
+    // normalized to the canonical layout before dispatch.
+    std::string lCmd = iCmd;
+    if (lCmd.rfind("iohc", 0) == 0 && lCmd.length() > 4 &&
+        lCmd[4] >= '0' && lCmd[4] <= '9')
+    {
+        size_t lDigitsEnd = 4;
+        while (lDigitsEnd < lCmd.length() && lCmd[lDigitsEnd] >= '0' && lCmd[lDigitsEnd] <= '9')
+            lDigitsEnd++;
+        std::string lChannel = lCmd.substr(4, lDigitsEnd - 4);
+        // Canonical per-channel parsers read the channel from a fixed offset and
+        // expect a two-digit number, so pad single-digit channels (e.g. "3" -> "03").
+        if (lChannel.length() == 1)
+            lChannel = "0" + lChannel;
+        const std::string lRest = trimSpaces(lCmd.substr(lDigitsEnd));
+        if (!lRest.empty())
+        {
+            const size_t lSpace = lRest.find_first_of(" \t");
+            const std::string lSubCmd = (lSpace == std::string::npos) ? lRest : lRest.substr(0, lSpace);
+            const std::string lExtraArgs = (lSpace == std::string::npos) ? "" : trimSpaces(lRest.substr(lSpace + 1));
+            lCmd = "iohc " + lSubCmd + " " + lChannel;
+            if (!lExtraArgs.empty())
+                lCmd += " " + lExtraArgs;
+        }
+    }
+
     // Allow the help command even when KNX is not configured so users
     // can discover IOHC commands on any build (SX1276 or SX1262).
-    if (iCmd.substr(0, 5) != "iohc " || iCmd.length() < 6)
+    if (lCmd.substr(0, 5) != "iohc " || lCmd.length() < 6)
         return false;
 
-    std::string lSub = iCmd.substr(5);
+    std::string lSub = lCmd.substr(5);
 
     if (lSub.substr(0, 1) == "h") // help
     {
@@ -2644,7 +2675,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         std::string lChannelText;
         if (!takeToken(lArg, lChannelText))
         {
-            openknx.console.printHelpLine("iohc 1wctrl status|NN [ADDR HEX32 [MFG]]", "Show or set the effective channel 1W controller profile");
+            openknx.console.printHelpLine("iohcNN 1wctrl [ADDR HEX32 [MFG]]", "Show or set the effective channel 1W controller profile");
             return true;
         }
         uint8_t lIdx = 0;
@@ -2675,7 +2706,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             uint32_t lManufacturer = lProfile ? lProfile->getOneWayControllerManufacturer() : static_cast<uint8_t>(IoHomeManufacturer::Somfy);
             if (!lRemainingArg.empty() && (!parseUnsignedDecimal(lRemainingArg, lManufacturer) || lManufacturer > 0xFF))
             {
-                openknx.console.printHelpLine("iohc 1wctrl NN reuse2w [MFG]", "Diagnostic only: copy the 2W identity into the 1W profile");
+                openknx.console.printHelpLine("iohcNN 1wctrl reuse2w [MFG]", "Diagnostic only: copy the 2W identity into the 1W profile");
                 return true;
             }
             if (!lProfile || mController.getOwnNodeId() == 0 || !keyHasNonZeroByte(mController.getSystemKey()))
@@ -2727,8 +2758,8 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if (!takeToken(lArg, lAddressText) || !takeToken(lArg, lKeyText) ||
             (!lArg.empty() && !takeToken(lArg, lManufacturerText)) || !lArg.empty())
         {
-            openknx.console.printHelpLine("iohc 1wctrl NN ADDR HEX32 [MFG]", "Set the effective channel 1W controller profile");
-            openknx.console.printHelpLine("iohc 1wctrl NN reuse2w [MFG]", "Diagnostic only: copy the 2W identity into the 1W profile");
+            openknx.console.printHelpLine("iohcNN 1wctrl ADDR HEX32 [MFG]", "Set the effective channel 1W controller profile");
+            openknx.console.printHelpLine("iohcNN 1wctrl reuse2w [MFG]", "Diagnostic only: copy the 2W identity into the 1W profile");
             return true;
         }
         uint32_t lRemoteNodeId = 0;
@@ -2738,7 +2769,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             !parseHexBytes(lKeyText, lKey, 16) ||
             (!lManufacturerText.empty() && (!parseUnsignedDecimal(lManufacturerText, lManufacturer) || lManufacturer > 0xFF)))
         {
-            logInfoP("Invalid 1W profile. Use: iohc 1wctrl NN ADDR HEX32 [MFG]");
+            logInfoP("Invalid 1W profile. Use: iohcNN 1wctrl ADDR HEX32 [MFG]");
             return true;
         }
 
@@ -2772,7 +2803,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         std::string lChannelText;
         if (!takeToken(lArg, lChannelText) || lArg.empty())
         {
-            openknx.console.printHelpLine("iohc 1wqr NN QRHEX", "Import a Situo QR controller identity into the effective channel profile");
+            openknx.console.printHelpLine("iohcNN 1wqr QRHEX", "Import a Situo QR controller identity into the effective channel profile");
             return true;
         }
 
@@ -2826,7 +2857,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         uint8_t lIdx = 0;
         if (!parseChannelIndex(lArg, mNumChannels, lIdx))
         {
-            openknx.console.printHelpLine("iohc 1wnew NN", "Generate a new own 1W controller profile for an unpaired channel");
+            openknx.console.printHelpLine("iohcNN 1wnew", "Generate a new own 1W controller profile for an unpaired channel");
             return true;
         }
         IoHomecontrolChannel *lCh = mChannels[lIdx];
@@ -2880,7 +2911,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             !parseChannelIndex(lChannelText, mNumChannels, lIdx) ||
             !parseUnsignedDecimal(lManufacturerText, lManufacturer) || lManufacturer > 0xFF)
         {
-            openknx.console.printHelpLine("iohc 1wmfg NN ID", "Set manufacturer of the effective channel 1W profile");
+            openknx.console.printHelpLine("iohcNN 1wmfg ID", "Set manufacturer of the effective channel 1W profile");
             return true;
         }
         if (!mChannels[lIdx] || !mChannels[lIdx]->is1W())
@@ -2916,7 +2947,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if (!takeToken(lArgs, lChanText) || !takeToken(lArgs, lAddrText) || !lArgs.empty() ||
             !parseChannelIndex(lChanText, mNumChannels, lIdx) || !parseHex24(lAddrText, lNodeId) || lNodeId == 0)
         {
-            openknx.console.printHelpLine("iohc bind1w NN ADDR", "Bind/rebind a 1W broadcast profile to an actuator node");
+            openknx.console.printHelpLine("iohcNN bind1w ADDR", "Bind/rebind a 1W broadcast profile to an actuator node");
             return true;
         }
         if (!mChannels[lIdx] || !mChannels[lIdx]->is1W())
@@ -2938,7 +2969,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         size_t lSpace1 = lArgs.find_first_of(" \t");
         if (lSpace1 == std::string::npos)
         {
-            openknx.console.printHelpLine("iohc pair1w-type NN ADDR TYPE", "1W pair with explicit broadcast type");
+            openknx.console.printHelpLine("iohcNN pair1w-type ADDR TYPE", "1W pair with explicit broadcast type");
             return true;
         }
         std::string lChanText = lArgs.substr(0, lSpace1);
@@ -2946,7 +2977,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         size_t lSpace2 = lRest.find_first_of(" \t");
         if (lSpace2 == std::string::npos)
         {
-            openknx.console.printHelpLine("iohc pair1w-type NN ADDR TYPE", "1W pair with explicit broadcast type");
+            openknx.console.printHelpLine("iohcNN pair1w-type ADDR TYPE", "1W pair with explicit broadcast type");
             return true;
         }
         std::string lAddrText = lRest.substr(0, lSpace2);
@@ -2959,7 +2990,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             !parseHex24(lAddrText, lNodeId) ||
             !parseUnsignedDecimal(lTypeText, lType) || lType > 63)
         {
-            logInfoP("Usage: iohc pair1w-type NN ADDR TYPE (TYPE 0=All/rspaargaren default, 2=shutter, 3=awning, 0..63 allowed)");
+            logInfoP("Usage: iohcNN pair1w-type ADDR TYPE (TYPE 0=All/rspaargaren default, 2=shutter, 3=awning, 0..63 allowed)");
             return true;
         }
 
@@ -2978,7 +3009,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         std::string lChanText;
         if (!takeToken(lArgs, lChanText))
         {
-            logInfoP("Usage: iohc pair1w NN [ADDR] announce-only|add-only|announce-add|remove");
+            logInfoP("Usage: iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove");
             return true;
         }
 
@@ -3013,14 +3044,14 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             }
             else
             {
-                logInfoP("Usage: iohc pair1w NN [ADDR] announce-only|add-only|announce-add|remove");
+                logInfoP("Usage: iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove");
                 return true;
             }
         }
 
         if (!lModeSeen)
         {
-            logInfoP("Usage: iohc pair1w NN [ADDR] announce-only|add-only|announce-add|remove");
+            logInfoP("Usage: iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove");
             return true;
         }
 
@@ -3050,7 +3081,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         std::string lChanText;
         if (!takeToken(lArgs, lChanText))
         {
-            logInfoP("Usage: iohc remove1w NN [ADDR]");
+            logInfoP("Usage: iohcNN remove1w [ADDR]");
             return true;
         }
 
@@ -3089,7 +3120,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         size_t lSpace1 = lArgs.find_first_of(" \t");
         if (lSpace1 == std::string::npos)
         {
-            openknx.console.printHelpLine("iohc send1w-type NN open|close|stop|vent|force [TYPE]", "Send 1W Execute with explicit broadcast type");
+            openknx.console.printHelpLine("iohcNN send1w-type open|close|stop|vent|force [TYPE]", "Send 1W Execute with explicit broadcast type");
             return true;
         }
         std::string lChanText = lArgs.substr(0, lSpace1);
@@ -3149,7 +3180,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         }
         else
         {
-            logInfoP("Usage: iohc send1w-type NN open|close|stop|vent|force [TYPE]");
+            logInfoP("Usage: iohcNN send1w-type open|close|stop|vent|force [TYPE]");
             return true;
         }
 
@@ -3167,7 +3198,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         std::string lModeText;
         if (!takeToken(lArgs, lChanText) || !takeToken(lArgs, lModeText))
         {
-            logInfoP("Usage: iohc pair2w-exp NN discovery-confirm|launch-key|pull-key [ADDR]");
+            logInfoP("Usage: iohcNN pair2w-exp discovery-confirm|launch-key|pull-key [ADDR]");
             return true;
         }
 
@@ -3186,7 +3217,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         Pairing2WMode lMode = Pairing2WMode::Normal;
         if (!parsePairing2WMode(lModeText, lMode) || lMode == Pairing2WMode::Normal)
         {
-            logInfoP("Usage: iohc pair2w-exp NN discovery-confirm|launch-key|pull-key [ADDR]");
+            logInfoP("Usage: iohcNN pair2w-exp discovery-confirm|launch-key|pull-key [ADDR]");
             return true;
         }
 
@@ -3348,7 +3379,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         size_t lSpace = lArgs.find_first_of(" 	");
         if (lSpace == std::string::npos)
         {
-            logInfoP("Usage: iohc %s NN %s",
+            logInfoP("Usage: iohcNN %s %s",
                      lIsExecRaw ? "execraw" : (lIsRawCode ? "raw1w" : "send1wbtn"),
                      lIsExecRaw ? "HEX_PAYLOAD" : (lIsRawCode ? "HEX_CODE" : "up|down|stop|my|prog|release|stop2"));
             return true;
@@ -3446,7 +3477,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         }
         else
         {
-            logInfoP("Usage: iohc send1wbtn NN up|down|stop|my|prog|release|stop2");
+            logInfoP("Usage: iohcNN send1wbtn up|down|stop|my|prog|release|stop2");
             return true;
         }
 
@@ -3463,12 +3494,12 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         return true;
     }
 
-    // "pos" is a short alias for "send" so the command still fits the 14-char
-    // diagnose-object input limit (e.g. "iohc pos 1 100"). Arguments are parsed
+    // "send" is reachable via the channel-first form "iohcNN send PP", which
+    // fits the 14-character diagnose-object input limit. Arguments are parsed
     // by token, so a one- or two-digit channel and position both work.
-    if (lSub.substr(0, 4) == "send" || lSub.substr(0, 3) == "pos")
+    if (lSub.substr(0, 4) == "send")
     {
-        const size_t lPrefixLen = (lSub.substr(0, 3) == "pos") ? 3 : 4;
+        const size_t lPrefixLen = 4;
         const std::string lArgs = trimSpaces(lSub.length() > lPrefixLen ? lSub.substr(lPrefixLen) : "");
         const size_t lSpace = lArgs.find_first_of(" \t");
         uint8_t lIdx = 0;
@@ -3518,10 +3549,11 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         return true;
     }
 
-    // "id" is a short alias for "identify" so it fits the 14-char diagnose limit.
-    if (lSub.rfind("identify", 0) == 0 || lSub.rfind("id", 0) == 0)
+    // "identify" is reachable via the channel-first form "iohcNN identify",
+    // which fits the 14-character diagnose-object input limit.
+    if (lSub.rfind("identify", 0) == 0)
     {
-        const size_t lPrefixLen = (lSub.rfind("identify", 0) == 0) ? strlen("identify") : strlen("id");
+        const size_t lPrefixLen = strlen("identify");
         std::string lArg = (lSub.length() > lPrefixLen) ? lSub.substr(lPrefixLen) : "";
         size_t lPos = 0;
         while (lPos < lArg.length() && isSpace(lArg[lPos]))
@@ -3532,9 +3564,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         uint8_t lIdx = 0;
         if (lArg.empty() || !parseChannelIndex(lArg, mNumChannels, lIdx))
         {
-            logInfoP("Usage: iohc identify NN");
+            logInfoP("Usage: iohcNN identify");
             if (iDebugKo)
-                openknx.console.writeDiagnoseKo("Use: id NN");
+                openknx.console.writeDiagnoseKo("Bad channel");
             return true;
         }
 
@@ -3618,102 +3650,76 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 
     if (lSub.substr(0, 4) == "cozy")
     {
-        if (lSub.length() > 5)
+        // Channel-first layout: "cozy NN <action> [value]" (reachable as
+        // "iohcNN cozy <action> [value]"), keeping the channel position
+        // consistent with all other per-channel commands.
+        std::string lCozyArgs = trimSpaces(lSub.length() > 4 ? lSub.substr(4) : "");
+        const size_t lSpace1 = lCozyArgs.find_first_of(" \t");
+        uint8_t lIdx = 0;
+        if (lSpace1 == std::string::npos ||
+            !parseChannelIndex(lCozyArgs.substr(0, lSpace1), mNumChannels, lIdx) ||
+            !mChannels[lIdx]->isPaired())
         {
-            std::string lCozyCmd = lSub.substr(5);
+            logInfoP("Usage: iohcNN cozy temp|mode|presence|window|poweron|midnight [VALUE]");
+            return true;
+        }
 
-            auto parseChannelIdx = [&](const std::string &iStr, size_t iOffset) -> int8_t
-            {
-                if (iStr.length() <= iOffset)
-                    return -1;
-                uint8_t idx = 0;
-                if (!parseChannelIndex(iStr.substr(iOffset, 2), mNumChannels, idx))
-                    return -1;
-                return (idx < mNumChannels && mChannels[idx]->isPaired()) ? idx : -1;
-            };
+        const std::string lRest = trimSpaces(lCozyArgs.substr(lSpace1 + 1));
+        const size_t lSpace2 = lRest.find_first_of(" \t");
+        const std::string lAction = (lSpace2 == std::string::npos) ? lRest : lRest.substr(0, lSpace2);
+        const std::string lValueText = (lSpace2 == std::string::npos) ? "" : trimSpaces(lRest.substr(lSpace2 + 1));
+        uint32_t lValue = 0;
+        const bool lHasValue = parseUnsignedDecimal(lValueText, lValue);
 
-            if (lCozyCmd.substr(0, 4) == "temp" && lCozyCmd.length() > 7)
-            {
-                int8_t lIdx = parseChannelIdx(lCozyCmd, 5);
-                uint32_t lTempValue = 0;
-                if (lIdx >= 0 && parseUnsignedDecimal(lCozyCmd.substr(8), lTempValue))
-                {
-                    uint8_t lTemp = static_cast<uint8_t>(lTempValue);
-                    mController.sendCommand(mChannels[lIdx]->getNodeId(),
-                                            mChannels[lIdx]->getEncryptionKey(),
-                                            IoHomeCommand::WritePrivate, 0x03, lTemp);
-                    logInfoP("Cozy: set temperature %d (tenths) on channel %d", lTemp, lIdx + 1);
-                }
-                else
-                    logInfoP("Invalid cozy temp command: %s", lCozyCmd.c_str());
-            }
-            else if (lCozyCmd.substr(0, 4) == "mode" && lCozyCmd.length() > 7)
-            {
-                int8_t lIdx = parseChannelIdx(lCozyCmd, 5);
-                uint32_t lModeValue = 0;
-                if (lIdx >= 0 && parseUnsignedDecimal(lCozyCmd.substr(8), lModeValue))
-                {
-                    uint8_t lMode = static_cast<uint8_t>(lModeValue);
-                    mController.sendCommand(mChannels[lIdx]->getNodeId(),
-                                            mChannels[lIdx]->getEncryptionKey(),
-                                            IoHomeCommand::WritePrivate, 0x04, lMode);
-                    logInfoP("Cozy: set mode %d on channel %d", lMode, lIdx + 1);
-                }
-                else
-                    logInfoP("Invalid cozy mode command: %s", lCozyCmd.c_str());
-            }
-            else if (lCozyCmd.substr(0, 8) == "presence" && lCozyCmd.length() > 11)
-            {
-                int8_t lIdx = parseChannelIdx(lCozyCmd, 9);
-                uint32_t lValValue = 0;
-                if (lIdx >= 0 && parseUnsignedDecimal(lCozyCmd.substr(12), lValValue))
-                {
-                    uint8_t lVal = static_cast<uint8_t>(lValValue);
-                    mController.sendCommand(mChannels[lIdx]->getNodeId(),
-                                            mChannels[lIdx]->getEncryptionKey(),
-                                            IoHomeCommand::WritePrivate, 0x10, lVal);
-                    logInfoP("Cozy: set presence %s on channel %d", lVal ? "ON" : "OFF", lIdx + 1);
-                }
-                else
-                    logInfoP("Invalid cozy presence command: %s", lCozyCmd.c_str());
-            }
-            else if (lCozyCmd.substr(0, 6) == "window" && lCozyCmd.length() > 9)
-            {
-                int8_t lIdx = parseChannelIdx(lCozyCmd, 7);
-                uint32_t lValValue = 0;
-                if (lIdx >= 0 && parseUnsignedDecimal(lCozyCmd.substr(10), lValValue))
-                {
-                    uint8_t lVal = static_cast<uint8_t>(lValValue);
-                    mController.sendCommand(mChannels[lIdx]->getNodeId(),
-                                            mChannels[lIdx]->getEncryptionKey(),
-                                            IoHomeCommand::WritePrivate, 0x0E, lVal);
-                    logInfoP("Cozy: set window %s on channel %d", lVal ? "OPEN" : "CLOSED", lIdx + 1);
-                }
-                else
-                    logInfoP("Invalid cozy window command: %s", lCozyCmd.c_str());
-            }
-            else if (lCozyCmd.substr(0, 7) == "poweron" && lCozyCmd.length() > 8)
-            {
-                int8_t lIdx = parseChannelIdx(lCozyCmd, 8);
-                if (lIdx >= 0)
-                {
-                    mController.sendCommand(mChannels[lIdx]->getNodeId(),
-                                            mChannels[lIdx]->getEncryptionKey(),
-                                            IoHomeCommand::WritePrivate, 0x0C, 0);
-                    logInfoP("Cozy: power on channel %d", lIdx + 1);
-                }
-            }
-            else if (lCozyCmd.substr(0, 8) == "midnight" && lCozyCmd.length() > 9)
-            {
-                int8_t lIdx = parseChannelIdx(lCozyCmd, 9);
-                if (lIdx >= 0)
-                {
-                    mController.sendCommand(mChannels[lIdx]->getNodeId(),
-                                            mChannels[lIdx]->getEncryptionKey(),
-                                            IoHomeCommand::WritePrivate, 0x00, 0);
-                    logInfoP("Cozy: midnight sync on channel %d", lIdx + 1);
-                }
-            }
+        if (lAction == "temp" && lHasValue)
+        {
+            uint8_t lTemp = static_cast<uint8_t>(lValue);
+            mController.sendCommand(mChannels[lIdx]->getNodeId(),
+                                    mChannels[lIdx]->getEncryptionKey(),
+                                    IoHomeCommand::WritePrivate, 0x03, lTemp);
+            logInfoP("Cozy: set temperature %d (tenths) on channel %d", lTemp, lIdx + 1);
+        }
+        else if (lAction == "mode" && lHasValue)
+        {
+            uint8_t lMode = static_cast<uint8_t>(lValue);
+            mController.sendCommand(mChannels[lIdx]->getNodeId(),
+                                    mChannels[lIdx]->getEncryptionKey(),
+                                    IoHomeCommand::WritePrivate, 0x04, lMode);
+            logInfoP("Cozy: set mode %d on channel %d", lMode, lIdx + 1);
+        }
+        else if (lAction == "presence" && lHasValue)
+        {
+            uint8_t lVal = static_cast<uint8_t>(lValue);
+            mController.sendCommand(mChannels[lIdx]->getNodeId(),
+                                    mChannels[lIdx]->getEncryptionKey(),
+                                    IoHomeCommand::WritePrivate, 0x10, lVal);
+            logInfoP("Cozy: set presence %s on channel %d", lVal ? "ON" : "OFF", lIdx + 1);
+        }
+        else if (lAction == "window" && lHasValue)
+        {
+            uint8_t lVal = static_cast<uint8_t>(lValue);
+            mController.sendCommand(mChannels[lIdx]->getNodeId(),
+                                    mChannels[lIdx]->getEncryptionKey(),
+                                    IoHomeCommand::WritePrivate, 0x0E, lVal);
+            logInfoP("Cozy: set window %s on channel %d", lVal ? "OPEN" : "CLOSED", lIdx + 1);
+        }
+        else if (lAction == "poweron")
+        {
+            mController.sendCommand(mChannels[lIdx]->getNodeId(),
+                                    mChannels[lIdx]->getEncryptionKey(),
+                                    IoHomeCommand::WritePrivate, 0x0C, 0);
+            logInfoP("Cozy: power on channel %d", lIdx + 1);
+        }
+        else if (lAction == "midnight")
+        {
+            mController.sendCommand(mChannels[lIdx]->getNodeId(),
+                                    mChannels[lIdx]->getEncryptionKey(),
+                                    IoHomeCommand::WritePrivate, 0x00, 0);
+            logInfoP("Cozy: midnight sync on channel %d", lIdx + 1);
+        }
+        else
+        {
+            logInfoP("Invalid cozy command: %s", lCozyArgs.c_str());
         }
         return true;
     }
