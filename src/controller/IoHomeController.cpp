@@ -2160,14 +2160,31 @@ const IoHomeController::IoHomeNodeStats *IoHomeController::nodeStats() const
     return mNodeStats;
 }
 
-void IoHomeController::recordScanFrame(const IoHomeFrame &iFrame, int16_t iRssi, uint8_t iFreqIdx)
+void IoHomeController::recordScanFrame(const IoHomeFrame &iFrame, const uint8_t *iRaw, uint8_t iRawLen, int16_t iRssi, uint8_t iFreqIdx)
 {
+    if (iRawLen > IOHC_FRAME_BUFFER_SIZE)
+        iRawLen = IOHC_FRAME_BUFFER_SIZE;
     mScanBuffer[mScanBufferHead].timestamp = millis();
     mScanBuffer[mScanBufferHead].frame = iFrame;
+    if (iRaw != nullptr && iRawLen > 0)
+        memcpy(mScanBuffer[mScanBufferHead].raw, iRaw, iRawLen);
+    mScanBuffer[mScanBufferHead].rawLen = iRawLen;
     mScanBuffer[mScanBufferHead].rssi = iRssi;
     mScanBuffer[mScanBufferHead].freqIdx = iFreqIdx;
     mScanBuffer[mScanBufferHead].valid = true;
     mScanBufferHead = (mScanBufferHead + 1) % kScanBufferSize;
+
+    // Live trace: log the exact on-air bytes immediately so a real remote's
+    // button press is captured the moment it is received. The hex format is
+    // identical to the module's own "PairDiag: tx1w ... hex=" line, enabling a
+    // direct byte-by-byte comparison between the original remote and our TX.
+    const uint32_t lFreqHz = (iFreqIdx < IOHC_NUM_FREQUENCIES) ? IOHC_FREQUENCIES[iFreqIdx] : 0;
+    const std::string lHex = hexDump(iRaw, iRawLen);
+    logInfoP("Scan rx: cmd=%s(0x%02X) src=0x%06X dst=0x%06X freq=%u %luHz rssi=%d len=%u hex=%s",
+             commandName(iFrame.commandId), static_cast<unsigned>(iFrame.commandId),
+             iFrame.getSrcNodeId(), iFrame.getDestNodeId(),
+             static_cast<unsigned>(iFreqIdx), static_cast<unsigned long>(lFreqHz),
+             iRssi, static_cast<unsigned>(iRawLen), lHex.c_str());
 }
 
 void IoHomeController::updateNodeStats(uint32_t iNodeId, int16_t iRssi, IoHomeCommand iCmd)
@@ -2879,6 +2896,7 @@ void IoHomeController::loop()
     if (mRadio.isPacketAvailable())
     {
         uint8_t lLen = mRadio.readPacket(mRxBuffer, sizeof(mRxBuffer));
+        mRxRawLen = lLen;
         bool lParsed = (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen));
         if (lLen > 0 && !lParsed)
             mRxParseFailCount++;
@@ -5740,7 +5758,7 @@ void IoHomeController::dispatchRxFrame()
          mRxFrame.commandId == IoHomeCommand::DiscoverSPEResponse))
     {
         mModule->remoteMap().observeAddress(lSrcNode);
-        recordScanFrame(mRxFrame, mRadio.lastRssi(), mCurrentFreqIdx);
+        recordScanFrame(mRxFrame, mRxBuffer, mRxRawLen, mRadio.lastRssi(), mCurrentFreqIdx);
         updateNodeStats(lSrcNode, mRadio.lastRssi(), mRxFrame.commandId);
         logInfoP("Discovery: %s from 0x%06X freq=%d rssi=%ddBm",
                  commandName(mRxFrame.commandId), lSrcNode, mCurrentFreqIdx, mRadio.lastRssi());
@@ -6171,7 +6189,7 @@ void IoHomeController::processPassiveFrame()
     // Record frame in scan buffer if network scan is active
     if (mNetworkScanActive)
     {
-        recordScanFrame(mRxFrame, mRadio.lastRssi(), mCurrentFreqIdx);
+        recordScanFrame(mRxFrame, mRxBuffer, mRxRawLen, mRadio.lastRssi(), mCurrentFreqIdx);
         updateNodeStats(lSrcNode, mRadio.lastRssi(), mRxFrame.commandId);
     }
 
@@ -6268,7 +6286,7 @@ void IoHomeController::processGatewayFrame()
 
     if (mNetworkScanActive)
     {
-        recordScanFrame(mRxFrame, mRadio.lastRssi(), mCurrentFreqIdx);
+        recordScanFrame(mRxFrame, mRxBuffer, mRxRawLen, mRadio.lastRssi(), mCurrentFreqIdx);
         updateNodeStats(lSrcNode, mRadio.lastRssi(), mRxFrame.commandId);
     }
 

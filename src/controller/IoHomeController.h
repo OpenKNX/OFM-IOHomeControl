@@ -351,6 +351,8 @@ public:
   {
     uint32_t timestamp;
     IoHomeFrame frame;
+    uint8_t raw[IOHC_FRAME_BUFFER_SIZE]; // exact on-air bytes as received
+    uint8_t rawLen;
     int16_t rssi;
     uint8_t freqIdx;
     bool valid;
@@ -563,6 +565,7 @@ private:
   uint8_t mTxBuffer[IOHC_FRAME_BUFFER_SIZE];
   uint8_t mTxLen;
   uint8_t mRxBuffer[IOHC_FRAME_BUFFER_SIZE];
+  uint8_t mRxRawLen = 0; // length of the last raw frame read into mRxBuffer
   uint32_t mRxParseFailCount;
 
   // 1W repeat transmission state
@@ -775,7 +778,7 @@ private:
   void logGatewayState(const char *iLabel) const;
 
   // Network scan recording
-  void recordScanFrame(const IoHomeFrame &iFrame, int16_t iRssi, uint8_t iFreqIdx);
+  void recordScanFrame(const IoHomeFrame &iFrame, const uint8_t *iRaw, uint8_t iRawLen, int16_t iRssi, uint8_t iFreqIdx);
   void updateNodeStats(uint32_t iNodeId, int16_t iRssi, IoHomeCommand iCmd);
 
   // Command scan results

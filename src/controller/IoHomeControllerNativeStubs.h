@@ -45,7 +45,7 @@
 struct OpenKnxNativeFlashStub
 {
   uint32_t saveCount = 0;
-  void save() { saveCount++; }
+  void save(bool = false) { saveCount++; }
 };
 
 struct OpenKnxNativeStub

@@ -566,8 +566,13 @@ Bei kanalbezogenen Befehlen wird die Kanalnummer direkt an das Präfix angehäng
 |--------|-------------|
 | `iohc scan start` | Startet passiven Netzwerk-Scan |
 | `iohc scan stop` | Stoppt Netzwerk-Scan |
-| `iohc scan dump` | Zeigt empfangene Pakete |
+| `iohc scan dump` | Zeigt empfangene Pakete inkl. vollständigem Frame-Hex |
 | `iohc scan stats` | Zeigt Statistiken pro Node |
+
+Während ein Netzwerk-Scan aktiv ist, wird jedes empfangene Paket sofort als
+`Scan rx:`-Logzeile mit den exakten Funkbytes (`hex=...`) ausgegeben. Dadurch
+lässt sich der Tastendruck einer Original-Fernbedienung direkt mitloggen und
+byteweise mit der `PairDiag: tx1w ... hex=...`-Zeile des Moduls vergleichen.
 
 ----
 
