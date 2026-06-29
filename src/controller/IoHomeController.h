@@ -15,6 +15,13 @@
 #define IOHC_AUTH_DWELL_MS_SX1262 90
 #define IOHC_AUTH_PREAMBLE_SX1262 64
 #define IOHC_PAIR_TIMEOUT_MS 30000
+// Diagnostic discovery sweep: listen window per frequency and how many full
+// frequency sweeps a single discovery broadcast performs before giving up.
+// The extended window adds a short grace period so a frame already arriving at
+// the window boundary is not truncated by hopping to the next frequency.
+#define IOHC_DISCOVERY_LISTEN_MS 2000
+#define IOHC_DISCOVERY_LISTEN_EXTENDED_MS 2050
+#define IOHC_DISCOVERY_MAX_SWEEPS 3
 #define IOHC_DUTY_CYCLE_WINDOW_MS 3600000 // 1 hour
 #define IOHC_LBT_RSSI_THRESHOLD_DBM -90   // clear channel threshold before TX
 #define IOHC_LBT_MAX_RETRIES 5            // normal TX: 5 * 5ms worst-case
@@ -598,6 +605,7 @@ private:
   uint8_t mPairingChallenge[6];
   uint32_t mDiscoveredNodeId;
   uint8_t mPairingFreqIdx;
+  uint8_t mDiscoverySweep; // diagnostic discovery: current full-sweep attempt (0-based)
   uint32_t mPairingStartTime;
   DiscoverySendPhase mDiscoverySendPhase;
   DiscoveryTimingTrace mDiscoveryTimingTrace;

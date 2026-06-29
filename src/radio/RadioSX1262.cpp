@@ -106,7 +106,7 @@ RadioSX1262::RadioSX1262()
 #ifdef ESP32
       mChipMutex(nullptr), mChipMutexBuffer{}, mDio1EventQueue(nullptr), mDio1EventQueueBuffer{}, mDio1EventQueueStorage{}, mDio1TaskHandle(nullptr),
 #endif
-      mIrqFired(false), mPreambleFlag(false), mPendingIrqStickyMask(0), mPendingIrqQueue{}, mPendingIrqHead(0), mPendingIrqTail(0), mPendingIrqOverflowCount(0),
+      mIrqFired(false), mPreambleFlag(false), mSyncFlag(false), mPendingIrqStickyMask(0), mPendingIrqQueue{}, mPendingIrqHead(0), mPendingIrqTail(0), mPendingIrqOverflowCount(0),
       mTxStartCount(0), mTxDoneCount(0), mRxStartCount(0), mIrqCount(0),
       mPreambleIrqCount(0), mSyncWordIrqCount(0), mRxDoneCount(0), mCrcErrorCount(0),
       mTimeoutCount(0), mIrqPollHitCount(0), mPreambleOnlyIrqCount(0), mRxReadFailCount(0), mTxBusyHighHitCount(0), mTxBusyHighTotalUs(0), mTxBusyHighMaxUs(0), mTxBusyHighStartUs(0), mTxBusyTraceActive(false), mTxBusyTraceOp(TxBusyTraceOp::None), mTxBusyTrace{}, mLastIrqStatus(0), mLastOpStatusBefore(0), mLastOpStatusAfter(0),
@@ -589,6 +589,7 @@ RadioError RadioSX1262::startTransmitInternal(const uint8_t *iData, uint8_t iLen
     // Clear IRQ flags before TX
     mIrqFired = false;
     mPreambleFlag = false;
+    mSyncFlag = false;
 #ifdef ESP32
     portENTER_CRITICAL(&mPendingIrqMux);
 #endif
@@ -669,6 +670,7 @@ RadioError RadioSX1262::startReceiveInternal(bool iBlocking)
     // Clear IRQ flags and preamble flag before RX
     mIrqFired = false;
     mPreambleFlag = false;
+    mSyncFlag = false;
 #ifdef ESP32
     portENTER_CRITICAL(&mPendingIrqMux);
 #endif
@@ -786,6 +788,7 @@ bool RadioSX1262::isPacketAvailable()
         if (lNeedsClear && !clearIrqStatus(SX1262_IRQ_ALL, false))
             return false;
         mPreambleFlag = false;
+        mSyncFlag = false;
 
         if (lIrq & SX1262_IRQ_CRC_ERR)
             return false;
@@ -801,6 +804,11 @@ bool RadioSX1262::isPacketAvailable()
 bool RadioSX1262::isPreambleDetected() const
 {
     return mPreambleFlag;
+}
+
+bool RadioSX1262::isSyncDetected() const
+{
+    return mSyncFlag;
 }
 
 uint8_t RadioSX1262::readPacket(uint8_t *oBuffer, uint8_t iMaxLen)
@@ -1504,7 +1512,10 @@ void RadioSX1262::noteIrqStatus(uint16_t iIrq, bool iPolled)
         mPreambleIrqCount++;
     }
     if (iIrq & SX1262_IRQ_SYNC_WORD_VALID)
+    {
+        mSyncFlag = true;
         mSyncWordIrqCount++;
+    }
     if (iIrq & SX1262_IRQ_RX_DONE)
         mRxDoneCount++;
     if (iIrq & SX1262_IRQ_CRC_ERR)

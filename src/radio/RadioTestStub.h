@@ -119,6 +119,7 @@ public:
   bool isTxDoneBlocking() { return isTxDone(); }
   bool isPacketAvailable() { return !mReceiveQueue.empty(); }
   bool isPreambleDetected() const { return false; }
+  bool isSyncDetected() const { return false; }
 
   uint8_t readPacket(uint8_t *oBuffer, uint8_t iMaxLen)
   {

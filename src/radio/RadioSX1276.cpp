@@ -466,6 +466,17 @@ bool RadioSX1276::isPreambleDetected() const
 #endif
 }
 
+bool RadioSX1276::isSyncDetected() const
+{
+#ifdef ESP32
+    // RegIrqFlags1 bit0 (SyncAddressMatch) latches once the sync word is
+    // matched during FSK reception, indicating a frame is in progress.
+    return (const_cast<RadioSX1276 *>(this)->readRegister(REG_IRQFLAGS1) & RF_IRQFLAGS1_SYNCADDRESSMATCH) != 0;
+#else
+    return false;
+#endif
+}
+
 uint8_t RadioSX1276::readPacket(uint8_t *oBuffer, uint8_t iMaxLen)
 {
     if (!mInitialized)

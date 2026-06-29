@@ -902,7 +902,7 @@ IoHomeController::IoHomeController()
       mState(ControllerState::Idle), mStateTimer(0),
       mCurrentFreqIdx(0), mQueueHead(0), mQueueTail(0),
       mPairingChannel(0), mDiscoveredNodeId(0),
-      mPairingFreqIdx(frequencyIndexForHz(kNormal2WTxFreqHz)), mPairingStartTime(0),
+      mPairingFreqIdx(frequencyIndexForHz(kNormal2WTxFreqHz)), mDiscoverySweep(0), mPairingStartTime(0),
       mDiscoverySendPhase(DiscoverySendPhase::SetFrequency),
       mDiscoveryTimingTrace{},
       mDiscoverySPE(false),
@@ -1883,6 +1883,7 @@ void IoHomeController::startDiscovery(bool iEncrypted)
         return;
 
     mPairingFreqIdx = 0;
+    mDiscoverySweep = 0;
     mPairingStartTime = millis();
     mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
     resetDiscoveryTimingTrace();
@@ -2614,7 +2615,10 @@ void IoHomeController::serviceRxScan()
     if (lNow - mRxScanLastSwitch < mRxScanIntervalUs)
         return;
 
-    if (mRadio.isPreambleDetected())
+    // Do not hop channels while a frame is arriving on the current frequency:
+    // a detected preamble or matched sync word means a packet is in flight and
+    // switching now would truncate it. Stay put until reception completes.
+    if (mRadio.isPreambleDetected() || mRadio.isSyncDetected())
         return;
 
     const uint8_t lNextFreqIdx = (mCurrentFreqIdx + 1) % IOHC_NUM_FREQUENCIES;
@@ -5011,13 +5015,30 @@ void IoHomeController::processDiscovery()
         }
 
         const unsigned long lListenElapsedMs = static_cast<unsigned long>(millis() - mStateTimer);
-        if (lListenElapsedMs > 2000)
+        // Gate hopping: if a frame is currently arriving (preamble detected or
+        // sync word matched), extend the listen window by a short grace period
+        // so the in-flight response is not truncated by switching frequency.
+        const bool lFrameArriving = mRadio.isPreambleDetected() || mRadio.isSyncDetected();
+        const unsigned long lListenLimitMs = lFrameArriving ? IOHC_DISCOVERY_LISTEN_EXTENDED_MS : IOHC_DISCOVERY_LISTEN_MS;
+        if (lListenElapsedMs > lListenLimitMs)
         {
-            logDiscoveryTimingTrace((mPairingFreqIdx + 1 < IOHC_NUM_FREQUENCIES) ? "next" : "done", lListenElapsedMs);
-            // Next frequency or done
+            const bool lMoreFreqs = (mPairingFreqIdx + 1 < IOHC_NUM_FREQUENCIES);
+            const bool lMoreSweeps = (mDiscoverySweep + 1 < IOHC_DISCOVERY_MAX_SWEEPS);
+            logDiscoveryTimingTrace((lMoreFreqs || lMoreSweeps) ? "next" : "done", lListenElapsedMs);
+            // Next frequency, next sweep, or done
             mPairingFreqIdx++;
             if (mPairingFreqIdx < IOHC_NUM_FREQUENCIES)
             {
+                mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
+                resetDiscoveryTimingTrace();
+                mState = ControllerState::DiscoverySending;
+            }
+            else if (lMoreSweeps)
+            {
+                // Completed a full frequency sweep without finishing all retries:
+                // restart the sweep to give devices another chance to respond.
+                mDiscoverySweep++;
+                mPairingFreqIdx = 0;
                 mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
                 resetDiscoveryTimingTrace();
                 mState = ControllerState::DiscoverySending;

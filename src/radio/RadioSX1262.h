@@ -83,6 +83,7 @@ public:
   bool isTxDoneBlocking();
   bool isPacketAvailable();
   bool isPreambleDetected() const;
+  bool isSyncDetected() const;
   uint8_t readPacket(uint8_t *oBuffer, uint8_t iMaxLen);
   int16_t lastRssi() const;
   bool currentRssi(int16_t &oRssi);
@@ -195,6 +196,7 @@ private:
   // Interrupt-driven DIO1 detection
   volatile bool mIrqFired;
   volatile bool mPreambleFlag; // latched preamble detection from IRQ
+  volatile bool mSyncFlag;     // latched sync-word detection from IRQ
   volatile uint16_t mPendingIrqStickyMask;
   volatile uint16_t mPendingIrqQueue[kPendingIrqDepth];
   volatile uint8_t mPendingIrqHead;
