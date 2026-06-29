@@ -2360,6 +2360,8 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohcNN status", "Show channel NN detail");
     openknx.console.printHelpLine("iohcNN pair [ADDR]", "Start pairing; 1W ADDR is optional/binding only");
     openknx.console.printHelpLine("iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove", "Explicit 1W mode; ADDR optional");
+    openknx.console.printHelpLine("iohcNN pair1w receive|copy [SEC]", "Clone original remote: capture its key from the 'copy remote' procedure");
+    openknx.console.printHelpLine("iohcNN pair1w stop|status", "Stop or show the 1W key-receive (clone) state");
     openknx.console.printHelpLine("iohcNN bind1w ADDR", "Bind/rebind a 1W broadcast profile to an actuator node");
     openknx.console.printHelpLine("iohcNN remove1w [ADDR]", "Shortcut for: pair1w [ADDR] remove");
     openknx.console.printHelpLine("iohcNN pair2w-exp MODE [ADDR]", "Diagnostic-only 2W pairing mode: discovery-confirm|launch-key|pull-key");
@@ -3009,7 +3011,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         std::string lChanText;
         if (!takeToken(lArgs, lChanText))
         {
-            logInfoP("Usage: iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove");
+            logInfoP("Usage: iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove | receive|copy [SEC]|stop|status");
             return true;
         }
 
@@ -3018,6 +3020,76 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         {
             logInfoP("Invalid channel: %s", lChanText.c_str());
             return true;
+        }
+
+        // 1W key copy/clone: capture an existing remote's key over-air. The
+        // original remote transmits its key inside a SendKey1W (0x30) frame
+        // during the manufacturer's "copy remote" procedure; we decrypt it with
+        // the public transfer key and clone the remote identity into this
+        // channel so the actuator obeys the cloned commands.
+        {
+            std::string lPeekArgs = lArgs;
+            std::string lKeyword;
+            if (takeToken(lPeekArgs, lKeyword) &&
+                (lKeyword == "receive" || lKeyword == "copy" || lKeyword == "recv" ||
+                 lKeyword == "stop" || lKeyword == "status"))
+            {
+                if (!mChannels[lIdx] || !mChannels[lIdx]->is1W())
+                {
+                    logInfoP("Channel %u is not configured for 1W.", static_cast<unsigned>(lIdx + 1));
+                    return true;
+                }
+
+                if (lKeyword == "stop")
+                {
+                    mController.stopOneWayKeyReceive();
+                    logInfoP("1W key receive stopped on channel %u", static_cast<unsigned>(lIdx + 1));
+                    return true;
+                }
+
+                if (lKeyword == "status")
+                {
+                    const char *lStatusName = "idle";
+                    switch (mController.oneWayKeyReceiveStatus())
+                    {
+                    case IoHomeController::OneWayKeyReceiveStatus::Listening:
+                        lStatusName = "listening";
+                        break;
+                    case IoHomeController::OneWayKeyReceiveStatus::Captured:
+                        lStatusName = "captured";
+                        break;
+                    case IoHomeController::OneWayKeyReceiveStatus::Timeout:
+                        lStatusName = "timeout";
+                        break;
+                    default:
+                        lStatusName = "idle";
+                        break;
+                    }
+                    logInfoP("1W key receive ch=%u status=%s captured=0x%06X",
+                             static_cast<unsigned>(lIdx + 1), lStatusName,
+                             mController.oneWayKeyReceiveCapturedNode() & 0x00FFFFFF);
+                    return true;
+                }
+
+                // receive / copy: optional capture timeout in seconds (default 60)
+                uint32_t lTimeoutSec = 60;
+                std::string lTimeoutText;
+                if (takeToken(lPeekArgs, lTimeoutText))
+                {
+                    uint32_t lParsed = 0;
+                    if (parseUnsignedDecimal(lTimeoutText, lParsed) && lParsed > 0 && lParsed <= 3600)
+                        lTimeoutSec = lParsed;
+                }
+
+                if (mController.startOneWayKeyReceive(lIdx, lTimeoutSec * 1000UL))
+                    logInfoP("1W key receive armed on channel %u for %us. Now run the 'copy remote' "
+                             "procedure on the original remote so it transmits its key.",
+                             static_cast<unsigned>(lIdx + 1), static_cast<unsigned>(lTimeoutSec));
+                else
+                    logInfoP("1W key receive could not start on channel %u (busy or not 1W).",
+                             static_cast<unsigned>(lIdx + 1));
+                return true;
+            }
         }
 
         uint32_t lNodeId = 0;
@@ -3044,14 +3116,14 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             }
             else
             {
-                logInfoP("Usage: iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove");
+                logInfoP("Usage: iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove | receive|copy [SEC]|stop|status");
                 return true;
             }
         }
 
         if (!lModeSeen)
         {
-            logInfoP("Usage: iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove");
+            logInfoP("Usage: iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove | receive|copy [SEC]|stop|status");
             return true;
         }
 

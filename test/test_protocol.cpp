@@ -8250,6 +8250,88 @@ TEST(controller_passive_key_sniff_captures_result_and_callback)
     ASSERT_TRUE(!lController.passiveKeyResult().valid);
 }
 
+TEST(controller_1w_key_receive_clones_remote_from_sendkey_frame)
+{
+    const uint32_t lOwnNodeId = 0x9F0071;
+    const uint32_t lRemoteNodeId = 0x7E9E6E; // original remote we want to clone
+    const uint8_t lManufacturer = 0x01;      // Velux
+    const uint16_t lSequence = 0x148C;
+    const uint8_t lClearKey[16] = {
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+        0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lOwnNodeId);
+    lController.init();
+    lChannel.setIs1W(true);
+
+    ASSERT_EQ(lController.oneWayKeyReceiveStatus(),
+              IoHomeController::OneWayKeyReceiveStatus::Idle);
+    ASSERT_TRUE(lController.startOneWayKeyReceive(0, 0));
+    ASSERT_TRUE(lController.isPassiveMode());
+    ASSERT_EQ(lController.oneWayKeyReceiveStatus(),
+              IoHomeController::OneWayKeyReceiveStatus::Listening);
+
+    // The original remote encrypts its key with the public transfer key, keyed
+    // by its own node address, and broadcasts it inside a SendKey1W (0x30).
+    const uint8_t lRemoteAddr[3] = {
+        static_cast<uint8_t>((lRemoteNodeId >> 16) & 0xFF),
+        static_cast<uint8_t>((lRemoteNodeId >> 8) & 0xFF),
+        static_cast<uint8_t>(lRemoteNodeId & 0xFF)};
+    uint8_t lEncryptedKey[16];
+    ASSERT_TRUE(IoHomeCrypto::encrypt1WKey(lClearKey, IOHC_TRANSFER_KEY, lRemoteAddr, lEncryptedKey));
+
+    IoHomeFrame lFrame;
+    lFrame.init();
+    lFrame.setStart2W();
+    lFrame.set1WMode();
+    lFrame.setSrcNode(lRemoteNodeId);
+    lFrame.setDestNode(0x00003F); // 1W broadcast target, type 0
+    lFrame.commandId = IoHomeCommand::SendKey1W;
+    memcpy(lFrame.data, lEncryptedKey, sizeof(lEncryptedKey));
+    lFrame.data[16] = lManufacturer;
+    lFrame.data[17] = 0x01;
+    lFrame.data[18] = static_cast<uint8_t>((lSequence >> 8) & 0xFF);
+    lFrame.data[19] = static_cast<uint8_t>(lSequence & 0xFF);
+    lFrame.dataLen = 20;
+    lFrame.hasHmac = false;
+
+    ASSERT_TRUE(queueControllerPassiveFrame(lController, lFrame));
+
+    ASSERT_EQ(lController.oneWayKeyReceiveStatus(),
+              IoHomeController::OneWayKeyReceiveStatus::Captured);
+    ASSERT_EQ(lController.oneWayKeyReceiveCapturedNode(), lRemoteNodeId);
+    ASSERT_TRUE(!lController.isPassiveMode());
+
+    // The channel profile is now a true clone of the original remote.
+    ASSERT_EQ(lChannel.getOneWayControllerNodeId(), lRemoteNodeId);
+    ASSERT_MEM_EQ(lChannel.getOneWayControllerKey(), lClearKey, 16);
+    ASSERT_EQ(lChannel.getOneWayControllerManufacturer(), lManufacturer);
+    ASSERT_EQ(lChannel.getSequence1W(), lSequence);
+    ASSERT_MEM_EQ(lChannel.getEncryptionKey(), lClearKey, 16);
+}
+
+TEST(controller_1w_key_receive_rejects_non_1w_channel)
+{
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(0x9F0071);
+    lController.init();
+    lChannel.setIs1W(false);
+
+    ASSERT_TRUE(!lController.startOneWayKeyReceive(0, 0));
+    ASSERT_TRUE(!lController.isPassiveMode());
+    ASSERT_EQ(lController.oneWayKeyReceiveStatus(),
+              IoHomeController::OneWayKeyReceiveStatus::Idle);
+}
+
 TEST(controller_passive_remote_activity_schedules_follow_up_poll_for_target_device)
 {
     const uint32_t lOwnNodeId = 0x831F2A;
@@ -10302,6 +10384,8 @@ int main()
     RUN(controller_passive_key_sniff_start_stop_clear);
     RUN(controller_passive_mode_does_not_sniff_without_explicit_start);
     RUN(controller_passive_key_sniff_captures_result_and_callback);
+    RUN(controller_1w_key_receive_clones_remote_from_sendkey_frame);
+    RUN(controller_1w_key_receive_rejects_non_1w_channel);
     RUN(controller_passive_remote_activity_schedules_follow_up_poll_for_target_device);
     RUN(controller_linked_remote_activity_schedules_follow_up_poll_for_linked_device);
     RUN(controller_2w_challenge_response_inherits_low_power);

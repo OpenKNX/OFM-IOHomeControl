@@ -69,6 +69,7 @@ The 1W path follows the reference remote model more closely than older gateway-d
 
 - 1W pairing/add sends an announce/add flow (`0x2E` followed by unauthenticated `0x30 SendKey1W`). `0x39 RemoveController` is only sent by explicit remove flows.
 - `0x30 SendKey1W` is a 29-byte frame: 9-byte header plus `encryptedKey[16] + manufacturer + 0x01 + sequence[2]`, with no appended 1W HMAC.
+- A channel can clone an existing original remote instead of enrolling a new identity: `iohcNN pair1w receive` arms a listener that captures the remote's `0x30 SendKey1W` "copy remote" frame, decrypts the contained key with the public transfer key, and stores the remote's address, key and manufacturer into the channel's 1W profile. This is required for actuators that only obey remotes added through the manufacturer's copy procedure. Use `pair1w stop`/`pair1w status` to cancel or inspect the capture.
 - Normal 1W commands use typed broadcast destinations by default, computed as `dst=((type << 6) | 0x3F)`. Type `0` remains the explicit all-device target.
 - Normal 1W control uses the raw io-homecontrol closedness convention internally (`0=open`, `100=closed`). UI/KNX open percentages are converted explicitly at the channel boundary.
 - 1W radio transmission uses four total sends by default: one long-preamble first TX followed by three short-preamble repeats with 40 ms spacing.

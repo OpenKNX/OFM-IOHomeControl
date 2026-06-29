@@ -1987,6 +1987,101 @@ const IoHomeController::PassiveKeyResult &IoHomeController::passiveKeyResult() c
     return mPassiveKeyResult;
 }
 
+bool IoHomeController::startOneWayKeyReceive(uint8_t iChannelIndex, uint32_t iTimeoutMs)
+{
+    if (mState != ControllerState::Idle && mState != ControllerState::PassiveListening)
+        return false;
+
+    IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(iChannelIndex) : nullptr;
+    if (!lCh || !lCh->is1W() || !oneWayProfileForChannel(lCh))
+        return false;
+
+    mOneWayKeyReceiveActive = true;
+    mOneWayKeyReceiveChannel = iChannelIndex;
+    mOneWayKeyReceiveStartedAt = millis();
+    mOneWayKeyReceiveTimeoutMs = iTimeoutMs;
+    mOneWayKeyReceiveCapturedNode = 0;
+    mOneWayKeyReceiveStatus = OneWayKeyReceiveStatus::Listening;
+    setPassiveMode(true);
+    return true;
+}
+
+void IoHomeController::stopOneWayKeyReceive()
+{
+    if (!mOneWayKeyReceiveActive)
+        return;
+
+    mOneWayKeyReceiveActive = false;
+    mOneWayKeyReceiveChannel = 0xFF;
+    if (mOneWayKeyReceiveStatus == OneWayKeyReceiveStatus::Listening)
+        mOneWayKeyReceiveStatus = OneWayKeyReceiveStatus::Idle;
+
+    if (mPassiveMode && !mNetworkScanActive)
+        setPassiveMode(false);
+}
+
+IoHomeController::OneWayKeyReceiveStatus IoHomeController::oneWayKeyReceiveStatus() const
+{
+    return mOneWayKeyReceiveStatus;
+}
+
+uint32_t IoHomeController::oneWayKeyReceiveCapturedNode() const
+{
+    return mOneWayKeyReceiveCapturedNode;
+}
+
+void IoHomeController::handleOneWayKeyReceiveFrame()
+{
+    // Incoming SendKey1W (0x30) carries the originating remote's key encrypted
+    // with the well-known transfer key, keyed by the remote's own node address:
+    //   data = encryptedKey[16] + manufacturer + 0x01 + sequence[2].
+    if (mRxFrame.dataLen < 17)
+        return;
+
+    const uint32_t lRemoteId = mRxFrame.getSrcNodeId() & 0x00FFFFFF;
+    if (lRemoteId == 0)
+        return;
+
+    IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(mOneWayKeyReceiveChannel) : nullptr;
+    IoHomecontrolChannel *lProfile = lCh ? oneWayProfileForChannel(lCh) : nullptr;
+    if (!lCh || !lProfile)
+    {
+        stopOneWayKeyReceive();
+        return;
+    }
+
+    const uint8_t lRemoteAddr[3] = {
+        static_cast<uint8_t>((lRemoteId >> 16) & 0xFF),
+        static_cast<uint8_t>((lRemoteId >> 8) & 0xFF),
+        static_cast<uint8_t>(lRemoteId & 0xFF)};
+
+    uint8_t lKey[16];
+    if (!IoHomeCrypto::decrypt1WKey(mRxFrame.data, IOHC_TRANSFER_KEY, lRemoteAddr, lKey))
+        return;
+
+    const uint8_t lManufacturer = mRxFrame.data[16];
+    uint16_t lSequence = 0;
+    if (mRxFrame.dataLen >= 20)
+        lSequence = static_cast<uint16_t>((static_cast<uint16_t>(mRxFrame.data[18]) << 8) | mRxFrame.data[19]);
+
+    // Clone the originating remote's identity + key into the channel profile so
+    // the module transmits as a true copy that the actuator already trusts.
+    lProfile->setOneWayControllerNodeId(lRemoteId);
+    lProfile->setOneWayControllerKey(lKey);
+    lProfile->setOneWayControllerManufacturer(lManufacturer);
+    lProfile->setSequence1W(lSequence);
+    lCh->setEncryptionKey(lKey);
+    openknx.flash.save(true); // identity change is rare & critical: bypass write throttle
+
+    mOneWayKeyReceiveCapturedNode = lRemoteId;
+    mOneWayKeyReceiveStatus = OneWayKeyReceiveStatus::Captured;
+    logInfoP("1W key receive: cloned remote=0x%06X key=set mfg=0x%02X seq=0x%04X into channel %u",
+             lRemoteId, static_cast<unsigned>(lManufacturer), static_cast<unsigned>(lSequence),
+             static_cast<unsigned>(mOneWayKeyReceiveChannel + 1));
+
+    stopOneWayKeyReceive();
+}
+
 void IoHomeController::setGatewayMode(bool iEnabled)
 {
     mGatewayMode = iEnabled;
@@ -2889,6 +2984,15 @@ void IoHomeController::loop()
             mState = ControllerState::Idle;
             startReceive();
         }
+    }
+
+    if (mOneWayKeyReceiveActive &&
+        mOneWayKeyReceiveTimeoutMs > 0 &&
+        millis() - mOneWayKeyReceiveStartedAt >= mOneWayKeyReceiveTimeoutMs)
+    {
+        mOneWayKeyReceiveStatus = OneWayKeyReceiveStatus::Timeout;
+        logInfoP("1W key receive: timeout, no SendKey1W (0x30) captured");
+        stopOneWayKeyReceive();
     }
 
     // Multi-frequency RX scanning: cycle through frequencies only while listening.
@@ -6230,6 +6334,14 @@ void IoHomeController::processPassiveFrame()
     {
         recordScanFrame(mRxFrame, mRxBuffer, mRxRawLen, mRadio.lastRssi(), mCurrentFreqIdx);
         updateNodeStats(lSrcNode, mRadio.lastRssi(), mRxFrame.commandId);
+    }
+
+    // 1W key copy: capture an existing remote's key from its SendKey1W (0x30)
+    // "copy remote" frame and clone it into the target channel's 1W profile.
+    if (mOneWayKeyReceiveActive && mRxFrame.commandId == IoHomeCommand::SendKey1W)
+    {
+        handleOneWayKeyReceiveFrame();
+        return;
     }
 
     if (mPassiveKeySniffStatus != PassiveKeySniffStatus::Listening)

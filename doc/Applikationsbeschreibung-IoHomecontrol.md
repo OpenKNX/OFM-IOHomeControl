@@ -221,6 +221,21 @@ Bei Auswahl von 1W erscheint ein zusätzliches Feld:
 
 > Im 1W-Modus stehen keine Positionsrückmeldung, kein Batterielevel und keine Signalstärke vom Gerät zur Verfügung. Die Positionsschätzung erfolgt ausschließlich anhand der konfigurierten Fahrzeiten.
 
+### **Original-Fernbedienung klonen (1W-Schlüsselübernahme)**
+
+Manche 1W-Aktoren akzeptieren ausschließlich Fernbedienungen, die zuvor über den herstellerseitigen Kopiervorgang angelernt wurden. Eine vom Modul selbst erzeugte 1W-Identität wird von solchen Aktoren verworfen, auch wenn der Funkrahmen formal korrekt aufgebaut ist. Für diesen Fall kann das Modul eine vorhandene Original-Fernbedienung klonen, anstatt sich als neues Gerät anzulernen.
+
+Beim Kopiervorgang sendet die Original-Fernbedienung ihren Schlüssel per Funk in einem `SendKey1W`-Rahmen (`0x30`). Dieser Schlüssel ist mit dem öffentlich bekannten io-homecontrol-Übertragungsschlüssel verschlüsselt. Das Modul empfängt diesen Rahmen, entschlüsselt ihn und übernimmt die Adresse, den Schlüssel und den Hersteller der Original-Fernbedienung in das 1W-Profil des Kanals. Anschließend sendet das Modul als exakte Kopie der Original-Fernbedienung, sodass der Aktor die Befehle annimmt.
+
+Ablauf:
+
+1. Den Kanal in den 1W-Modus versetzen.
+2. Den Klon-Empfang mit `iohcNN pair1w receive` aktivieren (Standard-Wartezeit 60 Sekunden, alternativ `iohcNN pair1w copy SEKUNDEN`).
+3. An der Original-Fernbedienung den herstellerseitigen Kopiervorgang („Fernbedienung kopieren") auslösen, sodass diese ihren Schlüssel sendet.
+4. Das Modul übernimmt Adresse und Schlüssel automatisch, speichert das Profil dauerhaft und meldet die übernommene Node-ID. Der aktuelle Zustand lässt sich jederzeit mit `iohcNN pair1w status` abfragen, ein laufender Empfang mit `iohcNN pair1w stop` beenden.
+
+> Der Klon-Empfang ist zurzeit eine reine Konsolenfunktion. Da der 1W-Modus keine Rückmeldung des Aktors liefert, sollte die erfolgreiche Übernahme abschließend durch einen Fahrbefehl am Aktor überprüft werden.
+
 
 
 ## **Positionssteuerung**
@@ -528,6 +543,10 @@ Bei kanalbezogenen Befehlen wird die Kanalnummer direkt an das Präfix angehäng
 | `iohcNN pair AABBCC` | Startet 1W-Pairing mit bekannter Node-ID (Hex) |
 | `iohc pair cancel` | Bricht laufenden Pairing-Vorgang ab |
 | `iohcNN unpair` | Entfernt Pairing für Kanal NN |
+| `iohcNN pair1w receive` | Klont eine Original-Fernbedienung über deren Kopiervorgang (1W-Schlüsselübernahme) |
+| `iohcNN pair1w copy SEC` | Wie `receive`, jedoch mit eigener Wartezeit in Sekunden |
+| `iohcNN pair1w stop` | Beendet einen laufenden Klon-Empfang |
+| `iohcNN pair1w status` | Zeigt den Zustand des Klon-Empfangs (z.B. übernommene Node-ID) |
 
 ### **Steuerungsbefehle**
 

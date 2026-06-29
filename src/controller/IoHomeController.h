@@ -327,6 +327,28 @@ public:
   PassiveKeySniffStatus passiveKeySniffStatus() const;
   const PassiveKeyResult &passiveKeyResult() const;
 
+  // 1W key copy/clone: listen for an existing remote's over-air SendKey1W
+  // (0x30) "copy remote" frame, decrypt its key with the well-known transfer
+  // key, and store the captured remote identity + key into the target
+  // channel's 1W controller profile. After capture the module transmits as a
+  // true clone of the original remote, so an actuator that already trusts that
+  // remote obeys the cloned commands.
+  enum class OneWayKeyReceiveStatus : uint8_t
+  {
+    Idle = 0,
+    Listening = 1,
+    Captured = 2,
+    Timeout = 3
+  };
+
+  static constexpr uint32_t kOneWayKeyReceiveDefaultTimeoutMs = 60000UL;
+
+  bool startOneWayKeyReceive(uint8_t iChannelIndex,
+                             uint32_t iTimeoutMs = kOneWayKeyReceiveDefaultTimeoutMs);
+  void stopOneWayKeyReceive();
+  OneWayKeyReceiveStatus oneWayKeyReceiveStatus() const;
+  uint32_t oneWayKeyReceiveCapturedNode() const;
+
   // Fake gateway mode (respond to device-initiated pairing requests)
   void setGatewayMode(bool iEnabled);
   bool isGatewayMode() const;
@@ -645,6 +667,14 @@ private:
   uint32_t mPassiveKeySniffStartedAt;
   uint32_t mPassiveKeySniffTimeoutMs;
 
+  // 1W key copy/clone receive state
+  bool mOneWayKeyReceiveActive = false;
+  uint8_t mOneWayKeyReceiveChannel = 0xFF;
+  uint32_t mOneWayKeyReceiveStartedAt = 0;
+  uint32_t mOneWayKeyReceiveTimeoutMs = 0;
+  uint32_t mOneWayKeyReceiveCapturedNode = 0;
+  OneWayKeyReceiveStatus mOneWayKeyReceiveStatus = OneWayKeyReceiveStatus::Idle;
+
   // Fake gateway mode state
   bool mGatewayMode;
   uint32_t mGatewayNodeId;          // gateway node ID (source address in responses)
@@ -778,6 +808,7 @@ private:
 
   // Passive mode frame processing
   void processPassiveFrame();
+  void handleOneWayKeyReceiveFrame();
 
   // Fake gateway mode handlers
   void processGatewayFrame();
