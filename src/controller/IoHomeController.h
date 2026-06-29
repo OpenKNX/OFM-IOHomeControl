@@ -756,6 +756,10 @@ private:
   void processPairSendSetConfig1AuthResponse();
   void processPairWaitSetConfig1FinalResponse();
   void interpretSetConfig1Result(bool iFinalResponse);
+  // Store the system key into the paired channel and advance to SetConfig1.
+  // Shared by the normal 0x33 confirmation path and the early-confirm path
+  // where a device skips its 0x3C challenge and confirms the key directly.
+  void finalize2WPairingKey();
   bool processPairWait1WBlind(ControllerState iNextState);
 
   void processDiscovery();

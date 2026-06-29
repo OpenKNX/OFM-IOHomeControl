@@ -2905,7 +2905,7 @@ TEST(key_transfer_is_continuation_frame)
 {
     IoHomeFrame frame;
     frame.init();
-    frame.ctrlByte0 = 0;    // no START, no END: true 2W continuation
+    frame.ctrlByte0 = 0; // no START, no END: true 2W continuation
     frame.ctrlByte1 = 0x00;
     frame.setSrcNode(0x1A380B);
     frame.setDestNode(0x485B37);
@@ -2927,7 +2927,7 @@ TEST(challenge_response_is_continuation_frame)
 {
     IoHomeFrame frame;
     frame.init();
-    frame.ctrlByte0 = 0;    // no START, no END: true 2W continuation
+    frame.ctrlByte0 = 0; // no START, no END: true 2W continuation
     frame.ctrlByte1 = 0x00;
     frame.setSrcNode(0x1A380B);
     frame.setDestNode(0x485B37);
@@ -2977,7 +2977,6 @@ TEST(receive_auth_challenge_frame)
     ASSERT_MEM_EQ(parsed.data, challenge, 6);
     ASSERT_TRUE(!parsed.hasHmac);
 }
-
 
 // =====================================================================
 // Reference byte-vector regression tests
@@ -4354,7 +4353,6 @@ TEST(send_key_1w_rejects_appended_hmac)
     ASSERT_TRUE(!deserializeFrameForTest(parsed, buf, len + IOHC_HMAC_SIZE));
 }
 
-
 TEST(serializer_boundary_2w_challenge_response_hmac_as_data)
 {
     // 2W ChallengeResponse (0x3D) must carry the HMAC bytes as ordinary data.
@@ -4531,7 +4529,6 @@ TEST(serializer_boundary_raw_crc_explicit_only)
     ASSERT_EQ(parsed.commandId, IoHomeCommand::Private);
     ASSERT_EQ(parsed.dataLen, 3);
 }
-
 
 TEST(frame_1w_execute_has_hmac)
 {
@@ -5545,12 +5542,12 @@ TEST(test_1w_execute_payload_layout)
 {
     // Simulate 1W Execute payload construction (matching rspaargaren _p0x00_14)
     // Wire: origin(1) + acei(1) + main(2) + fp1(1) + fp2(1) + seq(2) + hmac(6) = 14 bytes
-    uint8_t data[8]; // data portion before HMAC
+    uint8_t data[8];               // data portion before HMAC
     uint8_t rawClosedPercent = 75; // raw IOHC closedness, not UI open percent
 
-    data[0] = IOHC_ORIGINATOR_USER;       // origin = 0x01
-    data[1] = IOHC_ACEI_1W;               // acei = 0x43
-    data[2] = rawClosedPercent * 2;       // main high = 150
+    data[0] = IOHC_ORIGINATOR_USER; // origin = 0x01
+    data[1] = IOHC_ACEI_1W;         // acei = 0x43
+    data[2] = rawClosedPercent * 2; // main high = 150
     data[3] = 0x00;                 // main low
     data[4] = 0x00;                 // fp1
     data[5] = 0x00;                 // fp2
@@ -7448,12 +7445,10 @@ static void buildErrorResponseFrame(IoHomeFrame &oFrame,
     oFrame.hasHmac = false;
 }
 
-static bool advancePairingToWaitKeyTransferConfirmation(IoHomeController &iController,
-                                                        uint32_t iRemoteNodeId,
-                                                        uint32_t iDeviceNodeId)
+static bool advancePairingToWaitDeviceChallenge(IoHomeController &iController,
+                                                uint32_t iRemoteNodeId,
+                                                uint32_t iDeviceNodeId)
 {
-    static const uint8_t kChallenge[6] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB};
-
     if (!iController.startPairing(0))
         return false;
 
@@ -7479,11 +7474,24 @@ static bool advancePairingToWaitKeyTransferConfirmation(IoHomeController &iContr
         lFrame.commandId != IoHomeCommand::KeyInitTransfer)
         return false;
 
+    return iController.state() == ControllerState::PairWaitDeviceChallenge;
+}
+
+static bool advancePairingToWaitKeyTransferConfirmation(IoHomeController &iController,
+                                                        uint32_t iRemoteNodeId,
+                                                        uint32_t iDeviceNodeId)
+{
+    static const uint8_t kChallenge[6] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB};
+
+    if (!advancePairingToWaitDeviceChallenge(iController, iRemoteNodeId, iDeviceNodeId))
+        return false;
+
     IoHomeFrame lChallengeRequest;
     buildPairChallengeRequestFrame(lChallengeRequest, iRemoteNodeId, iDeviceNodeId, kChallenge);
     if (!queueControllerResponse(iController, lChallengeRequest))
         return false;
 
+    IoHomeFrame lFrame;
     const auto &lKeyTransferPacket = iController.radio().testLastTransmittedPacket();
     if (lKeyTransferPacket.empty() ||
         !deserializeFrameForTest(lFrame, lKeyTransferPacket.data(), static_cast<uint8_t>(lKeyTransferPacket.size())) ||
@@ -7629,6 +7637,36 @@ TEST(controller_2w_pairing_succeeds_when_setconfig1_times_out)
     lController.loop();
 
     ASSERT_EQ(lController.state(), ControllerState::PairComplete);
+}
+
+TEST(controller_2w_pairing_accepts_direct_key_confirmation_without_challenge)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, 0, lKey);
+    lController.setSystemKey(lKey);
+
+    // Drive pairing until we have sent KeyInitTransfer (0x31) and are waiting
+    // for the device's 0x3C challenge.
+    ASSERT_TRUE(advancePairingToWaitDeviceChallenge(lController, lRemoteNodeId, lDeviceNodeId));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitDeviceChallenge);
+
+    // The device skips the challenge and confirms the key directly with 0x33.
+    // The controller must accept this as a successful pairing and proceed to
+    // SetConfig1 just like the normal post-challenge confirmation path.
+    IoHomeFrame lSetConfig1;
+    ASSERT_TRUE(queueKeyTransferConfirmationAndCaptureSetConfig1(lController, lRemoteNodeId, lDeviceNodeId, lSetConfig1));
+    ASSERT_EQ(lSetConfig1.commandId, IoHomeCommand::SetConfig1);
+    ASSERT_EQ(lChannel.getNodeId(), lDeviceNodeId);
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitSetConfig1Response);
 }
 
 TEST(controller_2w_pairing_succeeds_when_setconfig1_returns_error_response)
@@ -8741,7 +8779,6 @@ TEST(retry_preserves_start_flag_for_2w_request)
     ASSERT_TRUE(retryKeepsStartForQueued2WSetName());
 }
 
-
 TEST(byte_vector_controller_2w_execute_payloads_and_retry_start)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -8941,7 +8978,6 @@ TEST(byte_vector_controller_1w_repeat_plan_long_then_three_short_40ms)
 
     ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
 }
-
 
 TEST(controller_2w_final_response_wait_and_sx1262_dwell)
 {
@@ -9258,7 +9294,6 @@ TEST(controller_default_1w_execute_matches_reference_payloads)
         ASSERT_TRUE(lFrame.hasHmac);
     }
 }
-
 
 TEST(controller_1w_execute_template_can_override_acei_fp_and_destination)
 {
@@ -9637,7 +9672,6 @@ TEST(controller_1w_execute_uses_remote_identity_not_2w_gateway_identity)
     ASSERT_MEM_NEQ(lRemoteKey, lGatewayKey, 16);
     ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BF);
 }
-
 
 TEST(channel_1w_sequence_reserve_window_reduces_flash_saves)
 {
@@ -10249,6 +10283,7 @@ int main()
     RUN(controller_2w_pairing_succeeds_when_setconfig1_times_out);
     RUN(controller_2w_pairing_succeeds_when_setconfig1_returns_error_response);
     RUN(controller_2w_pairing_succeeds_when_setconfig1_send_or_setup_fails);
+    RUN(controller_2w_pairing_accepts_direct_key_confirmation_without_challenge);
     RUN(controller_2w_pairing_setconfig1_auth_challenge_completes_on_final_reject);
     RUN(controller_status_update_requires_11_bytes_for_position);
     RUN(controller_private_response_requires_8_bytes_for_position);

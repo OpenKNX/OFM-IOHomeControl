@@ -3027,6 +3027,16 @@ void IoHomeController::loop()
                         memcpy(mPairingChallenge, mRxFrame.data, 6);
                     mState = ControllerState::PairSendKeyTransfer;
                 }
+                else if ((mRxFrame.commandId == IoHomeCommand::KeyTransferConfirmation ||
+                          mRxFrame.commandId == IoHomeCommand::Confirmation) &&
+                         (mDiscoveredNodeId == 0 || mRxFrame.getSrcNodeId() == mDiscoveredNodeId))
+                {
+                    // Some actuators skip the 0x3C challenge and confirm the key
+                    // directly with 0x33. Treat that as successful pairing.
+                    logInfoP("Pairing: device confirmed key without challenge (0x%02X)",
+                             static_cast<uint8_t>(mRxFrame.commandId));
+                    finalize2WPairingKey();
+                }
             }
             else if (mState == ControllerState::PairWaitKeyTransferConfirmation)
             {
@@ -3042,18 +3052,7 @@ void IoHomeController::loop()
                          mRxFrame.commandId == IoHomeCommand::KeyTransferConfirmation)
                 {
                     // Pairing successful — store system key as channel encryption key
-                    if (mModule)
-                    {
-                        IoHomecontrolChannel *lCh = mModule->getChannel(mPairingChannel);
-                        if (lCh)
-                        {
-                            lCh->setNodeId(mDiscoveredNodeId);
-                            lCh->setLowPower2W(true);
-                            lCh->setEncryptionKey(mSystemKey);
-                            openknx.flash.save(true); // pairing is rare & critical: bypass write throttle
-                        }
-                    }
-                    mState = ControllerState::PairSendSetConfig1;
+                    finalize2WPairingKey();
                 }
             }
             else if (mState == ControllerState::PairWaitSetConfig1Response)
@@ -4546,6 +4545,25 @@ void IoHomeController::processPairSendKeyInit()
     {
         mState = ControllerState::PairFailed;
     }
+}
+
+void IoHomeController::finalize2WPairingKey()
+{
+    // Store the negotiated system key as the channel's encryption key and move
+    // on to the optional SetConfig1 step. Pairing is rare and critical, so the
+    // flash write bypasses the normal throttle.
+    if (mModule)
+    {
+        IoHomecontrolChannel *lCh = mModule->getChannel(mPairingChannel);
+        if (lCh)
+        {
+            lCh->setNodeId(mDiscoveredNodeId);
+            lCh->setLowPower2W(true);
+            lCh->setEncryptionKey(mSystemKey);
+            openknx.flash.save(true);
+        }
+    }
+    mState = ControllerState::PairSendSetConfig1;
 }
 
 void IoHomeController::processPairWaitDeviceChallenge()
