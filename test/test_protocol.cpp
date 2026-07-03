@@ -6909,6 +6909,93 @@ TEST(controller_default_1w_pairing_uses_type0_all)
     ASSERT_TRUE(lFrame.hasHmac);
 }
 
+TEST(controller_discovery_sends_standard_28_then_alt_2e_broadcast)
+{
+    // Standard (non-encrypted) discovery mirrors a TaHoma box: it broadcasts the
+    // classic DiscoverRequest (0x28 -> 0x00003B) and then the alternative
+    // Discover2ERequest (0x2E -> 0x00003F, data 0x00, unauthenticated) on the
+    // same frequency before listening for responses.
+    const uint32_t lOwnNodeId = 0x9F0071;
+
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lOwnNodeId);
+    lController.init();
+
+    lController.startDiscovery(false);
+    ASSERT_EQ(lController.state(), ControllerState::DiscoverySending);
+
+    // First transmit: classic 0x28 DiscoverRequest to 0x00003B.
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::DiscoverySending);
+
+    IoHomeFrame lStd;
+    const auto &lStdPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lStdPacket.empty());
+    ASSERT_TRUE(deserializeFrameForTest(lStd, lStdPacket.data(), static_cast<uint8_t>(lStdPacket.size())));
+    ASSERT_EQ(lStd.commandId, IoHomeCommand::DiscoverRequest);
+    ASSERT_EQ(lStd.getSrcNodeId(), lOwnNodeId);
+    ASSERT_EQ(lStd.getDestNodeId(), 0x00003B);
+    ASSERT_EQ(lStd.dataLen, 0);
+    ASSERT_TRUE(!lStd.hasHmac);
+
+    // Second transmit: alternative 0x2E Discover2ERequest to 0x00003F.
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
+
+    IoHomeFrame lAlt;
+    const auto &lAltPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lAltPacket.empty());
+    ASSERT_TRUE(deserializeFrameForTest(lAlt, lAltPacket.data(), static_cast<uint8_t>(lAltPacket.size())));
+    ASSERT_EQ(lAlt.commandId, IoHomeCommand::Discover2ERequest);
+    ASSERT_EQ(lAlt.getSrcNodeId(), lOwnNodeId);
+    ASSERT_EQ(lAlt.getDestNodeId(), 0x00003F);
+    ASSERT_EQ(lAlt.dataLen, 1);
+    ASSERT_EQ(lAlt.data[0], 0x00);
+    ASSERT_TRUE(!lAlt.hasHmac);
+}
+
+TEST(controller_spe_discovery_sends_single_2a_broadcast)
+{
+    // Encrypted (SPE) discovery keeps its single DiscoverSPERequest (0x2A) frame
+    // and must not emit the unauthenticated 0x2E alternative.
+    const uint32_t lOwnNodeId = 0x9F0071;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lOwnNodeId);
+    lController.setSystemKey(lKey);
+    lController.init();
+
+    lController.startDiscovery(true);
+    ASSERT_EQ(lController.state(), ControllerState::DiscoverySending);
+
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    // A single SPE frame moves straight to listening; no alternative 0x2E TX.
+    ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
+
+    IoHomeFrame lSpe;
+    const auto &lSpePacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lSpePacket.empty());
+    ASSERT_TRUE(deserializeFrameForTest(lSpe, lSpePacket.data(), static_cast<uint8_t>(lSpePacket.size())));
+    ASSERT_EQ(lSpe.commandId, IoHomeCommand::DiscoverSPERequest);
+    ASSERT_EQ(lSpe.getDestNodeId(), 0x00003B);
+}
+
 TEST(controller_1w_pairing_allows_add_without_target_node)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -10431,6 +10518,8 @@ int main()
     RUN(controller_1w_pairing_modes_command_sequences);
     RUN(controller_1w_announce_only_does_not_send_sendkey_after_repeats);
     RUN(controller_default_1w_pairing_uses_type0_all);
+    RUN(controller_discovery_sends_standard_28_then_alt_2e_broadcast);
+    RUN(controller_spe_discovery_sends_single_2a_broadcast);
     RUN(controller_1w_pairing_allows_add_without_target_node);
     RUN(controller_1w_sendkey_frame_identical_with_known_or_unknown_target);
     RUN(controller_1w_virtual_channel_execute_allowed_without_target_node);

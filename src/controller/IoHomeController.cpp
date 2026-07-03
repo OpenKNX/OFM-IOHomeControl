@@ -1892,6 +1892,7 @@ void IoHomeController::startDiscovery(bool iEncrypted)
     mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
     resetDiscoveryTimingTrace();
     mDiscoverySPE = iEncrypted;
+    mDiscoveryAltFrame = false;
     mState = ControllerState::DiscoverySending;
     if (mPairDiagnosticTraceEnabled)
     {
@@ -4999,11 +5000,21 @@ void IoHomeController::processDiscovery()
         mTxFrame.setStart2W();
         mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END); // standalone: START+END (per nicolas5000)
         mTxFrame.setSrcNode(mOwnNodeId);
-        mTxFrame.setDestBroadcast();
         mTxFrame.hasHmac = false;
 
-        if (mDiscoverySPE)
+        if (mDiscoveryAltFrame)
         {
+            // Alternative discovery broadcast, mirroring a TaHoma box: the
+            // Discover2ERequest (0x2E) is unauthenticated, carries a single
+            // 0x00 data byte, and targets the 0x00003F broadcast address.
+            mTxFrame.setDestBroadcast2E();
+            mTxFrame.commandId = IoHomeCommand::Discover2ERequest;
+            mTxFrame.data[0] = 0x00;
+            mTxFrame.dataLen = 1;
+        }
+        else if (mDiscoverySPE)
+        {
+            mTxFrame.setDestBroadcast();
             mTxFrame.commandId = IoHomeCommand::DiscoverSPERequest;
             // SPE discovery payload: 6B random challenge + 6B HMAC(challenge, systemKey)
             uint8_t lChallenge[6];
@@ -5016,6 +5027,7 @@ void IoHomeController::processDiscovery()
         }
         else
         {
+            mTxFrame.setDestBroadcast();
             mTxFrame.commandId = IoHomeCommand::DiscoverRequest;
             mTxFrame.dataLen = 0;
         }
@@ -5075,9 +5087,22 @@ void IoHomeController::processDiscovery()
             if (lErr == RadioError::None)
             {
                 mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
-                mDiscoveryTimingTrace.txStartUs = micros();
-                mStateTimer = millis();
-                mState = ControllerState::DiscoveryListening;
+                // Standard discovery sends the classic 0x28 frame first and then,
+                // like a TaHoma box, the alternative 0x2E frame on the same
+                // frequency before listening. SPE discovery keeps its single frame.
+                if (!mDiscoverySPE && !mDiscoveryAltFrame)
+                {
+                    mDiscoveryAltFrame = true;
+                    resetDiscoveryTimingTrace();
+                    // Stay in DiscoverySending to transmit the 0x2E frame next.
+                }
+                else
+                {
+                    mDiscoveryAltFrame = false;
+                    mDiscoveryTimingTrace.txStartUs = micros();
+                    mStateTimer = millis();
+                    mState = ControllerState::DiscoveryListening;
+                }
             }
             else if (lErr == RadioError::Busy)
             {
@@ -5086,6 +5111,7 @@ void IoHomeController::processDiscovery()
             else
             {
                 mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
+                mDiscoveryAltFrame = false;
                 resetDiscoveryTimingTrace();
                 mState = ControllerState::Idle;
             }
@@ -5093,6 +5119,7 @@ void IoHomeController::processDiscovery()
         else
         {
             mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
+            mDiscoveryAltFrame = false;
             resetDiscoveryTimingTrace();
             mState = ControllerState::Idle;
         }

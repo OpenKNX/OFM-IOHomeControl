@@ -632,6 +632,11 @@ private:
   DiscoverySendPhase mDiscoverySendPhase;
   DiscoveryTimingTrace mDiscoveryTimingTrace;
   bool mDiscoverySPE; // encrypted discovery mode
+  // Standard (non-encrypted) discovery mirrors a TaHoma box, which broadcasts
+  // both the classic DiscoverRequest (0x28 -> 0x00003B) and the alternative
+  // Discover2ERequest (0x2E -> 0x00003F) per frequency. This flag selects the
+  // 0x2E frame for the second transmit within one frequency step.
+  bool mDiscoveryAltFrame = false;
   uint8_t mPairSetConfigChallenge[6];
   uint8_t mPairKeyTransferChallenge[6];
   IoHomeFrame mPairLaunchKeyTransferFrame;

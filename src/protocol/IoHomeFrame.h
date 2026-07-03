@@ -61,6 +61,7 @@ struct IoHomeFrame
     void setSrcNode(uint32_t iNodeId);
     void setDestNode(uint32_t iNodeId);
     void setDestBroadcast();
+    void setDestBroadcast2E();
     void setDestGroup();
 
     // Set 1W mode (RTS-like, one-way)

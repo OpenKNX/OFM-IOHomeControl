@@ -49,6 +49,11 @@ void IoHomeFrame::setDestBroadcast()
     memcpy(destNode, IOHC_BROADCAST_DISCOVER, IOHC_NODE_ID_SIZE);
 }
 
+void IoHomeFrame::setDestBroadcast2E()
+{
+    memcpy(destNode, IOHC_BROADCAST_DISCOVER2E, IOHC_NODE_ID_SIZE);
+}
+
 void IoHomeFrame::setDestGroup()
 {
     memcpy(destNode, IOHC_BROADCAST_GROUP, IOHC_NODE_ID_SIZE);
