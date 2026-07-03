@@ -3342,8 +3342,29 @@ void IoHomeController::loop()
     case ControllerState::PairWaitSetConfig1FinalResponse:
         processPairWaitSetConfig1FinalResponse();
         break;
-    case ControllerState::PairComplete:
     case ControllerState::PairFailed:
+    {
+        // A failed 1W pairing attempt may have left a tentative target
+        // address behind (set eagerly by the console command before the
+        // attempt ran). Clear it so the channel status does not keep
+        // showing a stale/misleading "device=0x..." for a pairing that
+        // never actually completed.
+        IoHomecontrolChannel *lFailedCh = mModule ? mModule->getChannel(mPairingChannel) : nullptr;
+        if (lFailedCh && lFailedCh->is1W() && !lFailedCh->isPaired() && mDiscoveredNodeId != 0 &&
+            lFailedCh->getConfigured1WTargetNodeId() == mDiscoveredNodeId)
+        {
+            lFailedCh->setConfigured1WTargetNodeId(0);
+            openknx.flash.save(true); // clearing a stale target is rare & critical: bypass write throttle
+            logInfoP("Pairing: 1W mode=%s failed for channel %d - clearing stale target 0x%06X",
+                     pairing1WModeName(mPairing1WMode),
+                     mPairingChannel + 1,
+                     mDiscoveredNodeId);
+        }
+        mState = ControllerState::Idle;
+        startReceive();
+        break;
+    }
+    case ControllerState::PairComplete:
         mState = ControllerState::Idle;
         startReceive();
         break;
