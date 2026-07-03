@@ -174,7 +174,27 @@
               <ParameterType Id="%AID%_PT-IOHCOneWayProfileChannel" Name="IOHCOneWayProfileChannel">
                 <TypeNumber SizeInBit="8" Type="unsignedInt" minInclusive="0" maxInclusive="%N%" />
               </ParameterType>
+              <!-- 1W Execute ACEI byte (priority). Enumeration value = raw ACEI byte (decimal).
+                   ACEI layout: bit7-5 = priority level, bit4-3 = service, bit2-1 = extended info, bit0 = valid (always 1).
+                   The clean level bytes use service=0, extended=0, valid=1 (0x01..0xE1). 0x43/0x67/0xE7 are values observed
+                   on air (0x43 = module default, 0x61 = Velux remote, 0x67 = 1W execute, 0xE7 = automatic controller). -->
+              <ParameterType Id="%AID%_PT-IOHCOneWayAcei" Name="IOHCOneWayAcei">
+                <TypeRestriction Base="Value" SizeInBit="8">
+                  <Enumeration Text="Priorität 0 (Personenschutz)" Value="1" Id="%ENID%" />
+                  <Enumeration Text="Priorität 1 (Umgebungsschutz)" Value="33" Id="%ENID%" />
+                  <Enumeration Text="Priorität 2 (Benutzer hoch)" Value="65" Id="%ENID%" />
+                  <Enumeration Text="Priorität 2 (Benutzer hoch, Standard)" Value="67" Id="%ENID%" />
+                  <Enumeration Text="Priorität 3 (Benutzer Standard / Velux-Fernbedienung)" Value="97" Id="%ENID%" />
+                  <Enumeration Text="Priorität 3 (Benutzer Standard / 2W-Fernbedienung)" Value="103" Id="%ENID%" />
+                  <Enumeration Text="Priorität 4 (Komfort 1)" Value="129" Id="%ENID%" />
+                  <Enumeration Text="Priorität 5 (Komfort 2)" Value="161" Id="%ENID%" />
+                  <Enumeration Text="Priorität 6 (Komfort 3 / SAAC)" Value="193" Id="%ENID%" />
+                  <Enumeration Text="Priorität 7 (Komfort 4 / KLF100)" Value="225" Id="%ENID%" />
+                  <Enumeration Text="Priorität 7 (Komfort 4 / Automatik)" Value="231" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
             </ParameterTypes>
+
 
             <Parameters>
               <!-- Global parameters -->

@@ -165,6 +165,7 @@ void IoHomecontrolChannel::setup()
     const uint8_t lOneWayBroadcastType = static_cast<uint8_t>(ParamIOHC_cOneWayBroadcastType);
     const uint8_t lOneWayProfileChannel = static_cast<uint8_t>(ParamIOHC_cOneWayProfileChannel);
     const uint8_t lOneWayManufacturer = static_cast<uint8_t>(ParamIOHC_cOneWayManufacturer);
+    const uint8_t lOneWayAcei = static_cast<uint8_t>(ParamIOHC_cOneWayAcei);
 
     logInfoP("ETS config: active=%u protocol=%u (%s) oneWayTarget=0x%06X oneWayType=%u oneWayProfile=%u oneWayMfg=0x%02X",
              ParamIOHC_cActive ? 1U : 0U,
@@ -203,6 +204,7 @@ void IoHomecontrolChannel::setup()
         static_cast<uint8_t>(ParamIOHC_cDeviceType)));
     const uint8_t lProfileChannel = lOneWayProfileChannel;
     setConfigured1WProfileChannel(lProfileChannel == 0 ? 0xFF : static_cast<uint8_t>(lProfileChannel - 1));
+    setConfigured1WAcei(lOneWayAcei != 0 ? lOneWayAcei : IOHC_ACEI_1W);
     mConfigured1WManufacturer = lOneWayManufacturer;
     if (mConfigured1WManufacturer != 0)
         setOneWayControllerManufacturer(mConfigured1WManufacturer);
@@ -210,10 +212,11 @@ void IoHomecontrolChannel::setup()
     if (mIs1W && mConfigured1WTargetNodeId == 0)
         logInfoP("Channel is configured as 1W but has no ETS 1W target node; pairing must provide a target node explicitly");
 
-    logInfoP("Applied protocol config: %s target=0x%06X broadcastType=%u profile=%s manufacturer=0x%02X",
+    logInfoP("Applied protocol config: %s target=0x%06X broadcastType=%u acei=0x%02X profile=%s manufacturer=0x%02X",
              mIs1W ? "1W" : "2W",
              static_cast<unsigned long>(mConfigured1WTargetNodeId),
              static_cast<unsigned>(mConfigured1WBroadcastType),
+             static_cast<unsigned>(mConfigured1WAcei),
              mConfigured1WProfileChannel == 0xFF ? "own" : "linked",
              static_cast<unsigned>(mOneWayControllerManufacturer));
 
@@ -770,6 +773,8 @@ void IoHomecontrolChannel::setConfigured1WTargetNodeId(uint32_t iNodeId) { mConf
 uint32_t IoHomecontrolChannel::getConfigured1WTargetNodeId() const { return mConfigured1WTargetNodeId; }
 void IoHomecontrolChannel::setConfigured1WBroadcastType(uint8_t iBroadcastType) { mConfigured1WBroadcastType = iBroadcastType & 0x3F; }
 uint8_t IoHomecontrolChannel::getConfigured1WBroadcastType() const { return mConfigured1WBroadcastType; }
+void IoHomecontrolChannel::setConfigured1WAcei(uint8_t iAcei) { mConfigured1WAcei = iAcei; }
+uint8_t IoHomecontrolChannel::getConfigured1WAcei() const { return mConfigured1WAcei; }
 
 // --- Private command methods ---
 

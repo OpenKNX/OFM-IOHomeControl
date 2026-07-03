@@ -8332,6 +8332,80 @@ TEST(controller_1w_key_receive_rejects_non_1w_channel)
               IoHomeController::OneWayKeyReceiveStatus::Idle);
 }
 
+TEST(controller_1w_execute_uses_configured_channel_acei)
+{
+    const uint32_t lRemoteNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    // Default channel ACEI (0x43) is used when nothing is configured.
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setIs1W(true);
+        lChannel.setConfigured1WBroadcastType(0);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+        lChannel.setEncryptionKey(lKey);
+
+        ASSERT_EQ(lChannel.getConfigured1WAcei(), 0x43);
+        ASSERT_TRUE(lController.sendOneWayChannelExecuteWithType(&lChannel, 0x0000, 0, 0, 0));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        lController.loop();
+
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(!lPacket.empty());
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
+        ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
+        ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+        ASSERT_EQ(lFrame.data[0], 0x01);
+        ASSERT_EQ(lFrame.data[1], 0x43);
+    }
+
+    // Configuring the channel ACEI to the Velux remote value (0x61) is honored
+    // in the transmitted 1W Execute frame while everything else is unchanged.
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setIs1W(true);
+        lChannel.setConfigured1WBroadcastType(0);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+        lChannel.setEncryptionKey(lKey);
+        lChannel.setConfigured1WAcei(0x61);
+
+        ASSERT_EQ(lChannel.getConfigured1WAcei(), 0x61);
+        ASSERT_TRUE(lController.sendOneWayChannelExecuteWithType(&lChannel, 0x0000, 0, 0, 0));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        lController.loop();
+
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(!lPacket.empty());
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
+        ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
+        ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+        ASSERT_EQ(lFrame.data[0], 0x01);
+        ASSERT_EQ(lFrame.data[1], 0x61);
+    }
+}
+
 TEST(controller_passive_remote_activity_schedules_follow_up_poll_for_target_device)
 {
     const uint32_t lOwnNodeId = 0x831F2A;
@@ -10386,6 +10460,7 @@ int main()
     RUN(controller_passive_key_sniff_captures_result_and_callback);
     RUN(controller_1w_key_receive_clones_remote_from_sendkey_frame);
     RUN(controller_1w_key_receive_rejects_non_1w_channel);
+    RUN(controller_1w_execute_uses_configured_channel_acei);
     RUN(controller_passive_remote_activity_schedules_follow_up_poll_for_target_device);
     RUN(controller_linked_remote_activity_schedules_follow_up_poll_for_linked_device);
     RUN(controller_2w_challenge_response_inherits_low_power);

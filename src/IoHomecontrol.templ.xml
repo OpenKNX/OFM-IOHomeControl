@@ -25,7 +25,7 @@
               <Parameter Id="%AID%_P-%TT%%CC%015" Name="c%C%PairingDiag" ParameterType="%AID%_PT-IOHCText40Byte" Text="Letzte Pairing-Diagnose" Value="Noch keine Diagnose" Access="Read" />
 
               <!-- Main configuration Union including 10 ETS-backed scene slots -->
-              <Union SizeInBit="416">
+              <Union SizeInBit="424">
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%001" Name="c%C%Active" ParameterType="%AID%_PT-IOHCCheckBox" Offset="0" BitOffset="0" Text="Kanal aktiv" Value="1" />
                 <Parameter Id="%AID%_UP-%TT%%CC%002" Name="c%C%DeviceType" ParameterType="%AID%_PT-IOHCDeviceType" Offset="1" BitOffset="0" Text="Gerätetyp" Value="1" />
@@ -43,6 +43,7 @@
                 <Parameter Id="%AID%_UP-%TT%%CC%016" Name="c%C%OneWayBroadcastType" ParameterType="%AID%_PT-IOHCOneWayBroadcastType" Offset="49" BitOffset="0" Text="1W Broadcast-Typ" Value="255" />
                 <Parameter Id="%AID%_UP-%TT%%CC%017" Name="c%C%OneWayManufacturer" ParameterType="%AID%_PT-IOHCOneWayManufacturer" Offset="50" BitOffset="0" Text="1W Controller-Hersteller (eigenes Profil)" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%018" Name="c%C%OneWayProfileChannel" ParameterType="%AID%_PT-IOHCOneWayProfileChannel" Offset="51" BitOffset="0" Text="1W Profil teilen mit Kanal (0 = eigenes)" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%019" Name="c%C%OneWayAcei" ParameterType="%AID%_PT-IOHCOneWayAcei" Offset="52" BitOffset="0" Text="1W Befehls-Priorität (ACEI)" Value="67" />
                 <Parameter Id="%AID%_UP-%TT%%CC%020" Name="c%C%SceneCount" ParameterType="%AID%_PT-IOHCSceneCount" Offset="13" BitOffset="0" Text="Anzahl Szenen" Value="0" />
                 <!-- Scene slot parameters 1..10 are generated from IoHomecontrol.scene.part.xml. -->
                 <op:usePart name="IOHCScene" xpath="//Parameters/*" />
@@ -69,6 +70,7 @@
               <ParameterRef Id="%AID%_UP-%TT%%CC%016_R-%TT%%CC%01601" RefId="%AID%_UP-%TT%%CC%016" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%017_R-%TT%%CC%01701" RefId="%AID%_UP-%TT%%CC%017" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801" RefId="%AID%_UP-%TT%%CC%018" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%019_R-%TT%%CC%01901" RefId="%AID%_UP-%TT%%CC%019" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_UP-%TT%%CC%020" />
               <!-- Scene slot ParameterRefs 1..10 are generated from IoHomecontrol.scene.part.xml. -->
               <op:usePart name="IOHCScene" xpath="//ParameterRefs/*" />
@@ -206,6 +208,7 @@
                           <when test="1">
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%011_R-%TT%%CC%01101" IndentLevel="1" HelpContext="IOHC-Kanal" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%016_R-%TT%%CC%01601" IndentLevel="1" HelpContext="IOHC-1W-Broadcast-Typ" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%019_R-%TT%%CC%01901" IndentLevel="1" HelpContext="IOHC-1W-Prioritaet" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801" IndentLevel="1" HelpContext="IOHC-1W-Profil" />
                             <choose ParamRefId="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801">
                               <when test="0">

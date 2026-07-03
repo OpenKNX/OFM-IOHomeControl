@@ -82,6 +82,8 @@ public:
   uint32_t getConfigured1WTargetNodeId() const;
   void setConfigured1WBroadcastType(uint8_t iBroadcastType);
   uint8_t getConfigured1WBroadcastType() const;
+  void setConfigured1WAcei(uint8_t iAcei);
+  uint8_t getConfigured1WAcei() const;
   bool requestStatus();
   void scheduleStatusPoll(uint32_t iDelayMs);
 
@@ -118,6 +120,7 @@ private:
   bool mIs1W = false;                         // true if channel uses 1W protocol
   uint32_t mConfigured1WTargetNodeId = 0;
   uint8_t mConfigured1WBroadcastType = 0;
+  uint8_t mConfigured1WAcei = 0x43; // ACEI byte for 1W Execute (0x43 = IOHC_ACEI_1W default, prio 2)
   float mCurrentPosition = 0.0f;
   float mCurrentSlat = 0.0f;
   bool mIsMoving = false;

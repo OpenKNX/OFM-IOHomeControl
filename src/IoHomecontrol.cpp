@@ -2387,6 +2387,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohcNN 1wmfg ID", "Set manufacturer of the effective channel 1W profile");
     openknx.console.printHelpLine("iohcNN pair1w-type ADDR TYPE", "1W pair with explicit broadcast type");
     openknx.console.printHelpLine("iohcNN send1w-type open|close|stop|vent|force [TYPE]", "Send 1W Execute with explicit broadcast type");
+    openknx.console.printHelpLine("iohcNN 1wacei [HH]", "Show/set 1W Execute ACEI (priority) byte, e.g. 61 for Velux");
     openknx.console.printHelpLine("iohcNN cozy temp TT", "Set thermostat temp (TT=tenths, 70-280)");
     openknx.console.printHelpLine("iohcNN cozy mode MM", "Set thermostat mode (0-3)");
     openknx.console.printHelpLine("iohcNN cozy presence 0/1", "Set presence on/off");
@@ -2605,12 +2606,13 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 {
                     IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(lCh);
                     const bool lOneWayBroadcastOnly = !lCh->isPaired() && lCh->getConfigured1WTargetNodeId() == 0;
-                    logInfoP("Ch%02d: %s [1W] device=0x%06X remote=0x%06X key=%s type=%u mfg=0x%02X seq=0x%04X lastPairMode=%s", i + 1,
+                    logInfoP("Ch%02d: %s [1W] device=0x%06X remote=0x%06X key=%s type=%u acei=0x%02X mfg=0x%02X seq=0x%04X lastPairMode=%s", i + 1,
                              lOneWayBroadcastOnly ? "1W-BROADCAST" : (lCh->isPaired() ? "PAIRED" : "unpaired"),
                              lCh->isPaired() ? lCh->getNodeId() : lCh->getConfigured1WTargetNodeId(),
                              lProfile ? lProfile->getOneWayControllerNodeId() : 0,
                              lProfile ? keyStateText(lProfile->getOneWayControllerKey()) : "missing",
                              static_cast<unsigned>(lCh->getConfigured1WBroadcastType()),
+                             static_cast<unsigned>(lCh->getConfigured1WAcei()),
                              static_cast<unsigned>(lProfile ? lProfile->getOneWayControllerManufacturer() : 0),
                              static_cast<unsigned>(lProfile ? lProfile->getSequence1W() : 0),
                              IoHomeController::pairing1WModeName(mController.lastPairing1WMode()));
@@ -3260,6 +3262,41 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             logInfoP("Sent 1W %s main=0x%04X type=%u dst=0x%06X to channel %u", lName, static_cast<unsigned>(lMain), static_cast<unsigned>(lType), mController.oneWayBroadcastTarget(static_cast<uint8_t>(lType)), static_cast<unsigned>(lIdx + 1));
         else
             logInfoP("Failed to queue 1W %s for channel %u", lName, static_cast<unsigned>(lIdx + 1));
+        return true;
+    }
+
+    if (lSub.rfind("1wacei", 0) == 0)
+    {
+        std::string lArgs = trimSpaces(lSub.length() > strlen("1wacei") ? lSub.substr(strlen("1wacei")) : "");
+        size_t lSpace = lArgs.find_first_of(" \t");
+        std::string lChanText = (lSpace == std::string::npos) ? lArgs : lArgs.substr(0, lSpace);
+        std::string lHexText = (lSpace == std::string::npos) ? "" : trimSpaces(lArgs.substr(lSpace + 1));
+
+        uint8_t lIdx = 0;
+        if (lChanText.empty() || !parseChannelIndex(lChanText, mNumChannels, lIdx))
+        {
+            openknx.console.printHelpLine("iohcNN 1wacei [HH]", "Show/set the 1W Execute ACEI (priority) byte, e.g. 61 for Velux remotes");
+            return true;
+        }
+        IoHomecontrolChannel *lCh = mChannels[lIdx];
+
+        if (lHexText.empty())
+        {
+            logInfoP("Ch%02u 1W ACEI=0x%02X", static_cast<unsigned>(lIdx + 1),
+                     static_cast<unsigned>(lCh->getConfigured1WAcei()));
+            return true;
+        }
+
+        uint8_t lByte[1] = {};
+        uint8_t lByteLen = 0;
+        if (!parseHexBytesDynamic(lHexText, lByte, sizeof(lByte), lByteLen) || lByteLen != 1)
+        {
+            logInfoP("Invalid ACEI byte: %s (expect one hex byte, e.g. 61)", lHexText.c_str());
+            return true;
+        }
+        lCh->setConfigured1WAcei(lByte[0]);
+        logInfoP("Ch%02u 1W ACEI set to 0x%02X (runtime only; set the ETS parameter to persist across reboot)",
+                 static_cast<unsigned>(lIdx + 1), static_cast<unsigned>(lByte[0]));
         return true;
     }
 

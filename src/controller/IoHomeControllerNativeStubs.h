@@ -102,6 +102,8 @@ public:
   uint32_t getConfigured1WTargetNodeId() const { return mConfigured1WTargetNodeId; }
   void setConfigured1WBroadcastType(uint8_t iBroadcastType) { mConfigured1WBroadcastType = iBroadcastType & 0x3F; }
   uint8_t getConfigured1WBroadcastType() const { return mConfigured1WBroadcastType; }
+  void setConfigured1WAcei(uint8_t iAcei) { mConfigured1WAcei = iAcei; }
+  uint8_t getConfigured1WAcei() const { return mConfigured1WAcei; }
 
   void setNodeId(uint32_t iNodeId)
   {
@@ -267,6 +269,7 @@ private:
   // TEST_NATIVE mirrors the production channel default: unspecified 1W type is
   // type 0 / All, which serializes to destination 0x00003F.
   uint8_t mConfigured1WBroadcastType = 0;
+  uint8_t mConfigured1WAcei = 0x43; // mirrors production default IOHC_ACEI_1W
   bool mHasPositionFeedback = false;
   float mPositionFeedback = 0.0f;
   bool mHasTargetPositionFeedback = false;

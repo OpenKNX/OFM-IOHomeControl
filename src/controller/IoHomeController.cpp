@@ -1173,6 +1173,8 @@ bool IoHomeController::sendChannelCommand(IoHomecontrolChannel *iChannel,
     lEntry.oneWayBroadcastType = iChannel->getConfigured1WBroadcastType();
     const OneWayCommandProfile lOneWayProfile = oneWayCommandProfileForType(lEntry.oneWayBroadcastType);
     lEntry.oneWayAcei = lOneWayProfile.acei;
+    if (iChannel->getConfigured1WAcei() != 0)
+        lEntry.oneWayAcei = iChannel->getConfigured1WAcei();
     lEntry.oneWayFp1 = lOneWayProfile.fp1;
     lEntry.oneWayFp2 = lOneWayProfile.fp2;
     if (iCmd == IoHomeCommand::Execute && iParam3 == 0xFF)
@@ -1367,6 +1369,8 @@ bool IoHomeController::sendOneWayChannelExecuteWithType(IoHomecontrolChannel *iC
     lEntry.oneWayStandardExecute = true;
     lEntry.oneWayMain = iMain;
     lEntry.oneWayAcei = lProfile.acei;
+    if (iChannel->getConfigured1WAcei() != 0)
+        lEntry.oneWayAcei = iChannel->getConfigured1WAcei();
     lEntry.oneWayFp1 = iFp1;
     lEntry.oneWayFp2 = iFp2;
     lEntry.oneWayBroadcastType = iBroadcastType & 0x3F;
