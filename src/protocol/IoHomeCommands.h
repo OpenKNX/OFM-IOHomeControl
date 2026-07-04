@@ -256,7 +256,7 @@ constexpr uint32_t IOHC_FREQUENCIES[IOHC_NUM_FREQUENCIES] = {
 #define IOHC_NAME_MAX_SIZE 16   // max name payload bytes (per nicolas5000: CMD_PARAM_NAME_MAXSIZE/2)
 
 // 1W repeat transmission (fire-and-forget sends 4x at 40ms intervals)
-#define IOHC_1W_REPEAT_COUNT 3            // 3 additional repeats (4 total transmissions)
+#define IOHC_1W_REPEAT_COUNT 4            // 4 additional repeats (5 total transmissions, matches reference)
 #define IOHC_1W_REPEAT_INTERVAL_MS 40     // ms between 1W repeat transmissions
 
 // Sync word
