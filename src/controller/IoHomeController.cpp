@@ -3445,14 +3445,15 @@ void IoHomeController::processTxPending()
     const bool lIs1WFrame = ((mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0);
     if (lIs1WFrame)
     {
-        // Queued 1W commands emulate a handheld one-way remote. A real remote
-        // transmits each frame across all io-homecontrol channels (frequency
-        // agility) so the actuator - which scans the three frequencies - can
-        // catch it. Start on the canonical CH2 (the channel pairing uses)
-        // instead of the random channel the RX scan happened to leave the radio
-        // on, and hop across the channels for the repeats.
+        // Queued 1W commands emulate a handheld one-way remote. Reference
+        // implementations (rspaargaren/iohomecontrol) always transmit 1W
+        // frames - including all repeats - on the fixed CH2 (868.95 MHz);
+        // frequency hopping is disabled for 1W. Start on the canonical CH2
+        // (the channel pairing already uses) instead of the random channel
+        // the RX scan happened to leave the radio on, and stay there for the
+        // repeats to match both the reference and our own 1W pairing paths.
         mCurrentFreqIdx = frequencyIndexForHz(kNormal2WTxFreqHz);
-        mTx1WHopFrequencies = true;
+        mTx1WHopFrequencies = false;
     }
     const uint8_t lTxDutyFreqIdx = lIs1WFrame ? mCurrentFreqIdx : frequencyIndexForHz(kNormal2WTxFreqHz);
     if (!isDutyCycleOk(lTxDutyFreqIdx))
