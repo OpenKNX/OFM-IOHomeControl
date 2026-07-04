@@ -43,7 +43,7 @@
                 <Parameter Id="%AID%_UP-%TT%%CC%016" Name="c%C%OneWayBroadcastType" ParameterType="%AID%_PT-IOHCOneWayBroadcastType" Offset="49" BitOffset="0" Text="1W Broadcast-Typ" Value="255" />
                 <Parameter Id="%AID%_UP-%TT%%CC%017" Name="c%C%OneWayManufacturer" ParameterType="%AID%_PT-IOHCOneWayManufacturer" Offset="50" BitOffset="0" Text="1W Controller-Hersteller (eigenes Profil)" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%018" Name="c%C%OneWayProfileChannel" ParameterType="%AID%_PT-IOHCOneWayProfileChannel" Offset="51" BitOffset="0" Text="1W Profil teilen mit Kanal (0 = eigenes)" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%019" Name="c%C%OneWayAcei" ParameterType="%AID%_PT-IOHCOneWayAcei" Offset="52" BitOffset="0" Text="1W Befehls-Priorität (ACEI)" Value="67" />
+                <Parameter Id="%AID%_UP-%TT%%CC%019" Name="c%C%OneWayAcei" ParameterType="%AID%_PT-IOHCOneWayAcei" Offset="52" BitOffset="0" Text="1W Befehls-Priorität (ACEI)" Value="97" />
                 <Parameter Id="%AID%_UP-%TT%%CC%020" Name="c%C%SceneCount" ParameterType="%AID%_PT-IOHCSceneCount" Offset="13" BitOffset="0" Text="Anzahl Szenen" Value="0" />
                 <!-- Scene slot parameters 1..10 are generated from IoHomecontrol.scene.part.xml. -->
                 <op:usePart name="IOHCScene" xpath="//Parameters/*" />
