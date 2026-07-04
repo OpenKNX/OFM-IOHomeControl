@@ -4562,6 +4562,71 @@ TEST(frame_1w_execute_has_hmac)
     ASSERT_EQ(parsed.dataLen, 8);
 }
 
+TEST(frame_1w_activate_mode_has_hmac)
+{
+    // 1W ActivateMode (0x01, _p0x01_13) must also detect the appended HMAC:
+    // origin+acei+main(1)+fp1+fp2+seq[2] = 7 payload bytes + 6 HMAC bytes.
+    IoHomeFrame frame;
+    frame.init();
+    frame.ctrlByte0 = IOHC_CTRL0_START | IOHC_CTRL0_MODE_1W;
+    frame.ctrlByte1 = 0x01;
+    frame.setSrcNode(0x485B37);
+    frame.setDestNode(0x0000BF);
+    frame.commandId = IoHomeCommand::ActivateMode;
+    frame.data[0] = IOHC_ORIGINATOR_USER;
+    frame.data[1] = IOHC_ACEI_1W;
+    frame.data[2] = 0x00; // main (1 byte)
+    frame.data[3] = 0x01; // fp1
+    frame.data[4] = 0x00; // fp2
+    frame.data[5] = 0x12; // sequence hi
+    frame.data[6] = 0x34; // sequence lo
+    frame.dataLen = 7;
+    memset(frame.hmac, 0xCC, IOHC_HMAC_SIZE);
+    frame.hasHmac = true;
+
+    uint8_t buf[32];
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
+    ASSERT_TRUE(len > 0);
+
+    IoHomeFrame parsed;
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
+    ASSERT_TRUE(parsed.hasHmac);
+    ASSERT_EQ(parsed.dataLen, 7);
+    ASSERT_MEM_EQ(parsed.hmac, frame.hmac, IOHC_HMAC_SIZE);
+}
+
+TEST(frame_1w_write_private_has_hmac)
+{
+    // 1W WritePrivate (0x20, _p0x20_13) must also detect the appended HMAC:
+    // origin+acei+main[2]+fp1+seq[2] = 6 payload bytes + 6 HMAC bytes.
+    IoHomeFrame frame;
+    frame.init();
+    frame.ctrlByte0 = IOHC_CTRL0_START | IOHC_CTRL0_MODE_1W;
+    frame.ctrlByte1 = 0x01;
+    frame.setSrcNode(0xB60D1A);
+    frame.setDestNode(0x00003F);
+    frame.commandId = IoHomeCommand::WritePrivate;
+    frame.data[0] = IOHC_ORIGINATOR_RAIN;
+    frame.data[1] = 0xDB;
+    frame.data[2] = 0x00; // main hi
+    frame.data[3] = 0x09; // main lo
+    frame.data[4] = 0x00; // fp1
+    frame.data[5] = 0x23; // sequence hi
+    frame.dataLen = 6;
+    memset(frame.hmac, 0xAA, IOHC_HMAC_SIZE);
+    frame.hasHmac = true;
+
+    uint8_t buf[32];
+    uint8_t len = serializeFrameForTest(frame, buf, sizeof(buf));
+    ASSERT_TRUE(len > 0);
+
+    IoHomeFrame parsed;
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
+    ASSERT_TRUE(parsed.hasHmac);
+    ASSERT_EQ(parsed.dataLen, 6);
+    ASSERT_MEM_EQ(parsed.hmac, frame.hmac, IOHC_HMAC_SIZE);
+}
+
 // --- Address classes ---
 
 TEST(address_class_group)
@@ -10371,6 +10436,8 @@ int main()
     RUN(send_key_1w_unauthenticated_29_bytes);
     RUN(send_key_1w_rejects_appended_hmac);
     RUN(frame_1w_execute_has_hmac);
+    RUN(frame_1w_activate_mode_has_hmac);
+    RUN(frame_1w_write_private_has_hmac);
 
     printf("\nSerializer boundary tests:\n");
     RUN(serializer_boundary_2w_challenge_response_hmac_as_data);

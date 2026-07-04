@@ -294,8 +294,13 @@ bool IoHomeFrame::deserializeFrame(const uint8_t *iBuffer, uint8_t iLen)
         dataLen = lDeclaredRemainingBytes;
         hasHmac = false;
     }
-    else if ((lCmd == 0x00 || lCmd == 0x2E || lCmd == 0x39) && lDeclaredRemainingBytes >= IOHC_HMAC_SIZE)
+    else if ((lCmd == 0x00 || lCmd == 0x01 || lCmd == 0x20 || lCmd == 0x2E || lCmd == 0x39) &&
+             lDeclaredRemainingBytes >= IOHC_HMAC_SIZE)
     {
+        // 0x00 (_p0x00_14/_p0x00_16), 0x01 (_p0x01_13), 0x20 (_p0x20_13/15/16),
+        // 0x2E and 0x39 all carry an appended 6-byte 1W HMAC per the reference
+        // (rspaargaren/iohomecontrol). This mirrors what the controller
+        // already transmits for 0x01 (build1WActivateMode13).
         dataLen = lDeclaredRemainingBytes - IOHC_HMAC_SIZE;
         hasHmac = true;
     }

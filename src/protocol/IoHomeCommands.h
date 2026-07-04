@@ -17,17 +17,17 @@ enum class IoHomeCommand : uint8_t
     // Unknown0B = 0x0B,  // not used — observed in rspaargaren scan list only
     Private2 = 0x0C,         // Alternate private command (not used — observed in reference, no handler)
     Private2Response = 0x0D, // Response to 0x0C (not used — empty case in reference)
-    // Unknown0E = 0x0E,  // not used — observed in rspaargaren scan list only
-    // Unknown14 = 0x14,  // not used — observed in rspaargaren scan list only
-    // Unknown16 = 0x16,  // not used — observed in rspaargaren scan list only
-    // Unknown19 = 0x19,  // not used — observed in rspaargaren scan list only
+                             // Unknown0E = 0x0E,  // not used — observed in rspaargaren scan list only
+                             // Unknown14 = 0x14,  // not used — observed in rspaargaren scan list only
+                             // Unknown16 = 0x16,  // not used — observed in rspaargaren scan list only
+                             // Unknown19 = 0x19,  // not used — observed in rspaargaren scan list only
     Identify = 0x1E, // Authenticated - make device identify itself
 
     // Cozy/Atlantic thermostat control
     WritePrivate = 0x20,         // Authenticated — set temperature, mode, presence
     WritePrivateResponse = 0x21, // Response to WritePrivate
-    // Unknown23 = 0x23,  // not used — observed in rspaargaren scan list only
-    // Unknown25 = 0x25,  // not used — observed in rspaargaren scan list only
+                                 // Unknown23 = 0x23,  // not used — observed in rspaargaren scan list only
+                                 // Unknown25 = 0x25,  // not used — observed in rspaargaren scan list only
 
     // Discovery & pairing
     DiscoverRequest = 0x28, // Broadcast to 0x00003B
@@ -43,7 +43,7 @@ enum class IoHomeCommand : uint8_t
     KeyInitTransfer = 0x31,         // 2W: ask challenge
     KeyTransfer = 0x32,             // 2W: send encrypted system key
     KeyTransferConfirmation = 0x33, // Device confirms key storage (not used — not parsed in reference)
-    // Unknown34 = 0x34,  // not used — observed in rspaargaren scan list only
+                                    // Unknown34 = 0x34,  // not used — observed in rspaargaren scan list only
 
     // Address assignment
     AddressRequest = 0x36,  // Request address from device
@@ -52,7 +52,7 @@ enum class IoHomeCommand : uint8_t
     // 2W key exchange initiation
     LaunchKeyTransfer = 0x38, // Initiate key transfer with 6-byte challenge
     RemoveController = 0x39,  // Authenticated — remove controller from device
-    // Unknown3A = 0x3A,  // not used — observed in rspaargaren scan list only
+                             // Unknown3A = 0x3A,  // not used — observed in rspaargaren scan list only
 
     // Challenge-response authentication
     ChallengeRequest = 0x3C,
@@ -61,7 +61,7 @@ enum class IoHomeCommand : uint8_t
     // Unknown commands (observed in packet captures, undocumented)
     Unknown46Request = 0x46,  // Authentication needed (not used)
     Unknown46Response = 0x47, // (not used)
-    // Unknown48 = 0x48,  // not used — observed in rspaargaren scan list only
+                              // Unknown48 = 0x48,  // not used — observed in rspaargaren scan list only
     Unknown4ARequest = 0x4A,  // No authentication needed (not used)
     Unknown4AResponse = 0x4B, // (not used)
 
@@ -69,7 +69,7 @@ enum class IoHomeCommand : uint8_t
     GetName = 0x50,
     GetNameResponse = 0x51,
     SetName = 0x52,
-    SetNameResponse = 0x53,  // not used — response to SetName (per nicolas5000)
+    SetNameResponse = 0x53, // not used — response to SetName (per nicolas5000)
     GetGeneralInfo1 = 0x54,
     GetGeneralInfo1Response = 0x55,
     GetGeneralInfo2 = 0x56,
@@ -89,7 +89,7 @@ enum class IoHomeCommand : uint8_t
     // Status
     StatusUpdate = 0x71,
     StatusUpdateResponse = 0x72, // ACK for unsolicited 0x71; payload {0x05, 0x00}
-    // Unknown73 = 0x73,  // not used — observed in rspaargaren scan list only
+                                 // Unknown73 = 0x73,  // not used — observed in rspaargaren scan list only
 
     // Extended command range (rspaargaren scan list only, undocumented)
     // May be a parallel set for a different device class or protocol version
@@ -185,7 +185,7 @@ inline bool isOpenCloseOnly(IoHomeDeviceType iType)
 #define IOHC_ACEI_EXTENDED_MASK 0x06
 #define IOHC_ACEI_VALID_BIT 0x01
 #define IOHC_ACEI_DEFAULT 0x67 // priority=3 (user remote), service=0, extended=3, valid=1
-#define IOHC_ACEI_1W 0x43     // priority=2 (user), service=0, extended=1, valid=1 (1W mode)
+#define IOHC_ACEI_1W 0x43      // priority=2 (user), service=0, extended=1, valid=1 (1W mode)
 
 // Command originator IDs (Execute data[0])
 #define IOHC_ORIGINATOR_LOCAL 0x00     // local user (button on device)
@@ -256,8 +256,8 @@ constexpr uint32_t IOHC_FREQUENCIES[IOHC_NUM_FREQUENCIES] = {
 #define IOHC_NAME_MAX_SIZE 16   // max name payload bytes (per nicolas5000: CMD_PARAM_NAME_MAXSIZE/2)
 
 // 1W repeat transmission (fire-and-forget sends 4x at 40ms intervals)
-#define IOHC_1W_REPEAT_COUNT 4            // 4 additional repeats (5 total transmissions, matches reference)
-#define IOHC_1W_REPEAT_INTERVAL_MS 40     // ms between 1W repeat transmissions
+#define IOHC_1W_REPEAT_COUNT 4        // 4 additional repeats (5 total transmissions, matches reference)
+#define IOHC_1W_REPEAT_INTERVAL_MS 40 // ms between 1W repeat transmissions
 
 // Sync word
 constexpr uint8_t IOHC_SYNC_WORD[3] = {0x55, 0xFF, 0x33};
