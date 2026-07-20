@@ -215,9 +215,49 @@ function IOHC_queryPairingInfo(device, online, progress, context, fallbackResult
     var channelIndex = context.channelIndex - 1;
     var data = [0x12];
     data = data.concat(channelIndex);
-    var resp = IOHC_invokeFunctionProperty(online, data);
+
+    // Distinguish two very different failure modes:
+    //  - invokeFunctionProperty THROWS  -> the device answered the connection
+    //    but the property read itself failed (bus error, timeout, busy). The
+    //    application is present, so this is a genuine read failure.
+    //  - it returns empty / too short    -> the io-homecontrol function property
+    //    does not exist, i.e. only the .knxprod was loaded and the application
+    //    was never downloaded to the device ("not programmed").
+    var resp = null;
+    var readError = null;
+    try {
+        resp = IOHC_invokeFunctionProperty(online, data);
+    } catch (error) {
+        readError = error;
+    }
+
+    if (readError) {
+        // Do not abort the whole script (red "failed" in ETS); report per channel.
+        IOHC_setPairingInfo(
+            device,
+            context,
+            "Lesen fehlgeschlagen",
+            "unbekannt",
+            IOHC_buildOneWaySummary(device, context, false, 0),
+            "Statusabfrage fehlgeschlagen");
+        if (progress) {
+            progress.setProgress(100);
+        }
+        return null;
+    }
+
     if (!resp || resp.length < 4) {
-        throw new Error("io-homecontrol: Pairing-Status konnte nicht gelesen werden");
+        IOHC_setPairingInfo(
+            device,
+            context,
+            "Nicht programmiert",
+            "unbekannt",
+            IOHC_buildOneWaySummary(device, context, false, 0),
+            "Applikation nicht programmiert?");
+        if (progress) {
+            progress.setProgress(100);
+        }
+        return null;
     }
 
     IOHC_applyStatusResponse(device, context, resp, fallbackResult, fallbackDiag);
