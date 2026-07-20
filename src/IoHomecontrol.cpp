@@ -2539,7 +2539,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     if (!knx.configured())
     {
         openknx.console.printHelpLine("iohc", "Device is not Configured! Please configure KNX settings in ETS and power cycle the device.");
-        return false;
+        return true;
     }
     if (lSub.substr(0, 6) == "status")
     {
