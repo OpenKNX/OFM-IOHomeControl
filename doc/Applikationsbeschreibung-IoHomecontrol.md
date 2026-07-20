@@ -344,17 +344,17 @@ Jeder io-homecontrol-Kanal repräsentiert ein einzelnes io-homecontrol-Gerät. D
 Ein Freitextfeld mit bis zu 40 Zeichen zur Benennung des Kanals. Der Text wird in ETS als Kanalname sowie in den Kommunikationsobjekten angezeigt.
 
 <!-- DOC HelpContext="IOHC-Kanal-aktiv" -->
-#### **Kanal aktiv**
+#### **Kanalaktivität**
 
-Schaltet den Kanal ein oder aus. Nur aktive Kanäle werden von der Firmware verarbeitet und blenden ihre weiteren Konfigurationsparameter ein.
+Legt fest, ob der Kanal verwendet wird. Nur aktivierte Kanäle werden von der Firmware verarbeitet und blenden ihre weiteren Konfigurationsparameter ein.
 
-* **Aus**: Kanal ist deaktiviert
-* **Ein** (Standard): Kanal ist aktiv
+* **Deaktiviert**: Kanal wird nicht verwendet
+* **Aktiviert** (Standard): Kanal ist aktiv
 
 <!-- DOC HelpContext="IOHC-Geraetetyp" -->
 ### **Gerätetyp**
 
-Erscheint nur, wenn "Kanal aktiv" auf "Ein" steht.
+Erscheint nur, wenn die Kanalaktivität auf "Aktiviert" steht.
 
 Bestimmt den Typ des angeschlossenen io-homecontrol-Geräts. Die Auswahl beeinflusst, welche Kommunikationsobjekte und Parameter für diesen Kanal sichtbar sind.
 
@@ -375,10 +375,20 @@ Mögliche Werte:
 
 > Bei Gerätetypen mit Positionssteuerung (0-4, 7, 9-11) werden zusätzlich die Parameter Öffnungszeit, Schließzeit und Richtung invertieren angezeigt. Beim Gerätetyp Thermostat (5) erscheinen die Thermostat-spezifischen KOs.
 
+<!-- DOC HelpContext="IOHC-Suspendiert" -->
+#### **Suspendiert**
+
+Erscheint nur, wenn die Kanalaktivität auf "Aktiviert" steht.
+
+Setzt den Kanal vorübergehend still, ohne die Konfiguration zu verlieren. Ein suspendierter Kanal wird von der Firmware nicht verarbeitet (kein Senden, keine Statusabfrage), behält aber alle Einstellungen.
+
+* **nicht gesetzt** (Standard): Kanal ist aktiv
+* **gesetzt**: Kanal ist suspendiert
+
 <!-- DOC HelpContext="IOHC-Status-Abfrageintervall" -->
 ### **Status-Abfrageintervall**
 
-Erscheint nur, wenn "Kanal aktiv" auf "Ein" steht.
+Erscheint nur, wenn die Kanalaktivität auf "Aktiviert" steht.
 
 Legt fest, in welchem Intervall das Modul den Gerätestatus abfragt. Dieses Intervall dient als Fallback; bei Geräten mit eigenständigen Statusmeldungen wird es lediglich ergänzend verwendet.
 
@@ -420,7 +430,7 @@ Vertauscht die Bedeutung von 0 % und 100 %. Dies ist sinnvoll, wenn Geräte in e
 <!-- DOC HelpContext="IOHC-Verhalten-nach-Neustart" -->
 ### **Verhalten nach Neustart**
 
-Erscheint nur, wenn "Kanal aktiv" auf "Ein" steht.
+Erscheint nur, wenn die Kanalaktivität auf "Aktiviert" steht.
 
 Bestimmt, was das Modul nach einem Neustart (z.B. Stromausfall) für diesen Kanal tut.
 
@@ -432,7 +442,7 @@ Mögliche Werte:
 <!-- DOC HelpContext="IOHC-Protokoll-Modus" -->
 ### **Protokoll-Modus**
 
-Erscheint nur, wenn "Kanal aktiv" auf "Ein" steht.
+Erscheint nur, wenn die Kanalaktivität auf "Aktiviert" steht.
 
 Wählt den Kommunikationsmodus für diesen Kanal.
 
@@ -448,7 +458,7 @@ Die dezimale Node-ID des Zielgeräts. Sie muss bekannt sein und kann beispielswe
 <!-- DOC HelpContext="IOHC-Anzahl-Szenen" -->
 ### **Szenen**
 
-Erscheint nur, wenn "Kanal aktiv" auf "Ein" steht.
+Erscheint nur, wenn die Kanalaktivität auf "Aktiviert" steht.
 
 #### **Anzahl Szenen**
 

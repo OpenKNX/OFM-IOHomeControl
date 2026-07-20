@@ -1,6 +1,10 @@
-### Kanal aktiv
+### Kanalaktivität
 
-Mit diesem Parameter wird festgelegt, ob der Kanal verwendet wird.
+Legt fest, ob der Kanal verwendet wird.
 
-Bei deaktiviertem Kanal bleibt die vorhandene Konfiguration erhalten, der Kanal wird jedoch nicht aktiv genutzt.
-Dies ist insbesondere bei vorbereiteten oder vorübergehend stillgelegten Kanalplätzen sinnvoll.
+Nur aktivierte Kanäle werden von der Firmware verarbeitet und blenden ihre weiteren Konfigurationsparameter ein. Ein deaktivierter Kanal wird nicht genutzt; seine übrigen Parameter werden ausgeblendet.
+
+Für ein vorübergehendes Stilllegen bei erhaltener Konfiguration wird stattdessen der separate Parameter „Suspendiert“ verwendet.
+
+* **Deaktiviert**: Kanal wird nicht verwendet
+* **Aktiviert**: Kanal ist aktiv

@@ -167,8 +167,11 @@ void IoHomecontrolChannel::setup()
     const uint8_t lOneWayManufacturer = static_cast<uint8_t>(ParamIOHC_cOneWayManufacturer);
     const uint8_t lOneWayAcei = static_cast<uint8_t>(ParamIOHC_cOneWayAcei);
 
+    // A channel is active when it is activated (Kanalaktivität = Aktiviert) and not temporarily suspended.
+    const bool lChannelActive = ParamIOHC_cActive && !ParamIOHC_cSuspend;
+
     logInfoP("ETS config: active=%u protocol=%u (%s) oneWayTarget=0x%06X oneWayType=%u oneWayProfile=%u oneWayMfg=0x%02X",
-             ParamIOHC_cActive ? 1U : 0U,
+             lChannelActive ? 1U : 0U,
              static_cast<unsigned>(lProtocolMode),
              lProtocolMode == 1 ? "1W" : "2W",
              static_cast<unsigned long>(lOneWayTargetNodeId),
@@ -176,8 +179,8 @@ void IoHomecontrolChannel::setup()
              static_cast<unsigned>(lOneWayProfileChannel),
              static_cast<unsigned>(lOneWayManufacturer));
 
-    // Check if channel is active in ETS
-    if (!ParamIOHC_cActive)
+    // Check if channel is active in ETS (activated and not suspended)
+    if (!lChannelActive)
     {
         logInfoP("Channel disabled in ETS - protocol and 1W settings will not be applied");
         return;
@@ -234,7 +237,7 @@ void IoHomecontrolChannel::loop()
     if (!mPaired || (mIs1W && mNodeId == 0))
         return;
 
-    if (!ParamIOHC_cActive)
+    if (!ParamIOHC_cActive || ParamIOHC_cSuspend)
         return;
 
     const uint32_t lNow = millis();

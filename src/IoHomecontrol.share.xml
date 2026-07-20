@@ -34,6 +34,17 @@
                   <Enumeration Text="Ein" Value="1" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
+              <!-- Channel activity: Deaktiviert / Aktiviert (unified channel selection) -->
+              <ParameterType Id="%AID%_PT-IOHCChannelActivity" Name="IOHCChannelActivity">
+                <TypeRestriction Base="Value" SizeInBit="1">
+                  <Enumeration Text="Deaktiviert" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Aktiviert" Value="1" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <!-- Suspend -->
+              <ParameterType Id="%AID%_PT-IOHCSuspended" Name="IOHCSuspended">
+                <TypeNumber SizeInBit="1" Type="unsignedInt" minInclusive="0" maxInclusive="1" UIHint="CheckBox" />
+              </ParameterType>
               <!-- Device type selection -->
               <ParameterType Id="%AID%_PT-IOHCDeviceType" Name="IOHCDeviceType">
                 <TypeRestriction Base="Value" SizeInBit="8">
@@ -66,6 +77,10 @@
               <!-- Channel name -->
               <ParameterType Id="%AID%_PT-IOHCText40Byte" Name="IOHCText40Byte">
                 <TypeText SizeInBit="320" />
+              </ParameterType>
+              <!-- Channel name display: holds the inactive/suspend marker + the 40-char name -->
+              <ParameterType Id="%AID%_PT-IOHCText45Byte" Name="IOHCText45Byte">
+                <TypeText SizeInBit="360" />
               </ParameterType>
               <!-- Pairing mode selector (P0) -->
               <ParameterType Id="%AID%_PT-IOHCPairingMode" Name="IOHCPairingMode">
@@ -241,7 +256,6 @@
             <Channel Id="%AID%_CH-%PREFIX%" Number="%PREFIX%" Name="IOHC_Global" Text="IO-HomeControl" Icon="remote" HelpContext="BASE-OpenKNX">
               <ParameterBlock Id="%AID%_PB-nnn" Name="IOHC_Global" Text="Allgemein" Icon="cog" HelpContext="IOHC-Allgemein">
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="Allgemein" UIHint="Headline" />
-                <ParameterRefRef RefId="%AID%_P-%TT%00001_R-%TT%0000101" HelpContext="IOHC-Verfuegbare-Kanaele" />
                 <ParameterRefRef RefId="%AID%_P-%TT%00002_R-%TT%0000201" HelpContext="IOHC-Fernbedienungs-Beobachtung" />
                 <ComObjectRefRef RefId="%AID%_O-%TT%00000_R-%TT%0000001" />
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="Pairing-Übersicht" UIHint="Headline" />
@@ -293,16 +307,26 @@
                 <ComObjectRefRef RefId="%AID%_O-%TT%00005_R-%TT%0000501" />
               </ParameterBlock>
 
-              <op:include href="IoHomecontrol.templ.xml" xpath="//Dynamic/ChannelIndependentBlock/*" type="template" prefix="IOHC" IsInner="true" />
+              <ParameterBlock Id="%AID%_PB-nnn" Text="Kanalauswahl" Icon="format-list-bulleted-type" HelpContext="IOHC-Kanalauswahl">
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="Kanalauswahl" UIHint="Headline" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00001_R-%TT%0000101" HelpContext="IOHC-Verfuegbare-Kanaele" IndentLevel="1" />
+                <ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
+                  <Rows>
+                    <Row Id="%AID%_PB-nnn_R-1" />
+                  </Rows>
+                  <Columns>
+                    <Column Id="%AID%_PB-nnn_C-1" Width="15%" />
+                    <Column Id="%AID%_PB-nnn_C-2" Width="40%" />
+                    <Column Id="%AID%_PB-nnn_C-3" Width="45%" />
+                  </Columns>
+                  <ParameterSeparator Id="%AID%_PS-nnn" Cell="1,1" UIHint="Headline" Text="Kanal" />
+                  <ParameterSeparator Id="%AID%_PS-nnn" Cell="1,2" UIHint="Headline" Text="Kanalaktivität" />
+                  <ParameterSeparator Id="%AID%_PS-nnn" Cell="1,3" UIHint="Headline" Text="Beschreibung" />
+                </ParameterBlock>
+                <op:include href="IoHomecontrol.templ.xml" xpath="//Dynamic/ChannelIndependentBlock/ParameterBlock[@Name='ChannelSelection']/*" type="template" prefix="IOHC" IsInner="true" />
+              </ParameterBlock>
 
-              <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101">
-                <when test="&lt;%N%">
-                  <ParameterBlock Id="%AID%_PB-nnn" Text="(mehr)" Icon="dots-horizontal" HelpContext="Empty">
-                    <ParameterSeparator Id="%AID%_PS-nnn" Text="Kanalauswahl" UIHint="Headline" />
-                    <ParameterRefRef RefId="%AID%_P-%TT%00001_R-%TT%0000101" HelpContext="IOHC-Verfuegbare-Kanaele" IndentLevel="1" />
-                  </ParameterBlock>
-                </when>
-              </choose>
+              <op:include href="IoHomecontrol.templ.xml" xpath="//Dynamic/ChannelIndependentBlock/ParameterBlock[@Name='ChannelDefinition']/*" type="template" prefix="IOHC" IsInner="true" />
             </Channel>
 
           </Dynamic>
