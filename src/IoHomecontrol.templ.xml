@@ -238,8 +238,8 @@
                     <ParameterSeparator Id="%AID%_PS-nnn" Text="Kanal %C%" UIHint="Headline" />
                     <ParameterRefRef RefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" IndentLevel="1" HelpContext="IOHC-Beschreibung" />
                         <!-- Basic configuration (channel is activated) -->
-                        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201" IndentLevel="1" HelpContext="IOHC-Geraetetyp" />
                         <ParameterRefRef RefId="%AID%_UP-%TT%%CC%008_R-%TT%%CC%00801" IndentLevel="1" HelpContext="IOHC-Suspendiert" />
+                        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201" IndentLevel="1" HelpContext="IOHC-Geraetetyp" />
                         <ParameterRefRef RefId="%AID%_UP-%TT%%CC%003_R-%TT%%CC%00301" IndentLevel="1" HelpContext="IOHC-Status-Abfrageintervall" />
 
                         <ParameterRefRef RefId="%AID%_UP-%TT%%CC%007_R-%TT%%CC%00701" IndentLevel="1" HelpContext="IOHC-Verhalten-nach-Neustart" />

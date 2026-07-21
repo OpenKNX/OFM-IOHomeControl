@@ -275,17 +275,20 @@ function IOHC_refreshAllPairingInfo(device, online, progress, context) {
 
     progress.setText("Pairing-Übersicht wird für " + visibleChannelCount + " Kanäle aktualisiert ...");
     progress.setProgress(5);
-    online.connect();
-    try {
-        for (var channelIndex = 1; channelIndex <= visibleChannelCount; channelIndex++) {
+    // Read each channel in its own connect/disconnect cycle, exactly like the
+    // per-channel "Pairing-Status auslesen" button. Holding a single connection
+    // open across all reads does not work reliably; only the first read succeeds.
+    for (var channelIndex = 1; channelIndex <= visibleChannelCount; channelIndex++) {
+        online.connect();
+        try {
             IOHC_queryPairingInfo(device, online, null, { channelIndex: channelIndex }, "Status gelesen", "Status über Übersicht gelesen");
-            progress.setText("Pairing-Übersicht: Kanal " + channelIndex + " von " + visibleChannelCount + " aktualisiert ...");
-            progress.setProgress(Math.floor((channelIndex * 100) / visibleChannelCount));
+        } finally {
+            online.disconnect();
         }
-        IOHC_setParameterValue(device, IOHC_getGlobalPrefix() + "OverviewLastRefresh", IOHC_nowText());
-    } finally {
-        online.disconnect();
+        progress.setText("Pairing-Übersicht: Kanal " + channelIndex + " von " + visibleChannelCount + " aktualisiert ...");
+        progress.setProgress(Math.floor((channelIndex * 100) / visibleChannelCount));
     }
+    IOHC_setParameterValue(device, IOHC_getGlobalPrefix() + "OverviewLastRefresh", IOHC_nowText());
 
     progress.setText("Pairing-Übersicht aktualisiert.");
     progress.setProgress(100);
