@@ -258,6 +258,9 @@
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="Allgemein" UIHint="Headline" />
                 <ParameterRefRef RefId="%AID%_P-%TT%00002_R-%TT%0000201" HelpContext="IOHC-Fernbedienungs-Beobachtung" />
                 <ComObjectRefRef RefId="%AID%_O-%TT%00000_R-%TT%0000001" />
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="2W-Schlüsselextraktion" UIHint="Headline" />
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="Aktiviert die 2W-Schlüsselextraktion. Danach am vorhandenen Fremd-Gateway 'Gerät hinzufügen' auslösen." UIHint="Information" />
+                <Button Id="%AID%_B-%TT%00011" Text="2W-Schlüssel extrahieren" EventHandler="IOHC_startKeyExtract" EventHandlerOnline="ConnectionOriented" />
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="Pairing-Übersicht" UIHint="Headline" />
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="Die Werte werden durch die Online-Aktionen in den jeweiligen Kanal-Seiten aktualisiert." UIHint="Information" />
                 <Button Id="%AID%_B-%TT%00010" Text="Pairing-Übersicht aktualisieren" EventHandler="IOHC_refreshAllPairingInfo" EventHandlerOnline="ConnectionOriented" />

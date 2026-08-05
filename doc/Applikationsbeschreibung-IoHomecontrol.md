@@ -166,6 +166,11 @@ Die ETS-Schaltflächen sind:
 * **Pairing starten**: Startet den Pairing-Vorgang im aktuell gewählten Modus.
 * **Pairing entfernen**: Entfernt die Zuordnung für den betreffenden Kanal.
 
+Im 1W-Modus stehen zusätzlich folgende ETS-Aktionen zur Verfügung:
+
+* **Neues eigenes 1W-Controllerprofil erzeugen**: Legt für den Kanal ein neues lokales 1W-Profil an, sofern kein anderer gepaarter Kanal dieses Profil verwendet.
+* **Original-1W-Fernbedienung klonen**: Aktiviert den 1W-Klon-Empfang mit Standard-Timeout. Anschließend muss an der Original-Fernbedienung der herstellerseitige Kopiervorgang ausgelöst werden.
+
 Die angezeigten ETS-Felder sind:
 
 * **Letztes Pairing-Ergebnis**: Zeigt den letzten von ETS ausgelösten oder gelesenen Status an.
@@ -230,11 +235,11 @@ Beim Kopiervorgang sendet die Original-Fernbedienung ihren Schlüssel per Funk i
 Ablauf:
 
 1. Den Kanal in den 1W-Modus versetzen.
-2. Den Klon-Empfang mit `iohcNN pair1w receive` aktivieren (Standard-Wartezeit 60 Sekunden, alternativ `iohcNN pair1w copy SEKUNDEN`).
+2. Den Klon-Empfang aktivieren, entweder in ETS über **Original-1W-Fernbedienung klonen** oder per Konsole mit `iohcNN pair1w receive` beziehungsweise `iohcNN pair1w copy SEKUNDEN`.
 3. An der Original-Fernbedienung den herstellerseitigen Kopiervorgang („Fernbedienung kopieren") auslösen, sodass diese ihren Schlüssel sendet.
 4. Das Modul übernimmt Adresse und Schlüssel automatisch, speichert das Profil dauerhaft und meldet die übernommene Node-ID. Der aktuelle Zustand lässt sich jederzeit mit `iohcNN pair1w status` abfragen, ein laufender Empfang mit `iohcNN pair1w stop` beenden.
 
-> Der Klon-Empfang ist zurzeit eine reine Konsolenfunktion. Da der 1W-Modus keine Rückmeldung des Aktors liefert, sollte die erfolgreiche Übernahme abschließend durch einen Fahrbefehl am Aktor überprüft werden.
+> Da der 1W-Modus keine Rückmeldung des Aktors liefert, sollte die erfolgreiche Übernahme abschließend durch einen Fahrbefehl am Aktor überprüft werden.
 
 Reagiert der Aktor nach einem erfolgreichen Klonen trotzdem nicht auf Befehle, liegt dies meist an der **1W Befehls-Priorität (ACEI)**. Manche Aktoren akzeptieren nur die exakte Priorität ihrer Original-Fernbedienung. Über den Parameter *1W Befehls-Priorität (ACEI)* lässt sich diese je Kanal einstellen; die Voreinstellung **Priorität 3 (Velux-Fernbedienung)** entspricht dem Byte einer originalen Velux-Fernbedienung und passt zu den meisten unterstützten 1W-Aktoren. Zum Ausprobieren ohne ETS-Download kann der Wert zur Laufzeit mit `iohcNN 1wacei HH` gesetzt werden (z. B. `iohcNN 1wacei 61` für Velux); diese Laufzeit-Einstellung wird beim Neustart wieder durch den ETS-Parameter ersetzt.
 
@@ -305,6 +310,8 @@ Dort werden pro Kanal dieselben vier Werte wie auf der jeweiligen Kanalseite ang
 * **Diagnose**
 
 Über die Schaltfläche **Pairing-Übersicht aktualisieren** werden diese Werte für alle sichtbaren Kanäle nacheinander direkt vom Gerät gelesen. Das Feld **Zuletzt aktualisiert** zeigt, wann dieser Sammel-Refresh zuletzt erfolgreich abgeschlossen wurde.
+
+Auf derselben Seite befindet sich zusätzlich die ETS-Aktion **2W-Schlüssel extrahieren**. Sie aktiviert die temporäre 2W-Geräterolle des Moduls für die aktive Schlüsselextraktion. Nach dem Start muss am vorhandenen Fremd-Gateway der normale Vorgang zum Hinzufügen eines Geräts ausgelöst werden, damit das Gateway seinen Systemschlüssel an das Modul überträgt. Diese Funktion ist ausschließlich für eigene oder berechtigt verwaltete Fremd-Gateways vorgesehen.
 
 <!-- DOC HelpContext="IOHC-Fernbedienungs-Beobachtung" -->
 ### **Fernbedienungs-Beobachtung**

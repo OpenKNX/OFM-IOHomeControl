@@ -1958,6 +1958,43 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         }
         break;
     }
+    case 0x16: // Start 1W key receive / clone workflow
+    {
+        if (length < 2)
+            break;
+        const uint8_t lChannel = data[1];
+        if (lChannel < mNumChannels)
+        {
+            resultData[0] = 0x02;
+            if (mChannels[lChannel] && mChannels[lChannel]->is1W())
+            {
+                if (mController.startOneWayKeyReceive(lChannel, IoHomeController::kOneWayKeyReceiveDefaultTimeoutMs))
+                {
+                    resultData[0] = 0x00;
+                    logInfoP("ETS: 1W clone armed for channel %d", lChannel + 1);
+                }
+                else
+                {
+                    resultData[0] = 0x04;
+                    logInfoP("ETS: 1W clone blocked for channel %d", lChannel + 1);
+                }
+            }
+            resultLength = 1;
+            return true;
+        }
+        break;
+    }
+    case 0x17: // Start active 2W key extraction
+    {
+        resultData[0] = mController.startKeyExtraction(IoHomeController::kKeyExtractDefaultTimeoutMs) ? 0x00 : 0x04;
+        if (resultData[0] == 0x00)
+            logInfoP("ETS: active 2W key extraction armed");
+        else
+            logInfoP("ETS: active 2W key extraction blocked, controller state=%s",
+                     IoHomeController::stateName(mController.state()));
+        resultLength = 1;
+        return true;
+    }
     case 0x20: // Test: send position command
     {
         if (length < 3)

@@ -180,11 +180,9 @@ Useful diagnostic entry points include:
 - `iohc pairdiag on|off|status` — show compact pairing, TX, crypto, key, repeat and sequence diagnostics.
 - `iohc proto selftest` — run byte-exact protocol self-tests on-device.
 
-
 ## Function Properties (advanced)
 
 ETS function property interface (objectIndex=160, propertyId=10).
-
 
 | Code | Request payload | Response payload | Description |
 |------|-----------------|------------------|-------------|
@@ -193,15 +191,17 @@ ETS function property interface (objectIndex=160, propertyId=10).
 | 0x12 | `cmd, channel` | `paired, nodeIdHi, nodeIdMid, nodeIdLo, controllerState, lastPairStartStatus, profileChannel, profileNodeHi, profileNodeMid, profileNodeLo, manufacturer, sequenceHi, sequenceLo, broadcastType` | Read pairing state plus the effective 1W profile diagnostics for one channel. The profile fields are unused and should be ignored for 2W channels. The sequence field reports the active profile sequence; the console status additionally shows the reserved high-water sequence. |
 | 0x13 | `cmd, channel` | `status` | Unpair the selected channel, erase the stored key, and persist the change. |
 | 0x15 | `cmd, channel` | `status` | Generate a new own 1W controller profile. Rejected for shared profiles or while any paired channel uses the profile. |
+| 0x16 | `cmd, channel` | `status` | Start the 1W clone listener on the selected channel with the default timeout. The original remote must then send its manufacturer copy frame. |
+| 0x17 | `cmd` | `status` | Start the active 2W key extraction responder with the default timeout. Afterwards trigger the manual add-device flow on the owned third-party gateway. |
 | 0x20 | `cmd, channel, percent` | `status` | Test helper for sending a position command to an already paired device. |
 
-Common status byte values used by commands `0x10`, `0x11`, `0x13`, and `0x20`:
+Common status byte values used by commands `0x10`, `0x11`, `0x13`, `0x17`, and `0x20`:
 
 | Value | Meaning |
 |-------|---------|
 | 0x00 | Command accepted / executed successfully |
 | 0x03 | 1W pairing rejected because the target node ID is missing |
-| 0x04 | Pairing start rejected because the controller is currently busy |
+| 0x04 | Command rejected because the controller is currently busy |
 | 0xFF | Invalid request, channel out of range, or command not supported in the current state |
 
 Status byte values specific to command `0x15`:
@@ -212,6 +212,15 @@ Status byte values specific to command `0x15`:
 | 0x02 | Channel is not configured for 1W, or profile generation failed |
 | 0x03 | Profile is currently used by at least one paired channel |
 | 0x04 | Channel uses a shared profile instead of its own profile |
+| 0xFF | Invalid request or channel out of range |
+
+For command `0x16`, the currently used status byte meanings are:
+
+| Value | Meaning |
+|-------|---------|
+| 0x00 | 1W clone listener armed successfully |
+| 0x02 | Channel is not configured for 1W |
+| 0x04 | 1W clone listener could not start because the controller is busy |
 | 0xFF | Invalid request or channel out of range |
 
 For the `0x12` status query, `lastPairStartStatus` is currently encoded as follows:

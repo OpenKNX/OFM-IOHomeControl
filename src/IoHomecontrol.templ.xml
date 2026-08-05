@@ -259,12 +259,14 @@
                                 <ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
                                   <Rows>
                                     <Row Id="%AID%_PB-nnn_R-1" />
+                                    <Row Id="%AID%_PB-nnn_R-2" />
                                   </Rows>
                                   <Columns>
                                     <Column Id="%AID%_PB-nnn_C-1" Width="2%" />
                                     <Column Id="%AID%_PB-nnn_C-2" Width="98%" />
                                   </Columns>
                                   <Button Id="%AID%_B-%TT%%CC%004" Text="Neues eigenes 1W-Controllerprofil erzeugen" Cell="1,2" EventHandler="IOHC_generateOneWayProfile" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                                  <Button Id="%AID%_B-%TT%%CC%005" Text="Original-1W-Fernbedienung klonen" Cell="2,2" EventHandler="IOHC_startOneWayClone" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                                 </ParameterBlock>
                               </when>
                             </choose>

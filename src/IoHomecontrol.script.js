@@ -411,3 +411,48 @@ function IOHC_generateOneWayProfile(device, online, progress, context) {
         online.disconnect();
     }
 }
+
+function IOHC_startOneWayClone(device, online, progress, context) {
+    var channelIndex = context.channelIndex - 1;
+    progress.setText("1W-Klonen wird vorbereitet für Kanal " + (channelIndex + 1) + " ...");
+    progress.setProgress(20);
+    online.connect();
+    try {
+        var resp = IOHC_invokeFunctionProperty(online, [0x16, channelIndex]);
+        if (!resp || resp.length < 1) {
+            throw new Error("io-homecontrol: Keine Antwort beim Start des 1W-Klonens");
+        }
+        if (resp[0] == 0) {
+            IOHC_setPairingInfo(device, context, "1W-Klon aktiv", "nicht angelernt", IOHC_buildOneWaySummary(device, context, false, 0), "Originalfernbedienung jetzt kopieren");
+            progress.setText("1W-Klonen aktiv. Jetzt an der Original-Fernbedienung die Copy-Funktion auslösen.");
+            progress.setProgress(100);
+            return;
+        }
+        if (resp[0] == 4) {
+            throw new Error("io-homecontrol: 1W-Klonen ist gerade durch einen anderen Controller-Vorgang blockiert");
+        }
+        throw new Error("io-homecontrol: Kanal ist nicht für 1W-Klonen geeignet");
+    } finally {
+        online.disconnect();
+    }
+}
+
+function IOHC_startKeyExtract(device, online, progress, context) {
+    progress.setText("2W-Schlüsselextraktion wird vorbereitet ...");
+    progress.setProgress(20);
+    online.connect();
+    try {
+        var resp = IOHC_invokeFunctionProperty(online, [0x17]);
+        if (!resp || resp.length < 1) {
+            throw new Error("io-homecontrol: Keine Antwort beim Start der 2W-Schlüsselextraktion");
+        }
+        if (resp[0] == 0) {
+            progress.setText("2W-Schlüsselextraktion aktiv. Jetzt am Fremd-Gateway 'Gerät hinzufügen' starten.");
+            progress.setProgress(100);
+            return;
+        }
+        throw new Error("io-homecontrol: 2W-Schlüsselextraktion ist gerade blockiert");
+    } finally {
+        online.disconnect();
+    }
+}
