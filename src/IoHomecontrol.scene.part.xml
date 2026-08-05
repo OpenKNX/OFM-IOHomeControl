@@ -74,8 +74,20 @@
             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%ID+40%_R-%TT%%CC%%ID+40%01" IndentLevel="2" HelpContext="IOHC-Szenenmodus" />
           </when>
 
+          <!-- Dimmable light scenes -->
+          <when test="6">
+            <choose ParamRefId="%AID%_UP-%TT%%CC%081_R-%TT%%CC%08101">
+              <when test="1">
+                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%ID%_R-%TT%%CC%%ID%01" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
+              </when>
+              <when test="0">
+                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%ID+50%_R-%TT%%CC%%ID+50%01" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
+              </when>
+            </choose>
+          </when>
+
           <!-- On/Off scenes -->
-          <when test="6 8 12">
+          <when test="8 12">
             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%ID+50%_R-%TT%%CC%%ID+50%01" IndentLevel="2" HelpContext="IOHC-Szenenzustand" />
           </when>
         </choose>

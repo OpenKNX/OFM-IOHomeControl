@@ -140,7 +140,7 @@ Das io-homecontrol-Modul unterstützt verschiedene Gerätetypen. Der Gerätetyp 
 | Markise | Horizontale und vertikale Markisen | Position, Auf/Ab, Stopp |
 | Garagentor | Garagentorantriebe | Position, Auf/Ab, Stopp |
 | Thermostat | Atlantic Cozy io | Temperatur, Betriebsmodus, Anwesenheit, Fensterkontakt |
-| Licht | io-homecontrol Dimmer und Schalter | Ein/Aus (statt Auf/Ab) |
+| Licht | io-homecontrol Lichtaktoren, Schalter und Dimmer | Ein/Aus, optional zusätzlich Helligkeit 0-100 % |
 | Tor | Schiebetore, Drehtorantriebe | Position, Auf/Ab, Stopp |
 | Schloss | io-homecontrol Türschlösser | Status, Kanal sperren |
 | Sonnenschutz horizontal | Horizontale Sonnenschutzsysteme | Lamellenposition |
@@ -148,7 +148,7 @@ Das io-homecontrol-Modul unterstützt verschiedene Gerätetypen. Der Gerätetyp 
 | Lüftung | io-homecontrol Lüftungseinheiten | Position, Auf/Ab, Stopp |
 | Schalter | io-homecontrol Schalter | Ein/Aus (statt Auf/Ab) |
 
-> Bei den Gerätetypen Licht und Schalter ersetzen eigene Schalt-KOs die Antriebs-KOs: Statt "Auf/Ab" (DPT 1.008) erscheint "Ein/Aus" (DPT 1.001) und statt "Bewegt" (DPT 1.011) das KO "Status" (DPT 1.001). Der DPT ist damit semantisch passend gesetzt, was sich u.a. unmittelbar auf eine direkt am KO erstellte Gruppenadresse auswirkt. Beim Gerätetyp Schloss sind das KO "Status" (DPT 1.011) sowie das generische KO "Sperren" sichtbar.
+> Bei den Gerätetypen Licht und Schalter ersetzen eigene Schalt-KOs die Antriebs-KOs: Statt "Auf/Ab" (DPT 1.008) erscheint "Ein/Aus" (DPT 1.001) und statt "Bewegt" (DPT 1.011) das KO "Status" (DPT 1.001). Für den Gerätetyp Licht kann zusätzlich die Eigenschaft **Dimmbar** aktiviert werden; dann bleiben die Schalt-KOs erhalten und die Positions-KOs werden zusätzlich als Helligkeitswert 0-100 % genutzt. Beim Gerätetyp Schloss sind das KO "Status" (DPT 1.011) sowie das generische KO "Sperren" sichtbar.
 
 
 
@@ -437,7 +437,7 @@ Bestimmt, was das Modul nach einem Neustart (z.B. Stromausfall) für diesen Kana
 Mögliche Werte:
 * **Nichts tun** (0): Kein Befehl wird gesendet
 * **Status abfragen** (1) — Standard: Das Modul fragt die aktuelle Position vom Gerät ab
-* **Letzte Position anfahren** (2): Das Modul sendet nach dem Neustart den zuletzt gespeicherten Zustand erneut. Bei Gerätetypen mit Positionssteuerung wird die letzte Positionsrückmeldung verwendet, bei Licht-, Schalter- und Schloss-Kanälen der letzte Ein/Aus-Zustand.
+* **Letzte Position anfahren** (2): Das Modul sendet nach dem Neustart den zuletzt gespeicherten Zustand erneut. Bei Gerätetypen mit Positionssteuerung wird die letzte Positionsrückmeldung verwendet. Bei Licht- und Schalter-Kanälen ohne Dimmfunktion sowie bei Schloss-Kanälen wird der letzte Ein/Aus-Zustand verwendet; dimmbare Lichtkanäle stellen die letzte Helligkeitsrückmeldung wieder her.
 
 <!-- DOC HelpContext="IOHC-Protokoll-Modus" -->
 ### **Protokoll-Modus**
@@ -488,9 +488,13 @@ Für jede aktive Szene erscheinen abhängig vom Gerätetyp unterschiedliche Para
 * **Szene n Modus**: Auto / Manuell / Programm / Aus.
 
 <!-- DOC HelpContext="IOHC-Szenenzustand" -->
-**Für Licht, Schalter und Schloss:**
+**Für Licht und Schalter ohne Dimmfunktion sowie für Schloss:**
 
 * **Szene n Zustand**: Ein / Aus.
+
+**Für Licht mit aktivierter Eigenschaft Dimmbar:**
+
+* **Szene n Position**: Helligkeit 0-100 %.
 
 <!-- DOC HelpContext="IOHC-Szenensteuerung" -->
 Szenen werden über die Kommunikationsobjekte "Szene" (DPT 17.001, Szenennummer 1-10) und "Szenensteuerung" (DPT 18.001, Lernen/Abrufen) aufgerufen.
@@ -674,6 +678,8 @@ Sichtbar bei den Gerätetypen Licht und Schalter. Diese Objekte ersetzen die Ant
 |--------|------|-----|----------|-------------|
 | Kn+3 | Ein/Aus | 1.001 | Schreiben | 1 = Ein, 0 = Aus |
 | Kn+6 | Status | 1.001 | Lesen | 1 = Ein, 0 = Aus |
+
+Für den Gerätetyp Licht mit aktivierter Eigenschaft **Dimmbar** werden zusätzlich die Positionsobjekte Kn+0 und Kn+1 eingeblendet. Sie übertragen die Helligkeit als DPT 5.001 im Bereich 0-100 %; die Schaltobjekte Kn+3 und Kn+6 bleiben parallel sichtbar.
 
 #### **Schloss-KO**
 

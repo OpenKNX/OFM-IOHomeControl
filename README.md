@@ -50,12 +50,13 @@ The protocol implementation covers manufacturers such as Velux, Somfy, Atlantic,
 - **Wind/rain alarm** safety input — auto-retract awnings, close windows on alarm
 - **Step-stop (Langzeitbetrieb)** — standard KNX blind behavior for venetian blinds
 - **Power-on behavior** configurable per channel (nothing, request status, restore last feedback position)
-- **Dedicated binary command/status handling** for lights, switches and locks
+- **Optional brightness control for dimmable lights**, plus dedicated binary command/status handling for lights, switches and locks
 - **3-channel frequency hopping** across the 868 MHz ISM band
 - **EU duty cycle compliance** with per-sub-band tracking (1-hour window)
 - **Command queue** with automatic retries (up to 3 attempts, cycling frequencies)
 - **Remote observation** — track io-homecontrol remotes on the bus, link devices to remotes
 - **Explicit passive key sniff workflow** for diagnostics (listen-only session with separate start/stop/status/clear controls)
+- **Active 2W key extraction workflow** for owned hubs (temporary device-role responder via `iohc extract ...`)
 - **Network scan** with per-node packet statistics and RSSI tracking; observation-only
 - **Encrypted discovery (SPE)** for scanning already-paired devices
 - **Flash persistence** of 2W identity/pairing data and complete per-channel 1W controller profiles
@@ -170,6 +171,7 @@ The firmware provides an `iohc` serial console for commissioning, service and be
 Useful diagnostic entry points include:
 
 - `iohc status` / `iohcNN status` — show 2W identity and per-channel 1W remote identity separately.
+- `iohc extract start [SEC]` / `stop` / `status` / `clear` — arm the temporary 2W device-role responder used to recover the system key from an owned third-party 2W hub during a manual pairing attempt.
 - `iohc 1wctrl status` / `iohcNN 1wctrl status` — show effective 1W profile, type, manufacturer, sequence and reserved sequence.
 - `iohcNN pair1w [ADDR] add-only|announce-add` — test reference-style 1W add flows without inserting `0x39` automatically.
 - `iohcNN remove1w [ADDR]` — send the explicit 1W remove flow.
@@ -261,6 +263,7 @@ IoHomecontrol (OpenKNX::Module)
     ├── Network Scan (passive packet capture, per-node stats; observation-only)
     ├── Remote Observation (track remotes, link to devices)
     ├── Passive Key Sniff (explicit session, retained capture result)
+    ├── Active Key Extraction (temporary 2W device-role responder)
     ├── Protocol Builders (centralized 1W/2W frame templates)
     ├── IoHomeFrame (frame serialization/deserialization, 9–32 bytes)
     └── IoHomeCrypto (AES-128 ECB, HMAC, CRC-16 Kermit, IV construction)

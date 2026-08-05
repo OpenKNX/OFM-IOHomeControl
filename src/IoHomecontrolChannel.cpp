@@ -5,6 +5,10 @@
 #include "knxprod.h"
 #include "OpenKNX.h"
 
+#ifndef ParamIOHC_cDimmable
+#define ParamIOHC_cDimmable 0
+#endif
+
 // ---------------------------------------------------------------------------
 // Scene parameter access
 //
@@ -962,6 +966,11 @@ bool IoHomecontrolChannel::isOnOffDeviceType() const
     return ParamIOHC_cDeviceType == 6 || ParamIOHC_cDeviceType == 12;
 }
 
+bool IoHomecontrolChannel::isDimmableLight() const
+{
+    return ParamIOHC_cDeviceType == 6 && ParamIOHC_cDimmable;
+}
+
 bool IoHomecontrolChannel::isLockDeviceType() const
 {
     return ParamIOHC_cDeviceType == 8;
@@ -995,7 +1004,7 @@ void IoHomecontrolChannel::publishBinaryStatus()
     if (!isBinaryDeviceType())
         return;
 
-    bool lActive = mCurrentPosition >= 50.0f;
+    bool lActive = isDimmableLight() ? (mCurrentPosition > 0.0f) : (mCurrentPosition >= 50.0f);
     if (isOnOffDeviceType())
         getKo(IOHC_KoCHOnOffStatus).value(lActive, DPT_Switch);
     else
@@ -1019,6 +1028,9 @@ bool IoHomecontrolChannel::restoreLastKnownStateAfterStartup()
     case 11:
         break;
     case 6:
+        if (!isDimmableLight())
+            lBinaryState = true;
+        break;
     case 8:
     case 12:
         lBinaryState = true;
@@ -1335,8 +1347,16 @@ void IoHomecontrolChannel::handleSceneRecall(uint8_t iScene)
         return;
     }
 
+    if (lDeviceType == 6 && isDimmableLight())
+    {
+        uint8_t lPos = mScenePositions[lSceneIndex];
+        logDebugP("Scene %d recall -> brightness %d%%", iScene, lPos);
+        sendPositionCommand(sceneToDevicePosition(lPos));
+        return;
+    }
+
     // Licht/Schloss/Schalter scenes: on/off
-    if (lDeviceType == 6 || lDeviceType == 8 || lDeviceType == 12)
+    if ((lDeviceType == 6 && !isDimmableLight()) || lDeviceType == 8 || lDeviceType == 12)
     {
         uint8_t lOnOff = mScenePositions[lSceneIndex]; // 0=off, 1=on (overlaid param)
         logDebugP("Scene %d recall -> %s", iScene, lOnOff ? "on" : "off");

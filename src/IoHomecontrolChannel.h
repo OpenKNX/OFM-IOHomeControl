@@ -185,6 +185,7 @@ private:
   bool storeSceneStateToEts(uint8_t iSceneIndex, uint8_t iScenePosition, uint8_t iSceneSlat);
 
   bool isOnOffDeviceType() const;
+  bool isDimmableLight() const;
   bool isLockDeviceType() const;
   bool isTiltCapableDeviceType() const;
   bool isBinaryDeviceType() const;
