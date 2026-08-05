@@ -478,6 +478,23 @@ namespace
             return "unknown";
         }
     }
+
+    const char *keyExtractStatusName(IoHomeController::KeyExtractStatus iStatus)
+    {
+        switch (iStatus)
+        {
+        case IoHomeController::KeyExtractStatus::Idle:
+            return "idle";
+        case IoHomeController::KeyExtractStatus::Armed:
+            return "armed";
+        case IoHomeController::KeyExtractStatus::Captured:
+            return "captured";
+        case IoHomeController::KeyExtractStatus::Timeout:
+            return "timeout";
+        default:
+            return "unknown";
+        }
+    }
 }
 
 IoHomecontrol openknxIoHomecontrol;
@@ -516,6 +533,7 @@ void IoHomecontrol::onPassiveKeyCaptured(const IoHomeController::PassiveKeyResul
         return;
 
     mRemoteMap.observeAddress(iResult.nodeId);
+    openknx.console.writeDiagnoseKo("Key found");
     logInfoP("Passive sniff result: node=0x%06X freq=%u key=%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
              iResult.nodeId, static_cast<unsigned>(iResult.freqIdx),
              iResult.key[0], iResult.key[1], iResult.key[2], iResult.key[3],
@@ -2402,6 +2420,8 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc remote observed", "Show observed addresses");
     openknx.console.printHelpLine("iohc sniff start [S]", "Start passive key sniff for S seconds");
     openknx.console.printHelpLine("iohc sniff stop|status|clear", "Manage passive key sniff result");
+    openknx.console.printHelpLine("iohc extract start [S]", "Arm active key extraction for S seconds");
+    openknx.console.printHelpLine("iohc extract stop|status|clear", "Manage active key extraction result");
     openknx.console.printHelpLine("iohc gateway on", "Enable fake gateway mode (respond to device pairing)");
     openknx.console.printHelpLine("iohc gateway off", "Disable fake gateway mode");
     openknx.console.printHelpLine("iohc gateway status", "Show gateway mode status and paired devices");
@@ -3977,6 +3997,79 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         }
 
         logInfoP("Usage: iohc sniff start [seconds] | stop | status | clear");
+        return true;
+    }
+
+    if (lSub.substr(0, 7) == "extract")
+    {
+        std::string lExtractCmd;
+        if (lSub.length() > 8)
+            lExtractCmd = trimSpaces(lSub.substr(8));
+
+        if (lExtractCmd.empty() || lExtractCmd.substr(0, 6) == "status")
+        {
+            const auto lStatus = mController.keyExtractStatus();
+            const auto &lResult = mController.keyExtractResult();
+            logInfoP("Key extract: %s", keyExtractStatusName(lStatus));
+            if (lResult.valid)
+            {
+                logInfoP("  node=0x%06X freq=%u capturedAt=%lu key=%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
+                         lResult.nodeId, static_cast<unsigned>(lResult.freqIdx),
+                         static_cast<unsigned long>(lResult.capturedAt),
+                         lResult.key[0], lResult.key[1], lResult.key[2], lResult.key[3],
+                         lResult.key[4], lResult.key[5], lResult.key[6], lResult.key[7],
+                         lResult.key[8], lResult.key[9], lResult.key[10], lResult.key[11],
+                         lResult.key[12], lResult.key[13], lResult.key[14], lResult.key[15]);
+            }
+            return true;
+        }
+
+        if (lExtractCmd.substr(0, 5) == "start")
+        {
+            uint32_t lTimeoutMs = IoHomeController::kKeyExtractDefaultTimeoutMs;
+            std::string lArg = trimSpaces(lExtractCmd.substr(5));
+            if (!lArg.empty())
+            {
+                uint32_t lSeconds = 0;
+                if (!parseUnsignedDecimal(lArg, lSeconds))
+                {
+                    logInfoP("Invalid extract timeout: %s", lArg.c_str());
+                    return true;
+                }
+                lTimeoutMs = lSeconds * 1000UL;
+            }
+
+            if (mController.startKeyExtraction(lTimeoutMs))
+            {
+                logInfoP("Key extract armed (%lu ms timeout)", static_cast<unsigned long>(lTimeoutMs));
+                if (iDebugKo)
+                    openknx.console.writeDiagnoseKo("Extract on");
+            }
+            else
+            {
+                logInfoP("Key extract start blocked by controller state %s",
+                         IoHomeController::stateName(mController.state()));
+            }
+            return true;
+        }
+
+        if (lExtractCmd.substr(0, 4) == "stop")
+        {
+            mController.stopKeyExtraction();
+            logInfoP("Key extract stopped");
+            if (iDebugKo)
+                openknx.console.writeDiagnoseKo("Extract off");
+            return true;
+        }
+
+        if (lExtractCmd.substr(0, 5) == "clear")
+        {
+            mController.clearKeyExtractResult();
+            logInfoP("Key extract result cleared");
+            return true;
+        }
+
+        logInfoP("Usage: iohc extract start [seconds] | stop | status | clear");
         return true;
     }
 

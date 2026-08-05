@@ -21,7 +21,7 @@ enum class IoHomeCommand : uint8_t
                              // Unknown14 = 0x14,  // not used — observed in rspaargaren scan list only
                              // Unknown16 = 0x16,  // not used — observed in rspaargaren scan list only
                              // Unknown19 = 0x19,  // not used — observed in rspaargaren scan list only
-    Identify = 0x1E, // Authenticated - make device identify itself
+    Identify = 0x1E,         // Authenticated - make device identify itself
 
     // Cozy/Atlantic thermostat control
     WritePrivate = 0x20,         // Authenticated — set temperature, mode, presence
@@ -42,7 +42,7 @@ enum class IoHomeCommand : uint8_t
     SendKey1W = 0x30,               // 1W key transfer (encrypted key + manufacturer + sequence; optional HMAC)
     KeyInitTransfer = 0x31,         // 2W: ask challenge
     KeyTransfer = 0x32,             // 2W: send encrypted system key
-    KeyTransferConfirmation = 0x33, // Device confirms key storage (not used — not parsed in reference)
+    KeyTransferConfirmation = 0x33, // Device confirms key storage
                                     // Unknown34 = 0x34,  // not used — observed in rspaargaren scan list only
 
     // Address assignment
@@ -52,7 +52,7 @@ enum class IoHomeCommand : uint8_t
     // 2W key exchange initiation
     LaunchKeyTransfer = 0x38, // Initiate key transfer with 6-byte challenge
     RemoveController = 0x39,  // Authenticated — remove controller from device
-                             // Unknown3A = 0x3A,  // not used — observed in rspaargaren scan list only
+                              // Unknown3A = 0x3A,  // not used — observed in rspaargaren scan list only
 
     // Challenge-response authentication
     ChallengeRequest = 0x3C,
@@ -236,6 +236,13 @@ inline IoHomeAddressClass getAddressClass(uint32_t iNodeId)
     if (lLow == 0x003F)
         return IoHomeAddressClass::DiscoverAlt;
     return IoHomeAddressClass::BroadcastDeviceType;
+}
+
+inline void encodePackedDeviceType(uint16_t iType, uint8_t iSubtype,
+                                   uint8_t &oTypeLsb, uint8_t &oTypeSub)
+{
+    oTypeLsb = static_cast<uint8_t>(iType & 0xFF);
+    oTypeSub = static_cast<uint8_t>(((iType >> 8) & 0x03) | ((iSubtype & 0x3F) << 2));
 }
 
 // io-homecontrol frequencies (Hz)

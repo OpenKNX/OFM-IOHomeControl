@@ -62,11 +62,22 @@ namespace
     constexpr uint8_t kGatewayDiscoverManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Overkiz);
     constexpr uint8_t kGatewayInfoManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
     constexpr uint16_t kPositionRawTolerance = 100;
+    constexpr uint16_t kExtractDeviceType = static_cast<uint16_t>(IoHomeDeviceType::RollerShutter);
+    constexpr uint8_t kExtractDeviceSubtype = 0x01;
+    constexpr uint8_t kExtractManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
 #if defined(RADIO_SX1262) || defined(TEST_NATIVE)
     constexpr bool kIsSX1262Radio = true;
 #else
     constexpr bool kIsSX1262Radio = false;
 #endif
+
+    uint32_t mixKeyExtractSeed(uint32_t iValue)
+    {
+        iValue ^= (iValue << 13);
+        iValue ^= (iValue >> 17);
+        iValue ^= (iValue << 5);
+        return iValue;
+    }
 
     bool isTrackedStatusPollCommand(const IoHomeQueueEntry &iCmd)
     {
@@ -627,11 +638,72 @@ namespace
         IoHomeFrame lFrame;
         initGatewayResponseFrame(lFrame, iGatewayNodeId, iDeviceNodeId,
                                  IoHomeCommand::GetGeneralInfo1Response);
-        lFrame.data[0] = kGatewayInfoDeviceType & 0xFF;
-        lFrame.data[1] = ((kGatewayInfoDeviceType >> 8) & 0x03) |
-                         ((kGatewayInfoSubtype & 0x3F) << 2);
+        encodePackedDeviceType(kGatewayInfoDeviceType, kGatewayInfoSubtype,
+                               lFrame.data[0], lFrame.data[1]);
         lFrame.data[2] = kGatewayInfoManufacturer;
         lFrame.dataLen = 3;
+        return lFrame.serialize2W(oBuffer, iBufferLen);
+    }
+
+    uint8_t buildExtractDiscoverAnswerFrame(uint8_t *oBuffer,
+                                            uint8_t iBufferLen,
+                                            uint32_t iExtractNodeId,
+                                            uint32_t iHubNodeId,
+                                            uint16_t iType,
+                                            uint8_t iSubtype,
+                                            uint8_t iManufacturer)
+    {
+        IoHomeFrame lFrame;
+        initGatewayResponseFrame(lFrame, iExtractNodeId, iHubNodeId,
+                                 IoHomeCommand::DiscoverResponse);
+        encodePackedDeviceType(iType, iSubtype, lFrame.data[0], lFrame.data[1]);
+        lFrame.data[2] = static_cast<uint8_t>((iExtractNodeId >> 16) & 0xFF);
+        lFrame.data[3] = static_cast<uint8_t>((iExtractNodeId >> 8) & 0xFF);
+        lFrame.data[4] = static_cast<uint8_t>(iExtractNodeId & 0xFF);
+        lFrame.data[5] = iManufacturer;
+        lFrame.data[6] = 0x00;
+        lFrame.data[7] = 0x00;
+        lFrame.data[8] = 0x00;
+        lFrame.dataLen = 9;
+        return lFrame.serialize2W(oBuffer, iBufferLen);
+    }
+
+    uint8_t buildExtractChallengeRequestFrame(uint8_t *oBuffer,
+                                              uint8_t iBufferLen,
+                                              uint32_t iExtractNodeId,
+                                              uint32_t iHubNodeId,
+                                              const uint8_t iChallenge[6])
+    {
+        if (iChallenge == nullptr)
+            return 0;
+
+        IoHomeFrame lFrame;
+        lFrame.init();
+        lFrame.ctrlByte0 = 0;
+        lFrame.ctrlByte1 = 0x00;
+        lFrame.setSrcNode(iExtractNodeId);
+        lFrame.setDestNode(iHubNodeId);
+        lFrame.commandId = IoHomeCommand::ChallengeRequest;
+        memcpy(lFrame.data, iChallenge, 6);
+        lFrame.dataLen = 6;
+        lFrame.hasHmac = false;
+        return lFrame.serialize2W(oBuffer, iBufferLen);
+    }
+
+    uint8_t buildExtractKeyConfirmFrame(uint8_t *oBuffer,
+                                        uint8_t iBufferLen,
+                                        uint32_t iExtractNodeId,
+                                        uint32_t iHubNodeId)
+    {
+        IoHomeFrame lFrame;
+        lFrame.init();
+        lFrame.ctrlByte0 = 0;
+        lFrame.ctrlByte1 = 0x00;
+        lFrame.setSrcNode(iExtractNodeId);
+        lFrame.setDestNode(iHubNodeId);
+        lFrame.commandId = IoHomeCommand::KeyTransferConfirmation;
+        lFrame.dataLen = 0;
+        lFrame.hasHmac = false;
         return lFrame.serialize2W(oBuffer, iBufferLen);
     }
 
@@ -918,6 +990,12 @@ IoHomeController::IoHomeController()
       mPassiveKeyResult{},
       mPassiveKeySniffStartedAt(0),
       mPassiveKeySniffTimeoutMs(0),
+      mKeyExtractArmed(false), mKeyExtractThrowawayId(0),
+      mKeyExtractHubNodeId(0),
+      mKeyExtractState(ControllerState::ExtractIdle),
+      mKeyExtractArmedAt(0), mKeyExtractTimeoutMs(0),
+      mKeyExtractStatus(KeyExtractStatus::Idle),
+      mKeyExtractResult{},
       mGatewayMode(false), mGatewayNodeId(0),
       mGatewayState(ControllerState::GatewayIdle),
       mGatewayPeerNodeId(0),
@@ -949,6 +1027,9 @@ IoHomeController::IoHomeController()
     memset(mAuthChallenge, 0, sizeof(mAuthChallenge));
     memset(mPassiveChallenge, 0, sizeof(mPassiveChallenge));
     memset(&mPassiveKeyResult, 0, sizeof(mPassiveKeyResult));
+    memset(mKeyExtractChallenge, 0, sizeof(mKeyExtractChallenge));
+    memset(mKeyExtractKey, 0, sizeof(mKeyExtractKey));
+    memset(&mKeyExtractResult, 0, sizeof(mKeyExtractResult));
     memset(mGatewayKey, 0, sizeof(mGatewayKey));
     clearGatewayPairedDevices();
     mPairSetConfigRequest.init();
@@ -1992,6 +2073,56 @@ const IoHomeController::PassiveKeyResult &IoHomeController::passiveKeyResult() c
     return mPassiveKeyResult;
 }
 
+bool IoHomeController::startKeyExtraction(uint32_t iTimeoutMs)
+{
+    if (mState != ControllerState::Idle)
+        return false;
+
+    clearKeyExtractResult();
+    mKeyExtractThrowawayId = generateKeyExtractNodeId();
+    memset(mKeyExtractChallenge, 0, sizeof(mKeyExtractChallenge));
+    memset(mKeyExtractKey, 0, sizeof(mKeyExtractKey));
+    mKeyExtractHubNodeId = 0;
+    mKeyExtractState = ControllerState::ExtractIdle;
+    mKeyExtractArmedAt = millis();
+    mKeyExtractTimeoutMs = iTimeoutMs;
+    mKeyExtractStatus = KeyExtractStatus::Armed;
+    mKeyExtractArmed = true;
+    startReceive();
+    return true;
+}
+
+void IoHomeController::stopKeyExtraction()
+{
+    mKeyExtractArmed = false;
+    resetKeyExtractSessionState();
+    if (mKeyExtractStatus == KeyExtractStatus::Armed)
+    {
+        mKeyExtractStatus = KeyExtractStatus::Idle;
+    }
+    startReceive();
+}
+
+void IoHomeController::clearKeyExtractResult()
+{
+    memset(&mKeyExtractResult, 0, sizeof(mKeyExtractResult));
+    if (mKeyExtractStatus == KeyExtractStatus::Captured ||
+        mKeyExtractStatus == KeyExtractStatus::Timeout)
+    {
+        mKeyExtractStatus = mKeyExtractArmed ? KeyExtractStatus::Armed : KeyExtractStatus::Idle;
+    }
+}
+
+IoHomeController::KeyExtractStatus IoHomeController::keyExtractStatus() const
+{
+    return mKeyExtractStatus;
+}
+
+const IoHomeController::PassiveKeyResult &IoHomeController::keyExtractResult() const
+{
+    return mKeyExtractResult;
+}
+
 bool IoHomeController::startOneWayKeyReceive(uint8_t iChannelIndex, uint32_t iTimeoutMs)
 {
     if (mState != ControllerState::Idle && mState != ControllerState::PassiveListening)
@@ -2516,6 +2647,12 @@ const char *IoHomeController::stateName(ControllerState iState)
         return "ScanWaitResponse";
     case ControllerState::PassiveListening:
         return "PassiveListening";
+    case ControllerState::ExtractIdle:
+        return "ExtractIdle";
+    case ControllerState::ExtractSentDiscoverResp:
+        return "ExtractSentDiscoverResp";
+    case ControllerState::ExtractSentChallenge:
+        return "ExtractSentChallenge";
     default:
         return "Unknown";
     }
@@ -2991,6 +3128,15 @@ void IoHomeController::loop()
         }
     }
 
+    if (mKeyExtractArmed &&
+        mKeyExtractTimeoutMs > 0 &&
+        millis() - mKeyExtractArmedAt >= mKeyExtractTimeoutMs)
+    {
+        logInfoP("Key extract: timeout in %s", stateName(mKeyExtractState));
+        mKeyExtractStatus = KeyExtractStatus::Timeout;
+        stopKeyExtraction();
+    }
+
     if (mOneWayKeyReceiveActive &&
         mOneWayKeyReceiveTimeoutMs > 0 &&
         millis() - mOneWayKeyReceiveStartedAt >= mOneWayKeyReceiveTimeoutMs)
@@ -3235,6 +3381,10 @@ void IoHomeController::loop()
             {
                 // Passive mode: observe pairing exchanges, extract keys
                 processPassiveFrame();
+            }
+            else if (mKeyExtractArmed && mState == ControllerState::Idle)
+            {
+                processKeyExtractFrame();
             }
             else if (mGatewayMode && mState == ControllerState::Idle)
             {
@@ -6539,6 +6689,175 @@ void IoHomeController::processGatewayFrame()
         processGatewayIdle();
         break;
     }
+}
+
+void IoHomeController::processKeyExtractFrame()
+{
+    const uint32_t lSrcNode = mRxFrame.getSrcNodeId();
+    const uint32_t lDstNode = mRxFrame.getDestNodeId();
+
+    if (mModule)
+        mModule->remoteMap().observeAddress(lSrcNode);
+
+    if (mNetworkScanActive)
+    {
+        recordScanFrame(mRxFrame, mRxBuffer, mRxRawLen, mRadio.lastRssi(), mCurrentFreqIdx);
+        updateNodeStats(lSrcNode, mRadio.lastRssi(), mRxFrame.commandId);
+    }
+
+    if (mKeyExtractHubNodeId != 0 && lSrcNode != mKeyExtractHubNodeId &&
+        mRxFrame.commandId != IoHomeCommand::DiscoverRequest)
+    {
+        dispatchRxFrame();
+        return;
+    }
+
+    switch (mRxFrame.commandId)
+    {
+    case IoHomeCommand::DiscoverRequest:
+        if (mKeyExtractState != ControllerState::ExtractIdle &&
+            mKeyExtractState != ControllerState::ExtractSentDiscoverResp)
+        {
+            dispatchRxFrame();
+            return;
+        }
+
+        mKeyExtractHubNodeId = lSrcNode;
+        mTxLen = buildExtractDiscoverAnswerFrame(mTxBuffer, sizeof(mTxBuffer),
+                                                 mKeyExtractThrowawayId, lSrcNode,
+                                                 kExtractDeviceType, kExtractDeviceSubtype,
+                                                 kExtractManufacturer);
+        if (mTxLen == 0)
+            return;
+        if (startShortPreambleTransmit(mTxBuffer, mTxLen, true) != RadioError::None)
+            return;
+        mKeyExtractState = ControllerState::ExtractSentDiscoverResp;
+        return;
+
+    case IoHomeCommand::KeyInitTransfer:
+        if (lDstNode != mKeyExtractThrowawayId)
+        {
+            dispatchRxFrame();
+            return;
+        }
+
+        if (mKeyExtractState == ControllerState::ExtractSentDiscoverResp)
+        {
+            IoHomeCrypto::generateChallenge(mKeyExtractChallenge);
+            mKeyExtractHubNodeId = lSrcNode;
+            mKeyExtractState = ControllerState::ExtractSentChallenge;
+        }
+        else if (mKeyExtractState != ControllerState::ExtractSentChallenge)
+        {
+            dispatchRxFrame();
+            return;
+        }
+
+        mTxLen = buildExtractChallengeRequestFrame(mTxBuffer, sizeof(mTxBuffer),
+                                                   mKeyExtractThrowawayId, lSrcNode,
+                                                   mKeyExtractChallenge);
+        if (mTxLen == 0)
+            return;
+        if (startShortPreambleTransmit(mTxBuffer, mTxLen, true) != RadioError::None)
+            return;
+        return;
+
+    case IoHomeCommand::KeyTransfer:
+        if (mKeyExtractState != ControllerState::ExtractSentChallenge ||
+            lDstNode != mKeyExtractThrowawayId ||
+            mRxFrame.dataLen < 16)
+        {
+            dispatchRxFrame();
+            return;
+        }
+
+        {
+            const uint8_t lKeyInitData[1] = {static_cast<uint8_t>(IoHomeCommand::KeyInitTransfer)};
+            if (!IoHomeCrypto::crypt2WKeyXor(lKeyInitData, sizeof(lKeyInitData),
+                                             mKeyExtractChallenge, mRxFrame.data,
+                                             IOHC_TRANSFER_KEY, mKeyExtractKey))
+            {
+                return;
+            }
+
+            mTxLen = buildExtractKeyConfirmFrame(mTxBuffer, sizeof(mTxBuffer),
+                                                 mKeyExtractThrowawayId, lSrcNode);
+            if (mTxLen == 0)
+                return;
+            if (startShortPreambleTransmit(mTxBuffer, mTxLen, true) != RadioError::None)
+                return;
+
+            memset(&mKeyExtractResult, 0, sizeof(mKeyExtractResult));
+            mKeyExtractResult.valid = true;
+            mKeyExtractResult.nodeId = lSrcNode;
+            memcpy(mKeyExtractResult.key, mKeyExtractKey, sizeof(mKeyExtractResult.key));
+            mKeyExtractResult.capturedAt = millis();
+            mKeyExtractResult.freqIdx = mLastResponseFreqIdx;
+            mKeyExtractStatus = KeyExtractStatus::Captured;
+
+            if (mModule)
+                mModule->onPassiveKeyCaptured(mKeyExtractResult);
+
+            stopKeyExtraction();
+            return;
+        }
+
+    default:
+        break;
+    }
+
+    dispatchRxFrame();
+}
+
+void IoHomeController::resetKeyExtractSessionState()
+{
+    mKeyExtractState = ControllerState::ExtractIdle;
+    mKeyExtractThrowawayId = 0;
+    mKeyExtractHubNodeId = 0;
+    memset(mKeyExtractChallenge, 0, sizeof(mKeyExtractChallenge));
+    memset(mKeyExtractKey, 0, sizeof(mKeyExtractKey));
+}
+
+uint32_t IoHomeController::generateKeyExtractNodeId() const
+{
+    uint32_t lSeed = mixKeyExtractSeed(millis() ^ (micros() << 1) ^ mOwnNodeId ^ 0x5A11C3D2UL);
+    uint32_t lLastCandidate = 0x010101;
+
+    for (uint8_t i = 0; i < 16; i++)
+    {
+        lSeed = mixKeyExtractSeed(lSeed + 0x9E3779B9UL + i);
+        uint32_t lCandidate = lSeed & 0x00FFFFFF;
+        if (lCandidate == 0)
+            lCandidate = 0x010000 | ((lSeed >> 8) & 0x00FFFF);
+        lLastCandidate = lCandidate;
+
+        if (getAddressClass(lCandidate) != IoHomeAddressClass::Unicast)
+            continue;
+        if (lCandidate == mOwnNodeId)
+            continue;
+
+        bool lCollision = false;
+        if (mModule)
+        {
+            for (uint8_t ch = 0; ch < IOHC_ChannelCount; ch++)
+            {
+                IoHomecontrolChannel *lChannel = mModule->getChannel(ch);
+                if (!lChannel)
+                    continue;
+                if (lChannel->getNodeId() == lCandidate ||
+                    lChannel->getOneWayControllerNodeId() == lCandidate)
+                {
+                    lCollision = true;
+                    break;
+                }
+            }
+        }
+
+        if (!lCollision)
+            return lCandidate;
+    }
+
+    return lLastCandidate;
 }
 
 void IoHomeController::processGatewayIdle()

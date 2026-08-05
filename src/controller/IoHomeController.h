@@ -164,6 +164,11 @@ enum class ControllerState : uint8_t
   // Passive mode (listen only)
   PassiveListening,
 
+  // Active key extraction (device-role responder)
+  ExtractIdle,
+  ExtractSentDiscoverResp,
+  ExtractSentChallenge,
+
   // Fake gateway mode (respond to device-initiated pairing)
   GatewayIdle,
   GatewayWaitDiscoveryResponse,
@@ -326,6 +331,22 @@ public:
   void clearPassiveKeyResult();
   PassiveKeySniffStatus passiveKeySniffStatus() const;
   const PassiveKeyResult &passiveKeyResult() const;
+
+  enum class KeyExtractStatus : uint8_t
+  {
+    Idle = 0,
+    Armed = 1,
+    Captured = 2,
+    Timeout = 3
+  };
+
+  static constexpr uint32_t kKeyExtractDefaultTimeoutMs = 600000UL;
+
+  bool startKeyExtraction(uint32_t iTimeoutMs = kKeyExtractDefaultTimeoutMs);
+  void stopKeyExtraction();
+  void clearKeyExtractResult();
+  KeyExtractStatus keyExtractStatus() const;
+  const PassiveKeyResult &keyExtractResult() const;
 
   // 1W key copy/clone: listen for an existing remote's over-air SendKey1W
   // (0x30) "copy remote" frame, decrypt its key with the well-known transfer
@@ -672,6 +693,18 @@ private:
   uint32_t mPassiveKeySniffStartedAt;
   uint32_t mPassiveKeySniffTimeoutMs;
 
+  // Active key extraction (device-role responder)
+  bool mKeyExtractArmed;
+  uint32_t mKeyExtractThrowawayId;
+  uint8_t mKeyExtractChallenge[6];
+  uint32_t mKeyExtractHubNodeId;
+  uint8_t mKeyExtractKey[16];
+  ControllerState mKeyExtractState;
+  uint32_t mKeyExtractArmedAt;
+  uint32_t mKeyExtractTimeoutMs;
+  KeyExtractStatus mKeyExtractStatus;
+  PassiveKeyResult mKeyExtractResult;
+
   // 1W key copy/clone receive state
   bool mOneWayKeyReceiveActive = false;
   uint8_t mOneWayKeyReceiveChannel = 0xFF;
@@ -814,6 +847,11 @@ private:
   // Passive mode frame processing
   void processPassiveFrame();
   void handleOneWayKeyReceiveFrame();
+
+  // Active key extraction handlers
+  void processKeyExtractFrame();
+  void resetKeyExtractSessionState();
+  uint32_t generateKeyExtractNodeId() const;
 
   // Fake gateway mode handlers
   void processGatewayFrame();
