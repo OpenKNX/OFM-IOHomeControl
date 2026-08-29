@@ -59,15 +59,10 @@ namespace
 
     uint8_t resolveOneWayBroadcastType(uint8_t iConfiguredType, uint8_t iDeviceType)
     {
-        (void)iDeviceType;
         if (iConfiguredType != 0xFF)
             return iConfiguredType & 0x3F;
 
-        // Reference-compatible rspaargaren/iohomecontrol default:
-        // type 0 is the generic “All” target and serializes to 0x00003F via
-        // dst = ((type << 6) | 0x3F).  Typed targets such as 2 (shutter/blind)
-        // and 3 (awning) remain explicit ETS/console/diagnostic choices.
-        return 0;
+        return IoHomeController::oneWayBroadcastTypeForEtsDeviceType(iDeviceType);
     }
 
     float clampPercent(float iValue)

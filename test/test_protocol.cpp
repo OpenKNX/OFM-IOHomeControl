@@ -9203,6 +9203,24 @@ TEST(controller_passive_key_sniff_captures_result_and_callback)
     ASSERT_TRUE(!lController.passiveKeyResult().valid);
 }
 
+TEST(controller_1w_automatic_broadcast_type_maps_ets_roles_to_protocol_classes)
+{
+    ASSERT_EQ(IoHomeController::oneWayBroadcastTypeForEtsDeviceType(0), 0U);
+    ASSERT_EQ(IoHomeController::oneWayBroadcastTypeForEtsDeviceType(1), 2U);
+    ASSERT_EQ(IoHomeController::oneWayBroadcastTypeForEtsDeviceType(2), 4U);
+    ASSERT_EQ(IoHomeController::oneWayBroadcastTypeForEtsDeviceType(3), 3U);
+    ASSERT_EQ(IoHomeController::oneWayBroadcastTypeForEtsDeviceType(4), 5U);
+    ASSERT_EQ(IoHomeController::oneWayBroadcastTypeForEtsDeviceType(5), 14U);
+    ASSERT_EQ(IoHomeController::oneWayBroadcastTypeForEtsDeviceType(6), 6U);
+    ASSERT_EQ(IoHomeController::oneWayBroadcastTypeForEtsDeviceType(7), 7U);
+    ASSERT_EQ(IoHomeController::oneWayBroadcastTypeForEtsDeviceType(8), 9U);
+    ASSERT_EQ(IoHomeController::oneWayBroadcastTypeForEtsDeviceType(9), 16U);
+    ASSERT_EQ(IoHomeController::oneWayBroadcastTypeForEtsDeviceType(10), 19U);
+    ASSERT_EQ(IoHomeController::oneWayBroadcastTypeForEtsDeviceType(11), 20U);
+    ASSERT_EQ(IoHomeController::oneWayBroadcastTypeForEtsDeviceType(12), 15U);
+    ASSERT_EQ(IoHomeController::oneWayBroadcastTypeForEtsDeviceType(0xFF), 0U);
+}
+
 TEST(controller_1w_key_receive_clones_remote_from_sendkey_frame)
 {
     const uint32_t lOwnNodeId = 0x9F0071;

@@ -371,7 +371,10 @@ public:
     Idle = 0,
     Listening = 1,
     Captured = 2,
-    Timeout = 3
+    Timeout = 3,
+    CapturedTrailerMacVerified = 4,
+    TrailerMacInvalid = 5,
+    SharedProfile = 6
   };
 
   static constexpr uint32_t kOneWayKeyReceiveDefaultTimeoutMs = 60000UL;
@@ -510,6 +513,8 @@ public:
   void setOneWayBroadcastType(uint8_t iBroadcastType);
   uint8_t getOneWayBroadcastType() const;
   uint32_t oneWayBroadcastTarget(uint8_t iBroadcastType) const;
+  // Map ETS device roles to the protocol class used for 1W typed broadcast.
+  static uint8_t oneWayBroadcastTypeForEtsDeviceType(uint8_t iEtsDeviceType);
   IoHomecontrolChannel *oneWayProfileForChannel(IoHomecontrolChannel *iChannel) const;
 
   // Set pointer to parent module (for channel callbacks)

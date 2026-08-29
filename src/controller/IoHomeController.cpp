@@ -1165,6 +1165,31 @@ uint32_t IoHomeController::oneWayBroadcastTarget(uint8_t iBroadcastType) const
     return static_cast<uint32_t>(((static_cast<uint16_t>(iBroadcastType & 0x3F) << 6) | 0x003F) & 0x00FFFF);
 }
 
+uint8_t IoHomeController::oneWayBroadcastTypeForEtsDeviceType(uint8_t iEtsDeviceType)
+{
+    // The reference implementation sends to the protocol class passed by the
+    // caller. Our ETS values describe application roles, so translate them
+    // explicitly instead of treating them as protocol values.
+    switch (iEtsDeviceType)
+    {
+    case 1:  return static_cast<uint8_t>(IoHomeDeviceType::RollerShutter);
+    case 2:  return static_cast<uint8_t>(IoHomeDeviceType::WindowOpener);
+    case 3:  return static_cast<uint8_t>(IoHomeDeviceType::Awning);
+    case 4:  return static_cast<uint8_t>(IoHomeDeviceType::GarageOpener);
+    case 5:  return static_cast<uint8_t>(IoHomeDeviceType::HeatingTempInterface);
+    case 6:  return static_cast<uint8_t>(IoHomeDeviceType::Light);
+    case 7:  return static_cast<uint8_t>(IoHomeDeviceType::GateOpener);
+    case 8:  return static_cast<uint8_t>(IoHomeDeviceType::Lock);
+    case 9:  return static_cast<uint8_t>(IoHomeDeviceType::HorizontalAwning);
+    case 10: return static_cast<uint8_t>(IoHomeDeviceType::CurtainTrack);
+    case 11: return static_cast<uint8_t>(IoHomeDeviceType::VentilationPoint);
+    case 12: return static_cast<uint8_t>(IoHomeDeviceType::OnOffSwitch);
+    case 0:
+    default:
+        return static_cast<uint8_t>(IoHomeDeviceType::Unknown); // type 0 = all
+    }
+}
+
 ControllerState IoHomeController::state() const
 {
     return mState;
@@ -1900,6 +1925,9 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
                  static_cast<unsigned>(iChannelIndex + 1),
                  mDiscoveredNodeId == 0 ? "broadcast-only " : "",
                  mDiscoveredNodeId);
+        logInfoP("Pairing: 1W class type=%u dst=0x%06X; it must match the actuator class or enrollment and commands will not be accepted",
+                 static_cast<unsigned>(mPairing1WBroadcastType),
+                 static_cast<unsigned>(oneWayBroadcastTarget(mPairing1WBroadcastType)));
         if (mPairDiagnosticTraceEnabled)
         {
             logInfoP("PairDiag: starting 1W mode=%s sequence=%s state=%s",

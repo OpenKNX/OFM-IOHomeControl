@@ -165,8 +165,19 @@
                 <TypeRestriction Base="Value" SizeInBit="8">
                   <Enumeration Text="Automatisch nach Gerätetyp" Value="255" Id="%ENID%" />
                   <Enumeration Text="Alle Geräte (Typ 0)" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Jalousie (Typ 1)" Value="1" Id="%ENID%" />
                   <Enumeration Text="Rollladen / Jalousie (Typ 2)" Value="2" Id="%ENID%" />
                   <Enumeration Text="Markise (Typ 3)" Value="3" Id="%ENID%" />
+                  <Enumeration Text="Fenster (Typ 4)" Value="4" Id="%ENID%" />
+                  <Enumeration Text="Garagentor (Typ 5)" Value="5" Id="%ENID%" />
+                  <Enumeration Text="Licht (Typ 6)" Value="6" Id="%ENID%" />
+                  <Enumeration Text="Tor (Typ 7)" Value="7" Id="%ENID%" />
+                  <Enumeration Text="Schloss (Typ 9)" Value="9" Id="%ENID%" />
+                  <Enumeration Text="Thermostat (Typ 14)" Value="14" Id="%ENID%" />
+                  <Enumeration Text="Schalter (Typ 15)" Value="15" Id="%ENID%" />
+                  <Enumeration Text="Horizontaler Sonnenschutz (Typ 16)" Value="16" Id="%ENID%" />
+                  <Enumeration Text="Vorhangschiene (Typ 19)" Value="19" Id="%ENID%" />
+                  <Enumeration Text="Lüftung (Typ 20)" Value="20" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
               <ParameterType Id="%AID%_PT-IOHCOneWayManufacturer" Name="IOHCOneWayManufacturer">
