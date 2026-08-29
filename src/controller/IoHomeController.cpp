@@ -3816,6 +3816,22 @@ void IoHomeController::processWaitResponse()
 
     if (millis() - mStateTimer >= mResponseTimeoutMs)
     {
+        // Execute changes the physical device state. Once it has challenged
+        // and accepted our authentication, a missing final response is not a
+        // safe reason to replay the movement command.
+        if (mCurrentCmd.active && mCurrentCmd.command == IoHomeCommand::Execute &&
+            mSawChallenge && mWaitingFinalResponse)
+        {
+            logInfoP("Command: Execute to 0x%06X accepted without final response", mCurrentCmd.destNodeId);
+            mCurrentCmd.active = false;
+            mWaitingFinalResponse = false;
+            mSawChallenge = false;
+            mRetryAtMs = 0;
+            mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
+            mState = ControllerState::Idle;
+            return;
+        }
+
         if (mRetryAtMs == 0)
         {
             mRetryAtMs = millis() + IOHC_RETRY_GAP_MS;

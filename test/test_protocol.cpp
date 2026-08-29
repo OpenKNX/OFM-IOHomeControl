@@ -9600,21 +9600,8 @@ TEST(controller_2w_final_response_wait_and_sx1262_dwell)
 
     ioHomeTestAdvanceMillis(1);
     lController.loop();
-    ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
+    ASSERT_EQ(lController.state(), ControllerState::Idle);
     ASSERT_EQ(lController.radio().testTransmitCount(), 2U);
-
-    ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS - 1);
-    lController.loop();
-    ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 2U);
-
-    ioHomeTestAdvanceMillis(1);
-    lController.loop();
-    ASSERT_EQ(lController.state(), ControllerState::TxPending);
-
-    lController.loop();
-    lController.loop();
-    ASSERT_EQ(lController.radio().testTransmitCount(), 3U);
 }
 
 TEST(controller_default_1w_execute_uses_standard_vent_layout)
