@@ -18,6 +18,11 @@ namespace
   {
     oData[iBitPos / 8U] |= static_cast<uint8_t>(1U << (7U - (iBitPos % 8U)));
   }
+
+  void clearBitMsb(uint8_t *oData, size_t iBitPos)
+  {
+    oData[iBitPos / 8U] &= static_cast<uint8_t>(~(1U << (7U - (iBitPos % 8U))));
+  }
 }
 
 SX1262IoHomePhySyncConfig sx1262ResolveIoHomeSyncWord(const uint8_t *iSyncWord, uint8_t iSyncWordLen)
@@ -59,13 +64,16 @@ size_t sx1262EncodeIoHomeFrame(const uint8_t *iFrame, size_t iFrameLen, uint8_t 
   if (lEncodedLen > iEncodedMaxLen)
     return 0;
 
-  std::memset(oEncoded, 0, lEncodedLen);
+  // UART idles high. Mark unused bits in the final packed byte high too, so
+  // they cannot look like a trailing start bit to the receiver.
+  std::memset(oEncoded, 0xFF, lEncodedLen);
 
   size_t lBitPos = 0;
   for (size_t i = 0; i < lProtocolLen; i++)
   {
     const uint8_t lValue = lProtocolFrame[i];
-    lBitPos++; // start bit = 0
+    clearBitMsb(oEncoded, lBitPos); // start bit = 0
+    lBitPos++;
     for (uint8_t lBit = 0; lBit < 8U; lBit++)
     {
       if ((lValue & (1U << lBit)) != 0)
