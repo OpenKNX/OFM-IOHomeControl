@@ -580,6 +580,16 @@ RadioError RadioSX1262::startTransmitInternal(const uint8_t *iData, uint8_t iLen
         return RadioError::Busy;
     }
 
+    // SX126x GFSK erratum: packet/modulation configuration can clear this
+    // bit, so set it for every transmission rather than only at init time.
+    uint8_t lTxModulation = 0;
+    if (!readRegister(0x0889, lTxModulation) ||
+        !writeRegister(0x0889, static_cast<uint8_t>(lTxModulation | 0x04)))
+    {
+        setRfSwitchRx();
+        return RadioError::HardwareError;
+    }
+
     if (!writeBuffer(0x00, lTxData, lTxLen, iBlocking))
     {
         setRfSwitchRx();
