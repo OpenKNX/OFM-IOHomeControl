@@ -1803,7 +1803,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
             }
             const bool lExplicitOneWayRequest = lNodeId != 0;
 
-            Pairing1WMode lOneWayMode = Pairing1WMode::AnnounceAdd;
+            Pairing1WMode lOneWayMode = Pairing1WMode::RemoveAdd;
             if (length >= 6)
             {
                 switch (data[5])
@@ -1822,7 +1822,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
                     break;
                 case 0x00:
                 default:
-                    lOneWayMode = Pairing1WMode::AnnounceAdd;
+                    lOneWayMode = Pairing1WMode::RemoveAdd;
                     break;
                 }
             }
@@ -3066,9 +3066,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         mChannels[lIdx]->setIs1W(true);
         const bool lOk = mController.startPairingWithType(lIdx, lNodeId, static_cast<uint8_t>(lType));
         if (lOk)
-            logInfoP("1W mode=announce-add pairing started ch=%u target=0x%06X type=%u dst=0x%06X", static_cast<unsigned>(lIdx + 1), lNodeId, static_cast<unsigned>(lType), mController.oneWayBroadcastTarget(static_cast<uint8_t>(lType)));
+            logInfoP("1W mode=remove-add pairing started ch=%u target=0x%06X type=%u dst=0x%06X", static_cast<unsigned>(lIdx + 1), lNodeId, static_cast<unsigned>(lType), mController.oneWayBroadcastTarget(static_cast<uint8_t>(lType)));
         else
-            logInfoP("1W mode=announce-add pairing failed to start for channel %u", static_cast<unsigned>(lIdx + 1));
+            logInfoP("1W mode=remove-add pairing failed to start for channel %u", static_cast<unsigned>(lIdx + 1));
         return true;
     }
 
@@ -3446,7 +3446,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 if (lOk)
                 {
                     if (mChannels[lIdx]->is1W())
-                        logInfoP("1W mode=announce-add pairing started for channel %d (default pair command)", lIdx + 1);
+                        logInfoP("1W mode=remove-add pairing started for channel %d (default pair command)", lIdx + 1);
                     else
                         logInfoP("Pairing started for channel %d", lIdx + 1);
                     if (iDebugKo)

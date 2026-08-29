@@ -51,9 +51,9 @@ enum class OneWayDestinationMode : uint8_t
 // These modes map directly to the rspaargaren/iohomecontrol user operations:
 //   announce-only -> 0x2E only
 //   add-only      -> 0x30 only
-//   announce-add  -> 0x2E then 0x30
+//   announce-add  -> 0x2E then 0x30 (diagnostic fallback)
 //   remove        -> 0x39 only
-//   remove-add    -> 0x39 then 0x30 (captured Smoove enrollment gesture)
+//   remove-add    -> 0x39 then 0x30 (default, captured Smoove enrollment gesture)
 enum class Pairing1WMode : uint8_t
 {
   AnnounceAdd = 0,
@@ -292,7 +292,7 @@ public:
   bool startPairing1WRemove(uint8_t iChannelIndex, uint32_t iKnownNodeId);
   // Start a 1W learning flow with an explicit broadcast type override.
   bool startPairingWithType(uint8_t iChannelIndex, uint32_t iKnownNodeId, uint8_t iBroadcastType,
-                            Pairing1WMode iMode = Pairing1WMode::AnnounceAdd);
+                            Pairing1WMode iMode = Pairing1WMode::RemoveAdd);
   PairStartStatus lastPairStartStatus() const;
   ControllerState lastPairStartBlockedState() const;
   Pairing1WMode lastPairing1WMode() const;
@@ -671,8 +671,8 @@ private:
   uint8_t mPairPulledKey[16];
   uint8_t mPairPullAuthChallenge[6];
   uint8_t mPairing1WStage = 0; // 0=announce(0x2E), 1=add/send-key(0x30), 2=remove(0x39)
-  Pairing1WMode mRequestedPairing1WMode = Pairing1WMode::AnnounceAdd;
-  Pairing1WMode mPairing1WMode = Pairing1WMode::AnnounceAdd;
+  Pairing1WMode mRequestedPairing1WMode = Pairing1WMode::RemoveAdd;
+  Pairing1WMode mPairing1WMode = Pairing1WMode::RemoveAdd;
   uint8_t mPairing1WBroadcastType = 0;
   uint8_t mDefault1WBroadcastType = 0;
   Pairing2WMode mPairing2WMode = Pairing2WMode::Normal;

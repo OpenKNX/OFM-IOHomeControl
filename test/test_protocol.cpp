@@ -7035,6 +7035,7 @@ TEST(controller_default_1w_pairing_uses_type0_all)
     ASSERT_EQ(lController.oneWayBroadcastTarget(0), 0x00003F);
     ASSERT_EQ(lController.oneWayBroadcastTarget(3), 0x0000FF);
     ASSERT_TRUE(lController.startPairing(0, lDeviceNodeId));
+    ASSERT_EQ(lController.lastPairing1WMode(), Pairing1WMode::RemoveAdd);
 
     lController.radio().testClearTransmittedPacket();
     lController.loop();
@@ -7044,7 +7045,7 @@ TEST(controller_default_1w_pairing_uses_type0_all)
 
     IoHomeFrame lFrame;
     ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
-    ASSERT_EQ(lFrame.commandId, IoHomeCommand::Discover2ERequest);
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::RemoveController);
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
     ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
     ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
@@ -7053,6 +7054,16 @@ TEST(controller_default_1w_pairing_uses_type0_all)
     ASSERT_EQ(lFrame.data[2], 0x01);
     ASSERT_EQ(lChannel.getSequence1W(), 1);
     ASSERT_TRUE(lFrame.hasHmac);
+
+    finishCurrentBlind1WPairingTxForTest(lController);
+    ASSERT_EQ(lController.state(), ControllerState::PairSend1WKeyTransfer);
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    IoHomeFrame lSendKey;
+    const auto &lSendKeyPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(deserializeFrameForTest(lSendKey, lSendKeyPacket.data(), static_cast<uint8_t>(lSendKeyPacket.size())));
+    ASSERT_EQ(lSendKey.commandId, IoHomeCommand::SendKey1W);
+    ASSERT_EQ(lChannel.getSequence1W(), 2);
 }
 
 TEST(controller_discovery_sends_standard_28_then_alt_2e_broadcast)

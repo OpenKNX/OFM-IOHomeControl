@@ -1016,8 +1016,8 @@ IoHomeController::IoHomeController()
       mDiscoveryTimingTrace{},
       mDiscoverySPE(false),
       mPairing1WStage(0),
-      mRequestedPairing1WMode(Pairing1WMode::AnnounceAdd),
-      mPairing1WMode(Pairing1WMode::AnnounceAdd),
+      mRequestedPairing1WMode(Pairing1WMode::RemoveAdd),
+      mPairing1WMode(Pairing1WMode::RemoveAdd),
       mPairing1WBroadcastType(0), mDefault1WBroadcastType(0),
       mAuthSrcNodeId(0), mAuthChannelIdx(0),
       mStatusAckDestNodeId(0), mStatusAckFreqIdx(0),
@@ -1851,11 +1851,12 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
         // transaction. A zero target is a valid virtual/broadcast-only remote
         // profile: SendKey1W still carries remote src + typed/all broadcast dst.
         mDiscoveredNodeId = lKnownNodeId;
-        // First-class 1W operations are explicit and map directly to the
-        // reference flow: 0x2E announce, 0x30 add/send-key, 0x39 remove.
+        // The default follows the captured handheld enrollment gesture:
+        // 0x39 self-remove, then 0x30 add/send-key. Other modes remain
+        // explicit diagnostics for device-family compatibility work.
         const Pairing1WMode lMode = mRequestedPairing1WMode;
         mPairing1WMode = lMode;
-        mRequestedPairing1WMode = Pairing1WMode::AnnounceAdd;
+        mRequestedPairing1WMode = Pairing1WMode::RemoveAdd;
         switch (lMode)
         {
         case Pairing1WMode::Remove:
@@ -1892,8 +1893,8 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
         return true;
     }
 
-    mPairing1WMode = Pairing1WMode::AnnounceAdd;
-    mRequestedPairing1WMode = Pairing1WMode::AnnounceAdd;
+    mPairing1WMode = Pairing1WMode::RemoveAdd;
+    mRequestedPairing1WMode = Pairing1WMode::RemoveAdd;
     mState = ControllerState::PairSendDiscovery;
     if (mPairDiagnosticTraceEnabled)
     {
@@ -1931,7 +1932,7 @@ bool IoHomeController::startPairing1W(uint8_t iChannelIndex, uint32_t iKnownNode
     mRequestedPairing1WMode = iMode;
     const bool lOk = startPairing(iChannelIndex, iKnownNodeId);
     if (!lOk)
-        mRequestedPairing1WMode = Pairing1WMode::AnnounceAdd;
+        mRequestedPairing1WMode = Pairing1WMode::RemoveAdd;
     return lOk;
 }
 
