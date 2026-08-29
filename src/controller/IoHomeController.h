@@ -12,6 +12,10 @@
 #define IOHC_RX_TIMEOUT_MS 300
 #define IOHC_RX_FINAL_TIMEOUT_MS 500
 #define IOHC_RETRY_GAP_MS 250
+#ifndef IOHC_PAIR_KEY_EXCHANGE_MAX_ATTEMPTS
+#define IOHC_PAIR_KEY_EXCHANGE_MAX_ATTEMPTS 3
+#endif
+#define IOHC_PAIR_KEY_EXCHANGE_TIMEOUT_MS 15000
 #define IOHC_AUTH_DWELL_MS_SX1262 90
 #define IOHC_AUTH_PREAMBLE_SX1262 64
 #define IOHC_PAIR_TIMEOUT_MS 30000
@@ -656,6 +660,8 @@ private:
   // Optional 2W target supplied by the caller. Discovery is broadcast, but a
   // response must not bind this pairing transaction to another learn-mode device.
   uint32_t mPairingKnownNodeId;
+  uint8_t mPairKeyExchangeAttempts;
+  uint32_t mPairKeyExchangeStartTime;
   uint8_t mPairingFreqIdx;
   uint8_t mDiscoverySweep; // diagnostic discovery: current full-sweep attempt (0-based)
   uint32_t mPairingStartTime;
@@ -833,6 +839,7 @@ private:
   void processPairSendKeyTransfer();
   void processPairSendKeyTransferAuthResponse();
   void processPairWaitKeyTransferConfirmation();
+  bool retry2WKeyExchange();
   void processPairSendSetConfig1();
   void processPairWaitSetConfig1Response();
   void processPairSendSetConfig1AuthResponse();

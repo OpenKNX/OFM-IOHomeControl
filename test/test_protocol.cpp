@@ -8058,6 +8058,100 @@ TEST(controller_2w_command_ignores_foreign_challenge)
     ASSERT_EQ(lFrame.getDestNodeId(), lDeviceNodeId);
 }
 
+TEST(controller_2w_pairing_retries_key_init_and_accepts_direct_confirmation)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, 0, lKey);
+    lController.setSystemKey(lKey);
+    ASSERT_TRUE(advancePairingToWaitDeviceChallenge(lController, lRemoteNodeId, lDeviceNodeId));
+
+    ioHomeTestAdvanceMillis(5001);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::PairSendKeyInit);
+
+    IoHomeFrame lKeyInit;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lKeyInit));
+    ASSERT_EQ(lKeyInit.commandId, IoHomeCommand::KeyInitTransfer);
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitDeviceChallenge);
+
+    // A delayed device can finish the retried phase without another challenge.
+    IoHomeFrame lSetConfig1;
+    ASSERT_TRUE(queueKeyTransferConfirmationAndCaptureSetConfig1(lController,
+                                                                   lRemoteNodeId,
+                                                                   lDeviceNodeId,
+                                                                   lSetConfig1));
+    ASSERT_EQ(lSetConfig1.commandId, IoHomeCommand::SetConfig1);
+    ASSERT_EQ(lChannel.getNodeId(), lDeviceNodeId);
+}
+
+TEST(controller_2w_pairing_retries_key_init_with_fresh_challenge)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    static const uint8_t kFreshChallenge[6] = {0xBA, 0x98, 0x76, 0x54, 0x32, 0x10};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, 0, lKey);
+    lController.setSystemKey(lKey);
+    ASSERT_TRUE(advancePairingToWaitKeyTransferConfirmation(lController, lRemoteNodeId, lDeviceNodeId));
+
+    ioHomeTestAdvanceMillis(5001);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::PairSendKeyInit);
+
+    IoHomeFrame lKeyInit;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lKeyInit));
+    ASSERT_EQ(lKeyInit.commandId, IoHomeCommand::KeyInitTransfer);
+
+    IoHomeFrame lFreshChallenge;
+    buildPairChallengeRequestFrame(lFreshChallenge, lRemoteNodeId, lDeviceNodeId, kFreshChallenge);
+    ASSERT_TRUE(queueControllerResponse(lController, lFreshChallenge));
+
+    IoHomeFrame lKeyTransfer;
+    const auto &lKeyTransferPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lKeyTransferPacket.empty());
+    ASSERT_TRUE(deserializeFrameForTest(lKeyTransfer, lKeyTransferPacket.data(),
+                                        static_cast<uint8_t>(lKeyTransferPacket.size())));
+    ASSERT_EQ(lKeyTransfer.commandId, IoHomeCommand::KeyTransfer);
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitKeyTransferConfirmation);
+}
+
+TEST(controller_2w_pairing_key_exchange_respects_total_budget)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, 0, lKey);
+    lController.setSystemKey(lKey);
+    ASSERT_TRUE(advancePairingToWaitDeviceChallenge(lController, lRemoteNodeId, lDeviceNodeId));
+
+    ioHomeTestAdvanceMillis(IOHC_PAIR_KEY_EXCHANGE_TIMEOUT_MS);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::PairFailed);
+}
+
 TEST(controller_2w_pairing_succeeds_when_setconfig1_returns_error_response)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -11146,6 +11240,9 @@ int main()
     RUN(controller_2w_pairing_rejects_misdirected_key_confirmation);
     RUN(controller_2w_pairing_correlates_interleaved_frames);
     RUN(controller_2w_command_ignores_foreign_challenge);
+    RUN(controller_2w_pairing_retries_key_init_and_accepts_direct_confirmation);
+    RUN(controller_2w_pairing_retries_key_init_with_fresh_challenge);
+    RUN(controller_2w_pairing_key_exchange_respects_total_budget);
     RUN(controller_2w_pairing_setconfig1_auth_challenge_completes_on_final_reject);
     RUN(controller_status_update_requires_11_bytes_for_position);
     RUN(controller_private_response_requires_8_bytes_for_position);

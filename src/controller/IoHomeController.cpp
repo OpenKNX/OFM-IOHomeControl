@@ -1011,6 +1011,7 @@ IoHomeController::IoHomeController()
       mState(ControllerState::Idle), mStateTimer(0),
       mCurrentFreqIdx(0), mQueueHead(0), mQueueTail(0),
       mPairingChannel(0), mDiscoveredNodeId(0), mPairingKnownNodeId(0),
+      mPairKeyExchangeAttempts(0), mPairKeyExchangeStartTime(0),
       mPairingFreqIdx(frequencyIndexForHz(kNormal2WTxFreqHz)), mDiscoverySweep(0), mPairingStartTime(0),
       mDiscoverySendPhase(DiscoverySendPhase::SetFrequency),
       mDiscoveryTimingTrace{},
@@ -1817,6 +1818,8 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mDiscoverySPE = false;
     mDiscoveredNodeId = 0;
     mPairingKnownNodeId = iKnownNodeId & 0x00FFFFFF;
+    mPairKeyExchangeAttempts = 0;
+    mPairKeyExchangeStartTime = 0;
     mTx1WRepeatRemaining = 0;
     mTx1WRepeatTimer = 0;
 
@@ -3255,6 +3258,8 @@ void IoHomeController::loop()
                     {
                         mDiscoveredNodeId = mRxFrame.getSrcNodeId();
                         mPairingFreqIdx = mLastResponseFreqIdx;
+                        mPairKeyExchangeAttempts = 0;
+                        mPairKeyExchangeStartTime = 0;
 
                     // Default laberning-style path:
                     // 0x28 DiscoverRequest -> 0x29/0x2B DiscoverResponse
@@ -4903,6 +4908,14 @@ void IoHomeController::processPairSendKeyInit()
     // Reference-compatible 2W pairing uses an initial START frame with the
     // LOW_POWER bit set and a long preamble so low-power actuators wake up
     // before answering with ChallengeRequest (0x3C).
+    if (mPairKeyExchangeAttempts >= IOHC_PAIR_KEY_EXCHANGE_MAX_ATTEMPTS ||
+        (mPairKeyExchangeAttempts > 0 &&
+         millis() - mPairKeyExchangeStartTime >= IOHC_PAIR_KEY_EXCHANGE_TIMEOUT_MS))
+    {
+        mState = ControllerState::PairFailed;
+        return;
+    }
+
     if (!build2WKeyInit(mTxFrame, mOwnNodeId, mDiscoveredNodeId))
     {
         mState = ControllerState::PairFailed;
@@ -4925,6 +4938,9 @@ void IoHomeController::processPairSendKeyInit()
         const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
+            if (mPairKeyExchangeAttempts == 0)
+                mPairKeyExchangeStartTime = millis();
+            ++mPairKeyExchangeAttempts;
             mStateTimer = millis();
             mState = ControllerState::PairWaitDeviceChallenge;
         }
@@ -4941,6 +4957,26 @@ void IoHomeController::processPairSendKeyInit()
     {
         mState = ControllerState::PairFailed;
     }
+}
+
+bool IoHomeController::retry2WKeyExchange()
+{
+    if (mPairKeyExchangeAttempts >= IOHC_PAIR_KEY_EXCHANGE_MAX_ATTEMPTS ||
+        mPairKeyExchangeAttempts == 0 ||
+        millis() - mPairKeyExchangeStartTime >= IOHC_PAIR_KEY_EXCHANGE_TIMEOUT_MS)
+    {
+        mState = ControllerState::PairFailed;
+        return false;
+    }
+
+    // Restart at 0x31 instead of replaying 0x32: a slow device may have lost
+    // the continuation and reply with either a direct 0x33 or a new 0x3C.
+    // The normal receive path already accepts the former and replaces the
+    // stored challenge for the latter.
+    memset(mPairingChallenge, 0, sizeof(mPairingChallenge));
+    memset(mPairKeyTransferChallenge, 0, sizeof(mPairKeyTransferChallenge));
+    mState = ControllerState::PairSendKeyInit;
+    return true;
 }
 
 void IoHomeController::finalize2WPairingKey()
@@ -4975,7 +5011,7 @@ void IoHomeController::processPairWaitDeviceChallenge()
 
     if (millis() - mStateTimer > 5000) // 5s timeout for device challenge
     {
-        mState = ControllerState::PairFailed;
+        retry2WKeyExchange();
     }
     // ChallengeRequest response is handled in main loop RX dispatch
 }
@@ -5087,7 +5123,7 @@ void IoHomeController::processPairWaitKeyTransferConfirmation()
 
     if (millis() - mStateTimer > 5000) // 5s timeout
     {
-        mState = ControllerState::PairFailed;
+        retry2WKeyExchange();
     }
     // Confirmation response and channel storage handled in main loop RX dispatch
 }
