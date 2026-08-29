@@ -653,6 +653,9 @@ private:
   ControllerState mLastPairStartBlockedState = ControllerState::Idle;
   uint8_t mPairingChallenge[6];
   uint32_t mDiscoveredNodeId;
+  // Optional 2W target supplied by the caller. Discovery is broadcast, but a
+  // response must not bind this pairing transaction to another learn-mode device.
+  uint32_t mPairingKnownNodeId;
   uint8_t mPairingFreqIdx;
   uint8_t mDiscoverySweep; // diagnostic discovery: current full-sweep attempt (0-based)
   uint32_t mPairingStartTime;

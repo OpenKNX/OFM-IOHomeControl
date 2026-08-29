@@ -1010,7 +1010,7 @@ IoHomeController::IoHomeController()
     : mModule(nullptr), mOwnNodeId(0),
       mState(ControllerState::Idle), mStateTimer(0),
       mCurrentFreqIdx(0), mQueueHead(0), mQueueTail(0),
-      mPairingChannel(0), mDiscoveredNodeId(0),
+      mPairingChannel(0), mDiscoveredNodeId(0), mPairingKnownNodeId(0),
       mPairingFreqIdx(frequencyIndexForHz(kNormal2WTxFreqHz)), mDiscoverySweep(0), mPairingStartTime(0),
       mDiscoverySendPhase(DiscoverySendPhase::SetFrequency),
       mDiscoveryTimingTrace{},
@@ -1816,6 +1816,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mPairPulledKeyFrame.init();
     mDiscoverySPE = false;
     mDiscoveredNodeId = 0;
+    mPairingKnownNodeId = iKnownNodeId & 0x00FFFFFF;
     mTx1WRepeatRemaining = 0;
     mTx1WRepeatTimer = 0;
 
@@ -3248,7 +3249,9 @@ void IoHomeController::loop()
                     // bind this pairing transaction to another controller's
                     // response while several devices are in learn mode.
                     const uint32_t lSource = mRxFrame.getSrcNodeId();
-                    if (lSource != 0 && mRxFrame.getDestNodeId() == mOwnNodeId)
+                    if (getAddressClass(lSource) == IoHomeAddressClass::Unicast &&
+                        mRxFrame.getDestNodeId() == mOwnNodeId &&
+                        (mPairingKnownNodeId == 0 || lSource == mPairingKnownNodeId))
                     {
                         mDiscoveredNodeId = mRxFrame.getSrcNodeId();
                         mPairingFreqIdx = mLastResponseFreqIdx;
@@ -3393,14 +3396,17 @@ void IoHomeController::loop()
                         memcpy(mPairSetConfigChallenge, mRxFrame.data, sizeof(mPairSetConfigChallenge));
                         mState = ControllerState::PairSendSetConfig1AuthResponse;
                     }
-                    else
+                    else if (mRxFrame.commandId == IoHomeCommand::SetConfig1Response ||
+                             mRxFrame.commandId == IoHomeCommand::ErrorResponse)
                         interpretSetConfig1Result(false);
                 }
             }
             else if (mState == ControllerState::PairWaitSetConfig1FinalResponse)
             {
                 if (mRxFrame.getSrcNodeId() == mDiscoveredNodeId &&
-                    mRxFrame.getDestNodeId() == mOwnNodeId)
+                    mRxFrame.getDestNodeId() == mOwnNodeId &&
+                    (mRxFrame.commandId == IoHomeCommand::SetConfig1Response ||
+                     mRxFrame.commandId == IoHomeCommand::ErrorResponse))
                 {
                     interpretSetConfig1Result(true);
                 }

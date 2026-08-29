@@ -7947,6 +7947,117 @@ TEST(controller_2w_pairing_rejects_misdirected_key_confirmation)
     ASSERT_EQ(lSetConfig1.commandId, IoHomeCommand::SetConfig1);
 }
 
+TEST(controller_2w_pairing_correlates_interleaved_frames)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    static const uint8_t kChallenge[6] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, 0, lKey);
+    lController.setSystemKey(lKey);
+    ASSERT_TRUE(lController.startPairing(0, lDeviceNodeId));
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::DiscoverRequest);
+
+    // A broadcast source, another unicast device, and a response addressed to
+    // someone else must not take ownership of this known-target transaction.
+    IoHomeFrame lDiscoverResponse;
+    buildDiscoverResponseFrame(lDiscoverResponse, lRemoteNodeId, 0);
+    ASSERT_TRUE(queueControllerResponse(lController, lDiscoverResponse));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitDiscoveryResponse);
+
+    buildDiscoverResponseFrame(lDiscoverResponse, lRemoteNodeId, 0x123456);
+    ASSERT_TRUE(queueControllerResponse(lController, lDiscoverResponse));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitDiscoveryResponse);
+
+    buildDiscoverResponseFrame(lDiscoverResponse, 0x654321, lDeviceNodeId);
+    ASSERT_TRUE(queueControllerResponse(lController, lDiscoverResponse));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitDiscoveryResponse);
+
+    buildDiscoverResponseFrame(lDiscoverResponse, lRemoteNodeId, lDeviceNodeId);
+    ASSERT_TRUE(queueControllerResponse(lController, lDiscoverResponse));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitDeviceChallenge);
+
+    // Once the device is bound, only its correctly addressed, complete 0x3C
+    // can cause the 0x32 key-transfer response.
+    IoHomeFrame lChallengeRequest;
+    buildPairChallengeRequestFrame(lChallengeRequest, lRemoteNodeId, 0x123456, kChallenge);
+    lController.radio().testClearTransmittedPacket();
+    ASSERT_TRUE(queueControllerResponse(lController, lChallengeRequest));
+    ASSERT_TRUE(lController.radio().testLastTransmittedPacket().empty());
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitDeviceChallenge);
+
+    buildPairChallengeRequestFrame(lChallengeRequest, lRemoteNodeId, lDeviceNodeId, kChallenge);
+    lChallengeRequest.dataLen = 5;
+    ASSERT_TRUE(queueControllerResponse(lController, lChallengeRequest));
+    ASSERT_TRUE(lController.radio().testLastTransmittedPacket().empty());
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitDeviceChallenge);
+
+    buildPairChallengeRequestFrame(lChallengeRequest, lRemoteNodeId, lDeviceNodeId, kChallenge);
+    ASSERT_TRUE(queueControllerResponse(lController, lChallengeRequest));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitKeyTransferConfirmation);
+
+    // An interleaved status-like response and a different device's 0x33 do
+    // not finish the active key exchange.
+    uint8_t lStatusData[] = {0x00};
+    buildPrivateResponseFrame(lFrame, lRemoteNodeId, lDeviceNodeId, lStatusData, sizeof(lStatusData));
+    lController.radio().testClearTransmittedPacket();
+    ASSERT_TRUE(queueControllerResponse(lController, lFrame));
+    ASSERT_TRUE(lController.radio().testLastTransmittedPacket().empty());
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitKeyTransferConfirmation);
+
+    buildKeyTransferConfirmationFrame(lFrame, lRemoteNodeId, 0x123456);
+    ASSERT_TRUE(queueControllerResponse(lController, lFrame));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitKeyTransferConfirmation);
+}
+
+TEST(controller_2w_command_ignores_foreign_challenge)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    static const uint8_t kChallenge[6] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 50));
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
+
+    IoHomeFrame lChallengeRequest;
+    buildPairChallengeRequestFrame(lChallengeRequest, lRemoteNodeId, 0x123456, kChallenge);
+    lController.radio().testClearTransmittedPacket();
+    ASSERT_TRUE(queueControllerResponse(lController, lChallengeRequest));
+    ASSERT_TRUE(lController.radio().testLastTransmittedPacket().empty());
+    ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
+
+    buildPairChallengeRequestFrame(lChallengeRequest, lRemoteNodeId, lDeviceNodeId, kChallenge);
+    ASSERT_TRUE(queueControllerResponse(lController, lChallengeRequest));
+
+    const auto &lChallengeResponsePacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lChallengeResponsePacket.empty());
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lChallengeResponsePacket.data(),
+                                        static_cast<uint8_t>(lChallengeResponsePacket.size())));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::ChallengeResponse);
+    ASSERT_EQ(lFrame.getDestNodeId(), lDeviceNodeId);
+}
+
 TEST(controller_2w_pairing_succeeds_when_setconfig1_returns_error_response)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -11033,6 +11144,8 @@ int main()
     RUN(controller_2w_pairing_succeeds_when_setconfig1_send_or_setup_fails);
     RUN(controller_2w_pairing_accepts_direct_key_confirmation_without_challenge);
     RUN(controller_2w_pairing_rejects_misdirected_key_confirmation);
+    RUN(controller_2w_pairing_correlates_interleaved_frames);
+    RUN(controller_2w_command_ignores_foreign_challenge);
     RUN(controller_2w_pairing_setconfig1_auth_challenge_completes_on_final_reject);
     RUN(controller_status_update_requires_11_bytes_for_position);
     RUN(controller_private_response_requires_8_bytes_for_position);
