@@ -2217,8 +2217,34 @@ bool IoHomeController::startOneWayKeyReceive(uint8_t iChannelIndex, uint32_t iTi
         return false;
 
     IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(iChannelIndex) : nullptr;
-    if (!lCh || !lCh->is1W() || !oneWayProfileForChannel(lCh))
+    IoHomecontrolChannel *lProfile = lCh ? oneWayProfileForChannel(lCh) : nullptr;
+    if (!lCh || !lCh->is1W() || !lProfile)
         return false;
+
+    // Capturing a remote replaces the controller identity. Do not overwrite an
+    // identity that is selected by another channel: cloning needs an own,
+    // unshared profile.
+    bool lProfileShared = lProfile != lCh;
+    for (uint8_t i = 0; i < IOHC_ChannelCount; i++)
+    {
+        IoHomecontrolChannel *lCandidate = mModule->getChannel(i);
+        if (lCandidate && lCandidate != lCh && lCandidate->is1W() &&
+            oneWayProfileForChannel(lCandidate) == lProfile)
+        {
+            lProfileShared = true;
+            break;
+        }
+    }
+    if (lProfileShared)
+    {
+        mOneWayKeyReceiveCapturedNode = 0;
+        mOneWayKeyReceiveStatus = OneWayKeyReceiveStatus::SharedProfile;
+        const uint8_t lProfileIndex = channelIndexFor(lProfile);
+        logInfoP("1W key receive: refused for ch%u because effective profile ch%u is shared; select an unshared own profile first",
+                 static_cast<unsigned>(iChannelIndex + 1),
+                 static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1));
+        return false;
+    }
 
     mOneWayKeyReceiveActive = true;
     mOneWayKeyReceiveChannel = iChannelIndex;
@@ -2306,14 +2332,18 @@ void IoHomeController::handleOneWayKeyReceiveFrame()
     lProfile->setOneWayControllerKey(lKey);
     lProfile->setOneWayControllerManufacturer(lManufacturer);
     lProfile->setSequence1W(lSequence);
+    // Persist a future high-water mark before this identity can send. The next
+    // command uses sequence + 1 and remains safe across a restart.
+    lProfile->setReservedSequence1W(static_cast<uint16_t>(lSequence + IOHC_1W_SEQUENCE_RESERVE_WINDOW));
     lCh->setEncryptionKey(lKey);
     openknx.flash.save(true); // identity change is rare & critical: bypass write throttle
 
     mOneWayKeyReceiveCapturedNode = lRemoteId;
     mOneWayKeyReceiveStatus = mRxFrame.hasTrailerMac ? OneWayKeyReceiveStatus::CapturedTrailerMacVerified
                                                       : OneWayKeyReceiveStatus::Captured;
-    logInfoP("1W key receive: cloned remote=0x%06X key=set mfg=0x%02X seq=0x%04X trailer-mac=%s into channel %u",
+    logInfoP("1W key receive: cloned remote=0x%06X key=set mfg=0x%02X seq=0x%04X reserved=0x%04X trailer-mac=%s into channel %u",
              lRemoteId, static_cast<unsigned>(lManufacturer), static_cast<unsigned>(lSequence),
+             static_cast<unsigned>(lProfile->getReservedSequence1W()),
              mRxFrame.hasTrailerMac ? "verified" : "absent",
              static_cast<unsigned>(mOneWayKeyReceiveChannel + 1));
 

@@ -9283,7 +9283,40 @@ TEST(controller_1w_key_receive_clones_remote_from_sendkey_frame)
     ASSERT_MEM_EQ(lChannel.getOneWayControllerKey(), lClearKey, 16);
     ASSERT_EQ(lChannel.getOneWayControllerManufacturer(), lManufacturer);
     ASSERT_EQ(lChannel.getSequence1W(), lSequence);
+    ASSERT_EQ(lChannel.getReservedSequence1W(),
+              static_cast<uint16_t>(lSequence + IOHC_1W_SEQUENCE_RESERVE_WINDOW));
+    bool lSaveRequired = true;
+    ASSERT_EQ(lChannel.incrementSequence1W(false, lSaveRequired), static_cast<uint16_t>(lSequence + 1));
+    ASSERT_TRUE(!lSaveRequired);
     ASSERT_MEM_EQ(lChannel.getEncryptionKey(), lClearKey, 16);
+}
+
+TEST(controller_1w_key_receive_rejects_shared_controller_profile)
+{
+    const uint8_t lExistingKey[16] = {
+        0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80,
+        0x90, 0xA0, 0xB0, 0xC0, 0xD0, 0xE0, 0xF0, 0x01};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lProfileChannel;
+    IoHomecontrolChannel lLinkedChannel;
+    lModule.testSetChannel(0, &lProfileChannel);
+    lModule.testSetChannel(1, &lLinkedChannel);
+    lController.setModule(&lModule);
+    lController.init();
+    lProfileChannel.setIs1W(true);
+    lProfileChannel.setOneWayControllerNodeId(0x810001);
+    lProfileChannel.setOneWayControllerKey(lExistingKey);
+    lLinkedChannel.setIs1W(true);
+    lLinkedChannel.setConfigured1WProfileChannel(0);
+
+    ASSERT_TRUE(!lController.startOneWayKeyReceive(1, 0));
+    ASSERT_EQ(lController.oneWayKeyReceiveStatus(),
+              IoHomeController::OneWayKeyReceiveStatus::SharedProfile);
+    ASSERT_TRUE(!lController.isPassiveMode());
+    ASSERT_EQ(lProfileChannel.getOneWayControllerNodeId(), 0x810001U);
+    ASSERT_MEM_EQ(lProfileChannel.getOneWayControllerKey(), lExistingKey, 16);
 }
 
 TEST(controller_1w_key_receive_verifies_optional_sendkey_trailer_mac)

@@ -3131,6 +3131,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                     case IoHomeController::OneWayKeyReceiveStatus::TrailerMacInvalid:
                         lStatusName = "trailer-mac-invalid";
                         break;
+                    case IoHomeController::OneWayKeyReceiveStatus::SharedProfile:
+                        lStatusName = "shared-profile";
+                        break;
                     case IoHomeController::OneWayKeyReceiveStatus::Timeout:
                         lStatusName = "timeout";
                         break;

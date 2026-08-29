@@ -321,9 +321,7 @@ public:
     Idle = 0,
     Listening = 1,
     Captured = 2,
-    Timeout = 3,
-    CapturedTrailerMacVerified = 4,
-    TrailerMacInvalid = 5
+    Timeout = 3
   };
 
   struct PassiveKeyResult

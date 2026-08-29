@@ -68,10 +68,10 @@ For 2W, the module uses one global controller node ID and system key. For 1W, ea
 
 The 1W path follows the reference remote model more closely than older gateway-derived implementations:
 
-- 1W pairing/add sends an announce/add flow (`0x2E` followed by unauthenticated `0x30 SendKey1W`). `0x39 RemoveController` is only sent by explicit remove flows.
+- Default 1W pairing uses the observed remove/add flow (`0x39 RemoveController` followed by unauthenticated `0x30 SendKey1W`).
 - `0x30 SendKey1W` has 29 declared bytes: 9-byte header plus `encryptedKey[16] + manufacturer + 0x01 + sequence[2]`. The default profile sends no trailer; an ETS profile option can append the observed six-byte MAC outside CTRL0's declared length.
-- A channel can clone an existing original remote instead of enrolling a new identity: `iohcNN pair1w receive` arms a listener that captures the remote's `0x30 SendKey1W` "copy remote" frame, decrypts the contained key with the public transfer key, and stores the remote's address, key and manufacturer into the channel's 1W profile. This is required for actuators that only obey remotes added through the manufacturer's copy procedure. Use `pair1w stop`/`pair1w status` to cancel or inspect the capture.
-- Normal 1W commands use typed broadcast destinations by default, computed as `dst=((type << 6) | 0x3F)`. Type `0` remains the explicit all-device target.
+- A channel can clone an existing original remote instead of enrolling a new identity: `iohcNN pair1w receive` arms a listener that captures the remote's `0x30 SendKey1W` "copy remote" frame, decrypts the contained key with the public transfer key, and stores the remote's address, key, manufacturer, and a future reserved sequence window into the channel's own unshared 1W profile. This is required for actuators that only obey remotes added through the manufacturer's copy procedure. Use `pair1w stop`/`pair1w status` to cancel or inspect the capture.
+- Normal 1W commands use typed broadcast destinations by default, computed as `dst=((type << 6) | 0x3F)`. Automatic mode maps the ETS device role to its protocol class; type `0` remains the explicit all-device target.
 - Normal 1W control uses the raw io-homecontrol closedness convention internally (`0=open`, `100=closed`). UI/KNX open percentages are converted explicitly at the channel boundary.
 - 1W radio transmission uses four total sends by default: one long-preamble first TX followed by three short-preamble repeats with 40 ms spacing.
 
@@ -220,7 +220,7 @@ For command `0x16`, the currently used status byte meanings are:
 |-------|---------|
 | 0x00 | 1W clone listener armed successfully |
 | 0x02 | Channel is not configured for 1W |
-| 0x04 | 1W clone listener could not start because the controller is busy |
+| 0x04 | 1W clone listener could not start because the controller is busy or the selected profile is shared |
 | 0xFF | Invalid request or channel out of range |
 
 For the `0x12` status query, `lastPairStartStatus` is currently encoded as follows:
