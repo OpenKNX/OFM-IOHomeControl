@@ -13,7 +13,7 @@ SX1262_ERROR_SRCS = test_sx1262_device_errors.cpp ../src/radio/SX1262DeviceError
 SX1262_PHY_SRCS = test_sx1262_iohome_phy.cpp ../src/radio/SX1262IoHomePhy.cpp ../src/protocol/IoHomeCrypto.cpp
 TARGETS = test_protocol test_sx1262_device_errors test_sx1262_iohome_phy
 
-.PHONY: all build clean run
+.PHONY: all build clean run corpus
 
 all: build run
 
@@ -32,6 +32,11 @@ run: $(TARGETS)
 	./test_protocol
 	./test_sx1262_device_errors
 	./test_sx1262_iohome_phy
+
+# The protocol binary contains the golden RF corpus checks. Keep this target
+# separate so CI and maintainers have a stable, documented validation entry.
+corpus: test_protocol
+	./test_protocol
 
 clean:
 	rm -f $(TARGETS) $(addsuffix .exe,$(TARGETS))

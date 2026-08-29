@@ -1,0 +1,31 @@
+name: Golden RF corpus
+
+on:
+  pull_request:
+    paths:
+      - 'test/corpus/**'
+      - 'test/test_protocol.cpp'
+      - 'src/protocol/**'
+      - 'src/controller/**'
+      - 'test/Makefile'
+      - '.github/workflows/golden-rf-corpus.yml'
+  push:
+    branches: [v1dev]
+    paths:
+      - 'test/corpus/**'
+      - 'test/test_protocol.cpp'
+      - 'src/protocol/**'
+      - 'src/controller/**'
+      - 'test/Makefile'
+      - '.github/workflows/golden-rf-corpus.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and validate golden RF corpus
+        run: make -C test corpus
