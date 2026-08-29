@@ -7858,6 +7858,13 @@ TEST(controller_2w_pairing_accepts_direct_key_confirmation_without_challenge)
     ASSERT_TRUE(advancePairingToWaitDeviceChallenge(lController, lRemoteNodeId, lDeviceNodeId));
     ASSERT_EQ(lController.state(), ControllerState::PairWaitDeviceChallenge);
 
+    // A confirmation from a different device must not complete the active
+    // exchange merely because it happens to use the right opcode.
+    IoHomeFrame lWrongDeviceConfirmation;
+    buildKeyTransferConfirmationFrame(lWrongDeviceConfirmation, lRemoteNodeId, 0x123456);
+    ASSERT_TRUE(queueControllerResponse(lController, lWrongDeviceConfirmation));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitDeviceChallenge);
+
     // The device skips the challenge and confirms the key directly with 0x33.
     // The controller must accept this as a successful pairing and proceed to
     // SetConfig1 just like the normal post-challenge confirmation path.
@@ -7866,6 +7873,33 @@ TEST(controller_2w_pairing_accepts_direct_key_confirmation_without_challenge)
     ASSERT_EQ(lSetConfig1.commandId, IoHomeCommand::SetConfig1);
     ASSERT_EQ(lChannel.getNodeId(), lDeviceNodeId);
     ASSERT_EQ(lController.state(), ControllerState::PairWaitSetConfig1Response);
+}
+
+TEST(controller_2w_pairing_rejects_misdirected_key_confirmation)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, 0, lKey);
+    lController.setSystemKey(lKey);
+    ASSERT_TRUE(advancePairingToWaitKeyTransferConfirmation(lController, lRemoteNodeId, lDeviceNodeId));
+
+    IoHomeFrame lMisdirectedConfirmation;
+    buildKeyTransferConfirmationFrame(lMisdirectedConfirmation, 0x654321, lDeviceNodeId);
+    ASSERT_TRUE(queueControllerResponse(lController, lMisdirectedConfirmation));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitKeyTransferConfirmation);
+    ASSERT_EQ(lChannel.getNodeId(), 0U);
+
+    IoHomeFrame lSetConfig1;
+    ASSERT_TRUE(queueKeyTransferConfirmationAndCaptureSetConfig1(lController, lRemoteNodeId, lDeviceNodeId, lSetConfig1));
+    ASSERT_EQ(lSetConfig1.commandId, IoHomeCommand::SetConfig1);
 }
 
 TEST(controller_2w_pairing_succeeds_when_setconfig1_returns_error_response)
@@ -10825,6 +10859,7 @@ int main()
     RUN(controller_2w_pairing_succeeds_when_setconfig1_returns_error_response);
     RUN(controller_2w_pairing_succeeds_when_setconfig1_send_or_setup_fails);
     RUN(controller_2w_pairing_accepts_direct_key_confirmation_without_challenge);
+    RUN(controller_2w_pairing_rejects_misdirected_key_confirmation);
     RUN(controller_2w_pairing_setconfig1_auth_challenge_completes_on_final_reject);
     RUN(controller_status_update_requires_11_bytes_for_position);
     RUN(controller_private_response_requires_8_bytes_for_position);

@@ -3180,32 +3180,39 @@ void IoHomeController::loop()
                 if (mRxFrame.commandId == IoHomeCommand::DiscoverResponse ||
                     mRxFrame.commandId == IoHomeCommand::DiscoverSPEResponse)
                 {
-                    mDiscoveredNodeId = mRxFrame.getSrcNodeId();
-                    mPairingFreqIdx = mLastResponseFreqIdx;
+                    // Discovery is broadcast, but its response is not. Do not
+                    // bind this pairing transaction to another controller's
+                    // response while several devices are in learn mode.
+                    const uint32_t lSource = mRxFrame.getSrcNodeId();
+                    if (lSource != 0 && mRxFrame.getDestNodeId() == mOwnNodeId)
+                    {
+                        mDiscoveredNodeId = mRxFrame.getSrcNodeId();
+                        mPairingFreqIdx = mLastResponseFreqIdx;
 
                     // Default laberning-style path:
                     // 0x28 DiscoverRequest -> 0x29/0x2B DiscoverResponse
                     // -> 0x31 KeyInitTransfer -> 0x3C -> 0x32 -> 0x33.
                     // Experimental branches are only reachable via explicit
                     // diagnostic pairing modes.
-                    switch (mPairing2WMode)
-                    {
-                    case Pairing2WMode::DiscoveryConfirmation:
-                        mState = ControllerState::PairSendDiscoveryConfirmation;
-                        break;
+                        switch (mPairing2WMode)
+                        {
+                        case Pairing2WMode::DiscoveryConfirmation:
+                            mState = ControllerState::PairSendDiscoveryConfirmation;
+                            break;
 
-                    case Pairing2WMode::LaunchKeyTransfer:
-                        mState = ControllerState::PairSendLaunchKeyTransfer;
-                        break;
+                        case Pairing2WMode::LaunchKeyTransfer:
+                            mState = ControllerState::PairSendLaunchKeyTransfer;
+                            break;
 
-                    case Pairing2WMode::PullKey:
-                        mState = ControllerState::PairSendPullKeyChallenge;
-                        break;
+                        case Pairing2WMode::PullKey:
+                            mState = ControllerState::PairSendPullKeyChallenge;
+                            break;
 
-                    case Pairing2WMode::Normal:
-                    default:
-                        mState = ControllerState::PairSendKeyInit;
-                        break;
+                        case Pairing2WMode::Normal:
+                        default:
+                            mState = ControllerState::PairSendKeyInit;
+                            break;
+                        }
                     }
                 }
             }
@@ -3275,21 +3282,22 @@ void IoHomeController::loop()
             }
             else if (mState == ControllerState::PairWaitDeviceChallenge)
             {
-                if (mRxFrame.commandId == IoHomeCommand::ChallengeRequest)
+                if (mRxFrame.commandId == IoHomeCommand::ChallengeRequest &&
+                    mRxFrame.getSrcNodeId() == mDiscoveredNodeId &&
+                    mRxFrame.getDestNodeId() == mOwnNodeId &&
+                    mRxFrame.dataLen >= sizeof(mPairingChallenge))
                 {
                     // Device sends its challenge — extract and store for key transfer
-                    if (mRxFrame.dataLen >= 6)
-                        memcpy(mPairingChallenge, mRxFrame.data, 6);
+                    memcpy(mPairingChallenge, mRxFrame.data, sizeof(mPairingChallenge));
                     mState = ControllerState::PairSendKeyTransfer;
                 }
-                else if ((mRxFrame.commandId == IoHomeCommand::KeyTransferConfirmation ||
-                          mRxFrame.commandId == IoHomeCommand::Confirmation) &&
-                         (mDiscoveredNodeId == 0 || mRxFrame.getSrcNodeId() == mDiscoveredNodeId))
+                else if (mRxFrame.commandId == IoHomeCommand::KeyTransferConfirmation &&
+                         mRxFrame.getSrcNodeId() == mDiscoveredNodeId &&
+                         mRxFrame.getDestNodeId() == mOwnNodeId)
                 {
                     // Some actuators skip the 0x3C challenge and confirm the key
                     // directly with 0x33. Treat that as successful pairing.
-                    logInfoP("Pairing: device confirmed key without challenge (0x%02X)",
-                             static_cast<uint8_t>(mRxFrame.commandId));
+                    logInfoP("Pairing: device confirmed key without challenge (0x33)");
                     finalize2WPairingKey();
                 }
             }
@@ -3303,8 +3311,9 @@ void IoHomeController::loop()
                     memcpy(mPairKeyTransferChallenge, mRxFrame.data, sizeof(mPairKeyTransferChallenge));
                     mState = ControllerState::PairSendKeyTransferAuthResponse;
                 }
-                else if (mRxFrame.commandId == IoHomeCommand::Confirmation ||
-                         mRxFrame.commandId == IoHomeCommand::KeyTransferConfirmation)
+                else if (mRxFrame.commandId == IoHomeCommand::KeyTransferConfirmation &&
+                         mRxFrame.getSrcNodeId() == mDiscoveredNodeId &&
+                         mRxFrame.getDestNodeId() == mOwnNodeId)
                 {
                     // Pairing successful — store system key as channel encryption key
                     finalize2WPairingKey();
@@ -3800,8 +3809,6 @@ void IoHomeController::processWaitResponse()
         return;
     }
 
-    serviceRxScan();
-
     if (millis() - mStateTimer >= mResponseTimeoutMs)
     {
         if (mRetryAtMs == 0)
@@ -3851,6 +3858,19 @@ void IoHomeController::processWaitResponse()
 
 void IoHomeController::processResponse()
 {
+    // An active 2W exchange is unicast. An unrelated frame must neither answer
+    // its challenge nor complete the queued command. Keep listening for the
+    // expected peer until the normal timeout expires.
+    if (!mCurrentCmd.active ||
+        mRxFrame.getSrcNodeId() != mCurrentCmd.destNodeId ||
+        mRxFrame.getDestNodeId() != mOwnNodeId)
+    {
+        dispatchRxFrame();
+        if (mState == ControllerState::ProcessResponse)
+            mState = ControllerState::WaitResponse;
+        return;
+    }
+
     // Check for challenge-response authentication (0x3C) for authenticated 2W commands
     if (mRxFrame.commandId == IoHomeCommand::ChallengeRequest &&
         mCurrentCmd.active && !mAuthResponseSent &&
@@ -4858,8 +4878,6 @@ void IoHomeController::processPairWaitDeviceChallenge()
         return;
     }
 
-    serviceRxScan();
-
     if (millis() - mStateTimer > 5000) // 5s timeout for device challenge
     {
         mState = ControllerState::PairFailed;
@@ -4972,8 +4990,6 @@ void IoHomeController::processPairWaitKeyTransferConfirmation()
         return;
     }
 
-    serviceRxScan();
-
     if (millis() - mStateTimer > 5000) // 5s timeout
     {
         mState = ControllerState::PairFailed;
@@ -5044,8 +5060,6 @@ void IoHomeController::processPairWaitSetConfig1Response()
         mState = ControllerState::PairComplete;
         return;
     }
-
-    serviceRxScan();
 
     if (millis() - mStateTimer > 2000)
     {
@@ -5151,8 +5165,6 @@ void IoHomeController::processPairWaitSetConfig1FinalResponse()
         mState = ControllerState::PairComplete;
         return;
     }
-
-    serviceRxScan();
 
     if (millis() - mStateTimer > 2000)
     {
