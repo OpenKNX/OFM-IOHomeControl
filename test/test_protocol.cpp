@@ -6887,6 +6887,7 @@ TEST(controller_1w_pairing_modes_command_sequences)
         {Pairing1WMode::AddOnly, IoHomeCommand::SendKey1W, false, IoHomeCommand::SendKey1W},
         {Pairing1WMode::AnnounceAdd, IoHomeCommand::Discover2ERequest, true, IoHomeCommand::SendKey1W},
         {Pairing1WMode::Remove, IoHomeCommand::RemoveController, false, IoHomeCommand::SendKey1W},
+        {Pairing1WMode::RemoveAdd, IoHomeCommand::RemoveController, true, IoHomeCommand::SendKey1W},
     };
 
     for (const TestCase &lCase : lCases)

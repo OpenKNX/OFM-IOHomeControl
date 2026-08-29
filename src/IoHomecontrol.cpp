@@ -329,6 +329,11 @@ namespace
             oMode = Pairing1WMode::Remove;
             return true;
         }
+        if (lMode == "remove-add" || lMode == "relearn")
+        {
+            oMode = Pairing1WMode::RemoveAdd;
+            return true;
+        }
         return false;
     }
 
@@ -1812,6 +1817,9 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
                 case 0x03:
                     lOneWayMode = Pairing1WMode::Remove;
                     break;
+                case 0x04:
+                    lOneWayMode = Pairing1WMode::RemoveAdd;
+                    break;
                 case 0x00:
                 default:
                     lOneWayMode = Pairing1WMode::AnnounceAdd;
@@ -2414,7 +2422,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc status", "Show all channel status");
     openknx.console.printHelpLine("iohcNN status", "Show channel NN detail");
     openknx.console.printHelpLine("iohcNN pair [ADDR]", "Start pairing; 1W ADDR is optional/binding only");
-    openknx.console.printHelpLine("iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove", "Explicit 1W mode; ADDR optional");
+    openknx.console.printHelpLine("iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove|remove-add", "Explicit 1W mode; ADDR optional");
     openknx.console.printHelpLine("iohcNN pair1w receive|copy [SEC]", "Clone original remote: capture its key from the 'copy remote' procedure");
     openknx.console.printHelpLine("iohcNN pair1w stop|status", "Stop or show the 1W key-receive (clone) state");
     openknx.console.printHelpLine("iohcNN bind1w ADDR", "Bind/rebind a 1W broadcast profile to an actuator node");
@@ -3070,7 +3078,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         std::string lChanText;
         if (!takeToken(lArgs, lChanText))
         {
-            logInfoP("Usage: iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove | receive|copy [SEC]|stop|status");
+            logInfoP("Usage: iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove|remove-add | receive|copy [SEC]|stop|status");
             return true;
         }
 
@@ -3175,14 +3183,14 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             }
             else
             {
-                logInfoP("Usage: iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove | receive|copy [SEC]|stop|status");
+                logInfoP("Usage: iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove|remove-add | receive|copy [SEC]|stop|status");
                 return true;
             }
         }
 
         if (!lModeSeen)
         {
-            logInfoP("Usage: iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove | receive|copy [SEC]|stop|status");
+            logInfoP("Usage: iohcNN pair1w [ADDR] announce-only|add-only|announce-add|remove|remove-add | receive|copy [SEC]|stop|status");
             return true;
         }
 

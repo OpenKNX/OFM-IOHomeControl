@@ -53,12 +53,14 @@ enum class OneWayDestinationMode : uint8_t
 //   add-only      -> 0x30 only
 //   announce-add  -> 0x2E then 0x30
 //   remove        -> 0x39 only
+//   remove-add    -> 0x39 then 0x30 (captured Smoove enrollment gesture)
 enum class Pairing1WMode : uint8_t
 {
   AnnounceAdd = 0,
   AnnounceOnly = 1,
   AddOnly = 2,
-  Remove = 3
+  Remove = 3,
+  RemoveAdd = 4
 };
 
 // Queued command entry

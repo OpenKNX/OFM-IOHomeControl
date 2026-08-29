@@ -127,6 +127,8 @@ namespace
             return "0x30";
         case Pairing1WMode::Remove:
             return "0x39";
+        case Pairing1WMode::RemoveAdd:
+            return "0x39,0x30";
         case Pairing1WMode::AnnounceAdd:
         default:
             return "0x2E,0x30";
@@ -1822,6 +1824,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
         switch (lMode)
         {
         case Pairing1WMode::Remove:
+        case Pairing1WMode::RemoveAdd:
             mPairing1WStage = 2;
             mState = ControllerState::PairSend1WRemove;
             break;
@@ -2549,6 +2552,8 @@ const char *IoHomeController::pairing1WModeName(Pairing1WMode iMode)
         return "add-only";
     case Pairing1WMode::Remove:
         return "remove";
+    case Pairing1WMode::RemoveAdd:
+        return "remove-add";
     case Pairing1WMode::AnnounceAdd:
     default:
         return "announce-add";
@@ -4478,8 +4483,17 @@ void IoHomeController::processPairSend1WRemove()
 
 void IoHomeController::processPairWait1WRemove()
 {
-    if (!processPairWait1WBlind(ControllerState::PairComplete))
+    const ControllerState lNextState = (mPairing1WMode == Pairing1WMode::RemoveAdd)
+                                           ? ControllerState::PairSend1WKeyTransfer
+                                           : ControllerState::PairComplete;
+    if (!processPairWait1WBlind(lNextState))
         return;
+
+    if (mState == ControllerState::PairSend1WKeyTransfer)
+    {
+        mPairing1WStage = 1;
+        return;
+    }
 
     if (mState == ControllerState::PairComplete && mModule)
     {
