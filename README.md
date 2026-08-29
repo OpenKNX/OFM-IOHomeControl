@@ -69,7 +69,7 @@ For 2W, the module uses one global controller node ID and system key. For 1W, ea
 The 1W path follows the reference remote model more closely than older gateway-derived implementations:
 
 - 1W pairing/add sends an announce/add flow (`0x2E` followed by unauthenticated `0x30 SendKey1W`). `0x39 RemoveController` is only sent by explicit remove flows.
-- `0x30 SendKey1W` is a 29-byte frame: 9-byte header plus `encryptedKey[16] + manufacturer + 0x01 + sequence[2]`, with no appended 1W HMAC.
+- `0x30 SendKey1W` has 29 declared bytes: 9-byte header plus `encryptedKey[16] + manufacturer + 0x01 + sequence[2]`. The default profile sends no trailer; an ETS profile option can append the observed six-byte MAC outside CTRL0's declared length.
 - A channel can clone an existing original remote instead of enrolling a new identity: `iohcNN pair1w receive` arms a listener that captures the remote's `0x30 SendKey1W` "copy remote" frame, decrypts the contained key with the public transfer key, and stores the remote's address, key and manufacturer into the channel's 1W profile. This is required for actuators that only obey remotes added through the manufacturer's copy procedure. Use `pair1w stop`/`pair1w status` to cancel or inspect the capture.
 - Normal 1W commands use typed broadcast destinations by default, computed as `dst=((type << 6) | 0x3F)`. Type `0` remains the explicit all-device target.
 - Normal 1W control uses the raw io-homecontrol closedness convention internally (`0=open`, `100=closed`). UI/KNX open percentages are converted explicitly at the channel boundary.
@@ -298,9 +298,9 @@ IoHomecontrol (OpenKNX::Module)
 - Preamble: 1024 symbols for long/first transmissions, 8 symbols for short follow-up/repeat transmissions
 - Sync word: 0xFF 0x33 (preceded by 0x55 preamble anchor byte)
 - Packet format: variable length, hardware CRC (CCITT), io-homecontrol mode enabled
-- Frame size: 9–32 bytes; authenticated 1W frames declare the appended HMAC in CTRL0
+- Frame size: 9–35 bytes; authenticated 1W frames declare the appended HMAC in CTRL0
 - 2W `0x3D` ChallengeResponse carries HMAC bytes as command data, not as an appended frame HMAC
-- 1W `0x30 SendKey1W` is unauthenticated and remains exactly 29 bytes total
+- 1W `0x30 SendKey1W` defaults to 29 bytes total; selected profiles may use the observed 35-byte form with a six-byte trailer MAC outside the declared length
 - 1W frames use the low-power flag and type-dependent broadcast destinations
 
 ## Related protocol sources

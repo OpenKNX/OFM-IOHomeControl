@@ -84,6 +84,8 @@ public:
   uint8_t getConfigured1WBroadcastType() const;
   void setConfigured1WAcei(uint8_t iAcei);
   uint8_t getConfigured1WAcei() const;
+  void setConfigured1WEnrollmentMac(bool iEnabled);
+  bool getConfigured1WEnrollmentMac() const;
   bool requestStatus();
   void scheduleStatusPoll(uint32_t iDelayMs);
 
@@ -121,6 +123,7 @@ private:
   uint32_t mConfigured1WTargetNodeId = 0;
   uint8_t mConfigured1WBroadcastType = 0;
   uint8_t mConfigured1WAcei = 0x43; // ACEI byte for 1W Execute (0x43 = IOHC_ACEI_1W default, prio 2)
+  bool mConfigured1WEnrollmentMac = false;
   float mCurrentPosition = 0.0f;
   float mCurrentSlat = 0.0f;
   bool mIsMoving = false;

@@ -4573,6 +4573,47 @@ TEST(serializer_boundary_sendkey1w_unauthenticated_29)
     ASSERT_EQ(frame.serialize1W(buf, sizeof(buf)), 0);
 }
 
+TEST(serializer_sendkey1w_accepts_optional_trailer_mac)
+{
+    const uint8_t kKey[16] = {
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
+        0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE};
+    const uint16_t kSequence = 0x1A2B;
+
+    IoHomeFrame frame;
+    frame.init();
+    frame.set1WMode();
+    frame.setFrameOrder(IOHC_CTRL0_ORDER_END);
+    frame.setSrcNode(0x485B37);
+    frame.setDestNode(0x0000BF);
+    frame.commandId = IoHomeCommand::SendKey1W;
+    for (uint8_t i = 0; i < 16; i++)
+        frame.data[i] = static_cast<uint8_t>(0xC0 + i);
+    frame.data[16] = static_cast<uint8_t>(IoHomeManufacturer::Velux);
+    frame.data[17] = 0x01;
+    frame.data[18] = static_cast<uint8_t>(kSequence >> 8);
+    frame.data[19] = static_cast<uint8_t>(kSequence & 0xFF);
+    frame.dataLen = 20;
+
+    uint8_t transcript[17] = {static_cast<uint8_t>(IoHomeCommand::SendKey1W)};
+    memcpy(transcript + 1, frame.data, 16);
+    ASSERT_TRUE(IoHomeCrypto::createHmac1W(transcript, sizeof(transcript), kSequence,
+                                           kKey, frame.trailerMac));
+    frame.hasTrailerMac = true;
+
+    uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t len = frame.serialize1W(buf, sizeof(buf));
+    ASSERT_EQ(len, 35);
+    ASSERT_EQ((buf[0] & IOHC_CTRL0_LEN_MASK) + 1, 29);
+    ASSERT_MEM_EQ(buf + 29, frame.trailerMac, IOHC_HMAC_SIZE);
+
+    IoHomeFrame parsed;
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
+    ASSERT_EQ(parsed.dataLen, 20);
+    ASSERT_TRUE(parsed.hasTrailerMac);
+    ASSERT_MEM_EQ(parsed.trailerMac, frame.trailerMac, IOHC_HMAC_SIZE);
+}
+
 TEST(serializer_boundary_raw_crc_explicit_only)
 {
     // Normal protocol serializers reject CRC. Only the raw/diagnostic helper may
@@ -7191,6 +7232,45 @@ TEST(controller_1w_pairing_allows_add_without_target_node)
     ASSERT_TRUE(!lFrame.hasHmac);
 }
 
+TEST(controller_1w_profile_can_append_sendkey_trailer_mac)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setIs1W(true);
+    lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+    lChannel.setOneWayControllerKey(lKey);
+    lChannel.setEncryptionKey(lKey);
+    lChannel.setConfigured1WEnrollmentMac(true);
+
+    ASSERT_TRUE(lController.startPairing1WAddOnly(0, 0));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_EQ(lPacket.size(), 35U);
+    ASSERT_EQ((lPacket[0] & IOHC_CTRL0_LEN_MASK) + 1, 29);
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
+    ASSERT_TRUE(lFrame.hasTrailerMac);
+    const uint16_t lSequence = static_cast<uint16_t>((static_cast<uint16_t>(lFrame.data[18]) << 8) | lFrame.data[19]);
+    uint8_t lTranscript[17] = {static_cast<uint8_t>(IoHomeCommand::SendKey1W)};
+    memcpy(lTranscript + 1, lFrame.data, 16);
+    ASSERT_TRUE(IoHomeCrypto::verifyHmac1W(lTranscript, sizeof(lTranscript), lSequence,
+                                           lFrame.trailerMac, lKey));
+}
+
 TEST(controller_1w_sendkey_frame_identical_with_known_or_unknown_target)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -9111,6 +9191,93 @@ TEST(controller_1w_key_receive_clones_remote_from_sendkey_frame)
     ASSERT_EQ(lChannel.getOneWayControllerManufacturer(), lManufacturer);
     ASSERT_EQ(lChannel.getSequence1W(), lSequence);
     ASSERT_MEM_EQ(lChannel.getEncryptionKey(), lClearKey, 16);
+}
+
+TEST(controller_1w_key_receive_verifies_optional_sendkey_trailer_mac)
+{
+    const uint32_t lRemoteNodeId = 0x7E9E6E;
+    const uint16_t lSequence = 0x148C;
+    const uint8_t lClearKey[16] = {
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+        0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(0x9F0071);
+    lController.init();
+    lChannel.setIs1W(true);
+    ASSERT_TRUE(lController.startOneWayKeyReceive(0, 0));
+
+    const uint8_t lRemoteAddr[3] = {0x7E, 0x9E, 0x6E};
+    uint8_t lEncryptedKey[16];
+    ASSERT_TRUE(IoHomeCrypto::encrypt1WKey(lClearKey, IOHC_TRANSFER_KEY, lRemoteAddr, lEncryptedKey));
+
+    IoHomeFrame lFrame;
+    lFrame.init();
+    lFrame.set1WMode();
+    lFrame.setSrcNode(lRemoteNodeId);
+    lFrame.setDestNode(0x00003F);
+    lFrame.commandId = IoHomeCommand::SendKey1W;
+    memcpy(lFrame.data, lEncryptedKey, sizeof(lEncryptedKey));
+    lFrame.data[16] = 0x01;
+    lFrame.data[17] = 0x01;
+    lFrame.data[18] = static_cast<uint8_t>(lSequence >> 8);
+    lFrame.data[19] = static_cast<uint8_t>(lSequence & 0xFF);
+    lFrame.dataLen = 20;
+    uint8_t lTranscript[17] = {static_cast<uint8_t>(IoHomeCommand::SendKey1W)};
+    memcpy(lTranscript + 1, lEncryptedKey, sizeof(lEncryptedKey));
+    ASSERT_TRUE(IoHomeCrypto::createHmac1W(lTranscript, sizeof(lTranscript), lSequence,
+                                           lClearKey, lFrame.trailerMac));
+    lFrame.hasTrailerMac = true;
+
+    ASSERT_TRUE(queueControllerPassiveFrame(lController, lFrame));
+    ASSERT_EQ(lController.oneWayKeyReceiveStatus(),
+              IoHomeController::OneWayKeyReceiveStatus::CapturedTrailerMacVerified);
+    ASSERT_MEM_EQ(lChannel.getOneWayControllerKey(), lClearKey, 16);
+}
+
+TEST(controller_1w_key_receive_rejects_invalid_sendkey_trailer_mac)
+{
+    const uint8_t lClearKey[16] = {
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+        0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(0x9F0071);
+    lController.init();
+    lChannel.setIs1W(true);
+    ASSERT_TRUE(lController.startOneWayKeyReceive(0, 0));
+
+    IoHomeFrame lFrame;
+    lFrame.init();
+    lFrame.set1WMode();
+    lFrame.setSrcNode(0x7E9E6E);
+    lFrame.setDestNode(0x00003F);
+    lFrame.commandId = IoHomeCommand::SendKey1W;
+    const uint8_t lRemoteAddr[3] = {0x7E, 0x9E, 0x6E};
+    ASSERT_TRUE(IoHomeCrypto::encrypt1WKey(lClearKey, IOHC_TRANSFER_KEY, lRemoteAddr, lFrame.data));
+    lFrame.data[16] = 0x01;
+    lFrame.data[17] = 0x01;
+    lFrame.data[18] = 0x14;
+    lFrame.data[19] = 0x8C;
+    lFrame.dataLen = 20;
+    uint8_t lTranscript[17] = {static_cast<uint8_t>(IoHomeCommand::SendKey1W)};
+    memcpy(lTranscript + 1, lFrame.data, 16);
+    ASSERT_TRUE(IoHomeCrypto::createHmac1W(lTranscript, sizeof(lTranscript), 0x148C,
+                                           lClearKey, lFrame.trailerMac));
+    lFrame.trailerMac[0] ^= 0x01;
+    lFrame.hasTrailerMac = true;
+
+    ASSERT_TRUE(queueControllerPassiveFrame(lController, lFrame));
+    ASSERT_EQ(lController.oneWayKeyReceiveStatus(),
+              IoHomeController::OneWayKeyReceiveStatus::TrailerMacInvalid);
+    ASSERT_EQ(lChannel.getOneWayControllerNodeId(), 0U);
 }
 
 TEST(controller_1w_key_receive_rejects_non_1w_channel)
@@ -11077,6 +11244,7 @@ int main()
     RUN(serializer_boundary_2w_has_hmac_rejected);
     RUN(serializer_boundary_1w_execute_hmac_declared_length);
     RUN(serializer_boundary_sendkey1w_unauthenticated_29);
+    RUN(serializer_sendkey1w_accepts_optional_trailer_mac);
     RUN(serializer_boundary_raw_crc_explicit_only);
 
     printf("\nAddress classes:\n");
@@ -11229,6 +11397,7 @@ int main()
     RUN(controller_discovery_sends_standard_28_then_alt_2e_broadcast);
     RUN(controller_spe_discovery_sends_single_2a_broadcast);
     RUN(controller_1w_pairing_allows_add_without_target_node);
+    RUN(controller_1w_profile_can_append_sendkey_trailer_mac);
     RUN(controller_1w_sendkey_frame_identical_with_known_or_unknown_target);
     RUN(controller_1w_virtual_channel_execute_allowed_without_target_node);
     RUN(controller_default_2w_pairing_uses_key_init_after_discovery);
@@ -11262,6 +11431,8 @@ int main()
     RUN(controller_passive_mode_does_not_sniff_without_explicit_start);
     RUN(controller_passive_key_sniff_captures_result_and_callback);
     RUN(controller_1w_key_receive_clones_remote_from_sendkey_frame);
+    RUN(controller_1w_key_receive_verifies_optional_sendkey_trailer_mac);
+    RUN(controller_1w_key_receive_rejects_invalid_sendkey_trailer_mac);
     RUN(controller_1w_key_receive_rejects_non_1w_channel);
     RUN(controller_1w_execute_uses_configured_channel_acei);
     RUN(controller_passive_remote_activity_schedules_follow_up_poll_for_target_device);

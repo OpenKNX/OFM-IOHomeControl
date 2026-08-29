@@ -3125,6 +3125,12 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                     case IoHomeController::OneWayKeyReceiveStatus::Captured:
                         lStatusName = "captured";
                         break;
+                    case IoHomeController::OneWayKeyReceiveStatus::CapturedTrailerMacVerified:
+                        lStatusName = "captured-trailer-mac-verified";
+                        break;
+                    case IoHomeController::OneWayKeyReceiveStatus::TrailerMacInvalid:
+                        lStatusName = "trailer-mac-invalid";
+                        break;
                     case IoHomeController::OneWayKeyReceiveStatus::Timeout:
                         lStatusName = "timeout";
                         break;

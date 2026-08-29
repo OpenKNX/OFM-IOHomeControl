@@ -5,7 +5,8 @@
 
 // Frame size limits
 // 2W max: 32 bytes (standard io-homecontrol 2W limit)
-// 1W SendKey1W: 9 header + 20 data = 29 bytes, no appended HMAC
+// 1W SendKey1W: 9 header + 20 data = 29 declared bytes. Some remotes append
+// a six-byte MAC trailer outside that declared length (35 bytes on air).
 // Other authenticated 1W frames may include an appended 6-byte HMAC.
 #define IOHC_FRAME_MIN_SIZE 9
 #define IOHC_FRAME_MAX_SIZE_2W 32
@@ -47,6 +48,8 @@ struct IoHomeFrame
     uint8_t dataLen;
     uint8_t hmac[IOHC_HMAC_SIZE];
     bool hasHmac;
+    uint8_t trailerMac[IOHC_HMAC_SIZE];
+    bool hasTrailerMac;
     uint16_t crc;
     bool hasCrc;
 
@@ -81,7 +84,8 @@ struct IoHomeFrame
     uint8_t serialize2W(uint8_t *oBuffer, uint8_t iMaxLen) const;
 
     // Serialize a 1W protocol frame for normal TX.
-    // Isolates 1W HMAC/length rules; SendKey1W is unauthenticated and rejected unless hasHmac=false and dataLen=20.
+    // Isolates 1W HMAC/length rules. SendKey1W requires hasHmac=false and
+    // dataLen=20; it may carry the separately modelled six-byte trailerMac.
     // Transport CRC is not appended here.
     uint8_t serialize1W(uint8_t *oBuffer, uint8_t iMaxLen) const;
 
@@ -96,7 +100,8 @@ struct IoHomeFrame
     // Deserialize an exact protocol frame from a received byte buffer.
     // Strict mode: no CRC bytes and no extra transport bytes are accepted.
     // 2W frames must match the CTRL0-declared length exactly.
-    // 1W parsing rejects appended SendKey1W HMAC bytes; 0x30 is unauthenticated.
+    // 1W parsing accepts the optional out-of-declared-length SendKey1W MAC
+    // trailer separately from normal authenticated-frame HMAC bytes.
     bool deserializeFrame(const uint8_t *iBuffer, uint8_t iLen);
 
     // Deserialize a raw radio/diagnostic buffer that may include a transport CRC.

@@ -27,7 +27,7 @@
               <Parameter Id="%AID%_P-%TT%%CC%015" Name="c%C%PairingDiag" ParameterType="%AID%_PT-IOHCText40Byte" Text="Letzte Pairing-Diagnose" Value="Noch keine Diagnose" Access="Read" />
 
               <!-- Main configuration Union including 10 ETS-backed scene slots -->
-              <Union SizeInBit="424">
+              <Union SizeInBit="432">
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%001" Name="c%C%Active" ParameterType="%AID%_PT-IOHCChannelActivity" Offset="0" BitOffset="0" Text="Kanalaktivität" Value="1" />
                 <Parameter Id="%AID%_UP-%TT%%CC%008" Name="c%C%Suspend" ParameterType="%AID%_PT-IOHCSuspended" Offset="0" BitOffset="2" Text="Suspendiert" Value="0" />
@@ -48,6 +48,7 @@
                 <Parameter Id="%AID%_UP-%TT%%CC%017" Name="c%C%OneWayManufacturer" ParameterType="%AID%_PT-IOHCOneWayManufacturer" Offset="50" BitOffset="0" Text="1W Controller-Hersteller (eigenes Profil)" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%018" Name="c%C%OneWayProfileChannel" ParameterType="%AID%_PT-IOHCOneWayProfileChannel" Offset="51" BitOffset="0" Text="1W Profil teilen mit Kanal (0 = eigenes)" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%019" Name="c%C%OneWayAcei" ParameterType="%AID%_PT-IOHCOneWayAcei" Offset="52" BitOffset="0" Text="1W Befehls-Priorität (ACEI)" Value="97" />
+                <Parameter Id="%AID%_UP-%TT%%CC%082" Name="c%C%OneWayEnrollmentMac" ParameterType="%AID%_PT-IOHCCheckBox" Offset="53" BitOffset="0" Text="1W Anmeldung mit MAC-Anhang (0x30)" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%020" Name="c%C%SceneCount" ParameterType="%AID%_PT-IOHCSceneCount" Offset="13" BitOffset="0" Text="Anzahl Szenen" Value="0" />
                 <!-- Scene slot parameters 1..10 are generated from IoHomecontrol.scene.part.xml. -->
                 <op:usePart name="IOHCScene" xpath="//Parameters/*" />
@@ -78,6 +79,7 @@
               <ParameterRef Id="%AID%_UP-%TT%%CC%017_R-%TT%%CC%01701" RefId="%AID%_UP-%TT%%CC%017" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801" RefId="%AID%_UP-%TT%%CC%018" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%019_R-%TT%%CC%01901" RefId="%AID%_UP-%TT%%CC%019" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%082_R-%TT%%CC%08201" RefId="%AID%_UP-%TT%%CC%082" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_UP-%TT%%CC%020" />
               <!-- Scene slot ParameterRefs 1..10 are generated from IoHomecontrol.scene.part.xml. -->
               <op:usePart name="IOHCScene" xpath="//ParameterRefs/*" />
@@ -255,6 +257,7 @@
                             <choose ParamRefId="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801">
                               <when test="0">
                                 <ParameterRefRef RefId="%AID%_UP-%TT%%CC%017_R-%TT%%CC%01701" IndentLevel="1" HelpContext="IOHC-1W-Hersteller" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%082_R-%TT%%CC%08201" IndentLevel="1" HelpContext="IOHC-1W-MAC" />
                                 <ParameterSeparator Id="%AID%_PS-nnn" Text="Ein neues Controllerprofil erfordert danach ein erneutes 1W-Pairing. Die Aktion ist nur möglich, solange kein Kanal dieses Profil gepaart verwendet." UIHint="Information" />
                                 <ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
                                   <Rows>

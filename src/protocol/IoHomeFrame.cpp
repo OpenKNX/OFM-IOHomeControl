@@ -12,6 +12,8 @@ void IoHomeFrame::init()
     dataLen = 0;
     memset(hmac, 0, IOHC_HMAC_SIZE);
     hasHmac = false;
+    memset(trailerMac, 0, IOHC_HMAC_SIZE);
+    hasTrailerMac = false;
     crc = 0;
     hasCrc = false;
 }
@@ -91,6 +93,8 @@ uint8_t IoHomeFrame::totalLength() const
     uint8_t lLen = 9 + dataLen;
     if (hasHmac)
         lLen += IOHC_HMAC_SIZE;
+    if (hasTrailerMac)
+        lLen += IOHC_HMAC_SIZE;
     if (hasCrc)
         lLen += IOHC_CRC_SIZE;
     return lLen;
@@ -166,7 +170,7 @@ uint8_t IoHomeFrame::serialize2W(uint8_t *oBuffer, uint8_t iMaxLen) const
     // 2W frames are strict protocol frames. A 0x3D ChallengeResponse carries
     // the 6-byte HMAC as normal data with hasHmac=false. Appended HMAC and CRC
     // are rejected here so normal 2W TX cannot accidentally emit legacy/raw bytes.
-    if ((ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0 || hasHmac || hasCrc)
+    if ((ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0 || hasHmac || hasTrailerMac || hasCrc)
         return 0;
 
     return serializeProtocolFrame(*this, oBuffer, iMaxLen,
@@ -179,16 +183,33 @@ uint8_t IoHomeFrame::serialize2W(uint8_t *oBuffer, uint8_t iMaxLen) const
 uint8_t IoHomeFrame::serialize1W(uint8_t *oBuffer, uint8_t iMaxLen) const
 {
     // 1W has its own HMAC/length semantics:
-    // - SendKey1W (0x30) is a dedicated unauthenticated 29-byte frame:
+    // - SendKey1W (0x30) is a dedicated 29-byte declared frame:
     //   9-byte header + encryptedKey[16] + manufacturer + 0x01 + sequence[2].
-    //   It must never append a 1W HMAC.
+    //   A device-profile option may append its six-byte MAC outside CTRL0's
+    //   declared length; that is not a normal 1W HMAC.
     // - Normal authenticated 1W commands include the appended HMAC in CTRL0.
     // Transport CRC is not appended by the normal 1W serializer.
     if ((ctrlByte0 & IOHC_CTRL0_MODE_1W) == 0 || hasCrc)
         return 0;
 
-    if (commandId == IoHomeCommand::SendKey1W && (hasHmac || dataLen != 20))
+    if (commandId != IoHomeCommand::SendKey1W && hasTrailerMac)
         return 0;
+
+    if (commandId == IoHomeCommand::SendKey1W)
+    {
+        if (hasHmac || dataLen != 20)
+            return 0;
+
+        const uint8_t lLen = serializeProtocolFrame(*this, oBuffer, iMaxLen,
+                                                     IOHC_FRAME_MAX_SIZE_1W,
+                                                     false, false, false);
+        if (lLen == 0 || !hasTrailerMac)
+            return lLen;
+        if (lLen + IOHC_HMAC_SIZE > iMaxLen)
+            return 0;
+        memcpy(oBuffer + lLen, trailerMac, IOHC_HMAC_SIZE);
+        return lLen + IOHC_HMAC_SIZE;
+    }
 
     return serializeProtocolFrame(*this, oBuffer, iMaxLen,
                                   IOHC_FRAME_MAX_SIZE_1W,
@@ -203,13 +224,33 @@ uint8_t IoHomeFrame::serializeRawWithCrc(uint8_t *oBuffer, uint8_t iMaxLen) cons
     // appended by the frame layer. Keep 2W appended-HMAC forbidden even here;
     // 2W auth responses must encode HMAC as command data on 0x3D.
     const bool lOneWay = (ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0;
-    if (!lOneWay && hasHmac)
+    if (!lOneWay && (hasHmac || hasTrailerMac))
         return 0;
 
     if (lOneWay)
     {
-        if (commandId == IoHomeCommand::SendKey1W && (hasHmac || dataLen != 20))
+        if (commandId != IoHomeCommand::SendKey1W && hasTrailerMac)
             return 0;
+        if (commandId == IoHomeCommand::SendKey1W)
+        {
+            if (hasHmac || dataLen != 20)
+                return 0;
+            const uint8_t lLen = serializeProtocolFrame(*this, oBuffer, iMaxLen,
+                                                         IOHC_FRAME_MAX_SIZE_1W,
+                                                         false, false, false);
+            if (lLen == 0 || lLen + (hasTrailerMac ? IOHC_HMAC_SIZE : 0) + IOHC_CRC_SIZE > iMaxLen)
+                return 0;
+            uint8_t lPos = lLen;
+            if (hasTrailerMac)
+            {
+                memcpy(oBuffer + lPos, trailerMac, IOHC_HMAC_SIZE);
+                lPos += IOHC_HMAC_SIZE;
+            }
+            const uint16_t lCrc = IoHomeCrypto::crc16Kermit(oBuffer, lPos);
+            oBuffer[lPos++] = lCrc & 0xFF;
+            oBuffer[lPos++] = (lCrc >> 8) & 0xFF;
+            return lPos;
+        }
 
         return serializeProtocolFrame(*this, oBuffer, iMaxLen,
                                       IOHC_FRAME_MAX_SIZE_1W,
@@ -250,13 +291,13 @@ bool IoHomeFrame::deserializeFrame(const uint8_t *iBuffer, uint8_t iLen)
         return false;
 
     const uint8_t lCmd = iBuffer[IOHC_FRAME_MIN_SIZE - 1];
-    // 1W protocol frames are also length-delimited. SendKey1W (0x30) is
-    // unauthenticated and therefore must not carry appended HMAC bytes outside
-    // the declared CTRL0 length. Normal authenticated 1W commands include their
-    // HMAC in the declared length.
+    // SendKey1W (0x30) may carry a six-byte MAC trailer outside its declared
+    // CTRL0 length. Normal authenticated 1W commands include HMAC in length.
     if (lIs1W)
     {
-        if (iLen != lDeclaredLen)
+        const bool lSendKeyTrailer = lCmd == static_cast<uint8_t>(IoHomeCommand::SendKey1W) &&
+                                     iLen == lDeclaredLen + IOHC_HMAC_SIZE;
+        if (iLen != lDeclaredLen && !lSendKeyTrailer)
             return false;
 
         if (iLen > IOHC_FRAME_MAX_SIZE_1W)
@@ -293,6 +334,7 @@ bool IoHomeFrame::deserializeFrame(const uint8_t *iBuffer, uint8_t iLen)
             return false;
         dataLen = lDeclaredRemainingBytes;
         hasHmac = false;
+        hasTrailerMac = iLen == lDeclaredLen + IOHC_HMAC_SIZE;
     }
     else if ((lCmd == 0x00 || lCmd == 0x01 || lCmd == 0x20 || lCmd == 0x2E || lCmd == 0x39) &&
              lDeclaredRemainingBytes >= IOHC_HMAC_SIZE)
@@ -325,6 +367,9 @@ bool IoHomeFrame::deserializeFrame(const uint8_t *iBuffer, uint8_t iLen)
         lPos += IOHC_HMAC_SIZE;
     }
 
+    if (hasTrailerMac)
+        memcpy(trailerMac, iBuffer + lPos, IOHC_HMAC_SIZE);
+
     return lPos == lPayloadLen;
 }
 
@@ -346,9 +391,15 @@ bool IoHomeFrame::deserializeRawWithOptionalCrc(const uint8_t *iBuffer, uint8_t 
 
     uint8_t lProtocolLen = lDeclaredLen;
 
+    const uint8_t lCmd = iBuffer[IOHC_FRAME_MIN_SIZE - 1];
     if (iLen == lDeclaredLen + IOHC_CRC_SIZE)
     {
         lProtocolLen = lDeclaredLen;
+    }
+    else if (lIs1W && lCmd == static_cast<uint8_t>(IoHomeCommand::SendKey1W) &&
+             iLen == lDeclaredLen + IOHC_HMAC_SIZE + IOHC_CRC_SIZE)
+    {
+        lProtocolLen = lDeclaredLen + IOHC_HMAC_SIZE;
     }
     else
     {

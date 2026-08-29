@@ -137,8 +137,8 @@ namespace
 
     bool build1WSendKey30(IoHomeFrame &oFrame,
                           const uint8_t iEncryptedKey[16],
-                          uint8_t iManufacturer,
-                          uint16_t iSequence)
+                          uint8_t iManufacturer, uint16_t iSequence,
+                          const uint8_t iControllerKey[16], bool iAppendTrailerMac)
     {
         if (!iEncryptedKey)
             return false;
@@ -153,6 +153,18 @@ namespace
         oFrame.data[19] = static_cast<uint8_t>(iSequence & 0xFF);
         oFrame.dataLen = 20;
         oFrame.hasHmac = false;
+        oFrame.hasTrailerMac = false;
+        if (iAppendTrailerMac)
+        {
+            if (!iControllerKey)
+                return false;
+            uint8_t lTranscript[17] = {static_cast<uint8_t>(IoHomeCommand::SendKey1W)};
+            memcpy(lTranscript + 1, iEncryptedKey, 16);
+            if (!IoHomeCrypto::createHmac1W(lTranscript, sizeof(lTranscript), iSequence,
+                                             iControllerKey, oFrame.trailerMac))
+                return false;
+            oFrame.hasTrailerMac = true;
+        }
         return true;
     }
 
@@ -290,9 +302,11 @@ namespace
     }
 
     bool build1WSendKey(IoHomeFrame &oFrame, const uint8_t iEncryptedKey[16],
-                        uint8_t iManufacturer, uint16_t iSequence)
+                        uint8_t iManufacturer, uint16_t iSequence,
+                        const uint8_t iControllerKey[16], bool iAppendTrailerMac)
     {
-        return build1WSendKey30(oFrame, iEncryptedKey, iManufacturer, iSequence);
+        return build1WSendKey30(oFrame, iEncryptedKey, iManufacturer, iSequence,
+                                iControllerKey, iAppendTrailerMac);
     }
 
     const char *pairingModeName(Pairing2WMode iMode, ControllerState iState)
@@ -2217,11 +2231,13 @@ void IoHomeController::handleOneWayKeyReceiveFrame()
     // Incoming SendKey1W (0x30) carries the originating remote's key encrypted
     // with the well-known transfer key, keyed by the remote's own node address:
     //   data = encryptedKey[16] + manufacturer + 0x01 + sequence[2].
-    if (mRxFrame.dataLen < 17)
+    if ((mRxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) == 0 ||
+        mRxFrame.commandId != IoHomeCommand::SendKey1W ||
+        mRxFrame.dataLen != 20 || mRxFrame.data[17] != 0x01)
         return;
 
     const uint32_t lRemoteId = mRxFrame.getSrcNodeId() & 0x00FFFFFF;
-    if (lRemoteId == 0)
+    if (getAddressClass(lRemoteId) != IoHomeAddressClass::Unicast)
         return;
 
     IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(mOneWayKeyReceiveChannel) : nullptr;
@@ -2242,9 +2258,19 @@ void IoHomeController::handleOneWayKeyReceiveFrame()
         return;
 
     const uint8_t lManufacturer = mRxFrame.data[16];
-    uint16_t lSequence = 0;
-    if (mRxFrame.dataLen >= 20)
-        lSequence = static_cast<uint16_t>((static_cast<uint16_t>(mRxFrame.data[18]) << 8) | mRxFrame.data[19]);
+    const uint16_t lSequence = static_cast<uint16_t>((static_cast<uint16_t>(mRxFrame.data[18]) << 8) | mRxFrame.data[19]);
+    if (mRxFrame.hasTrailerMac)
+    {
+        uint8_t lTranscript[17] = {static_cast<uint8_t>(IoHomeCommand::SendKey1W)};
+        memcpy(lTranscript + 1, mRxFrame.data, 16);
+        if (!IoHomeCrypto::verifyHmac1W(lTranscript, sizeof(lTranscript), lSequence,
+                                        mRxFrame.trailerMac, lKey))
+        {
+            mOneWayKeyReceiveStatus = OneWayKeyReceiveStatus::TrailerMacInvalid;
+            logInfoP("1W key receive: rejected SendKey1W trailer MAC from 0x%06X", lRemoteId);
+            return;
+        }
+    }
 
     // Clone the originating remote's identity + key into the channel profile so
     // the module transmits as a true copy that the actuator already trusts.
@@ -2256,9 +2282,11 @@ void IoHomeController::handleOneWayKeyReceiveFrame()
     openknx.flash.save(true); // identity change is rare & critical: bypass write throttle
 
     mOneWayKeyReceiveCapturedNode = lRemoteId;
-    mOneWayKeyReceiveStatus = OneWayKeyReceiveStatus::Captured;
-    logInfoP("1W key receive: cloned remote=0x%06X key=set mfg=0x%02X seq=0x%04X into channel %u",
+    mOneWayKeyReceiveStatus = mRxFrame.hasTrailerMac ? OneWayKeyReceiveStatus::CapturedTrailerMacVerified
+                                                      : OneWayKeyReceiveStatus::Captured;
+    logInfoP("1W key receive: cloned remote=0x%06X key=set mfg=0x%02X seq=0x%04X trailer-mac=%s into channel %u",
              lRemoteId, static_cast<unsigned>(lManufacturer), static_cast<unsigned>(lSequence),
+             mRxFrame.hasTrailerMac ? "verified" : "absent",
              static_cast<unsigned>(mOneWayKeyReceiveChannel + 1));
 
     stopOneWayKeyReceive();
@@ -4668,7 +4696,8 @@ void IoHomeController::processPairSend1WKeyTransfer()
     }
 
     uint16_t lSeq = nextSequence1W(lProfile, true);
-    if (!build1WSendKey(mTxFrame, lEncryptedKey, lProfile->getOneWayControllerManufacturer(), lSeq))
+    if (!build1WSendKey(mTxFrame, lEncryptedKey, lProfile->getOneWayControllerManufacturer(), lSeq,
+                        lProfile->getOneWayControllerKey(), lProfile->getConfigured1WEnrollmentMac()))
     {
         mState = ControllerState::PairFailed;
         return;
@@ -6189,7 +6218,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         }
         const uint16_t lSequence = (static_cast<uint16_t>((iEntry.param2 != 0xFF) ? iEntry.param2 : 0x00) << 8) |
                                    static_cast<uint16_t>((iEntry.param3 != 0xFF) ? iEntry.param3 : 0x00);
-        if (!build1WSendKey(mTxFrame, lEncKey1W, lProfile->getOneWayControllerManufacturer(), lSequence))
+        if (!build1WSendKey(mTxFrame, lEncKey1W, lProfile->getOneWayControllerManufacturer(), lSequence,
+                            lProfile->getOneWayControllerKey(), lProfile->getConfigured1WEnrollmentMac()))
             return false;
         mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
         break;
