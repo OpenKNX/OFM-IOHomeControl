@@ -17,6 +17,7 @@
 #include "protocol/IoHomeFrame.h"
 #include "protocol/IoHomeCommands.h"
 #include "IoHomeRemoteMap.h"
+#include "corpus/golden_rf_corpus.h"
 
 #ifdef TEST_NATIVE
 #include "controller/IoHomeController.h"
@@ -4612,6 +4613,80 @@ TEST(serializer_sendkey1w_accepts_optional_trailer_mac)
     ASSERT_EQ(parsed.dataLen, 20);
     ASSERT_TRUE(parsed.hasTrailerMac);
     ASSERT_MEM_EQ(parsed.trailerMac, frame.trailerMac, IOHC_HMAC_SIZE);
+}
+
+TEST(golden_rf_corpus_frames_decode_to_declared_metadata)
+{
+    using namespace IoHomeGoldenRfCorpus;
+
+    ASSERT_TRUE(frameCount > 0);
+    for (uint8_t i = 0; i < frameCount; i++)
+    {
+        const Frame &lFixture = kFrames[i];
+        ASSERT_TRUE(lFixture.id && lFixture.id[0] != '\0');
+        ASSERT_TRUE(lFixture.scenario && lFixture.scenario[0] != '\0');
+        ASSERT_TRUE(lFixture.provenance && lFixture.provenance[0] != '\0');
+        ASSERT_TRUE(lFixture.bytes != nullptr);
+        ASSERT_TRUE(lFixture.wireLen >= IOHC_FRAME_MIN_SIZE);
+
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lFixture.bytes, lFixture.wireLen));
+        ASSERT_EQ(lFrame.commandId, lFixture.command);
+        ASSERT_EQ(lFrame.getSrcNodeId(), lFixture.source);
+        ASSERT_EQ(lFrame.getDestNodeId(), lFixture.destination);
+        ASSERT_EQ((lFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0, lFixture.oneWay);
+        ASSERT_EQ(lFrame.hasHmac, lFixture.hasHmac);
+        ASSERT_EQ(lFrame.hasTrailerMac, lFixture.hasTrailerMac);
+        ASSERT_EQ((lFixture.bytes[0] & IOHC_CTRL0_LEN_MASK) + 1,
+                  lFixture.hasTrailerMac ? 29 : lFixture.wireLen);
+    }
+}
+
+TEST(golden_rf_corpus_public_trailer_mac_verifies)
+{
+    using namespace IoHomeGoldenRfCorpus;
+
+    const Frame *lFixture = findFrame("dimmer_sendkey_with_mac");
+    ASSERT_TRUE(lFixture != nullptr);
+    ASSERT_EQ(lFixture->crypto, CryptoExpectation::VerifyPublicOneWayTrailer);
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lFixture->bytes, lFixture->wireLen));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
+    ASSERT_TRUE(lFrame.hasTrailerMac);
+    ASSERT_EQ(lFrame.dataLen, 20);
+
+    const uint16_t lSequence = static_cast<uint16_t>((static_cast<uint16_t>(lFrame.data[18]) << 8) |
+                                                     lFrame.data[19]);
+    uint8_t lTranscript[17] = {static_cast<uint8_t>(IoHomeCommand::SendKey1W)};
+    memcpy(lTranscript + 1, lFrame.data, 16);
+    ASSERT_TRUE(IoHomeCrypto::verifyHmac1W(lTranscript, sizeof(lTranscript), lSequence,
+                                           lFrame.trailerMac, kPublicTrailerVectorKey));
+}
+
+TEST(golden_rf_corpus_covers_every_pairing_wait_injection)
+{
+    using namespace IoHomeGoldenRfCorpus;
+
+    ASSERT_EQ(pairingWaitInjectionCount, 5);
+    for (uint8_t i = 0; i < pairingWaitInjectionCount; i++)
+    {
+        const PairingWaitInjection &lInjection = kPairingWaitInjections[i];
+        ASSERT_TRUE(lInjection.waitState && lInjection.waitState[0] != '\0');
+        ASSERT_TRUE(lInjection.expectedOutcome && lInjection.expectedOutcome[0] != '\0');
+        const Frame *lFixture = findFrame(lInjection.unrelatedFrameId);
+        ASSERT_TRUE(lFixture != nullptr);
+        ASSERT_EQ(lFixture->crypto, CryptoExpectation::PairingCorrelationMustReject);
+    }
+
+    ASSERT_EQ(scenarioCount, 10);
+    for (uint8_t i = 0; i < scenarioCount; i++)
+    {
+        const Scenario &lScenario = kScenarios[i];
+        ASSERT_TRUE(lScenario.id && lScenario.id[0] != '\0');
+        ASSERT_TRUE(lScenario.expectedOutcome && lScenario.expectedOutcome[0] != '\0');
+        ASSERT_TRUE(findFrame(lScenario.fixtureId) != nullptr);
+    }
 }
 
 TEST(serializer_boundary_raw_crc_explicit_only)
@@ -11246,6 +11321,11 @@ int main()
     RUN(serializer_boundary_sendkey1w_unauthenticated_29);
     RUN(serializer_sendkey1w_accepts_optional_trailer_mac);
     RUN(serializer_boundary_raw_crc_explicit_only);
+
+    printf("\nGolden RF corpus:\n");
+    RUN(golden_rf_corpus_frames_decode_to_declared_metadata);
+    RUN(golden_rf_corpus_public_trailer_mac_verifies);
+    RUN(golden_rf_corpus_covers_every_pairing_wait_injection);
 
     printf("\nAddress classes:\n");
     RUN(address_class_group);
