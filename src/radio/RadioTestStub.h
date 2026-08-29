@@ -201,6 +201,7 @@ public:
   void testSetNextTransmitError(RadioError iError) { mNextTransmitError = iError; }
   uint32_t testTransmitCount() const { return mTxStartCount; }
   uint16_t testLastPreambleLength() const { return mLastPreambleLength; }
+  uint32_t testCurrentFrequency() const { return mCurrentFreq; }
   const std::vector<uint8_t> &testLastTransmittedPacket() const { return mLastTransmittedPacket; }
 
 private:

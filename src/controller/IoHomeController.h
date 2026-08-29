@@ -169,7 +169,10 @@ enum class ControllerState : uint8_t
   // Active key extraction (device-role responder)
   ExtractIdle,
   ExtractSentDiscoverResp,
+  ExtractSentConfirmAck,
   ExtractSentChallenge,
+  Extracted,
+  ExtractSentAddressResp,
 
   // Fake gateway mode (respond to device-initiated pairing)
   GatewayIdle,
@@ -343,6 +346,7 @@ public:
   };
 
   static constexpr uint32_t kKeyExtractDefaultTimeoutMs = 600000UL;
+  static constexpr uint32_t kKeyExtractPostExtractGraceMs = 60000UL;
 
   bool startKeyExtraction(uint32_t iTimeoutMs = kKeyExtractDefaultTimeoutMs);
   void stopKeyExtraction();
@@ -704,8 +708,13 @@ private:
   ControllerState mKeyExtractState;
   uint32_t mKeyExtractArmedAt;
   uint32_t mKeyExtractTimeoutMs;
+  uint32_t mKeyExtractGraceDeadlineMs = 0;
   KeyExtractStatus mKeyExtractStatus;
   PassiveKeyResult mKeyExtractResult;
+  uint8_t mKeyExtractReplyBuffer[IOHC_FRAME_BUFFER_SIZE] = {};
+  uint8_t mKeyExtractReplyLen = 0;
+  uint8_t mKeyExtractReplyPhase = 0;
+  uint16_t mKeyExtractReplyPreamble = IOHC_PREAMBLE_SHORT;
 
   // 1W key copy/clone receive state
   bool mOneWayKeyReceiveActive = false;
@@ -852,6 +861,9 @@ private:
 
   // Active key extraction handlers
   void processKeyExtractFrame();
+  bool queueKeyExtractReply(const uint8_t *iBuffer, uint8_t iLen, uint16_t iPreambleSymbols);
+  void serviceKeyExtractReply();
+  void extendKeyExtractGrace();
   void resetKeyExtractSessionState();
   uint32_t generateKeyExtractNodeId() const;
 

@@ -113,6 +113,12 @@ static bool queueGatewayRequestAndLoop(IoHomeController &iController,
                                        const IoHomeFrame &iRequest,
                                        IoHomeFrame &oResponse)
 {
+    // The active extraction responder broadcasts every device-role reply.
+    // Drain a previous CH1/CH3/CH2 sequence before injecting the next hub
+    // request, as a real hub cannot transmit while the responder is on air.
+    for (uint8_t i = 0; i < 8; i++)
+        iController.loop();
+
     uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE];
     const uint8_t lLen = serializeFrameForTest(iRequest, lBuffer, sizeof(lBuffer));
     if (lLen == 0)
@@ -231,6 +237,33 @@ static void buildKeyExtractKeyTransfer(IoHomeFrame &oFrame,
     oFrame.commandId = IoHomeCommand::KeyTransfer;
     memcpy(oFrame.data, lEncryptedKey, sizeof(lEncryptedKey));
     oFrame.dataLen = sizeof(lEncryptedKey);
+    oFrame.hasHmac = false;
+}
+
+static void buildKeyExtractConfirmation(IoHomeFrame &oFrame,
+                                        uint32_t iHubNodeId,
+                                        uint32_t iExtractNodeId)
+{
+    oFrame.init();
+    oFrame.ctrlByte0 = 0;
+    oFrame.ctrlByte1 = 0x00;
+    oFrame.setSrcNode(iHubNodeId);
+    oFrame.setDestNode(iExtractNodeId);
+    oFrame.commandId = IoHomeCommand::Confirmation;
+    oFrame.dataLen = 0;
+    oFrame.hasHmac = false;
+}
+
+static void buildKeyExtractAddressRequest(IoHomeFrame &oFrame,
+                                          uint32_t iHubNodeId,
+                                          uint32_t iExtractNodeId)
+{
+    oFrame.init();
+    oFrame.setStart2W();
+    oFrame.setSrcNode(iHubNodeId);
+    oFrame.setDestNode(iExtractNodeId);
+    oFrame.commandId = IoHomeCommand::AddressRequest;
+    oFrame.dataLen = 0;
     oFrame.hasHmac = false;
 }
 #endif
@@ -8470,6 +8503,34 @@ TEST(controller_key_extract_answers_discovery_with_throwaway_id)
     ASSERT_EQ(lResponse.data[4], static_cast<uint8_t>(lResponse.getSrcNodeId() & 0xFF));
 }
 
+TEST(controller_key_extract_broadcasts_reply_with_ch2_last)
+{
+    const uint32_t lOwnNodeId = 0x112233;
+    const uint32_t lHubNodeId = 0x445566;
+
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    initKeyExtractControllerForTest(lController, lModule, lOwnNodeId);
+    ASSERT_TRUE(lController.startKeyExtraction());
+
+    IoHomeFrame lRequest;
+    buildGatewayDiscoverRequest(lRequest, lHubNodeId);
+    IoHomeFrame lResponse;
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+
+    // Finish the CH1, CH3, then CH2 reply sequence. The final radio channel
+    // must be CH2 so a hub reacting to it finds us back in receive mode.
+    for (uint8_t i = 0; i < 4; i++)
+        lController.loop();
+    ASSERT_EQ(lController.radio().testTransmitCount(), 3U);
+    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
+}
+
 TEST(controller_key_extract_reuses_stored_challenge_on_key_init_retry)
 {
     const uint32_t lOwnNodeId = 0x112233;
@@ -8502,6 +8563,40 @@ TEST(controller_key_extract_reuses_stored_challenge_on_key_init_retry)
     ASSERT_EQ(lChallengeResp2.commandId, IoHomeCommand::ChallengeRequest);
     ASSERT_EQ(lChallengeResp2.dataLen, 6);
     ASSERT_MEM_EQ(lChallengeResp1.data, lChallengeResp2.data, 6);
+}
+
+TEST(controller_key_extract_acknowledges_discovery_confirmation)
+{
+    const uint32_t lOwnNodeId = 0x112233;
+    const uint32_t lHubNodeId = 0x445566;
+
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    initKeyExtractControllerForTest(lController, lModule, lOwnNodeId);
+    ASSERT_TRUE(lController.startKeyExtraction());
+
+    IoHomeFrame lDiscoverReq;
+    buildGatewayDiscoverRequest(lDiscoverReq, lHubNodeId);
+    IoHomeFrame lDiscoverResp;
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lDiscoverReq, lDiscoverResp));
+    const uint32_t lThrowawayNodeId = lDiscoverResp.getSrcNodeId();
+
+    IoHomeFrame lConfirmation;
+    buildKeyExtractConfirmation(lConfirmation, lHubNodeId, lThrowawayNodeId);
+    IoHomeFrame lConfirmationAck;
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lConfirmation, lConfirmationAck));
+    ASSERT_EQ(lConfirmationAck.commandId, IoHomeCommand::ConfirmationACK);
+    ASSERT_EQ(lConfirmationAck.getSrcNodeId(), lThrowawayNodeId);
+    ASSERT_EQ(lConfirmationAck.getDestNodeId(), lHubNodeId);
+
+    // The hub may retry 0x2C after missing 0x2D; it must receive the same
+    // confirmation instead of pulling the responder back to discovery.
+    IoHomeFrame lRetryAck;
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lConfirmation, lRetryAck));
+    ASSERT_EQ(lRetryAck.commandId, IoHomeCommand::ConfirmationACK);
 }
 
 TEST(controller_key_extract_recovers_hub_system_key)
@@ -8549,6 +8644,76 @@ TEST(controller_key_extract_recovers_hub_system_key)
     ASSERT_MEM_EQ(lModule.testLastPassiveKeyResult().key, lSystemKey, sizeof(lSystemKey));
 }
 
+TEST(controller_key_extract_completes_hub_address_verification)
+{
+    const uint32_t lOwnNodeId = 0x112233;
+    const uint32_t lHubNodeId = 0x445566;
+    const uint8_t lSystemKey[16] = {
+        0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE,
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
+    const uint8_t lAddressChallenge[6] = {0x64, 0x45, 0xE0, 0x81, 0xDC, 0x93};
+
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    initKeyExtractControllerForTest(lController, lModule, lOwnNodeId);
+    ASSERT_TRUE(lController.startKeyExtraction());
+
+    IoHomeFrame lRequest;
+    IoHomeFrame lResponse;
+    buildGatewayDiscoverRequest(lRequest, lHubNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    const uint32_t lThrowawayNodeId = lResponse.getSrcNodeId();
+
+    buildKeyExtractKeyInit(lRequest, lHubNodeId, lThrowawayNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeRequest);
+
+    buildKeyExtractKeyTransfer(lRequest, lHubNodeId, lThrowawayNodeId, lResponse.data, lSystemKey);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lResponse.commandId, IoHomeCommand::KeyTransferConfirmation);
+    ASSERT_EQ(lController.keyExtractStatus(), IoHomeController::KeyExtractStatus::Captured);
+
+    // The advertised throwaway address is public; only the hub that handed us
+    // the key may drive the post-extraction verification round.
+    buildKeyExtractAddressRequest(lRequest, 0x123456, lThrowawayNodeId);
+    ASSERT_TRUE(!queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+
+    buildKeyExtractAddressRequest(lRequest, lHubNodeId, lThrowawayNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lResponse.commandId, IoHomeCommand::AddressResponse);
+    ASSERT_EQ(lResponse.dataLen, 3);
+    ASSERT_EQ(lResponse.data[0], static_cast<uint8_t>(lThrowawayNodeId >> 16));
+    ASSERT_EQ(lResponse.data[1], static_cast<uint8_t>(lThrowawayNodeId >> 8));
+    ASSERT_EQ(lResponse.data[2], static_cast<uint8_t>(lThrowawayNodeId));
+
+    buildPairChallengeRequestFrame(lRequest, lHubNodeId, lThrowawayNodeId, lAddressChallenge);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
+    ASSERT_TRUE((lResponse.ctrlByte0 & IOHC_CTRL0_END) != 0);
+    ASSERT_TRUE((lResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
+
+    IoHomeFrame lAddressResponse;
+    lAddressResponse.init();
+    lAddressResponse.ctrlByte0 = 0;
+    lAddressResponse.ctrlByte1 = 0;
+    lAddressResponse.setSrcNode(lThrowawayNodeId);
+    lAddressResponse.setDestNode(lHubNodeId);
+    lAddressResponse.commandId = IoHomeCommand::AddressResponse;
+    lAddressResponse.data[0] = static_cast<uint8_t>(lThrowawayNodeId >> 16);
+    lAddressResponse.data[1] = static_cast<uint8_t>(lThrowawayNodeId >> 8);
+    lAddressResponse.data[2] = static_cast<uint8_t>(lThrowawayNodeId);
+    lAddressResponse.dataLen = 3;
+    uint8_t lTranscript[4] = {static_cast<uint8_t>(IoHomeCommand::AddressResponse),
+                              lAddressResponse.data[0], lAddressResponse.data[1], lAddressResponse.data[2]};
+    uint8_t lExpectedHmac[IOHC_HMAC_SIZE] = {};
+    ASSERT_TRUE(IoHomeCrypto::createHmac2W(lTranscript, sizeof(lTranscript),
+                                           lAddressChallenge, lSystemKey, lExpectedHmac));
+    ASSERT_MEM_EQ(lResponse.data, lExpectedHmac, IOHC_HMAC_SIZE);
+}
+
 TEST(controller_key_extract_ignores_frames_addressed_to_real_node_id)
 {
     const uint32_t lOwnNodeId = 0x112233;
@@ -8569,6 +8734,8 @@ TEST(controller_key_extract_ignores_frames_addressed_to_real_node_id)
 
     IoHomeFrame lWrongKeyInitReq;
     buildKeyExtractKeyInit(lWrongKeyInitReq, lHubNodeId, lOwnNodeId);
+    for (uint8_t i = 0; i < 4; i++)
+        lController.loop(); // drain the preceding discovery broadcast
     lController.radio().testClearTransmittedPacket();
     uint8_t lBuf[IOHC_FRAME_BUFFER_SIZE];
     const uint8_t lLen = serializeFrameForTest(lWrongKeyInitReq, lBuf, sizeof(lBuf));
@@ -8612,6 +8779,10 @@ TEST(controller_key_extract_disarms_after_success)
     IoHomeFrame lConfirmResp;
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lKeyTransferReq, lConfirmResp));
 
+    // Extraction stays armed for a bounded verification window, then disarms
+    // automatically if the hub never performs the 0x36 address check.
+    ioHomeTestAdvanceMillis(IoHomeController::kKeyExtractPostExtractGraceMs + 1U);
+    lController.loop();
     lController.radio().testClearTransmittedPacket();
     IoHomeFrame lSecondDiscoverResp;
     ASSERT_TRUE(!queueGatewayRequestAndLoop(lController, lDiscoverReq, lSecondDiscoverResp));
@@ -10829,8 +11000,11 @@ int main()
     RUN(gateway_controller_key_transfer_uses_configured_gateway_key);
     RUN(gateway_controller_challenge_response_tracks_paired_device);
     RUN(controller_key_extract_answers_discovery_with_throwaway_id);
+    RUN(controller_key_extract_broadcasts_reply_with_ch2_last);
     RUN(controller_key_extract_reuses_stored_challenge_on_key_init_retry);
+    RUN(controller_key_extract_acknowledges_discovery_confirmation);
     RUN(controller_key_extract_recovers_hub_system_key);
+    RUN(controller_key_extract_completes_hub_address_verification);
     RUN(controller_key_extract_ignores_frames_addressed_to_real_node_id);
     RUN(controller_key_extract_disarms_after_success);
     RUN(controller_1w_pairing_modes_command_sequences);

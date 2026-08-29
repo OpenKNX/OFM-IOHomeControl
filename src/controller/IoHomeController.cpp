@@ -709,6 +709,41 @@ namespace
         return lFrame.serialize2W(oBuffer, iBufferLen);
     }
 
+    uint8_t buildExtractConfirmationAckFrame(uint8_t *oBuffer,
+                                             uint8_t iBufferLen,
+                                             uint32_t iExtractNodeId,
+                                             uint32_t iHubNodeId)
+    {
+        IoHomeFrame lFrame;
+        lFrame.init();
+        lFrame.ctrlByte0 = 0;
+        lFrame.ctrlByte1 = 0x00;
+        lFrame.setSrcNode(iExtractNodeId);
+        lFrame.setDestNode(iHubNodeId);
+        lFrame.commandId = IoHomeCommand::ConfirmationACK;
+        lFrame.dataLen = 0;
+        lFrame.hasHmac = false;
+        return lFrame.serialize2W(oBuffer, iBufferLen);
+    }
+
+    bool buildExtractAddressResponseFrame(IoHomeFrame &oFrame,
+                                          uint32_t iExtractNodeId,
+                                          uint32_t iHubNodeId)
+    {
+        oFrame.init();
+        oFrame.ctrlByte0 = 0;
+        oFrame.ctrlByte1 = 0x00;
+        oFrame.setSrcNode(iExtractNodeId);
+        oFrame.setDestNode(iHubNodeId);
+        oFrame.commandId = IoHomeCommand::AddressResponse;
+        oFrame.data[0] = static_cast<uint8_t>((iExtractNodeId >> 16) & 0xFF);
+        oFrame.data[1] = static_cast<uint8_t>((iExtractNodeId >> 8) & 0xFF);
+        oFrame.data[2] = static_cast<uint8_t>(iExtractNodeId & 0xFF);
+        oFrame.dataLen = 3;
+        oFrame.hasHmac = false;
+        return true;
+    }
+
     bool copy2WPayload(uint8_t *oData, uint8_t &oLen, const uint8_t *iTemplate, uint8_t iTemplateLen)
     {
         if (oData == nullptr || iTemplate == nullptr || iTemplateLen > IOHC_FRAME_MAX_DATA)
@@ -2089,6 +2124,9 @@ bool IoHomeController::startKeyExtraction(uint32_t iTimeoutMs)
     mKeyExtractState = ControllerState::ExtractIdle;
     mKeyExtractArmedAt = millis();
     mKeyExtractTimeoutMs = iTimeoutMs;
+    mKeyExtractGraceDeadlineMs = 0;
+    mKeyExtractReplyLen = 0;
+    mKeyExtractReplyPhase = 0;
     mKeyExtractStatus = KeyExtractStatus::Armed;
     mKeyExtractArmed = true;
     startReceive();
@@ -2656,8 +2694,14 @@ const char *IoHomeController::stateName(ControllerState iState)
         return "ExtractIdle";
     case ControllerState::ExtractSentDiscoverResp:
         return "ExtractSentDiscoverResp";
+    case ControllerState::ExtractSentConfirmAck:
+        return "ExtractSentConfirmAck";
     case ControllerState::ExtractSentChallenge:
         return "ExtractSentChallenge";
+    case ControllerState::Extracted:
+        return "Extracted";
+    case ControllerState::ExtractSentAddressResp:
+        return "ExtractSentAddressResp";
     default:
         return "Unknown";
     }
@@ -3140,6 +3184,20 @@ void IoHomeController::loop()
         logInfoP("Key extract: timeout in %s", stateName(mKeyExtractState));
         mKeyExtractStatus = KeyExtractStatus::Timeout;
         stopKeyExtraction();
+    }
+
+    if (mKeyExtractArmed && mKeyExtractGraceDeadlineMs != 0 &&
+        static_cast<int32_t>(millis() - mKeyExtractGraceDeadlineMs) >= 0)
+    {
+        logInfoP("Key extract: post-extraction grace elapsed in %s", stateName(mKeyExtractState));
+        stopKeyExtraction();
+    }
+
+    if (mKeyExtractArmed && mKeyExtractReplyLen != 0)
+    {
+        serviceKeyExtractReply();
+        if (mKeyExtractReplyLen != 0)
+            return;
     }
 
     if (mOneWayKeyReceiveActive &&
@@ -6747,8 +6805,10 @@ void IoHomeController::processKeyExtractFrame()
         updateNodeStats(lSrcNode, mRadio.lastRssi(), mRxFrame.commandId);
     }
 
-    if (mKeyExtractHubNodeId != 0 && lSrcNode != mKeyExtractHubNodeId &&
-        mRxFrame.commandId != IoHomeCommand::DiscoverRequest)
+    // Once a hub has started this transaction, every subsequent response is
+    // tied to it. The throwaway node ID is visible on air and must not let a
+    // second nearby controller drive or prolong this recovery session.
+    if (mKeyExtractHubNodeId != 0 && lSrcNode != mKeyExtractHubNodeId)
     {
         dispatchRxFrame();
         return;
@@ -6771,9 +6831,27 @@ void IoHomeController::processKeyExtractFrame()
                                                  kExtractManufacturer);
         if (mTxLen == 0)
             return;
-        if (startShortPreambleTransmit(mTxBuffer, mTxLen, true) != RadioError::None)
+        // Discovery is the only cold reply: the hub may still be hopping, so
+        // use the long wake-up preamble. All in-exchange replies stay short.
+        if (!queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_PREAMBLE_LONG))
             return;
         mKeyExtractState = ControllerState::ExtractSentDiscoverResp;
+        return;
+
+    case IoHomeCommand::Confirmation:
+        if (lDstNode != mKeyExtractThrowawayId ||
+            (mKeyExtractState != ControllerState::ExtractSentDiscoverResp &&
+             mKeyExtractState != ControllerState::ExtractSentConfirmAck))
+        {
+            dispatchRxFrame();
+            return;
+        }
+
+        mTxLen = buildExtractConfirmationAckFrame(mTxBuffer, sizeof(mTxBuffer),
+                                                   mKeyExtractThrowawayId, lSrcNode);
+        if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_PREAMBLE_SHORT))
+            return;
+        mKeyExtractState = ControllerState::ExtractSentConfirmAck;
         return;
 
     case IoHomeCommand::KeyInitTransfer:
@@ -6783,7 +6861,8 @@ void IoHomeController::processKeyExtractFrame()
             return;
         }
 
-        if (mKeyExtractState == ControllerState::ExtractSentDiscoverResp)
+        if (mKeyExtractState == ControllerState::ExtractSentDiscoverResp ||
+            mKeyExtractState == ControllerState::ExtractSentConfirmAck)
         {
             IoHomeCrypto::generateChallenge(mKeyExtractChallenge);
             mKeyExtractHubNodeId = lSrcNode;
@@ -6800,7 +6879,7 @@ void IoHomeController::processKeyExtractFrame()
                                                    mKeyExtractChallenge);
         if (mTxLen == 0)
             return;
-        if (startShortPreambleTransmit(mTxBuffer, mTxLen, true) != RadioError::None)
+        if (!queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_PREAMBLE_SHORT))
             return;
         return;
 
@@ -6826,7 +6905,7 @@ void IoHomeController::processKeyExtractFrame()
                                                  mKeyExtractThrowawayId, lSrcNode);
             if (mTxLen == 0)
                 return;
-            if (startShortPreambleTransmit(mTxBuffer, mTxLen, true) != RadioError::None)
+            if (!queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_PREAMBLE_SHORT))
                 return;
 
             memset(&mKeyExtractResult, 0, sizeof(mKeyExtractResult));
@@ -6840,7 +6919,56 @@ void IoHomeController::processKeyExtractFrame()
             if (mModule)
                 mModule->onPassiveKeyCaptured(mKeyExtractResult);
 
-            stopKeyExtraction();
+            // A KLR200 may verify the impersonated device immediately after
+            // 0x33: 0x36 -> 0x37 -> 0x3C -> 0x3D. Keep this hub-bound session
+            // alive long enough to finish that round instead of disarming.
+            mKeyExtractState = ControllerState::Extracted;
+            extendKeyExtractGrace();
+            return;
+        }
+
+    case IoHomeCommand::AddressRequest:
+        if ((mKeyExtractState != ControllerState::Extracted &&
+             mKeyExtractState != ControllerState::ExtractSentAddressResp) ||
+            lDstNode != mKeyExtractThrowawayId)
+        {
+            dispatchRxFrame();
+            return;
+        }
+
+        {
+            IoHomeFrame lAddressResponse;
+            if (!buildExtractAddressResponseFrame(lAddressResponse, mKeyExtractThrowawayId, lSrcNode))
+                return;
+            mTxLen = lAddressResponse.serialize2W(mTxBuffer, sizeof(mTxBuffer));
+            if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_PREAMBLE_SHORT))
+                return;
+            mKeyExtractState = ControllerState::ExtractSentAddressResp;
+            extendKeyExtractGrace();
+            return;
+        }
+
+    case IoHomeCommand::ChallengeRequest:
+        if (mKeyExtractState != ControllerState::ExtractSentAddressResp ||
+            lDstNode != mKeyExtractThrowawayId || mRxFrame.dataLen < IOHC_HMAC_SIZE)
+        {
+            dispatchRxFrame();
+            return;
+        }
+
+        {
+            IoHomeFrame lAddressResponse;
+            IoHomeFrame lChallengeResponse;
+            if (!buildExtractAddressResponseFrame(lAddressResponse, mKeyExtractThrowawayId, lSrcNode) ||
+                !build2WChallengeResponse(lChallengeResponse, mKeyExtractThrowawayId, lSrcNode,
+                                          false, lAddressResponse, mRxFrame.data, mKeyExtractKey))
+                return;
+            // Device-role closing response: END, no low-power bit.
+            lChallengeResponse.ctrlByte0 |= IOHC_CTRL0_END;
+            mTxLen = lChallengeResponse.serialize2W(mTxBuffer, sizeof(mTxBuffer));
+            if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_PREAMBLE_SHORT))
+                return;
+            extendKeyExtractGrace();
             return;
         }
 
@@ -6851,11 +6979,75 @@ void IoHomeController::processKeyExtractFrame()
     dispatchRxFrame();
 }
 
+bool IoHomeController::queueKeyExtractReply(const uint8_t *iBuffer, uint8_t iLen,
+                                            uint16_t iPreambleSymbols)
+{
+    if (iBuffer == nullptr || iLen == 0 || iLen > sizeof(mKeyExtractReplyBuffer) ||
+        mKeyExtractReplyLen != 0)
+        return false;
+
+    memcpy(mKeyExtractReplyBuffer, iBuffer, iLen);
+    mKeyExtractReplyLen = iLen;
+    mKeyExtractReplyPhase = 0;
+    mKeyExtractReplyPreamble = iPreambleSymbols;
+    serviceKeyExtractReply();
+    return true;
+}
+
+void IoHomeController::serviceKeyExtractReply()
+{
+    static constexpr uint8_t kReplyFrequencyOrder[] = {1, 2, 0}; // CH1, CH3, CH2 last
+
+    if (mKeyExtractReplyLen == 0)
+        return;
+
+    if (mRadio.state() == RadioState::Transmitting)
+    {
+        if (!mRadio.isTxDone())
+            return;
+    }
+
+    if (mKeyExtractReplyPhase >= sizeof(kReplyFrequencyOrder))
+    {
+        mKeyExtractReplyLen = 0;
+        mKeyExtractReplyPhase = 0;
+        startReceive();
+        return;
+    }
+
+    const uint8_t lFrequencyIdx = kReplyFrequencyOrder[mKeyExtractReplyPhase];
+    const RadioError lPrepErr = configureTxRadio(mKeyExtractReplyPreamble,
+                                                  &IOHC_FREQUENCIES[lFrequencyIdx]);
+    if (lPrepErr != RadioError::None)
+    {
+        mKeyExtractReplyLen = 0;
+        startReceive();
+        return;
+    }
+
+    if (mRadio.startTransmit(mKeyExtractReplyBuffer, mKeyExtractReplyLen) == RadioError::None)
+    {
+        mKeyExtractReplyPhase++;
+        return;
+    }
+
+    mKeyExtractReplyLen = 0;
+    startReceive();
+}
+
+void IoHomeController::extendKeyExtractGrace()
+{
+    mKeyExtractGraceDeadlineMs = millis() + kKeyExtractPostExtractGraceMs;
+}
+
 void IoHomeController::resetKeyExtractSessionState()
 {
     mKeyExtractState = ControllerState::ExtractIdle;
     mKeyExtractThrowawayId = 0;
     mKeyExtractHubNodeId = 0;
+    mKeyExtractGraceDeadlineMs = 0;
+    mKeyExtractReplyLen = 0;
+    mKeyExtractReplyPhase = 0;
     memset(mKeyExtractChallenge, 0, sizeof(mKeyExtractChallenge));
     memset(mKeyExtractKey, 0, sizeof(mKeyExtractKey));
 }
