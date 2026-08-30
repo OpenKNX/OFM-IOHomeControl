@@ -951,7 +951,12 @@ private:
   bool radioIsSX1262() const;
   RadioError configureTxRadio(uint16_t iPreambleSymbols, const uint32_t *iFrequencyHz = nullptr);
   RadioError configureNormal2WTxRadio(uint16_t iPreambleSymbols);
-  void serviceRxScan();
+  // Passive/background monitoring may rotate across every IOHC channel. A
+  // response wait must select its policy explicitly: broadcast discovery
+  // replies rotate off the broadcast request channel; unicast replies hold
+  // the channel that carried their request.
+  void serviceBackgroundRxScan();
+  void serviceBroadcastResponseScan(uint8_t iRequestFrequencyIndex);
   bool waitForLbtClear(LbtContext iContext);
   RadioError startRadioTransmit(const uint8_t *iBuffer, uint8_t iLen, LbtContext iLbtContext);
   RadioError startTransmitWithPreamble(const uint8_t *iBuffer, uint8_t iLen,

@@ -3085,7 +3085,7 @@ RadioError IoHomeController::configureNormal2WTxRadio(uint16_t iPreambleSymbols)
     return configureTxRadio(iPreambleSymbols, &lTxFreq);
 }
 
-void IoHomeController::serviceRxScan()
+void IoHomeController::serviceBackgroundRxScan()
 {
     if (!mRxScanEnabled || mRadio.state() != RadioState::Receiving)
         return;
@@ -3101,6 +3101,38 @@ void IoHomeController::serviceRxScan()
         return;
 
     const uint8_t lNextFreqIdx = (mCurrentFreqIdx + 1) % IOHC_NUM_FREQUENCIES;
+    if (mRadio.setFrequency(IOHC_FREQUENCIES[lNextFreqIdx]) == RadioError::None)
+    {
+        mCurrentFreqIdx = lNextFreqIdx;
+        if (mRadio.startReceive() == RadioError::None)
+            mRxScanLastSwitch = lNow;
+    }
+}
+
+void IoHomeController::serviceBroadcastResponseScan(uint8_t iRequestFrequencyIndex)
+{
+    if (!mRxScanEnabled || mRadio.state() != RadioState::Receiving ||
+        iRequestFrequencyIndex >= IOHC_NUM_FREQUENCIES)
+        return;
+
+    const uint32_t lNow = micros();
+    const bool lOnRequestChannel = mCurrentFreqIdx == iRequestFrequencyIndex;
+    if (!lOnRequestChannel && lNow - mRxScanLastSwitch < mRxScanIntervalUs)
+        return;
+
+    // Never retune while a frame is being demodulated. A broadcast response
+    // has no request-bound return channel, so the useful listen set is the two
+    // non-request channels; this mirrors the reference ListenPolicy::
+    // ROTATE_SKIPPING_REQUEST policy.
+    if (mRadio.isPreambleDetected() || mRadio.isSyncDetected())
+        return;
+
+    uint8_t lNextFreqIdx = mCurrentFreqIdx;
+    do
+    {
+        lNextFreqIdx = (lNextFreqIdx + 1) % IOHC_NUM_FREQUENCIES;
+    } while (lNextFreqIdx == iRequestFrequencyIndex);
+
     if (mRadio.setFrequency(IOHC_FREQUENCIES[lNextFreqIdx]) == RadioError::None)
     {
         mCurrentFreqIdx = lNextFreqIdx;
@@ -3412,7 +3444,7 @@ void IoHomeController::loop()
     // Multi-frequency RX scanning: cycle through frequencies only while listening.
     // TX-side paths explicitly select their protocol channel before transmitting.
     if (mState == ControllerState::Idle || mState == ControllerState::PassiveListening)
-        serviceRxScan();
+        serviceBackgroundRxScan();
 
     // Check for incoming packets in any state
     if (mRadio.isPacketAvailable())
@@ -4355,7 +4387,7 @@ void IoHomeController::processPairWaitDiscoveryResponse()
         return;
     }
 
-    serviceRxScan();
+    serviceBroadcastResponseScan(frequencyIndexForHz(kNormal2WTxFreqHz));
 
     if (millis() - mStateTimer > 2000) // retry cadence; TX stays on CH2
     {
@@ -4447,8 +4479,6 @@ void IoHomeController::processPairWaitDiscoveryConfirmationAck()
         return;
     }
 
-    serviceRxScan();
-
     if (millis() - mStateTimer > 1000)
     {
         logDebugP("Pairing: discovery confirmation ack timed out for 0x%06X, falling back to push flow", mDiscoveredNodeId);
@@ -4522,8 +4552,6 @@ void IoHomeController::processPairWaitLaunchKeyTransfer()
         return;
     }
 
-    serviceRxScan();
-
     if (millis() - mStateTimer > 1000)
     {
         logDebugP("Pairing: pulled key transfer timed out for 0x%06X, falling back to push flow", mDiscoveredNodeId);
@@ -4592,8 +4620,6 @@ void IoHomeController::processPairWaitPullKeyChallengeResponse()
         mState = ControllerState::PairSendKeyInit;
         return;
     }
-
-    serviceRxScan();
 
     if (millis() - mStateTimer > IOHC_RX_TIMEOUT_MS)
     {

@@ -7965,6 +7965,59 @@ TEST(controller_default_2w_pairing_uses_key_init_after_discovery)
     ASSERT_EQ(lKeyInitFrame.dataLen, 0);
 }
 
+TEST(pairing_broadcast_scan_skips_request_channel_and_unicast_wait_holds_it)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    // Discovery is broadcast on CH2. Its response wait must immediately
+    // listen on CH3, then CH1, and never spend a dwell back on CH2.
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, 0, lKey);
+        ASSERT_TRUE(lController.startPairing(0));
+
+        lController.loop(); // PairSendDiscovery: TX on CH2
+        ASSERT_EQ(lController.state(), ControllerState::PairWaitDiscoveryResponse);
+        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+        lController.loop(); // enter RX and rotate off the broadcast request channel
+        ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_3);
+
+        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+        lController.loop();
+        ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_1);
+
+        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+        lController.loop();
+        ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_3);
+    }
+
+    // Key-init is unicast on CH2. Even with the global scan enabled, its
+    // challenge wait must remain on the request channel for the full window.
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, 0, lKey);
+        lController.setSystemKey(lKey);
+        ASSERT_TRUE(advancePairingToWaitDeviceChallenge(lController, lRemoteNodeId, lDeviceNodeId));
+
+        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US * 2U);
+        lController.loop();
+        ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
+        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US * 2U);
+        lController.loop();
+        ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
+    }
+}
+
 TEST(controller_experimental_2w_pairing_can_use_discovery_confirmation)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
