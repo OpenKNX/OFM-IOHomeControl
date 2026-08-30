@@ -12,6 +12,8 @@
 #include <cstring>
 #include <cstdint>
 
+#include "test_registry.h"
+
 // Pull in the modules under test
 #include "protocol/IoHomeCrypto.h"
 #include "protocol/IoHomeFrame.h"
@@ -26,10 +28,13 @@
 
 // ---------- Test framework (minimal) ----------
 
-static int sTestsPassed = 0;
-static int sTestsFailed = 0;
+int sTestsPassed = 0;
+int sTestsFailed = 0;
 
-#define TEST(name) static void test_##name()
+#define TEST(name)                                                    \
+    static void test_##name();                                       \
+    static IoHomeTestRegistrar test_registrar_##name(#name, test_##name); \
+    static void test_##name()
 #define RUN(name)                  \
     do                             \
     {                              \
@@ -11063,6 +11068,7 @@ TEST(controller_1w_missing_profile_does_not_send_empty_frame)
 // main
 // =====================================================================
 
+#ifdef TEST_LEGACY_RUNNER
 int main()
 {
     printf("=== OFM-IO-Homecontrol Protocol Unit Tests ===\n\n");
@@ -11599,3 +11605,4 @@ int main()
     printf("\n=== Results: %d passed, %d failed ===\n", sTestsPassed, sTestsFailed);
     return sTestsFailed > 0 ? 1 : 0;
 }
+#endif

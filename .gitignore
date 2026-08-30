@@ -1,0 +1,6 @@
+/test/build/
+/test/*.exe
+/test/test_protocol
+/test/test_sx1262_device_errors
+/test/test_sx1262_iohome_phy
+/test/tp.exe

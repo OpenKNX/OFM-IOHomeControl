@@ -1,10 +1,12 @@
-name: Golden RF corpus
+name: Native protocol suites
 
 on:
   pull_request:
     paths:
       - 'test/corpus/**'
       - 'test/test_protocol.cpp'
+      - 'test/test_registry.h'
+      - 'test/test_suite_main.cpp'
       - 'src/protocol/**'
       - 'src/controller/**'
       - 'test/Makefile'
@@ -14,6 +16,8 @@ on:
     paths:
       - 'test/corpus/**'
       - 'test/test_protocol.cpp'
+      - 'test/test_registry.h'
+      - 'test/test_suite_main.cpp'
       - 'src/protocol/**'
       - 'src/controller/**'
       - 'test/Makefile'
@@ -23,9 +27,19 @@ permissions:
   contents: read
 
 jobs:
-  validate:
+  native-suite:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [protocol, controller, exchange, radio]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ${{ matrix.suite }} suite
+        run: make -C test check-${{ matrix.suite }}
+  golden-rf-corpus:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Build and validate golden RF corpus
+      - name: Validate golden RF corpus
         run: make -C test corpus
