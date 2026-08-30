@@ -10042,14 +10042,17 @@ TEST(byte_vector_controller_2w_execute_payloads_and_retry_start)
     struct Vector
     {
         uint8_t param;
+        uint8_t profile;
         uint8_t expectedLen;
         uint8_t expectedPayload[8];
     };
 
     const Vector vectors[] = {
-        {50, 8, {0x01, 0x67, 0x64, 0x00, 0x80, 0xD8, 0x06, 0x00}},
-        {0xD2, 6, {0x01, 0x67, 0xD2, 0x00, 0x00, 0x00, 0x00, 0x00}},
-        {0xD8, 6, {0x01, 0x67, 0xD8, 0x00, 0x00, 0x00, 0x00, 0x00}},
+        {50, 0xFF, 8, {0x01, 0x67, 0x64, 0x00, 0x80, 0xD8, 0x06, 0x00}},
+        {0xD2, 0xFF, 6, {0x01, 0x67, 0xD2, 0x00, 0x00, 0x00, 0x00, 0x00}},
+        {0xD8, 0xFF, 6, {0x01, 0x67, 0xD8, 0x00, 0x00, 0x00, 0x00, 0x00}},
+        {50, IOHC_EXECUTE_PROFILE_SILENT, 8, {0x01, 0x67, 0x64, 0x00, 0x80, 0xD8, 0x05, 0x00}},
+        {0xD8, IOHC_EXECUTE_PROFILE_SILENT, 8, {0x01, 0x67, 0xD8, 0x00, 0x80, 0xD8, 0x05, 0x00}},
     };
 
     for (const Vector &v : vectors)
@@ -10060,7 +10063,7 @@ TEST(byte_vector_controller_2w_execute_payloads_and_retry_start)
         initPaired2WControllerForTest(lController, lModule, lChannel,
                                       lRemoteNodeId, lDeviceNodeId, lKey);
 
-        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, v.param));
+        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, v.param, 0xFF, v.profile));
 
         IoHomeFrame lFirstFrame;
         ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFirstFrame));

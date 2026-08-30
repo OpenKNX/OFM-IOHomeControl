@@ -187,6 +187,11 @@ inline bool isOpenCloseOnly(IoHomeDeviceType iType)
 #define IOHC_ACEI_DEFAULT 0x67 // priority=3 (user remote), service=0, extended=3, valid=1
 #define IOHC_ACEI_1W 0x43      // priority=2 (user), service=0, extended=1, valid=1 (1W mode)
 
+// 2W Execute extended profile byte. Somfy RS100 captures use the silent
+// profile for absolute-position and favourite commands.
+#define IOHC_EXECUTE_PROFILE_SILENT 0x05
+#define IOHC_EXECUTE_PROFILE_DEFAULT 0x06
+
 // Command originator IDs (Execute data[0])
 #define IOHC_ORIGINATOR_LOCAL 0x00     // local user (button on device)
 #define IOHC_ORIGINATOR_USER 0x01      // remote user (remote control)

@@ -49,6 +49,7 @@
                 <Parameter Id="%AID%_UP-%TT%%CC%018" Name="c%C%OneWayProfileChannel" ParameterType="%AID%_PT-IOHCOneWayProfileChannel" Offset="51" BitOffset="0" Text="1W Profil teilen mit Kanal (0 = eigenes)" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%019" Name="c%C%OneWayAcei" ParameterType="%AID%_PT-IOHCOneWayAcei" Offset="52" BitOffset="0" Text="1W Befehls-Priorität (ACEI)" Value="97" />
                 <Parameter Id="%AID%_UP-%TT%%CC%082" Name="c%C%OneWayEnrollmentMac" ParameterType="%AID%_PT-IOHCCheckBox" Offset="53" BitOffset="0" Text="1W Anmeldung mit MAC-Anhang (0x30)" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%083" Name="c%C%SilentOperation" ParameterType="%AID%_PT-IOHCCheckBox" Offset="53" BitOffset="1" Text="Somfy RS100: leiser Betrieb" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%020" Name="c%C%SceneCount" ParameterType="%AID%_PT-IOHCSceneCount" Offset="13" BitOffset="0" Text="Anzahl Szenen" Value="0" />
                 <!-- Scene slot parameters 1..10 are generated from IoHomecontrol.scene.part.xml. -->
                 <op:usePart name="IOHCScene" xpath="//Parameters/*" />
@@ -80,6 +81,7 @@
               <ParameterRef Id="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801" RefId="%AID%_UP-%TT%%CC%018" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%019_R-%TT%%CC%01901" RefId="%AID%_UP-%TT%%CC%019" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%082_R-%TT%%CC%08201" RefId="%AID%_UP-%TT%%CC%082" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%083_R-%TT%%CC%08301" RefId="%AID%_UP-%TT%%CC%083" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_UP-%TT%%CC%020" />
               <!-- Scene slot ParameterRefs 1..10 are generated from IoHomecontrol.scene.part.xml. -->
               <op:usePart name="IOHCScene" xpath="//ParameterRefs/*" />
@@ -273,6 +275,9 @@
                                 </ParameterBlock>
                               </when>
                             </choose>
+                          </when>
+                          <when test="0">
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%083_R-%TT%%CC%08301" IndentLevel="1" HelpContext="IOHC-Silentbetrieb" />
                           </when>
                         </choose>
 

@@ -9,6 +9,10 @@
 #define ParamIOHC_cDimmable 0
 #endif
 
+#ifndef ParamIOHC_cSilentOperation
+#define ParamIOHC_cSilentOperation 0
+#endif
+
 // ---------------------------------------------------------------------------
 // Scene parameter access
 //
@@ -166,6 +170,7 @@ void IoHomecontrolChannel::setup()
     const uint8_t lOneWayManufacturer = static_cast<uint8_t>(ParamIOHC_cOneWayManufacturer);
     const uint8_t lOneWayAcei = static_cast<uint8_t>(ParamIOHC_cOneWayAcei);
     const bool lOneWayEnrollmentMac = ParamIOHC_cOneWayEnrollmentMac != 0;
+    const bool lSilentOperation = ParamIOHC_cSilentOperation != 0;
 
     // A channel is active when it is activated (Kanalaktivität = Aktiviert) and not temporarily suspended.
     const bool lChannelActive = ParamIOHC_cActive && !ParamIOHC_cSuspend;
@@ -209,6 +214,7 @@ void IoHomecontrolChannel::setup()
     setConfigured1WProfileChannel(lProfileChannel == 0 ? 0xFF : static_cast<uint8_t>(lProfileChannel - 1));
     setConfigured1WAcei(lOneWayAcei != 0 ? lOneWayAcei : IOHC_ACEI_1W);
     setConfigured1WEnrollmentMac(lOneWayEnrollmentMac);
+    mSilentOperation = !mIs1W && lSilentOperation;
     mConfigured1WManufacturer = lOneWayManufacturer;
     if (mConfigured1WManufacturer != 0)
         setOneWayControllerManufacturer(mConfigured1WManufacturer);
@@ -216,13 +222,14 @@ void IoHomecontrolChannel::setup()
     if (mIs1W && mConfigured1WTargetNodeId == 0)
         logInfoP("Channel is configured as 1W but has no ETS 1W target node; pairing must provide a target node explicitly");
 
-    logInfoP("Applied protocol config: %s target=0x%06X broadcastType=%u acei=0x%02X profile=%s manufacturer=0x%02X",
+    logInfoP("Applied protocol config: %s target=0x%06X broadcastType=%u acei=0x%02X profile=%s manufacturer=0x%02X rs100Silent=%u",
              mIs1W ? "1W" : "2W",
              static_cast<unsigned long>(mConfigured1WTargetNodeId),
              static_cast<unsigned>(mConfigured1WBroadcastType),
              static_cast<unsigned>(mConfigured1WAcei),
              mConfigured1WProfileChannel == 0xFF ? "own" : "linked",
-             static_cast<unsigned>(mOneWayControllerManufacturer));
+             static_cast<unsigned>(mOneWayControllerManufacturer),
+             mSilentOperation ? 1U : 0U);
 
     logDebugP("Setup (type=%d, poll=%ds, open=%.1fs, close=%.1fs, invert=%d, powerOn=%d, scenes=%d, 1w=%d, 1wTarget=%06X, 1wType=%u, 1wProfile=%u)",
               ParamIOHC_cDeviceType, ParamIOHC_cPollInterval,
@@ -791,7 +798,8 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
     uint8_t lParam = (uint8_t)(iPercent + 0.5f);
     const bool lQueued = mIs1W
                              ? mController.sendChannelCommand(this, IoHomeCommand::Execute, lParam, iSlatPercent)
-                             : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lParam);
+                             : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lParam,
+                                                       0xFF, mSilentOperation ? IOHC_EXECUTE_PROFILE_SILENT : 0xFF);
     if (!lQueued)
         return;
 
@@ -806,7 +814,8 @@ void IoHomecontrolChannel::sendUpDown(bool iDown)
     uint8_t lPercent = iDown ? 100 : 0;
     const bool lQueued = mIs1W
                              ? mController.sendChannelCommand(this, IoHomeCommand::Execute, lPercent)
-                             : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lPercent);
+                             : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lPercent,
+                                                       0xFF, mSilentOperation ? IOHC_EXECUTE_PROFILE_SILENT : 0xFF);
     if (!lQueued)
         return;
 
@@ -834,7 +843,8 @@ void IoHomecontrolChannel::sendFavorite()
     logDebugP("Send FAVORITE");
     const bool lQueued = mIs1W
                              ? mController.sendChannelCommand(this, IoHomeCommand::Execute, 0xD8)
-                             : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD8);
+                             : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD8,
+                                                       0xFF, mSilentOperation ? IOHC_EXECUTE_PROFILE_SILENT : 0xFF);
     if (!lQueued)
         return;
 
