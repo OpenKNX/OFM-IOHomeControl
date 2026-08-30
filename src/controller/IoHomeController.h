@@ -207,6 +207,33 @@ public:
     Failed = 3
   };
 
+  // Outcome of the most recent pairing attempt. `diagnostic` retains the
+  // latest actionable problem even when pairing later completes (for example,
+  // a device that accepted its key but rejected optional status configuration).
+  enum class PairingOutcome : uint8_t
+  {
+    None = 0,
+    InProgress = 1,
+    Success = 2,
+    NoResponse = 3,
+    InvalidResponse = 4,
+    KeyExchangeFailure = 5,
+    ConfigurationFailure = 6,
+    Cancelled = 7,
+    StartRejected = 8
+  };
+
+  struct PairingTelemetry
+  {
+    PairingOutcome outcome = PairingOutcome::None;
+    PairingOutcome diagnostic = PairingOutcome::None;
+    uint8_t channel = 0;
+    uint32_t peerNodeId = 0;
+    uint8_t lastReceivedCommand = 0xFF;
+    uint8_t rejectedFrames = 0;
+    uint8_t keyExchangeAttempts = 0;
+  };
+
   IoHomeController();
 
   // Initialize radio with hardware pins from IoHomecontrolHardware.h
@@ -397,6 +424,8 @@ public:
   void setPairDiagnosticTraceEnabled(bool iEnabled);
   bool isPairDiagnosticTraceEnabled() const;
   static const char *stateName(ControllerState iState);
+  static const char *pairingOutcomeName(PairingOutcome iOutcome);
+  const PairingTelemetry &pairingTelemetry() const;
   void logPairDiagnosticStatus() const;
 
   // Multi-frequency RX scanning (cycle through all frequencies during idle/passive)
@@ -660,6 +689,7 @@ private:
   uint8_t mPairingChannel;
   PairStartStatus mLastPairStartStatus = PairStartStatus::Ok;
   ControllerState mLastPairStartBlockedState = ControllerState::Idle;
+  PairingTelemetry mPairingTelemetry{};
   uint8_t mPairingChallenge[6];
   uint32_t mDiscoveredNodeId;
   // Optional 2W target supplied by the caller. Discovery is broadcast, but a
@@ -850,6 +880,9 @@ private:
   void processPairSendSetConfig1AuthResponse();
   void processPairWaitSetConfig1FinalResponse();
   void interpretSetConfig1Result(bool iFinalResponse);
+  void beginPairingTelemetry(uint8_t iChannelIndex, uint32_t iKnownNodeId);
+  void recordPairingDiagnostic(PairingOutcome iOutcome, const char *iAction);
+  void completePairingTelemetry(PairingOutcome iOutcome);
   // Store the system key into the paired channel and advance to SetConfig1.
   // Shared by the normal 0x33 confirmation path and the early-confirm path
   // where a device skips its 0x3C challenge and confirms the key directly.

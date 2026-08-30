@@ -768,37 +768,51 @@ namespace
         return true;
     }
 
-    bool build2WExecutePositionPayload(uint8_t iPositionPercent, uint8_t *oData, uint8_t &oLen)
+    bool build2WExecutePositionPayload(uint8_t iPositionPercent, bool iSilentOperation,
+                                       uint8_t *oData, uint8_t &oLen)
     {
         if (oData == nullptr || iPositionPercent > 100)
             return false;
 
-        // Reference template: 01 67 <pos*2> 00 80 D8 06 00
+        // Reference template: 01 67 <pos*2> 00 80 D8 <profile> 00
         oData[0] = IOHC_ORIGINATOR_USER;
         oData[1] = IOHC_ACEI_DEFAULT;
         oData[2] = static_cast<uint8_t>(iPositionPercent * 2U);
         oData[3] = 0x00;
         oData[4] = 0x80;
         oData[5] = 0xD8;
-        oData[6] = 0x06;
+        oData[6] = iSilentOperation ? IOHC_EXECUTE_PROFILE_SILENT : IOHC_EXECUTE_PROFILE_DEFAULT;
         oData[7] = 0x00;
         oLen = 8;
         return true;
     }
 
-    bool build2WExecuteSpecialPayload(uint8_t iSpecialPosition, uint8_t *oData, uint8_t &oLen)
+    bool build2WExecuteSpecialPayload(uint8_t iSpecialPosition, bool iSilentOperation,
+                                      uint8_t *oData, uint8_t &oLen)
     {
         if (oData == nullptr)
             return false;
 
-        // Reference template: 01 67 <D2/D8> 00 00 00
+        // Reference template: 01 67 <D2/D8> 00 00 00. RS100 favourite uses
+        // the observed extended silent form: 01 67 D8 00 80 D8 05 00.
         oData[0] = IOHC_ORIGINATOR_USER;
         oData[1] = IOHC_ACEI_DEFAULT;
         oData[2] = iSpecialPosition;
         oData[3] = 0x00;
-        oData[4] = 0x00;
-        oData[5] = 0x00;
-        oLen = 6;
+        if (iSilentOperation && iSpecialPosition == 0xD8)
+        {
+            oData[4] = 0x80;
+            oData[5] = 0xD8;
+            oData[6] = IOHC_EXECUTE_PROFILE_SILENT;
+            oData[7] = 0x00;
+            oLen = 8;
+        }
+        else
+        {
+            oData[4] = 0x00;
+            oData[5] = 0x00;
+            oLen = 6;
+        }
         return true;
     }
 
@@ -981,18 +995,28 @@ namespace
         uint8_t lLen = 0;
 
         static constexpr uint8_t kExecutePosition50[] = {0x01, 0x67, 0x64, 0x00, 0x80, 0xD8, 0x06, 0x00};
-        if (!build2WExecutePositionPayload(50, lPayload, lLen) ||
+        if (!build2WExecutePositionPayload(50, false, lPayload, lLen) ||
             !payloadEquals(lPayload, lLen, kExecutePosition50, sizeof(kExecutePosition50)))
             return false;
 
         static constexpr uint8_t kExecuteStop[] = {0x01, 0x67, 0xD2, 0x00, 0x00, 0x00};
-        if (!build2WExecuteSpecialPayload(0xD2, lPayload, lLen) ||
+        if (!build2WExecuteSpecialPayload(0xD2, false, lPayload, lLen) ||
             !payloadEquals(lPayload, lLen, kExecuteStop, sizeof(kExecuteStop)))
             return false;
 
         static constexpr uint8_t kExecuteFavorite[] = {0x01, 0x67, 0xD8, 0x00, 0x00, 0x00};
-        if (!build2WExecuteSpecialPayload(0xD8, lPayload, lLen) ||
+        if (!build2WExecuteSpecialPayload(0xD8, false, lPayload, lLen) ||
             !payloadEquals(lPayload, lLen, kExecuteFavorite, sizeof(kExecuteFavorite)))
+            return false;
+
+        static constexpr uint8_t kExecutePosition50Silent[] = {0x01, 0x67, 0x64, 0x00, 0x80, 0xD8, 0x05, 0x00};
+        if (!build2WExecutePositionPayload(50, true, lPayload, lLen) ||
+            !payloadEquals(lPayload, lLen, kExecutePosition50Silent, sizeof(kExecutePosition50Silent)))
+            return false;
+
+        static constexpr uint8_t kExecuteFavoriteSilent[] = {0x01, 0x67, 0xD8, 0x00, 0x80, 0xD8, 0x05, 0x00};
+        if (!build2WExecuteSpecialPayload(0xD8, true, lPayload, lLen) ||
+            !payloadEquals(lPayload, lLen, kExecuteFavoriteSilent, sizeof(kExecuteFavoriteSilent)))
             return false;
 
         static constexpr uint8_t kExecuteTilt50[] = {0x01, 0xE7, 0xD4, 0x00, 0x20, 0x64, 0x00, 0x00};
@@ -1821,8 +1845,14 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
         mState <= ControllerState::PairFailed)
     {
         mLastPairStartStatus = PairStartStatus::Busy;
+        mPairingTelemetry = {PairingOutcome::StartRejected, PairingOutcome::StartRejected,
+                             iChannelIndex, iKnownNodeId & 0x00FFFFFF, 0xFF, 0, 0};
+        recordPairingDiagnostic(PairingOutcome::StartRejected,
+                                "Wait for the active pairing transaction to finish or cancel it first.");
         return false;
     }
+
+    beginPairingTelemetry(iChannelIndex, iKnownNodeId);
 
     if (mState != ControllerState::Idle)
     {
@@ -1878,6 +1908,9 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
             logInfoP("Pairing: 1W controller profile missing for ch%u and could not be generated; run 'iohc 1wnew %u' first",
                      static_cast<unsigned>(iChannelIndex + 1),
                      static_cast<unsigned>(iChannelIndex + 1));
+            completePairingTelemetry(PairingOutcome::ConfigurationFailure);
+            recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
+                                    "Create or repair the 1W controller profile, then retry pairing.");
             return false;
         }
 
@@ -2036,10 +2069,79 @@ void IoHomeController::cancelPairing()
     if (mState >= ControllerState::PairSendDiscovery &&
         mState <= ControllerState::PairFailed)
     {
+        completePairingTelemetry(PairingOutcome::Cancelled);
         mState = ControllerState::Idle;
         startReceive();
         tracePairDiagnosticStateChange();
     }
+}
+
+const char *IoHomeController::pairingOutcomeName(PairingOutcome iOutcome)
+{
+    switch (iOutcome)
+    {
+    case PairingOutcome::None: return "none";
+    case PairingOutcome::InProgress: return "in-progress";
+    case PairingOutcome::Success: return "success";
+    case PairingOutcome::NoResponse: return "no-response";
+    case PairingOutcome::InvalidResponse: return "invalid-response";
+    case PairingOutcome::KeyExchangeFailure: return "key-exchange-failure";
+    case PairingOutcome::ConfigurationFailure: return "configuration-failure";
+    case PairingOutcome::Cancelled: return "cancelled";
+    case PairingOutcome::StartRejected: return "start-rejected";
+    }
+    return "unknown";
+}
+
+const IoHomeController::PairingTelemetry &IoHomeController::pairingTelemetry() const
+{
+    return mPairingTelemetry;
+}
+
+void IoHomeController::beginPairingTelemetry(uint8_t iChannelIndex, uint32_t iKnownNodeId)
+{
+    mPairingTelemetry = {PairingOutcome::InProgress, PairingOutcome::None,
+                         iChannelIndex, iKnownNodeId & 0x00FFFFFF, 0xFF, 0, 0};
+    logInfoP("Pairing outcome: in-progress channel=%u peer=0x%06X",
+             static_cast<unsigned>(iChannelIndex + 1), iKnownNodeId & 0x00FFFFFF);
+}
+
+void IoHomeController::recordPairingDiagnostic(PairingOutcome iOutcome, const char *iAction)
+{
+    mPairingTelemetry.diagnostic = iOutcome;
+    if (iOutcome != PairingOutcome::StartRejected)
+    {
+        mPairingTelemetry.peerNodeId = mDiscoveredNodeId ? mDiscoveredNodeId : mPairingKnownNodeId;
+        mPairingTelemetry.lastReceivedCommand = static_cast<uint8_t>(mRxFrame.commandId);
+    }
+    mPairingTelemetry.keyExchangeAttempts = mPairKeyExchangeAttempts;
+    if (iOutcome == PairingOutcome::InvalidResponse && mPairingTelemetry.rejectedFrames != 0xFF)
+        ++mPairingTelemetry.rejectedFrames;
+    logInfoP("Pairing diagnostic: %s channel=%u peer=0x%06X rx=0x%02X retries=%u rejected=%u; action: %s",
+             pairingOutcomeName(iOutcome),
+             static_cast<unsigned>(mPairingTelemetry.channel + 1),
+             mPairingTelemetry.peerNodeId,
+             static_cast<unsigned>(mPairingTelemetry.lastReceivedCommand),
+             static_cast<unsigned>(mPairingTelemetry.keyExchangeAttempts),
+             static_cast<unsigned>(mPairingTelemetry.rejectedFrames),
+             iAction);
+}
+
+void IoHomeController::completePairingTelemetry(PairingOutcome iOutcome)
+{
+    if (mPairingTelemetry.outcome != PairingOutcome::InProgress && iOutcome != PairingOutcome::StartRejected)
+        return;
+    mPairingTelemetry.outcome = iOutcome;
+    mPairingTelemetry.peerNodeId = mDiscoveredNodeId ? mDiscoveredNodeId : mPairingKnownNodeId;
+    mPairingTelemetry.keyExchangeAttempts = mPairKeyExchangeAttempts;
+    if (iOutcome != PairingOutcome::Success)
+        mPairingTelemetry.diagnostic = iOutcome;
+    logInfoP("Pairing outcome: %s channel=%u peer=0x%06X retries=%u rejected=%u",
+             pairingOutcomeName(iOutcome),
+             static_cast<unsigned>(mPairingTelemetry.channel + 1),
+             mPairingTelemetry.peerNodeId,
+             static_cast<unsigned>(mPairingTelemetry.keyExchangeAttempts),
+             static_cast<unsigned>(mPairingTelemetry.rejectedFrames));
 }
 
 void IoHomeController::startDiscovery(bool iEncrypted)
@@ -3029,6 +3131,13 @@ void IoHomeController::logPairDiagnosticStatus() const
              mDiscoverySPE ? 1 : 0,
              mPassiveMode ? 1 : 0,
              mRxScanEnabled ? 1 : 0);
+    logInfoP("PairDiag: outcome=%s diagnostic=%s telemetryPeer=0x%06X lastRx=0x%02X rejected=%u keyAttempts=%u",
+             pairingOutcomeName(mPairingTelemetry.outcome),
+             pairingOutcomeName(mPairingTelemetry.diagnostic),
+             mPairingTelemetry.peerNodeId,
+             static_cast<unsigned>(mPairingTelemetry.lastReceivedCommand),
+             static_cast<unsigned>(mPairingTelemetry.rejectedFrames),
+             static_cast<unsigned>(mPairingTelemetry.keyExchangeAttempts));
     logInfoP("PairDiag: radio init=%d radioState=%d lastRssi=%d queue=%u duty=%u busyTO=%d irq=0x%04X txS=%lu txD=%lu rxS=%lu crc=%lu timeout=%lu",
              lHealth.initialized ? 1 : 0,
              static_cast<int>(lHealth.radioState),
@@ -3315,6 +3424,7 @@ void IoHomeController::loop()
             mRxParseFailCount++;
         if (lParsed)
         {
+            const ControllerState lPairingStateBeforeRx = mState;
             // Record which frequency the response came on
             mLastResponseFreqIdx = mCurrentFreqIdx;
 
@@ -3565,6 +3675,20 @@ void IoHomeController::loop()
                 // Unsolicited frame (e.g., status update from device)
                 dispatchRxFrame();
             }
+
+            // Pairing accepts only strictly correlated frames. Preserve a
+            // structured reason when a received frame leaves a response-wait
+            // state unchanged, rather than hiding it in transition logs.
+            if (mState == lPairingStateBeforeRx &&
+                (lPairingStateBeforeRx == ControllerState::PairWaitDiscoveryResponse ||
+                 lPairingStateBeforeRx == ControllerState::PairWaitDeviceChallenge ||
+                 lPairingStateBeforeRx == ControllerState::PairWaitKeyTransferConfirmation ||
+                 lPairingStateBeforeRx == ControllerState::PairWaitSetConfig1Response ||
+                 lPairingStateBeforeRx == ControllerState::PairWaitSetConfig1FinalResponse))
+            {
+                recordPairingDiagnostic(PairingOutcome::InvalidResponse,
+                                        "Check controller/device addresses, command phase, and learn mode; unrelated frames are ignored.");
+            }
         }
     }
 
@@ -3680,11 +3804,28 @@ void IoHomeController::loop()
                      mPairingChannel + 1,
                      mDiscoveredNodeId);
         }
+        if (mPairingTelemetry.outcome == PairingOutcome::InProgress)
+        {
+            const PairingOutcome lOutcome = mPairingTelemetry.diagnostic == PairingOutcome::InvalidResponse
+                                                ? PairingOutcome::InvalidResponse
+                                                : (mPairKeyExchangeAttempts > 0
+                                                       ? PairingOutcome::KeyExchangeFailure
+                                                       : PairingOutcome::NoResponse);
+            completePairingTelemetry(lOutcome);
+            recordPairingDiagnostic(lOutcome,
+                                    lOutcome == PairingOutcome::KeyExchangeFailure
+                                        ? "Keep the actuator awake and in learn mode, then retry the 2W key exchange."
+                                        : (lOutcome == PairingOutcome::InvalidResponse
+                                               ? "Check the selected peer and controller identity; unrelated frames were ignored."
+                                               : "Check power, RF range, frequency, and that the actuator is in learn mode."));
+        }
         mState = ControllerState::Idle;
         startReceive();
         break;
     }
     case ControllerState::PairComplete:
+        if (mPairingTelemetry.outcome == PairingOutcome::InProgress)
+            completePairingTelemetry(PairingOutcome::Success);
         mState = ControllerState::Idle;
         startReceive();
         break;
@@ -5220,6 +5361,8 @@ void IoHomeController::processPairSendSetConfig1()
     if (!build2WSetConfig1(mTxFrame, mOwnNodeId, mDiscoveredNodeId))
     {
         logDebugP("Pairing: failed to build SetConfig1 for 0x%06X", mDiscoveredNodeId);
+        recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
+                                "The key was stored; status feedback could not be configured. Verify it with a normal command.");
         mState = ControllerState::PairComplete;
         return;
     }
@@ -5236,6 +5379,8 @@ void IoHomeController::processPairSendSetConfig1()
     if (mTxLen == 0)
     {
         logDebugP("Pairing: failed to serialize SetConfig1 for 0x%06X", mDiscoveredNodeId);
+        recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
+                                "The key was stored; status feedback could not be configured. Verify it with a normal command.");
         mState = ControllerState::PairComplete;
         return;
     }
@@ -5246,6 +5391,8 @@ void IoHomeController::processPairSendSetConfig1()
     if (lPrepErr != RadioError::None)
     {
         logDebugP("Pairing: failed to send SetConfig1 to 0x%06X", mDiscoveredNodeId);
+        recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
+                                "The key was stored; status feedback could not be configured. Verify RF and retry if needed.");
         mState = ControllerState::PairComplete;
         return;
     }
@@ -5264,6 +5411,8 @@ void IoHomeController::processPairSendSetConfig1()
     else
     {
         logDebugP("Pairing: failed to send SetConfig1 to 0x%06X", mDiscoveredNodeId);
+        recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
+                                "The key was stored; status feedback could not be configured. Verify RF and retry if needed.");
         mState = ControllerState::PairComplete;
     }
 }
@@ -5275,6 +5424,8 @@ void IoHomeController::processPairWaitSetConfig1Response()
         return;
     if (lRxErr != RadioError::None)
     {
+        recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
+                                "The key was stored; no configuration response was received. Verify status feedback manually.");
         mState = ControllerState::PairComplete;
         return;
     }
@@ -5282,6 +5433,8 @@ void IoHomeController::processPairWaitSetConfig1Response()
     if (millis() - mStateTimer > 2000)
     {
         logDebugP("Pairing: SetConfig1 timed out for 0x%06X", mDiscoveredNodeId);
+        recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
+                                "The key was stored; no configuration response was received. Verify status feedback manually.");
         mState = ControllerState::PairComplete;
     }
 }
@@ -5300,12 +5453,16 @@ void IoHomeController::interpretSetConfig1Result(bool iFinalResponse)
         logInfoP(iFinalResponse ? "Pairing: device 0x%06X rejected automatic status feedback"
                                 : "Pairing: device 0x%06X does not support automatic status feedback",
                  mDiscoveredNodeId);
+        recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
+                                "The key was stored, but the actuator rejected optional automatic status feedback.");
     }
     else
     {
         logDebugP(iFinalResponse ? "Pairing: unexpected final SetConfig1 response 0x%02X from 0x%06X"
                                  : "Pairing: unexpected SetConfig1 response 0x%02X from 0x%06X",
                   static_cast<uint8_t>(mRxFrame.commandId), mDiscoveredNodeId);
+        recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
+                                "The key was stored, but the configuration response format was not accepted.");
     }
 
     mState = ControllerState::PairComplete;
@@ -6058,12 +6215,16 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             }
             else if (iEntry.param <= 100)
             {
-                if (!build2WExecutePositionPayload(iEntry.param, mTxFrame.data, mTxFrame.dataLen))
+                if (!build2WExecutePositionPayload(iEntry.param,
+                                                   iEntry.param3 == IOHC_EXECUTE_PROFILE_SILENT,
+                                                   mTxFrame.data, mTxFrame.dataLen))
                     return false;
             }
             else
             {
-                if (!build2WExecuteSpecialPayload(iEntry.param, mTxFrame.data, mTxFrame.dataLen))
+                if (!build2WExecuteSpecialPayload(iEntry.param,
+                                                  iEntry.param3 == IOHC_EXECUTE_PROFILE_SILENT,
+                                                  mTxFrame.data, mTxFrame.dataLen))
                     return false;
             }
 

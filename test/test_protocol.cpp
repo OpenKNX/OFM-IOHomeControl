@@ -10031,6 +10031,23 @@ TEST(retry_preserves_start_flag_for_2w_request)
     ASSERT_TRUE(retryKeepsStartForQueued2WSetName());
 }
 
+TEST(pairing_telemetry_reports_start_and_cancel)
+{
+    IoHomeController lController;
+
+    ASSERT_TRUE(lController.startPairing(2, 0x123456));
+    const IoHomeController::PairingTelemetry &lStarted = lController.pairingTelemetry();
+    ASSERT_EQ(lStarted.outcome, IoHomeController::PairingOutcome::InProgress);
+    ASSERT_EQ(lStarted.diagnostic, IoHomeController::PairingOutcome::None);
+    ASSERT_EQ(lStarted.channel, 2);
+    ASSERT_EQ(lStarted.peerNodeId, 0x123456U);
+
+    lController.cancelPairing();
+    const IoHomeController::PairingTelemetry &lCancelled = lController.pairingTelemetry();
+    ASSERT_EQ(lCancelled.outcome, IoHomeController::PairingOutcome::Cancelled);
+    ASSERT_EQ(lCancelled.diagnostic, IoHomeController::PairingOutcome::Cancelled);
+}
+
 TEST(byte_vector_controller_2w_execute_payloads_and_retry_start)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
