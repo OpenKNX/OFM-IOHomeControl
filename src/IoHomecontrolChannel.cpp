@@ -13,6 +13,10 @@
 #define ParamIOHC_cSilentOperation 0
 #endif
 
+#ifndef ParamIOHC_cOneWayEnrollmentFinalizer
+#define ParamIOHC_cOneWayEnrollmentFinalizer 0
+#endif
+
 // ---------------------------------------------------------------------------
 // Scene parameter access
 //
@@ -170,6 +174,7 @@ void IoHomecontrolChannel::setup()
     const uint8_t lOneWayManufacturer = static_cast<uint8_t>(ParamIOHC_cOneWayManufacturer);
     const uint8_t lOneWayAcei = static_cast<uint8_t>(ParamIOHC_cOneWayAcei);
     const bool lOneWayEnrollmentMac = ParamIOHC_cOneWayEnrollmentMac != 0;
+    const uint8_t lOneWayEnrollmentFinalizer = static_cast<uint8_t>(ParamIOHC_cOneWayEnrollmentFinalizer);
     const bool lSilentOperation = ParamIOHC_cSilentOperation != 0;
 
     // A channel is active when it is activated (Kanalaktivität = Aktiviert) and not temporarily suspended.
@@ -214,6 +219,10 @@ void IoHomecontrolChannel::setup()
     setConfigured1WProfileChannel(lProfileChannel == 0 ? 0xFF : static_cast<uint8_t>(lProfileChannel - 1));
     setConfigured1WAcei(lOneWayAcei != 0 ? lOneWayAcei : IOHC_ACEI_1W);
     setConfigured1WEnrollmentMac(lOneWayEnrollmentMac);
+    setConfigured1WEnrollmentFinalizer(
+        lOneWayEnrollmentFinalizer <= static_cast<uint8_t>(OneWayEnrollmentFinalizer::StopDown)
+            ? static_cast<OneWayEnrollmentFinalizer>(lOneWayEnrollmentFinalizer)
+            : OneWayEnrollmentFinalizer::Automatic);
     mSilentOperation = !mIs1W && lSilentOperation;
     mConfigured1WManufacturer = lOneWayManufacturer;
     if (mConfigured1WManufacturer != 0)
@@ -222,13 +231,14 @@ void IoHomecontrolChannel::setup()
     if (mIs1W && mConfigured1WTargetNodeId == 0)
         logInfoP("Channel is configured as 1W but has no ETS 1W target node; pairing must provide a target node explicitly");
 
-    logInfoP("Applied protocol config: %s target=0x%06X broadcastType=%u acei=0x%02X profile=%s manufacturer=0x%02X rs100Silent=%u",
+    logInfoP("Applied protocol config: %s target=0x%06X broadcastType=%u acei=0x%02X profile=%s manufacturer=0x%02X enrollFinalizer=%u rs100Silent=%u",
              mIs1W ? "1W" : "2W",
              static_cast<unsigned long>(mConfigured1WTargetNodeId),
              static_cast<unsigned>(mConfigured1WBroadcastType),
              static_cast<unsigned>(mConfigured1WAcei),
              mConfigured1WProfileChannel == 0xFF ? "own" : "linked",
              static_cast<unsigned>(mOneWayControllerManufacturer),
+             static_cast<unsigned>(mConfigured1WEnrollmentFinalizer),
              mSilentOperation ? 1U : 0U);
 
     logDebugP("Setup (type=%d, poll=%ds, open=%.1fs, close=%.1fs, invert=%d, powerOn=%d, scenes=%d, 1w=%d, 1wTarget=%06X, 1wType=%u, 1wProfile=%u)",
@@ -788,6 +798,8 @@ void IoHomecontrolChannel::setConfigured1WAcei(uint8_t iAcei) { mConfigured1WAce
 uint8_t IoHomecontrolChannel::getConfigured1WAcei() const { return mConfigured1WAcei; }
 void IoHomecontrolChannel::setConfigured1WEnrollmentMac(bool iEnabled) { mConfigured1WEnrollmentMac = iEnabled; }
 bool IoHomecontrolChannel::getConfigured1WEnrollmentMac() const { return mConfigured1WEnrollmentMac; }
+void IoHomecontrolChannel::setConfigured1WEnrollmentFinalizer(OneWayEnrollmentFinalizer iFinalizer) { mConfigured1WEnrollmentFinalizer = iFinalizer; }
+OneWayEnrollmentFinalizer IoHomecontrolChannel::getConfigured1WEnrollmentFinalizer() const { return mConfigured1WEnrollmentFinalizer; }
 
 // --- Private command methods ---
 

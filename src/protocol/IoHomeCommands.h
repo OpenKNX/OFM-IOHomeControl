@@ -111,6 +111,16 @@ enum class IoHomeCommand : uint8_t
     ErrorResponse = 0xFE
 };
 
+// Configured 1W enrollment completion policy. Automatic stays conservative:
+// it resolves to STOP+DOWN only for a controller profile whose manufacturer is
+// explicitly VELUX; unknown and Somfy-style profiles resolve to no finalizer.
+enum class OneWayEnrollmentFinalizer : uint8_t
+{
+    Automatic = 0,
+    None = 1,
+    StopDown = 2,
+};
+
 // io-homecontrol device types
 enum class IoHomeDeviceType : uint8_t
 {
@@ -270,6 +280,8 @@ constexpr uint32_t IOHC_FREQUENCIES[IOHC_NUM_FREQUENCIES] = {
 // 1W repeat transmission (fire-and-forget sends 4x at 40ms intervals)
 #define IOHC_1W_REPEAT_COUNT 4        // 4 additional repeats (5 total transmissions, matches reference)
 #define IOHC_1W_REPEAT_INTERVAL_MS 40 // ms between 1W repeat transmissions
+#define IOHC_1W_ENROLL_FINALIZER_DELAY_MS 40
+#define IOHC_1W_ENROLL_FINALIZER_DEADLINE_MS 3000
 
 // Sync word
 constexpr uint8_t IOHC_SYNC_WORD[3] = {0x55, 0xFF, 0x33};

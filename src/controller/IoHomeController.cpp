@@ -135,6 +135,20 @@ namespace
         }
     }
 
+    const char *oneWayEnrollPhaseName(IoHomeController::OneWayEnrollPhase iPhase)
+    {
+        switch (iPhase)
+        {
+        case IoHomeController::OneWayEnrollPhase::Remove: return "remove";
+        case IoHomeController::OneWayEnrollPhase::Add: return "add";
+        case IoHomeController::OneWayEnrollPhase::FinalizeStop: return "finalize-stop";
+        case IoHomeController::OneWayEnrollPhase::FinalizeDown: return "finalize-down";
+        case IoHomeController::OneWayEnrollPhase::Complete: return "complete";
+        case IoHomeController::OneWayEnrollPhase::Failed: return "failed";
+        }
+        return "unknown";
+    }
+
     bool build1WSendKey30(IoHomeFrame &oFrame,
                           const uint8_t iEncryptedKey[16],
                           uint8_t iManufacturer, uint16_t iSequence,
@@ -319,6 +333,11 @@ namespace
         case ControllerState::PairWait1WRemove:
         case ControllerState::PairSend1WKeyTransfer:
         case ControllerState::PairWait1WKeyTransfer:
+        case ControllerState::PairSend1WFinalizerStop:
+        case ControllerState::PairWait1WFinalizerStop:
+        case ControllerState::PairWait1WFinalizerGap:
+        case ControllerState::PairSend1WFinalizerDown:
+        case ControllerState::PairWait1WFinalizerDown:
             return "1w";
         default:
             break;
@@ -1189,6 +1208,30 @@ uint32_t IoHomeController::oneWayBroadcastTarget(uint8_t iBroadcastType) const
     return static_cast<uint32_t>(((static_cast<uint16_t>(iBroadcastType & 0x3F) << 6) | 0x003F) & 0x00FFFF);
 }
 
+uint8_t IoHomeController::pairing1WAddDestinationCount() const
+{
+    // A real VELUX KLI enrollment ring sends the same logical 0x30 (and the
+    // same rolling sequence) to All plus its three observed product classes.
+    return mPairing1WVeluxProfile ? 4U : 1U;
+}
+
+uint32_t IoHomeController::pairing1WAddDestination() const
+{
+    if (!mPairing1WVeluxProfile)
+        return oneWayBroadcastTarget(mPairing1WBroadcastType);
+
+    static constexpr uint32_t kVeluxKliAddDestinations[] = {
+        0x00003F, // All / generic
+        0x0000BF, // VELUX window family
+        0x0000FF, // VELUX shutter / dual-shutter family
+        0x00037F, // VELUX blind and other observed products
+    };
+    const uint8_t lIndex = mPairing1WAddDestinationIndex < 4U
+                               ? mPairing1WAddDestinationIndex
+                               : 0U;
+    return kVeluxKliAddDestinations[lIndex];
+}
+
 uint8_t IoHomeController::oneWayBroadcastTypeForEtsDeviceType(uint8_t iEtsDeviceType)
 {
     // The reference implementation sends to the protocol class passed by the
@@ -1891,6 +1934,10 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mPairKeyExchangeStartTime = 0;
     mTx1WRepeatRemaining = 0;
     mTx1WRepeatTimer = 0;
+    mPairing1WAddDestinationIndex = 0;
+    mPairing1WAddSequence = 0;
+    mPairing1WStopStartedAt = 0;
+    mPairing1WDownStartedAt = 0;
 
     IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(iChannelIndex) : nullptr;
     if (lCh && lCh->is1W())
@@ -1913,6 +1960,13 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
                                     "Create or repair the 1W controller profile, then retry pairing.");
             return false;
         }
+
+        IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lCh);
+        const uint8_t lManufacturer = lProfile ? lProfile->getOneWayControllerManufacturer() : 0;
+        mPairing1WVeluxProfile = lManufacturer == static_cast<uint8_t>(IoHomeManufacturer::Velux);
+        mPairing1WFinalizer = resolveOneWayEnrollmentFinalizer(
+            lCh->getConfigured1WEnrollmentFinalizer(), lManufacturer);
+        resetOneWayEnrollmentTrace();
 
         mPairing1WBroadcastType = lCh->getConfigured1WBroadcastType();
         uint32_t lKnownNodeId = iKnownNodeId & 0x00FFFFFF;
@@ -1961,6 +2015,12 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
         logInfoP("Pairing: 1W class type=%u dst=0x%06X; it must match the actuator class or enrollment and commands will not be accepted",
                  static_cast<unsigned>(mPairing1WBroadcastType),
                  static_cast<unsigned>(oneWayBroadcastTarget(mPairing1WBroadcastType)));
+        logInfoP("Pairing: 1W profile=%s manufacturer=0x%02X addDestinations=%u configuredFinalizer=%s resolvedFinalizer=%s",
+                 mPairing1WVeluxProfile ? "velux-kli" : "generic",
+                 static_cast<unsigned>(lManufacturer),
+                 static_cast<unsigned>(pairing1WAddDestinationCount()),
+                 oneWayEnrollmentFinalizerName(lCh->getConfigured1WEnrollmentFinalizer()),
+                 oneWayEnrollmentFinalizerName(mPairing1WFinalizer));
         if (mPairDiagnosticTraceEnabled)
         {
             logInfoP("PairDiag: starting 1W mode=%s sequence=%s state=%s",
@@ -2096,6 +2156,100 @@ const char *IoHomeController::pairingOutcomeName(PairingOutcome iOutcome)
 const IoHomeController::PairingTelemetry &IoHomeController::pairingTelemetry() const
 {
     return mPairingTelemetry;
+}
+
+const IoHomeController::OneWayEnrollmentTraceEntry *IoHomeController::oneWayEnrollmentTrace() const
+{
+    return mOneWayEnrollmentTrace;
+}
+
+uint8_t IoHomeController::oneWayEnrollmentTraceCount() const
+{
+    return mOneWayEnrollmentTraceCount;
+}
+
+OneWayEnrollmentFinalizer IoHomeController::resolveOneWayEnrollmentFinalizer(
+    OneWayEnrollmentFinalizer iConfigured, uint8_t iManufacturer)
+{
+    if (iConfigured == OneWayEnrollmentFinalizer::StopDown)
+        return OneWayEnrollmentFinalizer::StopDown;
+    if (iConfigured == OneWayEnrollmentFinalizer::None)
+        return OneWayEnrollmentFinalizer::None;
+    return iManufacturer == static_cast<uint8_t>(IoHomeManufacturer::Velux)
+               ? OneWayEnrollmentFinalizer::StopDown
+               : OneWayEnrollmentFinalizer::None;
+}
+
+const char *IoHomeController::oneWayEnrollmentFinalizerName(OneWayEnrollmentFinalizer iFinalizer)
+{
+    switch (iFinalizer)
+    {
+    case OneWayEnrollmentFinalizer::Automatic: return "automatic";
+    case OneWayEnrollmentFinalizer::StopDown: return "stop-down";
+    case OneWayEnrollmentFinalizer::None: return "none";
+    }
+    return "unknown";
+}
+
+void IoHomeController::resetOneWayEnrollmentTrace()
+{
+    for (uint8_t i = 0; i < kOneWayEnrollmentTraceSize; ++i)
+        mOneWayEnrollmentTrace[i] = OneWayEnrollmentTraceEntry{};
+    mOneWayEnrollmentTraceCount = 0;
+    mOneWayEnrollmentActiveTrace = -1;
+}
+
+void IoHomeController::recordOneWayEnrollmentPhase(OneWayEnrollPhase iPhase,
+                                                    uint16_t iSequence,
+                                                    uint32_t iDestination)
+{
+    if (mOneWayEnrollmentTraceCount >= kOneWayEnrollmentTraceSize)
+        return;
+    OneWayEnrollmentTraceEntry &lEntry = mOneWayEnrollmentTrace[mOneWayEnrollmentTraceCount];
+    lEntry.phase = iPhase;
+    lEntry.sequence = iSequence;
+    lEntry.source = mTxFrame.getSrcNodeId();
+    lEntry.destination = iDestination & 0x00FFFFFF;
+    lEntry.timestampMs = millis();
+    lEntry.elapsedMs = millis() - mPairingStartTime;
+    lEntry.txSuccess = false;
+    lEntry.valid = true;
+    mOneWayEnrollmentActiveTrace = static_cast<int8_t>(mOneWayEnrollmentTraceCount);
+    ++mOneWayEnrollmentTraceCount;
+
+    logInfoP("1W enroll: controller=%02u source=0x%06X phase=%s seq=%u dst=0x%06X tx=pending",
+             static_cast<unsigned>(mPairingChannel + 1),
+             mTxFrame.getSrcNodeId(), oneWayEnrollPhaseName(iPhase),
+             static_cast<unsigned>(iSequence), iDestination & 0x00FFFFFF);
+}
+
+void IoHomeController::completeOneWayEnrollmentPhase(bool iSuccess)
+{
+    if (mOneWayEnrollmentActiveTrace < 0 ||
+        static_cast<uint8_t>(mOneWayEnrollmentActiveTrace) >= mOneWayEnrollmentTraceCount)
+        return;
+    OneWayEnrollmentTraceEntry &lEntry = mOneWayEnrollmentTrace[mOneWayEnrollmentActiveTrace];
+    lEntry.txSuccess = iSuccess;
+    logInfoP("1W enroll: controller=%02u phase=%s seq=%u dst=0x%06X tx=%s elapsed=%lums",
+             static_cast<unsigned>(mPairingChannel + 1), oneWayEnrollPhaseName(lEntry.phase),
+             static_cast<unsigned>(lEntry.sequence), lEntry.destination,
+             iSuccess ? "success" : "failure",
+             static_cast<unsigned long>(millis() - lEntry.timestampMs));
+    mOneWayEnrollmentActiveTrace = -1;
+}
+
+void IoHomeController::failOneWayEnrollment(const char *iReason)
+{
+    completeOneWayEnrollmentPhase(false);
+    recordOneWayEnrollmentPhase(OneWayEnrollPhase::Failed, 0, 0);
+    completeOneWayEnrollmentPhase(false);
+    logInfoP("1W enroll: failed controller=%02u phase-state=%s reason=%s",
+             static_cast<unsigned>(mPairingChannel + 1), stateName(mState),
+             iReason ? iReason : "transmission failure");
+    completePairingTelemetry(PairingOutcome::ConfigurationFailure);
+    recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
+                            iReason ? iReason : "Retry 1W enrollment while the target remains in association mode.");
+    mState = ControllerState::PairFailed;
 }
 
 void IoHomeController::beginPairingTelemetry(uint8_t iChannelIndex, uint32_t iKnownNodeId)
@@ -2835,6 +2989,16 @@ const char *IoHomeController::stateName(ControllerState iState)
         return "PairSend1WKeyTransfer";
     case ControllerState::PairWait1WKeyTransfer:
         return "PairWait1WKeyTransfer";
+    case ControllerState::PairSend1WFinalizerStop:
+        return "PairSend1WFinalizerStop";
+    case ControllerState::PairWait1WFinalizerStop:
+        return "PairWait1WFinalizerStop";
+    case ControllerState::PairWait1WFinalizerGap:
+        return "PairWait1WFinalizerGap";
+    case ControllerState::PairSend1WFinalizerDown:
+        return "PairSend1WFinalizerDown";
+    case ControllerState::PairWait1WFinalizerDown:
+        return "PairWait1WFinalizerDown";
     case ControllerState::PairSendKeyInit:
         return "PairSendKeyInit";
     case ControllerState::PairWaitDeviceChallenge:
@@ -3170,6 +3334,22 @@ void IoHomeController::logPairDiagnosticStatus() const
              static_cast<unsigned>(mPairingTelemetry.lastReceivedCommand),
              static_cast<unsigned>(mPairingTelemetry.rejectedFrames),
              static_cast<unsigned>(mPairingTelemetry.keyExchangeAttempts));
+    logInfoP("PairDiag: 1W mode=%s profile=%s addDestination=%u/%u finalizer=%s traceEntries=%u",
+             pairing1WModeName(mPairing1WMode),
+             mPairing1WVeluxProfile ? "velux-kli" : "generic",
+             static_cast<unsigned>(mPairing1WAddDestinationIndex + 1U),
+             static_cast<unsigned>(pairing1WAddDestinationCount()),
+             oneWayEnrollmentFinalizerName(mPairing1WFinalizer),
+             static_cast<unsigned>(mOneWayEnrollmentTraceCount));
+    for (uint8_t i = 0; i < mOneWayEnrollmentTraceCount; ++i)
+    {
+        const OneWayEnrollmentTraceEntry &lEntry = mOneWayEnrollmentTrace[i];
+        logInfoP("PairDiag: 1W trace[%u] phase=%s seq=%u src=0x%06X dst=0x%06X at=%lums tx=%s",
+                 static_cast<unsigned>(i), oneWayEnrollPhaseName(lEntry.phase),
+                 static_cast<unsigned>(lEntry.sequence), lEntry.source, lEntry.destination,
+                 static_cast<unsigned long>(lEntry.elapsedMs),
+                 lEntry.txSuccess ? "success" : "failure");
+    }
     logInfoP("PairDiag: radio init=%d radioState=%d lastRssi=%d queue=%u duty=%u busyTO=%d irq=0x%04X txS=%lu txD=%lu rxS=%lu crc=%lu timeout=%lu",
              lHealth.initialized ? 1 : 0,
              static_cast<int>(lHealth.radioState),
@@ -3790,6 +3970,21 @@ void IoHomeController::loop()
         break;
     case ControllerState::PairWait1WKeyTransfer:
         processPairWait1WKeyTransfer();
+        break;
+    case ControllerState::PairSend1WFinalizerStop:
+        processPairSend1WFinalizerStop();
+        break;
+    case ControllerState::PairWait1WFinalizerStop:
+        processPairWait1WFinalizerStop();
+        break;
+    case ControllerState::PairWait1WFinalizerGap:
+        processPairWait1WFinalizerGap();
+        break;
+    case ControllerState::PairSend1WFinalizerDown:
+        processPairSend1WFinalizerDown();
+        break;
+    case ControllerState::PairWait1WFinalizerDown:
+        processPairWait1WFinalizerDown();
         break;
     case ControllerState::PairSendKeyInit:
         processPairSendKeyInit();
@@ -4740,7 +4935,7 @@ void IoHomeController::processPairSend1WRemove()
 {
     if (millis() - mPairingStartTime > IOHC_PAIR_TIMEOUT_MS)
     {
-        mState = ControllerState::PairFailed;
+        failOneWayEnrollment("remove phase exceeded the enrollment time budget");
         return;
     }
 
@@ -4751,7 +4946,7 @@ void IoHomeController::processPairSend1WRemove()
         return;
     if (lPrepErr != RadioError::None)
     {
-        mState = ControllerState::PairFailed;
+        failOneWayEnrollment("radio preparation failed before 0x39 REMOVE");
         return;
     }
 
@@ -4759,7 +4954,7 @@ void IoHomeController::processPairSend1WRemove()
     IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lCh);
     if (!lCh || !lProfile || !lProfile->hasOneWayControllerIdentity())
     {
-        mState = ControllerState::PairFailed;
+        failOneWayEnrollment("controller profile is unavailable for 0x39 REMOVE");
         return;
     }
 
@@ -4777,7 +4972,7 @@ void IoHomeController::processPairSend1WRemove()
     uint8_t lHmacInput[2] = {static_cast<uint8_t>(mTxFrame.commandId), 0x00};
     if (!createAndTraceHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
     {
-        mState = ControllerState::PairFailed;
+        failOneWayEnrollment("HMAC generation failed for 0x39 REMOVE");
         return;
     }
     mTxFrame.hasHmac = true;
@@ -4785,9 +4980,12 @@ void IoHomeController::processPairSend1WRemove()
     mTxLen = mTxFrame.serialize1W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen == 0)
     {
-        mState = ControllerState::PairFailed;
+        failOneWayEnrollment("serialization failed for 0x39 REMOVE");
         return;
     }
+
+    recordOneWayEnrollmentPhase(OneWayEnrollPhase::Remove, lSeq,
+                                mTxFrame.getDestNodeId());
 
     if (mPairDiagnosticTraceEnabled)
     {
@@ -4814,10 +5012,8 @@ void IoHomeController::processPairSend1WRemove()
         mTx1WHopFrequencies = false; // pairing remove stays on the fixed CH2
         mState = ControllerState::PairWait1WRemove;
     }
-    else if (lErr != RadioError::Busy)
-    {
-        mState = ControllerState::PairFailed;
-    }
+    else
+        failOneWayEnrollment("radio rejected 0x39 REMOVE");
 }
 
 void IoHomeController::processPairWait1WRemove()
@@ -4827,6 +5023,15 @@ void IoHomeController::processPairWait1WRemove()
                                            : ControllerState::PairComplete;
     if (!processPairWait1WBlind(lNextState))
         return;
+
+    if (mState == ControllerState::PairWait1WRemove)
+        return;
+    if (mState == ControllerState::PairFailed)
+    {
+        failOneWayEnrollment("0x39 REMOVE burst did not complete");
+        return;
+    }
+    completeOneWayEnrollmentPhase(true);
 
     if (mState == ControllerState::PairSend1WKeyTransfer)
     {
@@ -4844,6 +5049,8 @@ void IoHomeController::processPairWait1WRemove()
             logInfoP("Pairing: 1W mode=%s complete for channel %d (no 0x30 key transfer follows)",
                      pairing1WModeName(mPairing1WMode),
                      mPairingChannel + 1);
+            recordOneWayEnrollmentPhase(OneWayEnrollPhase::Complete, 0, 0);
+            completeOneWayEnrollmentPhase(true);
         }
     }
 }
@@ -4852,7 +5059,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
 {
     if (millis() - mPairingStartTime > IOHC_PAIR_TIMEOUT_MS)
     {
-        mState = ControllerState::PairFailed;
+        failOneWayEnrollment("add phase exceeded the enrollment time budget");
         return;
     }
 
@@ -4860,7 +5067,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
     IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lCh);
     if (!lCh || !lProfile || !lProfile->hasOneWayControllerIdentity())
     {
-        mState = ControllerState::PairFailed;
+        failOneWayEnrollment("controller profile is unavailable for 0x30 ADD_CONTROLLER");
         return;
     }
 
@@ -4871,7 +5078,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
         return;
     if (lPrepErr != RadioError::None)
     {
-        mState = ControllerState::PairFailed;
+        failOneWayEnrollment("radio preparation failed before 0x30 ADD_CONTROLLER");
         return;
     }
 
@@ -4892,7 +5099,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
         logInfoP("Pairing: refusing 1W SendKey1W because remote/controller node is invalid remote=0x%06X device=0x%06X",
                  lRemoteNodeId,
                  mDiscoveredNodeId);
-        mState = ControllerState::PairFailed;
+        failOneWayEnrollment("invalid controller identity for 0x30 ADD_CONTROLLER");
         return;
     }
 
@@ -4902,29 +5109,26 @@ void IoHomeController::processPairSend1WKeyTransfer()
     lRemoteNodeAddr[2] = lRemoteNodeId & 0xFF;
 
     mTxFrame.setSrcNode(lRemoteNodeId);
-    mTxFrame.setDestNode(oneWayBroadcastTarget(mPairing1WBroadcastType));
+    mTxFrame.setDestNode(pairing1WAddDestination());
 
     uint8_t lEncryptedKey[16];
     if (!IoHomeCrypto::encrypt1WKey(lProfile->getOneWayControllerKey(), IOHC_TRANSFER_KEY, lRemoteNodeAddr, lEncryptedKey))
     {
-        mState = ControllerState::PairFailed;
+        failOneWayEnrollment("controller-key wrapping failed for 0x30 ADD_CONTROLLER");
         return;
     }
 
     if (mPairDiagnosticTraceEnabled)
-    {
-        const std::string lEncKeyHex = hexDump(lEncryptedKey, sizeof(lEncryptedKey));
-        logInfoP("1w key: remote=0x%06X device=0x%06X ivAddr=remote encKey=%s",
-                 lRemoteNodeId,
-                 mDiscoveredNodeId,
-                 lEncKeyHex.c_str());
-    }
+        logInfoP("1w key: remote=0x%06X device=0x%06X ivAddr=remote encrypted-key=redacted",
+                 lRemoteNodeId, mDiscoveredNodeId);
 
-    uint16_t lSeq = nextSequence1W(lProfile, true);
+    if (mPairing1WAddDestinationIndex == 0)
+        mPairing1WAddSequence = nextSequence1W(lProfile, true);
+    const uint16_t lSeq = mPairing1WAddSequence;
     if (!build1WSendKey(mTxFrame, lEncryptedKey, lProfile->getOneWayControllerManufacturer(), lSeq,
                         lProfile->getOneWayControllerKey(), lProfile->getConfigured1WEnrollmentMac()))
     {
-        mState = ControllerState::PairFailed;
+        failOneWayEnrollment("0x30 ADD_CONTROLLER payload generation failed");
         return;
     }
 
@@ -4948,9 +5152,11 @@ void IoHomeController::processPairSend1WKeyTransfer()
                      static_cast<unsigned>(mCurrentFreqIdx),
                      static_cast<unsigned long>(IOHC_FREQ_2));
             trace1WRepeatPlan("1w key");
-            const std::string lHex = hexDump(mTxBuffer, mTxLen);
-            logInfoP("PairDiag: 1W key tx hex=%s", lHex.c_str());
+            logInfoP("PairDiag: 1W key tx payload=redacted");
         }
+
+        recordOneWayEnrollmentPhase(OneWayEnrollPhase::Add, lSeq,
+                                    mTxFrame.getDestNodeId());
 
         const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
@@ -4965,19 +5171,228 @@ void IoHomeController::processPairSend1WKeyTransfer()
             mPairDiag1WTxSampleCount = 0;
             mState = ControllerState::PairWait1WKeyTransfer;
         }
+        else
+            failOneWayEnrollment("radio rejected 0x30 ADD_CONTROLLER");
     }
     else
-    {
-        mState = ControllerState::PairFailed;
-    }
+        failOneWayEnrollment("serialization failed for 0x30 ADD_CONTROLLER");
 }
 
 void IoHomeController::processPairWait1WKeyTransfer()
 {
-    if (!processPairWait1WBlind(ControllerState::PairComplete))
+    const bool lHasMoreAddDestinations =
+        static_cast<uint8_t>(mPairing1WAddDestinationIndex + 1U) < pairing1WAddDestinationCount();
+    const ControllerState lNextState = lHasMoreAddDestinations
+                                           ? ControllerState::PairSend1WKeyTransfer
+                                           : (mPairing1WFinalizer == OneWayEnrollmentFinalizer::StopDown
+                                                  ? ControllerState::PairSend1WFinalizerStop
+                                                  : ControllerState::PairComplete);
+    if (!processPairWait1WBlind(lNextState))
         return;
 
-    if (mState == ControllerState::PairComplete && mModule)
+    if (mState == ControllerState::PairWait1WKeyTransfer)
+        return;
+    if (mState == ControllerState::PairFailed)
+    {
+        failOneWayEnrollment("0x30 ADD_CONTROLLER burst did not complete");
+        return;
+    }
+
+    completeOneWayEnrollmentPhase(true);
+    if (mState == ControllerState::PairSend1WKeyTransfer)
+    {
+        ++mPairing1WAddDestinationIndex;
+        return;
+    }
+    if (mState == ControllerState::PairSend1WFinalizerStop)
+    {
+        mPairing1WStage = 3;
+        return;
+    }
+    if (mState == ControllerState::PairComplete)
+        completeOneWayEnrollment();
+}
+
+bool IoHomeController::prepareOneWayEnrollmentExecute(uint16_t iMain,
+                                                       uint16_t iSequence,
+                                                       OneWayEnrollPhase iPhase)
+{
+    IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(mPairingChannel) : nullptr;
+    IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lCh);
+    if (!lCh || !lProfile || !lProfile->hasOneWayControllerIdentity())
+        return false;
+
+    mTxFrame.init();
+    mTxFrame.set1WMode();
+    mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
+    mTxFrame.commandId = IoHomeCommand::Execute;
+    mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
+    mTxFrame.setDestNode(0x00003F); // captured KLI STOP/DOWN target is ALL
+
+    OneWayCommandProfile lCommandProfile = oneWayCommandProfileForType(mPairing1WBroadcastType);
+    lCommandProfile.acei = lCh->getConfigured1WAcei();
+    if (!build1WExecute(mTxFrame, lCommandProfile, iMain, 0x00, 0x00, iSequence))
+        return false;
+
+    uint8_t lHmacInput[7] = {static_cast<uint8_t>(IoHomeCommand::Execute)};
+    memcpy(lHmacInput + 1, mTxFrame.data, 6);
+    if (!createAndTraceHmac1W(lHmacInput, sizeof(lHmacInput), iSequence,
+                              lProfile->getOneWayControllerKey(), mTxFrame.hmac))
+        return false;
+    mTxFrame.hasHmac = true;
+
+    mTxLen = mTxFrame.serialize1W(mTxBuffer, sizeof(mTxBuffer));
+    if (mTxLen == 0)
+        return false;
+
+    recordOneWayEnrollmentPhase(iPhase, iSequence, mTxFrame.getDestNodeId());
+    return true;
+}
+
+void IoHomeController::processPairSend1WFinalizerStop()
+{
+    if (millis() - mPairingStartTime > IOHC_PAIR_TIMEOUT_MS)
+    {
+        failOneWayEnrollment("STOP finalizer exceeded the enrollment time budget");
+        return;
+    }
+
+    mCurrentFreqIdx = kPair1WFreqIdx;
+    const uint32_t lPair1WFreq = IOHC_FREQ_2;
+    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lPair1WFreq);
+    if (lPrepErr == RadioError::Busy)
+        return;
+    if (lPrepErr != RadioError::None)
+    {
+        failOneWayEnrollment("radio preparation failed before finalizer STOP");
+        return;
+    }
+
+    IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(mPairingChannel) : nullptr;
+    IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lCh);
+    if (!lProfile)
+    {
+        failOneWayEnrollment("controller profile is unavailable for finalizer STOP");
+        return;
+    }
+    const uint16_t lSeq = nextSequence1W(lProfile, true);
+    if (!prepareOneWayEnrollmentExecute(IOHC_POSITION_STOP, lSeq,
+                                        OneWayEnrollPhase::FinalizeStop))
+    {
+        failOneWayEnrollment("finalizer STOP frame generation failed");
+        return;
+    }
+
+    const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    if (lErr != RadioError::None)
+    {
+        failOneWayEnrollment("radio rejected finalizer STOP; DOWN was suppressed");
+        return;
+    }
+
+    mPairing1WStopStartedAt = millis();
+    mStateTimer = millis();
+    mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
+    mTx1WRepeatTimer = 0;
+    mTx1WHopFrequencies = false;
+    mState = ControllerState::PairWait1WFinalizerStop;
+}
+
+void IoHomeController::processPairWait1WFinalizerStop()
+{
+    if (!processPairWait1WBlind(ControllerState::PairWait1WFinalizerGap))
+        return;
+    if (mState == ControllerState::PairWait1WFinalizerStop)
+        return;
+    if (mState == ControllerState::PairFailed)
+    {
+        failOneWayEnrollment("finalizer STOP burst failed; DOWN was suppressed");
+        return;
+    }
+    completeOneWayEnrollmentPhase(true);
+    mStateTimer = millis();
+}
+
+void IoHomeController::processPairWait1WFinalizerGap()
+{
+    if (millis() - mPairing1WStopStartedAt >= IOHC_1W_ENROLL_FINALIZER_DEADLINE_MS)
+    {
+        failOneWayEnrollment("finalizer DOWN missed the three-second VELUX deadline");
+        return;
+    }
+    if (millis() - mStateTimer < IOHC_1W_ENROLL_FINALIZER_DELAY_MS)
+        return;
+    mPairing1WStage = 4;
+    mState = ControllerState::PairSend1WFinalizerDown;
+}
+
+void IoHomeController::processPairSend1WFinalizerDown()
+{
+    if (millis() - mPairing1WStopStartedAt >= IOHC_1W_ENROLL_FINALIZER_DEADLINE_MS)
+    {
+        failOneWayEnrollment("finalizer DOWN missed the three-second VELUX deadline");
+        return;
+    }
+
+    mCurrentFreqIdx = kPair1WFreqIdx;
+    const uint32_t lPair1WFreq = IOHC_FREQ_2;
+    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lPair1WFreq);
+    if (lPrepErr == RadioError::Busy)
+        return;
+    if (lPrepErr != RadioError::None)
+    {
+        failOneWayEnrollment("radio preparation failed before finalizer DOWN");
+        return;
+    }
+
+    IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(mPairingChannel) : nullptr;
+    IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lCh);
+    if (!lProfile)
+    {
+        failOneWayEnrollment("controller profile is unavailable for finalizer DOWN");
+        return;
+    }
+    const uint16_t lSeq = nextSequence1W(lProfile, true);
+    if (!prepareOneWayEnrollmentExecute(IOHC_POSITION_MAX, lSeq,
+                                        OneWayEnrollPhase::FinalizeDown))
+    {
+        failOneWayEnrollment("finalizer DOWN frame generation failed");
+        return;
+    }
+
+    const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    if (lErr != RadioError::None)
+    {
+        failOneWayEnrollment("radio rejected finalizer DOWN");
+        return;
+    }
+
+    mPairing1WDownStartedAt = millis();
+    mStateTimer = millis();
+    mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
+    mTx1WRepeatTimer = 0;
+    mTx1WHopFrequencies = false;
+    mState = ControllerState::PairWait1WFinalizerDown;
+}
+
+void IoHomeController::processPairWait1WFinalizerDown()
+{
+    if (!processPairWait1WBlind(ControllerState::PairComplete))
+        return;
+    if (mState == ControllerState::PairWait1WFinalizerDown)
+        return;
+    if (mState == ControllerState::PairFailed)
+    {
+        failOneWayEnrollment("finalizer DOWN burst failed");
+        return;
+    }
+    completeOneWayEnrollmentPhase(true);
+    completeOneWayEnrollment();
+}
+
+void IoHomeController::completeOneWayEnrollment()
+{
+    if (mModule)
     {
         IoHomecontrolChannel *lCh = mModule->getChannel(mPairingChannel);
         if (lCh)
@@ -4989,17 +5404,20 @@ void IoHomeController::processPairWait1WKeyTransfer()
                 lCh->setConfigured1WTargetNodeId(0);
             if (lProfile)
                 lCh->setEncryptionKey(lProfile->getOneWayControllerKey());
-            openknx.flash.save(true); // pairing is rare & critical: bypass write throttle
-            if (mDiscoveredNodeId != 0)
-                logInfoP("Pairing: 1W mode=%s complete for 0x%06X on channel %d (no device ACK in 1W mode)",
-                         pairing1WModeName(mPairing1WMode),
-                         mDiscoveredNodeId, mPairingChannel + 1);
-            else
-                logInfoP("Pairing: 1W mode=%s broadcast profile sent on channel %d without bound target node (no device ACK in 1W mode)",
-                         pairing1WModeName(mPairing1WMode),
-                         mPairingChannel + 1);
+            openknx.flash.save(true);
         }
     }
+
+    recordOneWayEnrollmentPhase(OneWayEnrollPhase::Complete, 0, 0);
+    completeOneWayEnrollmentPhase(true);
+    logInfoP("1W enroll: completed controller=%02u profile=%s finalizer=%s stop-to-down=%lums",
+             static_cast<unsigned>(mPairingChannel + 1),
+             mPairing1WVeluxProfile ? "velux-kli" : "generic",
+             oneWayEnrollmentFinalizerName(mPairing1WFinalizer),
+             static_cast<unsigned long>(mPairing1WStopStartedAt && mPairing1WDownStartedAt
+                                            ? mPairing1WDownStartedAt - mPairing1WStopStartedAt
+                                            : 0));
+    mState = ControllerState::PairComplete;
 }
 
 bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
@@ -5019,7 +5437,7 @@ bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
         mTx1WRepeatTimer = 0;
 
         // Reference 1W timing: the first TX uses the long wake-up preamble,
-        // then all three repeats use the short preamble with a 40 ms gap.
+        // then all configured repeats use the short preamble with a 40 ms gap.
         RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
         if (mPairDiagnosticTraceEnabled && lErr == RadioError::None)
         {
@@ -6454,13 +6872,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         if (!IoHomeCrypto::encrypt1WKey(lProfile->getOneWayControllerKey(), IOHC_TRANSFER_KEY, lRemoteNodeAddr, lEncKey1W))
             return false;
         if (mPairDiagnosticTraceEnabled)
-        {
-            const std::string lEncKeyHex = hexDump(lEncKey1W, sizeof(lEncKey1W));
-            logInfoP("1w key: remote=0x%06X device=0x%06X ivAddr=remote encKey=%s",
-                     lRemoteNodeId,
-                     lDeviceNodeId,
-                     lEncKeyHex.c_str());
-        }
+            logInfoP("1w key: remote=0x%06X device=0x%06X ivAddr=remote encrypted-key=redacted",
+                     lRemoteNodeId, lDeviceNodeId);
         const uint16_t lSequence = (static_cast<uint16_t>((iEntry.param2 != 0xFF) ? iEntry.param2 : 0x00) << 8) |
                                    static_cast<uint16_t>((iEntry.param3 != 0xFF) ? iEntry.param3 : 0x00);
         if (!build1WSendKey(mTxFrame, lEncKey1W, lProfile->getOneWayControllerManufacturer(), lSequence,

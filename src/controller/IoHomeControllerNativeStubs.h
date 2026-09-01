@@ -104,6 +104,10 @@ public:
   uint8_t getConfigured1WBroadcastType() const { return mConfigured1WBroadcastType; }
   void setConfigured1WAcei(uint8_t iAcei) { mConfigured1WAcei = iAcei; }
   uint8_t getConfigured1WAcei() const { return mConfigured1WAcei; }
+  void setConfigured1WEnrollmentMac(bool iEnabled) { mConfigured1WEnrollmentMac = iEnabled; }
+  bool getConfigured1WEnrollmentMac() const { return mConfigured1WEnrollmentMac; }
+  void setConfigured1WEnrollmentFinalizer(OneWayEnrollmentFinalizer iFinalizer) { mConfigured1WEnrollmentFinalizer = iFinalizer; }
+  OneWayEnrollmentFinalizer getConfigured1WEnrollmentFinalizer() const { return mConfigured1WEnrollmentFinalizer; }
 
   void setNodeId(uint32_t iNodeId)
   {
@@ -270,6 +274,8 @@ private:
   // type 0 / All, which serializes to destination 0x00003F.
   uint8_t mConfigured1WBroadcastType = 0;
   uint8_t mConfigured1WAcei = 0x43; // mirrors production default IOHC_ACEI_1W
+  bool mConfigured1WEnrollmentMac = false;
+  OneWayEnrollmentFinalizer mConfigured1WEnrollmentFinalizer = OneWayEnrollmentFinalizer::Automatic;
   bool mHasPositionFeedback = false;
   float mPositionFeedback = 0.0f;
   bool mHasTargetPositionFeedback = false;

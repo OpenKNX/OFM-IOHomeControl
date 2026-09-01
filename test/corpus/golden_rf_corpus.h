@@ -61,6 +61,30 @@ struct Scenario
     const char *expectedOutcome;
 };
 
+struct MaskedFrameReference
+{
+    const char *id;
+    const char *provenance;
+    const uint8_t *bytes;
+    const uint8_t *compareMask;
+    uint8_t wireLen;
+};
+
+struct OneWayEnrollmentReference
+{
+    const char *id;
+    const char *provenance;
+    uint8_t manufacturer;
+    uint8_t acei;
+    uint8_t addDestinationCount;
+    uint32_t addDestinations[4];
+    uint32_t finalizerDestination;
+    uint16_t stopMain;
+    uint16_t downMain;
+    uint16_t stopDownDeadlineMs;
+    uint8_t repeatCountAfterFirst;
+};
+
 // Re-keyed, non-secret equivalent of the observed Smoove Remove -> SendKey
 // sequence. Its 0x30 payload is from the long-standing public crypto vector.
 static const uint8_t kSmooveRemoveController[] = {
@@ -82,6 +106,44 @@ static const uint8_t kSendKeyWithMac[] = {
     0x84, 0x26, 0xCE, 0x7C, 0x12, 0x51, 0xB8, 0xE0,
     0x01, 0x01, 0x1A, 0x2B,
     0x2D, 0x49, 0x8F, 0xBF, 0x1F, 0x7C,
+};
+
+// Public KLI-compatible 0x30 wire shape. This is a source-derived regression
+// reference, not a claimed RF capture: source, wrapped key and sequence are
+// deliberately masked. The stable fields pin CTRL flags, ALL destination,
+// command, VELUX manufacturer and the 0x01 enrollment marker.
+static const uint8_t kKli310AddShape[] = {
+    0xFC, 0x20, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0x30,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x01, 0x01, 0x00, 0x00,
+};
+
+static const uint8_t kKli310AddShapeMask[] = {
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0xFF,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xFF, 0xFF, 0x00, 0x00,
+};
+
+static const MaskedFrameReference kKli310AddReference = {
+    "kli310_add_controller_shape",
+    "public KLI behavior from samr037/iohc-flipper tx_runner.c; variable fields masked",
+    kKli310AddShape, kKli310AddShapeMask, sizeof(kKli310AddShape),
+};
+
+static const OneWayEnrollmentReference kKli310EnrollmentReference = {
+    "kli310_remove_multicast_add_stop_down",
+    "public KLI behavior from samr037/iohc-flipper tx_runner.c and VELUX registration instructions",
+    0x01,
+    0x61,
+    4,
+    {0x00003F, 0x0000BF, 0x0000FF, 0x00037F},
+    0x00003F,
+    0xD200,
+    0xC800,
+    3000,
+    4,
 };
 
 static const uint8_t kPublicTrailerVectorKey[16] = {
@@ -185,5 +247,19 @@ inline const Frame *findFrame(const char *iId)
             return &kFrames[i];
     }
     return nullptr;
+}
+
+inline bool matchesMaskedReference(const uint8_t *iActual, uint8_t iActualLen,
+                                   const MaskedFrameReference &iReference)
+{
+    if (!iActual || iActualLen != iReference.wireLen)
+        return false;
+    for (uint8_t i = 0; i < iReference.wireLen; ++i)
+    {
+        if ((iActual[i] & iReference.compareMask[i]) !=
+            (iReference.bytes[i] & iReference.compareMask[i]))
+            return false;
+    }
+    return true;
 }
 } // namespace IoHomeGoldenRfCorpus

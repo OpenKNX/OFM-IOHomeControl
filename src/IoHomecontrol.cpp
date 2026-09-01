@@ -2728,7 +2728,10 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                     continue;
                 IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(lCh);
                 const uint8_t lProfileIndex = oneWayProfileIndex(lProfile);
-                logInfoP("1W ch%02u profile=ch%02u remote=0x%06X key=%s type=%u mfg=0x%02X seq=0x%04X reserved=0x%04X",
+                const OneWayEnrollmentFinalizer lConfiguredFinalizer = lCh->getConfigured1WEnrollmentFinalizer();
+                const OneWayEnrollmentFinalizer lResolvedFinalizer = IoHomeController::resolveOneWayEnrollmentFinalizer(
+                    lConfiguredFinalizer, lProfile ? lProfile->getOneWayControllerManufacturer() : 0);
+                logInfoP("1W ch%02u profile=ch%02u remote=0x%06X key=%s type=%u mfg=0x%02X seq=0x%04X reserved=0x%04X enrollFinalizer=%s->%s addMac=%u",
                          static_cast<unsigned>(i + 1),
                          static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1),
                          lProfile ? lProfile->getOneWayControllerNodeId() : 0,
@@ -2736,7 +2739,10 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                          static_cast<unsigned>(lCh->getConfigured1WBroadcastType()),
                          static_cast<unsigned>(lProfile ? lProfile->getOneWayControllerManufacturer() : 0),
                          static_cast<unsigned>(lProfile ? lProfile->getSequence1W() : 0),
-                         static_cast<unsigned>(lProfile ? lProfile->getReservedSequence1W() : 0));
+                         static_cast<unsigned>(lProfile ? lProfile->getReservedSequence1W() : 0),
+                         IoHomeController::oneWayEnrollmentFinalizerName(lConfiguredFinalizer),
+                         IoHomeController::oneWayEnrollmentFinalizerName(lResolvedFinalizer),
+                         lProfile && lProfile->getConfigured1WEnrollmentMac() ? 1U : 0U);
             }
             return true;
         }
@@ -2807,7 +2813,10 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 
         if (lArg.empty() || lArg == "status")
         {
-            logInfoP("1W ch%02u effective profile=ch%02u remote=0x%06X key=%s type=%u mfg=0x%02X seq=0x%04X reserved=0x%04X; 2W node=0x%06X key=%s",
+            const OneWayEnrollmentFinalizer lConfiguredFinalizer = mChannels[lIdx]->getConfigured1WEnrollmentFinalizer();
+            const OneWayEnrollmentFinalizer lResolvedFinalizer = IoHomeController::resolveOneWayEnrollmentFinalizer(
+                lConfiguredFinalizer, lProfile ? lProfile->getOneWayControllerManufacturer() : 0);
+            logInfoP("1W ch%02u effective profile=ch%02u remote=0x%06X key=%s type=%u mfg=0x%02X seq=0x%04X reserved=0x%04X enrollFinalizer=%s->%s addMac=%u; 2W node=0x%06X key=%s",
                      static_cast<unsigned>(lIdx + 1),
                      static_cast<unsigned>(lProfileIndex == 0xFF ? 0 : lProfileIndex + 1),
                      lProfile ? lProfile->getOneWayControllerNodeId() : 0,
@@ -2816,6 +2825,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                      static_cast<unsigned>(lProfile ? lProfile->getOneWayControllerManufacturer() : 0),
                      static_cast<unsigned>(lProfile ? lProfile->getSequence1W() : 0),
                      static_cast<unsigned>(lProfile ? lProfile->getReservedSequence1W() : 0),
+                     IoHomeController::oneWayEnrollmentFinalizerName(lConfiguredFinalizer),
+                     IoHomeController::oneWayEnrollmentFinalizerName(lResolvedFinalizer),
+                     lProfile && lProfile->getConfigured1WEnrollmentMac() ? 1U : 0U,
                      mController.getOwnNodeId(),
                      keyStateText(mController.getSystemKey()));
             return true;

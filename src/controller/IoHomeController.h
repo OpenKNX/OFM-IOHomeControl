@@ -139,6 +139,11 @@ enum class ControllerState : uint8_t
   PairWait1WRemove,
   PairSend1WKeyTransfer,
   PairWait1WKeyTransfer,
+  PairSend1WFinalizerStop,
+  PairWait1WFinalizerStop,
+  PairWait1WFinalizerGap,
+  PairSend1WFinalizerDown,
+  PairWait1WFinalizerDown,
   PairSendKeyInit,
   PairWaitDeviceChallenge,
   PairSendKeyTransfer,
@@ -233,6 +238,30 @@ public:
     uint8_t rejectedFrames = 0;
     uint8_t keyExchangeAttempts = 0;
   };
+
+  enum class OneWayEnrollPhase : uint8_t
+  {
+    Remove,
+    Add,
+    FinalizeStop,
+    FinalizeDown,
+    Complete,
+    Failed,
+  };
+
+  struct OneWayEnrollmentTraceEntry
+  {
+    OneWayEnrollPhase phase = OneWayEnrollPhase::Failed;
+    uint16_t sequence = 0;
+    uint32_t source = 0;
+    uint32_t destination = 0;
+    uint32_t timestampMs = 0;
+    uint32_t elapsedMs = 0;
+    bool txSuccess = false;
+    bool valid = false;
+  };
+
+  static constexpr uint8_t kOneWayEnrollmentTraceSize = 8;
 
   IoHomeController();
 
@@ -427,6 +456,8 @@ public:
   static const char *pairingOutcomeName(PairingOutcome iOutcome);
   const PairingTelemetry &pairingTelemetry() const;
   void logPairDiagnosticStatus() const;
+  const OneWayEnrollmentTraceEntry *oneWayEnrollmentTrace() const;
+  uint8_t oneWayEnrollmentTraceCount() const;
 
   // Multi-frequency RX scanning (cycle through all frequencies during idle/passive)
   void setRxScanEnabled(bool iEnabled);
@@ -542,6 +573,9 @@ public:
   uint32_t oneWayBroadcastTarget(uint8_t iBroadcastType) const;
   // Map ETS device roles to the protocol class used for 1W typed broadcast.
   static uint8_t oneWayBroadcastTypeForEtsDeviceType(uint8_t iEtsDeviceType);
+  static OneWayEnrollmentFinalizer resolveOneWayEnrollmentFinalizer(
+      OneWayEnrollmentFinalizer iConfigured, uint8_t iManufacturer);
+  static const char *oneWayEnrollmentFinalizerName(OneWayEnrollmentFinalizer iFinalizer);
   IoHomecontrolChannel *oneWayProfileForChannel(IoHomecontrolChannel *iChannel) const;
 
   // Set pointer to parent module (for channel callbacks)
@@ -690,6 +724,9 @@ private:
   PairStartStatus mLastPairStartStatus = PairStartStatus::Ok;
   ControllerState mLastPairStartBlockedState = ControllerState::Idle;
   PairingTelemetry mPairingTelemetry{};
+  OneWayEnrollmentTraceEntry mOneWayEnrollmentTrace[kOneWayEnrollmentTraceSize]{};
+  uint8_t mOneWayEnrollmentTraceCount = 0;
+  int8_t mOneWayEnrollmentActiveTrace = -1;
   uint8_t mPairingChallenge[6];
   uint32_t mDiscoveredNodeId;
   // Optional 2W target supplied by the caller. Discovery is broadcast, but a
@@ -714,10 +751,16 @@ private:
   IoHomeFrame mPairPulledKeyFrame;
   uint8_t mPairPulledKey[16];
   uint8_t mPairPullAuthChallenge[6];
-  uint8_t mPairing1WStage = 0; // 0=announce(0x2E), 1=add/send-key(0x30), 2=remove(0x39)
+  uint8_t mPairing1WStage = 0; // 0=announce, 1=add, 2=remove, 3=stop, 4=down
   Pairing1WMode mRequestedPairing1WMode = Pairing1WMode::RemoveAdd;
   Pairing1WMode mPairing1WMode = Pairing1WMode::RemoveAdd;
   uint8_t mPairing1WBroadcastType = 0;
+  OneWayEnrollmentFinalizer mPairing1WFinalizer = OneWayEnrollmentFinalizer::None;
+  bool mPairing1WVeluxProfile = false;
+  uint8_t mPairing1WAddDestinationIndex = 0;
+  uint16_t mPairing1WAddSequence = 0;
+  uint32_t mPairing1WStopStartedAt = 0;
+  uint32_t mPairing1WDownStartedAt = 0;
   uint8_t mDefault1WBroadcastType = 0;
   Pairing2WMode mPairing2WMode = Pairing2WMode::Normal;
   bool mPairing2WExperimental = false; // true only when entered via explicit pair2w-exp diagnostic command
@@ -869,6 +912,11 @@ private:
   void processPairWait1WRemove();
   void processPairSend1WKeyTransfer();
   void processPairWait1WKeyTransfer();
+  void processPairSend1WFinalizerStop();
+  void processPairWait1WFinalizerStop();
+  void processPairWait1WFinalizerGap();
+  void processPairSend1WFinalizerDown();
+  void processPairWait1WFinalizerDown();
   void processPairSendKeyInit();
   void processPairWaitDeviceChallenge();
   void processPairSendKeyTransfer();
@@ -883,6 +931,16 @@ private:
   void beginPairingTelemetry(uint8_t iChannelIndex, uint32_t iKnownNodeId);
   void recordPairingDiagnostic(PairingOutcome iOutcome, const char *iAction);
   void completePairingTelemetry(PairingOutcome iOutcome);
+  void resetOneWayEnrollmentTrace();
+  void recordOneWayEnrollmentPhase(OneWayEnrollPhase iPhase, uint16_t iSequence,
+                                   uint32_t iDestination);
+  void completeOneWayEnrollmentPhase(bool iSuccess);
+  void failOneWayEnrollment(const char *iReason);
+  void completeOneWayEnrollment();
+  bool prepareOneWayEnrollmentExecute(uint16_t iMain, uint16_t iSequence,
+                                      OneWayEnrollPhase iPhase);
+  uint32_t pairing1WAddDestination() const;
+  uint8_t pairing1WAddDestinationCount() const;
   // Store the system key into the paired channel and advance to SetConfig1.
   // Shared by the normal 0x33 confirmation path and the early-confirm path
   // where a device skips its 0x3C challenge and confirms the key directly.
