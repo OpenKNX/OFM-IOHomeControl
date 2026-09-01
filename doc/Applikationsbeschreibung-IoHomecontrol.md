@@ -224,6 +224,8 @@ Im unidirektionalen Modus sendet das Modul Befehle, ohne auf eine Antwort zu war
 Bei Auswahl von 1W erscheint ein zusätzliches Feld:
 * **1W Aktor-Node-ID**: Die dezimale Node-ID des Zielgeräts (0 = nicht gesetzt). Diese muss bekannt sein, z.B. durch vorheriges Beobachten mit dem Netzwerk-Scan.
 
+Das 1W-Anlernen ist hersteller- und gerätefamilienabhängig. Für ein generisches bzw. Somfy-Profil sendet das Modul standardmäßig `0x39 REMOVE` und `0x30 ADD_CONTROLLER`. Ein wirksames VELUX-Profil verwendet zusätzlich die KLI-kompatiblen Broadcast-Ziele und schließt die Anmeldung mit STOP und anschließend AB innerhalb von drei Sekunden ab. Der gesamte Ablauf ist serialisiert; normale Funkaufträge werden erst danach bearbeitet.
+
 > Im 1W-Modus stehen keine Positionsrückmeldung, kein Batterielevel und keine Signalstärke vom Gerät zur Verfügung. Die Positionsschätzung erfolgt ausschließlich anhand der konfigurierten Fahrzeiten.
 
 ### **Original-Fernbedienung klonen (1W-Schlüsselübernahme)**
@@ -242,6 +244,16 @@ Ablauf:
 > Da der 1W-Modus keine Rückmeldung des Aktors liefert, sollte die erfolgreiche Übernahme abschließend durch einen Fahrbefehl am Aktor überprüft werden.
 
 Reagiert der Aktor nach einem erfolgreichen Klonen trotzdem nicht auf Befehle, liegt dies meist an der **1W Befehls-Priorität (ACEI)**. Manche Aktoren akzeptieren nur die exakte Priorität ihrer Original-Fernbedienung. Über den Parameter *1W Befehls-Priorität (ACEI)* lässt sich diese je Kanal einstellen; die Voreinstellung **Priorität 3 (Velux-Fernbedienung)** entspricht dem Byte einer originalen Velux-Fernbedienung und passt zu den meisten unterstützten 1W-Aktoren. Zum Ausprobieren ohne ETS-Download kann der Wert zur Laufzeit mit `iohcNN 1wacei HH` gesetzt werden (z. B. `iohcNN 1wacei 61` für Velux); diese Laufzeit-Einstellung wird beim Neustart wieder durch den ETS-Parameter ersetzt.
+
+### **VELUX KUX/KLI anlernen und prüfen**
+
+1. Den KUX, Antrieb oder das Fenster gemäß Herstelleranleitung in das physische PROG-/Zuordnungsfenster versetzen.
+2. Im wirksamen 1W-Profil den Controller-Hersteller **VELUX** und als ACEI normalerweise `0x61` wählen.
+3. Den Parameter **1W Anmeldeabschluss** auf **Automatisch** belassen. Das Modul sendet dann bei VELUX vier `0x30`-Broadcasts mit derselben logischen Sequenz und danach STOP (`0xD200`) sowie AB/GESCHLOSSEN (`0xC800`) an `0x00003F`. STOP und AB erhalten jeweils eine neue Sequenz.
+4. Den MAC-Anhang nur aktivieren, wenn der Aktor oder eine Aufnahme der Originalfernbedienung ausdrücklich die 35-Byte-Form zeigt; üblich ist die 29-Byte-Form ohne Anhang.
+5. Die physische Bestätigung des Ziels abwarten und anschließend AUF, STOPP und AB testen. Nach einem Neustart erneut testen, damit Schlüssel und Sequenzreserve geprüft sind.
+
+Falls keine Bestätigung erfolgt, `iohcNN 1wctrl status` und `iohc pairdiag status` prüfen. Relevant sind Profilkanal, Controller-Quelle und -Hersteller, Broadcast-Typ, ACEI, MAC-Variante, aufgelöster Anmeldeabschluss sowie die Phasen REMOVE, ADD, STOP und DOWN mit Ziel, Sequenz, Zeit und TX-Ergebnis. Schlüsselmaterial wird nicht ausgegeben. Da 1W keine Bestätigung sendet, beweist ein erfolgreiches TX-Protokoll allein noch kein angenommenes Pairing; bei der Fehlersuche ist eine zweite Empfangseinheit hilfreich.
 
 
 
@@ -462,6 +474,16 @@ Bei Auswahl von 1W erscheint zusätzlich:
 
 Die dezimale Node-ID des Zielgeräts. Sie muss bekannt sein und kann beispielsweise über den Netzwerk-Scan ermittelt werden. Wertebereich: 0 bis 16777215 (24 Bit). 0 bedeutet "nicht gesetzt".
 
+#### **1W Anmeldeabschluss**
+
+Legt den Abschluss des 1W-Anlernens fest:
+
+* **Automatisch** (Standard): STOP + AB nur für ein wirksames VELUX-Controllerprofil; für Somfy und unbekannte Hersteller kein Abschluss.
+* **Keiner**: Nach `0x30 ADD_CONTROLLER` werden keine Abschlussbefehle gesendet.
+* **STOP + AB**: Erzwingt den VELUX-kompatiblen Abschluss unabhängig vom Herstellerprofil.
+
+STOP und AB werden als vollständige 1W-Sendebursts mit eigenen fortlaufenden Sequenzen an ALL (`0x00003F`) gesendet. AB beginnt deterministisch und deutlich vor Ablauf der Drei-Sekunden-Grenze. Schlägt eine Phase fehl, werden abhängige Folgephasen nicht blind ausgeführt und das Anlernen als fehlgeschlagen protokolliert.
+
 <!-- DOC HelpContext="IOHC-Anzahl-Szenen" -->
 ### **Szenen**
 
@@ -570,6 +592,7 @@ Bei kanalbezogenen Befehlen wird die Kanalnummer direkt an das Präfix angehäng
 | `iohcNN pair1w copy SEC` | Wie `receive`, jedoch mit eigener Wartezeit in Sekunden |
 | `iohcNN pair1w stop` | Beendet einen laufenden Klon-Empfang |
 | `iohcNN pair1w status` | Zeigt den Zustand des Klon-Empfangs (z.B. übernommene Node-ID) |
+| `iohcNN 1wctrl status` | Zeigt das wirksame 1W-Profil einschließlich konfiguriertem/aufgelöstem Anmeldeabschluss und der letzten Enrollment-Phasen |
 
 ### **Steuerungsbefehle**
 

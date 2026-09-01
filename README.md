@@ -69,11 +69,25 @@ For 2W, the module uses one global controller node ID and system key. For 1W, ea
 The 1W path follows the reference remote model more closely than older gateway-derived implementations:
 
 - Default 1W pairing uses the observed remove/add flow (`0x39 RemoveController` followed by unauthenticated `0x30 SendKey1W`).
+- VELUX/KLI-compatible profiles use the KLI enrollment variant: one logical `0x30` is broadcast to `0x00003F`, `0x0000BF`, `0x0000FF`, and `0x00037F` with a shared sequence number, then authenticated STOP (`0xD200`) and DOWN/CLOSE (`0xC800`) commands are sent to ALL (`0x00003F`) with fresh sequences. DOWN starts well within the required three-second window after STOP.
+- The ETS parameter **1W enrollment finalizer** is conservative by default: **Automatic** selects STOP + DOWN only for a VELUX controller manufacturer. **None** disables it, while **STOP + DOWN** explicitly enables it for another profile. It is not assumed that Somfy or unknown 1W devices need this finalizer.
 - `0x30 SendKey1W` has 29 declared bytes: 9-byte header plus `encryptedKey[16] + manufacturer + 0x01 + sequence[2]`. The default profile sends no trailer; an ETS profile option can append the observed six-byte MAC outside CTRL0's declared length.
 - A channel can clone an existing original remote instead of enrolling a new identity: `iohcNN pair1w receive` arms a listener that captures the remote's `0x30 SendKey1W` "copy remote" frame, decrypts the contained key with the public transfer key, and stores the remote's address, key, manufacturer, and a future reserved sequence window into the channel's own unshared 1W profile. This is required for actuators that only obey remotes added through the manufacturer's copy procedure. Use `pair1w stop`/`pair1w status` to cancel or inspect the capture.
 - Normal 1W commands use typed broadcast destinations by default, computed as `dst=((type << 6) | 0x3F)`. Automatic mode maps the ETS device role to its protocol class; type `0` remains the explicit all-device target.
 - Normal 1W control uses the raw io-homecontrol closedness convention internally (`0=open`, `100=closed`). UI/KNX open percentages are converted explicitly at the channel boundary.
-- 1W radio transmission uses four total sends by default: one long-preamble first TX followed by three short-preamble repeats with 40 ms spacing.
+- 1W radio transmission uses five total sends by default: one long-preamble first TX followed by four short-preamble repeats with 40 ms spacing. Enrollment is an asynchronous serialized operation, so normal queued traffic cannot appear between REMOVE, ADD, STOP, and DOWN.
+
+### VELUX KUX/KLI commissioning and troubleshooting
+
+1. Put the owned KUX, actuator, or window product into its physical PROG/association window before starting module enrollment. The exact gesture and confirmation movement are device-specific; follow the relevant VELUX manual.
+2. Configure the effective 1W controller manufacturer as **VELUX** (`0x01`). Automatic finalization depends on this profile value.
+3. Leave the 1W command ACEI at the VELUX remote value `0x61` unless a capture of the original remote proves another value.
+4. Use the automatic broadcast class first. The KLI-compatible ADD flow covers ALL plus the public window/shutter/other type destinations; the finalizer deliberately uses ALL.
+5. Leave the `0x30` MAC trailer disabled unless the original remote or actuator is known to require the 35-byte variant. Both MAC and no-MAC forms remain supported.
+6. If enrollment fails, run `iohcNN 1wctrl status` and `iohc pairdiag status`. Check profile ownership, controller source/key, finalizer resolution, per-phase destination/sequence/TX result, and STOP-to-DOWN timing. Diagnostics redact wrapped keys and key material.
+7. After the target confirms pairing, test OPEN, STOP, and CLOSE, then reboot the module and repeat a command to verify that the persistent controller key and reserved sequence remain accepted.
+
+Because 1W devices do not acknowledge these frames, a successful local TX trace alone is not proof of physical enrollment. A second receiver capture and the target's confirmation movement are the definitive checks.
 
 ## Hardware Requirements
 
@@ -172,7 +186,7 @@ Useful diagnostic entry points include:
 
 - `iohc status` / `iohcNN status` — show 2W identity and per-channel 1W remote identity separately.
 - `iohc extract start [SEC]` / `stop` / `status` / `clear` — arm the temporary 2W device-role responder used to recover the system key from an owned third-party 2W hub during a manual pairing attempt.
-- `iohc 1wctrl status` / `iohcNN 1wctrl status` — show effective 1W profile, type, manufacturer, sequence and reserved sequence.
+- `iohc 1wctrl status` / `iohcNN 1wctrl status` — show effective 1W profile, type, manufacturer, sequence, reserved sequence, and configured/resolved enrollment finalizer.
 - `iohcNN pair1w [ADDR] add-only|announce-add` — test reference-style 1W add flows without inserting `0x39` automatically.
 - `iohcNN remove1w [ADDR]` — send the explicit 1W remove flow.
 - `iohcNN send1w-type open|close|stop|vent|force [TYPE|dst=typed|dst=all|dst=exact ADDR]` — test typed/all/exact 1W destinations.
@@ -312,6 +326,7 @@ The io-homecontrol protocol support in this module consolidates findings from se
 - [psolyca/iown-homecontrol](https://github.com/psolyca/iown-homecontrol) — 1W/2W implementation reference with detailed command and crypto handling.
 - [CyrilOpenSource/iown-homecontrol-esp32sx1276](https://github.com/CyrilOpenSource/iown-homecontrol-esp32sx1276) — ESP32/SX1276 1W/2W implementation reference.
 - [rspaargaren/iohomecontrol](https://github.com/rspaargaren/iohomecontrol) — ESP32 implementation reference with additional 1W-focused work.
+- [samr037/iohc-flipper](https://github.com/samr037/iohc-flipper) — public KLI-compatible VELUX pairing reference for manufacturer/ACEI values, multicast ADD destinations, and STOP/DOWN finalization.
 - [nicolas5000/io-rts-esp32](https://github.com/nicolas5000/iorts-esp32)- — ESP32 implementation reference for io-homecontrol 2W and legacy RTS.
 
 ## Credits

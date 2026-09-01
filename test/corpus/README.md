@@ -19,10 +19,18 @@ The initial scenarios cover the August regression families:
 | RS100 on SX1262 | Foreign challenge is rejected by pairing correlation; valid retry confirmation decodes |
 | Key extraction | KIG300/KLR200-style address-response shape pins address verification parsing |
 | Pairing interference | One unrelated frame is assigned to each pairing wait state with its required outcome |
+| VELUX KLI-compatible enrollment | Public source-derived `0x30` shape with source, wrapped key and sequence masked; four ADD destinations plus STOP/DOWN timing metadata |
 
 Radio labels describe the originating hardware path. The protocol corpus is
 driver-independent; OFM has no LR1121 driver, so the retained LR1121 fixture is
 protocol validation only and must not be claimed as an OFM hardware replay.
+
+The KLI-compatible enrollment reference is intentionally labeled
+**source-derived**, not captured. It records the stable behavior published by
+the public KLI implementation (manufacturer `0x01`, four `0x30` destinations,
+STOP then DOWN to `0x00003F`) and masks controller-specific bytes. Replace or
+augment it with a sanitized second-receiver capture after a physical KLI/KUX
+bench session; do not relabel the current fixture as hardware evidence.
 
 ## Adding a capture
 
