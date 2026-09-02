@@ -196,9 +196,9 @@
               </ParameterType>
               <ParameterType Id="%AID%_PT-IOHCOneWayEnrollmentFinalizer" Name="IOHCOneWayEnrollmentFinalizer">
                 <TypeRestriction Base="Value" SizeInBit="2">
-                  <Enumeration Text="Automatisch (VELUX: STOP + AB, sonst keiner)" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Automatisch (VELUX: STOP + RUNTER, sonst keiner)" Value="0" Id="%ENID%" />
                   <Enumeration Text="Keiner" Value="1" Id="%ENID%" />
-                  <Enumeration Text="STOP + AB" Value="2" Id="%ENID%" />
+                  <Enumeration Text="STOP + RUNTER" Value="2" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
               <!-- 1W Execute ACEI byte (priority). Enumeration value = raw ACEI byte (decimal).

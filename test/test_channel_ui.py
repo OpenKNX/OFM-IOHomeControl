@@ -162,6 +162,25 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn("activeChannels.push(channelIndex)", refresh)
         self.assertNotIn("Suspend", refresh)
 
+    def test_one_way_enrollment_finalizer_is_labeled_stop_runter(self) -> None:
+        finalizer = self.share.find(
+            ".//k:ParameterType[@Name='IOHCOneWayEnrollmentFinalizer']", NS
+        )
+        self.assertIsNotNone(finalizer)
+        labels = {
+            item.get("Value"): item.get("Text")
+            for item in finalizer.findall(".//k:Enumeration", NS)
+        }
+        self.assertEqual(
+            labels,
+            {
+                "0": "Automatisch (VELUX: STOP + RUNTER, sonst keiner)",
+                "1": "Keiner",
+                "2": "STOP + RUNTER",
+            },
+        )
+        self.assertFalse(any("UP" in label or "AUF" in label for label in labels.values()))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -249,7 +249,7 @@ Reagiert der Aktor nach einem erfolgreichen Klonen trotzdem nicht auf Befehle, l
 
 1. Den KUX, Antrieb oder das Fenster gemäß Herstelleranleitung in das physische PROG-/Zuordnungsfenster versetzen.
 2. Im wirksamen 1W-Profil den Controller-Hersteller **VELUX** und als ACEI normalerweise `0x61` wählen.
-3. Den Parameter **1W Anmeldeabschluss** auf **Automatisch** belassen. Das Modul sendet dann bei VELUX vier `0x30`-Broadcasts mit derselben logischen Sequenz und danach STOP (`0xD200`) sowie AB/GESCHLOSSEN (`0xC800`) an `0x00003F`. STOP und AB erhalten jeweils eine neue Sequenz.
+3. Den Parameter **1W Anmeldeabschluss** auf **Automatisch** belassen. Das Modul sendet dann bei VELUX vier `0x30`-Broadcasts mit derselben logischen Sequenz und danach STOP (`0xD200`) sowie RUNTER/DOWN/GESCHLOSSEN (`0xC800`) an `0x00003F`. STOP und RUNTER erhalten jeweils eine neue Sequenz.
 4. Den MAC-Anhang nur aktivieren, wenn der Aktor oder eine Aufnahme der Originalfernbedienung ausdrücklich die 35-Byte-Form zeigt; üblich ist die 29-Byte-Form ohne Anhang.
 5. Die physische Bestätigung des Ziels abwarten und anschließend AUF, STOPP und AB testen. Nach einem Neustart erneut testen, damit Schlüssel und Sequenzreserve geprüft sind.
 
@@ -477,11 +477,11 @@ Die dezimale Node-ID des Zielgeräts. Sie muss bekannt sein und kann beispielswe
 
 Legt den Abschluss des 1W-Anlernens fest:
 
-* **Automatisch** (Standard): STOP + AB nur für ein wirksames VELUX-Controllerprofil; für Somfy und unbekannte Hersteller kein Abschluss.
+* **Automatisch** (Standard): STOP + RUNTER nur für ein wirksames VELUX-Controllerprofil; für Somfy und unbekannte Hersteller kein Abschluss.
 * **Keiner**: Nach `0x30 ADD_CONTROLLER` werden keine Abschlussbefehle gesendet.
-* **STOP + AB**: Erzwingt den VELUX-kompatiblen Abschluss unabhängig vom Herstellerprofil.
+* **STOP + RUNTER**: Erzwingt den VELUX-kompatiblen Abschluss unabhängig vom Herstellerprofil.
 
-STOP und AB werden als vollständige 1W-Sendebursts mit eigenen fortlaufenden Sequenzen an ALL (`0x00003F`) gesendet. AB beginnt deterministisch und deutlich vor Ablauf der Drei-Sekunden-Grenze. Schlägt eine Phase fehl, werden abhängige Folgephasen nicht blind ausgeführt und das Anlernen als fehlgeschlagen protokolliert.
+STOP und RUNTER werden als vollständige 1W-Sendebursts mit eigenen fortlaufenden Sequenzen an ALL (`0x00003F`) gesendet. RUNTER (`DOWN`, `0xC800`) beginnt deterministisch und deutlich vor Ablauf der Drei-Sekunden-Grenze. Schlägt eine Phase fehl, werden abhängige Folgephasen nicht blind ausgeführt und das Anlernen als fehlgeschlagen protokolliert.
 
 <!-- DOC HelpContext="IOHC-Anzahl-Szenen" -->
 ### **Szenen**
