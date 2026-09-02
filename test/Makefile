@@ -7,10 +7,12 @@
 #   make check-controller  - run controller checks
 #   make check-exchange    - run pairing/key-exchange checks
 #   make check-radio       - run radio checks
+#   make check-ui          - verify ETS channel-selection conventions
 #   make corpus            - run only the golden RF corpus
 #   make clean             - remove isolated build artifacts
 
 CXX ?= clang++
+PYTHON ?= python3
 CXXFLAGS = -std=c++17 -Wall -Wextra -DTEST_NATIVE -I../src -I.
 BUILD_DIR = build
 PROTOCOL_SRCS = test_protocol.cpp test_suite_main.cpp ../src/controller/IoHomeController.cpp ../src/protocol/IoHomeCrypto.cpp ../src/protocol/IoHomeFrame.cpp ../src/IoHomeRemoteMap.cpp
@@ -21,13 +23,11 @@ SX1262_ERROR_TARGET = $(BUILD_DIR)/test_sx1262_device_errors
 SX1262_PHY_TARGET = $(BUILD_DIR)/test_sx1262_iohome_phy
 TARGETS = $(PROTOCOL_TARGET) $(SX1262_ERROR_TARGET) $(SX1262_PHY_TARGET)
 
-.PHONY: all build suite clean run check-protocol check-controller check-exchange check-radio corpus list
+.PHONY: all suite clean run check-protocol check-controller check-exchange check-radio check-ui corpus list
 
 all: run
 
-build: $(TARGETS)
-
-suite: build
+suite: $(TARGETS)
 
 $(BUILD_DIR):
 	mkdir -p $@
@@ -41,7 +41,7 @@ $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
 $(SX1262_PHY_TARGET): $(SX1262_PHY_SRCS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(SX1262_PHY_SRCS)
 
-run: check-protocol check-controller check-exchange check-radio
+run: check-protocol check-controller check-exchange check-radio check-ui
 
 check-protocol: $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite protocol
@@ -55,6 +55,9 @@ check-exchange: $(PROTOCOL_TARGET)
 check-radio: $(SX1262_ERROR_TARGET) $(SX1262_PHY_TARGET)
 	./$(SX1262_ERROR_TARGET)
 	./$(SX1262_PHY_TARGET)
+
+check-ui:
+	$(PYTHON) test_channel_ui.py
 
 corpus: $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite protocol --filter golden_rf_corpus

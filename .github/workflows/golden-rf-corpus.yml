@@ -9,7 +9,13 @@ on:
       - 'test/test_suite_main.cpp'
       - 'src/protocol/**'
       - 'src/controller/**'
+      - 'src/radio/**'
+      - 'src/*.xml'
+      - 'src/*.js'
       - 'test/Makefile'
+      - 'test/test_channel_ui.py'
+      - 'test/test_sx1262_device_errors.cpp'
+      - 'test/test_sx1262_iohome_phy.cpp'
       - '.github/workflows/golden-rf-corpus.yml'
   push:
     branches: [v1dev]
@@ -20,7 +26,13 @@ on:
       - 'test/test_suite_main.cpp'
       - 'src/protocol/**'
       - 'src/controller/**'
+      - 'src/radio/**'
+      - 'src/*.xml'
+      - 'src/*.js'
       - 'test/Makefile'
+      - 'test/test_channel_ui.py'
+      - 'test/test_sx1262_device_errors.cpp'
+      - 'test/test_sx1262_iohome_phy.cpp'
       - '.github/workflows/golden-rf-corpus.yml'
 
 permissions:
@@ -32,7 +44,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [protocol, controller, exchange, radio]
+        suite: [protocol, controller, exchange, radio, ui]
     steps:
       - uses: actions/checkout@v4
       - name: Run ${{ matrix.suite }} suite

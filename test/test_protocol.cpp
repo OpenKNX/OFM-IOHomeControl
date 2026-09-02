@@ -4407,7 +4407,7 @@ TEST(send_key_1w_unauthenticated_29_bytes)
     ASSERT_MEM_EQ(parsed.data, frame.data, 20);
 }
 
-TEST(send_key_1w_rejects_appended_hmac)
+TEST(send_key_1w_parses_optional_trailer_mac)
 {
     IoHomeFrame frame;
     frame.init();
@@ -4424,8 +4424,9 @@ TEST(send_key_1w_rejects_appended_hmac)
     uint8_t buf[IOHC_FRAME_BUFFER_SIZE];
     ASSERT_EQ(serializeFrameForTest(frame, buf, sizeof(buf)), 0);
 
-    // A manually appended HMAC outside the declared 29-byte frame must also be
-    // rejected by the parser.
+    // SendKey1W cannot embed an HMAC in its declared payload. Some controllers
+    // do append a six-byte MAC trailer outside the declared 29-byte frame;
+    // preserve it for the controller's cryptographic verification.
     frame.hasHmac = false;
     frame.dataLen = 19;
     ASSERT_EQ(serializeFrameForTest(frame, buf, sizeof(buf)), 0);
@@ -4436,7 +4437,11 @@ TEST(send_key_1w_rejects_appended_hmac)
     memset(buf + len, 0xBB, IOHC_HMAC_SIZE);
 
     IoHomeFrame parsed;
-    ASSERT_TRUE(!deserializeFrameForTest(parsed, buf, len + IOHC_HMAC_SIZE));
+    ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len + IOHC_HMAC_SIZE));
+    ASSERT_TRUE(!parsed.hasHmac);
+    ASSERT_TRUE(parsed.hasTrailerMac);
+    ASSERT_EQ(parsed.dataLen, 20);
+    ASSERT_MEM_EQ(parsed.trailerMac, buf + len, IOHC_HMAC_SIZE);
 }
 
 TEST(serializer_boundary_2w_challenge_response_hmac_as_data)
@@ -9499,7 +9504,7 @@ TEST(controller_key_extract_completes_hub_address_verification)
     ASSERT_EQ(lResponse.data[1], static_cast<uint8_t>(lThrowawayNodeId >> 8));
     ASSERT_EQ(lResponse.data[2], static_cast<uint8_t>(lThrowawayNodeId));
 
-    buildPairChallengeRequestFrame(lRequest, lHubNodeId, lThrowawayNodeId, lAddressChallenge);
+    buildPairChallengeRequestFrame(lRequest, lThrowawayNodeId, lHubNodeId, lAddressChallenge);
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_TRUE((lResponse.ctrlByte0 & IOHC_CTRL0_END) != 0);
@@ -11820,7 +11825,7 @@ int main()
     printf("\nHMAC/frame auth detection for new commands:\n");
     RUN(write_private_2w_rejects_appended_hmac);
     RUN(send_key_1w_unauthenticated_29_bytes);
-    RUN(send_key_1w_rejects_appended_hmac);
+    RUN(send_key_1w_parses_optional_trailer_mac);
     RUN(frame_1w_execute_has_hmac);
     RUN(frame_1w_activate_mode_has_hmac);
     RUN(frame_1w_write_private_has_hmac);

@@ -9,13 +9,17 @@ static int sTestsPassed = 0;
 static int sTestsFailed = 0;
 
 #define TEST(name) static void test_##name()
-#define RUN(name)              \
-  do                           \
-  {                            \
-    printf("  %-50s ", #name); \
-    test_##name();             \
-    printf("[PASS]\n");        \
-    sTestsPassed++;            \
+#define RUN(name)                  \
+  do                               \
+  {                                \
+    const int failed = sTestsFailed; \
+    printf("  %-50s ", #name);     \
+    test_##name();                 \
+    if (sTestsFailed == failed)    \
+    {                              \
+      printf("[PASS]\n");          \
+      sTestsPassed++;              \
+    }                              \
   } while (0)
 
 #define ASSERT_TRUE(expr)                              \

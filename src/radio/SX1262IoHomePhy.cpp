@@ -78,6 +78,8 @@ size_t sx1262EncodeIoHomeFrame(const uint8_t *iFrame, size_t iFrameLen, uint8_t 
     {
       if ((lValue & (1U << lBit)) != 0)
         setBitMsb(oEncoded, lBitPos);
+      else
+        clearBitMsb(oEncoded, lBitPos);
       lBitPos++;
     }
 
