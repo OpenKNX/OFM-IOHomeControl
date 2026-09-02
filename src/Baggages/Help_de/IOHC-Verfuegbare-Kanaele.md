@@ -1,6 +1,3 @@
 ### Anzahl io-homecontrol-Kanäle
 
-Dieser Parameter legt fest, wie viele io-homecontrol-Kanäle in ETS sichtbar und bearbeitbar sind.
-
-Eine kleinere Anzahl erhöht die Übersichtlichkeit der Applikation und reduziert unnötige Parameterseiten.
-Bei Bedarf kann die Anzahl später jederzeit wieder erhöht werden.
+Dieser ausgeblendete Kompatibilitätsparameter bleibt für Aktualisierungen bestehender Projekte erhalten. Die Kanalauswahl zeigt immer alle 16 Kanäle; verwendet werden nur die Kanäle, deren Kanalaktivität auf „Aktiviert“ steht.

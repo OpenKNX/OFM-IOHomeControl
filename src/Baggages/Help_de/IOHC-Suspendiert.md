@@ -6,5 +6,5 @@ Ein suspendierter Kanal wird von der Firmware nicht verarbeitet (kein Senden, ke
 
 Soll ein Kanal dauerhaft nicht verwendet werden, wird stattdessen die Kanalaktivität auf „Deaktiviert" gestellt.
 
-* **nicht gesetzt** (Standard): Kanal ist aktiv
-* **gesetzt**: Kanal ist suspendiert
+* **Nein** (Standard): Kanal ist aktiv
+* **Ja**: Kanal ist suspendiert

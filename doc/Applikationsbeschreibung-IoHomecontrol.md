@@ -30,10 +30,10 @@ Eine Übersicht der verfügbaren Konfigurationsseiten sowie Verweise auf die jew
 ### ETS Konfiguration
 
 * **+ [Allgemein](#allgemein)**
-  * [Verfügbare Kanäle](#verfügbare-kanäle)
   * [Pairing-Übersicht](#pairing-übersicht)
   * [Fernbedienungs-Beobachtung](#fernbedienungs-beobachtung)
   * [Discovery und Netzwerk-Scan](#discovery-und-netzwerk-scan)
+* **+ [Kanalauswahl](#kanalauswahl)**
 * **+ io-homecontrol Kanäle**
   * [**+ Kanal n: ...** (n=1 bis 16)](#kanal-n)
     * [Kanalkonfiguration](#kanalkonfiguration)
@@ -178,7 +178,7 @@ Die angezeigten ETS-Felder sind:
 * **Protokoll / Ziel**: Zeigt im 2W-Modus `2W (bidirektional)` und im 1W-Modus die Ziel- bzw. die tatsächlich gepaarte Node-ID.
 * **Letzte Pairing-Diagnose**: Zeigt Zusatzinformationen wie aktiven Controller-Zustand oder die Ursache einer Start-Ablehnung.
 
-Zusätzlich gibt es auf der globalen Seite **Allgemein** eine **Pairing-Übersicht**, die diese vier Werte für alle sichtbaren Kanäle tabellarisch darstellt und per Sammel-Button aktualisiert.
+Zusätzlich gibt es auf der globalen Seite **Allgemein** eine **Pairing-Übersicht**, die diese vier Werte für alle aktivierten Kanäle tabellarisch darstellt und per Sammel-Button aktualisiert. Suspendierte Kanäle bleiben sichtbar.
 
 * **Anlernen**: Startet den Pairing-Vorgang. Das Gerät muss sich dabei im Pairing-Modus befinden; die Aktivierung ist herstellerabhängig.
 * **Entfernen**: Entfernt das Pairing für diesen Kanal. Das Gerät muss anschließend bei Bedarf erneut angelernt werden.
@@ -303,16 +303,9 @@ Hier werden Einstellungen vorgenommen, die für das gesamte io-homecontrol-Modul
 
 > Hinweis: Screenshots der ETS-Oberfläche werden in einer zukünftigen Version ergänzt.
 
-<!-- DOC HelpContext="IOHC-Verfuegbare-Kanaele" -->
-### **Verfügbare Kanäle**
-
-Hier wird festgelegt, wie viele io-homecontrol-Kanäle in der Applikation verfügbar und editierbar sind. Die maximale Anzahl hängt von der Firmware des Geräts ab, das das io-homecontrol-Modul verwendet, und beträgt höchstens 16.
-
-Eine geringere Anzahl sichtbarer Kanäle erhöht die Übersichtlichkeit und reduziert unnötige Darstellungen in ETS.
-
 ### **Pairing-Übersicht**
 
-Die globale Seite **Allgemein** enthält eine read-only **Pairing-Übersicht** für alle aktuell sichtbaren io-homecontrol-Kanäle.
+Die globale Seite **Allgemein** enthält eine read-only **Pairing-Übersicht** für alle aktivierten io-homecontrol-Kanäle. Suspendierte Kanäle bleiben Teil der Übersicht; deaktivierte Kanäle werden ausgeblendet.
 
 Dort werden pro Kanal dieselben vier Werte wie auf der jeweiligen Kanalseite angezeigt:
 
@@ -321,7 +314,7 @@ Dort werden pro Kanal dieselben vier Werte wie auf der jeweiligen Kanalseite ang
 * **Protokoll / Ziel**
 * **Diagnose**
 
-Über die Schaltfläche **Pairing-Übersicht aktualisieren** werden diese Werte für alle sichtbaren Kanäle nacheinander direkt vom Gerät gelesen. Das Feld **Zuletzt aktualisiert** zeigt, wann dieser Sammel-Refresh zuletzt erfolgreich abgeschlossen wurde.
+Über die Schaltfläche **Pairing-Übersicht aktualisieren** werden diese Werte für alle aktivierten Kanäle nacheinander direkt vom Gerät gelesen. Deaktivierte Kanäle werden dabei übersprungen. Das Feld **Zuletzt aktualisiert** zeigt, wann dieser Sammel-Refresh zuletzt erfolgreich abgeschlossen wurde.
 
 Auf derselben Seite befindet sich zusätzlich die ETS-Aktion **2W-Schlüssel extrahieren**. Sie aktiviert die temporäre 2W-Geräterolle des Moduls für die aktive Schlüsselextraktion. Nach dem Start muss am vorhandenen Fremd-Gateway der normale Vorgang zum Hinzufügen eines Geräts ausgelöst werden, damit das Gateway seinen Systemschlüssel an das Modul überträgt. Diese Funktion ist ausschließlich für eigene oder berechtigt verwaltete Fremd-Gateways vorgesehen.
 
@@ -350,6 +343,14 @@ Wird eine 1 auf das KO "Netzwerk-Scan" gesendet, beginnt das Modul einen passive
 
 ----
 
+## **Kanalauswahl**
+
+Die Kanalauswahl steht direkt vor dem ersten Kanal. Sie listet alle io-homecontrol-Kanäle in einer Tabelle mit den Spalten **Kanal**, **Kanalaktivität** und **Beschreibung** auf.
+
+Die Beschreibung bleibt auch bei deaktivierten Kanälen sichtbar und editierbar. Nur aktivierte Kanäle erhalten eine eigene Kanalseite mit den weiteren Einstellungen.
+
+----
+
 <!-- DOC HelpContext="IOHC-Kanal" -->
 ## **Kanal n**
 
@@ -357,7 +358,6 @@ Jeder io-homecontrol-Kanal repräsentiert ein einzelnes io-homecontrol-Gerät. D
 
 ### **Kanalkonfiguration**
 
-<!-- DOC HelpContext="IOHC-Beschreibung" -->
 #### **Beschreibung**
 
 Ein Freitextfeld mit bis zu 40 Zeichen zur Benennung des Kanals. Der Text wird in ETS als Kanalname sowie in den Kommunikationsobjekten angezeigt.
@@ -367,8 +367,8 @@ Ein Freitextfeld mit bis zu 40 Zeichen zur Benennung des Kanals. Der Text wird i
 
 Legt fest, ob der Kanal verwendet wird. Nur aktivierte Kanäle werden von der Firmware verarbeitet und blenden ihre weiteren Konfigurationsparameter ein.
 
-* **Deaktiviert**: Kanal wird nicht verwendet
-* **Aktiviert** (Standard): Kanal ist aktiv
+* **Deaktiviert**: Kanal wird nicht verwendet (Standard für Kanal 2 bis 16)
+* **Aktiviert**: Kanal ist aktiv (Standard für Kanal 1)
 
 <!-- DOC HelpContext="IOHC-Geraetetyp" -->
 ### **Gerätetyp**
@@ -394,15 +394,14 @@ Mögliche Werte:
 
 > Bei Gerätetypen mit Positionssteuerung (0-4, 7, 9-11) werden zusätzlich die Parameter Öffnungszeit, Schließzeit und Richtung invertieren angezeigt. Beim Gerätetyp Thermostat (5) erscheinen die Thermostat-spezifischen KOs.
 
-<!-- DOC HelpContext="IOHC-Suspendiert" -->
 #### **Suspendiert**
 
 Erscheint nur, wenn die Kanalaktivität auf "Aktiviert" steht.
 
 Setzt den Kanal vorübergehend still, ohne die Konfiguration zu verlieren. Ein suspendierter Kanal wird von der Firmware nicht verarbeitet (kein Senden, keine Statusabfrage), behält aber alle Einstellungen.
 
-* **nicht gesetzt** (Standard): Kanal ist aktiv
-* **gesetzt**: Kanal ist suspendiert
+* **Nein** (Standard): Kanal ist aktiv
+* **Ja**: Kanal ist suspendiert
 
 <!-- DOC HelpContext="IOHC-Status-Abfrageintervall" -->
 ### **Status-Abfrageintervall**

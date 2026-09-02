@@ -828,7 +828,7 @@ uint8_t IoHomecontrol::countPairedChannels() const
 
 uint8_t IoHomecontrol::configuredChannelCount() const
 {
-    return MIN(ParamIOHC_VisibleChannels, IOHC_ChannelCount);
+    return IOHC_ChannelCount;
 }
 
 void IoHomecontrol::restoreChannelFlashState(uint8_t iIndex, const FlashChannelState &iState)
@@ -992,7 +992,7 @@ void IoHomecontrol::setup()
 
     // Create channels from ETS configuration
     mNumChannels = configuredChannelCount();
-    logDebugP("Visible channels: %d", mNumChannels);
+    logDebugP("Available channels: %d", mNumChannels);
 
     for (uint8_t i = 0; i < mNumChannels; i++)
     {

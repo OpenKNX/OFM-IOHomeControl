@@ -268,25 +268,41 @@ function IOHC_queryPairingInfo(device, online, progress, context, fallbackResult
 }
 
 function IOHC_refreshAllPairingInfo(device, online, progress, context) {
-    var visibleChannelCount = IOHC_getParameter(device, IOHC_getGlobalPrefix() + "VisibleChannels").value;
-    if (!visibleChannelCount || visibleChannelCount < 1) {
-        throw new Error("io-homecontrol: Keine sichtbaren Kanäle für die Pairing-Übersicht konfiguriert");
+    var channelCount = context.channelCount;
+    if (!channelCount || channelCount < 1) {
+        throw new Error("io-homecontrol: Keine Kanäle für die Pairing-Übersicht konfiguriert");
     }
 
-    progress.setText("Pairing-Übersicht wird für " + visibleChannelCount + " Kanäle aktualisiert ...");
+    var activeChannels = [];
+    for (var channelIndex = 1; channelIndex <= channelCount; channelIndex++) {
+        var activity = IOHC_getParameter(device, "IOHC_c" + channelIndex + "Active");
+        if (activity && activity.value == 1) {
+            activeChannels.push(channelIndex);
+        }
+    }
+
+    if (activeChannels.length == 0) {
+        IOHC_setParameterValue(device, IOHC_getGlobalPrefix() + "OverviewLastRefresh", IOHC_nowText());
+        progress.setText("Pairing-Übersicht: Keine aktivierten Kanäle.");
+        progress.setProgress(100);
+        return;
+    }
+
+    progress.setText("Pairing-Übersicht wird für " + activeChannels.length + " aktivierte Kanäle aktualisiert ...");
     progress.setProgress(5);
     // Read each channel in its own connect/disconnect cycle, exactly like the
     // per-channel "Pairing-Status auslesen" button. Holding a single connection
     // open across all reads does not work reliably; only the first read succeeds.
-    for (var channelIndex = 1; channelIndex <= visibleChannelCount; channelIndex++) {
+    for (var activeIndex = 0; activeIndex < activeChannels.length; activeIndex++) {
+        var channelIndex = activeChannels[activeIndex];
         online.connect();
         try {
             IOHC_queryPairingInfo(device, online, null, { channelIndex: channelIndex }, "Status gelesen", "Status über Übersicht gelesen");
         } finally {
             online.disconnect();
         }
-        progress.setText("Pairing-Übersicht: Kanal " + channelIndex + " von " + visibleChannelCount + " aktualisiert ...");
-        progress.setProgress(Math.floor((channelIndex * 100) / visibleChannelCount));
+        progress.setText("Pairing-Übersicht: Kanal " + channelIndex + " aktualisiert (" + (activeIndex + 1) + " von " + activeChannels.length + ") ...");
+        progress.setProgress(Math.floor(((activeIndex + 1) * 100) / activeChannels.length));
     }
     IOHC_setParameterValue(device, IOHC_getGlobalPrefix() + "OverviewLastRefresh", IOHC_nowText());
 

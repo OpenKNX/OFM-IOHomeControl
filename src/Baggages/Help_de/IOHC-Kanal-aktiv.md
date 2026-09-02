@@ -6,5 +6,5 @@ Nur aktivierte Kanäle werden von der Firmware verarbeitet und blenden ihre weit
 
 Für ein vorübergehendes Stilllegen bei erhaltener Konfiguration wird stattdessen der separate Parameter „Suspendiert“ verwendet.
 
-* **Deaktiviert**: Kanal wird nicht verwendet
-* **Aktiviert**: Kanal ist aktiv
+* **Deaktiviert**: Kanal wird nicht verwendet (Standard für Kanal 2 bis 16)
+* **Aktiviert**: Kanal ist aktiv (Standard für Kanal 1)

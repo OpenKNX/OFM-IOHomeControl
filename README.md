@@ -266,7 +266,7 @@ Both drivers expose an identical public API. The controller includes `Radio.h` a
 
 ### Channel Instancing
 
-This OFM defines a **single channel template** (`IoHomecontrol.templ.xml`). The OAM (application module) controls how many instances are created via `op:define NumChannels="16"`. The ETS parameter `IOHCVisibleChannels` lets the integrator choose how many channels (1–16) are active — unused channels are hidden in ETS. 
+This OFM defines a **single channel template** (`IoHomecontrol.templ.xml`). The OAM (application module) controls how many instances are created via `op:define NumChannels="16"`. ETS always shows the complete channel-selection table: channel 1 is enabled by default, channels 2–16 are disabled by default, and each enabled channel can additionally be suspended without losing its configuration.
 
 ```
 IoHomecontrol (OpenKNX::Module)

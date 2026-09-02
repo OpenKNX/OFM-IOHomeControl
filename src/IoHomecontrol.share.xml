@@ -15,8 +15,6 @@
   <!-- Prepare: Not ready to use -->
   <op:config name="%NET_ServiceHTTP%" value="0" />
 
-  <op:config name="%IOHC_NumChannelsDefault%" value="%N%" />
-
   <ManufacturerData>
     <Manufacturer RefId="M-00FA">
       <ApplicationPrograms>
@@ -40,10 +38,6 @@
                   <Enumeration Text="Deaktiviert" Value="0" Id="%ENID%" />
                   <Enumeration Text="Aktiviert" Value="1" Id="%ENID%" />
                 </TypeRestriction>
-              </ParameterType>
-              <!-- Suspend -->
-              <ParameterType Id="%AID%_PT-IOHCSuspended" Name="IOHCSuspended">
-                <TypeNumber SizeInBit="1" Type="unsignedInt" minInclusive="0" maxInclusive="1" UIHint="CheckBox" />
               </ParameterType>
               <!-- Device type selection -->
               <ParameterType Id="%AID%_PT-IOHCDeviceType" Name="IOHCDeviceType">
@@ -231,7 +225,8 @@
 
             <Parameters>
               <!-- Global parameters -->
-              <Parameter Id="%AID%_P-%TT%00001" Name="VisibleChannels" ParameterType="%AID%_PT-IOHCNumChannels" Text="Anzahl io-homecontrol Kanäle" SuffixText=" von %N%" Value="%IOHC_NumChannelsDefault%">
+              <!-- Retained in memory for update compatibility; channel activation now controls visibility. -->
+              <Parameter Id="%AID%_P-%TT%00001" Name="VisibleChannels" ParameterType="%AID%_PT-IOHCNumChannels" Text="Anzahl io-homecontrol Kanäle" SuffixText=" von %N%" Value="%N%" Access="None">
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
               </Parameter>
               <Parameter Id="%AID%_P-%TT%00002" Name="RemoteObserve" ParameterType="%AID%_PT-IOHCCheckBox" Text="Fernbedienungs-Beobachtung aktivieren" Value="0">
@@ -241,9 +236,25 @@
             </Parameters>
 
             <ParameterRefs>
-              <ParameterRef Id="%AID%_P-%TT%00001_R-%TT%0000101" RefId="%AID%_P-%TT%00001" />
               <ParameterRef Id="%AID%_P-%TT%00002_R-%TT%0000201" RefId="%AID%_P-%TT%00002" />
               <ParameterRef Id="%AID%_P-%TT%00003_R-%TT%0000301" RefId="%AID%_P-%TT%00003" />
+              <!-- ETS defaults: the first channel is enabled, all remaining channels are disabled. -->
+              <ParameterRef Id="%AID%_UP-%TT%01001_R-%TT%0100101" RefId="%AID%_UP-%TT%01001" Value="1" />
+              <ParameterRef Id="%AID%_UP-%TT%02001_R-%TT%0200101" RefId="%AID%_UP-%TT%02001" Value="0" />
+              <ParameterRef Id="%AID%_UP-%TT%03001_R-%TT%0300101" RefId="%AID%_UP-%TT%03001" Value="0" />
+              <ParameterRef Id="%AID%_UP-%TT%04001_R-%TT%0400101" RefId="%AID%_UP-%TT%04001" Value="0" />
+              <ParameterRef Id="%AID%_UP-%TT%05001_R-%TT%0500101" RefId="%AID%_UP-%TT%05001" Value="0" />
+              <ParameterRef Id="%AID%_UP-%TT%06001_R-%TT%0600101" RefId="%AID%_UP-%TT%06001" Value="0" />
+              <ParameterRef Id="%AID%_UP-%TT%07001_R-%TT%0700101" RefId="%AID%_UP-%TT%07001" Value="0" />
+              <ParameterRef Id="%AID%_UP-%TT%08001_R-%TT%0800101" RefId="%AID%_UP-%TT%08001" Value="0" />
+              <ParameterRef Id="%AID%_UP-%TT%09001_R-%TT%0900101" RefId="%AID%_UP-%TT%09001" Value="0" />
+              <ParameterRef Id="%AID%_UP-%TT%10001_R-%TT%1000101" RefId="%AID%_UP-%TT%10001" Value="0" />
+              <ParameterRef Id="%AID%_UP-%TT%11001_R-%TT%1100101" RefId="%AID%_UP-%TT%11001" Value="0" />
+              <ParameterRef Id="%AID%_UP-%TT%12001_R-%TT%1200101" RefId="%AID%_UP-%TT%12001" Value="0" />
+              <ParameterRef Id="%AID%_UP-%TT%13001_R-%TT%1300101" RefId="%AID%_UP-%TT%13001" Value="0" />
+              <ParameterRef Id="%AID%_UP-%TT%14001_R-%TT%1400101" RefId="%AID%_UP-%TT%14001" Value="0" />
+              <ParameterRef Id="%AID%_UP-%TT%15001_R-%TT%1500101" RefId="%AID%_UP-%TT%15001" Value="0" />
+              <ParameterRef Id="%AID%_UP-%TT%16001_R-%TT%1600101" RefId="%AID%_UP-%TT%16001" Value="0" />
             </ParameterRefs>
 
             <ComObjectTable>
@@ -281,7 +292,7 @@
                 <Button Id="%AID%_B-%TT%00011" Text="2W-Schlüssel extrahieren" EventHandler="IOHC_startKeyExtract" EventHandlerOnline="ConnectionOriented" />
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="Pairing-Übersicht" UIHint="Headline" />
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="Die Werte werden durch die Online-Aktionen in den jeweiligen Kanal-Seiten aktualisiert." UIHint="Information" />
-                <Button Id="%AID%_B-%TT%00010" Text="Pairing-Übersicht aktualisieren" EventHandler="IOHC_refreshAllPairingInfo" EventHandlerOnline="ConnectionOriented" />
+                <Button Id="%AID%_B-%TT%00010" Text="Pairing-Übersicht aktualisieren" EventHandler="IOHC_refreshAllPairingInfo" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelCount&quot;: %N% }" />
                 <ParameterRefRef RefId="%AID%_P-%TT%00003_R-%TT%0000301" />
                 <ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
                   <Rows>
@@ -301,23 +312,7 @@
                   <ParameterSeparator Id="%AID%_PS-nnn" Text="Protokoll / Ziel" Cell="1,5" UIHint="Headline" />
                   <ParameterSeparator Id="%AID%_PS-nnn" Text="Diagnose" Cell="1,6" UIHint="Headline" />
                 </ParameterBlock>
-
-                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=1"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="1" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%01012_R-%TT%0101201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%01013_R-%TT%0101301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%01014_R-%TT%0101401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%01015_R-%TT%0101501" Cell="1,6" /></ParameterBlock></when></choose>
-                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=2"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="2" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%02012_R-%TT%0201201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%02013_R-%TT%0201301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%02014_R-%TT%0201401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%02015_R-%TT%0201501" Cell="1,6" /></ParameterBlock></when></choose>
-                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=3"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="3" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%03012_R-%TT%0301201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%03013_R-%TT%0301301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%03014_R-%TT%0301401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%03015_R-%TT%0301501" Cell="1,6" /></ParameterBlock></when></choose>
-                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=4"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="4" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%04012_R-%TT%0401201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%04013_R-%TT%0401301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%04014_R-%TT%0401401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%04015_R-%TT%0401501" Cell="1,6" /></ParameterBlock></when></choose>
-                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=5"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="5" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%05012_R-%TT%0501201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%05013_R-%TT%0501301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%05014_R-%TT%0501401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%05015_R-%TT%0501501" Cell="1,6" /></ParameterBlock></when></choose>
-                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=6"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="6" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%06012_R-%TT%0601201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%06013_R-%TT%0601301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%06014_R-%TT%0601401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%06015_R-%TT%0601501" Cell="1,6" /></ParameterBlock></when></choose>
-                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=7"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="7" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%07012_R-%TT%0701201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%07013_R-%TT%0701301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%07014_R-%TT%0701401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%07015_R-%TT%0701501" Cell="1,6" /></ParameterBlock></when></choose>
-                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=8"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="8" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%08012_R-%TT%0801201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%08013_R-%TT%0801301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%08014_R-%TT%0801401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%08015_R-%TT%0801501" Cell="1,6" /></ParameterBlock></when></choose>
-                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=9"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="9" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%09012_R-%TT%0901201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%09013_R-%TT%0901301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%09014_R-%TT%0901401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%09015_R-%TT%0901501" Cell="1,6" /></ParameterBlock></when></choose>
-                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=10"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="10" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%10012_R-%TT%1001201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%10013_R-%TT%1001301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%10014_R-%TT%1001401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%10015_R-%TT%1001501" Cell="1,6" /></ParameterBlock></when></choose>
-                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=11"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="11" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%11012_R-%TT%1101201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%11013_R-%TT%1101301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%11014_R-%TT%1101401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%11015_R-%TT%1101501" Cell="1,6" /></ParameterBlock></when></choose>
-                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=12"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="12" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%12012_R-%TT%1201201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%12013_R-%TT%1201301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%12014_R-%TT%1201401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%12015_R-%TT%1201501" Cell="1,6" /></ParameterBlock></when></choose>
-                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=13"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="13" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%13012_R-%TT%1301201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%13013_R-%TT%1301301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%13014_R-%TT%1301401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%13015_R-%TT%1301501" Cell="1,6" /></ParameterBlock></when></choose>
-                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=14"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="14" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%14012_R-%TT%1401201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%14013_R-%TT%1401301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%14014_R-%TT%1401401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%14015_R-%TT%1401501" Cell="1,6" /></ParameterBlock></when></choose>
-                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=15"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="15" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%15012_R-%TT%1501201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%15013_R-%TT%1501301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%15014_R-%TT%1501401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%15015_R-%TT%1501501" Cell="1,6" /></ParameterBlock></when></choose>
-                <choose ParamRefId="%AID%_P-%TT%00001_R-%TT%0000101"><when test=">=16"><ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid"><Rows><Row Id="%AID%_PB-nnn_R-1" /></Rows><Columns><Column Id="%AID%_PB-nnn_C-1" Width="2%" /><Column Id="%AID%_PB-nnn_C-2" Width="8%" /><Column Id="%AID%_PB-nnn_C-3" Width="22%" /><Column Id="%AID%_PB-nnn_C-4" Width="18%" /><Column Id="%AID%_PB-nnn_C-5" Width="20%" /><Column Id="%AID%_PB-nnn_C-6" Width="30%" /></Columns><ParameterSeparator Id="%AID%_PS-nnn" Text="16" Cell="1,2" /><ParameterRefRef RefId="%AID%_P-%TT%16012_R-%TT%1601201" Cell="1,3" /><ParameterRefRef RefId="%AID%_P-%TT%16013_R-%TT%1601301" Cell="1,4" /><ParameterRefRef RefId="%AID%_P-%TT%16014_R-%TT%1601401" Cell="1,5" /><ParameterRefRef RefId="%AID%_P-%TT%16015_R-%TT%1601501" Cell="1,6" /></ParameterBlock></when></choose>
+                <op:include href="IoHomecontrol.templ.xml" xpath="//Dynamic/ChannelIndependentBlock/ParameterBlock[@Name='PairingOverview']/*" type="template" prefix="IOHC" IsInner="true" />
 
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="Discovery und Netzwerk-Scan" UIHint="Headline" />
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="Discovery und Netzwerk-Scan werden über Kommunikationsobjekte gesteuert. Die zugehörigen KOs findest du in der Objekttabelle dieses Kanals." UIHint="Information" />
@@ -328,26 +323,24 @@
                 <ComObjectRefRef RefId="%AID%_O-%TT%00005_R-%TT%0000501" />
               </ParameterBlock>
 
-              <ParameterBlock Id="%AID%_PB-nnn" Text="Kanalauswahl" Icon="format-list-bulleted-type" HelpContext="IOHC-Kanalauswahl">
-                <ParameterSeparator Id="%AID%_PS-nnn" Text="Kanalauswahl" UIHint="Headline" />
-                <ParameterRefRef RefId="%AID%_P-%TT%00001_R-%TT%0000101" HelpContext="IOHC-Verfuegbare-Kanaele" IndentLevel="1" />
+              <ParameterBlock Id="%AID%_PB-nnn" Text="Kanalauswahl" Icon="format-list-bulleted-type" HelpContext="BASE-ChannelSelect">
                 <ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
                   <Rows>
                     <Row Id="%AID%_PB-nnn_R-1" />
                   </Rows>
                   <Columns>
-                    <Column Id="%AID%_PB-nnn_C-1" Width="15%" />
-                    <Column Id="%AID%_PB-nnn_C-2" Width="40%" />
-                    <Column Id="%AID%_PB-nnn_C-3" Width="45%" />
+                    <Column Id="%AID%_PB-nnn_C-1" Width="10%" />
+                    <Column Id="%AID%_PB-nnn_C-2" Width="35%" />
+                    <Column Id="%AID%_PB-nnn_C-3" Width="55%" />
                   </Columns>
                   <ParameterSeparator Id="%AID%_PS-nnn" Cell="1,1" UIHint="Headline" Text="Kanal" />
                   <ParameterSeparator Id="%AID%_PS-nnn" Cell="1,2" UIHint="Headline" Text="Kanalaktivität" />
                   <ParameterSeparator Id="%AID%_PS-nnn" Cell="1,3" UIHint="Headline" Text="Beschreibung" />
                 </ParameterBlock>
-                <op:include href="IoHomecontrol.templ.xml" xpath="//Dynamic/ChannelIndependentBlock/ParameterBlock[@Name='ChannelSelection']/*" type="template" prefix="IOHC" IsInner="true" />
+                <op:include href="IoHomecontrol.templ.xml" xpath="//Dynamic/ChannelIndependentBlock/ParameterBlock[@Name='Settings']/*" type="template" prefix="IOHC" IsInner="true" />
               </ParameterBlock>
 
-              <op:include href="IoHomecontrol.templ.xml" xpath="//Dynamic/ChannelIndependentBlock/ParameterBlock[@Name='ChannelDefinition']/*" type="template" prefix="IOHC" IsInner="true" />
+              <op:include href="IoHomecontrol.templ.xml" xpath="//Dynamic/ChannelIndependentBlock/ParameterBlock[@Name='Channel']/*" type="template" prefix="IOHC" IsInner="true" />
             </Channel>
 
           </Dynamic>
