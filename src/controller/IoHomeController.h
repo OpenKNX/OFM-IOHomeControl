@@ -225,7 +225,10 @@ public:
     KeyExchangeFailure = 5,
     ConfigurationFailure = 6,
     Cancelled = 7,
-    StartRejected = 8
+    StartRejected = 8,
+    // 1W has no return path: a completed enrollment burst only proves that the
+    // frames left the radio, never that the actuator stored the controller.
+    OneWayEnrollmentTransmitted = 9
   };
 
   struct PairingTelemetry

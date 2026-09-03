@@ -49,6 +49,11 @@ public:
 
   // Pairing data
   bool isPaired() const;
+  // 1W has no peer node id, so a 1W channel is usable once its enrollment burst
+  // was transmitted; 2W requires an actually paired actuator node.
+  bool isOneWayEnrolled() const;
+  void setOneWayEnrolled(bool iEnrolled);
+  bool isOperational() const;
   void setNodeId(uint32_t iNodeId);
   uint32_t getNodeId() const;
   void setEncryptionKey(const uint8_t *iKey);
@@ -114,6 +119,7 @@ private:
   uint8_t mEncKey[16] = {};       // AES-128 encryption key
   uint8_t mLastChallenge[6] = {}; // challenge sent with last authenticated command
   bool mPaired = false;
+  bool mOneWayEnrolled = false;     // 1W enrollment burst was transmitted successfully
   bool mLowPower2W = true;          // Battery/solar-safe default for 2W devices
   bool mSilentOperation = false;    // Somfy RS100 2W Execute profile (0x05)
   uint16_t mSequence1W = 0;         // 1W last used sequence counter

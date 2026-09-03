@@ -2149,6 +2149,7 @@ const char *IoHomeController::pairingOutcomeName(PairingOutcome iOutcome)
     case PairingOutcome::ConfigurationFailure: return "configuration-failure";
     case PairingOutcome::Cancelled: return "cancelled";
     case PairingOutcome::StartRejected: return "start-rejected";
+    case PairingOutcome::OneWayEnrollmentTransmitted: return "1w-enrollment-transmitted";
     }
     return "unknown";
 }
@@ -2288,7 +2289,7 @@ void IoHomeController::completePairingTelemetry(PairingOutcome iOutcome)
     mPairingTelemetry.outcome = iOutcome;
     mPairingTelemetry.peerNodeId = mDiscoveredNodeId ? mDiscoveredNodeId : mPairingKnownNodeId;
     mPairingTelemetry.keyExchangeAttempts = mPairKeyExchangeAttempts;
-    if (iOutcome != PairingOutcome::Success)
+    if (iOutcome != PairingOutcome::Success && iOutcome != PairingOutcome::OneWayEnrollmentTransmitted)
         mPairingTelemetry.diagnostic = iOutcome;
     logInfoP("Pairing outcome: %s channel=%u peer=0x%06X retries=%u rejected=%u",
              pairingOutcomeName(iOutcome),
@@ -4052,7 +4053,12 @@ void IoHomeController::loop()
     }
     case ControllerState::PairComplete:
         if (mPairingTelemetry.outcome == PairingOutcome::InProgress)
-            completePairingTelemetry(PairingOutcome::Success);
+        {
+            IoHomecontrolChannel *lCompletedCh = mModule ? mModule->getChannel(mPairingChannel) : nullptr;
+            completePairingTelemetry(lCompletedCh && lCompletedCh->is1W()
+                                         ? PairingOutcome::OneWayEnrollmentTransmitted
+                                         : PairingOutcome::Success);
+        }
         mState = ControllerState::Idle;
         startReceive();
         break;
@@ -5045,6 +5051,7 @@ void IoHomeController::processPairWait1WRemove()
         if (lCh)
         {
             lCh->setNodeId(0);
+            lCh->setOneWayEnrolled(false); // remove-only revokes this controller
             openknx.flash.save(true); // pairing is rare & critical: bypass write throttle
             logInfoP("Pairing: 1W mode=%s complete for channel %d (no 0x30 key transfer follows)",
                      pairing1WModeName(mPairing1WMode),
@@ -5404,10 +5411,14 @@ void IoHomeController::completeOneWayEnrollment()
                 lCh->setConfigured1WTargetNodeId(0);
             if (lProfile)
                 lCh->setEncryptionKey(lProfile->getOneWayControllerKey());
+            // 1W has no paired peer node, so the enrollment flag alone enables
+            // KNX control for this channel.
+            lCh->setOneWayEnrolled(true);
             openknx.flash.save(true);
         }
     }
 
+    completePairingTelemetry(PairingOutcome::OneWayEnrollmentTransmitted);
     recordOneWayEnrollmentPhase(OneWayEnrollPhase::Complete, 0, 0);
     completeOneWayEnrollmentPhase(true);
     logInfoP("1W enroll: completed controller=%02u profile=%s finalizer=%s stop-to-down=%lums",

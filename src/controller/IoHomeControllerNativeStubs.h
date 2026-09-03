@@ -96,6 +96,9 @@ public:
   bool is1W() const { return mIs1W; }
   void setIs1W(bool iIs1W) { mIs1W = iIs1W; }
   bool isPaired() const { return mPaired; }
+  bool isOneWayEnrolled() const { return mOneWayEnrolled; }
+  void setOneWayEnrolled(bool iEnrolled) { mOneWayEnrolled = iEnrolled; }
+  bool isOperational() const { return mIs1W ? mOneWayEnrolled : mPaired; }
   void setPaired(bool iPaired) { mPaired = iPaired; }
 
   void setConfigured1WTargetNodeId(uint32_t iNodeId) { mConfigured1WTargetNodeId = iNodeId; }
@@ -268,6 +271,7 @@ private:
   uint8_t mConfigured1WProfileChannel = 0xFF;
   bool mIs1W = false;
   bool mPaired = false;
+  bool mOneWayEnrolled = false;
   bool mLowPower2W = true;
   uint32_t mConfigured1WTargetNodeId = 0;
   // TEST_NATIVE mirrors the production channel default: unspecified 1W type is

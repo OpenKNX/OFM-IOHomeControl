@@ -742,7 +742,7 @@ bool IoHomecontrol::oneWayProfileUsedByPairedChannel(IoHomecontrolChannel *iProf
         return false;
     for (uint8_t i = 0; i < mNumChannels; i++)
     {
-        if (mChannels[i] && mChannels[i]->isPaired() &&
+        if (mChannels[i] && mChannels[i]->isOperational() &&
             mController.oneWayProfileForChannel(mChannels[i]) == iProfile)
             return true;
     }
@@ -820,7 +820,7 @@ uint8_t IoHomecontrol::countPairedChannels() const
     uint8_t lCount = 0;
     for (uint8_t i = 0; i < mNumChannels; i++)
     {
-        if (mChannels[i] != nullptr && mChannels[i]->isPaired())
+        if (mChannels[i] != nullptr && mChannels[i]->isOperational())
             lCount++;
     }
     return lCount;
@@ -850,6 +850,7 @@ void IoHomecontrol::restoreChannelFlashState(uint8_t iIndex, const FlashChannelS
     }
 
     lChannel->setLowPower2W(iState.lowPower2W);
+    lChannel->setOneWayEnrolled(iState.oneWayEnrolled);
     if (iState.is1W && !lChannel->is1W())
         logInfoP("Flash restore: channel %u was saved as 1W while ETS runtime config is 2W; keeping saved 1W mode", static_cast<unsigned>(iIndex + 1));
     lChannel->setIs1W(lChannel->is1W() || iState.is1W);
@@ -1708,7 +1709,7 @@ void IoHomecontrol::processAfterStartupDelay()
     // P2: Power-on behavior per channel
     for (uint8_t i = 0; i < mNumChannels; i++)
     {
-        if (!mChannels[i]->isPaired())
+        if (!mChannels[i]->isOperational())
             continue;
 
         // 1W channels are one-way and cannot be polled; the status-request
@@ -1894,7 +1895,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         uint8_t lChannel = data[1];
         if (lChannel < mNumChannels)
         {
-            resultData[0] = mChannels[lChannel]->isPaired() ? 0x01 : 0x00;
+            resultData[0] = mChannels[lChannel]->isOperational() ? 0x01 : 0x00;
             uint32_t lNodeId = mChannels[lChannel]->getNodeId();
             resultData[1] = (lNodeId >> 16) & 0xFF;
             resultData[2] = (lNodeId >> 8) & 0xFF;
@@ -1928,6 +1929,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         {
             mController.cancelPairing();
             mChannels[lChannel]->setNodeId(0);
+            mChannels[lChannel]->setOneWayEnrolled(false);
             mChannels[lChannel]->setLowPower2W(true);
             memset(const_cast<uint8_t *>(mChannels[lChannel]->getEncryptionKey()), 0, 16);
             resultData[0] = 0x00;
@@ -2028,12 +2030,12 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
 }
 
 // --- Flash persistence ---
-// Layout v11: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
+// Layout v12: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
 // default 1W broadcastType(1) + numChannels(1) +
 // per-channel: index(1) + flags(1) + actuatorNodeId(3) + actuatorKey(16) +
 // 1W reservedSeq(2) + 1W controllerNodeId(3) + 1W controllerKey(16) +
 // 1W manufacturer(1) = 43 bytes + remoteMap
-// flags: bit0=paired, bit1=is1W, bit2=2W low-power
+// flags: bit0=paired, bit1=is1W, bit2=2W low-power, bit3=1W enrolled
 
 uint16_t IoHomecontrol::flashSize()
 {
@@ -2042,7 +2044,7 @@ uint16_t IoHomecontrol::flashSize()
 
 void IoHomecontrol::writeFlash()
 {
-    openknx.flash.writeByte(11); // format version 11 (v10 + 1W reserved sequence watermark)
+    openknx.flash.writeByte(12); // format version 12 (v11 + 1W enrollment flag)
 
     // Write system key
     const uint8_t *lSysKey = mController.getSystemKey();
@@ -2066,6 +2068,8 @@ void IoHomecontrol::writeFlash()
             lFlags |= 0x02;
         if (mChannels[i]->isLowPower2W())
             lFlags |= 0x04;
+        if (mChannels[i]->isOneWayEnrolled())
+            lFlags |= 0x08;
         openknx.flash.writeByte(lFlags);
         uint32_t lNodeId = mChannels[i]->getNodeId();
         openknx.flash.writeByte((lNodeId >> 16) & 0xFF);
@@ -2112,7 +2116,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
     uint8_t lVersion = openknx.flash.readByte();
 
-    if (lVersion == 11 || lVersion == 10 || lVersion == 9)
+    if (lVersion == 12 || lVersion == 11 || lVersion == 10 || lVersion == 9)
     {
         if (iSize < kFlashHeaderV9)
             return;
@@ -2161,6 +2165,10 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
             lState.paired = (lFlags & 0x01) != 0;
             lState.is1W = (lFlags & 0x02) != 0;
             lState.lowPower2W = lVersion >= 10 ? ((lFlags & 0x04) != 0) : true;
+            // Pre-v12 stored no 1W enrollment flag: a 1W channel that carried a
+            // paired peer was already enrolled, so keep those channels usable.
+            lState.oneWayEnrolled = lVersion >= 12 ? ((lFlags & 0x08) != 0)
+                                                   : (lState.is1W && lState.paired);
             lState.nodeId = lNodeId;
             memcpy(lState.key, lKey, sizeof(lState.key));
             lState.sequence1W = lSeq;
@@ -2614,9 +2622,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             if (parseChannelIndex(lSub.substr(7, 2), mNumChannels, lIdx))
             {
                 IoHomecontrolChannel *lCh = mChannels[lIdx];
-                const bool lOneWayBroadcastOnly = lCh->is1W() && !lCh->isPaired() && lCh->getConfigured1WTargetNodeId() == 0;
+                const bool lOneWayBroadcastOnly = lCh->is1W() && lCh->isOneWayEnrolled() && !lCh->isPaired();
                 logInfoP("Ch%02d: %s device=0x%06X%s", lIdx + 1,
-                         lOneWayBroadcastOnly ? "1W-BROADCAST" : (lCh->isPaired() ? "PAIRED" : "unpaired"),
+                         lOneWayBroadcastOnly ? "1W-ENROLLED" : (lCh->isOperational() ? "PAIRED" : (lCh->is1W() ? "not enrolled" : "unpaired")),
                          lCh->getNodeId(),
                          lCh->is1W() ? " [1W]" : " [2W]");
                 if (lCh->is1W())
@@ -2648,7 +2656,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 }
                 if (iDebugKo)
                     openknx.console.writeDiagnoseKo("Ch%02d %s %06X", lIdx + 1,
-                                                    lCh->isPaired() ? "P" : "-",
+                                                    lCh->isOperational() ? "P" : "-",
                                                     lCh->getNodeId());
             }
             else
@@ -2670,9 +2678,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 if (lCh->is1W())
                 {
                     IoHomecontrolChannel *lProfile = mController.oneWayProfileForChannel(lCh);
-                    const bool lOneWayBroadcastOnly = !lCh->isPaired() && lCh->getConfigured1WTargetNodeId() == 0;
+                    const bool lOneWayBroadcastOnly = lCh->isOneWayEnrolled() && !lCh->isPaired();
                     logInfoP("Ch%02d: %s [1W] device=0x%06X remote=0x%06X key=%s type=%u acei=0x%02X mfg=0x%02X seq=0x%04X lastPairMode=%s", i + 1,
-                             lOneWayBroadcastOnly ? "1W-BROADCAST" : (lCh->isPaired() ? "PAIRED" : "unpaired"),
+                             lOneWayBroadcastOnly ? "1W-ENROLLED" : (lCh->isOneWayEnrolled() ? "PAIRED" : "not enrolled"),
                              lCh->isPaired() ? lCh->getNodeId() : lCh->getConfigured1WTargetNodeId(),
                              lProfile ? lProfile->getOneWayControllerNodeId() : 0,
                              lProfile ? keyStateText(lProfile->getOneWayControllerKey()) : "missing",
@@ -3807,7 +3815,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             // Otherwise the channel stays remote=0/key=missing until the first
             // pairing. ensureOneWayControllerProfile() persists what it generates.
             ensureOneWayControllerProfile(mChannels[lIdx]);
-            if (mChannels[lIdx]->isPaired())
+            if (mChannels[lIdx]->isOperational())
                 openknx.flash.save(true); // mode change on a paired channel: bypass write throttle
             logInfoP("Channel %d set to 1W mode (seq=%d)", lIdx + 1, mChannels[lIdx]->getSequence1W());
             if (iDebugKo)
@@ -3828,7 +3836,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if (parseChannelIndex(lSub.substr(6, 2), mNumChannels, lIdx))
         {
             mChannels[lIdx]->setIs1W(false);
-            if (mChannels[lIdx]->isPaired())
+            if (mChannels[lIdx]->isOperational())
                 openknx.flash.save(true); // mode change on a paired channel: bypass write throttle
             logInfoP("Channel %d set to 2W mode", lIdx + 1);
             if (iDebugKo)

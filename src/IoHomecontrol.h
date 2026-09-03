@@ -63,6 +63,7 @@ private:
     bool valid = false;
     bool paired = false;
     bool is1W = false;
+    bool oneWayEnrolled = false;
     bool lowPower2W = true;
     uint32_t nodeId = 0;
     uint8_t key[16] = {};
