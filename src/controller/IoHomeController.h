@@ -212,7 +212,8 @@ public:
   {
     Ok = 0,
     Busy = 1,
-    Missing1WTarget = 2,
+    // 2 was Missing1WTarget. A 1W controller commands typed broadcasts and
+    // needs no target node, so the value is retired but not reused.
     Failed = 3
   };
 
@@ -261,7 +262,7 @@ public:
   struct OneWayPairingProfile
   {
     const char *name;
-    uint32_t removeDestination;   // 0 = derive from the configured broadcast type
+    uint32_t removeDestination; // 0 = derive from the configured broadcast type
     uint32_t finalizerDestination;
     const uint32_t *addDestinations; // nullptr = derive from the broadcast type
     uint8_t addDestinationCount;

@@ -1851,10 +1851,6 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
             {
                 switch (mController.lastPairStartStatus())
                 {
-                case IoHomeController::PairStartStatus::Missing1WTarget:
-                    resultData[0] = 0x03;
-                    logInfoP("ETS: 1W pairing needs a target node ID on channel %d", lChannel + 1);
-                    break;
                 case IoHomeController::PairStartStatus::Busy:
                     resultData[0] = 0x04;
                     logInfoP("ETS: pairing blocked for channel %d, controller state=%s", lChannel + 1,

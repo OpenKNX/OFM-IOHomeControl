@@ -214,7 +214,6 @@ Common status byte values used by commands `0x10`, `0x11`, `0x13`, `0x17`, and `
 | Value | Meaning |
 |-------|---------|
 | 0x00 | Command accepted / executed successfully |
-| 0x03 | 1W pairing rejected because the target node ID is missing |
 | 0x04 | Command rejected because the controller is currently busy |
 | 0xFF | Invalid request, channel out of range, or command not supported in the current state |
 
@@ -243,8 +242,9 @@ For the `0x12` status query, `lastPairStartStatus` is currently encoded as follo
 |-------|---------|
 | 0 | Last pairing start request was accepted |
 | 1 | Last pairing start request was blocked because the controller was busy |
-| 2 | Last 1W pairing start request was rejected because the target node ID was missing |
 | 3 | Generic pairing start failure |
+
+Value 2 is retired. It previously reported a missing 1W target node ID; a 1W controller commands typed broadcasts and needs no target node.
 
 ## Architecture
 
