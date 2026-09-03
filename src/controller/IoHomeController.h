@@ -32,6 +32,10 @@
 #define IOHC_LBT_AUTH_MAX_RETRIES 1       // auth responses must not be delayed too long
 #define IOHC_LBT_RETRY_DELAY_MS 5
 #define IOHC_RX_SCAN_INTERVAL_US 2700 // ~2.7ms frequency scan interval (per nicolas5000)
+// Passive correlation window after a received UNKNOWN_86 frame. Any frame
+// exchanged between the same two nodes inside this window is logged verbatim so
+// a possible request/response pairing can be established from real captures.
+#define IOHC_UNKNOWN86_CORRELATION_WINDOW_MS 500
 // Maximum raw Execute payload bytes before appending the 1W sequence number.
 // Normal 1W authenticated frames include 6-byte HMAC in CTRL0 length, so keep
 // 9(header) + raw + 2(seq) + 6(hmac) <= IOHC_FRAME_BUFFER_SIZE.
@@ -737,6 +741,14 @@ private:
   uint32_t mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
   uint32_t mRetryAtMs = 0;
 
+  // Passive UNKNOWN_86 (0x86) observation. No semantics are assumed; only the
+  // raw frame and any traffic between the same node pair are logged.
+  bool mUnknown86Pending = false;
+  uint32_t mUnknown86Source = 0;
+  uint32_t mUnknown86Dest = 0;
+  uint32_t mUnknown86ObservedAtMs = 0;
+  uint16_t mUnknown86Count = 0;
+
   // Pairing state
   uint8_t mPairingChannel;
   PairStartStatus mLastPairStartStatus = PairStartStatus::Ok;
@@ -950,6 +962,7 @@ private:
   void recordPairingDiagnostic(PairingOutcome iOutcome, const char *iAction);
   void completePairingTelemetry(PairingOutcome iOutcome);
   void resetOneWayEnrollmentTrace();
+  void observeUnknown86Frame();
   void recordOneWayEnrollmentPhase(OneWayEnrollPhase iPhase, uint16_t iSequence,
                                    uint32_t iDestination);
   void completeOneWayEnrollmentPhase(bool iSuccess);

@@ -2338,8 +2338,41 @@ TEST(command_id_enum_values)
     ASSERT_EQ((uint8_t)IoHomeCommand::SetConfig1Response, 0x70);
     ASSERT_EQ((uint8_t)IoHomeCommand::StatusUpdate, 0x71);
     ASSERT_EQ((uint8_t)IoHomeCommand::StatusUpdateResponse, 0x72);
+    ASSERT_EQ((uint8_t)IoHomeCommand::Unknown86, 0x86);
     ASSERT_EQ((uint8_t)IoHomeCommand::ErrorResponse, 0xFE);
 }
+
+TEST(frame_deserialize_unknown_86_keeps_raw_payload)
+{
+    // Real capture; no public source names 0x86 or decodes its 8 data bytes.
+    const uint8_t lCapture[] = {
+        0x50, 0x00, 0x05, 0xBA, 0x8E, 0x26, 0xEB, 0x96, 0x86,
+        0x00, 0x05, 0x02, 0xCA, 0x58, 0x01, 0x0B, 0x42};
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lCapture, sizeof(lCapture)));
+    ASSERT_EQ(lFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W, 0);
+    ASSERT_NE(lFrame.ctrlByte0 & IOHC_CTRL0_START, 0);
+    ASSERT_EQ(lFrame.ctrlByte0 & IOHC_CTRL0_END, 0);
+    ASSERT_EQ(lFrame.getSrcNodeId(), 0x26EB96U);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x05BA8EU);
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::Unknown86);
+    ASSERT_EQ(lFrame.dataLen, 8);
+    ASSERT_MEM_EQ(lFrame.data, lCapture + 9, 8);
+    ASSERT_TRUE(!lFrame.hasHmac);
+    ASSERT_TRUE(!lFrame.hasTrailerMac);
+
+    uint8_t lRoundTrip[sizeof(lCapture)] = {};
+    ASSERT_EQ(serializeFrameForTest(lFrame, lRoundTrip, sizeof(lRoundTrip)), sizeof(lCapture));
+    ASSERT_MEM_EQ(lRoundTrip, lCapture, sizeof(lCapture));
+}
+
+#ifdef TEST_NATIVE
+TEST(controller_unknown_86_is_named_without_semantics)
+{
+    ASSERT_TRUE(strcmp(IoHomeController::commandName(IoHomeCommand::Unknown86), "UNKNOWN_86") == 0);
+}
+#endif
 
 // =====================================================================
 // 37. Execute quiet mode flag

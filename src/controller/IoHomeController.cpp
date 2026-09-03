@@ -2249,6 +2249,56 @@ void IoHomeController::resetOneWayEnrollmentTrace()
     mOneWayEnrollmentActiveTrace = -1;
 }
 
+void IoHomeController::observeUnknown86Frame()
+{
+    const uint32_t lNow = millis();
+    const uint32_t lSrc = mRxFrame.getSrcNodeId();
+    const uint32_t lDst = mRxFrame.getDestNodeId();
+
+    if (mUnknown86Pending && lNow - mUnknown86ObservedAtMs > IOHC_UNKNOWN86_CORRELATION_WINDOW_MS)
+        mUnknown86Pending = false;
+
+    if (mRxFrame.commandId == IoHomeCommand::Unknown86)
+    {
+        if (mUnknown86Count != 0xFFFF)
+            ++mUnknown86Count;
+        const uint32_t lFreqHz = (mCurrentFreqIdx < IOHC_NUM_FREQUENCIES) ? IOHC_FREQUENCIES[mCurrentFreqIdx] : 0;
+        logInfoP("UNKNOWN_86(0x86): src=0x%06X dst=0x%06X ctrl0=0x%02X ctrl1=0x%02X len=%u freq=%luHz rssi=%ddBm seen=%u data=%s",
+                 lSrc, lDst,
+                 static_cast<unsigned>(mRxFrame.ctrlByte0),
+                 static_cast<unsigned>(mRxFrame.ctrlByte1),
+                 static_cast<unsigned>(mRxFrame.dataLen),
+                 static_cast<unsigned long>(lFreqHz),
+                 mRadio.lastRssi(),
+                 static_cast<unsigned>(mUnknown86Count),
+                 hexDump(mRxFrame.data, mRxFrame.dataLen).c_str());
+
+        mUnknown86Pending = true;
+        mUnknown86Source = lSrc;
+        mUnknown86Dest = lDst;
+        mUnknown86ObservedAtMs = lNow;
+        return;
+    }
+
+    if (!mUnknown86Pending)
+        return;
+
+    const bool lSameNodePair = (lSrc == mUnknown86Source && lDst == mUnknown86Dest) ||
+                               (lSrc == mUnknown86Dest && lDst == mUnknown86Source);
+    if (!lSameNodePair)
+        return;
+
+    // Deliberately does not name this frame a response to 0x86: the pairing is
+    // an open question and must be decided from real captures.
+    logInfoP("UNKNOWN_86 follow-up: +%lums src=0x%06X dst=0x%06X cmd=%s(0x%02X) len=%u data=%s",
+             static_cast<unsigned long>(lNow - mUnknown86ObservedAtMs),
+             lSrc, lDst,
+             commandName(mRxFrame.commandId),
+             static_cast<unsigned>(static_cast<uint8_t>(mRxFrame.commandId)),
+             static_cast<unsigned>(mRxFrame.dataLen),
+             hexDump(mRxFrame.data, mRxFrame.dataLen).c_str());
+}
+
 void IoHomeController::recordOneWayEnrollmentPhase(OneWayEnrollPhase iPhase,
                                                     uint16_t iSequence,
                                                     uint32_t iDestination)
@@ -2970,6 +3020,8 @@ const char *IoHomeController::commandName(IoHomeCommand iCmd)
         return "StatusUpdate";
     case IoHomeCommand::StatusUpdateResponse:
         return "StatusUpdateResponse";
+    case IoHomeCommand::Unknown86:
+        return "UNKNOWN_86";
     case IoHomeCommand::ErrorResponse:
         return "ErrorResponse";
     default:
@@ -3689,6 +3741,8 @@ void IoHomeController::loop()
             const ControllerState lPairingStateBeforeRx = mState;
             // Record which frequency the response came on
             mLastResponseFreqIdx = mCurrentFreqIdx;
+
+            observeUnknown86Frame();
 
             if (mPairDiagnosticTraceEnabled &&
                 (isPairDiagnosticState(mState) || isPairDiagnosticCommand(mRxFrame.commandId)))

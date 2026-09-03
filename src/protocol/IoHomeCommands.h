@@ -96,7 +96,11 @@ enum class IoHomeCommand : uint8_t
     // Unknown80 = 0x80,  // not used
     // Unknown82 = 0x82,  // not used
     // Unknown84 = 0x84,  // not used
-    // Unknown86 = 0x86,  // not used
+    // Observed on real 2W START frames (CTRL0=0x50) with an 8-byte payload.
+    // CyrilOpenSource/iown-homecontrol-esp32sx1276 lists it among the valid 2W
+    // opcodes, but no public source names it or decodes its payload. Keep the
+    // neutral name: do not invent semantics.
+    Unknown86 = 0x86,
     // Unknown88 = 0x88,  // not used
     // Unknown8A = 0x8A,  // not used
     // Unknown8B = 0x8B,  // not used
