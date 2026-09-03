@@ -17,6 +17,10 @@
 #define ParamIOHC_cOneWayEnrollmentFinalizer 0
 #endif
 
+#ifndef ParamIOHC_cTwoWayPowerClass
+#define ParamIOHC_cTwoWayPowerClass 0
+#endif
+
 // ---------------------------------------------------------------------------
 // Scene parameter access
 //
@@ -175,6 +179,7 @@ void IoHomecontrolChannel::setup()
     const uint8_t lOneWayAcei = static_cast<uint8_t>(ParamIOHC_cOneWayAcei);
     const bool lOneWayEnrollmentMac = ParamIOHC_cOneWayEnrollmentMac != 0;
     const uint8_t lOneWayEnrollmentFinalizer = static_cast<uint8_t>(ParamIOHC_cOneWayEnrollmentFinalizer);
+    const uint8_t lTwoWayPowerClass = static_cast<uint8_t>(ParamIOHC_cTwoWayPowerClass);
     const bool lSilentOperation = ParamIOHC_cSilentOperation != 0;
 
     // A channel is active when it is activated (Kanalaktivität = Aktiviert) and not temporarily suspended.
@@ -211,6 +216,10 @@ void IoHomecontrolChannel::setup()
 
     // Apply protocol mode from ETS (Feature 4: 1W/2W per channel)
     setIs1W(lProtocolMode == 1);
+    setConfigured2WPowerClass(
+        lTwoWayPowerClass <= static_cast<uint8_t>(TwoWayPowerClass::LowPower)
+            ? static_cast<TwoWayPowerClass>(lTwoWayPowerClass)
+            : TwoWayPowerClass::Automatic);
     setConfigured1WTargetNodeId(lOneWayTargetNodeId);
     setConfigured1WBroadcastType(resolveOneWayBroadcastType(
         lOneWayBroadcastType,
@@ -231,7 +240,7 @@ void IoHomecontrolChannel::setup()
     if (mIs1W && mConfigured1WTargetNodeId == 0)
         logInfoP("Channel is configured as 1W but has no ETS 1W target node; pairing must provide a target node explicitly");
 
-    logInfoP("Applied protocol config: %s target=0x%06X broadcastType=%u acei=0x%02X profile=%s manufacturer=0x%02X enrollFinalizer=%u rs100Silent=%u",
+    logInfoP("Applied protocol config: %s target=0x%06X broadcastType=%u acei=0x%02X profile=%s manufacturer=0x%02X enrollFinalizer=%u rs100Silent=%u power2W=%s",
              mIs1W ? "1W" : "2W",
              static_cast<unsigned long>(mConfigured1WTargetNodeId),
              static_cast<unsigned>(mConfigured1WBroadcastType),
@@ -239,7 +248,8 @@ void IoHomecontrolChannel::setup()
              mConfigured1WProfileChannel == 0xFF ? "own" : "linked",
              static_cast<unsigned>(mOneWayControllerManufacturer),
              static_cast<unsigned>(mConfigured1WEnrollmentFinalizer),
-             mSilentOperation ? 1U : 0U);
+             mSilentOperation ? 1U : 0U,
+             twoWayPowerClassName(mConfigured2WPowerClass));
 
     logDebugP("Setup (type=%d, poll=%ds, open=%.1fs, close=%.1fs, invert=%d, powerOn=%d, scenes=%d, 1w=%d, 1wTarget=%06X, 1wType=%u, 1wProfile=%u)",
               ParamIOHC_cDeviceType, ParamIOHC_cPollInterval,
@@ -733,6 +743,40 @@ bool IoHomecontrolChannel::isLowPower2W() const
 bool IoHomecontrolChannel::hasLearnedLowPower2W() const
 {
     return mHasLearnedLowPower2W;
+}
+
+void IoHomecontrolChannel::setConfigured2WPowerClass(TwoWayPowerClass iPowerClass)
+{
+    mConfigured2WPowerClass = iPowerClass;
+}
+
+TwoWayPowerClass IoHomecontrolChannel::getConfigured2WPowerClass() const
+{
+    return mConfigured2WPowerClass;
+}
+
+bool IoHomecontrolChannel::effectiveLowPower2W() const
+{
+    if (mIs1W || mConfigured2WPowerClass == TwoWayPowerClass::AlwaysAlive)
+        return false;
+    if (mConfigured2WPowerClass == TwoWayPowerClass::LowPower)
+        return true;
+    return mHasLearnedLowPower2W ? mLowPower2W : false;
+}
+
+const char *IoHomecontrolChannel::twoWayPowerClassName(TwoWayPowerClass iPowerClass)
+{
+    switch (iPowerClass)
+    {
+    case TwoWayPowerClass::Automatic:
+        return "automatic";
+    case TwoWayPowerClass::AlwaysAlive:
+        return "always-alive";
+    case TwoWayPowerClass::LowPower:
+        return "low-power";
+    default:
+        return "automatic";
+    }
 }
 
 void IoHomecontrolChannel::setLastChallenge(const uint8_t *iChallenge)

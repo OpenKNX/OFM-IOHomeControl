@@ -1828,7 +1828,7 @@ bool IoHomeController::resolveLowPower2W(uint32_t iNodeId) const
         return false;
     if (lCh->is1W())
         return false;
-    return lCh->isLowPower2W();
+    return lCh->effectiveLowPower2W();
 }
 
 uint16_t IoHomeController::preambleFor2WRequest(const IoHomeFrame &iFrame) const

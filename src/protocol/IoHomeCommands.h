@@ -121,6 +121,13 @@ enum class OneWayEnrollmentFinalizer : uint8_t
     StopDown = 2,
 };
 
+enum class TwoWayPowerClass : uint8_t
+{
+    Automatic = 0,
+    AlwaysAlive = 1,
+    LowPower = 2,
+};
+
 // io-homecontrol device types
 enum class IoHomeDeviceType : uint8_t
 {

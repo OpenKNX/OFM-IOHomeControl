@@ -135,6 +135,16 @@ public:
   }
   bool isLowPower2W() const { return mLowPower2W; }
   bool hasLearnedLowPower2W() const { return mHasLearnedLowPower2W; }
+  void setConfigured2WPowerClass(TwoWayPowerClass iPowerClass) { mConfigured2WPowerClass = iPowerClass; }
+  TwoWayPowerClass getConfigured2WPowerClass() const { return mConfigured2WPowerClass; }
+  bool effectiveLowPower2W() const
+  {
+    if (mIs1W || mConfigured2WPowerClass == TwoWayPowerClass::AlwaysAlive)
+      return false;
+    if (mConfigured2WPowerClass == TwoWayPowerClass::LowPower)
+      return true;
+    return mHasLearnedLowPower2W ? mLowPower2W : false;
+  }
 
   void setLastChallenge(const uint8_t *iChallenge)
   {
@@ -280,6 +290,7 @@ private:
   bool mPaired = false;
   bool mLowPower2W = false;
   bool mHasLearnedLowPower2W = false;
+  TwoWayPowerClass mConfigured2WPowerClass = TwoWayPowerClass::Automatic;
   uint32_t mConfigured1WTargetNodeId = 0;
   // TEST_NATIVE mirrors the production channel default: unspecified 1W type is
   // type 0 / All, which serializes to destination 0x00003F.

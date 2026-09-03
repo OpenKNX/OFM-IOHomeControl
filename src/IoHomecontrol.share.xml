@@ -155,6 +155,13 @@
                   <Enumeration Text="1W (unidirektional)" Value="1" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCTwoWayPowerClass" Name="IOHCTwoWayPowerClass">
+                <TypeRestriction Base="Value" SizeInBit="2">
+                  <Enumeration Text="Automatisch" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Immer aktiv" Value="1" Id="%ENID%" />
+                  <Enumeration Text="Energiesparend" Value="2" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
               <ParameterType Id="%AID%_PT-IOHCOneWayBroadcastType" Name="IOHCOneWayBroadcastType">
                 <TypeRestriction Base="Value" SizeInBit="8">
                   <Enumeration Text="Automatisch nach Gerätetyp" Value="255" Id="%ENID%" />

@@ -51,6 +51,7 @@
                 <Parameter Id="%AID%_UP-%TT%%CC%082" Name="c%C%OneWayEnrollmentMac" ParameterType="%AID%_PT-IOHCCheckBox" Offset="53" BitOffset="0" Text="1W Anmeldung mit MAC-Anhang (0x30)" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%083" Name="c%C%SilentOperation" ParameterType="%AID%_PT-IOHCCheckBox" Offset="53" BitOffset="1" Text="Somfy RS100: leiser Betrieb" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%084" Name="c%C%OneWayEnrollmentFinalizer" ParameterType="%AID%_PT-IOHCOneWayEnrollmentFinalizer" Offset="53" BitOffset="2" Text="1W Anmeldeabschluss" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%085" Name="c%C%TwoWayPowerClass" ParameterType="%AID%_PT-IOHCTwoWayPowerClass" Offset="53" BitOffset="4" Text="2W Energieklasse" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%020" Name="c%C%SceneCount" ParameterType="%AID%_PT-IOHCSceneCount" Offset="13" BitOffset="0" Text="Anzahl Szenen" Value="0" />
                 <!-- Scene slot parameters 1..10 are generated from IoHomecontrol.scene.part.xml. -->
                 <op:usePart name="IOHCScene" xpath="//Parameters/*" />
@@ -83,6 +84,7 @@
               <ParameterRef Id="%AID%_UP-%TT%%CC%082_R-%TT%%CC%08201" RefId="%AID%_UP-%TT%%CC%082" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%083_R-%TT%%CC%08301" RefId="%AID%_UP-%TT%%CC%083" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%084_R-%TT%%CC%08401" RefId="%AID%_UP-%TT%%CC%084" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%085_R-%TT%%CC%08501" RefId="%AID%_UP-%TT%%CC%085" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_UP-%TT%%CC%020" />
               <!-- Scene slot ParameterRefs 1..10 are generated from IoHomecontrol.scene.part.xml. -->
               <op:usePart name="IOHCScene" xpath="//ParameterRefs/*" />
@@ -299,6 +301,7 @@
                             </choose>
                           </when>
                           <when test="0">
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%085_R-%TT%%CC%08501" IndentLevel="1" HelpContext="IOHC-2W-Energieklasse" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%083_R-%TT%%CC%08301" IndentLevel="1" HelpContext="IOHC-Silentbetrieb" />
                           </when>
                         </choose>

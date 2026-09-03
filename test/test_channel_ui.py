@@ -181,6 +181,39 @@ class ChannelUiTest(unittest.TestCase):
         )
         self.assertFalse(any("UP" in label or "AUF" in label for label in labels.values()))
 
+    def test_two_way_power_class_override_is_available_only_for_2w(self) -> None:
+        power_class = self.share.find(
+            ".//k:ParameterType[@Name='IOHCTwoWayPowerClass']", NS
+        )
+        self.assertIsNotNone(power_class)
+        labels = {
+            item.get("Value"): item.get("Text")
+            for item in power_class.findall(".//k:Enumeration", NS)
+        }
+        self.assertEqual(
+            labels,
+            {"0": "Automatisch", "1": "Immer aktiv", "2": "Energiesparend"},
+        )
+
+        parameter = self.template.find(
+            ".//k:Parameter[@Name='c%C%TwoWayPowerClass']", NS
+        )
+        self.assertIsNotNone(parameter)
+        self.assertEqual(parameter.get("Value"), "0")
+        self.assertEqual(parameter.get("Offset"), "53")
+        self.assertEqual(parameter.get("BitOffset"), "4")
+
+        protocol_choice = self.template.find(
+            ".//k:choose[@ParamRefId='%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901']", NS
+        )
+        two_way = protocol_choice.find("k:when[@test='0']", NS)
+        self.assertIsNotNone(two_way)
+        ref = two_way.find(
+            "k:ParameterRefRef[@RefId='%AID%_UP-%TT%%CC%085_R-%TT%%CC%08501']", NS
+        )
+        self.assertIsNotNone(ref)
+        self.assertEqual(ref.get("HelpContext"), "IOHC-2W-Energieklasse")
+
 
 if __name__ == "__main__":
     unittest.main()

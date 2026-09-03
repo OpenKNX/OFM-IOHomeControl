@@ -57,6 +57,10 @@ public:
   void clearLearnedLowPower2W();
   bool isLowPower2W() const;
   bool hasLearnedLowPower2W() const;
+  void setConfigured2WPowerClass(TwoWayPowerClass iPowerClass);
+  TwoWayPowerClass getConfigured2WPowerClass() const;
+  bool effectiveLowPower2W() const;
+  static const char *twoWayPowerClassName(TwoWayPowerClass iPowerClass);
 
   // Challenge tracking for HMAC verification of responses
   void setLastChallenge(const uint8_t *iChallenge);
@@ -118,6 +122,7 @@ private:
   bool mPaired = false;
   bool mLowPower2W = false;         // Unknown 2W devices default to always-alive
   bool mHasLearnedLowPower2W = false;
+  TwoWayPowerClass mConfigured2WPowerClass = TwoWayPowerClass::Automatic;
   bool mSilentOperation = false;    // Somfy RS100 2W Execute profile (0x05)
   uint16_t mSequence1W = 0;         // 1W last used sequence counter
   uint16_t mReservedSequence1W = 0; // highest sequence persisted/reserved ahead in flash

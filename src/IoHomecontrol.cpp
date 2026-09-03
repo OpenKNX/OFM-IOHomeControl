@@ -2651,10 +2651,17 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 }
                 else
                 {
-                    logInfoP("  2W device: node=0x%06X key=%s lowPower=%u",
+                    const bool lEffectiveLowPower = lCh->effectiveLowPower2W();
+                    logInfoP("  2W device: node=0x%06X key=%s configured=%s learned=%s effective=%s startPreamble=%u",
                              lCh->getNodeId(),
                              keyStateText(lCh->getEncryptionKey()),
-                             lCh->isLowPower2W() ? 1U : 0U);
+                             IoHomecontrolChannel::twoWayPowerClassName(lCh->getConfigured2WPowerClass()),
+                             lCh->hasLearnedLowPower2W()
+                                 ? (lCh->isLowPower2W() ? "low-power" : "always-alive")
+                                 : "unknown",
+                             lEffectiveLowPower ? "low-power" : "always-alive",
+                             static_cast<unsigned>(lEffectiveLowPower ? IOHC_PREAMBLE_LONG
+                                                                      : IOHC_PREAMBLE_NORMAL_START));
                 }
                 if (iDebugKo)
                     openknx.console.writeDiagnoseKo("Ch%02d %s %06X", lIdx + 1,
@@ -2694,10 +2701,18 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 }
                 else
                 {
-                    logInfoP("Ch%02d: %s [2W] node=0x%06X key=%s", i + 1,
+                    const bool lEffectiveLowPower = lCh->effectiveLowPower2W();
+                    logInfoP("Ch%02d: %s [2W] node=0x%06X key=%s configured=%s learned=%s effective=%s startPreamble=%u", i + 1,
                              lCh->isPaired() ? "PAIRED" : "unpaired",
                              lCh->getNodeId(),
-                             keyStateText(lCh->getEncryptionKey()));
+                             keyStateText(lCh->getEncryptionKey()),
+                             IoHomecontrolChannel::twoWayPowerClassName(lCh->getConfigured2WPowerClass()),
+                             lCh->hasLearnedLowPower2W()
+                                 ? (lCh->isLowPower2W() ? "low-power" : "always-alive")
+                                 : "unknown",
+                             lEffectiveLowPower ? "low-power" : "always-alive",
+                             static_cast<unsigned>(lEffectiveLowPower ? IOHC_PREAMBLE_LONG
+                                                                      : IOHC_PREAMBLE_NORMAL_START));
                 }
             }
         }
