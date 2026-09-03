@@ -1831,6 +1831,15 @@ bool IoHomeController::resolveLowPower2W(uint32_t iNodeId) const
     return lCh->effectiveLowPower2W();
 }
 
+bool IoHomeController::pairingLowPower2W() const
+{
+    if (!mModule)
+        return false;
+
+    IoHomecontrolChannel *lCh = mModule->getChannel(mPairingChannel);
+    return lCh && !lCh->is1W() && lCh->effectiveLowPower2W();
+}
+
 uint16_t IoHomeController::preambleFor2WRequest(const IoHomeFrame &iFrame) const
 {
     if ((iFrame.ctrlByte0 & IOHC_CTRL0_START) == 0)
@@ -4652,6 +4661,7 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
 
     mTxFrame.init();
     mTxFrame.setStart2W();
+    mTxFrame.setLowPower(pairingLowPower2W());
     mTxFrame.setSrcNode(mOwnNodeId);
     mTxFrame.setDestNode(mDiscoveredNodeId);
     mTxFrame.commandId = IoHomeCommand::Confirmation;
@@ -4659,6 +4669,7 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
     mTxFrame.hasHmac = false;
 
     const uint32_t lConfirmationFreq = kNormal2WTxFreqHz;
+    const uint16_t lPreamble = preambleFor2WRequest(mTxFrame);
 #if defined(RADIO_SX1262)
     const RadioError lFreqErr = mRadio.setFrequencyBlocking(lConfirmationFreq);
     if (lFreqErr != RadioError::None)
@@ -4670,9 +4681,9 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
         return;
     }
     updateCurrentFrequencyIndex(lConfirmationFreq);
-    const RadioError lPrepErr = mRadio.setPreambleLengthBlocking(IOHC_PREAMBLE_LONG);
+    const RadioError lPrepErr = mRadio.setPreambleLengthBlocking(lPreamble);
 #else
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lConfirmationFreq);
+    const RadioError lPrepErr = configureTxRadio(lPreamble, &lConfirmationFreq);
 #endif
     if (lPrepErr == RadioError::Busy)
         return;
@@ -4686,7 +4697,7 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
     mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        tracePairDiagnosticTx2W(mTxFrame, IOHC_PREAMBLE_LONG);
+        tracePairDiagnosticTx2W(mTxFrame, lPreamble);
 #if defined(RADIO_SX1262)
         const RadioError lErr = mRadio.startTransmitBlocking(mTxBuffer, mTxLen);
 #else
@@ -4742,6 +4753,7 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
 
     mPairLaunchKeyTransferFrame.init();
     mPairLaunchKeyTransferFrame.setStart2W();
+    mPairLaunchKeyTransferFrame.setLowPower(pairingLowPower2W());
     mPairLaunchKeyTransferFrame.setSrcNode(mOwnNodeId);
     mPairLaunchKeyTransferFrame.setDestNode(mDiscoveredNodeId);
     mPairLaunchKeyTransferFrame.commandId = IoHomeCommand::LaunchKeyTransfer;
@@ -4750,7 +4762,8 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
     mPairLaunchKeyTransferFrame.dataLen = sizeof(mPairingChallenge);
     mPairLaunchKeyTransferFrame.hasHmac = false;
 
-    const RadioError lPrepErr = configureNormal2WTxRadio(IOHC_PREAMBLE_LONG);
+    const uint16_t lPreamble = preambleFor2WRequest(mPairLaunchKeyTransferFrame);
+    const RadioError lPrepErr = configureNormal2WTxRadio(lPreamble);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -4763,7 +4776,7 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
     mTxLen = mPairLaunchKeyTransferFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        tracePairDiagnosticTx2W(mPairLaunchKeyTransferFrame, IOHC_PREAMBLE_LONG);
+        tracePairDiagnosticTx2W(mPairLaunchKeyTransferFrame, lPreamble);
         const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
@@ -5628,9 +5641,9 @@ bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
 void IoHomeController::processPairSendKeyInit()
 {
     // Send KeyInitTransfer (0x31) to discovered device to begin key exchange.
-    // Reference-compatible 2W pairing uses an initial START frame with the
-    // LOW_POWER bit set and a long preamble so low-power actuators wake up
-    // before answering with ChallengeRequest (0x3C).
+    // The directed START frame follows the learned/configured power class so
+    // mains-powered devices receive the normal preamble while low-power
+    // devices still get the long wake-up preamble.
     if (mPairKeyExchangeAttempts >= IOHC_PAIR_KEY_EXCHANGE_MAX_ATTEMPTS ||
         (mPairKeyExchangeAttempts > 0 &&
          millis() - mPairKeyExchangeStartTime >= IOHC_PAIR_KEY_EXCHANGE_TIMEOUT_MS))
@@ -5645,7 +5658,10 @@ void IoHomeController::processPairSendKeyInit()
         return;
     }
 
-    const RadioError lPrepErr = configureNormal2WTxRadio(IOHC_PREAMBLE_LONG);
+    mTxFrame.setLowPower(pairingLowPower2W());
+    const uint16_t lPreamble = preambleFor2WRequest(mTxFrame);
+
+    const RadioError lPrepErr = configureNormal2WTxRadio(lPreamble);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -5657,7 +5673,7 @@ void IoHomeController::processPairSendKeyInit()
     mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        tracePairDiagnosticTx2W(mTxFrame, IOHC_PREAMBLE_LONG);
+        tracePairDiagnosticTx2W(mTxFrame, lPreamble);
         const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
@@ -5861,6 +5877,8 @@ void IoHomeController::processPairSendSetConfig1()
         return;
     }
 
+    mTxFrame.setLowPower(pairingLowPower2W());
+
     mPairSetConfigRequest = mTxFrame;
 
     if (mPairDiagnosticTraceEnabled)
@@ -5879,7 +5897,8 @@ void IoHomeController::processPairSendSetConfig1()
         return;
     }
 
-    const RadioError lPrepErr = configureNormal2WTxRadio(IOHC_PREAMBLE_LONG);
+    const uint16_t lPreamble = preambleFor2WRequest(mPairSetConfigRequest);
+    const RadioError lPrepErr = configureNormal2WTxRadio(lPreamble);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -5891,7 +5910,7 @@ void IoHomeController::processPairSendSetConfig1()
         return;
     }
 
-    tracePairDiagnosticTx2W(mPairSetConfigRequest, IOHC_PREAMBLE_LONG);
+    tracePairDiagnosticTx2W(mPairSetConfigRequest, lPreamble);
     const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
     if (lErr == RadioError::None)
     {
@@ -6086,6 +6105,11 @@ void IoHomeController::processDiscovery()
         }
 
         const uint32_t lDiscoveryFreq = IOHC_FREQUENCIES[mPairingFreqIdx];
+        // SPE roll-call addresses already paired devices, so it does not need
+        // the cold-discovery wake-up preamble. CTRL1 remains zero.
+        const uint16_t lDiscoveryPreamble = mDiscoverySPE
+                                                ? IOHC_PREAMBLE_NORMAL_START
+                                                : IOHC_PREAMBLE_LONG;
 #if defined(RADIO_SX1262)
         RadioError lPrepErr = RadioError::None;
         if (mDiscoverySendPhase == DiscoverySendPhase::SetFrequency)
@@ -6101,7 +6125,7 @@ void IoHomeController::processDiscovery()
         }
         else if (mDiscoverySendPhase == DiscoverySendPhase::SetPreamble)
         {
-            lPrepErr = mRadio.setPreambleLengthBlocking(IOHC_PREAMBLE_LONG);
+            lPrepErr = mRadio.setPreambleLengthBlocking(lDiscoveryPreamble);
             if (lPrepErr == RadioError::None)
             {
                 mDiscoveryTimingTrace.preambleReadyUs = micros();
@@ -6118,7 +6142,7 @@ void IoHomeController::processDiscovery()
             return;
         }
 #else
-        const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lDiscoveryFreq);
+        const RadioError lPrepErr = configureTxRadio(lDiscoveryPreamble, &lDiscoveryFreq);
         if (lPrepErr == RadioError::Busy)
             return;
         if (lPrepErr != RadioError::None)

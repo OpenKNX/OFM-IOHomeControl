@@ -7610,6 +7610,7 @@ TEST(controller_discovery_sends_standard_28_then_alt_2e_broadcast)
     ASSERT_EQ(lStd.getDestNodeId(), 0x00003B);
     ASSERT_EQ(lStd.dataLen, 0);
     ASSERT_TRUE(!lStd.hasHmac);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
 
     // Second transmit: alternative 0x2E Discover2ERequest to 0x00003F.
     lController.radio().testClearTransmittedPacket();
@@ -7626,6 +7627,7 @@ TEST(controller_discovery_sends_standard_28_then_alt_2e_broadcast)
     ASSERT_EQ(lAlt.dataLen, 1);
     ASSERT_EQ(lAlt.data[0], 0x00);
     ASSERT_TRUE(!lAlt.hasHmac);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
 }
 
 TEST(controller_spe_discovery_sends_single_2a_broadcast)
@@ -7661,6 +7663,8 @@ TEST(controller_spe_discovery_sends_single_2a_broadcast)
     ASSERT_TRUE(deserializeFrameForTest(lSpe, lSpePacket.data(), static_cast<uint8_t>(lSpePacket.size())));
     ASSERT_EQ(lSpe.commandId, IoHomeCommand::DiscoverSPERequest);
     ASSERT_EQ(lSpe.getDestNodeId(), 0x00003B);
+    ASSERT_EQ(lSpe.ctrlByte1, 0x00);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
 }
 
 TEST(controller_1w_pairing_allows_add_without_target_node)
@@ -8430,6 +8434,8 @@ TEST(controller_default_2w_pairing_uses_key_init_after_discovery)
     ASSERT_EQ(lKeyInitFrame.getSrcNodeId(), lRemoteNodeId);
     ASSERT_EQ(lKeyInitFrame.getDestNodeId(), lDeviceNodeId);
     ASSERT_EQ(lKeyInitFrame.dataLen, 0);
+    ASSERT_TRUE((lKeyInitFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
 }
 
 TEST(controller_pairing_discovery_learns_always_alive)
@@ -8466,6 +8472,14 @@ TEST(controller_pairing_discovery_learns_always_alive)
     ASSERT_TRUE(lChannel.hasLearnedLowPower2W());
     ASSERT_TRUE(!lChannel.isLowPower2W());
     ASSERT_EQ(openknx.flash.saveCount, lFlashSavesBeforeDiscovery + 1);
+
+    IoHomeFrame lKeyInitFrame;
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lPacket.empty());
+    ASSERT_TRUE(deserializeFrameForTest(lKeyInitFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lKeyInitFrame.commandId, IoHomeCommand::KeyInitTransfer);
+    ASSERT_TRUE((lKeyInitFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
 }
 
 TEST(pairing_broadcast_scan_skips_request_channel_and_unicast_wait_holds_it)
@@ -8543,7 +8557,8 @@ TEST(controller_experimental_2w_pairing_can_use_discovery_confirmation)
     ASSERT_EQ(lDiscoveryFrame.commandId, IoHomeCommand::DiscoverRequest);
 
     IoHomeFrame lDiscoverResponse;
-    buildDiscoverResponseFrame(lDiscoverResponse, lRemoteNodeId, lDeviceNodeId);
+    buildDiscoverResponseFrame(lDiscoverResponse, lRemoteNodeId, lDeviceNodeId,
+                               false, IOHC_POWER_SAVE_ALWAYS_ALIVE);
     uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE];
     const uint8_t lLen = serializeFrameForTest(lDiscoverResponse, lBuffer, sizeof(lBuffer));
     ASSERT_TRUE(lLen > 0);
@@ -8561,6 +8576,44 @@ TEST(controller_experimental_2w_pairing_can_use_discovery_confirmation)
     ASSERT_EQ(lConfirmationFrame.getSrcNodeId(), lRemoteNodeId);
     ASSERT_EQ(lConfirmationFrame.getDestNodeId(), lDeviceNodeId);
     ASSERT_EQ(lConfirmationFrame.dataLen, 0);
+    ASSERT_TRUE((lConfirmationFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+}
+
+TEST(controller_experimental_launch_key_transfer_uses_learned_low_power)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, 0, lKey);
+    lController.setSystemKey(lKey);
+
+    ASSERT_TRUE(lController.startPairingExperimental(0, 0, Pairing2WMode::LaunchKeyTransfer));
+
+    IoHomeFrame lDiscoveryFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lDiscoveryFrame));
+    ASSERT_EQ(lDiscoveryFrame.commandId, IoHomeCommand::DiscoverRequest);
+
+    IoHomeFrame lDiscoverResponse;
+    buildDiscoverResponseFrame(lDiscoverResponse, lRemoteNodeId, lDeviceNodeId,
+                               false, IOHC_POWER_SAVE_LOW_POWER);
+    ASSERT_TRUE(queueControllerResponse(lController, lDiscoverResponse));
+
+    IoHomeFrame lLaunchFrame;
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lPacket.empty());
+    ASSERT_TRUE(deserializeFrameForTest(lLaunchFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lLaunchFrame.commandId, IoHomeCommand::LaunchKeyTransfer);
+    ASSERT_EQ(lLaunchFrame.getDestNodeId(), lDeviceNodeId);
+    ASSERT_TRUE((lLaunchFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
 }
 
 TEST(controller_2w_pairing_succeeds_when_setconfig1_times_out)
@@ -8592,6 +8645,8 @@ TEST(controller_2w_pairing_succeeds_when_setconfig1_times_out)
     ASSERT_EQ(lSetConfig1.data[4], 0x00);
     ASSERT_EQ(lChannel.getNodeId(), lDeviceNodeId);
     ASSERT_EQ(lController.state(), ControllerState::PairWaitSetConfig1Response);
+    ASSERT_TRUE((lSetConfig1.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
 
     ioHomeTestAdvanceMillis(2001);
     lController.loop();

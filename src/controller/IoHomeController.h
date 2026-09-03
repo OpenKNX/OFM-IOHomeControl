@@ -1044,6 +1044,7 @@ private:
   uint8_t channelIndexFor(IoHomecontrolChannel *iChannel) const;
   IoHomecontrolChannel *channelForQueueEntry(const IoHomeQueueEntry &iEntry) const;
   bool resolveLowPower2W(uint32_t iNodeId) const;
+  bool pairingLowPower2W() const;
   uint16_t preambleFor2WRequest(const IoHomeFrame &iFrame) const;
   bool learnPowerClassFromDiscovery(IoHomecontrolChannel *iChannel,
                                     const IoHomeFrame &iFrame,
