@@ -8182,7 +8182,8 @@ static void buildPrivateResponseFrame(IoHomeFrame &oFrame,
 static void buildDiscoverResponseFrame(IoHomeFrame &oFrame,
                                        uint32_t iRemoteNodeId,
                                        uint32_t iDeviceNodeId,
-                                       bool iEncrypted = false)
+                                       bool iEncrypted = false,
+                                       uint8_t iPowerSave = 0xFF)
 {
     oFrame.init();
     oFrame.ctrlByte0 = IOHC_CTRL0_END;
@@ -8192,6 +8193,12 @@ static void buildDiscoverResponseFrame(IoHomeFrame &oFrame,
     oFrame.commandId = iEncrypted ? IoHomeCommand::DiscoverSPEResponse
                                   : IoHomeCommand::DiscoverResponse;
     oFrame.dataLen = 0;
+    if (iPowerSave <= IOHC_DISCOVERY_POWER_SAVE_MASK)
+    {
+        memset(oFrame.data, 0, 9);
+        oFrame.data[IOHC_DISCOVERY_FLAGS_OFFSET] = iPowerSave;
+        oFrame.dataLen = 9;
+    }
     oFrame.hasHmac = false;
 }
 
@@ -8337,7 +8344,9 @@ TEST(controller_default_2w_pairing_uses_key_init_after_discovery)
     ASSERT_EQ(lDiscoveryFrame.commandId, IoHomeCommand::DiscoverRequest);
 
     IoHomeFrame lDiscoverResponse;
-    buildDiscoverResponseFrame(lDiscoverResponse, lRemoteNodeId, lDeviceNodeId);
+    const uint32_t lFlashSavesBeforeDiscovery = openknx.flash.saveCount;
+    buildDiscoverResponseFrame(lDiscoverResponse, lRemoteNodeId, lDeviceNodeId,
+                               false, IOHC_POWER_SAVE_LOW_POWER);
     uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE];
     const uint8_t lLen = serializeFrameForTest(lDiscoverResponse, lBuffer, sizeof(lBuffer));
     ASSERT_TRUE(lLen > 0);
@@ -8345,6 +8354,10 @@ TEST(controller_default_2w_pairing_uses_key_init_after_discovery)
     lController.radio().testClearTransmittedPacket();
     lController.radio().testQueueReceivedPacket(lBuffer, lLen);
     lController.loop();
+
+    ASSERT_TRUE(lChannel.hasLearnedLowPower2W());
+    ASSERT_TRUE(lChannel.isLowPower2W());
+    ASSERT_EQ(openknx.flash.saveCount, lFlashSavesBeforeDiscovery + 1);
 
     const auto &lPacket = lController.radio().testLastTransmittedPacket();
     ASSERT_TRUE(!lPacket.empty());
@@ -8355,6 +8368,42 @@ TEST(controller_default_2w_pairing_uses_key_init_after_discovery)
     ASSERT_EQ(lKeyInitFrame.getSrcNodeId(), lRemoteNodeId);
     ASSERT_EQ(lKeyInitFrame.getDestNodeId(), lDeviceNodeId);
     ASSERT_EQ(lKeyInitFrame.dataLen, 0);
+}
+
+TEST(controller_pairing_discovery_learns_always_alive)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, 0, lKey);
+    lController.setSystemKey(lKey);
+    lChannel.setLowPower2W(true);
+    ASSERT_TRUE(lController.startPairing(0));
+
+    IoHomeFrame lDiscoveryFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lDiscoveryFrame));
+
+    IoHomeFrame lDiscoverResponse;
+    buildDiscoverResponseFrame(lDiscoverResponse, lRemoteNodeId, lDeviceNodeId,
+                               false, IOHC_POWER_SAVE_ALWAYS_ALIVE);
+    uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t lLen = serializeFrameForTest(lDiscoverResponse, lBuffer, sizeof(lBuffer));
+    ASSERT_TRUE(lLen > 0);
+
+    const uint32_t lFlashSavesBeforeDiscovery = openknx.flash.saveCount;
+    lController.radio().testQueueReceivedPacket(lBuffer, lLen);
+    lController.loop();
+
+    ASSERT_TRUE(lChannel.hasLearnedLowPower2W());
+    ASSERT_TRUE(!lChannel.isLowPower2W());
+    ASSERT_EQ(openknx.flash.saveCount, lFlashSavesBeforeDiscovery + 1);
 }
 
 TEST(pairing_broadcast_scan_skips_request_channel_and_unicast_wait_holds_it)
@@ -9042,8 +9091,11 @@ TEST(controller_private_response_decodes_battery_lowpower_and_tilt)
         IoHomeFrame lResponse;
         buildPrivateResponseFrame(lResponse, lRemoteNodeId, lDeviceNodeId,
                                   lData, sizeof(lData));
+        const uint32_t lFlashSavesBeforeResponse = openknx.flash.saveCount;
         ASSERT_TRUE(queueControllerResponse(lController, lResponse));
         ASSERT_TRUE(lChannel.isLowPower2W());
+        ASSERT_TRUE(lChannel.hasLearnedLowPower2W());
+        ASSERT_EQ(openknx.flash.saveCount, lFlashSavesBeforeResponse + 1);
         ASSERT_TRUE(lChannel.testHasBatteryLevel());
         ASSERT_EQ(lChannel.testBatteryLevel(), 87);
     }
@@ -12011,6 +12063,7 @@ int main()
     RUN(controller_1w_sendkey_frame_identical_with_known_or_unknown_target);
     RUN(controller_1w_virtual_channel_execute_allowed_without_target_node);
     RUN(controller_default_2w_pairing_uses_key_init_after_discovery);
+    RUN(controller_pairing_discovery_learns_always_alive);
     RUN(controller_experimental_2w_pairing_can_use_discovery_confirmation);
     RUN(controller_2w_pairing_succeeds_when_setconfig1_times_out);
     RUN(controller_2w_pairing_succeeds_when_setconfig1_returns_error_response);

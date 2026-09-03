@@ -716,11 +716,23 @@ const uint8_t *IoHomecontrolChannel::getEncryptionKey() const
 void IoHomecontrolChannel::setLowPower2W(bool iLowPower)
 {
     mLowPower2W = iLowPower;
+    mHasLearnedLowPower2W = true;
+}
+
+void IoHomecontrolChannel::clearLearnedLowPower2W()
+{
+    mLowPower2W = false;
+    mHasLearnedLowPower2W = false;
 }
 
 bool IoHomecontrolChannel::isLowPower2W() const
 {
     return mLowPower2W;
+}
+
+bool IoHomecontrolChannel::hasLearnedLowPower2W() const
+{
+    return mHasLearnedLowPower2W;
 }
 
 void IoHomecontrolChannel::setLastChallenge(const uint8_t *iChallenge)

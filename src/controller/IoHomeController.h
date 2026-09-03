@@ -1045,6 +1045,9 @@ private:
   IoHomecontrolChannel *channelForQueueEntry(const IoHomeQueueEntry &iEntry) const;
   bool resolveLowPower2W(uint32_t iNodeId) const;
   uint16_t preambleFor2WRequest(const IoHomeFrame &iFrame) const;
+  bool learnPowerClassFromDiscovery(IoHomecontrolChannel *iChannel,
+                                    const IoHomeFrame &iFrame,
+                                    const char *iSource);
   IoHomecontrolChannel *oneWayProfileForNode(uint32_t iNodeId) const;
   uint8_t oneWayBroadcastTypeForNode(uint32_t iNodeId) const;
   uint32_t oneWayDestinationForEntry(const IoHomeQueueEntry &iEntry) const;

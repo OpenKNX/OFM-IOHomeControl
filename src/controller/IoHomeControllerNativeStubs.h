@@ -123,8 +123,18 @@ public:
   }
 
   const uint8_t *getEncryptionKey() const { return mEncKey; }
-  void setLowPower2W(bool iLowPower) { mLowPower2W = iLowPower; }
+  void setLowPower2W(bool iLowPower)
+  {
+    mLowPower2W = iLowPower;
+    mHasLearnedLowPower2W = true;
+  }
+  void clearLearnedLowPower2W()
+  {
+    mLowPower2W = false;
+    mHasLearnedLowPower2W = false;
+  }
   bool isLowPower2W() const { return mLowPower2W; }
+  bool hasLearnedLowPower2W() const { return mHasLearnedLowPower2W; }
 
   void setLastChallenge(const uint8_t *iChallenge)
   {
@@ -269,6 +279,7 @@ private:
   bool mIs1W = false;
   bool mPaired = false;
   bool mLowPower2W = false;
+  bool mHasLearnedLowPower2W = false;
   uint32_t mConfigured1WTargetNodeId = 0;
   // TEST_NATIVE mirrors the production channel default: unspecified 1W type is
   // type 0 / All, which serializes to destination 0x00003F.

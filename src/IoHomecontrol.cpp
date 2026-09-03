@@ -849,7 +849,10 @@ void IoHomecontrol::restoreChannelFlashState(uint8_t iIndex, const FlashChannelS
         lChannel->setEncryptionKey(iState.key);
     }
 
-    lChannel->setLowPower2W(iState.lowPower2W);
+    if (iState.hasLearnedLowPower2W)
+        lChannel->setLowPower2W(iState.lowPower2W);
+    else
+        lChannel->clearLearnedLowPower2W();
     if (iState.is1W && !lChannel->is1W())
         logInfoP("Flash restore: channel %u was saved as 1W while ETS runtime config is 2W; keeping saved 1W mode", static_cast<unsigned>(iIndex + 1));
     lChannel->setIs1W(lChannel->is1W() || iState.is1W);
@@ -1928,7 +1931,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         {
             mController.cancelPairing();
             mChannels[lChannel]->setNodeId(0);
-            mChannels[lChannel]->setLowPower2W(false);
+            mChannels[lChannel]->clearLearnedLowPower2W();
             memset(const_cast<uint8_t *>(mChannels[lChannel]->getEncryptionKey()), 0, 16);
             resultData[0] = 0x00;
             resultLength = 1;
@@ -2028,12 +2031,13 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
 }
 
 // --- Flash persistence ---
-// Layout v11: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
+// Layout v12: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
 // default 1W broadcastType(1) + numChannels(1) +
 // per-channel: index(1) + flags(1) + actuatorNodeId(3) + actuatorKey(16) +
 // 1W reservedSeq(2) + 1W controllerNodeId(3) + 1W controllerKey(16) +
 // 1W manufacturer(1) = 43 bytes + remoteMap
-// flags: bit0=paired, bit1=is1W, bit2=2W low-power
+// flags: bit0=paired, bit1=is1W, bit2=2W low-power,
+//        bit3=2W power class learned
 
 uint16_t IoHomecontrol::flashSize()
 {
@@ -2042,7 +2046,7 @@ uint16_t IoHomecontrol::flashSize()
 
 void IoHomecontrol::writeFlash()
 {
-    openknx.flash.writeByte(11); // format version 11 (v10 + 1W reserved sequence watermark)
+    openknx.flash.writeByte(12); // format version 12 (v11 + learned 2W power-class marker)
 
     // Write system key
     const uint8_t *lSysKey = mController.getSystemKey();
@@ -2066,6 +2070,8 @@ void IoHomecontrol::writeFlash()
             lFlags |= 0x02;
         if (mChannels[i]->isLowPower2W())
             lFlags |= 0x04;
+        if (mChannels[i]->hasLearnedLowPower2W())
+            lFlags |= 0x08;
         openknx.flash.writeByte(lFlags);
         uint32_t lNodeId = mChannels[i]->getNodeId();
         openknx.flash.writeByte((lNodeId >> 16) & 0xFF);
@@ -2112,7 +2118,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
     uint8_t lVersion = openknx.flash.readByte();
 
-    if (lVersion == 11 || lVersion == 10 || lVersion == 9)
+    if (lVersion == 12 || lVersion == 11 || lVersion == 10 || lVersion == 9)
     {
         if (iSize < kFlashHeaderV9)
             return;
@@ -2160,7 +2166,11 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
             lState.valid = true;
             lState.paired = (lFlags & 0x01) != 0;
             lState.is1W = (lFlags & 0x02) != 0;
-            lState.lowPower2W = lVersion >= 10 ? ((lFlags & 0x04) != 0) : false;
+            // Older formats cannot distinguish a learned class from the old
+            // blanket low-power default. Treat those records as unknown so an
+            // upgrade cannot restore the VELUX-breaking long preamble.
+            lState.hasLearnedLowPower2W = lVersion >= 12 && (lFlags & 0x08) != 0;
+            lState.lowPower2W = lState.hasLearnedLowPower2W && (lFlags & 0x04) != 0;
             lState.nodeId = lNodeId;
             memcpy(lState.key, lKey, sizeof(lState.key));
             lState.sequence1W = lSeq;
@@ -3499,7 +3509,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             {
                 mController.cancelPairing();
                 mChannels[lIdx]->setNodeId(0);
-                mChannels[lIdx]->setLowPower2W(false);
+                mChannels[lIdx]->clearLearnedLowPower2W();
                 memset(const_cast<uint8_t *>(mChannels[lIdx]->getEncryptionKey()), 0, 16);
                 openknx.flash.save(true); // unpair is rare & critical: bypass write throttle
                 logInfoP("Channel %d unpaired", lIdx + 1);

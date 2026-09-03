@@ -54,7 +54,9 @@ public:
   void setEncryptionKey(const uint8_t *iKey);
   const uint8_t *getEncryptionKey() const;
   void setLowPower2W(bool iLowPower);
+  void clearLearnedLowPower2W();
   bool isLowPower2W() const;
+  bool hasLearnedLowPower2W() const;
 
   // Challenge tracking for HMAC verification of responses
   void setLastChallenge(const uint8_t *iChallenge);
@@ -115,6 +117,7 @@ private:
   uint8_t mLastChallenge[6] = {}; // challenge sent with last authenticated command
   bool mPaired = false;
   bool mLowPower2W = false;         // Unknown 2W devices default to always-alive
+  bool mHasLearnedLowPower2W = false;
   bool mSilentOperation = false;    // Somfy RS100 2W Execute profile (0x05)
   uint16_t mSequence1W = 0;         // 1W last used sequence counter
   uint16_t mReservedSequence1W = 0; // highest sequence persisted/reserved ahead in flash

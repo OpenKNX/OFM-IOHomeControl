@@ -1841,6 +1841,41 @@ uint16_t IoHomeController::preambleFor2WRequest(const IoHomeFrame &iFrame) const
                : IOHC_PREAMBLE_NORMAL_START;
 }
 
+bool IoHomeController::learnPowerClassFromDiscovery(IoHomecontrolChannel *iChannel,
+                                                     const IoHomeFrame &iFrame,
+                                                     const char *iSource)
+{
+    if (!iChannel || iChannel->is1W() ||
+        (iFrame.commandId != IoHomeCommand::DiscoverResponse &&
+         iFrame.commandId != IoHomeCommand::DiscoverSPEResponse) ||
+        iFrame.dataLen < IOHC_DISCOVERY_EXTENDED_SIZE)
+    {
+        return false;
+    }
+
+    const uint8_t lPowerSave = iFrame.data[IOHC_DISCOVERY_FLAGS_OFFSET] &
+                               IOHC_DISCOVERY_POWER_SAVE_MASK;
+    if (lPowerSave != IOHC_POWER_SAVE_ALWAYS_ALIVE &&
+        lPowerSave != IOHC_POWER_SAVE_LOW_POWER)
+    {
+        return false;
+    }
+
+    const bool lLowPower = lPowerSave == IOHC_POWER_SAVE_LOW_POWER;
+    const bool lChanged = !iChannel->hasLearnedLowPower2W() ||
+                          iChannel->isLowPower2W() != lLowPower;
+    iChannel->setLowPower2W(lLowPower);
+    if (lChanged)
+    {
+        logInfoP("2W power class learned from %s for 0x%06X: %s",
+                 iSource ? iSource : "discovery",
+                 iFrame.getSrcNodeId(),
+                 lLowPower ? "low-power" : "always-alive");
+        openknx.flash.save();
+    }
+    return lChanged;
+}
+
 IoHomecontrolChannel *IoHomeController::oneWayProfileForNode(uint32_t iNodeId) const
 {
     return oneWayProfileForChannel(channelForNode(iNodeId));
@@ -3675,6 +3710,9 @@ void IoHomeController::loop()
                         (mPairingKnownNodeId == 0 || lSource == mPairingKnownNodeId))
                     {
                         mDiscoveredNodeId = mRxFrame.getSrcNodeId();
+                        if (mModule)
+                            learnPowerClassFromDiscovery(mModule->getChannel(mPairingChannel),
+                                                         mRxFrame, "pairing discovery");
                         mPairingFreqIdx = mLastResponseFreqIdx;
                         mPairKeyExchangeAttempts = 0;
                         mPairKeyExchangeStartTime = 0;
@@ -5675,10 +5713,6 @@ void IoHomeController::finalize2WPairingKey()
         if (lCh)
         {
             lCh->setNodeId(mDiscoveredNodeId);
-            // Discovery metadata may refine this later. An unknown peer must
-            // remain always-alive: the long wake-up preamble can make VELUX
-            // always-alive receivers ignore directed traffic completely.
-            lCh->setLowPower2W(false);
             lCh->setEncryptionKey(mSystemKey);
             openknx.flash.save(true);
         }
@@ -6950,6 +6984,8 @@ void IoHomeController::dispatchRxFrame()
         (mRxFrame.commandId == IoHomeCommand::DiscoverResponse ||
          mRxFrame.commandId == IoHomeCommand::DiscoverSPEResponse))
     {
+        learnPowerClassFromDiscovery(channelForNode(lSrcNode), mRxFrame,
+                                     "roll-call discovery");
         mModule->remoteMap().observeAddress(lSrcNode);
         recordScanFrame(mRxFrame, mRxBuffer, mRxRawLen, mRadio.lastRssi(), mCurrentFreqIdx);
         updateNodeStats(lSrcNode, mRadio.lastRssi(), mRxFrame.commandId);
@@ -7125,7 +7161,17 @@ void IoHomeController::dispatchRxFrame()
                     uint8_t lEstimate = mRxFrame.data[7];
                     lCh->onEstimate(lEstimate);
                 }
+                const bool lHadPowerClass = lCh->hasLearnedLowPower2W();
+                const bool lWasLowPower = lCh->isLowPower2W();
                 applyPrivateBatteryInfo(lCh, mRxFrame.data, mRxFrame.dataLen);
+                if ((!lHadPowerClass && lCh->hasLearnedLowPower2W()) ||
+                    lWasLowPower != lCh->isLowPower2W())
+                {
+                    logInfoP("2W power class learned from PRIVATE for 0x%06X: %s",
+                             lSrcNode,
+                             lCh->isLowPower2W() ? "low-power" : "always-alive");
+                    openknx.flash.save();
+                }
                 applyPrivateTiltInfo(lCh, mRxFrame.data, mRxFrame.dataLen);
                 break;
             }

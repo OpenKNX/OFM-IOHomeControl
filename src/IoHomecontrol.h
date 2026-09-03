@@ -64,6 +64,7 @@ private:
     bool paired = false;
     bool is1W = false;
     bool lowPower2W = false;
+    bool hasLearnedLowPower2W = false;
     uint32_t nodeId = 0;
     uint8_t key[16] = {};
     uint16_t sequence1W = 0; // persisted reserved/high-water sequence

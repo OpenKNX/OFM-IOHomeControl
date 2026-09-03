@@ -278,6 +278,14 @@ constexpr uint32_t IOHC_FREQUENCIES[IOHC_NUM_FREQUENCIES] = {
 #define IOHC_PREAMBLE_SHORT 8         // symbols (bytes), for continuation frames
 #define IOHC_NAME_MAX_SIZE 16   // max name payload bytes (per nicolas5000: CMD_PARAM_NAME_MAXSIZE/2)
 
+// DiscoverResponse / DiscoverSPEResponse extended metadata. The Multi
+// Information Byte at data[6] reports POWER_SAVE in bits 1:0.
+#define IOHC_DISCOVERY_FLAGS_OFFSET 6
+#define IOHC_DISCOVERY_EXTENDED_SIZE 7
+#define IOHC_DISCOVERY_POWER_SAVE_MASK 0x03
+#define IOHC_POWER_SAVE_ALWAYS_ALIVE 0x00
+#define IOHC_POWER_SAVE_LOW_POWER 0x01
+
 // 1W repeat transmission (fire-and-forget sends 4x at 40ms intervals)
 #define IOHC_1W_REPEAT_COUNT 4        // 4 additional repeats (5 total transmissions, matches reference)
 #define IOHC_1W_REPEAT_INTERVAL_MS 40 // ms between 1W repeat transmissions
