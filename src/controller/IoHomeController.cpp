@@ -1824,9 +1824,15 @@ IoHomecontrolChannel *IoHomeController::channelForQueueEntry(const IoHomeQueueEn
 bool IoHomeController::resolveLowPower2W(uint32_t iNodeId) const
 {
     IoHomecontrolChannel *lCh = channelForNode(iNodeId);
-    if (!lCh)
+    if (lCh && lCh->is1W())
         return false;
-    if (lCh->is1W())
+
+    if (mDiagnostic2WPowerClass == TwoWayPowerClass::AlwaysAlive)
+        return false;
+    if (mDiagnostic2WPowerClass == TwoWayPowerClass::LowPower)
+        return true;
+
+    if (!lCh)
         return false;
     return lCh->effectiveLowPower2W();
 }
@@ -1837,13 +1843,23 @@ bool IoHomeController::pairingLowPower2W() const
         return false;
 
     IoHomecontrolChannel *lCh = mModule->getChannel(mPairingChannel);
-    return lCh && !lCh->is1W() && lCh->effectiveLowPower2W();
+    if (!lCh || lCh->is1W())
+        return false;
+
+    if (mDiagnostic2WPowerClass == TwoWayPowerClass::AlwaysAlive)
+        return false;
+    if (mDiagnostic2WPowerClass == TwoWayPowerClass::LowPower)
+        return true;
+    return lCh->effectiveLowPower2W();
 }
 
 uint16_t IoHomeController::preambleFor2WRequest(const IoHomeFrame &iFrame) const
 {
     if ((iFrame.ctrlByte0 & IOHC_CTRL0_START) == 0)
         return IOHC_PREAMBLE_SHORT;
+
+    if (mDiagnostic2WStartPreamble != 0)
+        return mDiagnostic2WStartPreamble;
 
     return (iFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0
                ? IOHC_PREAMBLE_LONG
@@ -2723,6 +2739,28 @@ void IoHomeController::setPairDiagnosticTraceEnabled(bool iEnabled)
 bool IoHomeController::isPairDiagnosticTraceEnabled() const
 {
     return mPairDiagnosticTraceEnabled;
+}
+
+void IoHomeController::setDiagnostic2WPowerClass(TwoWayPowerClass iPowerClass)
+{
+    mDiagnostic2WPowerClass = iPowerClass <= TwoWayPowerClass::LowPower
+                                  ? iPowerClass
+                                  : TwoWayPowerClass::Automatic;
+}
+
+TwoWayPowerClass IoHomeController::diagnostic2WPowerClass() const
+{
+    return mDiagnostic2WPowerClass;
+}
+
+void IoHomeController::setDiagnostic2WStartPreamble(uint16_t iPreambleSymbols)
+{
+    mDiagnostic2WStartPreamble = iPreambleSymbols;
+}
+
+uint16_t IoHomeController::diagnostic2WStartPreamble() const
+{
+    return mDiagnostic2WStartPreamble;
 }
 
 void IoHomeController::setRxScanEnabled(bool iEnabled)

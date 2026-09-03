@@ -2440,6 +2440,9 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohcNN pair2w-exp MODE [ADDR]", "Diagnostic-only 2W pairing mode: discovery-confirm|launch-key|pull-key");
     openknx.console.printHelpLine("iohc pair cancel", "Cancel ongoing pairing");
     openknx.console.printHelpLine("iohc pairdiag on|off|status", "Verbose pairing/discovery diagnostics");
+    openknx.console.printHelpLine("iohc 2wdiag power auto|always|low", "Runtime-only 2W power-class override");
+    openknx.console.printHelpLine("iohc 2wdiag preamble auto|N", "Runtime-only directed 2W START preamble override");
+    openknx.console.printHelpLine("iohc 2wdiag status|reset", "Show or clear runtime-only 2W overrides");
     openknx.console.printHelpLine("iohcNN unpair", "Remove pairing for channel NN");
     openknx.console.printHelpLine("iohc discover", "Broadcast discovery, list devices");
     openknx.console.printHelpLine("iohc discover spe", "Encrypted SPE/sub-device discovery");
@@ -2614,6 +2617,63 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     if (!knx.configured())
     {
         openknx.console.printHelpLine("iohc", "Device is not configured. Likely causes: application not downloaded from ETS, firmware/knxprod version mismatch, or missing ETS configuration. Re-download the application and power cycle the device.");
+        return true;
+    }
+    if (lSub.rfind("2wdiag", 0) == 0)
+    {
+        const std::string lArg = lSub.length() > 6 ? trimSpaces(lSub.substr(6)) : std::string();
+        if (lArg == "reset")
+        {
+            mController.setDiagnostic2WPowerClass(TwoWayPowerClass::Automatic);
+            mController.setDiagnostic2WStartPreamble(0);
+        }
+        else if (lArg.rfind("power ", 0) == 0)
+        {
+            const std::string lPower = trimSpaces(lArg.substr(6));
+            if (lPower == "auto" || lPower == "automatic")
+                mController.setDiagnostic2WPowerClass(TwoWayPowerClass::Automatic);
+            else if (lPower == "always" || lPower == "always-alive")
+                mController.setDiagnostic2WPowerClass(TwoWayPowerClass::AlwaysAlive);
+            else if (lPower == "low" || lPower == "low-power")
+                mController.setDiagnostic2WPowerClass(TwoWayPowerClass::LowPower);
+            else
+            {
+                logInfoP("Usage: iohc 2wdiag power auto|always|low");
+                return true;
+            }
+        }
+        else if (lArg.rfind("preamble ", 0) == 0)
+        {
+            const std::string lPreamble = trimSpaces(lArg.substr(9));
+            if (lPreamble == "auto" || lPreamble == "automatic")
+            {
+                mController.setDiagnostic2WStartPreamble(0);
+            }
+            else
+            {
+                uint32_t lSymbols = 0;
+                if (!parseUnsignedDecimal(lPreamble, lSymbols) || lSymbols == 0 || lSymbols > 65535UL)
+                {
+                    logInfoP("Usage: iohc 2wdiag preamble auto|1..65535");
+                    return true;
+                }
+                mController.setDiagnostic2WStartPreamble(static_cast<uint16_t>(lSymbols));
+            }
+        }
+        else if (!lArg.empty() && lArg != "status")
+        {
+            logInfoP("Usage: iohc 2wdiag power auto|always|low | preamble auto|N | status | reset");
+            return true;
+        }
+
+        const uint16_t lPreamble = mController.diagnostic2WStartPreamble();
+        if (lPreamble == 0)
+            logInfoP("2WDiag: power=%s startPreamble=automatic runtime-only (continuations stay short)",
+                     IoHomecontrolChannel::twoWayPowerClassName(mController.diagnostic2WPowerClass()));
+        else
+            logInfoP("2WDiag: power=%s startPreamble=%u runtime-only (continuations stay short)",
+                     IoHomecontrolChannel::twoWayPowerClassName(mController.diagnostic2WPowerClass()),
+                     static_cast<unsigned>(lPreamble));
         return true;
     }
     if (lSub.substr(0, 6) == "status")

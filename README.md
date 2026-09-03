@@ -192,6 +192,7 @@ Useful diagnostic entry points include:
 - `iohcNN send1w-type open|close|stop|vent|force [TYPE|dst=typed|dst=all|dst=exact ADDR]` — test typed/all/exact 1W destinations.
 - `iohcNN 1wctrl reuse2w [MFG]` — diagnostic-only command to intentionally reuse the 2W identity for a 1W profile.
 - `iohc pairdiag on|off|status` — show compact pairing, TX, crypto, key, repeat and sequence diagnostics.
+- `iohc 2wdiag power auto|always|low` / `preamble auto|N` / `status` / `reset` — independently override the 2W power bit and directed START preamble in RAM for Issue #87-style hardware bisection; continuation frames remain short.
 - `iohc proto selftest` — run byte-exact protocol self-tests on-device.
 
 ## Function Properties (advanced)

@@ -452,6 +452,10 @@ public:
 
   void setPairDiagnosticTraceEnabled(bool iEnabled);
   bool isPairDiagnosticTraceEnabled() const;
+  void setDiagnostic2WPowerClass(TwoWayPowerClass iPowerClass);
+  TwoWayPowerClass diagnostic2WPowerClass() const;
+  void setDiagnostic2WStartPreamble(uint16_t iPreambleSymbols);
+  uint16_t diagnostic2WStartPreamble() const;
   static const char *stateName(ControllerState iState);
   static const char *pairingOutcomeName(PairingOutcome iOutcome);
   const PairingTelemetry &pairingTelemetry() const;
@@ -867,6 +871,8 @@ private:
   uint32_t mRxScanIntervalUs;   // interval between frequency switches
   bool mRxScanEnabled;          // whether to cycle frequencies during idle RX
   uint8_t mLastResponseFreqIdx; // frequency index where last response was received
+  TwoWayPowerClass mDiagnostic2WPowerClass = TwoWayPowerClass::Automatic;
+  uint16_t mDiagnostic2WStartPreamble = 0; // 0 = derive from effective power class
   bool mPairDiagnosticTraceEnabled;
   ControllerState mLastPairDiagnosticTraceState;
 

@@ -578,6 +578,9 @@ Bei kanalbezogenen Befehlen wird die Kanalnummer direkt an das Präfix angehäng
 | `iohc help` | Zeigt verfügbare Befehle |
 | `iohc status` | Zeigt Pairing-Status aller Kanäle |
 | `iohcNN status` | Zeigt Details für Kanal NN |
+| `iohc 2wdiag power auto\|always\|low` | Überschreibt die 2W-Leistungsklasse temporär im RAM (nur Diagnose) |
+| `iohc 2wdiag preamble auto\|N` | Überschreibt die Präambellänge gerichteter 2W-START-Frames temporär; Fortsetzungsframes bleiben kurz |
+| `iohc 2wdiag status\|reset` | Zeigt bzw. löscht die temporären 2W-Diagnose-Overrides |
 
 ### **Pairing-Befehle**
 

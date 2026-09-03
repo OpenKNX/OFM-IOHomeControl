@@ -8014,6 +8014,49 @@ TEST(controller_ets_low_power_overrides_learned_always_alive)
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
 }
 
+TEST(controller_runtime_2w_diagnostic_override_decouples_power_and_preamble)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setNodeId(lDeviceNodeId);
+    lChannel.setEncryptionKey(lKey);
+    lChannel.setIs1W(false);
+
+    // Reproduce the diagnostic bisection from Issue #87: keep LOW_POWER set,
+    // but force the independent START preamble to the normal 32 symbols.
+    lController.setDiagnostic2WPowerClass(TwoWayPowerClass::LowPower);
+    lController.setDiagnostic2WStartPreamble(IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lController.diagnostic2WPowerClass(), TwoWayPowerClass::LowPower);
+    ASSERT_EQ(lController.diagnostic2WStartPreamble(), IOHC_PREAMBLE_NORMAL_START);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 50));
+    lController.loop();
+    lController.loop();
+
+    IoHomeFrame lFrame;
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lPacket.empty());
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+
+    lController.setDiagnostic2WPowerClass(TwoWayPowerClass::Automatic);
+    lController.setDiagnostic2WStartPreamble(0);
+    ASSERT_EQ(lController.diagnostic2WPowerClass(), TwoWayPowerClass::Automatic);
+    ASSERT_EQ(lController.diagnostic2WStartPreamble(), 0);
+}
+
 TEST(controller_send_identify_builds_authenticated_payload)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
