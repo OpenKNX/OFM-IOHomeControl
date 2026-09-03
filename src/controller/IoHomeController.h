@@ -252,6 +252,21 @@ public:
     Failed,
   };
 
+  // Vendor-specific 1W enrollment behavior. Keeping it in a table prevents
+  // profile-exact frame details from leaking into the generic 1W builders.
+  struct OneWayPairingProfile
+  {
+    const char *name;
+    uint32_t removeDestination;   // 0 = derive from the configured broadcast type
+    uint32_t finalizerDestination;
+    const uint32_t *addDestinations; // nullptr = derive from the broadcast type
+    uint8_t addDestinationCount;
+    bool pairingLowPower;
+  };
+
+  static const OneWayPairingProfile &oneWayPairingProfileGeneric();
+  static const OneWayPairingProfile &oneWayPairingProfileVeluxKli();
+
   struct OneWayEnrollmentTraceEntry
   {
     OneWayEnrollPhase phase = OneWayEnrollPhase::Failed;
@@ -944,6 +959,9 @@ private:
                                       OneWayEnrollPhase iPhase);
   uint32_t pairing1WAddDestination() const;
   uint8_t pairing1WAddDestinationCount() const;
+  const OneWayPairingProfile &pairing1WProfile() const;
+  uint32_t pairing1WRemoveDestination() const;
+  uint32_t pairing1WFinalizerDestination() const;
   // Store the system key into the paired channel and advance to SetConfig1.
   // Shared by the normal 0x33 confirmation path and the early-confirm path
   // where a device skips its 0x3C challenge and confirms the key directly.

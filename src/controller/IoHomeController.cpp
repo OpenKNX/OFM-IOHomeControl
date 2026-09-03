@@ -1210,26 +1210,71 @@ uint32_t IoHomeController::oneWayBroadcastTarget(uint8_t iBroadcastType) const
 
 uint8_t IoHomeController::pairing1WAddDestinationCount() const
 {
-    // A real VELUX KLI enrollment ring sends the same logical 0x30 (and the
-    // same rolling sequence) to All plus its three observed product classes.
-    return mPairing1WVeluxProfile ? 4U : 1U;
+    const OneWayPairingProfile &lProfile = pairing1WProfile();
+    return lProfile.addDestinations != nullptr ? lProfile.addDestinationCount : 1U;
 }
 
 uint32_t IoHomeController::pairing1WAddDestination() const
 {
-    if (!mPairing1WVeluxProfile)
+    const OneWayPairingProfile &lProfile = pairing1WProfile();
+    if (lProfile.addDestinations == nullptr)
         return oneWayBroadcastTarget(mPairing1WBroadcastType);
 
-    static constexpr uint32_t kVeluxKliAddDestinations[] = {
-        0x00003F, // All / generic
-        0x0000BF, // VELUX window family
-        0x0000FF, // VELUX shutter / dual-shutter family
-        0x00037F, // VELUX blind and other observed products
-    };
-    const uint8_t lIndex = mPairing1WAddDestinationIndex < 4U
+    const uint8_t lIndex = mPairing1WAddDestinationIndex < lProfile.addDestinationCount
                                ? mPairing1WAddDestinationIndex
                                : 0U;
-    return kVeluxKliAddDestinations[lIndex];
+    return lProfile.addDestinations[lIndex];
+}
+
+const IoHomeController::OneWayPairingProfile &IoHomeController::oneWayPairingProfileGeneric()
+{
+    static const OneWayPairingProfile kGeneric = {
+        "generic",
+        0,        // remove destination follows the configured broadcast type
+        0x00003F, // finalizer (only used when explicitly enabled)
+        nullptr,  // add destination follows the configured broadcast type
+        1,
+        true, // generic 1W remotes keep the LOW_POWER wake-up bit
+    };
+    return kGeneric;
+}
+
+const IoHomeController::OneWayPairingProfile &IoHomeController::oneWayPairingProfileVeluxKli()
+{
+    // Observed KLI 310 enrollment ring: REMOVE goes to All, then the same
+    // logical ADD (and the same rolling sequence) is repeated to the three
+    // captured product classes. A real KLI sends CTRL1=0x00 on both.
+    static const uint32_t kAddDestinations[] = {
+        0x0000BF, // roller shutter
+        0x0000FF, // awning
+        0x00037F, // dual shutter
+    };
+    static const OneWayPairingProfile kVeluxKli = {
+        "velux-kli",
+        0x00003F,
+        0x00003F,
+        kAddDestinations,
+        static_cast<uint8_t>(sizeof(kAddDestinations) / sizeof(kAddDestinations[0])),
+        false,
+    };
+    return kVeluxKli;
+}
+
+const IoHomeController::OneWayPairingProfile &IoHomeController::pairing1WProfile() const
+{
+    return mPairing1WVeluxProfile ? oneWayPairingProfileVeluxKli() : oneWayPairingProfileGeneric();
+}
+
+uint32_t IoHomeController::pairing1WRemoveDestination() const
+{
+    const OneWayPairingProfile &lProfile = pairing1WProfile();
+    return lProfile.removeDestination != 0 ? lProfile.removeDestination
+                                           : oneWayBroadcastTarget(mPairing1WBroadcastType);
+}
+
+uint32_t IoHomeController::pairing1WFinalizerDestination() const
+{
+    return pairing1WProfile().finalizerDestination;
 }
 
 uint8_t IoHomeController::oneWayBroadcastTypeForEtsDeviceType(uint8_t iEtsDeviceType)
@@ -2016,11 +2061,15 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
                  static_cast<unsigned>(mPairing1WBroadcastType),
                  static_cast<unsigned>(oneWayBroadcastTarget(mPairing1WBroadcastType)));
         logInfoP("Pairing: 1W profile=%s manufacturer=0x%02X addDestinations=%u configuredFinalizer=%s resolvedFinalizer=%s",
-                 mPairing1WVeluxProfile ? "velux-kli" : "generic",
+                 pairing1WProfile().name,
                  static_cast<unsigned>(lManufacturer),
                  static_cast<unsigned>(pairing1WAddDestinationCount()),
                  oneWayEnrollmentFinalizerName(lCh->getConfigured1WEnrollmentFinalizer()),
                  oneWayEnrollmentFinalizerName(mPairing1WFinalizer));
+        logInfoP("Pairing: 1W remove dst=0x%06X finalizer dst=0x%06X ctrl1LowPower=%u",
+                 pairing1WRemoveDestination(),
+                 pairing1WFinalizerDestination(),
+                 pairing1WProfile().pairingLowPower ? 1U : 0U);
         if (mPairDiagnosticTraceEnabled)
         {
             logInfoP("PairDiag: starting 1W mode=%s sequence=%s state=%s",
@@ -3337,7 +3386,7 @@ void IoHomeController::logPairDiagnosticStatus() const
              static_cast<unsigned>(mPairingTelemetry.keyExchangeAttempts));
     logInfoP("PairDiag: 1W mode=%s profile=%s addDestination=%u/%u finalizer=%s traceEntries=%u",
              pairing1WModeName(mPairing1WMode),
-             mPairing1WVeluxProfile ? "velux-kli" : "generic",
+             pairing1WProfile().name,
              static_cast<unsigned>(mPairing1WAddDestinationIndex + 1U),
              static_cast<unsigned>(pairing1WAddDestinationCount()),
              oneWayEnrollmentFinalizerName(mPairing1WFinalizer),
@@ -4966,8 +5015,9 @@ void IoHomeController::processPairSend1WRemove()
 
     mTxFrame.init();
     mTxFrame.set1WMode();
+    mTxFrame.setLowPower(pairing1WProfile().pairingLowPower);
     mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
-    mTxFrame.setDestNode(oneWayBroadcastTarget(mPairing1WBroadcastType));
+    mTxFrame.setDestNode(pairing1WRemoveDestination());
     mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
 
     // Explicit 1W Remove frame only:
@@ -5091,6 +5141,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
 
     mTxFrame.init();
     mTxFrame.set1WMode();
+    mTxFrame.setLowPower(pairing1WProfile().pairingLowPower);
     mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
     mTxFrame.commandId = IoHomeCommand::SendKey1W;
 
@@ -5234,7 +5285,7 @@ bool IoHomeController::prepareOneWayEnrollmentExecute(uint16_t iMain,
     mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
     mTxFrame.commandId = IoHomeCommand::Execute;
     mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
-    mTxFrame.setDestNode(0x00003F); // captured KLI STOP/DOWN target is ALL
+    mTxFrame.setDestNode(pairing1WFinalizerDestination());
 
     OneWayCommandProfile lCommandProfile = oneWayCommandProfileForType(mPairing1WBroadcastType);
     lCommandProfile.acei = lCh->getConfigured1WAcei();
@@ -5423,7 +5474,7 @@ void IoHomeController::completeOneWayEnrollment()
     completeOneWayEnrollmentPhase(true);
     logInfoP("1W enroll: completed controller=%02u profile=%s finalizer=%s stop-to-down=%lums",
              static_cast<unsigned>(mPairingChannel + 1),
-             mPairing1WVeluxProfile ? "velux-kli" : "generic",
+             pairing1WProfile().name,
              oneWayEnrollmentFinalizerName(mPairing1WFinalizer),
              static_cast<unsigned long>(mPairing1WStopStartedAt && mPairing1WDownStartedAt
                                             ? mPairing1WDownStartedAt - mPairing1WStopStartedAt

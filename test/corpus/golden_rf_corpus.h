@@ -76,6 +76,7 @@ struct OneWayEnrollmentReference
     const char *provenance;
     uint8_t manufacturer;
     uint8_t acei;
+    uint32_t removeDestination;
     uint8_t addDestinationCount;
     uint32_t addDestinations[4];
     uint32_t finalizerDestination;
@@ -83,6 +84,7 @@ struct OneWayEnrollmentReference
     uint16_t downMain;
     uint16_t stopDownDeadlineMs;
     uint8_t repeatCountAfterFirst;
+    bool pairingLowPower;
 };
 
 // Re-keyed, non-secret equivalent of the observed Smoove Remove -> SendKey
@@ -110,10 +112,11 @@ static const uint8_t kSendKeyWithMac[] = {
 
 // Public KLI-compatible 0x30 wire shape. This is a source-derived regression
 // reference, not a claimed RF capture: source, wrapped key and sequence are
-// deliberately masked. The stable fields pin CTRL flags, ALL destination,
-// command, VELUX manufacturer and the 0x01 enrollment marker.
+// deliberately masked. The stable fields pin CTRL flags, the roller-shutter
+// destination, command, VELUX manufacturer and the 0x01 enrollment marker.
+// A real KLI 310 sends CTRL1=0x00 (no LOW_POWER) on its enrollment frames.
 static const uint8_t kKli310AddShape[] = {
-    0xFC, 0x20, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0x30,
+    0xFC, 0x00, 0x00, 0x00, 0xBF, 0x00, 0x00, 0x00, 0x30,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x01, 0x01, 0x00, 0x00,
@@ -137,13 +140,15 @@ static const OneWayEnrollmentReference kKli310EnrollmentReference = {
     "public KLI behavior from samr037/iohc-flipper tx_runner.c and VELUX registration instructions",
     0x01,
     0x61,
-    4,
-    {0x00003F, 0x0000BF, 0x0000FF, 0x00037F},
+    0x00003F,
+    3,
+    {0x0000BF, 0x0000FF, 0x00037F, 0},
     0x00003F,
     0xD200,
     0xC800,
     3000,
     4,
+    false,
 };
 
 static const uint8_t kPublicTrailerVectorKey[16] = {
