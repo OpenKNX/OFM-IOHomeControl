@@ -31,8 +31,8 @@
 int sTestsPassed = 0;
 int sTestsFailed = 0;
 
-#define TEST(name)                                                    \
-    static void test_##name();                                       \
+#define TEST(name)                                                        \
+    static void test_##name();                                            \
     static IoHomeTestRegistrar test_registrar_##name(#name, test_##name); \
     static void test_##name()
 #define RUN(name)                  \
@@ -5965,8 +5965,8 @@ TEST(test_1w_execute_with_slat)
 
 TEST(test_1w_repeat_count_constant)
 {
-    ASSERT_EQ(IOHC_1W_REPEAT_COUNT, 4);
-    ASSERT_EQ(IOHC_1W_REPEAT_COUNT + 1, 5); // first TX + four repeats
+    ASSERT_EQ(IOHC_1W_REPEAT_COUNT, 3);
+    ASSERT_EQ(IOHC_1W_REPEAT_COUNT + 1, 4); // first TX + three repeats
 }
 
 TEST(test_1w_repeat_interval_constant)
@@ -7187,7 +7187,7 @@ TEST(controller_1w_announce_only_does_not_send_sendkey_after_repeats)
     ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
 
     finishCurrentBlind1WPairingTxForTest(lController);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 5U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
 
     IoHomeFrame lLastFrame;
     const auto &lLastPacket = lController.radio().testLastTransmittedPacket();
@@ -7196,7 +7196,7 @@ TEST(controller_1w_announce_only_does_not_send_sendkey_after_repeats)
 
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::Idle);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 5U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
 }
 
 TEST(controller_default_1w_pairing_uses_type0_all)
@@ -7382,7 +7382,7 @@ TEST(controller_velux_1w_enrollment_serializes_multicast_add_stop_down)
     finishCurrentBlind1WPairingTxForTest(lController);
 
     ASSERT_EQ(lController.state(), ControllerState::PairComplete);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 30U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 24U);
     ASSERT_EQ(lChannel.getSequence1W(), 4U);
     ASSERT_TRUE(lChannel.isOneWayEnrolled());
     ASSERT_TRUE(lChannel.isOperational());
@@ -7542,7 +7542,7 @@ TEST(controller_generic_1w_automatic_finalizer_stops_after_add)
     finishCurrentBlind1WPairingTxForTest(lController);
 
     ASSERT_EQ(lController.state(), ControllerState::PairComplete);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 10U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 8U);
     ASSERT_EQ(lChannel.getSequence1W(), 2U);
     ASSERT_EQ(lController.oneWayEnrollmentTraceCount(), 3U);
     ASSERT_EQ(lController.oneWayEnrollmentTrace()[0].phase,
@@ -7603,7 +7603,7 @@ TEST(controller_1w_enrollment_add_failure_skips_finalizer)
     lController.loop();
 
     ASSERT_EQ(lController.state(), ControllerState::PairFailed);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 5U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
     ASSERT_EQ(lChannel.getSequence1W(), 2U);
     const auto *lTrace = lController.oneWayEnrollmentTrace();
     const uint8_t lTraceCount = lController.oneWayEnrollmentTraceCount();
@@ -7629,13 +7629,13 @@ TEST(controller_velux_1w_finalizer_stop_failure_suppresses_down)
 
     ASSERT_TRUE(lController.startPairing1W(0, 0x7E9E6E, Pairing1WMode::RemoveAdd));
     ASSERT_TRUE(advanceVeluxEnrollmentToFinalizerStopForTest(lController));
-    ASSERT_EQ(lController.radio().testTransmitCount(), 20U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 16U);
 
     lController.radio().testSetNextTransmitError(RadioError::HardwareError);
     lController.loop();
 
     ASSERT_EQ(lController.state(), ControllerState::PairFailed);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 20U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 16U);
     ASSERT_EQ(lChannel.getSequence1W(), 3U);
     const auto *lTrace = lController.oneWayEnrollmentTrace();
     const uint8_t lTraceCount = lController.oneWayEnrollmentTraceCount();
@@ -7707,7 +7707,7 @@ TEST(controller_velux_1w_finalizer_down_failure_marks_operation_failed)
     lController.loop();
 
     ASSERT_EQ(lController.state(), ControllerState::PairFailed);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 25U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 20U);
     ASSERT_EQ(lChannel.getSequence1W(), 4U);
     const auto *lTrace = lController.oneWayEnrollmentTrace();
     const uint8_t lTraceCount = lController.oneWayEnrollmentTraceCount();
@@ -8830,9 +8830,9 @@ TEST(controller_2w_pairing_retries_key_init_and_accepts_direct_confirmation)
     // A delayed device can finish the retried phase without another challenge.
     IoHomeFrame lSetConfig1;
     ASSERT_TRUE(queueKeyTransferConfirmationAndCaptureSetConfig1(lController,
-                                                                   lRemoteNodeId,
-                                                                   lDeviceNodeId,
-                                                                   lSetConfig1));
+                                                                 lRemoteNodeId,
+                                                                 lDeviceNodeId,
+                                                                 lSetConfig1));
     ASSERT_EQ(lSetConfig1.commandId, IoHomeCommand::SetConfig1);
     ASSERT_EQ(lChannel.getNodeId(), lDeviceNodeId);
 }
@@ -10788,7 +10788,7 @@ TEST(byte_vector_controller_1w_sendkey_no_hmac_and_20_byte_payload)
     ASSERT_EQ(lFrame.data[17], 0x01);
 }
 
-TEST(byte_vector_controller_1w_repeat_plan_long_then_four_short_40ms)
+TEST(byte_vector_controller_1w_repeat_plan_long_then_three_short_40ms)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -10796,7 +10796,7 @@ TEST(byte_vector_controller_1w_repeat_plan_long_then_four_short_40ms)
         0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
         0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
 
-    ASSERT_EQ(IOHC_1W_REPEAT_COUNT, 4);
+    ASSERT_EQ(IOHC_1W_REPEAT_COUNT, 3);
     ASSERT_EQ(IOHC_1W_REPEAT_INTERVAL_MS, 40);
 
     IoHomeController lController;
@@ -10832,7 +10832,7 @@ TEST(byte_vector_controller_1w_repeat_plan_long_then_four_short_40ms)
         lController.loop();
     }
 
-    ASSERT_EQ(lController.radio().testTransmitCount(), 5U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
 }
 
 TEST(controller_2w_final_response_wait_and_sx1262_dwell)
@@ -10938,7 +10938,7 @@ TEST(controller_default_1w_execute_uses_standard_vent_layout)
     ASSERT_TRUE(lFrame.hasHmac);
 }
 
-TEST(controller_1w_execute_repeats_first_long_then_four_short)
+TEST(controller_1w_execute_repeats_first_long_then_three_short)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -10985,7 +10985,7 @@ TEST(controller_1w_execute_repeats_first_long_then_four_short)
         lController.loop(); // finish repeat TX and either schedule next repeat or go idle
     }
 
-    ASSERT_EQ(lController.radio().testTransmitCount(), 5U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
     ASSERT_EQ(lController.state(), ControllerState::Idle);
 }
 
@@ -11040,7 +11040,7 @@ TEST(controller_1w_pairing_repeats_first_long_then_short)
         lController.loop(); // finish repeat TX and schedule next repeat or complete
     }
 
-    ASSERT_EQ(lController.radio().testTransmitCount(), 5U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
 }
 
 TEST(controller_1w_ui_open_position_conversion_matches_raw_closed_main)
@@ -12194,10 +12194,10 @@ int main()
     RUN(byte_vector_controller_2w_execute_payloads_and_retry_start);
     RUN(byte_vector_controller_1w_default_and_typed_targets);
     RUN(byte_vector_controller_1w_sendkey_no_hmac_and_20_byte_payload);
-    RUN(byte_vector_controller_1w_repeat_plan_long_then_four_short_40ms);
+    RUN(byte_vector_controller_1w_repeat_plan_long_then_three_short_40ms);
     RUN(controller_2w_final_response_wait_and_sx1262_dwell);
     RUN(controller_default_1w_execute_uses_standard_vent_layout);
-    RUN(controller_1w_execute_repeats_first_long_then_four_short);
+    RUN(controller_1w_execute_repeats_first_long_then_three_short);
     RUN(controller_1w_pairing_repeats_first_long_then_short);
     RUN(controller_1w_ui_open_position_conversion_matches_raw_closed_main);
     RUN(controller_default_1w_execute_matches_reference_payloads);
