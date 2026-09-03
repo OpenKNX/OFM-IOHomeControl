@@ -5944,7 +5944,10 @@ TEST(test_1w_repeat_interval_constant)
 TEST(test_1w_repeat_preamble_constants)
 {
     ASSERT_EQ(IOHC_PREAMBLE_LONG, 1024);
+    ASSERT_EQ(IOHC_PREAMBLE_NORMAL_START, 32);
     ASSERT_EQ(IOHC_PREAMBLE_SHORT, 8);
+    ASSERT_TRUE(IOHC_PREAMBLE_LONG > IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_TRUE(IOHC_PREAMBLE_NORMAL_START > IOHC_PREAMBLE_SHORT);
     ASSERT_TRUE(IOHC_PREAMBLE_LONG > IOHC_PREAMBLE_SHORT);
 }
 
@@ -7941,6 +7944,7 @@ TEST(controller_2w_command_can_clear_low_power_for_mains_device)
     ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
     ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
 }
 
 TEST(controller_send_identify_builds_authenticated_payload)

@@ -273,8 +273,9 @@ constexpr uint32_t IOHC_FREQUENCIES[IOHC_NUM_FREQUENCIES] = {
 #define IOHC_BITRATE 38400
 #define IOHC_BANDWIDTH 250000
 #define IOHC_FREQ_DEV 19200
-#define IOHC_PREAMBLE_LONG 1024 // symbols (bytes), for START frames (per nicolas5000)
-#define IOHC_PREAMBLE_SHORT 8   // symbols (bytes), for continuation frames
+#define IOHC_PREAMBLE_LONG 1024       // symbols (bytes), wakes low-power 2W targets
+#define IOHC_PREAMBLE_NORMAL_START 32 // symbols (bytes), normal always-alive 2W START
+#define IOHC_PREAMBLE_SHORT 8         // symbols (bytes), for continuation frames
 #define IOHC_NAME_MAX_SIZE 16   // max name payload bytes (per nicolas5000: CMD_PARAM_NAME_MAXSIZE/2)
 
 // 1W repeat transmission (fire-and-forget sends 4x at 40ms intervals)

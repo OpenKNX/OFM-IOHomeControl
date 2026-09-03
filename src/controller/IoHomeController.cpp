@@ -1831,6 +1831,16 @@ bool IoHomeController::resolveLowPower2W(uint32_t iNodeId) const
     return lCh->isLowPower2W();
 }
 
+uint16_t IoHomeController::preambleFor2WRequest(const IoHomeFrame &iFrame) const
+{
+    if ((iFrame.ctrlByte0 & IOHC_CTRL0_START) == 0)
+        return IOHC_PREAMBLE_SHORT;
+
+    return (iFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0
+               ? IOHC_PREAMBLE_LONG
+               : IOHC_PREAMBLE_NORMAL_START;
+}
+
 IoHomecontrolChannel *IoHomeController::oneWayProfileForNode(uint32_t iNodeId) const
 {
     return oneWayProfileForChannel(channelForNode(iNodeId));
@@ -4170,10 +4180,13 @@ void IoHomeController::processTxPending()
         trace1WRepeatPlan("tx1w");
     }
 
-    // Set preamble based on frame type: START frames need long preamble for low-power devices.
+    // 1W has its own proven first-frame/repeat behaviour. For 2W, a START
+    // frame needs a wake-up preamble only when its target is low-power.
     // Normal 2W controller-originated TX is always sent on CH2; RX scanning remains separate.
     bool lIsStartFrame = (mTxFrame.ctrlByte0 & IOHC_CTRL0_START);
-    const uint16_t lPreamble = lIsStartFrame ? IOHC_PREAMBLE_LONG : IOHC_PREAMBLE_SHORT;
+    const uint16_t lPreamble = lIs1WFrame
+                                   ? (lIsStartFrame ? IOHC_PREAMBLE_LONG : IOHC_PREAMBLE_SHORT)
+                                   : preambleFor2WRequest(mTxFrame);
     if (!lIs1WFrame)
     {
         mWaitingFinalResponse = false;
