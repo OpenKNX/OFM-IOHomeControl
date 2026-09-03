@@ -7879,7 +7879,7 @@ TEST(controller_1w_key_frame_uses_profile_manufacturer_without_hmac)
     ASSERT_TRUE(!lFrame.hasHmac);
 }
 
-TEST(controller_2w_command_defaults_to_low_power)
+TEST(controller_2w_command_defaults_to_always_alive)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -7909,7 +7909,8 @@ TEST(controller_2w_command_defaults_to_low_power)
     IoHomeFrame lFrame;
     ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
-    ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
+    ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
 }
 
 TEST(controller_2w_command_can_clear_low_power_for_mains_device)
@@ -7979,7 +7980,8 @@ TEST(controller_send_identify_builds_authenticated_payload)
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Identify);
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
     ASSERT_EQ(lFrame.getDestNodeId(), lDeviceNodeId);
-    ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
+    ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
     ASSERT_EQ(lFrame.dataLen, 2);
     ASSERT_EQ(lFrame.data[0], IOHC_ORIGINATOR_USER);
     ASSERT_EQ(lFrame.data[1], 0xFF);
@@ -8075,7 +8077,7 @@ static bool retryKeepsStartForQueued2WCommand(IoHomeCommand iCommand, uint8_t iP
         return false;
     if ((lFirstFrame.ctrlByte0 & IOHC_CTRL0_START) == 0)
         return false;
-    if (lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_LONG)
+    if (lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_NORMAL_START)
         return false;
 
     lController.loop(); // TxInProgress -> WaitResponse
@@ -8092,7 +8094,7 @@ static bool retryKeepsStartForQueued2WCommand(IoHomeCommand iCommand, uint8_t iP
     const auto &lRetryPacket = lController.radio().testLastTransmittedPacket();
     if (lRetryPacket.empty())
         return false;
-    if (lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_LONG)
+    if (lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_NORMAL_START)
         return false;
 
     IoHomeFrame lRetryFrame;
@@ -8130,7 +8132,7 @@ static bool retryKeepsStartForQueued2WSetName()
         return false;
     if (lFirstFrame.commandId != IoHomeCommand::SetName ||
         (lFirstFrame.ctrlByte0 & IOHC_CTRL0_START) == 0 ||
-        lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_LONG)
+        lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_NORMAL_START)
         return false;
 
     lController.loop(); // TxInProgress -> WaitResponse
@@ -8145,7 +8147,7 @@ static bool retryKeepsStartForQueued2WSetName()
     lController.loop(); // TxPending -> TxInProgress, retry TX
 
     const auto &lRetryPacket = lController.radio().testLastTransmittedPacket();
-    if (lRetryPacket.empty() || lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_LONG)
+    if (lRetryPacket.empty() || lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_NORMAL_START)
         return false;
 
     IoHomeFrame lRetryFrame;
@@ -10529,7 +10531,7 @@ TEST(byte_vector_controller_2w_execute_payloads_and_retry_start)
         ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFirstFrame));
         ASSERT_EQ(lFirstFrame.commandId, IoHomeCommand::Execute);
         ASSERT_TRUE((lFirstFrame.ctrlByte0 & IOHC_CTRL0_START) != 0);
-        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
         ASSERT_EQ(lFirstFrame.dataLen, v.expectedLen);
         ASSERT_MEM_EQ(lFirstFrame.data, v.expectedPayload, v.expectedLen);
 
@@ -10545,7 +10547,7 @@ TEST(byte_vector_controller_2w_execute_payloads_and_retry_start)
 
         const auto &lRetryPacket = lController.radio().testLastTransmittedPacket();
         ASSERT_TRUE(!lRetryPacket.empty());
-        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
 
         IoHomeFrame lRetryFrame;
         ASSERT_TRUE(deserializeFrameForTest(lRetryFrame, lRetryPacket.data(), static_cast<uint8_t>(lRetryPacket.size())));
@@ -12026,7 +12028,7 @@ int main()
     RUN(controller_general_info2_response_uses_selector_before_tilt_decode);
     RUN(controller_status_poll_failure_after_challenge_notifies_channel);
     RUN(controller_1w_key_frame_uses_profile_manufacturer_without_hmac);
-    RUN(controller_2w_command_defaults_to_low_power);
+    RUN(controller_2w_command_defaults_to_always_alive);
     RUN(controller_2w_command_can_clear_low_power_for_mains_device);
     RUN(controller_send_identify_builds_authenticated_payload);
     RUN(controller_send_identify_rejects_1w_channel);

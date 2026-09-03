@@ -1928,7 +1928,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         {
             mController.cancelPairing();
             mChannels[lChannel]->setNodeId(0);
-            mChannels[lChannel]->setLowPower2W(true);
+            mChannels[lChannel]->setLowPower2W(false);
             memset(const_cast<uint8_t *>(mChannels[lChannel]->getEncryptionKey()), 0, 16);
             resultData[0] = 0x00;
             resultLength = 1;
@@ -2160,7 +2160,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
             lState.valid = true;
             lState.paired = (lFlags & 0x01) != 0;
             lState.is1W = (lFlags & 0x02) != 0;
-            lState.lowPower2W = lVersion >= 10 ? ((lFlags & 0x04) != 0) : true;
+            lState.lowPower2W = lVersion >= 10 ? ((lFlags & 0x04) != 0) : false;
             lState.nodeId = lNodeId;
             memcpy(lState.key, lKey, sizeof(lState.key));
             lState.sequence1W = lSeq;
@@ -3499,7 +3499,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             {
                 mController.cancelPairing();
                 mChannels[lIdx]->setNodeId(0);
-                mChannels[lIdx]->setLowPower2W(true);
+                mChannels[lIdx]->setLowPower2W(false);
                 memset(const_cast<uint8_t *>(mChannels[lIdx]->getEncryptionKey()), 0, 16);
                 openknx.flash.save(true); // unpair is rare & critical: bypass write throttle
                 logInfoP("Channel %d unpaired", lIdx + 1);

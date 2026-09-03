@@ -114,7 +114,7 @@ private:
   uint8_t mEncKey[16] = {};       // AES-128 encryption key
   uint8_t mLastChallenge[6] = {}; // challenge sent with last authenticated command
   bool mPaired = false;
-  bool mLowPower2W = true;          // Battery/solar-safe default for 2W devices
+  bool mLowPower2W = false;         // Unknown 2W devices default to always-alive
   bool mSilentOperation = false;    // Somfy RS100 2W Execute profile (0x05)
   uint16_t mSequence1W = 0;         // 1W last used sequence counter
   uint16_t mReservedSequence1W = 0; // highest sequence persisted/reserved ahead in flash

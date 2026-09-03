@@ -268,7 +268,7 @@ private:
   uint8_t mConfigured1WProfileChannel = 0xFF;
   bool mIs1W = false;
   bool mPaired = false;
-  bool mLowPower2W = true;
+  bool mLowPower2W = false;
   uint32_t mConfigured1WTargetNodeId = 0;
   // TEST_NATIVE mirrors the production channel default: unspecified 1W type is
   // type 0 / All, which serializes to destination 0x00003F.

@@ -1825,9 +1825,9 @@ bool IoHomeController::resolveLowPower2W(uint32_t iNodeId) const
 {
     IoHomecontrolChannel *lCh = channelForNode(iNodeId);
     if (!lCh)
-        return true;
+        return false;
     if (lCh->is1W())
-        return true;
+        return false;
     return lCh->isLowPower2W();
 }
 
@@ -5675,7 +5675,10 @@ void IoHomeController::finalize2WPairingKey()
         if (lCh)
         {
             lCh->setNodeId(mDiscoveredNodeId);
-            lCh->setLowPower2W(true);
+            // Discovery metadata may refine this later. An unknown peer must
+            // remain always-alive: the long wake-up preamble can make VELUX
+            // always-alive receivers ignore directed traffic completely.
+            lCh->setLowPower2W(false);
             lCh->setEncryptionKey(mSystemKey);
             openknx.flash.save(true);
         }
