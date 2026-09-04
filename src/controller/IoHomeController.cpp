@@ -1320,6 +1320,13 @@ uint8_t IoHomeController::oneWayAceiForManufacturer(uint8_t iManufacturer)
                : IOHC_ACEI_1W;
 }
 
+uint16_t IoHomeController::oneWayRepeatPreambleForManufacturer(uint8_t iManufacturer)
+{
+    return iManufacturer == static_cast<uint8_t>(IoHomeManufacturer::Velux)
+               ? IOHC_PREAMBLE_SHORT
+               : IOHC_PREAMBLE_LONG;
+}
+
 ControllerState IoHomeController::state() const
 {
     return mState;
@@ -3434,7 +3441,7 @@ void IoHomeController::tracePairDiagnosticTx2W(const IoHomeFrame &iFrame, uint16
              (iFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) ? 1U : 0U);
 }
 
-void IoHomeController::trace1WRepeatPlan(const char *iContext) const
+void IoHomeController::trace1WRepeatPlan(const char *iContext, uint16_t iRepeatPreamble) const
 {
     if (!mPairDiagnosticTraceEnabled)
         return;
@@ -3444,7 +3451,7 @@ void IoHomeController::trace1WRepeatPlan(const char *iContext) const
              static_cast<unsigned>(IOHC_1W_REPEAT_COUNT + 1U),
              static_cast<unsigned>(IOHC_1W_REPEAT_INTERVAL_MS),
              static_cast<unsigned>(IOHC_PREAMBLE_LONG),
-             static_cast<unsigned>(IOHC_PREAMBLE_SHORT));
+             static_cast<unsigned>(iRepeatPreamble));
 }
 
 bool IoHomeController::createAndTraceHmac1W(const uint8_t *iTranscript, uint8_t iTranscriptLen,
@@ -4410,7 +4417,7 @@ void IoHomeController::processTxPending()
                  mTxFrame.getSrcNodeId(),
                  mTxFrame.getDestNodeId(),
                  lHex.c_str());
-        trace1WRepeatPlan("tx1w");
+        trace1WRepeatPlan("tx1w", queuedOneWayRepeatPreamble());
     }
 
     // 1W has its own proven first-frame/repeat behaviour. For 2W, a START
@@ -4539,8 +4546,10 @@ void IoHomeController::processTx1WRepeat()
             mCurrentFreqIdx = lNextFreqIdx;
     }
 
-    // Re-send same buffer with the reference short repeat preamble.
-    const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
+    // Reference hardware uses a long preamble on every copy. Preserve the
+    // proven short-repeat exception only for VELUX controller identities.
+    const uint16_t lRepeatPreamble = queuedOneWayRepeatPreamble();
+    const RadioError lErr = startTransmitWithPreamble(mTxBuffer, mTxLen, lRepeatPreamble);
     if (lErr == RadioError::None)
     {
         if (mPairDiagnosticTraceEnabled)
@@ -4549,7 +4558,7 @@ void IoHomeController::processTx1WRepeat()
             logInfoP("PairDiag: 1W repeat tx remaining=%u len=%u pre=%u ch=%u freq=%lu",
                      static_cast<unsigned>(mTx1WRepeatRemaining),
                      static_cast<unsigned>(mTxLen),
-                     static_cast<unsigned>(IOHC_PREAMBLE_SHORT),
+                     static_cast<unsigned>(lRepeatPreamble),
                      static_cast<unsigned>(iohcChannelNumberForFrequency(lRepeatFreqHz)),
                      static_cast<unsigned long>(lRepeatFreqHz));
         }
@@ -5165,7 +5174,7 @@ void IoHomeController::processPairSend1WAnnounce()
                  mTxFrame.getSrcNodeId(),
                  mTxFrame.getDestNodeId(),
                  lHex.c_str());
-        trace1WRepeatPlan("1w announce");
+        trace1WRepeatPlan("1w announce", pairingOneWayRepeatPreamble());
     }
 
     const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
@@ -5277,7 +5286,7 @@ void IoHomeController::processPairSend1WRemove()
                  mTxFrame.getSrcNodeId(),
                  mTxFrame.getDestNodeId(),
                  lHex.c_str());
-        trace1WRepeatPlan("1w remove");
+        trace1WRepeatPlan("1w remove", pairingOneWayRepeatPreamble());
     }
 
     const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
@@ -5430,7 +5439,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
                      static_cast<unsigned>(lProfile->getOneWayControllerManufacturer()),
                      static_cast<unsigned>(mCurrentFreqIdx),
                      static_cast<unsigned long>(IOHC_FREQ_2));
-            trace1WRepeatPlan("1w key");
+            trace1WRepeatPlan("1w key", pairingOneWayRepeatPreamble());
             logInfoP("PairDiag: 1W key tx payload=redacted");
         }
 
@@ -5720,16 +5729,17 @@ bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
 
         mTx1WRepeatTimer = 0;
 
-        // Reference 1W timing: the first TX uses the long wake-up preamble,
-        // then all configured repeats use the short preamble with a 40 ms gap.
-        RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
+        // Generic identities follow reference hardware with a long preamble
+        // on every copy. VELUX retains its proven short-repeat timing.
+        const uint16_t lRepeatPreamble = pairingOneWayRepeatPreamble();
+        RadioError lErr = startTransmitWithPreamble(mTxBuffer, mTxLen, lRepeatPreamble);
         if (mPairDiagnosticTraceEnabled && lErr == RadioError::None)
         {
             logInfoP("PairDiag: 1W pair repeat tx state=%s remaining=%u len=%u pre=%u",
                      stateName(mState),
                      static_cast<unsigned>(mTx1WRepeatRemaining),
                      static_cast<unsigned>(mTxLen),
-                     static_cast<unsigned>(IOHC_PREAMBLE_SHORT));
+                     static_cast<unsigned>(lRepeatPreamble));
         }
 
         if (lErr == RadioError::None)
@@ -6719,6 +6729,24 @@ RadioError IoHomeController::startShortPreambleTransmit(const uint8_t *iBuffer, 
                                                         LbtContext iLbtContext)
 {
     return startTransmitWithPreamble(iBuffer, iLen, IOHC_PREAMBLE_SHORT, iTrackDutyCycle, iLbtContext);
+}
+
+uint16_t IoHomeController::queuedOneWayRepeatPreamble() const
+{
+    IoHomecontrolChannel *lChannel = channelForQueueEntry(mCurrentCmd);
+    IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lChannel);
+    const uint8_t lManufacturer = lProfile
+                                      ? lProfile->getOneWayControllerManufacturer()
+                                      : static_cast<uint8_t>(IoHomeManufacturer::Unknown);
+    return oneWayRepeatPreambleForManufacturer(lManufacturer);
+}
+
+uint16_t IoHomeController::pairingOneWayRepeatPreamble() const
+{
+    return oneWayRepeatPreambleForManufacturer(
+        mPairing1WVeluxProfile
+            ? static_cast<uint8_t>(IoHomeManufacturer::Velux)
+            : static_cast<uint8_t>(IoHomeManufacturer::Unknown));
 }
 
 uint16_t IoHomeController::authResponsePreamble() const

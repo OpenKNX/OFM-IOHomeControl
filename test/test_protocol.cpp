@@ -5983,6 +5983,15 @@ TEST(test_1w_repeat_preamble_constants)
     ASSERT_TRUE(IOHC_PREAMBLE_LONG > IOHC_PREAMBLE_NORMAL_START);
     ASSERT_TRUE(IOHC_PREAMBLE_NORMAL_START > IOHC_PREAMBLE_SHORT);
     ASSERT_TRUE(IOHC_PREAMBLE_LONG > IOHC_PREAMBLE_SHORT);
+    ASSERT_EQ(IoHomeController::oneWayRepeatPreambleForManufacturer(
+                  static_cast<uint8_t>(IoHomeManufacturer::Somfy)),
+              IOHC_PREAMBLE_LONG);
+    ASSERT_EQ(IoHomeController::oneWayRepeatPreambleForManufacturer(
+                  static_cast<uint8_t>(IoHomeManufacturer::Unknown)),
+              IOHC_PREAMBLE_LONG);
+    ASSERT_EQ(IoHomeController::oneWayRepeatPreambleForManufacturer(
+                  static_cast<uint8_t>(IoHomeManufacturer::Velux)),
+              IOHC_PREAMBLE_SHORT);
 }
 
 TEST(test_1w_activate_mode_payload_layout)
@@ -7052,12 +7061,12 @@ static void initOneWayPairingModeControllerForTest(IoHomeController &oController
 
 static void finishCurrentBlind1WPairingTxForTest(IoHomeController &iController)
 {
-    // Finish the long-preamble first TX and the configured short-preamble repeats.
+    // Finish the long-preamble first TX and the manufacturer-selected repeats.
     iController.loop();
     for (uint8_t i = 0; i < IOHC_1W_REPEAT_COUNT; i++)
     {
         ioHomeTestAdvanceMillis(IOHC_1W_REPEAT_INTERVAL_MS);
-        iController.loop(); // send short-preamble repeat
+        iController.loop(); // send manufacturer-selected repeat
         iController.loop(); // finish repeat TX and schedule next state/repeat
     }
 }
@@ -11165,7 +11174,7 @@ TEST(byte_vector_controller_1w_sendkey_no_hmac_and_20_byte_payload)
     ASSERT_EQ(lFrame.data[17], 0x01);
 }
 
-TEST(byte_vector_controller_1w_repeat_plan_long_then_three_short_40ms)
+TEST(byte_vector_controller_velux_1w_repeat_plan_long_then_three_short_40ms)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -11188,6 +11197,7 @@ TEST(byte_vector_controller_1w_repeat_plan_long_then_three_short_40ms)
     lChannel.setIs1W(true);
     lChannel.setOneWayControllerNodeId(lRemoteNodeId);
     lChannel.setOneWayControllerKey(lKey);
+    lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Velux));
 
     ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 0xD2));
     lController.loop();
@@ -11315,7 +11325,7 @@ TEST(controller_default_1w_execute_uses_standard_vent_layout)
     ASSERT_TRUE(lFrame.hasHmac);
 }
 
-TEST(controller_1w_execute_repeats_first_long_then_three_short)
+TEST(controller_1w_execute_uses_four_reference_long_preambles)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -11357,7 +11367,7 @@ TEST(controller_1w_execute_repeats_first_long_then_three_short)
         ioHomeTestAdvanceMillis(1);
         lController.loop();
         ASSERT_EQ(lController.radio().testTransmitCount(), static_cast<uint32_t>(i + 2));
-        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
 
         lController.loop(); // finish repeat TX and either schedule next repeat or go idle
     }
@@ -11366,7 +11376,7 @@ TEST(controller_1w_execute_repeats_first_long_then_three_short)
     ASSERT_EQ(lController.state(), ControllerState::Idle);
 }
 
-TEST(controller_1w_pairing_repeats_first_long_then_short)
+TEST(controller_1w_pairing_uses_four_reference_long_preambles)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -11412,12 +11422,41 @@ TEST(controller_1w_pairing_repeats_first_long_then_short)
         ioHomeTestAdvanceMillis(1);
         lController.loop();
         ASSERT_EQ(lController.radio().testTransmitCount(), lExpectedAfterRepeat);
-        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
 
         lController.loop(); // finish repeat TX and schedule next repeat or complete
     }
 
     ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
+}
+
+TEST(controller_velux_1w_pairing_keeps_short_repeat_preamble)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initOneWayPairingModeControllerForTest(lController, lModule, lChannel,
+                                           lRemoteNodeId, lDeviceNodeId, lKey);
+    lChannel.setOneWayControllerManufacturer(
+        static_cast<uint8_t>(IoHomeManufacturer::Velux));
+
+    ASSERT_TRUE(lController.startPairing1WAddOnly(0, lDeviceNodeId));
+    lController.loop(); // first ADD_CONTROLLER copy
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+
+    lController.loop(); // finish first copy and arm repeat timer
+    ioHomeTestAdvanceMillis(IOHC_1W_REPEAT_INTERVAL_MS);
+    lController.loop(); // first VELUX repeat
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
 }
 
 TEST(controller_1w_ui_open_position_conversion_matches_raw_closed_main)
@@ -12577,11 +12616,12 @@ int main()
     RUN(byte_vector_controller_2w_execute_payloads_and_retry_start);
     RUN(byte_vector_controller_1w_default_and_typed_targets);
     RUN(byte_vector_controller_1w_sendkey_no_hmac_and_20_byte_payload);
-    RUN(byte_vector_controller_1w_repeat_plan_long_then_three_short_40ms);
+    RUN(byte_vector_controller_velux_1w_repeat_plan_long_then_three_short_40ms);
     RUN(controller_2w_final_response_wait_and_sx1262_dwell);
     RUN(controller_default_1w_execute_uses_standard_vent_layout);
-    RUN(controller_1w_execute_repeats_first_long_then_three_short);
-    RUN(controller_1w_pairing_repeats_first_long_then_short);
+    RUN(controller_1w_execute_uses_four_reference_long_preambles);
+    RUN(controller_1w_pairing_uses_four_reference_long_preambles);
+    RUN(controller_velux_1w_pairing_keeps_short_repeat_preamble);
     RUN(controller_1w_ui_open_position_conversion_matches_raw_closed_main);
     RUN(controller_default_1w_execute_matches_reference_payloads);
     RUN(controller_1w_execute_template_can_override_acei_fp_and_destination);

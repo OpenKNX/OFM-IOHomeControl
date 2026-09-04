@@ -612,6 +612,9 @@ public:
   static uint8_t oneWayBroadcastTypeForEtsDeviceType(uint8_t iEtsDeviceType);
   // Resolve the capture-backed 1W Execute ACEI for a controller manufacturer.
   static uint8_t oneWayAceiForManufacturer(uint8_t iManufacturer);
+  // VELUX keeps the proven short-repeat timing; other identities follow the
+  // reference hardware's long preamble on every copy in a 1W burst.
+  static uint16_t oneWayRepeatPreambleForManufacturer(uint8_t iManufacturer);
   static OneWayEnrollmentFinalizer resolveOneWayEnrollmentFinalizer(
       OneWayEnrollmentFinalizer iConfigured, uint8_t iManufacturer);
   static const char *oneWayEnrollmentFinalizerName(OneWayEnrollmentFinalizer iFinalizer);
@@ -931,7 +934,7 @@ private:
   void tracePairDiagnosticCompactPair() const;
   void tracePairDiagnosticCompactRx(const IoHomeRadioHealth &iHealth) const;
   void tracePairDiagnosticTx2W(const IoHomeFrame &iFrame, uint16_t iPreambleSymbols) const;
-  void trace1WRepeatPlan(const char *iContext) const;
+  void trace1WRepeatPlan(const char *iContext, uint16_t iRepeatPreamble) const;
   bool createAndTraceHmac1W(const uint8_t *iTranscript, uint8_t iTranscriptLen,
                             uint16_t iSequenceNum, const uint8_t iControllerKey[16],
                             uint8_t oHmac[IOHC_HMAC_SIZE]) const;
@@ -1079,6 +1082,8 @@ private:
   RadioError startShortPreambleTransmit(const uint8_t *iBuffer, uint8_t iLen,
                                         bool iTrackDutyCycle = false,
                                         LbtContext iLbtContext = LbtContext::Normal);
+  uint16_t queuedOneWayRepeatPreamble() const;
+  uint16_t pairingOneWayRepeatPreamble() const;
   uint16_t authResponsePreamble() const;
   uint32_t currentTxTimeoutMs() const;
 
