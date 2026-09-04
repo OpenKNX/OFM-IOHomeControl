@@ -1234,7 +1234,7 @@ const IoHomeController::OneWayPairingProfile &IoHomeController::oneWayPairingPro
         0x00003F, // finalizer (only used when explicitly enabled)
         nullptr,  // add destination follows the configured broadcast type
         1,
-        true, // generic 1W remotes keep the LOW_POWER wake-up bit
+        false, // captured 1W frames keep CTRL1 clear; preamble length is independent
     };
     return kGeneric;
 }
@@ -5063,6 +5063,7 @@ void IoHomeController::processPairSend1WAnnounce()
 
     mTxFrame.init();
     mTxFrame.set1WMode();
+    mTxFrame.setLowPower(pairing1WProfile().pairingLowPower);
     mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
     mTxFrame.setDestNode(oneWayBroadcastTarget(mPairing1WBroadcastType));
     mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
@@ -5438,6 +5439,7 @@ bool IoHomeController::prepareOneWayEnrollmentExecute(uint16_t iMain,
 
     mTxFrame.init();
     mTxFrame.set1WMode();
+    mTxFrame.setLowPower(pairing1WProfile().pairingLowPower);
     mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
     mTxFrame.commandId = IoHomeCommand::Execute;
     mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());

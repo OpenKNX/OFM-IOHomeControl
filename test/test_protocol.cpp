@@ -4916,7 +4916,7 @@ TEST(frame_1w_mode_flag)
     ASSERT_TRUE(!(frame.ctrlByte0 & IOHC_CTRL0_MODE_1W));
     frame.set1WMode();
     ASSERT_TRUE(frame.ctrlByte0 & IOHC_CTRL0_MODE_1W);
-    ASSERT_TRUE(frame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
+    ASSERT_EQ(frame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
 }
 
 // --- EMS2 constants ---
@@ -7355,6 +7355,7 @@ TEST(controller_velux_1w_enrollment_serializes_multicast_add_stop_down)
     ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
     ASSERT_EQ(lFrame.getDestNodeId(), lReference.finalizerDestination);
+    ASSERT_EQ(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
     ASSERT_EQ(lFrame.data[0], IOHC_ORIGINATOR_USER);
     ASSERT_EQ(lFrame.data[1], lReference.acei);
     ASSERT_EQ(static_cast<uint16_t>((lFrame.data[2] << 8) | lFrame.data[3]),
@@ -7376,6 +7377,7 @@ TEST(controller_velux_1w_enrollment_serializes_multicast_add_stop_down)
     ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
     ASSERT_EQ(lFrame.getDestNodeId(), lReference.finalizerDestination);
+    ASSERT_EQ(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
     ASSERT_EQ(lFrame.data[0], IOHC_ORIGINATOR_USER);
     ASSERT_EQ(lFrame.data[1], lReference.acei);
     ASSERT_EQ(static_cast<uint16_t>((lFrame.data[2] << 8) | lFrame.data[3]),
@@ -7433,7 +7435,7 @@ TEST(controller_velux_1w_strict_profile_destinations_and_ctrl1)
     const auto &lGeneric = IoHomeController::oneWayPairingProfileGeneric();
     ASSERT_EQ(lGeneric.removeDestination, 0U); // derived from the broadcast type
     ASSERT_TRUE(lGeneric.addDestinations == nullptr);
-    ASSERT_TRUE(lGeneric.pairingLowPower);
+    ASSERT_TRUE(!lGeneric.pairingLowPower);
 }
 
 TEST(controller_velux_1w_remove_ignores_typed_broadcast_class)
@@ -7464,7 +7466,7 @@ TEST(controller_velux_1w_remove_ignores_typed_broadcast_class)
     ASSERT_EQ(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
 }
 
-TEST(controller_generic_1w_pairing_keeps_typed_destination_and_low_power)
+TEST(controller_generic_1w_pairing_keeps_typed_destination_and_clears_ctrl1)
 {
     const uint8_t lKey[16] = {
         0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
@@ -7489,7 +7491,7 @@ TEST(controller_generic_1w_pairing_keeps_typed_destination_and_low_power)
     ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::RemoveController);
     ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BFU);
-    ASSERT_NE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
+    ASSERT_EQ(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
 
     finishCurrentBlind1WPairingTxForTest(lController);
     ASSERT_EQ(lController.state(), ControllerState::PairSend1WKeyTransfer);
@@ -7498,7 +7500,7 @@ TEST(controller_generic_1w_pairing_keeps_typed_destination_and_low_power)
     ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
     ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BFU);
-    ASSERT_NE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
+    ASSERT_EQ(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
 }
 
 TEST(controller_1w_channel_is_operational_without_paired_node)
@@ -8022,7 +8024,7 @@ TEST(controller_1w_key_frame_uses_profile_manufacturer_without_hmac)
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
     ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BF); // type 2 typed broadcast
-    ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
+    ASSERT_EQ(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
     ASSERT_EQ(lFrame.dataLen, 20);
     ASSERT_EQ(lFrame.data[16], static_cast<uint8_t>(IoHomeManufacturer::Velux));
     ASSERT_TRUE(!lFrame.hasHmac);
@@ -11145,7 +11147,7 @@ TEST(controller_default_1w_execute_uses_standard_vent_layout)
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
     ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F); // default type 0 / All target
-    ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
+    ASSERT_EQ(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
     ASSERT_EQ(lFrame.dataLen, 8);
     ASSERT_EQ(lFrame.data[0], IOHC_ORIGINATOR_USER);
     ASSERT_EQ(lFrame.data[1], IOHC_ACEI_1W);

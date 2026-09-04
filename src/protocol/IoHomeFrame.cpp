@@ -64,7 +64,6 @@ void IoHomeFrame::setDestGroup()
 void IoHomeFrame::set1WMode()
 {
     ctrlByte0 |= IOHC_CTRL0_MODE_1W;
-    ctrlByte1 |= IOHC_CTRL1_LOW_POWER;
 }
 
 uint8_t IoHomeFrame::getFrameOrder() const
