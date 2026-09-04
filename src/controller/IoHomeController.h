@@ -7,11 +7,13 @@
 #include <string>
 
 #define IOHC_CMD_QUEUE_SIZE 8
-#define IOHC_MAX_RETRIES 3
+#define IOHC_EXCHANGE_MAX_ATTEMPTS 3
+#define IOHC_MAX_RETRIES (IOHC_EXCHANGE_MAX_ATTEMPTS - 1)
 #define IOHC_TX_TIMEOUT_MS 500
-#define IOHC_RX_TIMEOUT_MS 300
+#define IOHC_RX_TIMEOUT_MS 400
 #define IOHC_RX_FINAL_TIMEOUT_MS 500
 #define IOHC_RETRY_GAP_MS 250
+#define IOHC_EXCHANGE_TOTAL_BUDGET_MS 2500
 #ifndef IOHC_PAIR_KEY_EXCHANGE_MAX_ATTEMPTS
 #define IOHC_PAIR_KEY_EXCHANGE_MAX_ATTEMPTS 3
 #endif
@@ -748,6 +750,7 @@ private:
   bool mSawChallenge = false;
   uint32_t mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
   uint32_t mRetryAtMs = 0;
+  uint32_t mExchangeStartMs = 0;
 
   // Passive UNKNOWN_86 (0x86) observation. No semantics are assumed; only the
   // raw frame and any traffic between the same node pair are logged.

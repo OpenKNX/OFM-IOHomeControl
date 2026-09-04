@@ -1628,10 +1628,13 @@ TEST(position_special_values_encoding)
 
 TEST(retry_counter_logic)
 {
-    // Test that retry counting works correctly
-    // Simulate: retries starts at 0, increment on each timeout, stop at MAX
+    // IOHC_EXCHANGE_MAX_ATTEMPTS includes the initial transmission. The
+    // retries field counts only retransmissions after that first attempt.
     uint8_t retries = 0;
-    const uint8_t maxRetries = 3; // IOHC_MAX_RETRIES
+    const uint8_t maxRetries = IOHC_MAX_RETRIES;
+
+    ASSERT_EQ(IOHC_EXCHANGE_MAX_ATTEMPTS, 3);
+    ASSERT_EQ(maxRetries, 2);
 
     // First attempt
     ASSERT_EQ(retries, 0);
@@ -1642,18 +1645,12 @@ TEST(retry_counter_logic)
     ASSERT_EQ(retries, 1);
     ASSERT_TRUE(retries < maxRetries);
 
-    // Second retry
+    // Second and final retry
     retries++;
     ASSERT_EQ(retries, 2);
-    ASSERT_TRUE(retries < maxRetries);
-
-    // Third retry
-    retries++;
-    ASSERT_EQ(retries, 3);
     ASSERT_TRUE(!(retries < maxRetries)); // should give up
 
-    // Total attempts: 1 initial + 3 retries = 4 transmissions across 4 frequencies
-    // (freq hop after each timeout covers all 3 frequencies plus wrap)
+    // Total attempts: 1 initial + 2 retries = 3 transmissions.
 }
 
 TEST(frequency_hop_cycle)
@@ -10913,6 +10910,76 @@ TEST(controller_2w_initial_response_wait_uses_retry_gap)
     ASSERT_EQ(lController.radio().testTransmitCount(), 2U);
 }
 
+TEST(controller_2w_exchange_uses_three_total_attempts_without_trailing_gap)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+
+    ASSERT_EQ(IOHC_RX_TIMEOUT_MS, 400);
+    ASSERT_EQ(IOHC_RX_FINAL_TIMEOUT_MS, 500);
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey,
+                                        IoHomeCommand::Execute, 50));
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    lController.loop(); // first TX completes -> WaitResponse
+
+    for (uint8_t lRetry = 0; lRetry < IOHC_MAX_RETRIES; ++lRetry)
+    {
+        ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+        lController.loop(); // arm retry gap
+        ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
+        ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
+        lController.loop(); // retry becomes pending
+        ASSERT_EQ(lController.state(), ControllerState::TxPending);
+        lController.loop(); // transmit retry
+        lController.loop(); // retry TX completes -> WaitResponse
+    }
+
+    ASSERT_EQ(lController.radio().testTransmitCount(),
+              static_cast<size_t>(IOHC_EXCHANGE_MAX_ATTEMPTS));
+    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::Idle);
+    ASSERT_EQ(lController.radio().testTransmitCount(),
+              static_cast<size_t>(IOHC_EXCHANGE_MAX_ATTEMPTS));
+}
+
+TEST(controller_2w_exchange_budget_prevents_late_retry)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey,
+                                        IoHomeCommand::Execute, 50));
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    lController.loop(); // first TX completes -> WaitResponse
+
+    ioHomeTestAdvanceMillis(IOHC_EXCHANGE_TOTAL_BUDGET_MS);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::Idle);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
+}
+
 TEST(retry_preserves_start_flag_for_2w_request)
 {
     ASSERT_TRUE(retryKeepsStartForQueued2WCommand(IoHomeCommand::Execute, 50));
@@ -12500,6 +12567,8 @@ int main()
     RUN(controller_2w_challenge_response_uses_controller_role_flags_for_always_alive_device);
     RUN(controller_status_update_receive_auth_uses_saved_command_data);
     RUN(controller_2w_initial_response_wait_uses_retry_gap);
+    RUN(controller_2w_exchange_uses_three_total_attempts_without_trailing_gap);
+    RUN(controller_2w_exchange_budget_prevents_late_retry);
     RUN(retry_preserves_start_flag_for_2w_request);
     RUN(byte_vector_controller_2w_execute_payloads_and_retry_start);
     RUN(byte_vector_controller_1w_default_and_typed_targets);

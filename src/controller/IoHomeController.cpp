@@ -1175,6 +1175,7 @@ void IoHomeController::init()
     mSawChallenge = false;
     mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
     mRetryAtMs = 0;
+    mExchangeStartMs = 0;
     mDutyCycleWindowStart = millis();
 }
 
@@ -4361,6 +4362,7 @@ void IoHomeController::processIdle()
         if (queuePop(lEntry))
         {
             mCurrentCmd = lEntry;
+            mExchangeStartMs = millis();
             if (buildTxFrame(mCurrentCmd))
                 mState = ControllerState::TxPending;
             else
@@ -4584,6 +4586,18 @@ void IoHomeController::processWaitResponse()
 
     if (millis() - mStateTimer >= mResponseTimeoutMs)
     {
+        const auto failExchange = [this]() {
+            const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
+            const bool lAfterChallenge = mSawChallenge;
+            mCurrentCmd.active = false;
+            mWaitingFinalResponse = false;
+            mSawChallenge = false;
+            mRetryAtMs = 0;
+            mExchangeStartMs = 0;
+            mState = ControllerState::Idle;
+            notifyTrackedStatusPollFailure(mModule, lFailedCmd, lAfterChallenge);
+        };
+
         // Execute changes the physical device state. Once it has challenged
         // and accepted our authentication, a missing final response is not a
         // safe reason to replay the movement command.
@@ -4595,8 +4609,18 @@ void IoHomeController::processWaitResponse()
             mWaitingFinalResponse = false;
             mSawChallenge = false;
             mRetryAtMs = 0;
+            mExchangeStartMs = 0;
             mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
             mState = ControllerState::Idle;
+            return;
+        }
+
+        // EXCHANGE_MAX_ATTEMPTS counts the initial transmission. Do not add a
+        // trailing retry gap when the last permitted attempt has timed out.
+        if (!mCurrentCmd.active || mCurrentCmd.retries >= IOHC_MAX_RETRIES ||
+            millis() - mExchangeStartMs >= IOHC_EXCHANGE_TOTAL_BUDGET_MS)
+        {
+            failExchange();
             return;
         }
 
@@ -4610,6 +4634,14 @@ void IoHomeController::processWaitResponse()
             return;
 
         mRetryAtMs = 0;
+
+        // A long response window may consume the remaining wall-clock budget
+        // while the retry gap is pending. In that case, do not start a new TX.
+        if (millis() - mExchangeStartMs >= IOHC_EXCHANGE_TOTAL_BUDGET_MS)
+        {
+            failExchange();
+            return;
+        }
 
         // No response — retry the controller-originated 2W command on CH2.
         // RX may scan/hop while waiting, but TX must not be moved to CH1/CH3.
@@ -4634,13 +4666,7 @@ void IoHomeController::processWaitResponse()
         }
         else
         {
-            const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
-            const bool lAfterChallenge = mSawChallenge;
-            mCurrentCmd.active = false;
-            mWaitingFinalResponse = false;
-            mSawChallenge = false;
-            mState = ControllerState::Idle;
-            notifyTrackedStatusPollFailure(mModule, lFailedCmd, lAfterChallenge);
+            failExchange();
         }
     }
 }
@@ -4740,6 +4766,7 @@ void IoHomeController::processResponse()
     mWaitingFinalResponse = false;
     mSawChallenge = false;
     mRetryAtMs = 0;
+    mExchangeStartMs = 0;
     mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
     if (mState == ControllerState::ProcessResponse)
         mState = ControllerState::Idle;
