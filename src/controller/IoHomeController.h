@@ -33,7 +33,15 @@
 #define IOHC_LBT_MAX_RETRIES 5            // normal TX: 5 * 5ms worst-case
 #define IOHC_LBT_AUTH_MAX_RETRIES 1       // auth responses must not be delayed too long
 #define IOHC_LBT_RETRY_DELAY_MS 5
-#define IOHC_RX_SCAN_INTERVAL_US 2700 // ~2.7ms frequency scan interval (per nicolas5000)
+// Measured per-channel discovery/scan dwell defaults. SX1276 can use its
+// FastHop path; SX1262 needs a longer standby -> retune -> RX allowance.
+#define IOHC_RX_SCAN_INTERVAL_US_SX1276 5000
+#define IOHC_RX_SCAN_INTERVAL_US_SX1262 7000
+#if defined(RADIO_SX1262)
+#define IOHC_RX_SCAN_INTERVAL_US IOHC_RX_SCAN_INTERVAL_US_SX1262
+#else
+#define IOHC_RX_SCAN_INTERVAL_US IOHC_RX_SCAN_INTERVAL_US_SX1276
+#endif
 // Passive correlation window after a received UNKNOWN_86 frame. Any frame
 // exchanged between the same two nodes inside this window is logged verbatim so
 // a possible request/response pairing can be established from real captures.

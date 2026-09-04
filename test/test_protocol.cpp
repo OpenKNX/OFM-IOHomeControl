@@ -5348,9 +5348,13 @@ TEST(freq_scan_cycle_wraps)
 
 TEST(freq_scan_interval_constant)
 {
-    // IOHC_RX_SCAN_INTERVAL_US defined in IoHomeController.h = 2700
-    // Verify the value matches nicolas5000's CHANNEL_HOP_TIME_US
-    ASSERT_EQ(2700, 2700); // documents expected value
+    ASSERT_EQ(IOHC_RX_SCAN_INTERVAL_US_SX1276, 5000);
+    ASSERT_EQ(IOHC_RX_SCAN_INTERVAL_US_SX1262, 7000);
+#if defined(RADIO_SX1262)
+    ASSERT_EQ(IOHC_RX_SCAN_INTERVAL_US, IOHC_RX_SCAN_INTERVAL_US_SX1262);
+#else
+    ASSERT_EQ(IOHC_RX_SCAN_INTERVAL_US, IOHC_RX_SCAN_INTERVAL_US_SX1276);
+#endif
 }
 
 TEST(freq_scan_all_frequencies_covered)
