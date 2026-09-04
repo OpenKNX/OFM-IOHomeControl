@@ -611,8 +611,9 @@ RadioError RadioSX1262::startTransmitInternal(const uint8_t *iData, uint8_t iLen
     }
     mLastOpStatusBefore = lStatus;
 
-    // Start TX with no timeout while debugging basic TX_DONE signalling.
-    uint8_t lTxParams[3] = {0x00, 0x00, 0x00};
+    // Hardware backstop: 0x03E800 ticks at 15.625 us/tick = 4 seconds.
+    // The controller's shorter software timeout remains the normal recovery path.
+    uint8_t lTxParams[3] = {0x03, 0xE8, 0x00};
     if (!sendCommand(SX1262_CMD_SET_TX, lTxParams, 3, iBlocking))
     {
         setRfSwitchRx();
