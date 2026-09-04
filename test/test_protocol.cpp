@@ -7306,7 +7306,7 @@ TEST(controller_velux_1w_enrollment_serializes_multicast_add_stop_down)
     initOneWayPairingModeControllerForTest(lController, lModule, lChannel,
                                            lRemoteNodeId, lDeviceNodeId, lKey);
     lChannel.setOneWayControllerManufacturer(lReference.manufacturer);
-    lChannel.setConfigured1WAcei(lReference.acei);
+    lChannel.setConfigured1WAcei(0); // automatic: derive VELUX ACEI from manufacturer
     lChannel.setConfigured1WEnrollmentFinalizer(OneWayEnrollmentFinalizer::Automatic);
 
     ASSERT_TRUE(lController.startPairing1W(0, lDeviceNodeId, Pairing1WMode::RemoveAdd));
@@ -10239,7 +10239,15 @@ TEST(controller_1w_execute_uses_configured_channel_acei)
         0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
         0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
 
-    // Default channel ACEI (0x43) is used when nothing is configured.
+    ASSERT_EQ(IoHomeController::oneWayAceiForManufacturer(
+                  static_cast<uint8_t>(IoHomeManufacturer::Somfy)),
+              IOHC_ACEI_1W);
+    ASSERT_EQ(IoHomeController::oneWayAceiForManufacturer(
+                  static_cast<uint8_t>(IoHomeManufacturer::Velux)),
+              IOHC_ACEI_1W_VELUX);
+    ASSERT_EQ(IoHomeController::oneWayAceiForManufacturer(0x7F), IOHC_ACEI_1W);
+
+    // Automatic ACEI uses the Somfy controller profile's 0x43.
     {
         IoHomeController lController;
         IoHomecontrol lModule;
@@ -10254,7 +10262,8 @@ TEST(controller_1w_execute_uses_configured_channel_acei)
         lChannel.setOneWayControllerKey(lKey);
         lChannel.setEncryptionKey(lKey);
 
-        ASSERT_EQ(lChannel.getConfigured1WAcei(), 0x43);
+        lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Somfy));
+        ASSERT_EQ(lChannel.getConfigured1WAcei(), 0);
         ASSERT_TRUE(lController.sendOneWayChannelExecuteWithType(&lChannel, 0x0000, 0, 0, 0));
         lController.radio().testClearTransmittedPacket();
         lController.loop();
@@ -10271,6 +10280,35 @@ TEST(controller_1w_execute_uses_configured_channel_acei)
         ASSERT_EQ(lFrame.data[1], 0x43);
     }
 
+    // Automatic ACEI follows a VELUX controller profile without an override.
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setIs1W(true);
+        lChannel.setConfigured1WBroadcastType(0);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+        lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Velux));
+        lChannel.setEncryptionKey(lKey);
+
+        ASSERT_EQ(lChannel.getConfigured1WAcei(), 0);
+        ASSERT_TRUE(lController.sendOneWayChannelExecuteWithType(&lChannel, 0x0000, 0, 0, 0));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        lController.loop();
+
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(!lPacket.empty());
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lFrame.data[1], IOHC_ACEI_1W_VELUX);
+    }
+
     // Configuring the channel ACEI to the Velux remote value (0x61) is honored
     // in the transmitted 1W Execute frame while everything else is unchanged.
     {
@@ -10285,6 +10323,7 @@ TEST(controller_1w_execute_uses_configured_channel_acei)
         lChannel.setConfigured1WBroadcastType(0);
         lChannel.setOneWayControllerNodeId(lRemoteNodeId);
         lChannel.setOneWayControllerKey(lKey);
+        lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Somfy));
         lChannel.setEncryptionKey(lKey);
         lChannel.setConfigured1WAcei(0x61);
 

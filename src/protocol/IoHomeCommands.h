@@ -206,7 +206,8 @@ inline bool isOpenCloseOnly(IoHomeDeviceType iType)
 #define IOHC_ACEI_EXTENDED_MASK 0x06
 #define IOHC_ACEI_VALID_BIT 0x01
 #define IOHC_ACEI_DEFAULT 0x67 // priority=3 (user remote), service=0, extended=3, valid=1
-#define IOHC_ACEI_1W 0x43      // priority=2 (user), service=0, extended=1, valid=1 (1W mode)
+#define IOHC_ACEI_1W 0x43       // Somfy/default 1W remote profile
+#define IOHC_ACEI_1W_VELUX 0x61 // VELUX KLI 1W remote profile
 
 // 2W Execute extended profile byte. Somfy RS100 captures use the silent
 // profile for absolute-position and favourite commands.

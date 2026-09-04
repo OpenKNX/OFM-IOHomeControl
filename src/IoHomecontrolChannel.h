@@ -140,7 +140,7 @@ private:
   bool mIs1W = false;                         // true if channel uses 1W protocol
   uint32_t mConfigured1WTargetNodeId = 0;
   uint8_t mConfigured1WBroadcastType = 0;
-  uint8_t mConfigured1WAcei = 0x43; // ACEI byte for 1W Execute (0x43 = IOHC_ACEI_1W default, prio 2)
+  uint8_t mConfigured1WAcei = 0; // 0 = derive ACEI from the controller-profile manufacturer
   bool mConfigured1WEnrollmentMac = false;
   OneWayEnrollmentFinalizer mConfigured1WEnrollmentFinalizer = OneWayEnrollmentFinalizer::Automatic;
   float mCurrentPosition = 0.0f;

@@ -1302,6 +1302,13 @@ uint8_t IoHomeController::oneWayBroadcastTypeForEtsDeviceType(uint8_t iEtsDevice
     }
 }
 
+uint8_t IoHomeController::oneWayAceiForManufacturer(uint8_t iManufacturer)
+{
+    return iManufacturer == static_cast<uint8_t>(IoHomeManufacturer::Velux)
+               ? IOHC_ACEI_1W_VELUX
+               : IOHC_ACEI_1W;
+}
+
 ControllerState IoHomeController::state() const
 {
     return mState;
@@ -1377,7 +1384,10 @@ bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
     lEntry.oneWayRawLen = 0;
     lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
     const OneWayCommandProfile lOneWayProfile = oneWayCommandProfileForType(lEntry.oneWayBroadcastType);
-    lEntry.oneWayAcei = lOneWayProfile.acei;
+    IoHomecontrolChannel *lOneWayChannel = channelForNode(iDestNodeId);
+    lEntry.oneWayAcei = lOneWayChannel && lOneWayChannel->is1W()
+                            ? effectiveOneWayAcei(lOneWayChannel)
+                            : lOneWayProfile.acei;
     lEntry.oneWayFp1 = lOneWayProfile.fp1;
     lEntry.oneWayFp2 = lOneWayProfile.fp2;
     if (iCmd == IoHomeCommand::Execute && iParam3 == 0xFF)
@@ -1442,9 +1452,7 @@ bool IoHomeController::sendChannelCommand(IoHomecontrolChannel *iChannel,
     lEntry.oneWayRawLen = 0;
     lEntry.oneWayBroadcastType = iChannel->getConfigured1WBroadcastType();
     const OneWayCommandProfile lOneWayProfile = oneWayCommandProfileForType(lEntry.oneWayBroadcastType);
-    lEntry.oneWayAcei = lOneWayProfile.acei;
-    if (iChannel->getConfigured1WAcei() != 0)
-        lEntry.oneWayAcei = iChannel->getConfigured1WAcei();
+    lEntry.oneWayAcei = effectiveOneWayAcei(iChannel);
     lEntry.oneWayFp1 = lOneWayProfile.fp1;
     lEntry.oneWayFp2 = lOneWayProfile.fp2;
     if (iCmd == IoHomeCommand::Execute && iParam3 == 0xFF)
@@ -1494,7 +1502,10 @@ bool IoHomeController::sendOneWayButton(uint32_t iDestNodeId, const uint8_t *iEn
     lEntry.oneWayRawLen = 0;
     lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
     const OneWayCommandProfile lOneWayProfile = oneWayCommandProfileForType(lEntry.oneWayBroadcastType);
-    lEntry.oneWayAcei = lOneWayProfile.acei;
+    IoHomecontrolChannel *lOneWayChannel = channelForNode(iDestNodeId);
+    lEntry.oneWayAcei = lOneWayChannel && lOneWayChannel->is1W()
+                            ? effectiveOneWayAcei(lOneWayChannel)
+                            : lOneWayProfile.acei;
     lEntry.oneWayFp1 = lOneWayProfile.fp1;
     lEntry.oneWayFp2 = lOneWayProfile.fp2;
     lEntry.oneWayBroadcastTypeExplicit = false;
@@ -1528,7 +1539,7 @@ bool IoHomeController::sendOneWayChannelButton(IoHomecontrolChannel *iChannel, u
     lEntry.oneWayRawLen = 0;
     lEntry.oneWayBroadcastType = iChannel->getConfigured1WBroadcastType();
     const OneWayCommandProfile lOneWayProfile = oneWayCommandProfileForType(lEntry.oneWayBroadcastType);
-    lEntry.oneWayAcei = lOneWayProfile.acei;
+    lEntry.oneWayAcei = effectiveOneWayAcei(iChannel);
     lEntry.oneWayFp1 = lOneWayProfile.fp1;
     lEntry.oneWayFp2 = lOneWayProfile.fp2;
     lEntry.oneWayBroadcastTypeExplicit = false;
@@ -1630,7 +1641,6 @@ bool IoHomeController::sendOneWayChannelExecuteWithType(IoHomecontrolChannel *iC
     if (!lProfileChannel || !lProfileChannel->hasOneWayControllerIdentity())
         return false;
 
-    const OneWayCommandProfile lProfile = oneWayCommandProfileForType(iBroadcastType);
     IoHomeQueueEntry lEntry;
     memset(&lEntry, 0, sizeof(lEntry));
     lEntry.destNodeId = iChannel->getNodeId();
@@ -1638,9 +1648,7 @@ bool IoHomeController::sendOneWayChannelExecuteWithType(IoHomecontrolChannel *iC
     lEntry.command = IoHomeCommand::Execute;
     lEntry.oneWayStandardExecute = true;
     lEntry.oneWayMain = iMain;
-    lEntry.oneWayAcei = lProfile.acei;
-    if (iChannel->getConfigured1WAcei() != 0)
-        lEntry.oneWayAcei = iChannel->getConfigured1WAcei();
+    lEntry.oneWayAcei = effectiveOneWayAcei(iChannel);
     lEntry.oneWayFp1 = iFp1;
     lEntry.oneWayFp2 = iFp2;
     lEntry.oneWayBroadcastType = iBroadcastType & 0x3F;
@@ -1663,7 +1671,11 @@ bool IoHomeController::sendOneWayExecuteWithDestination(uint32_t iDestNodeId, co
                                       ? oneWayBroadcastTypeForNode(iDestNodeId)
                                       : (iBroadcastType & 0x3F);
     const OneWayCommandProfile lProfile = oneWayCommandProfileForType(lResolvedType);
-    return sendOneWayExecuteWithTemplate(iDestNodeId, iEncKey, lProfile.acei, iMain, iFp1, iFp2,
+    IoHomecontrolChannel *lOneWayChannel = channelForNode(iDestNodeId);
+    const uint8_t lAcei = lOneWayChannel && lOneWayChannel->is1W()
+                              ? effectiveOneWayAcei(lOneWayChannel)
+                              : lProfile.acei;
+    return sendOneWayExecuteWithTemplate(iDestNodeId, iEncKey, lAcei, iMain, iFp1, iFp2,
                                          iDestinationMode, iBroadcastType, iExactDestination);
 }
 
@@ -1989,6 +2001,21 @@ IoHomecontrolChannel *IoHomeController::oneWayProfileForChannel(IoHomecontrolCha
         }
     }
     return lProfile;
+}
+
+uint8_t IoHomeController::effectiveOneWayAcei(IoHomecontrolChannel *iChannel) const
+{
+    if (!iChannel)
+        return IOHC_ACEI_1W;
+
+    const uint8_t lOverride = iChannel->getConfigured1WAcei();
+    if (lOverride != 0)
+        return lOverride;
+
+    IoHomecontrolChannel *lProfile = oneWayProfileForChannel(iChannel);
+    return oneWayAceiForManufacturer(
+        lProfile ? lProfile->getOneWayControllerManufacturer()
+                 : static_cast<uint8_t>(IoHomeManufacturer::Unknown));
 }
 
 // --- Pairing ---
@@ -5446,7 +5473,7 @@ bool IoHomeController::prepareOneWayEnrollmentExecute(uint16_t iMain,
     mTxFrame.setDestNode(pairing1WFinalizerDestination());
 
     OneWayCommandProfile lCommandProfile = oneWayCommandProfileForType(mPairing1WBroadcastType);
-    lCommandProfile.acei = lCh->getConfigured1WAcei();
+    lCommandProfile.acei = effectiveOneWayAcei(lCh);
     if (!build1WExecute(mTxFrame, lCommandProfile, iMain, 0x00, 0x00, iSequence))
         return false;
 

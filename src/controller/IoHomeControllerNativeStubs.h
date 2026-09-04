@@ -299,7 +299,7 @@ private:
   // TEST_NATIVE mirrors the production channel default: unspecified 1W type is
   // type 0 / All, which serializes to destination 0x00003F.
   uint8_t mConfigured1WBroadcastType = 0;
-  uint8_t mConfigured1WAcei = 0x43; // mirrors production default IOHC_ACEI_1W
+  uint8_t mConfigured1WAcei = 0; // mirrors production automatic-by-manufacturer default
   bool mConfigured1WEnrollmentMac = false;
   OneWayEnrollmentFinalizer mConfigured1WEnrollmentFinalizer = OneWayEnrollmentFinalizer::Automatic;
   bool mHasPositionFeedback = false;

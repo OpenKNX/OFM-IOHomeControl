@@ -600,10 +600,13 @@ public:
   uint32_t oneWayBroadcastTarget(uint8_t iBroadcastType) const;
   // Map ETS device roles to the protocol class used for 1W typed broadcast.
   static uint8_t oneWayBroadcastTypeForEtsDeviceType(uint8_t iEtsDeviceType);
+  // Resolve the capture-backed 1W Execute ACEI for a controller manufacturer.
+  static uint8_t oneWayAceiForManufacturer(uint8_t iManufacturer);
   static OneWayEnrollmentFinalizer resolveOneWayEnrollmentFinalizer(
       OneWayEnrollmentFinalizer iConfigured, uint8_t iManufacturer);
   static const char *oneWayEnrollmentFinalizerName(OneWayEnrollmentFinalizer iFinalizer);
   IoHomecontrolChannel *oneWayProfileForChannel(IoHomecontrolChannel *iChannel) const;
+  uint8_t effectiveOneWayAcei(IoHomecontrolChannel *iChannel) const;
 
   // Set pointer to parent module (for channel callbacks)
   void setModule(IoHomecontrol *iModule);

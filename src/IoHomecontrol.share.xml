@@ -214,6 +214,7 @@
                    on air (0x43 = module default, 0x61 = Velux remote, 0x67 = 1W execute, 0xE7 = automatic controller). -->
               <ParameterType Id="%AID%_PT-IOHCOneWayAcei" Name="IOHCOneWayAcei">
                 <TypeRestriction Base="Value" SizeInBit="8">
+                  <Enumeration Text="Automatisch nach Hersteller" Value="0" Id="%ENID%" />
                   <Enumeration Text="Priorität 0 (Personenschutz)" Value="1" Id="%ENID%" />
                   <Enumeration Text="Priorität 1 (Umgebungsschutz)" Value="33" Id="%ENID%" />
                   <Enumeration Text="Priorität 2 (Benutzer hoch)" Value="65" Id="%ENID%" />

@@ -226,7 +226,7 @@ void IoHomecontrolChannel::setup()
         static_cast<uint8_t>(ParamIOHC_cDeviceType)));
     const uint8_t lProfileChannel = lOneWayProfileChannel;
     setConfigured1WProfileChannel(lProfileChannel == 0 ? 0xFF : static_cast<uint8_t>(lProfileChannel - 1));
-    setConfigured1WAcei(lOneWayAcei != 0 ? lOneWayAcei : IOHC_ACEI_1W);
+    setConfigured1WAcei(lOneWayAcei);
     setConfigured1WEnrollmentMac(lOneWayEnrollmentMac);
     setConfigured1WEnrollmentFinalizer(
         lOneWayEnrollmentFinalizer <= static_cast<uint8_t>(OneWayEnrollmentFinalizer::StopDown)
