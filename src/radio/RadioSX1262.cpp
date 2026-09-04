@@ -22,7 +22,9 @@ static void pinMode(uint8_t, uint8_t) {}
 static void digitalWrite(uint8_t, uint8_t) {}
 static int digitalRead(uint8_t) { return 0; }
 static void delay(unsigned long) {}
+static void delayMicroseconds(unsigned int) {}
 static unsigned long millis() { return 0; }
+static unsigned long micros() { return 0; }
 #define OUTPUT 1
 #define INPUT 0
 #define HIGH 1
@@ -39,6 +41,9 @@ static constexpr uint16_t kCachedIrqMask = SX1262_IRQ_TX_DONE | SX1262_IRQ_RX_DO
                                            SX1262_IRQ_CRC_ERR;
 
 static constexpr uint8_t kMaxSx1262PayloadLen = IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE;
+static constexpr uint8_t kSx1262RxBufferBase = 0x80;
+static constexpr uint32_t kIoHomeLineRateBps = 38400UL;
+static constexpr uint32_t kTxToRxSettleUs = 500UL;
 static constexpr uint32_t kRxDiscardLogIntervalMs = 1000UL;
 static constexpr size_t kRxDiscardDumpLen = 24;
 
@@ -105,6 +110,7 @@ RadioSX1262::RadioSX1262()
       mInitialized(false), mInitError(RadioSX1262InitError::None), mInitStatusByte(0), mInitDeviceErrors(0), mLastDeviceErrors(0), mTcxoStartupDelayUs(0), mTcxoStartupAttempts(0), mBusyTimedOut(false), mReceiveRestartPending(false), mState(RadioState::Idle),
       mLastRssi(0), mCurrentFreq(0), mStandbyMode(SX1262_STDBY_RC), mPreambleLength(8),
       mSyncWord{}, mSyncWordBits(0), mPacketPayloadLen(SX1262_IOHOME_RX_FIXED_LEN), mSoftwarePhyMode(false), mEms2Mode(false),
+      mTxToRxSettlePending(false), mSoftwarePhySyncAtUs(0), mEarlyRxFrame{}, mEarlyRxFrameLen(0),
 #ifdef ESP32
       mChipMutex(nullptr), mChipMutexBuffer{}, mDio1EventQueue(nullptr), mDio1EventQueueBuffer{}, mDio1EventQueueStorage{}, mDio1TaskHandle(nullptr),
 #endif
@@ -168,6 +174,10 @@ void RadioSX1262::init(uint8_t iCsPin, uint8_t iResetPin, uint8_t iDio1Pin, uint
     mSyncWordBits = 0;
     mPacketPayloadLen = SX1262_IOHOME_RX_FIXED_LEN;
     mSoftwarePhyMode = false;
+    mTxToRxSettlePending = false;
+    mSoftwarePhySyncAtUs = 0;
+    memset(mEarlyRxFrame, 0, sizeof(mEarlyRxFrame));
+    mEarlyRxFrameLen = 0;
     mPendingIrqStickyMask = 0;
     memset((void *)mPendingIrqQueue, 0, sizeof(mPendingIrqQueue));
     mPendingIrqHead = 0;
@@ -576,6 +586,8 @@ RadioError RadioSX1262::startTransmitInternal(const uint8_t *iData, uint8_t iLen
     mIrqFired = false;
     mPreambleFlag = false;
     mSyncFlag = false;
+    mSoftwarePhySyncAtUs = 0;
+    mEarlyRxFrameLen = 0;
 #ifdef ESP32
     portENTER_CRITICAL(&mPendingIrqMux);
 #endif
@@ -657,6 +669,7 @@ RadioError RadioSX1262::startReceiveInternal(bool iBlocking)
     mIrqFired = false;
     mPreambleFlag = false;
     mSyncFlag = false;
+    mSoftwarePhySyncAtUs = 0;
 #ifdef ESP32
     portENTER_CRITICAL(&mPendingIrqMux);
 #endif
@@ -693,6 +706,14 @@ RadioError RadioSX1262::startReceiveInternal(bool iBlocking)
     mTxBusyTraceActive = false;
     clearTxBusyTraceOp();
     mTxCompletionPhase = TxCompletionPhase::WaitingForIrq;
+
+    if (mTxToRxSettlePending)
+    {
+        // The receiver is already armed, so an immediate peer reply is captured
+        // while the GFSK frequency discriminator is given time to stabilize.
+        delayMicroseconds(kTxToRxSettleUs);
+        mTxToRxSettlePending = false;
+    }
 
     if (readCommand(SX1262_CMD_GET_STATUS, &lStatus, 1, iBlocking))
         mLastOpStatusAfter = lStatus;
@@ -745,6 +766,7 @@ bool RadioSX1262::advanceTxDoneCleanup(bool iBlocking)
             return false;
         setRfSwitchRx();
         mState = RadioState::Idle;
+        mTxToRxSettlePending = true;
         mTxDoneCount++;
         mTxCompletionPhase = TxCompletionPhase::WaitingForIrq;
         return true;
@@ -755,6 +777,9 @@ bool RadioSX1262::advanceTxDoneCleanup(bool iBlocking)
 
 bool RadioSX1262::isPacketAvailable()
 {
+    if (mEarlyRxFrameLen != 0)
+        return true;
+
     if (mReceiveRestartPending)
     {
         if (startReceive() == RadioError::Busy)
@@ -782,6 +807,16 @@ bool RadioSX1262::isPacketAvailable()
         return true;
     }
 
+    if (mSoftwarePhyMode && (lIrq & SX1262_IRQ_SYNC_WORD_VALID))
+    {
+        if (lNeedsClear && !clearIrqStatus(lIrq & ~SX1262_IRQ_RX_DONE, false))
+            return false;
+
+        // RX_DONE is tied to the fixed raw capture size. Complete from CTRL0's
+        // declared length instead, accepting the shortcut only after CRC validation.
+        return tryCompleteSoftwarePhyFromLength();
+    }
+
     if (lNeedsClear && !clearIrqStatus(lIrq & ~SX1262_IRQ_RX_DONE, false))
         return false;
     return false;
@@ -799,8 +834,18 @@ bool RadioSX1262::isSyncDetected() const
 
 uint8_t RadioSX1262::readPacket(uint8_t *oBuffer, uint8_t iMaxLen)
 {
-    if (!mInitialized)
+    if (!mInitialized || oBuffer == nullptr || iMaxLen == 0)
         return 0;
+
+    if (mEarlyRxFrameLen != 0)
+    {
+        uint8_t lLen = mEarlyRxFrameLen;
+        if (lLen > iMaxLen)
+            lLen = iMaxLen;
+        memcpy(oBuffer, mEarlyRxFrame, lLen);
+        mEarlyRxFrameLen = 0;
+        return lLen;
+    }
 
     // Read RSSI from GetPacketStatus
     // For GFSK: Status[0] = RxStatus, Status[1] = RssiSync, Status[2] = RssiAvg
@@ -1230,6 +1275,64 @@ bool RadioSX1262::applyPacketParams(bool iBlocking)
     return sendCommand(SX1262_CMD_SET_PACKET_PARAMS, lParams, 9, iBlocking);
 }
 
+bool RadioSX1262::tryCompleteSoftwarePhyFromLength()
+{
+    uint32_t lSyncAtUs = mSoftwarePhySyncAtUs;
+    if (lSyncAtUs == 0)
+        lSyncAtUs = micros();
+
+    const auto lWaitForRawBytes = [lSyncAtUs](size_t iRawBytes) {
+#ifdef ESP32
+        const uint32_t lRawBytesWithMargin = static_cast<uint32_t>(iRawBytes + SX1262_IOHOME_EARLY_READ_MARGIN);
+        const uint32_t lNeededUs = static_cast<uint32_t>(
+            (lRawBytesWithMargin * 8UL * 1000000UL + kIoHomeLineRateBps - 1UL) / kIoHomeLineRateBps);
+        while (static_cast<uint32_t>(micros() - lSyncAtUs) < lNeededUs)
+            delayMicroseconds(100);
+#else
+        (void)lSyncAtUs;
+        (void)iRawBytes;
+#endif
+    };
+
+    lWaitForRawBytes(SX1262_IOHOME_EARLY_HEADER_RAW_LEN);
+    uint8_t lHeader[SX1262_IOHOME_EARLY_HEADER_RAW_LEN] = {0};
+    if (!readBuffer(kSx1262RxBufferBase, lHeader, sizeof(lHeader), true))
+        return false;
+
+    const uint8_t lDeclaredFrameLen = sx1262PeekIoHomeFrameLength(lHeader, sizeof(lHeader));
+    const size_t lFrameRawLen = sx1262IoHomeRawBytesForFrame(lDeclaredFrameLen);
+    if (lFrameRawLen == 0 ||
+        lFrameRawLen + SX1262_IOHOME_EARLY_READ_MARGIN > SX1262_IOHOME_RX_READ_LEN)
+        return false;
+
+    lWaitForRawBytes(lFrameRawLen);
+    uint8_t lRawBuf[SX1262_IOHOME_RX_READ_LEN] = {0};
+    const size_t lReadLen = lFrameRawLen + SX1262_IOHOME_EARLY_READ_MARGIN;
+    if (!readBuffer(kSx1262RxBufferBase, lRawBuf, static_cast<uint8_t>(lReadLen), true))
+        return false;
+
+    size_t lFrameLen = 0;
+    uint8_t lFrame[IOHC_FRAME_BUFFER_SIZE] = {0};
+    if (!sx1262FindIoHomeFrame(lRawBuf, lReadLen, lFrame, sizeof(lFrame), lFrameLen))
+        return false;
+
+    uint8_t lPacketStatus[3] = {0};
+    if (readCommand(SX1262_CMD_GET_PACKET_STATUS, lPacketStatus, sizeof(lPacketStatus), true))
+        mLastRssi = -(lPacketStatus[2] / 2);
+
+    memcpy(mEarlyRxFrame, lFrame, lFrameLen);
+    mEarlyRxFrameLen = static_cast<uint8_t>(lFrameLen);
+
+    // This fixed-length reception is deliberately complete before RX_DONE.
+    // Tear it down and re-arm now; readPacket() consumes the cached validated frame.
+    (void)clearIrqStatus(SX1262_IRQ_ALL, true);
+    mPreambleFlag = false;
+    mSyncFlag = false;
+    mSoftwarePhySyncAtUs = 0;
+    (void)startReceiveInternal(true);
+    return true;
+}
+
 bool RadioSX1262::applyRxTxFallbackMode(uint8_t iMode, bool iBlocking)
 {
     return sendCommand(SX1262_CMD_SET_RX_TX_FALLBACK_MODE, &iMode, 1, iBlocking);
@@ -1510,6 +1613,8 @@ void RadioSX1262::noteIrqStatus(uint16_t iIrq, bool iPolled)
     }
     if (iIrq & SX1262_IRQ_SYNC_WORD_VALID)
     {
+        if (!mSyncFlag)
+            mSoftwarePhySyncAtUs = micros();
         mSyncFlag = true;
         mSyncWordIrqCount++;
     }

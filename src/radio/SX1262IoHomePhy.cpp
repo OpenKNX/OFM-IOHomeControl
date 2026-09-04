@@ -127,6 +127,32 @@ size_t sx1262DecodeIoHomeUart(const uint8_t *iRaw, size_t iRawLen, uint8_t iBitO
   return lDecodedLen;
 }
 
+uint8_t sx1262PeekIoHomeFrameLength(const uint8_t *iRaw, size_t iRawLen)
+{
+  uint8_t lBestFrameLen = 0;
+  for (uint8_t lBitOffset = 0; lBitOffset < SX1262_IOHOME_UART_PROBE_MAX_BIT_OFFSET; lBitOffset++)
+  {
+    uint8_t lCtrl0 = 0;
+    if (sx1262DecodeIoHomeUart(iRaw, iRawLen, lBitOffset, &lCtrl0, 1) != 1)
+      continue;
+
+    const uint8_t lFrameLen = static_cast<uint8_t>((lCtrl0 & IOHC_CTRL0_LEN_MASK) + 1U);
+    if (lFrameLen >= IOHC_FRAME_MIN_SIZE && lFrameLen <= IOHC_FRAME_BUFFER_SIZE &&
+        lFrameLen > lBestFrameLen)
+      lBestFrameLen = lFrameLen;
+  }
+  return lBestFrameLen;
+}
+
+size_t sx1262IoHomeRawBytesForFrame(size_t iFrameLen)
+{
+  if (iFrameLen < IOHC_FRAME_MIN_SIZE || iFrameLen > IOHC_FRAME_BUFFER_SIZE)
+    return 0;
+
+  const size_t lUartCells = iFrameLen + IOHC_CRC_SIZE;
+  return (lUartCells * SX1262_IOHOME_UART_BITS_PER_BYTE + 7U) / 8U;
+}
+
 bool sx1262FindIoHomeFrame(const uint8_t *iRaw, size_t iRawLen,
                            uint8_t *oFrame, size_t iFrameMaxLen, size_t &oFrameLen)
 {

@@ -1,5 +1,6 @@
 #pragma once
 #include "RadioTypes.h"
+#include "../protocol/IoHomeFrame.h"
 #include <stdint.h>
 
 #ifdef ESP32
@@ -182,6 +183,10 @@ private:
   uint8_t mPacketPayloadLen;
   bool mSoftwarePhyMode;
   bool mEms2Mode;
+  bool mTxToRxSettlePending;
+  volatile uint32_t mSoftwarePhySyncAtUs;
+  uint8_t mEarlyRxFrame[IOHC_FRAME_BUFFER_SIZE];
+  uint8_t mEarlyRxFrameLen;
 
 #ifdef ESP32
   SemaphoreHandle_t mChipMutex;
@@ -270,6 +275,7 @@ private:
   // Apply current packet params to chip
   bool applyStandardModulationParams(bool iBlocking = true);
   bool applyPacketParams(bool iBlocking = true);
+  bool tryCompleteSoftwarePhyFromLength();
 
   RadioError setFrequencyInternal(uint32_t iFreqHz, bool iBlocking);
   RadioError setOutputPowerInternal(uint8_t iPower, bool iBlocking);

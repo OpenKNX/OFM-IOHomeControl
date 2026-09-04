@@ -102,6 +102,28 @@ TEST(find_frame_with_bit_offset)
   ASSERT_MEM_EQ(lDecoded, lFrame, sizeof(lFrame));
 }
 
+TEST(peek_length_from_raw_header)
+{
+  const uint8_t lFrame[] = {0x4C, 0x00, 0x00, 0x00, 0x3F, 0x00, 0xFA, 0x34, 0x28, 0x01, 0x00, 0x00, 0x00};
+  uint8_t lEncoded[SX1262_IOHOME_MAX_ENCODED_FRAME_LEN] = {};
+  const size_t lEncodedLen = sx1262EncodeIoHomeFrame(lFrame, sizeof(lFrame), lEncoded, sizeof(lEncoded));
+  ASSERT_TRUE(lEncodedLen >= SX1262_IOHOME_EARLY_HEADER_RAW_LEN);
+  ASSERT_EQ(sx1262PeekIoHomeFrameLength(lEncoded, SX1262_IOHOME_EARLY_HEADER_RAW_LEN), sizeof(lFrame));
+  ASSERT_EQ(sx1262IoHomeRawBytesForFrame(sizeof(lFrame)), lEncodedLen);
+}
+
+TEST(peek_length_from_shifted_raw_header)
+{
+  const uint8_t lFrame[] = {0x48, 0x00, 0x00, 0x00, 0x3F, 0x00, 0xFA, 0x34, 0x07};
+  uint8_t lEncoded[SX1262_IOHOME_MAX_ENCODED_FRAME_LEN] = {};
+  const size_t lEncodedLen = sx1262EncodeIoHomeFrame(lFrame, sizeof(lFrame), lEncoded, sizeof(lEncoded));
+  ASSERT_TRUE(lEncodedLen > 0);
+
+  uint8_t lShifted[SX1262_IOHOME_MAX_ENCODED_FRAME_LEN + 2] = {};
+  shiftBitsMsb(lEncoded, lEncodedLen, 3, lShifted, sizeof(lShifted));
+  ASSERT_EQ(sx1262PeekIoHomeFrameLength(lShifted, SX1262_IOHOME_EARLY_HEADER_RAW_LEN), sizeof(lFrame));
+}
+
 TEST(find_send_key_frame_with_out_of_length_trailer)
 {
   uint8_t lFrame[35] = {
@@ -202,6 +224,8 @@ int main()
   RUN(resolve_sync_keeps_non_iohome_pattern);
   RUN(encode_and_find_round_trip_frame);
   RUN(find_frame_with_bit_offset);
+  RUN(peek_length_from_raw_header);
+  RUN(peek_length_from_shifted_raw_header);
   RUN(find_send_key_frame_with_out_of_length_trailer);
   RUN(find_send_key_frame_without_trailer);
   RUN(rejects_out_of_length_trailer_on_other_commands);
