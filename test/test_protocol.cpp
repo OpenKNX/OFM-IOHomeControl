@@ -8560,6 +8560,50 @@ static bool advancePairingToWaitKeyTransferConfirmation(IoHomeController &iContr
     return iController.state() == ControllerState::PairWaitKeyTransferConfirmation;
 }
 
+TEST(controller_2w_pairing_continuations_use_controller_role_flags)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    const uint8_t lChallenge[6] = {0x10, 0x20, 0x30, 0x40, 0x50, 0x60};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, 0, lKey);
+    lController.setSystemKey(lKey);
+
+    ASSERT_TRUE(advancePairingToWaitKeyTransferConfirmation(lController,
+                                                            lRemoteNodeId,
+                                                            lDeviceNodeId));
+    IoHomeFrame lFrame;
+    const auto &lKeyTransferPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lKeyTransferPacket.data(),
+                                        static_cast<uint8_t>(lKeyTransferPacket.size())));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::KeyTransfer);
+    ASSERT_TRUE((lFrame.ctrlByte0 & (IOHC_CTRL0_START | IOHC_CTRL0_END)) == 0);
+    ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
+
+    IoHomeFrame lChallengeRequest;
+    buildPairChallengeRequestFrame(lChallengeRequest, lRemoteNodeId,
+                                   lDeviceNodeId, lChallenge);
+    lController.radio().testClearTransmittedPacket();
+    ASSERT_TRUE(queueControllerResponse(lController, lChallengeRequest));
+
+    const auto &lAuthPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lAuthPacket.empty());
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lAuthPacket.data(),
+                                        static_cast<uint8_t>(lAuthPacket.size())));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::ChallengeResponse);
+    ASSERT_TRUE((lFrame.ctrlByte0 & (IOHC_CTRL0_START | IOHC_CTRL0_END)) == 0);
+    ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
+}
+
 static bool queueKeyTransferConfirmationAndCaptureSetConfig1(IoHomeController &iController,
                                                              uint32_t iRemoteNodeId,
                                                              uint32_t iDeviceNodeId,
@@ -9228,6 +9272,8 @@ TEST(controller_2w_pairing_setconfig1_auth_challenge_completes_on_final_reject)
     IoHomeFrame lAuthResponse;
     ASSERT_TRUE(deserializeFrameForTest(lAuthResponse, lAuthPacket.data(), static_cast<uint8_t>(lAuthPacket.size())));
     ASSERT_EQ(lAuthResponse.commandId, IoHomeCommand::ChallengeResponse);
+    ASSERT_TRUE((lAuthResponse.ctrlByte0 & (IOHC_CTRL0_START | IOHC_CTRL0_END)) == 0);
+    ASSERT_TRUE((lAuthResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
     ASSERT_EQ(lController.state(), ControllerState::PairWaitSetConfig1FinalResponse);
 
     IoHomeFrame lErrorResponse;
@@ -10492,7 +10538,7 @@ static void buildChallengeResponseFrame(IoHomeFrame &oFrame,
     oFrame.hasHmac = false;
 }
 
-TEST(controller_2w_challenge_response_inherits_low_power)
+TEST(controller_2w_challenge_response_uses_controller_role_flags_for_low_power_device)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -10521,7 +10567,7 @@ TEST(controller_2w_challenge_response_inherits_low_power)
     ASSERT_TRUE(lResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
 }
 
-TEST(controller_2w_challenge_response_can_clear_low_power_for_mains_device)
+TEST(controller_2w_challenge_response_uses_controller_role_flags_for_always_alive_device)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -10546,7 +10592,7 @@ TEST(controller_2w_challenge_response_can_clear_low_power_for_mains_device)
                                               lDeviceNodeId, lKey, lResponse));
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_EQ(lResponse.dataLen, IOHC_HMAC_SIZE);
-    ASSERT_TRUE((lResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
+    ASSERT_TRUE((lResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
 }
 
 TEST(controller_status_update_receive_auth_uses_saved_command_data)
@@ -10615,6 +10661,7 @@ TEST(controller_status_update_receive_auth_uses_saved_command_data)
     ASSERT_EQ(lAckFrame.dataLen, 2);
     ASSERT_EQ(lAckFrame.data[0], 0x05);
     ASSERT_EQ(lAckFrame.data[1], 0x00);
+    ASSERT_TRUE((lAckFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
 
     ASSERT_TRUE(lChannel.testHasStatusUpdate());
     ASSERT_TRUE(!lChannel.testStatusMoving());
@@ -12409,6 +12456,7 @@ int main()
     RUN(controller_1w_sendkey_frame_identical_with_known_or_unknown_target);
     RUN(controller_1w_virtual_channel_execute_allowed_without_target_node);
     RUN(controller_default_2w_pairing_uses_key_init_after_discovery);
+    RUN(controller_2w_pairing_continuations_use_controller_role_flags);
     RUN(controller_pairing_discovery_learns_always_alive);
     RUN(controller_experimental_2w_pairing_can_use_discovery_confirmation);
     RUN(controller_2w_pairing_succeeds_when_setconfig1_times_out);
@@ -12448,8 +12496,8 @@ int main()
     RUN(controller_1w_execute_uses_configured_channel_acei);
     RUN(controller_passive_remote_activity_schedules_follow_up_poll_for_target_device);
     RUN(controller_linked_remote_activity_schedules_follow_up_poll_for_linked_device);
-    RUN(controller_2w_challenge_response_inherits_low_power);
-    RUN(controller_2w_challenge_response_can_clear_low_power_for_mains_device);
+    RUN(controller_2w_challenge_response_uses_controller_role_flags_for_low_power_device);
+    RUN(controller_2w_challenge_response_uses_controller_role_flags_for_always_alive_device);
     RUN(controller_status_update_receive_auth_uses_saved_command_data);
     RUN(controller_2w_initial_response_wait_uses_retry_gap);
     RUN(retry_preserves_start_flag_for_2w_request);

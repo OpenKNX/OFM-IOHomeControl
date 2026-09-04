@@ -29,6 +29,12 @@ namespace
     constexpr uint32_t kNormal2WTxFreqHz = IOHC_FREQ_2;
     constexpr uint8_t kUnknownIohcChannel = 0;
 
+    enum class TwoWaySenderRole : uint8_t
+    {
+        Controller,
+        Device,
+    };
+
     uint8_t frequencyIndexForHz(uint32_t iFreqHz)
     {
         for (uint8_t i = 0; i < IOHC_NUM_FREQUENCIES; i++)
@@ -948,9 +954,11 @@ namespace
             return false;
 
         oFrame.init();
-        // 0x32 is a continuation frame. Keep START/END and LOW_POWER clear.
+        // Captured controller-role 0x32 continuation frames keep START/END
+        // clear while setting LOW_POWER independently of the target profile.
         oFrame.ctrlByte0 = 0;
         oFrame.ctrlByte1 = 0x00;
+        oFrame.setLowPower(true);
         oFrame.setSrcNode(iSrcNodeId);
         oFrame.setDestNode(iDestNodeId);
         oFrame.commandId = IoHomeCommand::KeyTransfer;
@@ -961,7 +969,7 @@ namespace
     }
 
     bool build2WChallengeResponse(IoHomeFrame &oFrame, uint32_t iSrcNodeId, uint32_t iDestNodeId,
-                                  bool iLowPower, const IoHomeFrame &iAuthenticatedRequest,
+                                  TwoWaySenderRole iSenderRole, const IoHomeFrame &iAuthenticatedRequest,
                                   const uint8_t iChallenge[6], const uint8_t iKey[16])
     {
         if (iChallenge == nullptr || iKey == nullptr)
@@ -973,10 +981,12 @@ namespace
             return false;
 
         oFrame.init();
-        // 0x3D carries the 6-byte HMAC as normal data in a 2W continuation frame.
+        // 0x3D carries the 6-byte HMAC as normal data in a 2W continuation
+        // frame. Captures distinguish the sender role here, not target sleep
+        // behavior: controllers set LOW_POWER and devices leave it clear.
         oFrame.ctrlByte0 = 0;
         oFrame.ctrlByte1 = 0x00;
-        oFrame.setLowPower(iLowPower);
+        oFrame.setLowPower(iSenderRole == TwoWaySenderRole::Controller);
         oFrame.setSrcNode(iSrcNodeId);
         oFrame.setDestNode(iDestNodeId);
         oFrame.commandId = IoHomeCommand::ChallengeResponse;
@@ -4663,7 +4673,7 @@ void IoHomeController::processResponse()
 
         IoHomeFrame lFrame;
         if (!build2WChallengeResponse(lFrame, mOwnNodeId, mCurrentCmd.destNodeId,
-                                      resolveLowPower2W(mCurrentCmd.destNodeId),
+                                      TwoWaySenderRole::Controller,
                                       mTxFrame, lChallenge, mCurrentCmd.encKey))
         {
             const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
@@ -5940,7 +5950,7 @@ void IoHomeController::processPairWaitDeviceChallenge()
 void IoHomeController::processPairSendKeyTransfer()
 {
     // KeyTransfer (0x32) is the continuation frame after 0x31. The centralized
-    // builder keeps START/END and LOW_POWER clear and encrypts the system key
+    // builder applies the captured controller-role flags and encrypts the system key
     // using the 0x31-only key-transfer transcript.
     if (!build2WKeyTransfer(mTxFrame, mOwnNodeId, mDiscoveredNodeId,
                             mPairingChallenge, mSystemKey))
@@ -5986,9 +5996,9 @@ void IoHomeController::processPairSendKeyTransferAuthResponse()
 {
     IoHomeFrame lFrame;
     // 2W ChallengeResponse (0x3D) is an authenticated continuation response.
-    // Keep LOW_POWER clear and use the short-preamble helper below; this avoids
-    // changing normal 2W auth TX timing and does not affect the separate 1W path.
-    if (!build2WChallengeResponse(lFrame, mOwnNodeId, mDiscoveredNodeId, false,
+    // Apply controller-role flags and retain the continuation short preamble.
+    if (!build2WChallengeResponse(lFrame, mOwnNodeId, mDiscoveredNodeId,
+                                  TwoWaySenderRole::Controller,
                                   mTxFrame, mPairKeyTransferChallenge, mSystemKey))
     {
         mState = ControllerState::PairFailed;
@@ -6177,7 +6187,8 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
         logInfoP("PairDiag: SetConfig1 auth transcript=%s", lTranscriptHex.c_str());
     }
 
-    if (!build2WChallengeResponse(lFrame, mOwnNodeId, mDiscoveredNodeId, true,
+    if (!build2WChallengeResponse(lFrame, mOwnNodeId, mDiscoveredNodeId,
+                                  TwoWaySenderRole::Controller,
                                   mPairSetConfigRequest, mPairSetConfigChallenge, mSystemKey))
     {
         logDebugP("Pairing: failed to build SetConfig1 challenge response for 0x%06X", mDiscoveredNodeId);
@@ -7478,7 +7489,8 @@ uint8_t IoHomeController::buildStatusUpdateResponse(uint32_t iDestNodeId, uint8_
     lFrame.init();
     lFrame.ctrlByte0 = IOHC_CTRL0_END; // response: END only (per nicolas5000)
     lFrame.ctrlByte1 = 0x00;
-    lFrame.setLowPower(resolveLowPower2W(iDestNodeId));
+    // Captured controller-role 0x72 acknowledgements always carry LOW_POWER.
+    lFrame.setLowPower(true);
     lFrame.setSrcNode(mOwnNodeId);
     lFrame.setDestNode(iDestNodeId);
     lFrame.commandId = IoHomeCommand::StatusUpdateResponse;
@@ -7961,7 +7973,8 @@ void IoHomeController::processKeyExtractFrame()
             IoHomeFrame lChallengeResponse;
             if (!buildExtractAddressResponseFrame(lAddressResponse, mKeyExtractThrowawayId, lSrcNode) ||
                 !build2WChallengeResponse(lChallengeResponse, mKeyExtractThrowawayId, lSrcNode,
-                                          false, lAddressResponse, mRxFrame.data, mKeyExtractKey))
+                                          TwoWaySenderRole::Device, lAddressResponse,
+                                          mRxFrame.data, mKeyExtractKey))
                 return;
             // Device-role closing response: END, no low-power bit.
             lChallengeResponse.ctrlByte0 |= IOHC_CTRL0_END;
