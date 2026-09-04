@@ -2096,6 +2096,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mTx1WRepeatTimer = 0;
     mPairing1WAddDestinationIndex = 0;
     mPairing1WAddSequence = 0;
+    mPairing1WEnrollmentOpenedAt = 0;
     mPairing1WStopStartedAt = 0;
     mPairing1WDownStartedAt = 0;
 
@@ -5449,6 +5450,11 @@ void IoHomeController::processPairSend1WKeyTransfer()
         const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
+            // VELUX opens its enrollment window with the first 0x30. The
+            // three-second finalizer deadline includes all later 0x30 copies
+            // and destinations; it does not begin at the subsequent STOP.
+            if (mPairing1WAddDestinationIndex == 0)
+                mPairing1WEnrollmentOpenedAt = millis();
             mStateTimer = millis();
             mTx1WRepeatRemaining = IOHC_1W_REPEAT_COUNT;
             mTx1WRepeatTimer = 0;
@@ -5604,9 +5610,9 @@ void IoHomeController::processPairWait1WFinalizerStop()
 
 void IoHomeController::processPairWait1WFinalizerGap()
 {
-    if (millis() - mPairing1WStopStartedAt >= IOHC_1W_ENROLL_FINALIZER_DEADLINE_MS)
+    if (millis() - mPairing1WEnrollmentOpenedAt >= IOHC_1W_ENROLL_FINALIZER_DEADLINE_MS)
     {
-        failOneWayEnrollment("finalizer DOWN missed the three-second VELUX deadline");
+        failOneWayEnrollment("finalizer DOWN missed the three-second window opened by 0x30");
         return;
     }
     if (millis() - mStateTimer < IOHC_1W_ENROLL_FINALIZER_DELAY_MS)
@@ -5617,9 +5623,9 @@ void IoHomeController::processPairWait1WFinalizerGap()
 
 void IoHomeController::processPairSend1WFinalizerDown()
 {
-    if (millis() - mPairing1WStopStartedAt >= IOHC_1W_ENROLL_FINALIZER_DEADLINE_MS)
+    if (millis() - mPairing1WEnrollmentOpenedAt >= IOHC_1W_ENROLL_FINALIZER_DEADLINE_MS)
     {
-        failOneWayEnrollment("finalizer DOWN missed the three-second VELUX deadline");
+        failOneWayEnrollment("finalizer DOWN missed the three-second window opened by 0x30");
         return;
     }
 
@@ -5703,10 +5709,13 @@ void IoHomeController::completeOneWayEnrollment()
     completePairingTelemetry(PairingOutcome::OneWayEnrollmentTransmitted);
     recordOneWayEnrollmentPhase(OneWayEnrollPhase::Complete, 0, 0);
     completeOneWayEnrollmentPhase(true);
-    logInfoP("1W enroll: completed controller=%02u profile=%s finalizer=%s stop-to-down=%lums",
+    logInfoP("1W enroll: completed controller=%02u profile=%s finalizer=%s open-to-down=%lums stop-to-down=%lums",
              static_cast<unsigned>(mPairingChannel + 1),
              pairing1WProfile().name,
              oneWayEnrollmentFinalizerName(mPairing1WFinalizer),
+             static_cast<unsigned long>(mPairing1WEnrollmentOpenedAt && mPairing1WDownStartedAt
+                                            ? mPairing1WDownStartedAt - mPairing1WEnrollmentOpenedAt
+                                            : 0),
              static_cast<unsigned long>(mPairing1WStopStartedAt && mPairing1WDownStartedAt
                                             ? mPairing1WDownStartedAt - mPairing1WStopStartedAt
                                             : 0));

@@ -811,6 +811,7 @@ private:
   bool mPairing1WVeluxProfile = false;
   uint8_t mPairing1WAddDestinationIndex = 0;
   uint16_t mPairing1WAddSequence = 0;
+  uint32_t mPairing1WEnrollmentOpenedAt = 0;
   uint32_t mPairing1WStopStartedAt = 0;
   uint32_t mPairing1WDownStartedAt = 0;
   uint8_t mDefault1WBroadcastType = 0;

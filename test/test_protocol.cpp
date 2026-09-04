@@ -7088,7 +7088,8 @@ static uint16_t oneWaySequenceForTest(const IoHomeFrame &iFrame)
                                  iFrame.data[iFrame.dataLen - 1]);
 }
 
-static bool advanceVeluxEnrollmentToFinalizerStopForTest(IoHomeController &iController)
+static bool advanceVeluxEnrollmentToFinalizerStopForTest(IoHomeController &iController,
+                                                         uint32_t *oEnrollmentOpenedAt = nullptr)
 {
     iController.loop(); // REMOVE
     finishCurrentBlind1WPairingTxForTest(iController);
@@ -7097,6 +7098,8 @@ static bool advanceVeluxEnrollmentToFinalizerStopForTest(IoHomeController &iCont
 
     for (uint8_t i = 0; i < IoHomeGoldenRfCorpus::kKli310EnrollmentReference.addDestinationCount; ++i)
     {
+        if (i == 0 && oEnrollmentOpenedAt)
+            *oEnrollmentOpenedAt = ioHomeTestMillis();
         iController.loop(); // ADD_CONTROLLER for one KLI destination
         if (iController.state() != ControllerState::PairWait1WKeyTransfer)
             return false;
@@ -7678,13 +7681,18 @@ TEST(controller_velux_1w_finalizer_deadline_failure_suppresses_down)
     ioHomeTestSetMillis(1000);
     ioHomeTestSetMicros(1000000);
     ASSERT_TRUE(lController.startPairing1W(0, 0x7E9E6E, Pairing1WMode::RemoveAdd));
-    ASSERT_TRUE(advanceVeluxEnrollmentToFinalizerStopForTest(lController));
+    uint32_t lEnrollmentOpenedAt = 0;
+    ASSERT_TRUE(advanceVeluxEnrollmentToFinalizerStopForTest(lController,
+                                                             &lEnrollmentOpenedAt));
+    ASSERT_TRUE(lEnrollmentOpenedAt > 0);
     lController.loop();
     finishCurrentBlind1WPairingTxForTest(lController);
     ASSERT_EQ(lController.state(), ControllerState::PairWait1WFinalizerGap);
     const uint32_t lTxCountBeforeDeadline = lController.radio().testTransmitCount();
 
-    ioHomeTestAdvanceMillis(IOHC_1W_ENROLL_FINALIZER_DEADLINE_MS);
+    const uint32_t lElapsedSinceOpening = ioHomeTestMillis() - lEnrollmentOpenedAt;
+    ASSERT_TRUE(lElapsedSinceOpening < IOHC_1W_ENROLL_FINALIZER_DEADLINE_MS);
+    ioHomeTestAdvanceMillis(IOHC_1W_ENROLL_FINALIZER_DEADLINE_MS - lElapsedSinceOpening);
     lController.loop();
 
     ASSERT_EQ(lController.state(), ControllerState::PairFailed);
