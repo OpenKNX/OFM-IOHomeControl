@@ -1,4 +1,5 @@
 #include "IoHomeController.h"
+#include "../protocol/IoHomeLogRedaction.h"
 
 #ifdef TEST_NATIVE
 #include "IoHomeControllerNativeStubs.h"
@@ -2406,13 +2407,14 @@ void IoHomeController::observeUnknown86Frame()
 
     // Deliberately does not name this frame a response to 0x86: the pairing is
     // an open question and must be decided from real captures.
+    const std::string lDataForLog = ioHomePayloadHexForLog(mRxFrame.commandId, mRxFrame.data, mRxFrame.dataLen);
     logInfoP("UNKNOWN_86 follow-up: +%lums src=0x%06X dst=0x%06X cmd=%s(0x%02X) len=%u data=%s",
              static_cast<unsigned long>(lNow - mUnknown86ObservedAtMs),
              lSrc, lDst,
              commandName(mRxFrame.commandId),
              static_cast<unsigned>(static_cast<uint8_t>(mRxFrame.commandId)),
              static_cast<unsigned>(mRxFrame.dataLen),
-             hexDump(mRxFrame.data, mRxFrame.dataLen).c_str());
+             lDataForLog.c_str());
 }
 
 void IoHomeController::recordOneWayEnrollmentPhase(OneWayEnrollPhase iPhase,
@@ -3022,22 +3024,32 @@ void IoHomeController::recordScanFrame(const IoHomeFrame &iFrame, const uint8_t 
 {
     if (iRawLen > IOHC_FRAME_BUFFER_SIZE)
         iRawLen = IOHC_FRAME_BUFFER_SIZE;
-    mScanBuffer[mScanBufferHead].timestamp = millis();
-    mScanBuffer[mScanBufferHead].frame = iFrame;
+    IoHomeScanEntry &lEntry = mScanBuffer[mScanBufferHead];
+    lEntry.timestamp = millis();
+    lEntry.frame = iFrame;
+    memset(lEntry.raw, 0, sizeof(lEntry.raw));
     if (iRaw != nullptr && iRawLen > 0)
-        memcpy(mScanBuffer[mScanBufferHead].raw, iRaw, iRawLen);
-    mScanBuffer[mScanBufferHead].rawLen = iRawLen;
-    mScanBuffer[mScanBufferHead].rssi = iRssi;
-    mScanBuffer[mScanBufferHead].freqIdx = iFreqIdx;
-    mScanBuffer[mScanBufferHead].valid = true;
+    {
+        const uint8_t lStoredLen = ioHomeCommandCarriesLogSensitiveKeyMaterial(iFrame.commandId)
+                                       ? static_cast<uint8_t>(iRawLen < IOHC_FRAME_MIN_SIZE ? iRawLen : IOHC_FRAME_MIN_SIZE)
+                                       : iRawLen;
+        memcpy(lEntry.raw, iRaw, lStoredLen);
+    }
+    if (ioHomeCommandCarriesLogSensitiveKeyMaterial(iFrame.commandId))
+    {
+        memset(lEntry.frame.data, 0, sizeof(lEntry.frame.data));
+        memset(lEntry.frame.hmac, 0, sizeof(lEntry.frame.hmac));
+        memset(lEntry.frame.trailerMac, 0, sizeof(lEntry.frame.trailerMac));
+    }
+    lEntry.rawLen = iRawLen;
+    lEntry.rssi = iRssi;
+    lEntry.freqIdx = iFreqIdx;
+    lEntry.valid = true;
     mScanBufferHead = (mScanBufferHead + 1) % kScanBufferSize;
 
-    // Live trace: log the exact on-air bytes immediately so a real remote's
-    // button press is captured the moment it is received. The hex format is
-    // identical to the module's own "PairDiag: tx1w ... hex=" line, enabling a
-    // direct byte-by-byte comparison between the original remote and our TX.
+    // Live traces retain header metadata, but key-bearing payloads are masked.
     const uint32_t lFreqHz = (iFreqIdx < IOHC_NUM_FREQUENCIES) ? IOHC_FREQUENCIES[iFreqIdx] : 0;
-    const std::string lHex = hexDump(iRaw, iRawLen);
+    const std::string lHex = ioHomeFrameHexForLog(iRaw, iRawLen);
     logInfoP("Scan rx: cmd=%s(0x%02X) src=0x%06X dst=0x%06X freq=%u %luHz rssi=%d len=%u hex=%s",
              commandName(iFrame.commandId), static_cast<unsigned>(iFrame.commandId),
              iFrame.getSrcNodeId(), iFrame.getDestNodeId(),
@@ -4407,7 +4419,7 @@ void IoHomeController::processTxPending()
 
     if (mPairDiagnosticTraceEnabled && lIs1WFrame)
     {
-        const std::string lHex = hexDump(mTxBuffer, mTxLen);
+        const std::string lHex = ioHomeFrameHexForLog(mTxBuffer, mTxLen);
         logInfoP("PairDiag: tx1w cmd=0x%02X name=%s len=%u hasHmac=%u seq=%u src=0x%06X dst=0x%06X hex=%s",
                  static_cast<unsigned>(mTxFrame.commandId),
                  commandName(mTxFrame.commandId),
@@ -5165,7 +5177,7 @@ void IoHomeController::processPairSend1WAnnounce()
     if (mPairDiagnosticTraceEnabled)
     {
         tracePairDiagnosticCompactPair();
-        const std::string lHex = hexDump(mTxBuffer, mTxLen);
+        const std::string lHex = ioHomeFrameHexForLog(mTxBuffer, mTxLen);
         logInfoP("PairDiag: 1W mode=%s announce tx cmd=%s(0x%02X) len=%u seq=%u src=0x%06X dst=0x%06X hex=%s",
                  pairing1WModeName(mPairing1WMode),
                  commandName(mTxFrame.commandId),
@@ -5277,7 +5289,7 @@ void IoHomeController::processPairSend1WRemove()
     if (mPairDiagnosticTraceEnabled)
     {
         tracePairDiagnosticCompactPair();
-        const std::string lHex = hexDump(mTxBuffer, mTxLen);
+        const std::string lHex = ioHomeFrameHexForLog(mTxBuffer, mTxLen);
         logInfoP("PairDiag: 1W mode=%s remove tx cmd=%s(0x%02X) len=%u seq=%u src=0x%06X dst=0x%06X hex=%s",
                  pairing1WModeName(mPairing1WMode),
                  commandName(mTxFrame.commandId),

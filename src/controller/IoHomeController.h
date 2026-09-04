@@ -511,7 +511,8 @@ public:
   {
     uint32_t timestamp;
     IoHomeFrame frame;
-    uint8_t raw[IOHC_FRAME_BUFFER_SIZE]; // exact on-air bytes as received
+    // Exact on-air bytes except that 0x30/0x32 payloads are zeroed at capture time.
+    uint8_t raw[IOHC_FRAME_BUFFER_SIZE];
     uint8_t rawLen;
     int16_t rssi;
     uint8_t freqIdx;

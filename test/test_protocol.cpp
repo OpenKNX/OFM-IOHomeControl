@@ -18,6 +18,7 @@
 #include "protocol/IoHomeCrypto.h"
 #include "protocol/IoHomeFrame.h"
 #include "protocol/IoHomeCommands.h"
+#include "protocol/IoHomeLogRedaction.h"
 #include "IoHomeRemoteMap.h"
 #include "corpus/golden_rf_corpus.h"
 
@@ -67,6 +68,41 @@ static void hexdump(const char *label, const uint8_t *data, size_t len)
     for (size_t i = 0; i < len; i++)
         printf("%02x", data[i]);
     printf("\n");
+}
+
+TEST(log_redaction_masks_send_key_1w_payload)
+{
+    const uint8_t frame[] = {
+        0xFC, 0x00, 0x00, 0x00, 0xBF, 0x7E, 0x9E, 0x6E, 0x30,
+        0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE,
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
+    };
+    const std::string rendered = ioHomeFrameHexForLog(frame, sizeof(frame));
+    ASSERT_EQ(rendered, "FC000000BF7E9E6E30[16 bytes redacted]");
+    ASSERT_TRUE(rendered.find("1032547698BADCFE") == std::string::npos);
+}
+
+TEST(log_redaction_masks_key_transfer_payload)
+{
+    const uint8_t frame[] = {
+        0x58, 0x00, 0x00, 0x00, 0x3F, 0x7E, 0x9E, 0x6E, 0x32,
+        0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE,
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
+    };
+    const uint8_t payload[] = {
+        0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE,
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
+    };
+    ASSERT_EQ(ioHomeFrameHexForLog(frame, sizeof(frame)),
+              "580000003F7E9E6E32[16 bytes redacted]");
+    ASSERT_EQ(ioHomePayloadHexForLog(IoHomeCommand::KeyTransfer, payload, sizeof(payload)),
+              "[16 bytes redacted]");
+}
+
+TEST(log_redaction_preserves_non_sensitive_frame)
+{
+    const uint8_t frame[] = {0x49, 0x00, 0x00, 0x00, 0x3F, 0x00, 0xFA, 0x34, 0x00, 0x01};
+    ASSERT_EQ(ioHomeFrameHexForLog(frame, sizeof(frame)), "490000003F00FA340001");
 }
 
 static uint8_t serializeFrameForTest(const IoHomeFrame &frame, uint8_t *buffer, uint8_t maxLen)

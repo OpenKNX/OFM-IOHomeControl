@@ -45,7 +45,6 @@ static constexpr uint8_t kSx1262RxBufferBase = 0x80;
 static constexpr uint32_t kIoHomeLineRateBps = 38400UL;
 static constexpr uint32_t kTxToRxSettleUs = 500UL;
 static constexpr uint32_t kRxDiscardLogIntervalMs = 1000UL;
-static constexpr size_t kRxDiscardDumpLen = 24;
 
 #if defined(IOHC_RADIO_TCXO_VOLTAGE) && !defined(IOHC_RADIO_TCXO_DELAY_US)
 #define IOHC_RADIO_TCXO_DELAY_US 5000UL
@@ -74,7 +73,7 @@ namespace
         return openknx.logger.buildPrefix("RadioSX1262", 0);
     }
 
-    void logDiscardedSoftwareCapture(uint8_t iPayloadLen, uint8_t iReadLen, uint8_t iStartOffset, int16_t iRssi, const uint8_t *iRawBuf)
+    void logDiscardedSoftwareCapture(uint8_t iPayloadLen, uint8_t iReadLen, uint8_t iStartOffset, int16_t iRssi)
     {
         static uint32_t sSuppressedCount = 0;
         static unsigned long sLastLogAt = 0;
@@ -92,12 +91,6 @@ namespace
                   static_cast<unsigned int>(iStartOffset),
                   static_cast<int>(iRssi),
                   static_cast<unsigned long>(sSuppressedCount));
-
-        size_t lDumpLen = iReadLen;
-        if (lDumpLen > kRxDiscardDumpLen)
-            lDumpLen = kRxDiscardDumpLen;
-        if (lDumpLen > 0)
-            logHexDebugP(iRawBuf, lDumpLen);
 
         sLastLogAt = lNow;
         sSuppressedCount = 0;
@@ -889,7 +882,7 @@ uint8_t RadioSX1262::readPacket(uint8_t *oBuffer, uint8_t iMaxLen)
         size_t lFrameLen = 0;
         const bool lFound = sx1262FindIoHomeFrame(lRawBuf, lReadLen, oBuffer, iMaxLen, lFrameLen);
         if (!lFound)
-            logDiscardedSoftwareCapture(lPayloadLen, lReadLen, lRxStartOffset, mLastRssi, lRawBuf);
+            logDiscardedSoftwareCapture(lPayloadLen, lReadLen, lRxStartOffset, mLastRssi);
         startReceive();
         return lFound ? static_cast<uint8_t>(lFrameLen) : 0;
     }

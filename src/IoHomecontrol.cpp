@@ -4,6 +4,7 @@
 #include "knxprod.h"
 #include "protocol/IoHomeFrame.h"
 #include "protocol/IoHomeCrypto.h"
+#include "protocol/IoHomeLogRedaction.h"
 #if defined(RADIO_SX1262)
 #include "radio/SX1262DeviceErrors.h"
 #include "radio/sx1262Regs-Fsk.h"
@@ -2493,9 +2494,9 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc gateway node ADDR", "Set gateway node ID (hex, default=0x112233)");
     openknx.console.printHelpLine("iohc gateway key HEX32", "Set gateway stack key (32 hex chars)");
     openknx.console.printHelpLine("iohc gateway clear", "Clear all paired devices in gateway mode");
-    openknx.console.printHelpLine("iohc scan start", "Start passive network scan (logs each frame live as 'Scan rx: ... hex=')");
+    openknx.console.printHelpLine("iohc scan start", "Start passive network scan (0x30/0x32 key payloads are redacted)");
     openknx.console.printHelpLine("iohc scan stop", "Stop network scan");
-    openknx.console.printHelpLine("iohc scan dump", "Dump captured packets incl. full frame hex");
+    openknx.console.printHelpLine("iohc scan dump", "Dump captured packets with key payload redaction");
     openknx.console.printHelpLine("iohc scan stats", "Show per-node statistics");
     openknx.console.printHelpLine("iohc radio", "Show radio health summary");
 #if defined(RADIO_SX1262)
@@ -4249,7 +4250,6 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             }
             else if (lScanCmd.substr(0, 4) == "dump")
             {
-                static const char kHexDigits[] = "0123456789ABCDEF";
                 const auto *lBuf = mController.scanBuffer();
                 uint8_t lHead = mController.scanBufferHead();
                 logInfoP("Scan buffer (newest first):");
@@ -4259,13 +4259,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                     if (!lBuf[lIdx].valid)
                         continue;
                     const auto &lEntry = lBuf[lIdx];
-                    std::string lHexStr;
-                    lHexStr.reserve(static_cast<size_t>(lEntry.rawLen) * 2);
-                    for (uint8_t b = 0; b < lEntry.rawLen; b++)
-                    {
-                        lHexStr.push_back(kHexDigits[(lEntry.raw[b] >> 4) & 0x0F]);
-                        lHexStr.push_back(kHexDigits[lEntry.raw[b] & 0x0F]);
-                    }
+                    const std::string lHexStr = ioHomeFrameHexForLog(lEntry.raw, lEntry.rawLen);
                     logInfoP("  [%lu] freq=%d src=%06X dst=%06X cmd=%s(0x%02X) len=%d rssi=%ddBm hex=%s",
                              lEntry.timestamp, lEntry.freqIdx,
                              lEntry.frame.getSrcNodeId(), lEntry.frame.getDestNodeId(),
