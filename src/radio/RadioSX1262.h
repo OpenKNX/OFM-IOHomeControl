@@ -268,6 +268,7 @@ private:
   void calibrate();
 
   // Apply current packet params to chip
+  bool applyStandardModulationParams(bool iBlocking = true);
   bool applyPacketParams(bool iBlocking = true);
 
   RadioError setFrequencyInternal(uint32_t iFreqHz, bool iBlocking);

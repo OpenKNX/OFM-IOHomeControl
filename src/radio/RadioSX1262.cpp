@@ -34,7 +34,9 @@ static unsigned long millis() { return 0; }
 #define SX1262_MUTEX_TIMEOUT_MS 50
 #define SX1262_DIO1_REQUEUE_DELAY_MS 2
 
-static constexpr uint16_t kCachedIrqMask = SX1262_IRQ_TX_DONE | SX1262_IRQ_RX_DONE | SX1262_IRQ_TIMEOUT | SX1262_IRQ_CRC_ERR;
+static constexpr uint16_t kCachedIrqMask = SX1262_IRQ_TX_DONE | SX1262_IRQ_RX_DONE |
+                                           SX1262_IRQ_SYNC_WORD_VALID | SX1262_IRQ_TIMEOUT |
+                                           SX1262_IRQ_CRC_ERR;
 
 static constexpr uint8_t kMaxSx1262PayloadLen = IOHC_FRAME_BUFFER_SIZE + IOHC_CRC_SIZE;
 static constexpr uint32_t kRxDiscardLogIntervalMs = 1000UL;
@@ -308,33 +310,7 @@ RadioError RadioSX1262::configure()
     if (!sendCommand(SX1262_CMD_SET_PACKET_TYPE, &lPacketType, 1))
         return RadioError::HardwareError;
 
-    // Set modulation parameters for io-homecontrol FSK:
-    // BitRate = 38400 bps, FreqDev = 19200 Hz
-    // SX1262 BitRate: BR = 32 * Fxosc / BitRate_param
-    // BitRate_param = 32 * 32000000 / 38400 = 26666 = 0x00682A (rounded: 0x006827)
-    // Actually: BitRate_param = (32 * FXOSC) / BR = (32 * 32e6) / 38400 = 26666.67 → 26667
-    // FreqDev_param = (FreqDev * 2^25) / Fxosc = (19200 * 33554432) / 32000000 = 20132.66 → 20133
-    // BW: 0x19 = 312.0 kHz, the smallest SX1262 GFSK Rx bandwidth step that still
-    // passes the io-homecontrol signal (38.4 kbps, ±19.2 kHz dev). Matches the
-    // laberning/home_io_control SX1262 reference. NOTE: the datasheet RxBw codes are
-    // not monotonic by value — 0x17 is 5.8 kHz (far too narrow), not 312 kHz.
-    // Pulse shape: 0x00 = no filter (no shaping, like SX1276)
-    uint8_t lModParams[8];
-    // BitRate: 3 bytes (MSB first) = 26667 = 0x00682B
-    uint32_t lBitRate = 26667;
-    lModParams[0] = (lBitRate >> 16) & 0xFF; // 0x00
-    lModParams[1] = (lBitRate >> 8) & 0xFF;  // 0x68
-    lModParams[2] = lBitRate & 0xFF;         // 0x2B
-    // Pulse shape: 0x00 = no filter
-    lModParams[3] = 0x00;
-    // Bandwidth: 0x19 = 312.0 kHz (per SX1262 datasheet RxBw table)
-    lModParams[4] = 0x19;
-    // FreqDev: 3 bytes (MSB first) = 20133 = 0x004EA5
-    uint32_t lFreqDev = 20133;
-    lModParams[5] = (lFreqDev >> 16) & 0xFF; // 0x00
-    lModParams[6] = (lFreqDev >> 8) & 0xFF;  // 0x4E
-    lModParams[7] = lFreqDev & 0xFF;         // 0xA5
-    if (!sendCommand(SX1262_CMD_SET_MODULATION_PARAMS, lModParams, 8))
+    if (!applyStandardModulationParams())
         return RadioError::HardwareError;
 
     // Set packet parameters
@@ -1159,6 +1135,8 @@ void RadioSX1262::configureStandardMode()
 {
     standby();
 
+    applyStandardModulationParams();
+
     // Restore 3-byte io-homecontrol sync word
     applySyncWord(IOHC_SYNC_WORD, IOHC_SYNC_WORD_SIZE);
     mPacketPayloadLen = mSoftwarePhyMode ? SX1262_IOHOME_RX_FIXED_LEN : IOHC_FRAME_BUFFER_SIZE;
@@ -1181,8 +1159,8 @@ RadioError RadioSX1262::sendEms2Wake()
     lModParams[0] = (lBitRate >> 16) & 0xFF;
     lModParams[1] = (lBitRate >> 8) & 0xFF;
     lModParams[2] = lBitRate & 0xFF;
-    lModParams[3] = 0x00; // no shaping
-    lModParams[4] = 0x19; // BW 312 kHz (RxBw code; carrier is TX-only here)
+    lModParams[3] = 0x0B; // Gaussian BT=1.0 (irrelevant for the unmodulated carrier)
+    lModParams[4] = 0x0C; // 58.6 kHz (irrelevant for the TX-only carrier)
     // FreqDev = 0 (unmodulated carrier)
     lModParams[5] = 0x00;
     lModParams[6] = 0x00;
@@ -1203,23 +1181,32 @@ RadioError RadioSX1262::sendEms2Wake()
     // Stop TX, return to standby
     standby();
 
-    // Restore frequency deviation: 19200 Hz
-    uint32_t lFreqDev = 20133;
-    lModParams[5] = (lFreqDev >> 16) & 0xFF;
-    lModParams[6] = (lFreqDev >> 8) & 0xFF;
-    lModParams[7] = lFreqDev & 0xFF;
-    sendCommand(SX1262_CMD_SET_MODULATION_PARAMS, lModParams, 8);
+    // Restore the complete tuned standard waveform, not just its deviation.
+    applyStandardModulationParams();
 
     return RadioError::None;
 }
 
 // --- Private helpers ---
 
+bool RadioSX1262::applyStandardModulationParams(bool iBlocking)
+{
+    // IO-homecontrol GFSK: 38.4 kbps, Gaussian BT=1.0, 58.6 kHz RX bandwidth,
+    // and 19.2 kHz deviation. These are the hardware-validated reference values.
+    const uint8_t lModParams[8] = {
+        0x00, 0x68, 0x2B,
+        0x0B,
+        0x0C,
+        0x00, 0x4E, 0xA5,
+    };
+    return sendCommand(SX1262_CMD_SET_MODULATION_PARAMS, lModParams, sizeof(lModParams), iBlocking);
+}
+
 bool RadioSX1262::applyPacketParams(bool iBlocking)
 {
     // SetPacketParams for GFSK: 9 bytes
     // [0-1] PreambleLength (2 bytes, in bits: symbols * 8)
-    // [2]   PreambleDetectorLength: 0x05 = 16 bits (2 bytes)
+    // [2]   PreambleDetectorLength: 0x04 = 8 bits (1 byte)
     // [3]   SyncWordLength (in bits)
     // [4]   AddrComp: 0x00 = off
     // [5]   HeaderType: 0x00 = fixed length, 0x01 = variable length
@@ -1233,7 +1220,7 @@ bool RadioSX1262::applyPacketParams(bool iBlocking)
         lPayloadLen = mSoftwarePhyMode ? SX1262_IOHOME_RX_FIXED_LEN : IOHC_FRAME_BUFFER_SIZE;
     lParams[0] = (lPreambleBits >> 8) & 0xFF;
     lParams[1] = lPreambleBits & 0xFF;
-    lParams[2] = 0x05;                           // preamble detector: 16 bits (2 bytes, matches Semtech SX126x encoding)
+    lParams[2] = 0x04;                           // preamble detector: 8 bits (1 byte)
     lParams[3] = mSyncWordBits;                  // sync word length is encoded in bits on SX126x GFSK packet params
     lParams[4] = 0x00;                           // no address filtering
     lParams[5] = mSoftwarePhyMode ? 0x00 : 0x01; // fixed length for software PHY, variable length otherwise
@@ -1910,9 +1897,13 @@ bool RadioSX1262::configureTxIrqs(bool iBlocking)
 bool RadioSX1262::configureRxIrqs(bool iBlocking)
 {
     uint8_t lDioParams[8];
-    uint16_t lIrqMask = SX1262_IRQ_RX_DONE | SX1262_IRQ_PREAMBLE_DETECTED |
-                        SX1262_IRQ_SYNC_WORD_VALID | SX1262_IRQ_CRC_ERR | SX1262_IRQ_TIMEOUT;
-    uint16_t lDio1Mask = lIrqMask;
+    // Keep PreambleDetected visible through GetIrqStatus, but do not route it to
+    // DIO1: it is not terminal and waking on it can tear down an active frame.
+    uint16_t lIrqMask = SX1262_IRQ_TX_DONE | SX1262_IRQ_RX_DONE |
+                        SX1262_IRQ_PREAMBLE_DETECTED | SX1262_IRQ_SYNC_WORD_VALID |
+                        SX1262_IRQ_CRC_ERR;
+    uint16_t lDio1Mask = SX1262_IRQ_TX_DONE | SX1262_IRQ_RX_DONE |
+                         SX1262_IRQ_SYNC_WORD_VALID | SX1262_IRQ_CRC_ERR;
     uint16_t lDio2Mask = 0x0000;
     uint16_t lDio3Mask = 0x0000;
     lDioParams[0] = (lIrqMask >> 8) & 0xFF;
