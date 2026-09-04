@@ -1210,26 +1210,71 @@ uint32_t IoHomeController::oneWayBroadcastTarget(uint8_t iBroadcastType) const
 
 uint8_t IoHomeController::pairing1WAddDestinationCount() const
 {
-    // A real VELUX KLI enrollment ring sends the same logical 0x30 (and the
-    // same rolling sequence) to All plus its three observed product classes.
-    return mPairing1WVeluxProfile ? 4U : 1U;
+    const OneWayPairingProfile &lProfile = pairing1WProfile();
+    return lProfile.addDestinations != nullptr ? lProfile.addDestinationCount : 1U;
 }
 
 uint32_t IoHomeController::pairing1WAddDestination() const
 {
-    if (!mPairing1WVeluxProfile)
+    const OneWayPairingProfile &lProfile = pairing1WProfile();
+    if (lProfile.addDestinations == nullptr)
         return oneWayBroadcastTarget(mPairing1WBroadcastType);
 
-    static constexpr uint32_t kVeluxKliAddDestinations[] = {
-        0x00003F, // All / generic
-        0x0000BF, // VELUX window family
-        0x0000FF, // VELUX shutter / dual-shutter family
-        0x00037F, // VELUX blind and other observed products
-    };
-    const uint8_t lIndex = mPairing1WAddDestinationIndex < 4U
+    const uint8_t lIndex = mPairing1WAddDestinationIndex < lProfile.addDestinationCount
                                ? mPairing1WAddDestinationIndex
                                : 0U;
-    return kVeluxKliAddDestinations[lIndex];
+    return lProfile.addDestinations[lIndex];
+}
+
+const IoHomeController::OneWayPairingProfile &IoHomeController::oneWayPairingProfileGeneric()
+{
+    static const OneWayPairingProfile kGeneric = {
+        "generic",
+        0,        // remove destination follows the configured broadcast type
+        0x00003F, // finalizer (only used when explicitly enabled)
+        nullptr,  // add destination follows the configured broadcast type
+        1,
+        true, // generic 1W remotes keep the LOW_POWER wake-up bit
+    };
+    return kGeneric;
+}
+
+const IoHomeController::OneWayPairingProfile &IoHomeController::oneWayPairingProfileVeluxKli()
+{
+    // Observed KLI 310 enrollment ring: REMOVE goes to All, then the same
+    // logical ADD (and the same rolling sequence) is repeated to the three
+    // captured product classes. A real KLI sends CTRL1=0x00 on both.
+    static const uint32_t kAddDestinations[] = {
+        0x0000BF, // roller shutter
+        0x0000FF, // awning
+        0x00037F, // dual shutter
+    };
+    static const OneWayPairingProfile kVeluxKli = {
+        "velux-kli",
+        0x00003F,
+        0x00003F,
+        kAddDestinations,
+        static_cast<uint8_t>(sizeof(kAddDestinations) / sizeof(kAddDestinations[0])),
+        false,
+    };
+    return kVeluxKli;
+}
+
+const IoHomeController::OneWayPairingProfile &IoHomeController::pairing1WProfile() const
+{
+    return mPairing1WVeluxProfile ? oneWayPairingProfileVeluxKli() : oneWayPairingProfileGeneric();
+}
+
+uint32_t IoHomeController::pairing1WRemoveDestination() const
+{
+    const OneWayPairingProfile &lProfile = pairing1WProfile();
+    return lProfile.removeDestination != 0 ? lProfile.removeDestination
+                                           : oneWayBroadcastTarget(mPairing1WBroadcastType);
+}
+
+uint32_t IoHomeController::pairing1WFinalizerDestination() const
+{
+    return pairing1WProfile().finalizerDestination;
 }
 
 uint8_t IoHomeController::oneWayBroadcastTypeForEtsDeviceType(uint8_t iEtsDeviceType)
@@ -2086,11 +2131,15 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
                  static_cast<unsigned>(mPairing1WBroadcastType),
                  static_cast<unsigned>(oneWayBroadcastTarget(mPairing1WBroadcastType)));
         logInfoP("Pairing: 1W profile=%s manufacturer=0x%02X addDestinations=%u configuredFinalizer=%s resolvedFinalizer=%s",
-                 mPairing1WVeluxProfile ? "velux-kli" : "generic",
+                 pairing1WProfile().name,
                  static_cast<unsigned>(lManufacturer),
                  static_cast<unsigned>(pairing1WAddDestinationCount()),
                  oneWayEnrollmentFinalizerName(lCh->getConfigured1WEnrollmentFinalizer()),
                  oneWayEnrollmentFinalizerName(mPairing1WFinalizer));
+        logInfoP("Pairing: 1W remove dst=0x%06X finalizer dst=0x%06X ctrl1LowPower=%u",
+                 pairing1WRemoveDestination(),
+                 pairing1WFinalizerDestination(),
+                 pairing1WProfile().pairingLowPower ? 1U : 0U);
         if (mPairDiagnosticTraceEnabled)
         {
             logInfoP("PairDiag: starting 1W mode=%s sequence=%s state=%s",
@@ -2219,6 +2268,7 @@ const char *IoHomeController::pairingOutcomeName(PairingOutcome iOutcome)
     case PairingOutcome::ConfigurationFailure: return "configuration-failure";
     case PairingOutcome::Cancelled: return "cancelled";
     case PairingOutcome::StartRejected: return "start-rejected";
+    case PairingOutcome::OneWayEnrollmentTransmitted: return "1w-enrollment-transmitted";
     }
     return "unknown";
 }
@@ -2267,6 +2317,56 @@ void IoHomeController::resetOneWayEnrollmentTrace()
         mOneWayEnrollmentTrace[i] = OneWayEnrollmentTraceEntry{};
     mOneWayEnrollmentTraceCount = 0;
     mOneWayEnrollmentActiveTrace = -1;
+}
+
+void IoHomeController::observeUnknown86Frame()
+{
+    const uint32_t lNow = millis();
+    const uint32_t lSrc = mRxFrame.getSrcNodeId();
+    const uint32_t lDst = mRxFrame.getDestNodeId();
+
+    if (mUnknown86Pending && lNow - mUnknown86ObservedAtMs > IOHC_UNKNOWN86_CORRELATION_WINDOW_MS)
+        mUnknown86Pending = false;
+
+    if (mRxFrame.commandId == IoHomeCommand::Unknown86)
+    {
+        if (mUnknown86Count != 0xFFFF)
+            ++mUnknown86Count;
+        const uint32_t lFreqHz = (mCurrentFreqIdx < IOHC_NUM_FREQUENCIES) ? IOHC_FREQUENCIES[mCurrentFreqIdx] : 0;
+        logInfoP("UNKNOWN_86(0x86): src=0x%06X dst=0x%06X ctrl0=0x%02X ctrl1=0x%02X len=%u freq=%luHz rssi=%ddBm seen=%u data=%s",
+                 lSrc, lDst,
+                 static_cast<unsigned>(mRxFrame.ctrlByte0),
+                 static_cast<unsigned>(mRxFrame.ctrlByte1),
+                 static_cast<unsigned>(mRxFrame.dataLen),
+                 static_cast<unsigned long>(lFreqHz),
+                 mRadio.lastRssi(),
+                 static_cast<unsigned>(mUnknown86Count),
+                 hexDump(mRxFrame.data, mRxFrame.dataLen).c_str());
+
+        mUnknown86Pending = true;
+        mUnknown86Source = lSrc;
+        mUnknown86Dest = lDst;
+        mUnknown86ObservedAtMs = lNow;
+        return;
+    }
+
+    if (!mUnknown86Pending)
+        return;
+
+    const bool lSameNodePair = (lSrc == mUnknown86Source && lDst == mUnknown86Dest) ||
+                               (lSrc == mUnknown86Dest && lDst == mUnknown86Source);
+    if (!lSameNodePair)
+        return;
+
+    // Deliberately does not name this frame a response to 0x86: the pairing is
+    // an open question and must be decided from real captures.
+    logInfoP("UNKNOWN_86 follow-up: +%lums src=0x%06X dst=0x%06X cmd=%s(0x%02X) len=%u data=%s",
+             static_cast<unsigned long>(lNow - mUnknown86ObservedAtMs),
+             lSrc, lDst,
+             commandName(mRxFrame.commandId),
+             static_cast<unsigned>(static_cast<uint8_t>(mRxFrame.commandId)),
+             static_cast<unsigned>(mRxFrame.dataLen),
+             hexDump(mRxFrame.data, mRxFrame.dataLen).c_str());
 }
 
 void IoHomeController::recordOneWayEnrollmentPhase(OneWayEnrollPhase iPhase,
@@ -2358,7 +2458,7 @@ void IoHomeController::completePairingTelemetry(PairingOutcome iOutcome)
     mPairingTelemetry.outcome = iOutcome;
     mPairingTelemetry.peerNodeId = mDiscoveredNodeId ? mDiscoveredNodeId : mPairingKnownNodeId;
     mPairingTelemetry.keyExchangeAttempts = mPairKeyExchangeAttempts;
-    if (iOutcome != PairingOutcome::Success)
+    if (iOutcome != PairingOutcome::Success && iOutcome != PairingOutcome::OneWayEnrollmentTransmitted)
         mPairingTelemetry.diagnostic = iOutcome;
     logInfoP("Pairing outcome: %s channel=%u peer=0x%06X retries=%u rejected=%u",
              pairingOutcomeName(iOutcome),
@@ -3012,6 +3112,8 @@ const char *IoHomeController::commandName(IoHomeCommand iCmd)
         return "StatusUpdate";
     case IoHomeCommand::StatusUpdateResponse:
         return "StatusUpdateResponse";
+    case IoHomeCommand::Unknown86:
+        return "UNKNOWN_86";
     case IoHomeCommand::ErrorResponse:
         return "ErrorResponse";
     default:
@@ -3428,7 +3530,7 @@ void IoHomeController::logPairDiagnosticStatus() const
              static_cast<unsigned>(mPairingTelemetry.keyExchangeAttempts));
     logInfoP("PairDiag: 1W mode=%s profile=%s addDestination=%u/%u finalizer=%s traceEntries=%u",
              pairing1WModeName(mPairing1WMode),
-             mPairing1WVeluxProfile ? "velux-kli" : "generic",
+             pairing1WProfile().name,
              static_cast<unsigned>(mPairing1WAddDestinationIndex + 1U),
              static_cast<unsigned>(pairing1WAddDestinationCount()),
              oneWayEnrollmentFinalizerName(mPairing1WFinalizer),
@@ -3731,6 +3833,8 @@ void IoHomeController::loop()
             const ControllerState lPairingStateBeforeRx = mState;
             // Record which frequency the response came on
             mLastResponseFreqIdx = mCurrentFreqIdx;
+
+            observeUnknown86Frame();
 
             if (mPairDiagnosticTraceEnabled &&
                 (isPairDiagnosticState(mState) || isPairDiagnosticCommand(mRxFrame.commandId)))
@@ -4147,7 +4251,12 @@ void IoHomeController::loop()
     }
     case ControllerState::PairComplete:
         if (mPairingTelemetry.outcome == PairingOutcome::InProgress)
-            completePairingTelemetry(PairingOutcome::Success);
+        {
+            IoHomecontrolChannel *lCompletedCh = mModule ? mModule->getChannel(mPairingChannel) : nullptr;
+            completePairingTelemetry(lCompletedCh && lCompletedCh->is1W()
+                                         ? PairingOutcome::OneWayEnrollmentTransmitted
+                                         : PairingOutcome::Success);
+        }
         mState = ControllerState::Idle;
         startReceive();
         break;
@@ -5062,8 +5171,9 @@ void IoHomeController::processPairSend1WRemove()
 
     mTxFrame.init();
     mTxFrame.set1WMode();
+    mTxFrame.setLowPower(pairing1WProfile().pairingLowPower);
     mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
-    mTxFrame.setDestNode(oneWayBroadcastTarget(mPairing1WBroadcastType));
+    mTxFrame.setDestNode(pairing1WRemoveDestination());
     mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
 
     // Explicit 1W Remove frame only:
@@ -5147,6 +5257,7 @@ void IoHomeController::processPairWait1WRemove()
         if (lCh)
         {
             lCh->setNodeId(0);
+            lCh->setOneWayEnrolled(false); // remove-only revokes this controller
             openknx.flash.save(true); // pairing is rare & critical: bypass write throttle
             logInfoP("Pairing: 1W mode=%s complete for channel %d (no 0x30 key transfer follows)",
                      pairing1WModeName(mPairing1WMode),
@@ -5186,6 +5297,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
 
     mTxFrame.init();
     mTxFrame.set1WMode();
+    mTxFrame.setLowPower(pairing1WProfile().pairingLowPower);
     mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
     mTxFrame.commandId = IoHomeCommand::SendKey1W;
 
@@ -5329,7 +5441,7 @@ bool IoHomeController::prepareOneWayEnrollmentExecute(uint16_t iMain,
     mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
     mTxFrame.commandId = IoHomeCommand::Execute;
     mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
-    mTxFrame.setDestNode(0x00003F); // captured KLI STOP/DOWN target is ALL
+    mTxFrame.setDestNode(pairing1WFinalizerDestination());
 
     OneWayCommandProfile lCommandProfile = oneWayCommandProfileForType(mPairing1WBroadcastType);
     lCommandProfile.acei = lCh->getConfigured1WAcei();
@@ -5506,15 +5618,19 @@ void IoHomeController::completeOneWayEnrollment()
                 lCh->setConfigured1WTargetNodeId(0);
             if (lProfile)
                 lCh->setEncryptionKey(lProfile->getOneWayControllerKey());
+            // 1W has no paired peer node, so the enrollment flag alone enables
+            // KNX control for this channel.
+            lCh->setOneWayEnrolled(true);
             openknx.flash.save(true);
         }
     }
 
+    completePairingTelemetry(PairingOutcome::OneWayEnrollmentTransmitted);
     recordOneWayEnrollmentPhase(OneWayEnrollPhase::Complete, 0, 0);
     completeOneWayEnrollmentPhase(true);
     logInfoP("1W enroll: completed controller=%02u profile=%s finalizer=%s stop-to-down=%lums",
              static_cast<unsigned>(mPairingChannel + 1),
-             mPairing1WVeluxProfile ? "velux-kli" : "generic",
+             pairing1WProfile().name,
              oneWayEnrollmentFinalizerName(mPairing1WFinalizer),
              static_cast<unsigned long>(mPairing1WStopStartedAt && mPairing1WDownStartedAt
                                             ? mPairing1WDownStartedAt - mPairing1WStopStartedAt

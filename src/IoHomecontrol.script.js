@@ -148,12 +148,21 @@ function IOHC_buildOneWaySummary(device, context, paired, pairedNodeId) {
     }
     var targetNodeId = IOHC_getParameter(device, prefix + "OneWayTargetNodeId").value;
     if (!targetNodeId) {
-        return paired ? "1W Typ " + typeText + ", gepaart " + IOHC_formatNodeId(pairedNodeId) : "1W Typ " + typeText + ", Ziel fehlt";
+        if (!paired) {
+            return "1W Typ " + typeText + ", Rundruf, nicht angelernt";
+        }
+        return pairedNodeId
+            ? "1W Typ " + typeText + ", gepaart " + IOHC_formatNodeId(pairedNodeId)
+            : "1W Typ " + typeText + ", angelernt (Rundruf)";
     }
 
     var targetText = IOHC_formatNodeId(targetNodeId);
     if (!paired) {
         return "1W Typ " + typeText + ", Ziel " + targetText + ", nicht angelernt";
+    }
+
+    if (!pairedNodeId) {
+        return "1W Typ " + typeText + ", Ziel " + targetText + ", angelernt";
     }
 
     var pairedText = IOHC_formatNodeId(pairedNodeId);
@@ -169,13 +178,19 @@ function IOHC_applyStatusResponse(device, context, resp, fallbackResult, fallbac
     var pairedNodeId = IOHC_readNodeId(resp, 1);
     var controllerState = resp.length > 4 ? resp[4] : 0;
     var lastStartStatus = resp.length > 5 ? resp[5] : 0;
-    var nodeText = paired ? IOHC_formatNodeId(pairedNodeId) : "nicht angelernt";
+    var statusPrefix = IOHC_getChannelPrefix(context);
+    var isOneWay = IOHC_getParameter(device, statusPrefix + "ProtocolMode").value == 1;
+    // 1W has no peer node id: the channel reports its controller enrollment
+    // state instead of a paired actuator address.
+    var nodeText = isOneWay
+        ? (paired ? "1W angelernt (ohne Node-ID)" : "nicht angelernt")
+        : (paired ? IOHC_formatNodeId(pairedNodeId) : "nicht angelernt");
     var resultText = fallbackResult;
     var diagText = fallbackDiag;
 
     if (!resultText) {
         if (paired) {
-            resultText = "Angelernt";
+            resultText = isOneWay ? "1W Anmeldung gesendet" : "Angelernt";
         } else if (controllerState >= 6 && controllerState <= 28) {
             resultText = "Pairing aktiv";
         } else {
@@ -188,10 +203,12 @@ function IOHC_applyStatusResponse(device, context, resp, fallbackResult, fallbac
             diagText = IOHC_controllerStateText(controllerState);
         } else if (lastStartStatus == 1) {
             diagText = "Controller war blockiert";
-        } else if (lastStartStatus == 2) {
-            diagText = "1W Ziel-Node-ID fehlt";
+        } else if (paired) {
+            diagText = isOneWay
+                ? "1W Anmeldesequenz gesendet; Annahme durch den Aktor nicht rückmeldbar"
+                : "Gerät ist angelernt";
         } else {
-            diagText = paired ? "Gerät ist angelernt" : "Kein aktiver Pairing-Vorgang";
+            diagText = "Kein aktiver Pairing-Vorgang";
         }
     }
 
@@ -337,11 +354,6 @@ function IOHC_startPairing(device, online, progress, context) {
             progress.setText("Pairing gestartet. Gerät jetzt in den Lernmodus versetzen und Konsole oder Pairing-Status beobachten.");
             IOHC_queryPairingInfo(device, online, progress, context, "Pairing gestartet", "ETS hat den Start ausgelöst");
             return;
-        }
-
-        if (resp[0] == 3) {
-            IOHC_setPairingInfo(device, context, "Start abgelehnt", "nicht angelernt", IOHC_buildOneWaySummary(device, context, false, 0), "1W Ziel-Node-ID fehlt");
-            throw new Error("io-homecontrol: 1W Pairing benötigt eine Ziel-Node-ID im ETS-Parameter");
         }
 
         if (resp[0] == 4) {

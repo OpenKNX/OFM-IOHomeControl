@@ -32,6 +32,10 @@
 #define IOHC_LBT_AUTH_MAX_RETRIES 1       // auth responses must not be delayed too long
 #define IOHC_LBT_RETRY_DELAY_MS 5
 #define IOHC_RX_SCAN_INTERVAL_US 2700 // ~2.7ms frequency scan interval (per nicolas5000)
+// Passive correlation window after a received UNKNOWN_86 frame. Any frame
+// exchanged between the same two nodes inside this window is logged verbatim so
+// a possible request/response pairing can be established from real captures.
+#define IOHC_UNKNOWN86_CORRELATION_WINDOW_MS 500
 // Maximum raw Execute payload bytes before appending the 1W sequence number.
 // Normal 1W authenticated frames include 6-byte HMAC in CTRL0 length, so keep
 // 9(header) + raw + 2(seq) + 6(hmac) <= IOHC_FRAME_BUFFER_SIZE.
@@ -208,7 +212,8 @@ public:
   {
     Ok = 0,
     Busy = 1,
-    Missing1WTarget = 2,
+    // 2 was Missing1WTarget. A 1W controller commands typed broadcasts and
+    // needs no target node, so the value is retired but not reused.
     Failed = 3
   };
 
@@ -225,7 +230,10 @@ public:
     KeyExchangeFailure = 5,
     ConfigurationFailure = 6,
     Cancelled = 7,
-    StartRejected = 8
+    StartRejected = 8,
+    // 1W has no return path: a completed enrollment burst only proves that the
+    // frames left the radio, never that the actuator stored the controller.
+    OneWayEnrollmentTransmitted = 9
   };
 
   struct PairingTelemetry
@@ -248,6 +256,21 @@ public:
     Complete,
     Failed,
   };
+
+  // Vendor-specific 1W enrollment behavior. Keeping it in a table prevents
+  // profile-exact frame details from leaking into the generic 1W builders.
+  struct OneWayPairingProfile
+  {
+    const char *name;
+    uint32_t removeDestination; // 0 = derive from the configured broadcast type
+    uint32_t finalizerDestination;
+    const uint32_t *addDestinations; // nullptr = derive from the broadcast type
+    uint8_t addDestinationCount;
+    bool pairingLowPower;
+  };
+
+  static const OneWayPairingProfile &oneWayPairingProfileGeneric();
+  static const OneWayPairingProfile &oneWayPairingProfileVeluxKli();
 
   struct OneWayEnrollmentTraceEntry
   {
@@ -723,6 +746,14 @@ private:
   uint32_t mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
   uint32_t mRetryAtMs = 0;
 
+  // Passive UNKNOWN_86 (0x86) observation. No semantics are assumed; only the
+  // raw frame and any traffic between the same node pair are logged.
+  bool mUnknown86Pending = false;
+  uint32_t mUnknown86Source = 0;
+  uint32_t mUnknown86Dest = 0;
+  uint32_t mUnknown86ObservedAtMs = 0;
+  uint16_t mUnknown86Count = 0;
+
   // Pairing state
   uint8_t mPairingChannel;
   PairStartStatus mLastPairStartStatus = PairStartStatus::Ok;
@@ -938,6 +969,7 @@ private:
   void recordPairingDiagnostic(PairingOutcome iOutcome, const char *iAction);
   void completePairingTelemetry(PairingOutcome iOutcome);
   void resetOneWayEnrollmentTrace();
+  void observeUnknown86Frame();
   void recordOneWayEnrollmentPhase(OneWayEnrollPhase iPhase, uint16_t iSequence,
                                    uint32_t iDestination);
   void completeOneWayEnrollmentPhase(bool iSuccess);
@@ -947,6 +979,9 @@ private:
                                       OneWayEnrollPhase iPhase);
   uint32_t pairing1WAddDestination() const;
   uint8_t pairing1WAddDestinationCount() const;
+  const OneWayPairingProfile &pairing1WProfile() const;
+  uint32_t pairing1WRemoveDestination() const;
+  uint32_t pairing1WFinalizerDestination() const;
   // Store the system key into the paired channel and advance to SetConfig1.
   // Shared by the normal 0x33 confirmation path and the early-confirm path
   // where a device skips its 0x3C challenge and confirms the key directly.

@@ -262,7 +262,7 @@ void IoHomecontrolChannel::setup()
 
 void IoHomecontrolChannel::loop()
 {
-    if (!mPaired || (mIs1W && mNodeId == 0))
+    if (!isOperational())
         return;
 
     if (!ParamIOHC_cActive || ParamIOHC_cSuspend)
@@ -316,9 +316,9 @@ void IoHomecontrolChannel::loop()
 
 void IoHomecontrolChannel::processInputKo(uint8_t iIoIndex, GroupObject &iKo)
 {
-    if (!mPaired)
+    if (!isOperational())
     {
-        logDebugP("Ignoring KO %d - not paired", iIoIndex);
+        logDebugP("Ignoring KO %d - %s", iIoIndex, mIs1W ? "1W not enrolled" : "not paired");
         return;
     }
 
@@ -700,6 +700,21 @@ void IoHomecontrolChannel::onStatusPollFailed(bool iAfterChallenge)
 bool IoHomecontrolChannel::isPaired() const
 {
     return mPaired;
+}
+
+bool IoHomecontrolChannel::isOneWayEnrolled() const
+{
+    return mOneWayEnrolled;
+}
+
+void IoHomecontrolChannel::setOneWayEnrolled(bool iEnrolled)
+{
+    mOneWayEnrolled = iEnrolled;
+}
+
+bool IoHomecontrolChannel::isOperational() const
+{
+    return mIs1W ? mOneWayEnrolled : mPaired;
 }
 
 void IoHomecontrolChannel::setNodeId(uint32_t iNodeId)

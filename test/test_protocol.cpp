@@ -31,8 +31,8 @@
 int sTestsPassed = 0;
 int sTestsFailed = 0;
 
-#define TEST(name)                                                    \
-    static void test_##name();                                       \
+#define TEST(name)                                                        \
+    static void test_##name();                                            \
     static IoHomeTestRegistrar test_registrar_##name(#name, test_##name); \
     static void test_##name()
 #define RUN(name)                  \
@@ -2338,8 +2338,41 @@ TEST(command_id_enum_values)
     ASSERT_EQ((uint8_t)IoHomeCommand::SetConfig1Response, 0x70);
     ASSERT_EQ((uint8_t)IoHomeCommand::StatusUpdate, 0x71);
     ASSERT_EQ((uint8_t)IoHomeCommand::StatusUpdateResponse, 0x72);
+    ASSERT_EQ((uint8_t)IoHomeCommand::Unknown86, 0x86);
     ASSERT_EQ((uint8_t)IoHomeCommand::ErrorResponse, 0xFE);
 }
+
+TEST(frame_deserialize_unknown_86_keeps_raw_payload)
+{
+    // Real capture; no public source names 0x86 or decodes its 8 data bytes.
+    const uint8_t lCapture[] = {
+        0x50, 0x00, 0x05, 0xBA, 0x8E, 0x26, 0xEB, 0x96, 0x86,
+        0x00, 0x05, 0x02, 0xCA, 0x58, 0x01, 0x0B, 0x42};
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lCapture, sizeof(lCapture)));
+    ASSERT_EQ(lFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W, 0);
+    ASSERT_NE(lFrame.ctrlByte0 & IOHC_CTRL0_START, 0);
+    ASSERT_EQ(lFrame.ctrlByte0 & IOHC_CTRL0_END, 0);
+    ASSERT_EQ(lFrame.getSrcNodeId(), 0x26EB96U);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x05BA8EU);
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::Unknown86);
+    ASSERT_EQ(lFrame.dataLen, 8);
+    ASSERT_MEM_EQ(lFrame.data, lCapture + 9, 8);
+    ASSERT_TRUE(!lFrame.hasHmac);
+    ASSERT_TRUE(!lFrame.hasTrailerMac);
+
+    uint8_t lRoundTrip[sizeof(lCapture)] = {};
+    ASSERT_EQ(serializeFrameForTest(lFrame, lRoundTrip, sizeof(lRoundTrip)), sizeof(lCapture));
+    ASSERT_MEM_EQ(lRoundTrip, lCapture, sizeof(lCapture));
+}
+
+#ifdef TEST_NATIVE
+TEST(controller_unknown_86_is_named_without_semantics)
+{
+    ASSERT_TRUE(strcmp(IoHomeController::commandName(IoHomeCommand::Unknown86), "UNKNOWN_86") == 0);
+}
+#endif
 
 // =====================================================================
 // 37. Execute quiet mode flag
@@ -5932,8 +5965,8 @@ TEST(test_1w_execute_with_slat)
 
 TEST(test_1w_repeat_count_constant)
 {
-    ASSERT_EQ(IOHC_1W_REPEAT_COUNT, 4);
-    ASSERT_EQ(IOHC_1W_REPEAT_COUNT + 1, 5); // first TX + four repeats
+    ASSERT_EQ(IOHC_1W_REPEAT_COUNT, 3);
+    ASSERT_EQ(IOHC_1W_REPEAT_COUNT + 1, 4); // first TX + three repeats
 }
 
 TEST(test_1w_repeat_interval_constant)
@@ -7052,7 +7085,7 @@ static bool advanceVeluxEnrollmentToFinalizerStopForTest(IoHomeController &iCont
     if (iController.state() != ControllerState::PairSend1WKeyTransfer)
         return false;
 
-    for (uint8_t i = 0; i < 4; ++i)
+    for (uint8_t i = 0; i < IoHomeGoldenRfCorpus::kKli310EnrollmentReference.addDestinationCount; ++i)
     {
         iController.loop(); // ADD_CONTROLLER for one KLI destination
         if (iController.state() != ControllerState::PairWait1WKeyTransfer)
@@ -7157,7 +7190,7 @@ TEST(controller_1w_announce_only_does_not_send_sendkey_after_repeats)
     ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
 
     finishCurrentBlind1WPairingTxForTest(lController);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 5U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
 
     IoHomeFrame lLastFrame;
     const auto &lLastPacket = lController.radio().testLastTransmittedPacket();
@@ -7166,7 +7199,7 @@ TEST(controller_1w_announce_only_does_not_send_sendkey_after_repeats)
 
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::Idle);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 5U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
 }
 
 TEST(controller_default_1w_pairing_uses_type0_all)
@@ -7211,7 +7244,7 @@ TEST(controller_default_1w_pairing_uses_type0_all)
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::RemoveController);
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
     ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
-    ASSERT_TRUE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
+    ASSERT_EQ(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0); // VELUX KLI sends CTRL1=0x00
     ASSERT_EQ(lFrame.dataLen, 3);
     ASSERT_EQ(lFrame.data[1], 0x00);
     ASSERT_EQ(lFrame.data[2], 0x01);
@@ -7283,7 +7316,8 @@ TEST(controller_velux_1w_enrollment_serializes_multicast_add_stop_down)
     IoHomeFrame lFrame;
     ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::RemoveController);
-    ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+    ASSERT_EQ(lFrame.getDestNodeId(), lReference.removeDestination);
+    ASSERT_EQ(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
     ASSERT_EQ(oneWaySequenceForTest(lFrame), 1U);
     finishCurrentBlind1WPairingTxForTest(lController);
 
@@ -7306,6 +7340,7 @@ TEST(controller_velux_1w_enrollment_serializes_multicast_add_stop_down)
         ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
         ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
         ASSERT_EQ(lFrame.getDestNodeId(), lReference.addDestinations[i]);
+        ASSERT_EQ(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
         ASSERT_EQ(oneWaySequenceForTest(lFrame), 2U);
         ASSERT_EQ(lFrame.data[16], lReference.manufacturer);
         ASSERT_TRUE(!lFrame.hasHmac);
@@ -7350,14 +7385,17 @@ TEST(controller_velux_1w_enrollment_serializes_multicast_add_stop_down)
     finishCurrentBlind1WPairingTxForTest(lController);
 
     ASSERT_EQ(lController.state(), ControllerState::PairComplete);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 35U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 24U);
     ASSERT_EQ(lChannel.getSequence1W(), 4U);
+    ASSERT_TRUE(lChannel.isOneWayEnrolled());
+    ASSERT_TRUE(lChannel.isOperational());
 
     const auto *lTrace = lController.oneWayEnrollmentTrace();
-    ASSERT_EQ(lController.oneWayEnrollmentTraceCount(), 8U);
+    ASSERT_EQ(lController.oneWayEnrollmentTraceCount(), 7U);
     ASSERT_EQ(lTrace[0].phase, IoHomeController::OneWayEnrollPhase::Remove);
     ASSERT_EQ(lTrace[0].source, lRemoteNodeId);
-    for (uint8_t i = 0; i < 4; ++i)
+    ASSERT_EQ(lTrace[0].destination, lReference.removeDestination);
+    for (uint8_t i = 0; i < lReference.addDestinationCount; ++i)
     {
         ASSERT_EQ(lTrace[i + 1].phase, IoHomeController::OneWayEnrollPhase::Add);
         ASSERT_EQ(lTrace[i + 1].sequence, 2U);
@@ -7365,16 +7403,123 @@ TEST(controller_velux_1w_enrollment_serializes_multicast_add_stop_down)
         ASSERT_EQ(lTrace[i + 1].destination, lReference.addDestinations[i]);
         ASSERT_TRUE(lTrace[i + 1].txSuccess);
     }
-    ASSERT_EQ(lTrace[5].phase, IoHomeController::OneWayEnrollPhase::FinalizeStop);
-    ASSERT_EQ(lTrace[5].sequence, 3U);
+    ASSERT_EQ(lTrace[4].phase, IoHomeController::OneWayEnrollPhase::FinalizeStop);
+    ASSERT_EQ(lTrace[4].sequence, 3U);
+    ASSERT_TRUE(lTrace[4].txSuccess);
+    ASSERT_EQ(lTrace[5].phase, IoHomeController::OneWayEnrollPhase::FinalizeDown);
+    ASSERT_EQ(lTrace[5].sequence, 4U);
     ASSERT_TRUE(lTrace[5].txSuccess);
-    ASSERT_EQ(lTrace[6].phase, IoHomeController::OneWayEnrollPhase::FinalizeDown);
-    ASSERT_EQ(lTrace[6].sequence, 4U);
-    ASSERT_TRUE(lTrace[6].txSuccess);
-    ASSERT_TRUE(lTrace[6].timestampMs - lTrace[5].timestampMs <
+    ASSERT_TRUE(lTrace[5].timestampMs - lTrace[4].timestampMs <
                 lReference.stopDownDeadlineMs);
-    ASSERT_EQ(lTrace[7].phase, IoHomeController::OneWayEnrollPhase::Complete);
-    ASSERT_TRUE(lTrace[7].txSuccess);
+    ASSERT_EQ(lTrace[6].phase, IoHomeController::OneWayEnrollPhase::Complete);
+    ASSERT_TRUE(lTrace[6].txSuccess);
+    ASSERT_EQ(lController.pairingTelemetry().outcome,
+              IoHomeController::PairingOutcome::OneWayEnrollmentTransmitted);
+}
+
+TEST(controller_velux_1w_strict_profile_destinations_and_ctrl1)
+{
+    const auto &lVelux = IoHomeController::oneWayPairingProfileVeluxKli();
+    ASSERT_EQ(lVelux.removeDestination, 0x00003FU);
+    ASSERT_EQ(lVelux.finalizerDestination, 0x00003FU);
+    ASSERT_EQ(lVelux.addDestinationCount, 3U);
+    ASSERT_EQ(lVelux.addDestinations[0], 0x0000BFU);
+    ASSERT_EQ(lVelux.addDestinations[1], 0x0000FFU);
+    ASSERT_EQ(lVelux.addDestinations[2], 0x00037FU);
+    ASSERT_TRUE(!lVelux.pairingLowPower);
+    for (uint8_t i = 0; i < lVelux.addDestinationCount; ++i)
+        ASSERT_NE(lVelux.addDestinations[i], 0x00003FU);
+
+    const auto &lGeneric = IoHomeController::oneWayPairingProfileGeneric();
+    ASSERT_EQ(lGeneric.removeDestination, 0U); // derived from the broadcast type
+    ASSERT_TRUE(lGeneric.addDestinations == nullptr);
+    ASSERT_TRUE(lGeneric.pairingLowPower);
+}
+
+TEST(controller_velux_1w_remove_ignores_typed_broadcast_class)
+{
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initOneWayPairingModeControllerForTest(lController, lModule, lChannel,
+                                           0x831F2A, 0x7E9E6E, lKey);
+    lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Velux));
+    lChannel.setConfigured1WBroadcastType(2); // roller shutter -> 0x0000BF
+    lChannel.setConfigured1WEnrollmentFinalizer(OneWayEnrollmentFinalizer::None);
+
+    ASSERT_TRUE(lController.startPairing1W(0, 0x7E9E6E, Pairing1WMode::RemoveAdd));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::RemoveController);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x00003FU);
+    ASSERT_EQ(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
+}
+
+TEST(controller_generic_1w_pairing_keeps_typed_destination_and_low_power)
+{
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initOneWayPairingModeControllerForTest(lController, lModule, lChannel,
+                                           0x831F2A, 0x7E9E6E, lKey);
+    lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Somfy));
+    lChannel.setConfigured1WBroadcastType(2);
+    lChannel.setConfigured1WEnrollmentFinalizer(OneWayEnrollmentFinalizer::None);
+
+    ASSERT_TRUE(lController.startPairing1W(0, 0x7E9E6E, Pairing1WMode::RemoveAdd));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::RemoveController);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BFU);
+    ASSERT_NE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
+
+    finishCurrentBlind1WPairingTxForTest(lController);
+    ASSERT_EQ(lController.state(), ControllerState::PairSend1WKeyTransfer);
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BFU);
+    ASSERT_NE(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
+}
+
+TEST(controller_1w_channel_is_operational_without_paired_node)
+{
+    IoHomecontrolChannel lChannel;
+    lChannel.setIs1W(true);
+    ASSERT_TRUE(!lChannel.isOperational());
+    ASSERT_TRUE(!lChannel.isPaired());
+
+    lChannel.setOneWayEnrolled(true);
+    ASSERT_TRUE(lChannel.isOperational());
+    ASSERT_TRUE(!lChannel.isPaired()); // 1W never binds a peer node id
+    ASSERT_EQ(lChannel.getNodeId(), 0U);
+
+    // 2W keeps the peer-node requirement.
+    IoHomecontrolChannel lTwoWay;
+    lTwoWay.setIs1W(false);
+    lTwoWay.setOneWayEnrolled(true);
+    ASSERT_TRUE(!lTwoWay.isOperational());
+    lTwoWay.setNodeId(0x123456);
+    ASSERT_TRUE(lTwoWay.isOperational());
 }
 
 TEST(controller_generic_1w_automatic_finalizer_stops_after_add)
@@ -7400,7 +7545,7 @@ TEST(controller_generic_1w_automatic_finalizer_stops_after_add)
     finishCurrentBlind1WPairingTxForTest(lController);
 
     ASSERT_EQ(lController.state(), ControllerState::PairComplete);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 10U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 8U);
     ASSERT_EQ(lChannel.getSequence1W(), 2U);
     ASSERT_EQ(lController.oneWayEnrollmentTraceCount(), 3U);
     ASSERT_EQ(lController.oneWayEnrollmentTrace()[0].phase,
@@ -7461,7 +7606,7 @@ TEST(controller_1w_enrollment_add_failure_skips_finalizer)
     lController.loop();
 
     ASSERT_EQ(lController.state(), ControllerState::PairFailed);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 5U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
     ASSERT_EQ(lChannel.getSequence1W(), 2U);
     const auto *lTrace = lController.oneWayEnrollmentTrace();
     const uint8_t lTraceCount = lController.oneWayEnrollmentTraceCount();
@@ -7487,13 +7632,13 @@ TEST(controller_velux_1w_finalizer_stop_failure_suppresses_down)
 
     ASSERT_TRUE(lController.startPairing1W(0, 0x7E9E6E, Pairing1WMode::RemoveAdd));
     ASSERT_TRUE(advanceVeluxEnrollmentToFinalizerStopForTest(lController));
-    ASSERT_EQ(lController.radio().testTransmitCount(), 25U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 16U);
 
     lController.radio().testSetNextTransmitError(RadioError::HardwareError);
     lController.loop();
 
     ASSERT_EQ(lController.state(), ControllerState::PairFailed);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 25U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 16U);
     ASSERT_EQ(lChannel.getSequence1W(), 3U);
     const auto *lTrace = lController.oneWayEnrollmentTrace();
     const uint8_t lTraceCount = lController.oneWayEnrollmentTraceCount();
@@ -7565,7 +7710,7 @@ TEST(controller_velux_1w_finalizer_down_failure_marks_operation_failed)
     lController.loop();
 
     ASSERT_EQ(lController.state(), ControllerState::PairFailed);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 30U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 20U);
     ASSERT_EQ(lChannel.getSequence1W(), 4U);
     const auto *lTrace = lController.oneWayEnrollmentTrace();
     const uint8_t lTraceCount = lController.oneWayEnrollmentTraceCount();
@@ -8900,9 +9045,9 @@ TEST(controller_2w_pairing_retries_key_init_and_accepts_direct_confirmation)
     // A delayed device can finish the retried phase without another challenge.
     IoHomeFrame lSetConfig1;
     ASSERT_TRUE(queueKeyTransferConfirmationAndCaptureSetConfig1(lController,
-                                                                   lRemoteNodeId,
-                                                                   lDeviceNodeId,
-                                                                   lSetConfig1));
+                                                                 lRemoteNodeId,
+                                                                 lDeviceNodeId,
+                                                                 lSetConfig1));
     ASSERT_EQ(lSetConfig1.commandId, IoHomeCommand::SetConfig1);
     ASSERT_EQ(lChannel.getNodeId(), lDeviceNodeId);
 }
@@ -10854,14 +10999,14 @@ TEST(byte_vector_controller_1w_sendkey_no_hmac_and_20_byte_payload)
     ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
-    ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BF); // strict KLI ring starts at roller shutter
     ASSERT_EQ(lFrame.dataLen, 20);
     ASSERT_TRUE(!lFrame.hasHmac);
     ASSERT_EQ(lFrame.data[16], static_cast<uint8_t>(IoHomeManufacturer::Velux));
     ASSERT_EQ(lFrame.data[17], 0x01);
 }
 
-TEST(byte_vector_controller_1w_repeat_plan_long_then_four_short_40ms)
+TEST(byte_vector_controller_1w_repeat_plan_long_then_three_short_40ms)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -10869,7 +11014,7 @@ TEST(byte_vector_controller_1w_repeat_plan_long_then_four_short_40ms)
         0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
         0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
 
-    ASSERT_EQ(IOHC_1W_REPEAT_COUNT, 4);
+    ASSERT_EQ(IOHC_1W_REPEAT_COUNT, 3);
     ASSERT_EQ(IOHC_1W_REPEAT_INTERVAL_MS, 40);
 
     IoHomeController lController;
@@ -10905,7 +11050,7 @@ TEST(byte_vector_controller_1w_repeat_plan_long_then_four_short_40ms)
         lController.loop();
     }
 
-    ASSERT_EQ(lController.radio().testTransmitCount(), 5U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
 }
 
 TEST(controller_2w_final_response_wait_and_sx1262_dwell)
@@ -11011,7 +11156,7 @@ TEST(controller_default_1w_execute_uses_standard_vent_layout)
     ASSERT_TRUE(lFrame.hasHmac);
 }
 
-TEST(controller_1w_execute_repeats_first_long_then_four_short)
+TEST(controller_1w_execute_repeats_first_long_then_three_short)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -11058,7 +11203,7 @@ TEST(controller_1w_execute_repeats_first_long_then_four_short)
         lController.loop(); // finish repeat TX and either schedule next repeat or go idle
     }
 
-    ASSERT_EQ(lController.radio().testTransmitCount(), 5U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
     ASSERT_EQ(lController.state(), ControllerState::Idle);
 }
 
@@ -11113,7 +11258,7 @@ TEST(controller_1w_pairing_repeats_first_long_then_short)
         lController.loop(); // finish repeat TX and schedule next repeat or complete
     }
 
-    ASSERT_EQ(lController.radio().testTransmitCount(), 5U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
 }
 
 TEST(controller_1w_ui_open_position_conversion_matches_raw_closed_main)
@@ -12270,10 +12415,10 @@ int main()
     RUN(byte_vector_controller_2w_execute_payloads_and_retry_start);
     RUN(byte_vector_controller_1w_default_and_typed_targets);
     RUN(byte_vector_controller_1w_sendkey_no_hmac_and_20_byte_payload);
-    RUN(byte_vector_controller_1w_repeat_plan_long_then_four_short_40ms);
+    RUN(byte_vector_controller_1w_repeat_plan_long_then_three_short_40ms);
     RUN(controller_2w_final_response_wait_and_sx1262_dwell);
     RUN(controller_default_1w_execute_uses_standard_vent_layout);
-    RUN(controller_1w_execute_repeats_first_long_then_four_short);
+    RUN(controller_1w_execute_repeats_first_long_then_three_short);
     RUN(controller_1w_pairing_repeats_first_long_then_short);
     RUN(controller_1w_ui_open_position_conversion_matches_raw_closed_main);
     RUN(controller_default_1w_execute_matches_reference_payloads);

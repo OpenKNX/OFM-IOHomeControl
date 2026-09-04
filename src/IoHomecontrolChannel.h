@@ -49,6 +49,11 @@ public:
 
   // Pairing data
   bool isPaired() const;
+  // 1W has no peer node id, so a 1W channel is usable once its enrollment burst
+  // was transmitted; 2W requires an actually paired actuator node.
+  bool isOneWayEnrolled() const;
+  void setOneWayEnrolled(bool iEnrolled);
+  bool isOperational() const;
   void setNodeId(uint32_t iNodeId);
   uint32_t getNodeId() const;
   void setEncryptionKey(const uint8_t *iKey);
@@ -123,6 +128,7 @@ private:
   bool mLowPower2W = false;         // Unknown 2W devices default to always-alive
   bool mHasLearnedLowPower2W = false;
   TwoWayPowerClass mConfigured2WPowerClass = TwoWayPowerClass::Automatic;
+  bool mOneWayEnrolled = false;     // 1W enrollment burst was transmitted successfully
   bool mSilentOperation = false;    // Somfy RS100 2W Execute profile (0x05)
   uint16_t mSequence1W = 0;         // 1W last used sequence counter
   uint16_t mReservedSequence1W = 0; // highest sequence persisted/reserved ahead in flash

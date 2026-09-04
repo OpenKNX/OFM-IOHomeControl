@@ -96,6 +96,9 @@ public:
   bool is1W() const { return mIs1W; }
   void setIs1W(bool iIs1W) { mIs1W = iIs1W; }
   bool isPaired() const { return mPaired; }
+  bool isOneWayEnrolled() const { return mOneWayEnrolled; }
+  void setOneWayEnrolled(bool iEnrolled) { mOneWayEnrolled = iEnrolled; }
+  bool isOperational() const { return mIs1W ? mOneWayEnrolled : mPaired; }
   void setPaired(bool iPaired) { mPaired = iPaired; }
 
   void setConfigured1WTargetNodeId(uint32_t iNodeId) { mConfigured1WTargetNodeId = iNodeId; }
@@ -291,6 +294,7 @@ private:
   bool mLowPower2W = false;
   bool mHasLearnedLowPower2W = false;
   TwoWayPowerClass mConfigured2WPowerClass = TwoWayPowerClass::Automatic;
+  bool mOneWayEnrolled = false;
   uint32_t mConfigured1WTargetNodeId = 0;
   // TEST_NATIVE mirrors the production channel default: unspecified 1W type is
   // type 0 / All, which serializes to destination 0x00003F.
