@@ -855,9 +855,11 @@ void IoHomecontrol::restoreChannelFlashState(uint8_t iIndex, const FlashChannelS
     else
         lChannel->clearLearnedLowPower2W();
     lChannel->setOneWayEnrolled(iState.oneWayEnrolled);
-    if (iState.is1W && !lChannel->is1W())
-        logInfoP("Flash restore: channel %u was saved as 1W while ETS runtime config is 2W; keeping saved 1W mode", static_cast<unsigned>(iIndex + 1));
-    lChannel->setIs1W(lChannel->is1W() || iState.is1W);
+    if (iState.is1W != lChannel->is1W())
+        logInfoP("Flash restore: channel %u was saved as %s while ETS runtime config is %s; using ETS protocol mode",
+                 static_cast<unsigned>(iIndex + 1),
+                 iState.is1W ? "1W" : "2W",
+                 lChannel->is1W() ? "1W" : "2W");
     lChannel->setSequence1W(iState.sequence1W);
     lChannel->setOneWayControllerNodeId(iState.oneWayControllerNodeId);
     lChannel->setOneWayControllerKey(iState.oneWayControllerKey);
