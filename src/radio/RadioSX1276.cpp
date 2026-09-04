@@ -161,8 +161,9 @@ RadioError RadioSX1276::configure()
     writeRegister(REG_FDEVMSB, (lFdev >> 8) & 0xFF);
     writeRegister(REG_FDEVLSB, lFdev & 0xFF);
 
-    // PA ramp: no shaping, 12 us ramp (per nicolas5000)
-    writeRegister(REG_PARAMP, RF_PARAMP_MODULATIONSHAPING_00 | RF_PARAMP_0012_US);
+    // Hardware-validated TX shaping: Gaussian BT=1.0 with a 15 us PA ramp.
+    writeRegister(REG_PARAMP,
+                  RF_PARAMP_MODULATIONSHAPING_GAUSSIAN_BT_1_0 | RF_PARAMP_0015_US);
 
     // Over-current protection: 240 mA (required for PA_BOOST at higher power)
     writeRegister(REG_OCP, RF_OCP_ON | RF_OCP_TRIM_240_MA);
@@ -170,11 +171,11 @@ RadioError RadioSX1276::configure()
     // LNA: maximum gain (G1) + boost
     writeRegister(REG_LNA, 0x23);
 
-    // RX bandwidth: 250 kHz (Mant=00, Exp=1)
-    writeRegister(REG_RXBW, 0x01);
+    // Tuned 41.7 kHz RX/AFC bandwidth rejects adjacent-channel noise while
+    // retaining the validated io-homecontrol waveform.
+    writeRegister(REG_RXBW, RF_RXBW_41_7_KHZ);
 
-    // AFC bandwidth: 250 kHz (match RX bandwidth, per nicolas5000)
-    writeRegister(REG_AFCBW, 0x01);
+    writeRegister(REG_AFCBW, RF_RXBW_41_7_KHZ);
 
     // RSSI smoothing: 8-sample averaging
     writeRegister(REG_RSSICONFIG, 0x02);
@@ -196,9 +197,10 @@ RadioError RadioSX1276::configure()
     writeRegister(REG_PREAMBLEMSB, 0x00);
     writeRegister(REG_PREAMBLELSB, 0x08);
 
-    // SyncSize=2 matches 2 sync bytes: 0x55 0xFF.
-    // 0x33 is kept as the 3rd on-air/power-frame byte as in the working SX1276 reference.
-    writeRegister(REG_SYNCCONFIG, (readRegister(REG_SYNCCONFIG) & 0xF8) | 0x02);
+    // Initialize every SyncConfig field deterministically: sync detection on,
+    // AA fill polarity, PLL auto-restart off, and a two-byte 0x55/0xFF match.
+    // The third 0x33 value remains the on-air power-frame byte.
+    writeRegister(REG_SYNCCONFIG, RF_SYNCCONFIG_IOHOME_2_BYTES);
     writeRegister(REG_SYNCVALUE1, IOHC_SYNC_WORD[0]);
     writeRegister(REG_SYNCVALUE2, IOHC_SYNC_WORD[1]);
     writeRegister(REG_SYNCVALUE3, IOHC_SYNC_WORD[2]);
@@ -655,7 +657,7 @@ void RadioSX1276::configureStandardMode()
     // Restore io-homecontrol sync semantics:
     // SyncSize=2 matches 2 sync bytes: 0x55 0xFF.
     // 0x33 is kept as the 3rd on-air/power-frame byte as in the working SX1276 reference.
-    writeRegister(REG_SYNCCONFIG, (readRegister(REG_SYNCCONFIG) & 0xF8) | 0x02);
+    writeRegister(REG_SYNCCONFIG, RF_SYNCCONFIG_IOHOME_2_BYTES);
     writeRegister(REG_SYNCVALUE1, IOHC_SYNC_WORD[0]);
     writeRegister(REG_SYNCVALUE2, IOHC_SYNC_WORD[1]);
     writeRegister(REG_SYNCVALUE3, IOHC_SYNC_WORD[2]);

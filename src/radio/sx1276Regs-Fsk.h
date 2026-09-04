@@ -96,6 +96,12 @@
 // RegParamp bit masks
 #define RF_PARAMP_MODULATIONSHAPING_00 0x00
 #define RF_PARAMP_0012_US 0x0E
+#define RF_PARAMP_MODULATIONSHAPING_GAUSSIAN_BT_1_0 0x20
+#define RF_PARAMP_0015_US 0x0D
+
+// Tuned io-homecontrol FSK register values
+#define RF_RXBW_41_7_KHZ 0x13
+#define RF_SYNCCONFIG_IOHOME_2_BYTES 0x52
 
 // RegOsc bit masks
 #define RF_OSC_CLKOUT_OFF 0x07
