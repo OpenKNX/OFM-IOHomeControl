@@ -23,6 +23,17 @@ namespace
   {
     oData[iBitPos / 8U] &= static_cast<uint8_t>(~(1U << (7U - (iBitPos % 8U))));
   }
+
+  bool hasValidProtocolCrc(const uint8_t *iDecoded, size_t iDecodedLen,
+                           size_t iStart, size_t iFrameLen)
+  {
+    if (iStart + iFrameLen + IOHC_CRC_SIZE > iDecodedLen)
+      return false;
+
+    const uint16_t lRxCrc = static_cast<uint16_t>(iDecoded[iStart + iFrameLen]) |
+                            static_cast<uint16_t>(iDecoded[iStart + iFrameLen + 1U] << 8U);
+    return lRxCrc == IoHomeCrypto::crc16Kermit(iDecoded + iStart, iFrameLen);
+  }
 }
 
 SX1262IoHomePhySyncConfig sx1262ResolveIoHomeSyncWord(const uint8_t *iSyncWord, uint8_t iSyncWordLen)
@@ -136,13 +147,29 @@ bool sx1262FindIoHomeFrame(const uint8_t *iRaw, size_t iRawLen,
       const uint8_t lFrameLen = static_cast<uint8_t>((lCtrl0 & IOHC_CTRL0_LEN_MASK) + 1U);
       if (lFrameLen < IOHC_FRAME_MIN_SIZE || lFrameLen > IOHC_FRAME_BUFFER_SIZE)
         continue;
-      if (lStart + lFrameLen + IOHC_CRC_SIZE > lDecodedLen)
-        continue;
 
-      const uint16_t lRxCrc = static_cast<uint16_t>(lDecoded[lStart + lFrameLen]) |
-                              static_cast<uint16_t>(lDecoded[lStart + lFrameLen + 1U] << 8U);
-      const uint16_t lCalcCrc = IoHomeCrypto::crc16Kermit(lDecoded + lStart, lFrameLen);
-      if (lRxCrc != lCalcCrc)
+      // SendKey1W is the protocol's only legal out-of-length frame: CTRL0
+      // declares 29 bytes, while some remotes append a six-byte MAC before
+      // the transport CRC. Prefer that full candidate when its CRC validates,
+      // then retain the normal declared-length path for no-MAC SendKey frames.
+      const bool lMayHaveSendKeyTrailer =
+          (lCtrl0 & IOHC_CTRL0_MODE_1W) != 0 &&
+          lFrameLen == IOHC_FRAME_MIN_SIZE + 20U &&
+          lDecoded[lStart + IOHC_FRAME_MIN_SIZE - 1U] ==
+              static_cast<uint8_t>(IoHomeCommand::SendKey1W);
+      const size_t lTrailerFrameLen = static_cast<size_t>(lFrameLen) + IOHC_HMAC_SIZE;
+      if (lMayHaveSendKeyTrailer &&
+          hasValidProtocolCrc(lDecoded, lDecodedLen, lStart, lTrailerFrameLen))
+      {
+        if (lTrailerFrameLen > iFrameMaxLen)
+          return false;
+
+        std::memcpy(oFrame, lDecoded + lStart, lTrailerFrameLen);
+        oFrameLen = lTrailerFrameLen;
+        return true;
+      }
+
+      if (!hasValidProtocolCrc(lDecoded, lDecodedLen, lStart, lFrameLen))
         continue;
       if (lFrameLen > iFrameMaxLen)
         return false;

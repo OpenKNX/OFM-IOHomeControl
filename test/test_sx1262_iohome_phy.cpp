@@ -102,6 +102,66 @@ TEST(find_frame_with_bit_offset)
   ASSERT_MEM_EQ(lDecoded, lFrame, sizeof(lFrame));
 }
 
+TEST(find_send_key_frame_with_out_of_length_trailer)
+{
+  uint8_t lFrame[35] = {
+      0xFC, 0x00, 0x00, 0x00, 0xBF, 0x7E, 0x9E, 0x6E, 0x30};
+  for (uint8_t i = 0; i < 20; ++i)
+    lFrame[9U + i] = static_cast<uint8_t>(0x20U + i);
+  for (uint8_t i = 0; i < IOHC_HMAC_SIZE; ++i)
+    lFrame[29U + i] = static_cast<uint8_t>(0xA0U + i);
+
+  uint8_t lEncoded[SX1262_IOHOME_MAX_ENCODED_FRAME_LEN] = {};
+  const size_t lEncodedLen = sx1262EncodeIoHomeFrame(lFrame, sizeof(lFrame), lEncoded, sizeof(lEncoded));
+  ASSERT_TRUE(lEncodedLen > 0);
+
+  uint8_t lDecoded[IOHC_FRAME_BUFFER_SIZE] = {};
+  size_t lDecodedLen = 0;
+  ASSERT_TRUE(sx1262FindIoHomeFrame(lEncoded, lEncodedLen, lDecoded, sizeof(lDecoded), lDecodedLen));
+  ASSERT_EQ(lDecodedLen, sizeof(lFrame));
+  ASSERT_MEM_EQ(lDecoded, lFrame, sizeof(lFrame));
+}
+
+TEST(find_send_key_frame_without_trailer)
+{
+  uint8_t lFrame[29] = {
+      0xFC, 0x00, 0x00, 0x00, 0xBF, 0x7E, 0x9E, 0x6E, 0x30};
+  for (uint8_t i = 0; i < 20; ++i)
+    lFrame[9U + i] = static_cast<uint8_t>(0x40U + i);
+
+  uint8_t lEncoded[SX1262_IOHOME_MAX_ENCODED_FRAME_LEN] = {};
+  const size_t lEncodedLen = sx1262EncodeIoHomeFrame(lFrame, sizeof(lFrame), lEncoded, sizeof(lEncoded));
+  ASSERT_TRUE(lEncodedLen > 0);
+
+  uint8_t lDecoded[IOHC_FRAME_BUFFER_SIZE] = {};
+  size_t lDecodedLen = 0;
+  ASSERT_TRUE(sx1262FindIoHomeFrame(lEncoded, lEncodedLen, lDecoded, sizeof(lDecoded), lDecodedLen));
+  ASSERT_EQ(lDecodedLen, sizeof(lFrame));
+  ASSERT_MEM_EQ(lDecoded, lFrame, sizeof(lFrame));
+}
+
+TEST(rejects_out_of_length_trailer_on_other_commands)
+{
+  uint8_t lFrame[35] = {
+      0xFC, 0x00, 0x00, 0x00, 0xBF, 0x7E, 0x9E, 0x6E, 0x39};
+  for (uint8_t i = 0; i < 20; ++i)
+    lFrame[9U + i] = static_cast<uint8_t>(0x60U + i);
+  const uint16_t lDeclaredCrc = IoHomeCrypto::crc16Kermit(lFrame, 29);
+  lFrame[29] = static_cast<uint8_t>(lDeclaredCrc) ^ 0xFFU;
+  lFrame[30] = static_cast<uint8_t>(lDeclaredCrc >> 8U) ^ 0xFFU;
+  for (uint8_t i = 31; i < sizeof(lFrame); ++i)
+    lFrame[i] = static_cast<uint8_t>(0x80U + i);
+
+  uint8_t lEncoded[SX1262_IOHOME_MAX_ENCODED_FRAME_LEN] = {};
+  const size_t lEncodedLen = sx1262EncodeIoHomeFrame(lFrame, sizeof(lFrame), lEncoded, sizeof(lEncoded));
+  ASSERT_TRUE(lEncodedLen > 0);
+
+  uint8_t lDecoded[IOHC_FRAME_BUFFER_SIZE] = {};
+  size_t lDecodedLen = 0;
+  ASSERT_TRUE(!sx1262FindIoHomeFrame(lEncoded, lEncodedLen, lDecoded, sizeof(lDecoded), lDecodedLen));
+  ASSERT_EQ(lDecodedLen, 0u);
+}
+
 TEST(rejects_crc_invalid_capture)
 {
   const uint8_t lFrame[] = {0x48, 0x00, 0x00, 0x00, 0x3F, 0x00, 0xFA, 0x34, 0x07};
@@ -142,6 +202,9 @@ int main()
   RUN(resolve_sync_keeps_non_iohome_pattern);
   RUN(encode_and_find_round_trip_frame);
   RUN(find_frame_with_bit_offset);
+  RUN(find_send_key_frame_with_out_of_length_trailer);
+  RUN(find_send_key_frame_without_trailer);
+  RUN(rejects_out_of_length_trailer_on_other_commands);
   RUN(rejects_crc_invalid_capture);
   RUN(encode_respects_max_output_size);
   RUN(encode_pads_partial_uart_byte_high);
