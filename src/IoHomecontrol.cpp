@@ -167,14 +167,16 @@ namespace
         formatOneWayEnrollmentClasses(lClassMask, lClasses, sizeof(lClasses));
         const OneWayEnrollmentFinalizer lFinalizer = IoHomeController::resolveOneWayEnrollmentFinalizer(
             iChannel->getConfigured1WEnrollmentFinalizer(), lManufacturer);
-        logInfoP("  1W wire profile: manufacturer=%s(0x%02X) executeAcei=0x%02X source=%s executeDst=%s type=%u dst=%06X enrollClasses=%s%s finalizer=%s",
-                 oneWayManufacturerName(lManufacturer), static_cast<unsigned>(lManufacturer),
-                 static_cast<unsigned>(lAcei), lAceiOverride ? "ETS-override" : "manufacturer",
-                 oneWayExecuteDestinationPolicyName(lPolicy),
-                 static_cast<unsigned>(iChannel->getConfigured1WBroadcastType()),
-                 static_cast<unsigned long>(lDestination), lClasses,
-                 iChannel->getConfigured1WEnrollmentClassMask() == 0 ? " (automatic)" : " (ETS-override)",
-                 IoHomeController::oneWayEnrollmentFinalizerName(lFinalizer));
+        openknx.logger.logMacroWrapper(
+            0, "IoHomecontrol",
+            "  1W wire profile: manufacturer=%s(0x%02X) executeAcei=0x%02X source=%s executeDst=%s type=%u dst=%06X enrollClasses=%s%s finalizer=%s",
+            oneWayManufacturerName(lManufacturer), static_cast<unsigned>(lManufacturer),
+            static_cast<unsigned>(lAcei), lAceiOverride ? "ETS-override" : "manufacturer",
+            oneWayExecuteDestinationPolicyName(lPolicy),
+            static_cast<unsigned>(iChannel->getConfigured1WBroadcastType()),
+            static_cast<unsigned long>(lDestination), lClasses,
+            iChannel->getConfigured1WEnrollmentClassMask() == 0 ? " (automatic)" : " (ETS-override)",
+            IoHomeController::oneWayEnrollmentFinalizerName(lFinalizer));
     }
 
     bool identityEquals2W(uint32_t iNodeId, const uint8_t *iKey, uint32_t iTwoWayNodeId, const uint8_t *iTwoWayKey)
