@@ -1125,12 +1125,15 @@ TwoWayDiscoveryFrameOptions IoHomeController::referenceTwoWayDiscoveryOptions(Io
         break;
 
     case IoHomeCommand::DiscoverSPERequest:
-        // Real KLR300 authenticated roll-call: 0x2A -> 0x00003B,
-        // CTRL1=0x30.  The normal preamble remains independent of CTRL1.
+        // Authenticated post-extraction roll-call: 0x2A -> 0x00003B,
+        // CTRL1=0x30.  Use the long wake-up preamble by default so one
+        // broadcast can also reach sleeping solar/battery actuators.  The
+        // diagnostic discovery-preamble override still permits captured
+        // 32-symbol KLR300 shaping for controlled A/B tests.
         lOptions.destination = 0x00003B;
         lOptions.lowPower = true;
         lOptions.ackCapable = true;
-        lOptions.preamble = IOHC_PREAMBLE_NORMAL_START;
+        lOptions.preamble = IOHC_PREAMBLE_LONG;
         break;
 
     case IoHomeCommand::DiscoverRequest:
@@ -6917,11 +6920,17 @@ void IoHomeController::processScanSending()
     mTxFrame.commandId = static_cast<IoHomeCommand>(IOHC_SCAN_COMMANDS[mScanIndex]);
     mTxFrame.dataLen = 0;
     mTxFrame.hasHmac = false;
+    mTxFrame.setLowPower(resolveLowPower2W(mScanTargetNode));
 
     mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lErr = startShortPreambleTransmit(mTxBuffer, mTxLen);
+        // A capability scan is a directed START request and follows the same
+        // power-class policy as normal device traffic.  In particular, a
+        // configured/learned low-power target needs the 1024-symbol wake-up
+        // preamble; an always-alive target uses the normal 32-symbol START.
+        const uint16_t lPreamble = preambleFor2WRequest(mTxFrame);
+        const RadioError lErr = startTransmitWithPreamble(mTxBuffer, mTxLen, lPreamble);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();

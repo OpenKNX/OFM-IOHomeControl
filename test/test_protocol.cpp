@@ -8002,6 +8002,26 @@ TEST(controller_spe_discovery_sends_single_2a_broadcast)
     ASSERT_EQ(lSpe.commandId, IoHomeCommand::DiscoverSPERequest);
     ASSERT_EQ(lSpe.getDestNodeId(), 0x00003B);
     ASSERT_EQ(lSpe.ctrlByte1, static_cast<uint8_t>(IOHC_CTRL1_ACK | IOHC_CTRL1_LOW_POWER));
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+}
+
+TEST(controller_spe_discovery_preamble_override_keeps_klr300_ab_test_available)
+{
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(0x9F0071);
+    lController.setSystemKey(lKey);
+    lController.init();
+
+    TwoWayDiscoverySettings lSettings;
+    lSettings.preamble = TwoWayDiscoveryPreambleMode::Normal;
+    lController.setDiagnosticDiscoverySettings(lSettings);
+    lController.startDiscovery(true);
+    lController.loop();
+
+    ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
 }
 
@@ -8041,7 +8061,7 @@ TEST(discovery_klr300_reference_profiles_are_byte_exact)
     ASSERT_EQ(lSpe.destination, 0x00003BU);
     ASSERT_TRUE(lSpe.ackCapable);
     ASSERT_TRUE(lSpe.lowPower);
-    ASSERT_EQ(lSpe.preamble, IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lSpe.preamble, IOHC_PREAMBLE_LONG);
     ASSERT_TRUE(IoHomeController::buildTwoWayDiscoveryFrame(
         lFrame, lKlrNodeId, lSpe, lSystemKey, lChallenge));
     const uint8_t lSpeLen = lFrame.serialize2W(lBuffer, sizeof(lBuffer));
@@ -8097,6 +8117,58 @@ TEST(controller_pairing_discovery_ack_override_keeps_long_preamble)
     ASSERT_EQ(lDiscovery.getDestNodeId(), 0x00003BU);
     ASSERT_EQ(lDiscovery.ctrlByte1, IOHC_CTRL1_ACK);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+}
+
+TEST(controller_command_scan_uses_target_power_class_preamble)
+{
+    const uint32_t lOwnNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x155D81;
+
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lOwnNodeId);
+        lController.init();
+        lChannel.setNodeId(lDeviceNodeId);
+        lChannel.setIs1W(false);
+        lChannel.setConfigured2WPowerClass(TwoWayPowerClass::LowPower);
+
+        lController.startCommandScan(lDeviceNodeId);
+        lController.loop();
+
+        IoHomeFrame lFrame;
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(!lPacket.empty());
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+    }
+
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lOwnNodeId);
+        lController.init();
+        lChannel.setNodeId(lDeviceNodeId);
+        lChannel.setIs1W(false);
+        lChannel.setConfigured2WPowerClass(TwoWayPowerClass::AlwaysAlive);
+
+        lController.startCommandScan(lDeviceNodeId);
+        lController.loop();
+
+        IoHomeFrame lFrame;
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(!lPacket.empty());
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    }
 }
 
 TEST(controller_1w_pairing_allows_add_without_target_node)
@@ -13002,6 +13074,8 @@ int main()
     RUN(controller_velux_1w_finalizer_down_failure_marks_operation_failed);
     RUN(controller_discovery_sends_standard_28_then_alt_2e_broadcast);
     RUN(controller_spe_discovery_sends_single_2a_broadcast);
+    RUN(controller_spe_discovery_preamble_override_keeps_klr300_ab_test_available);
+    RUN(controller_command_scan_uses_target_power_class_preamble);
     RUN(controller_1w_pairing_allows_add_without_target_node);
     RUN(controller_1w_profile_can_append_sendkey_trailer_mac);
     RUN(controller_1w_sendkey_frame_identical_with_known_or_unknown_target);
