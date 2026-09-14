@@ -42,6 +42,9 @@
 #ifndef ParamIOHC_cOneWayEnrollmentClasses
 #define ParamIOHC_cOneWayEnrollmentClasses 0
 #endif
+#ifndef ParamIOHC_cOneWayPowerClass
+#define ParamIOHC_cOneWayPowerClass 0
+#endif
 
 // ---------------------------------------------------------------------------
 // Scene parameter access
@@ -203,6 +206,7 @@ void IoHomecontrolChannel::setup()
     const uint8_t lOneWayEnrollmentFinalizer = static_cast<uint8_t>(ParamIOHC_cOneWayEnrollmentFinalizer);
     const uint8_t lOneWayExecuteDestination = static_cast<uint8_t>(ParamIOHC_cOneWayExecuteDestination);
     const uint8_t lOneWayEnrollmentClasses = static_cast<uint8_t>(ParamIOHC_cOneWayEnrollmentClasses);
+    const uint8_t lOneWayPowerClass = static_cast<uint8_t>(ParamIOHC_cOneWayPowerClass);
     const uint8_t lTwoWayPowerClass = static_cast<uint8_t>(ParamIOHC_cTwoWayPowerClass);
     const uint8_t lTwoWayDiscoveryCommand = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryCommand);
     const uint8_t lTwoWayDiscoveryDestination = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryDestination);
@@ -278,6 +282,10 @@ void IoHomecontrolChannel::setup()
             ? static_cast<OneWayExecuteDestinationPolicy>(lOneWayExecuteDestination)
             : OneWayExecuteDestinationPolicy::Automatic);
     setConfigured1WEnrollmentClassMask(lOneWayEnrollmentClasses);
+    setConfigured1WPowerClass(
+        lOneWayPowerClass <= static_cast<uint8_t>(OneWayPowerClass::LowPower)
+            ? static_cast<OneWayPowerClass>(lOneWayPowerClass)
+            : OneWayPowerClass::Automatic);
     mSilentOperation = !mIs1W && lSilentOperation;
     mConfigured1WManufacturer = lOneWayManufacturer;
     if (mConfigured1WManufacturer != 0)
@@ -286,7 +294,7 @@ void IoHomecontrolChannel::setup()
     if (mIs1W && mConfigured1WTargetNodeId == 0)
         logInfoP("Channel is configured as 1W but has no ETS 1W target node; pairing must provide a target node explicitly");
 
-    logInfoP("Applied protocol config: %s target=0x%06X broadcastType=%u acei=0x%02X profile=%s manufacturer=0x%02X enrollFinalizer=%u rs100Silent=%u power2W=%s",
+    logInfoP("Applied protocol config: %s target=0x%06X broadcastType=%u acei=0x%02X profile=%s manufacturer=0x%02X enrollFinalizer=%u power1W=%s rs100Silent=%u power2W=%s",
              mIs1W ? "1W" : "2W",
              static_cast<unsigned long>(mConfigured1WTargetNodeId),
              static_cast<unsigned>(mConfigured1WBroadcastType),
@@ -294,6 +302,7 @@ void IoHomecontrolChannel::setup()
              mConfigured1WProfileChannel == 0xFF ? "own" : "linked",
              static_cast<unsigned>(mOneWayControllerManufacturer),
              static_cast<unsigned>(mConfigured1WEnrollmentFinalizer),
+             IoHomeController::oneWayPowerClassName(mConfigured1WPowerClass),
              mSilentOperation ? 1U : 0U,
              twoWayPowerClassName(mConfigured2WPowerClass));
 
@@ -931,6 +940,8 @@ void IoHomecontrolChannel::setConfigured1WExecuteDestinationPolicy(OneWayExecute
 OneWayExecuteDestinationPolicy IoHomecontrolChannel::getConfigured1WExecuteDestinationPolicy() const { return mConfigured1WExecuteDestinationPolicy; }
 void IoHomecontrolChannel::setConfigured1WEnrollmentClassMask(uint8_t iMask) { mConfigured1WEnrollmentClassMask = iMask & IOHC_1W_ENROLL_CLASS_ALL; }
 uint8_t IoHomecontrolChannel::getConfigured1WEnrollmentClassMask() const { return mConfigured1WEnrollmentClassMask; }
+void IoHomecontrolChannel::setConfigured1WPowerClass(OneWayPowerClass iPowerClass) { mConfigured1WPowerClass = iPowerClass; }
+OneWayPowerClass IoHomecontrolChannel::getConfigured1WPowerClass() const { return mConfigured1WPowerClass; }
 
 // --- Private command methods ---
 

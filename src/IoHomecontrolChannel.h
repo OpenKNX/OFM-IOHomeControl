@@ -106,6 +106,8 @@ public:
   OneWayExecuteDestinationPolicy getConfigured1WExecuteDestinationPolicy() const;
   void setConfigured1WEnrollmentClassMask(uint8_t iMask);
   uint8_t getConfigured1WEnrollmentClassMask() const;
+  void setConfigured1WPowerClass(OneWayPowerClass iPowerClass);
+  OneWayPowerClass getConfigured1WPowerClass() const;
   bool requestStatus();
   void scheduleStatusPoll(uint32_t iDelayMs);
 
@@ -152,6 +154,7 @@ private:
   OneWayEnrollmentFinalizer mConfigured1WEnrollmentFinalizer = OneWayEnrollmentFinalizer::Automatic;
   OneWayExecuteDestinationPolicy mConfigured1WExecuteDestinationPolicy = OneWayExecuteDestinationPolicy::Automatic;
   uint8_t mConfigured1WEnrollmentClassMask = 0; // 0 = captured VELUX default (all three)
+  OneWayPowerClass mConfigured1WPowerClass = OneWayPowerClass::Automatic;
   float mCurrentPosition = 0.0f;
   float mCurrentSlat = 0.0f;
   bool mIsMoving = false;

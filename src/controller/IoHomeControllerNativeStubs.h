@@ -115,6 +115,8 @@ public:
   OneWayExecuteDestinationPolicy getConfigured1WExecuteDestinationPolicy() const { return mConfigured1WExecuteDestinationPolicy; }
   void setConfigured1WEnrollmentClassMask(uint8_t iMask) { mConfigured1WEnrollmentClassMask = iMask & IOHC_1W_ENROLL_CLASS_ALL; }
   uint8_t getConfigured1WEnrollmentClassMask() const { return mConfigured1WEnrollmentClassMask; }
+  void setConfigured1WPowerClass(OneWayPowerClass iPowerClass) { mConfigured1WPowerClass = iPowerClass; }
+  OneWayPowerClass getConfigured1WPowerClass() const { return mConfigured1WPowerClass; }
 
   void setNodeId(uint32_t iNodeId)
   {
@@ -311,6 +313,7 @@ private:
   OneWayEnrollmentFinalizer mConfigured1WEnrollmentFinalizer = OneWayEnrollmentFinalizer::Automatic;
   OneWayExecuteDestinationPolicy mConfigured1WExecuteDestinationPolicy = OneWayExecuteDestinationPolicy::Automatic;
   uint8_t mConfigured1WEnrollmentClassMask = 0;
+  OneWayPowerClass mConfigured1WPowerClass = OneWayPowerClass::Automatic;
   bool mHasPositionFeedback = false;
   float mPositionFeedback = 0.0f;
   bool mHasTargetPositionFeedback = false;

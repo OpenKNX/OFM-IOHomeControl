@@ -187,6 +187,17 @@ enum class OneWayExecuteDestinationPolicy : uint8_t
     All = 2,
 };
 
+// Per-controller-identity 1W wake-up policy. Automatic preserves the module's
+// existing capture-backed behavior. AlwaysAlive uses the normal 32-symbol
+// preamble for every copy. LowPower sends one 1024-symbol wake-up copy with
+// CTRL1 LOW_POWER set, followed by normal copies with the flag clear.
+enum class OneWayPowerClass : uint8_t
+{
+    Automatic = 0,
+    AlwaysAlive = 1,
+    LowPower = 2,
+};
+
 // Configurable VELUX enrollment class sweep. A stored value of zero means the
 // captured default sweep containing all three classes.
 constexpr uint8_t IOHC_1W_ENROLL_CLASS_ROLLER = 0x01;

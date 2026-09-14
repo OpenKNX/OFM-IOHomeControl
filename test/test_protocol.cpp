@@ -6100,6 +6100,41 @@ TEST(test_1w_repeat_preamble_constants)
               IOHC_PREAMBLE_SHORT);
 }
 
+TEST(test_1w_power_class_copy_shapes)
+{
+    const uint8_t lSomfy = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
+    const uint8_t lVelux = static_cast<uint8_t>(IoHomeManufacturer::Velux);
+
+    // Automatic is backwards-compatible with OFM's existing manufacturer
+    // profile: every first copy is long, VELUX repeats short, others long.
+    OneWayCopyShape lShape = IoHomeController::oneWayCopyShape(OneWayPowerClass::Automatic, lSomfy, 0);
+    ASSERT_EQ(lShape.preamble, IOHC_PREAMBLE_LONG);
+    ASSERT_TRUE(!lShape.lowPower);
+    lShape = IoHomeController::oneWayCopyShape(OneWayPowerClass::Automatic, lSomfy, 1);
+    ASSERT_EQ(lShape.preamble, IOHC_PREAMBLE_LONG);
+    ASSERT_TRUE(!lShape.lowPower);
+    lShape = IoHomeController::oneWayCopyShape(OneWayPowerClass::Automatic, lVelux, 1);
+    ASSERT_EQ(lShape.preamble, IOHC_PREAMBLE_SHORT);
+    ASSERT_TRUE(!lShape.lowPower);
+
+    for (uint8_t lCopy = 0; lCopy < 4; ++lCopy)
+    {
+        lShape = IoHomeController::oneWayCopyShape(OneWayPowerClass::AlwaysAlive, lVelux, lCopy);
+        ASSERT_EQ(lShape.preamble, IOHC_PREAMBLE_NORMAL_START);
+        ASSERT_TRUE(!lShape.lowPower);
+    }
+
+    lShape = IoHomeController::oneWayCopyShape(OneWayPowerClass::LowPower, lVelux, 0);
+    ASSERT_EQ(lShape.preamble, IOHC_PREAMBLE_LONG);
+    ASSERT_TRUE(lShape.lowPower);
+    for (uint8_t lCopy = 1; lCopy < 4; ++lCopy)
+    {
+        lShape = IoHomeController::oneWayCopyShape(OneWayPowerClass::LowPower, lVelux, lCopy);
+        ASSERT_EQ(lShape.preamble, IOHC_PREAMBLE_NORMAL_START);
+        ASSERT_TRUE(!lShape.lowPower);
+    }
+}
+
 TEST(test_1w_activate_mode_payload_layout)
 {
     // 1W ActivateMode (_p0x01_13): origin(1)+acei(1)+main(1!)+fp1(1)+fp2(1)+seq(2)+hmac(6) = 13B
@@ -7547,14 +7582,12 @@ TEST(controller_velux_1w_strict_profile_destinations_and_ctrl1)
     ASSERT_EQ(lVelux.addDestinations[0], 0x0000BFU);
     ASSERT_EQ(lVelux.addDestinations[1], 0x0000FFU);
     ASSERT_EQ(lVelux.addDestinations[2], 0x00037FU);
-    ASSERT_TRUE(!lVelux.pairingLowPower);
     for (uint8_t i = 0; i < lVelux.addDestinationCount; ++i)
         ASSERT_NE(lVelux.addDestinations[i], 0x00003FU);
 
     const auto &lGeneric = IoHomeController::oneWayPairingProfileGeneric();
     ASSERT_EQ(lGeneric.removeDestination, 0U); // derived from the broadcast type
     ASSERT_TRUE(lGeneric.addDestinations == nullptr);
-    ASSERT_TRUE(!lGeneric.pairingLowPower);
 }
 
 TEST(controller_velux_1w_enrollment_class_mask_can_select_awning_only)
@@ -11649,6 +11682,66 @@ TEST(controller_1w_execute_uses_four_reference_long_preambles)
     ASSERT_EQ(lController.state(), ControllerState::Idle);
 }
 
+TEST(controller_1w_identity_power_class_shapes_runtime_burst)
+{
+    struct TestCase
+    {
+        OneWayPowerClass powerClass;
+        uint16_t firstPreamble;
+        bool firstLowPower;
+        uint16_t repeatPreamble;
+        bool repeatLowPower;
+    };
+    const TestCase lCases[] = {
+        {OneWayPowerClass::AlwaysAlive, IOHC_PREAMBLE_NORMAL_START, false,
+         IOHC_PREAMBLE_NORMAL_START, false},
+        {OneWayPowerClass::LowPower, IOHC_PREAMBLE_LONG, true,
+         IOHC_PREAMBLE_NORMAL_START, false},
+    };
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    for (const TestCase &lCase : lCases)
+    {
+        ioHomeTestSetMillis(1000);
+        ioHomeTestSetMicros(1000000);
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setNodeId(lDeviceNodeId);
+        lChannel.setEncryptionKey(lKey);
+        lChannel.setIs1W(true);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+        lChannel.setConfigured1WPowerClass(lCase.powerClass);
+
+        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 0xD2));
+        lController.loop();
+        lController.loop();
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), lCase.firstPreamble);
+        IoHomeFrame lFirst;
+        const auto &lFirstPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(deserializeFrameForTest(lFirst, lFirstPacket.data(), static_cast<uint8_t>(lFirstPacket.size())));
+        ASSERT_EQ((lFirst.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0, lCase.firstLowPower);
+
+        lController.loop();
+        ioHomeTestAdvanceMillis(IOHC_1W_REPEAT_INTERVAL_MS);
+        lController.loop();
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), lCase.repeatPreamble);
+        IoHomeFrame lRepeat;
+        const auto &lRepeatPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(deserializeFrameForTest(lRepeat, lRepeatPacket.data(), static_cast<uint8_t>(lRepeatPacket.size())));
+        ASSERT_EQ((lRepeat.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0, lCase.repeatLowPower);
+    }
+}
+
 TEST(controller_1w_pairing_uses_four_reference_long_preambles)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -11730,6 +11823,41 @@ TEST(controller_velux_1w_pairing_keeps_short_repeat_preamble)
     ioHomeTestAdvanceMillis(IOHC_1W_REPEAT_INTERVAL_MS);
     lController.loop(); // first VELUX repeat
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
+}
+
+TEST(controller_1w_low_power_class_shapes_pairing_burst)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initOneWayPairingModeControllerForTest(lController, lModule, lChannel,
+                                           lRemoteNodeId, lDeviceNodeId, lKey);
+    lChannel.setConfigured1WPowerClass(OneWayPowerClass::LowPower);
+
+    ASSERT_TRUE(lController.startPairing1WAddOnly(0, lDeviceNodeId));
+    lController.loop();
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+    IoHomeFrame lFirst;
+    const auto &lFirstPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(deserializeFrameForTest(lFirst, lFirstPacket.data(), static_cast<uint8_t>(lFirstPacket.size())));
+    ASSERT_TRUE((lFirst.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+
+    lController.loop();
+    ioHomeTestAdvanceMillis(IOHC_1W_REPEAT_INTERVAL_MS);
+    lController.loop();
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    IoHomeFrame lRepeat;
+    const auto &lRepeatPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(deserializeFrameForTest(lRepeat, lRepeatPacket.data(), static_cast<uint8_t>(lRepeatPacket.size())));
+    ASSERT_EQ(lRepeat.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
 }
 
 TEST(controller_1w_ui_open_position_conversion_matches_raw_closed_main)
@@ -12828,6 +12956,7 @@ int main()
     RUN(test_1w_repeat_count_constant);
     RUN(test_1w_repeat_interval_constant);
     RUN(test_1w_repeat_preamble_constants);
+    RUN(test_1w_power_class_copy_shapes);
     RUN(test_1w_activate_mode_payload_layout);
     RUN(test_1w_activate_mode_hmac_input_6bytes);
     RUN(test_1w_execute_16byte_payload_layout);
@@ -12932,8 +13061,10 @@ int main()
     RUN(controller_2w_final_response_wait_and_sx1262_dwell);
     RUN(controller_default_1w_execute_uses_standard_vent_layout);
     RUN(controller_1w_execute_uses_four_reference_long_preambles);
+    RUN(controller_1w_identity_power_class_shapes_runtime_burst);
     RUN(controller_1w_pairing_uses_four_reference_long_preambles);
     RUN(controller_velux_1w_pairing_keeps_short_repeat_preamble);
+    RUN(controller_1w_low_power_class_shapes_pairing_burst);
     RUN(controller_1w_ui_open_position_conversion_matches_raw_closed_main);
     RUN(controller_default_1w_execute_matches_reference_payloads);
     RUN(controller_1w_execute_template_can_override_acei_fp_and_destination);

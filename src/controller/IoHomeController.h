@@ -65,6 +65,12 @@ enum class OneWayDestinationMode : uint8_t
   Exact = 3
 };
 
+struct OneWayCopyShape
+{
+  uint16_t preamble;
+  bool lowPower;
+};
+
 // First-class 1W pairing/add/remove operation.
 // These modes map directly to the rspaargaren/iohomecontrol user operations:
 //   announce-only -> 0x2E only
@@ -280,7 +286,6 @@ public:
     uint32_t finalizerDestination;
     const uint32_t *addDestinations; // nullptr = derive from the broadcast type
     uint8_t addDestinationCount;
-    bool pairingLowPower;
   };
 
   static const OneWayPairingProfile &oneWayPairingProfileGeneric();
@@ -647,6 +652,10 @@ public:
   // VELUX keeps the proven short-repeat timing; other identities follow the
   // reference hardware's long preamble on every copy in a 1W burst.
   static uint16_t oneWayRepeatPreambleForManufacturer(uint8_t iManufacturer);
+  static OneWayCopyShape oneWayCopyShape(OneWayPowerClass iPowerClass,
+                                         uint8_t iManufacturer,
+                                         uint8_t iCopyIndex);
+  static const char *oneWayPowerClassName(OneWayPowerClass iPowerClass);
   static OneWayEnrollmentFinalizer resolveOneWayEnrollmentFinalizer(
       OneWayEnrollmentFinalizer iConfigured, uint8_t iManufacturer);
   static const char *oneWayEnrollmentFinalizerName(OneWayEnrollmentFinalizer iFinalizer);
@@ -654,6 +663,7 @@ public:
   uint8_t effectiveOneWayAcei(IoHomecontrolChannel *iChannel) const;
   OneWayDestinationMode effectiveOneWayDestinationMode(IoHomecontrolChannel *iChannel) const;
   uint8_t effectiveOneWayEnrollmentClassMask(IoHomecontrolChannel *iChannel) const;
+  OneWayPowerClass effectiveOneWayPowerClass(IoHomecontrolChannel *iChannel) const;
 
   // Set pointer to parent module (for channel callbacks)
   void setModule(IoHomecontrol *iModule);
@@ -971,7 +981,8 @@ private:
   void tracePairDiagnosticCompactPair() const;
   void tracePairDiagnosticCompactRx(const IoHomeRadioHealth &iHealth) const;
   void tracePairDiagnosticTx2W(const IoHomeFrame &iFrame, uint16_t iPreambleSymbols) const;
-  void trace1WRepeatPlan(const char *iContext, uint16_t iRepeatPreamble) const;
+  void trace1WRepeatPlan(const char *iContext, OneWayPowerClass iPowerClass,
+                         uint8_t iManufacturer) const;
   bool createAndTraceHmac1W(const uint8_t *iTranscript, uint8_t iTranscriptLen,
                             uint16_t iSequenceNum, const uint8_t iControllerKey[16],
                             uint8_t oHmac[IOHC_HMAC_SIZE]) const;
@@ -1119,8 +1130,10 @@ private:
   RadioError startShortPreambleTransmit(const uint8_t *iBuffer, uint8_t iLen,
                                         bool iTrackDutyCycle = false,
                                         LbtContext iLbtContext = LbtContext::Normal);
-  uint16_t queuedOneWayRepeatPreamble() const;
-  uint16_t pairingOneWayRepeatPreamble() const;
+  OneWayCopyShape queuedOneWayCopyShape(uint8_t iCopyIndex) const;
+  OneWayCopyShape pairingOneWayCopyShape(uint8_t iCopyIndex) const;
+  OneWayPowerClass pairingOneWayPowerClass() const;
+  uint8_t pairingOneWayManufacturer() const;
   uint16_t authResponsePreamble() const;
   uint32_t currentTxTimeoutMs() const;
 

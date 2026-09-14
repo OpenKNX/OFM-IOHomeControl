@@ -1465,7 +1465,6 @@ const IoHomeController::OneWayPairingProfile &IoHomeController::oneWayPairingPro
         0x00003F, // finalizer (only used when explicitly enabled)
         nullptr,  // add destination follows the configured broadcast type
         1,
-        false, // captured 1W frames keep CTRL1 clear; preamble length is independent
     };
     return kGeneric;
 }
@@ -1486,7 +1485,6 @@ const IoHomeController::OneWayPairingProfile &IoHomeController::oneWayPairingPro
         0x00003F,
         kAddDestinations,
         static_cast<uint8_t>(sizeof(kAddDestinations) / sizeof(kAddDestinations[0])),
-        false,
     };
     return kVeluxKli;
 }
@@ -1545,6 +1543,40 @@ uint16_t IoHomeController::oneWayRepeatPreambleForManufacturer(uint8_t iManufact
     return iManufacturer == static_cast<uint8_t>(IoHomeManufacturer::Velux)
                ? IOHC_PREAMBLE_SHORT
                : IOHC_PREAMBLE_LONG;
+}
+
+OneWayCopyShape IoHomeController::oneWayCopyShape(OneWayPowerClass iPowerClass,
+                                                   uint8_t iManufacturer,
+                                                   uint8_t iCopyIndex)
+{
+    switch (iPowerClass)
+    {
+    case OneWayPowerClass::AlwaysAlive:
+        return {IOHC_PREAMBLE_NORMAL_START, false};
+    case OneWayPowerClass::LowPower:
+        return iCopyIndex == 0
+                   ? OneWayCopyShape{IOHC_PREAMBLE_LONG, true}
+                   : OneWayCopyShape{IOHC_PREAMBLE_NORMAL_START, false};
+    case OneWayPowerClass::Automatic:
+    default:
+        // Preserve the OFM wire behavior existing installations already use:
+        // the first copy is a long, flag-free start; repeats are short for the
+        // capture-backed VELUX profile and long for other manufacturers.
+        return {static_cast<uint16_t>(iCopyIndex == 0 ? IOHC_PREAMBLE_LONG
+                                                      : oneWayRepeatPreambleForManufacturer(iManufacturer)),
+                false};
+    }
+}
+
+const char *IoHomeController::oneWayPowerClassName(OneWayPowerClass iPowerClass)
+{
+    switch (iPowerClass)
+    {
+    case OneWayPowerClass::AlwaysAlive: return "always-alive";
+    case OneWayPowerClass::LowPower: return "low-power";
+    case OneWayPowerClass::Automatic:
+    default: return "automatic";
+    }
 }
 
 ControllerState IoHomeController::state() const
@@ -2328,6 +2360,13 @@ uint8_t IoHomeController::effectiveOneWayEnrollmentClassMask(IoHomecontrolChanne
     return lConfigured == 0 ? IOHC_1W_ENROLL_CLASS_ALL : lConfigured;
 }
 
+OneWayPowerClass IoHomeController::effectiveOneWayPowerClass(IoHomecontrolChannel *iChannel) const
+{
+    IoHomecontrolChannel *lProfile = oneWayProfileForChannel(iChannel);
+    return lProfile ? lProfile->getConfigured1WPowerClass()
+                    : OneWayPowerClass::Automatic;
+}
+
 // --- Pairing ---
 
 bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId)
@@ -2476,10 +2515,14 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
                  static_cast<unsigned>(mPairing1WEnrollmentClassMask),
                  oneWayEnrollmentFinalizerName(lCh->getConfigured1WEnrollmentFinalizer()),
                  oneWayEnrollmentFinalizerName(mPairing1WFinalizer));
-        logInfoP("Pairing: 1W remove dst=0x%06X finalizer dst=0x%06X ctrl1LowPower=%u",
+        const OneWayCopyShape lFirstShape = pairingOneWayCopyShape(0);
+        const OneWayCopyShape lRepeatShape = pairingOneWayCopyShape(1);
+        logInfoP("Pairing: 1W remove dst=0x%06X finalizer dst=0x%06X power=%s first=%u/lp%u repeat=%u/lp%u",
                  pairing1WRemoveDestination(),
                  pairing1WFinalizerDestination(),
-                 pairing1WProfile().pairingLowPower ? 1U : 0U);
+                 oneWayPowerClassName(pairingOneWayPowerClass()),
+                 static_cast<unsigned>(lFirstShape.preamble), lFirstShape.lowPower ? 1U : 0U,
+                 static_cast<unsigned>(lRepeatShape.preamble), lRepeatShape.lowPower ? 1U : 0U);
         if (mPairDiagnosticTraceEnabled)
         {
             logInfoP("PairDiag: starting 1W mode=%s sequence=%s state=%s",
@@ -3758,17 +3801,22 @@ void IoHomeController::tracePairDiagnosticTx2W(const IoHomeFrame &iFrame, uint16
              (iFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) ? 1U : 0U);
 }
 
-void IoHomeController::trace1WRepeatPlan(const char *iContext, uint16_t iRepeatPreamble) const
+void IoHomeController::trace1WRepeatPlan(const char *iContext,
+                                         OneWayPowerClass iPowerClass,
+                                         uint8_t iManufacturer) const
 {
     if (!mPairDiagnosticTraceEnabled)
         return;
 
-    logInfoP("1w repeat: ctx=%s total=%u gap=%ums firstPre=%u repeatPre=%u",
+    const OneWayCopyShape lFirst = oneWayCopyShape(iPowerClass, iManufacturer, 0);
+    const OneWayCopyShape lRepeat = oneWayCopyShape(iPowerClass, iManufacturer, 1);
+    logInfoP("1w repeat: ctx=%s power=%s total=%u gap=%ums firstPre=%u firstLp=%u repeatPre=%u repeatLp=%u",
              iContext ? iContext : "1w",
+             oneWayPowerClassName(iPowerClass),
              static_cast<unsigned>(IOHC_1W_REPEAT_COUNT + 1U),
              static_cast<unsigned>(IOHC_1W_REPEAT_INTERVAL_MS),
-             static_cast<unsigned>(IOHC_PREAMBLE_LONG),
-             static_cast<unsigned>(iRepeatPreamble));
+             static_cast<unsigned>(lFirst.preamble), lFirst.lowPower ? 1U : 0U,
+             static_cast<unsigned>(lRepeat.preamble), lRepeat.lowPower ? 1U : 0U);
 }
 
 bool IoHomeController::createAndTraceHmac1W(const uint8_t *iTranscript, uint8_t iTranscriptLen,
@@ -4714,6 +4762,20 @@ void IoHomeController::processTxPending()
     if (!isDutyCycleOk(lTxDutyFreqIdx))
         return; // wait for duty cycle to clear
 
+    OneWayCopyShape lOneWayFirstShape{IOHC_PREAMBLE_LONG, false};
+    OneWayPowerClass lOneWayPowerClass = OneWayPowerClass::Automatic;
+    uint8_t lOneWayManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Unknown);
+    if (lIs1WFrame)
+    {
+        IoHomecontrolChannel *lChannel = channelForQueueEntry(mCurrentCmd);
+        IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lChannel);
+        lOneWayPowerClass = effectiveOneWayPowerClass(lChannel);
+        if (lProfile)
+            lOneWayManufacturer = lProfile->getOneWayControllerManufacturer();
+        lOneWayFirstShape = oneWayCopyShape(lOneWayPowerClass, lOneWayManufacturer, 0);
+        mTxFrame.setLowPower(lOneWayFirstShape.lowPower);
+    }
+
     mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen == 0)
     {
@@ -4734,16 +4796,15 @@ void IoHomeController::processTxPending()
                  mTxFrame.getSrcNodeId(),
                  mTxFrame.getDestNodeId(),
                  lHex.c_str());
-        trace1WRepeatPlan("tx1w", queuedOneWayRepeatPreamble());
+        trace1WRepeatPlan("tx1w", lOneWayPowerClass, lOneWayManufacturer);
     }
 
     // 1W has its own proven first-frame/repeat behaviour. For 2W, a START
     // frame needs a wake-up preamble only when its target is low-power.
     // Normal 2W controller-originated TX is always sent on CH2; RX scanning remains separate.
     bool lIsStartFrame = (mTxFrame.ctrlByte0 & IOHC_CTRL0_START);
-    const uint16_t lPreamble = lIs1WFrame
-                                   ? (lIsStartFrame ? IOHC_PREAMBLE_LONG : IOHC_PREAMBLE_SHORT)
-                                   : preambleFor2WRequest(mTxFrame);
+    const uint16_t lPreamble = lIs1WFrame ? lOneWayFirstShape.preamble
+                                          : preambleFor2WRequest(mTxFrame);
     if (!lIs1WFrame)
     {
         mWaitingFinalResponse = false;
@@ -4863,10 +4924,17 @@ void IoHomeController::processTx1WRepeat()
             mCurrentFreqIdx = lNextFreqIdx;
     }
 
-    // Reference hardware uses a long preamble on every copy. Preserve the
-    // proven short-repeat exception only for VELUX controller identities.
-    const uint16_t lRepeatPreamble = queuedOneWayRepeatPreamble();
-    const RadioError lErr = startTransmitWithPreamble(mTxBuffer, mTxLen, lRepeatPreamble);
+    const uint8_t lCopyIndex = static_cast<uint8_t>(IOHC_1W_REPEAT_COUNT - mTx1WRepeatRemaining);
+    const OneWayCopyShape lShape = queuedOneWayCopyShape(lCopyIndex);
+    mTxFrame.setLowPower(lShape.lowPower);
+    mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
+    if (mTxLen == 0)
+    {
+        mCurrentCmd.active = false;
+        mState = ControllerState::Idle;
+        return;
+    }
+    const RadioError lErr = startTransmitWithPreamble(mTxBuffer, mTxLen, lShape.preamble);
     if (lErr == RadioError::None)
     {
         if (mPairDiagnosticTraceEnabled)
@@ -4875,7 +4943,7 @@ void IoHomeController::processTx1WRepeat()
             logInfoP("PairDiag: 1W repeat tx remaining=%u len=%u pre=%u ch=%u freq=%lu",
                      static_cast<unsigned>(mTx1WRepeatRemaining),
                      static_cast<unsigned>(mTxLen),
-                     static_cast<unsigned>(lRepeatPreamble),
+                     static_cast<unsigned>(lShape.preamble),
                      static_cast<unsigned>(iohcChannelNumberForFrequency(lRepeatFreqHz)),
                      static_cast<unsigned long>(lRepeatFreqHz));
         }
@@ -5440,7 +5508,8 @@ void IoHomeController::processPairSend1WAnnounce()
 
     mCurrentFreqIdx = kPair1WFreqIdx;
     const uint32_t lPair1WFreq = IOHC_FREQ_2;
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lPair1WFreq);
+    const OneWayCopyShape lFirstShape = pairingOneWayCopyShape(0);
+    const RadioError lPrepErr = configureTxRadio(lFirstShape.preamble, &lPair1WFreq);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -5459,7 +5528,7 @@ void IoHomeController::processPairSend1WAnnounce()
 
     mTxFrame.init();
     mTxFrame.set1WMode();
-    mTxFrame.setLowPower(pairing1WProfile().pairingLowPower);
+    mTxFrame.setLowPower(lFirstShape.lowPower);
     mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
     mTxFrame.setDestNode(oneWayBroadcastTarget(mPairing1WBroadcastType));
     mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
@@ -5497,7 +5566,7 @@ void IoHomeController::processPairSend1WAnnounce()
                  mTxFrame.getSrcNodeId(),
                  mTxFrame.getDestNodeId(),
                  lHex.c_str());
-        trace1WRepeatPlan("1w announce", pairingOneWayRepeatPreamble());
+        trace1WRepeatPlan("1w announce", pairingOneWayPowerClass(), pairingOneWayManufacturer());
     }
 
     const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
@@ -5549,7 +5618,8 @@ void IoHomeController::processPairSend1WRemove()
 
     mCurrentFreqIdx = kPair1WFreqIdx;
     const uint32_t lPair1WFreq = IOHC_FREQ_2;
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lPair1WFreq);
+    const OneWayCopyShape lFirstShape = pairingOneWayCopyShape(0);
+    const RadioError lPrepErr = configureTxRadio(lFirstShape.preamble, &lPair1WFreq);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -5568,7 +5638,7 @@ void IoHomeController::processPairSend1WRemove()
 
     mTxFrame.init();
     mTxFrame.set1WMode();
-    mTxFrame.setLowPower(pairing1WProfile().pairingLowPower);
+    mTxFrame.setLowPower(lFirstShape.lowPower);
     mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
     mTxFrame.setDestNode(pairing1WRemoveDestination());
     mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
@@ -5609,7 +5679,7 @@ void IoHomeController::processPairSend1WRemove()
                  mTxFrame.getSrcNodeId(),
                  mTxFrame.getDestNodeId(),
                  lHex.c_str());
-        trace1WRepeatPlan("1w remove", pairingOneWayRepeatPreamble());
+        trace1WRepeatPlan("1w remove", pairingOneWayPowerClass(), pairingOneWayManufacturer());
     }
 
     const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
@@ -5683,7 +5753,8 @@ void IoHomeController::processPairSend1WKeyTransfer()
 
     mCurrentFreqIdx = kPair1WFreqIdx;
     const uint32_t lPair1WFreq = IOHC_FREQ_2;
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lPair1WFreq);
+    const OneWayCopyShape lFirstShape = pairingOneWayCopyShape(0);
+    const RadioError lPrepErr = configureTxRadio(lFirstShape.preamble, &lPair1WFreq);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -5694,7 +5765,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
 
     mTxFrame.init();
     mTxFrame.set1WMode();
-    mTxFrame.setLowPower(pairing1WProfile().pairingLowPower);
+    mTxFrame.setLowPower(lFirstShape.lowPower);
     mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
     mTxFrame.commandId = IoHomeCommand::SendKey1W;
 
@@ -5762,7 +5833,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
                      static_cast<unsigned>(lProfile->getOneWayControllerManufacturer()),
                      static_cast<unsigned>(mCurrentFreqIdx),
                      static_cast<unsigned long>(IOHC_FREQ_2));
-            trace1WRepeatPlan("1w key", pairingOneWayRepeatPreamble());
+            trace1WRepeatPlan("1w key", pairingOneWayPowerClass(), pairingOneWayManufacturer());
             logInfoP("PairDiag: 1W key tx payload=redacted");
         }
 
@@ -5840,7 +5911,7 @@ bool IoHomeController::prepareOneWayEnrollmentExecute(uint16_t iMain,
 
     mTxFrame.init();
     mTxFrame.set1WMode();
-    mTxFrame.setLowPower(pairing1WProfile().pairingLowPower);
+    mTxFrame.setLowPower(pairingOneWayCopyShape(0).lowPower);
     mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
     mTxFrame.commandId = IoHomeCommand::Execute;
     mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
@@ -5876,7 +5947,7 @@ void IoHomeController::processPairSend1WFinalizerStop()
 
     mCurrentFreqIdx = kPair1WFreqIdx;
     const uint32_t lPair1WFreq = IOHC_FREQ_2;
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lPair1WFreq);
+    const RadioError lPrepErr = configureTxRadio(pairingOneWayCopyShape(0).preamble, &lPair1WFreq);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -5953,7 +6024,7 @@ void IoHomeController::processPairSend1WFinalizerDown()
 
     mCurrentFreqIdx = kPair1WFreqIdx;
     const uint32_t lPair1WFreq = IOHC_FREQ_2;
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lPair1WFreq);
+    const RadioError lPrepErr = configureTxRadio(pairingOneWayCopyShape(0).preamble, &lPair1WFreq);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -6060,17 +6131,23 @@ bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
 
         mTx1WRepeatTimer = 0;
 
-        // Generic identities follow reference hardware with a long preamble
-        // on every copy. VELUX retains its proven short-repeat timing.
-        const uint16_t lRepeatPreamble = pairingOneWayRepeatPreamble();
-        RadioError lErr = startTransmitWithPreamble(mTxBuffer, mTxLen, lRepeatPreamble);
+        const uint8_t lCopyIndex = static_cast<uint8_t>(IOHC_1W_REPEAT_COUNT - mTx1WRepeatRemaining);
+        const OneWayCopyShape lShape = pairingOneWayCopyShape(lCopyIndex);
+        mTxFrame.setLowPower(lShape.lowPower);
+        mTxLen = mTxFrame.serialize1W(mTxBuffer, sizeof(mTxBuffer));
+        if (mTxLen == 0)
+        {
+            mState = ControllerState::PairFailed;
+            return true;
+        }
+        RadioError lErr = startTransmitWithPreamble(mTxBuffer, mTxLen, lShape.preamble);
         if (mPairDiagnosticTraceEnabled && lErr == RadioError::None)
         {
             logInfoP("PairDiag: 1W pair repeat tx state=%s remaining=%u len=%u pre=%u",
                      stateName(mState),
                      static_cast<unsigned>(mTx1WRepeatRemaining),
                      static_cast<unsigned>(mTxLen),
-                     static_cast<unsigned>(lRepeatPreamble));
+                     static_cast<unsigned>(lShape.preamble));
         }
 
         if (lErr == RadioError::None)
@@ -7041,22 +7118,33 @@ RadioError IoHomeController::startShortPreambleTransmit(const uint8_t *iBuffer, 
     return startTransmitWithPreamble(iBuffer, iLen, IOHC_PREAMBLE_SHORT, iTrackDutyCycle, iLbtContext);
 }
 
-uint16_t IoHomeController::queuedOneWayRepeatPreamble() const
+OneWayCopyShape IoHomeController::queuedOneWayCopyShape(uint8_t iCopyIndex) const
 {
     IoHomecontrolChannel *lChannel = channelForQueueEntry(mCurrentCmd);
     IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lChannel);
     const uint8_t lManufacturer = lProfile
                                       ? lProfile->getOneWayControllerManufacturer()
                                       : static_cast<uint8_t>(IoHomeManufacturer::Unknown);
-    return oneWayRepeatPreambleForManufacturer(lManufacturer);
+    return oneWayCopyShape(effectiveOneWayPowerClass(lChannel), lManufacturer, iCopyIndex);
 }
 
-uint16_t IoHomeController::pairingOneWayRepeatPreamble() const
+uint8_t IoHomeController::pairingOneWayManufacturer() const
 {
-    return oneWayRepeatPreambleForManufacturer(
-        mPairing1WVeluxProfile
-            ? static_cast<uint8_t>(IoHomeManufacturer::Velux)
-            : static_cast<uint8_t>(IoHomeManufacturer::Unknown));
+    IoHomecontrolChannel *lChannel = mModule ? mModule->getChannel(mPairingChannel) : nullptr;
+    IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lChannel);
+    return lProfile ? lProfile->getOneWayControllerManufacturer()
+                    : static_cast<uint8_t>(IoHomeManufacturer::Unknown);
+}
+
+OneWayPowerClass IoHomeController::pairingOneWayPowerClass() const
+{
+    IoHomecontrolChannel *lChannel = mModule ? mModule->getChannel(mPairingChannel) : nullptr;
+    return effectiveOneWayPowerClass(lChannel);
+}
+
+OneWayCopyShape IoHomeController::pairingOneWayCopyShape(uint8_t iCopyIndex) const
+{
+    return oneWayCopyShape(pairingOneWayPowerClass(), pairingOneWayManufacturer(), iCopyIndex);
 }
 
 uint16_t IoHomeController::authResponsePreamble() const

@@ -167,16 +167,22 @@ namespace
         formatOneWayEnrollmentClasses(lClassMask, lClasses, sizeof(lClasses));
         const OneWayEnrollmentFinalizer lFinalizer = IoHomeController::resolveOneWayEnrollmentFinalizer(
             iChannel->getConfigured1WEnrollmentFinalizer(), lManufacturer);
+        const OneWayPowerClass lPowerClass = iController.effectiveOneWayPowerClass(iChannel);
+        const OneWayCopyShape lFirstShape = IoHomeController::oneWayCopyShape(lPowerClass, lManufacturer, 0);
+        const OneWayCopyShape lRepeatShape = IoHomeController::oneWayCopyShape(lPowerClass, lManufacturer, 1);
         openknx.logger.logMacroWrapper(
             0, "IoHomecontrol",
-            "  1W wire profile: manufacturer=%s(0x%02X) executeAcei=0x%02X source=%s executeDst=%s type=%u dst=%06X enrollClasses=%s%s finalizer=%s",
+            "  1W wire profile: manufacturer=%s(0x%02X) executeAcei=0x%02X source=%s executeDst=%s type=%u dst=%06X enrollClasses=%s%s finalizer=%s power=%s first=%u/lp%u repeat=%u/lp%u",
             oneWayManufacturerName(lManufacturer), static_cast<unsigned>(lManufacturer),
             static_cast<unsigned>(lAcei), lAceiOverride ? "ETS-override" : "manufacturer",
             oneWayExecuteDestinationPolicyName(lPolicy),
             static_cast<unsigned>(iChannel->getConfigured1WBroadcastType()),
             static_cast<unsigned long>(lDestination), lClasses,
             iChannel->getConfigured1WEnrollmentClassMask() == 0 ? " (automatic)" : " (ETS-override)",
-            IoHomeController::oneWayEnrollmentFinalizerName(lFinalizer));
+            IoHomeController::oneWayEnrollmentFinalizerName(lFinalizer),
+            IoHomeController::oneWayPowerClassName(lPowerClass),
+            static_cast<unsigned>(lFirstShape.preamble), lFirstShape.lowPower ? 1U : 0U,
+            static_cast<unsigned>(lRepeatShape.preamble), lRepeatShape.lowPower ? 1U : 0U);
     }
 
     bool identityEquals2W(uint32_t iNodeId, const uint8_t *iKey, uint32_t iTwoWayNodeId, const uint8_t *iTwoWayKey)
