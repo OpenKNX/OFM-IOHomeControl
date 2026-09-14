@@ -36,6 +36,12 @@
 #ifndef ParamIOHC_cTwoWayDiscoveryPreamble
 #define ParamIOHC_cTwoWayDiscoveryPreamble 0
 #endif
+#ifndef ParamIOHC_cOneWayExecuteDestination
+#define ParamIOHC_cOneWayExecuteDestination 0
+#endif
+#ifndef ParamIOHC_cOneWayEnrollmentClasses
+#define ParamIOHC_cOneWayEnrollmentClasses 0
+#endif
 
 // ---------------------------------------------------------------------------
 // Scene parameter access
@@ -195,6 +201,8 @@ void IoHomecontrolChannel::setup()
     const uint8_t lOneWayAcei = static_cast<uint8_t>(ParamIOHC_cOneWayAcei);
     const bool lOneWayEnrollmentMac = ParamIOHC_cOneWayEnrollmentMac != 0;
     const uint8_t lOneWayEnrollmentFinalizer = static_cast<uint8_t>(ParamIOHC_cOneWayEnrollmentFinalizer);
+    const uint8_t lOneWayExecuteDestination = static_cast<uint8_t>(ParamIOHC_cOneWayExecuteDestination);
+    const uint8_t lOneWayEnrollmentClasses = static_cast<uint8_t>(ParamIOHC_cOneWayEnrollmentClasses);
     const uint8_t lTwoWayPowerClass = static_cast<uint8_t>(ParamIOHC_cTwoWayPowerClass);
     const uint8_t lTwoWayDiscoveryCommand = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryCommand);
     const uint8_t lTwoWayDiscoveryDestination = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryDestination);
@@ -265,6 +273,11 @@ void IoHomecontrolChannel::setup()
         lOneWayEnrollmentFinalizer <= static_cast<uint8_t>(OneWayEnrollmentFinalizer::StopDown)
             ? static_cast<OneWayEnrollmentFinalizer>(lOneWayEnrollmentFinalizer)
             : OneWayEnrollmentFinalizer::Automatic);
+    setConfigured1WExecuteDestinationPolicy(
+        lOneWayExecuteDestination <= static_cast<uint8_t>(OneWayExecuteDestinationPolicy::All)
+            ? static_cast<OneWayExecuteDestinationPolicy>(lOneWayExecuteDestination)
+            : OneWayExecuteDestinationPolicy::Automatic);
+    setConfigured1WEnrollmentClassMask(lOneWayEnrollmentClasses);
     mSilentOperation = !mIs1W && lSilentOperation;
     mConfigured1WManufacturer = lOneWayManufacturer;
     if (mConfigured1WManufacturer != 0)
@@ -914,6 +927,10 @@ void IoHomecontrolChannel::setConfigured1WEnrollmentMac(bool iEnabled) { mConfig
 bool IoHomecontrolChannel::getConfigured1WEnrollmentMac() const { return mConfigured1WEnrollmentMac; }
 void IoHomecontrolChannel::setConfigured1WEnrollmentFinalizer(OneWayEnrollmentFinalizer iFinalizer) { mConfigured1WEnrollmentFinalizer = iFinalizer; }
 OneWayEnrollmentFinalizer IoHomecontrolChannel::getConfigured1WEnrollmentFinalizer() const { return mConfigured1WEnrollmentFinalizer; }
+void IoHomecontrolChannel::setConfigured1WExecuteDestinationPolicy(OneWayExecuteDestinationPolicy iPolicy) { mConfigured1WExecuteDestinationPolicy = iPolicy; }
+OneWayExecuteDestinationPolicy IoHomecontrolChannel::getConfigured1WExecuteDestinationPolicy() const { return mConfigured1WExecuteDestinationPolicy; }
+void IoHomecontrolChannel::setConfigured1WEnrollmentClassMask(uint8_t iMask) { mConfigured1WEnrollmentClassMask = iMask & IOHC_1W_ENROLL_CLASS_ALL; }
+uint8_t IoHomecontrolChannel::getConfigured1WEnrollmentClassMask() const { return mConfigured1WEnrollmentClassMask; }
 
 // --- Private command methods ---
 

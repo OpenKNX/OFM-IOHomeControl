@@ -210,6 +210,25 @@
                   <Enumeration Text="Lüftung (Typ 20)" Value="20" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCOneWayExecuteDestination" Name="IOHCOneWayExecuteDestination">
+                <TypeRestriction Base="Value" SizeInBit="2">
+                  <Enumeration Text="Automatisch (Typ-Broadcast)" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Typ-Broadcast" Value="1" Id="%ENID%" />
+                  <Enumeration Text="Alle Geräte (00003F)" Value="2" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCOneWayEnrollmentClasses" Name="IOHCOneWayEnrollmentClasses">
+                <TypeRestriction Base="Value" SizeInBit="3">
+                  <Enumeration Text="Automatisch (BF + FF + 37F)" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Rollladen/Jalousie (BF)" Value="1" Id="%ENID%" />
+                  <Enumeration Text="Markise (FF)" Value="2" Id="%ENID%" />
+                  <Enumeration Text="Rollladen + Markise (BF + FF)" Value="3" Id="%ENID%" />
+                  <Enumeration Text="Dual Shutter (37F)" Value="4" Id="%ENID%" />
+                  <Enumeration Text="Rollladen + Dual Shutter (BF + 37F)" Value="5" Id="%ENID%" />
+                  <Enumeration Text="Markise + Dual Shutter (FF + 37F)" Value="6" Id="%ENID%" />
+                  <Enumeration Text="Alle explizit (BF + FF + 37F)" Value="7" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
               <ParameterType Id="%AID%_PT-IOHCOneWayManufacturer" Name="IOHCOneWayManufacturer">
                 <TypeRestriction Base="Value" SizeInBit="8">
                   <Enumeration Text="Aus gespeicherter Controller-Identität" Value="0" Id="%ENID%" />

@@ -102,6 +102,10 @@ public:
   bool getConfigured1WEnrollmentMac() const;
   void setConfigured1WEnrollmentFinalizer(OneWayEnrollmentFinalizer iFinalizer);
   OneWayEnrollmentFinalizer getConfigured1WEnrollmentFinalizer() const;
+  void setConfigured1WExecuteDestinationPolicy(OneWayExecuteDestinationPolicy iPolicy);
+  OneWayExecuteDestinationPolicy getConfigured1WExecuteDestinationPolicy() const;
+  void setConfigured1WEnrollmentClassMask(uint8_t iMask);
+  uint8_t getConfigured1WEnrollmentClassMask() const;
   bool requestStatus();
   void scheduleStatusPoll(uint32_t iDelayMs);
 
@@ -146,6 +150,8 @@ private:
   uint8_t mConfigured1WAcei = 0; // 0 = derive ACEI from the controller-profile manufacturer
   bool mConfigured1WEnrollmentMac = false;
   OneWayEnrollmentFinalizer mConfigured1WEnrollmentFinalizer = OneWayEnrollmentFinalizer::Automatic;
+  OneWayExecuteDestinationPolicy mConfigured1WExecuteDestinationPolicy = OneWayExecuteDestinationPolicy::Automatic;
+  uint8_t mConfigured1WEnrollmentClassMask = 0; // 0 = captured VELUX default (all three)
   float mCurrentPosition = 0.0f;
   float mCurrentSlat = 0.0f;
   bool mIsMoving = false;

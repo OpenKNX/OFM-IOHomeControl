@@ -100,6 +100,83 @@ namespace
         }
     }
 
+    const char *oneWayManufacturerName(uint8_t iManufacturer)
+    {
+        switch (static_cast<IoHomeManufacturer>(iManufacturer))
+        {
+        case IoHomeManufacturer::Velux: return "VELUX";
+        case IoHomeManufacturer::Somfy: return "Somfy";
+        case IoHomeManufacturer::Honeywell: return "Honeywell";
+        case IoHomeManufacturer::Hormann: return "Hoermann";
+        case IoHomeManufacturer::AssaAbloy: return "Assa-Abloy";
+        case IoHomeManufacturer::Niko: return "Niko";
+        case IoHomeManufacturer::WindowMaster: return "WindowMaster";
+        case IoHomeManufacturer::Renson: return "Renson";
+        case IoHomeManufacturer::Ciat: return "Ciat";
+        case IoHomeManufacturer::Secuyou: return "Secuyou";
+        case IoHomeManufacturer::Overkiz: return "Overkiz";
+        case IoHomeManufacturer::AtlanticGroup: return "Atlantic";
+        default: return "unknown";
+        }
+    }
+
+    const char *oneWayExecuteDestinationPolicyName(OneWayExecuteDestinationPolicy iPolicy)
+    {
+        switch (iPolicy)
+        {
+        case OneWayExecuteDestinationPolicy::Typed: return "typed";
+        case OneWayExecuteDestinationPolicy::All: return "all";
+        default: return "automatic->typed";
+        }
+    }
+
+    void formatOneWayEnrollmentClasses(uint8_t iMask, char *oText, size_t iSize)
+    {
+        if (!oText || iSize == 0)
+            return;
+        oText[0] = '\0';
+        const char *lSeparator = "";
+        if ((iMask & IOHC_1W_ENROLL_CLASS_ROLLER) != 0)
+        {
+            snprintf(oText + strlen(oText), iSize - strlen(oText), "%s0000BF", lSeparator);
+            lSeparator = ",";
+        }
+        if ((iMask & IOHC_1W_ENROLL_CLASS_AWNING) != 0)
+        {
+            snprintf(oText + strlen(oText), iSize - strlen(oText), "%s0000FF", lSeparator);
+            lSeparator = ",";
+        }
+        if ((iMask & IOHC_1W_ENROLL_CLASS_DUAL) != 0)
+            snprintf(oText + strlen(oText), iSize - strlen(oText), "%s00037F", lSeparator);
+    }
+
+    void logOneWayWireProfile(IoHomeController &iController, IoHomecontrolChannel *iChannel)
+    {
+        if (!iChannel || !iChannel->is1W())
+            return;
+        IoHomecontrolChannel *lProfile = iController.oneWayProfileForChannel(iChannel);
+        const uint8_t lManufacturer = lProfile ? lProfile->getOneWayControllerManufacturer() : 0;
+        const uint8_t lAcei = iController.effectiveOneWayAcei(iChannel);
+        const bool lAceiOverride = iChannel->getConfigured1WAcei() != 0;
+        const OneWayExecuteDestinationPolicy lPolicy = iChannel->getConfigured1WExecuteDestinationPolicy();
+        const uint32_t lDestination = lPolicy == OneWayExecuteDestinationPolicy::All
+                                          ? iController.oneWayBroadcastTarget(0)
+                                          : iController.oneWayBroadcastTarget(iChannel->getConfigured1WBroadcastType());
+        const uint8_t lClassMask = iController.effectiveOneWayEnrollmentClassMask(iChannel);
+        char lClasses[32];
+        formatOneWayEnrollmentClasses(lClassMask, lClasses, sizeof(lClasses));
+        const OneWayEnrollmentFinalizer lFinalizer = IoHomeController::resolveOneWayEnrollmentFinalizer(
+            iChannel->getConfigured1WEnrollmentFinalizer(), lManufacturer);
+        logInfoP("  1W wire profile: manufacturer=%s(0x%02X) executeAcei=0x%02X source=%s executeDst=%s type=%u dst=%06X enrollClasses=%s%s finalizer=%s",
+                 oneWayManufacturerName(lManufacturer), static_cast<unsigned>(lManufacturer),
+                 static_cast<unsigned>(lAcei), lAceiOverride ? "ETS-override" : "manufacturer",
+                 oneWayExecuteDestinationPolicyName(lPolicy),
+                 static_cast<unsigned>(iChannel->getConfigured1WBroadcastType()),
+                 static_cast<unsigned long>(lDestination), lClasses,
+                 iChannel->getConfigured1WEnrollmentClassMask() == 0 ? " (automatic)" : " (ETS-override)",
+                 IoHomeController::oneWayEnrollmentFinalizerName(lFinalizer));
+    }
+
     bool identityEquals2W(uint32_t iNodeId, const uint8_t *iKey, uint32_t iTwoWayNodeId, const uint8_t *iTwoWayKey)
     {
         return (iNodeId & 0x00FFFFFF) == (iTwoWayNodeId & 0x00FFFFFF) &&
@@ -2829,6 +2906,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                              static_cast<unsigned>(lProfile ? lProfile->getSequence1W() : 0),
                              static_cast<unsigned>(lProfile ? lProfile->getReservedSequence1W() : 0),
                              IoHomeController::pairing1WModeName(mController.lastPairing1WMode()));
+                    logOneWayWireProfile(mController, lCh);
                 }
                 else
                 {
@@ -2890,6 +2968,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                              static_cast<unsigned>(lProfile ? lProfile->getOneWayControllerManufacturer() : 0),
                              static_cast<unsigned>(lProfile ? lProfile->getSequence1W() : 0),
                              IoHomeController::pairing1WModeName(mController.lastPairing1WMode()));
+                    logOneWayWireProfile(mController, lCh);
                 }
                 else
                 {
@@ -2968,6 +3047,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                          IoHomeController::oneWayEnrollmentFinalizerName(lConfiguredFinalizer),
                          IoHomeController::oneWayEnrollmentFinalizerName(lResolvedFinalizer),
                          lProfile && lProfile->getConfigured1WEnrollmentMac() ? 1U : 0U);
+                logOneWayWireProfile(mController, lCh);
             }
             return true;
         }
@@ -3055,6 +3135,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                      lProfile && lProfile->getConfigured1WEnrollmentMac() ? 1U : 0U,
                      mController.getOwnNodeId(),
                      keyStateText(mController.getSystemKey()));
+            logOneWayWireProfile(mController, mChannels[lIdx]);
             return true;
         }
 

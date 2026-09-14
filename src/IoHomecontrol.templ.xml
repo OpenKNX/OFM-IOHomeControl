@@ -57,6 +57,8 @@
                 <Parameter Id="%AID%_UP-%TT%%CC%088" Name="c%C%TwoWayDiscoveryAck" ParameterType="%AID%_PT-IOHCTwoWayDiscoveryFlag" Offset="56" BitOffset="0" Text="2W Discovery ACK" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%089" Name="c%C%TwoWayDiscoveryLowPower" ParameterType="%AID%_PT-IOHCTwoWayDiscoveryFlag" Offset="57" BitOffset="0" Text="2W Discovery LOW_POWER" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%090" Name="c%C%TwoWayDiscoveryPreamble" ParameterType="%AID%_PT-IOHCTwoWayDiscoveryPreamble" Offset="58" BitOffset="0" Text="2W Discovery-Präambel" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%091" Name="c%C%OneWayExecuteDestination" ParameterType="%AID%_PT-IOHCOneWayExecuteDestination" Offset="59" BitOffset="0" Text="1W Befehls-Ziel" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%092" Name="c%C%OneWayEnrollmentClasses" ParameterType="%AID%_PT-IOHCOneWayEnrollmentClasses" Offset="60" BitOffset="0" Text="VELUX 1W Anmeldeklassen" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%020" Name="c%C%SceneCount" ParameterType="%AID%_PT-IOHCSceneCount" Offset="13" BitOffset="0" Text="Anzahl Szenen" Value="0" />
                 <!-- Scene slot parameters 1..10 are generated from IoHomecontrol.scene.part.xml. -->
                 <op:usePart name="IOHCScene" xpath="//Parameters/*" />
@@ -95,6 +97,8 @@
               <ParameterRef Id="%AID%_UP-%TT%%CC%088_R-%TT%%CC%08801" RefId="%AID%_UP-%TT%%CC%088" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%089_R-%TT%%CC%08901" RefId="%AID%_UP-%TT%%CC%089" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%090_R-%TT%%CC%09001" RefId="%AID%_UP-%TT%%CC%090" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%091_R-%TT%%CC%09101" RefId="%AID%_UP-%TT%%CC%091" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%092_R-%TT%%CC%09201" RefId="%AID%_UP-%TT%%CC%092" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_UP-%TT%%CC%020" />
               <!-- Scene slot ParameterRefs 1..10 are generated from IoHomecontrol.scene.part.xml. -->
               <op:usePart name="IOHCScene" xpath="//ParameterRefs/*" />
@@ -287,6 +291,8 @@
                           <when test="1">
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%011_R-%TT%%CC%01101" IndentLevel="1" HelpContext="IOHC-Kanal" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%016_R-%TT%%CC%01601" IndentLevel="1" HelpContext="IOHC-1W-Broadcast-Typ" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%091_R-%TT%%CC%09101" IndentLevel="1" HelpContext="IOHC-1W-Befehls-Ziel" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%092_R-%TT%%CC%09201" IndentLevel="1" HelpContext="IOHC-1W-Anmeldeklassen" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%019_R-%TT%%CC%01901" IndentLevel="1" HelpContext="IOHC-1W-Prioritaet" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801" IndentLevel="1" HelpContext="IOHC-1W-Profil" />
                             <choose ParamRefId="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801">

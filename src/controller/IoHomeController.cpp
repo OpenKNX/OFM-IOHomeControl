@@ -1362,7 +1362,16 @@ uint32_t IoHomeController::oneWayBroadcastTarget(uint8_t iBroadcastType) const
 uint8_t IoHomeController::pairing1WAddDestinationCount() const
 {
     const OneWayPairingProfile &lProfile = pairing1WProfile();
-    return lProfile.addDestinations != nullptr ? lProfile.addDestinationCount : 1U;
+    if (lProfile.addDestinations == nullptr)
+        return 1U;
+
+    uint8_t lCount = 0;
+    for (uint8_t i = 0; i < lProfile.addDestinationCount; i++)
+    {
+        if ((mPairing1WEnrollmentClassMask & (1U << i)) != 0)
+            lCount++;
+    }
+    return lCount > 0 ? lCount : lProfile.addDestinationCount;
 }
 
 uint32_t IoHomeController::pairing1WAddDestination() const
@@ -1371,10 +1380,16 @@ uint32_t IoHomeController::pairing1WAddDestination() const
     if (lProfile.addDestinations == nullptr)
         return oneWayBroadcastTarget(mPairing1WBroadcastType);
 
-    const uint8_t lIndex = mPairing1WAddDestinationIndex < lProfile.addDestinationCount
-                               ? mPairing1WAddDestinationIndex
-                               : 0U;
-    return lProfile.addDestinations[lIndex];
+    uint8_t lSelectedIndex = 0;
+    for (uint8_t i = 0; i < lProfile.addDestinationCount; i++)
+    {
+        if ((mPairing1WEnrollmentClassMask & (1U << i)) == 0)
+            continue;
+        if (lSelectedIndex == mPairing1WAddDestinationIndex)
+            return lProfile.addDestinations[i];
+        lSelectedIndex++;
+    }
+    return lProfile.addDestinations[0];
 }
 
 const IoHomeController::OneWayPairingProfile &IoHomeController::oneWayPairingProfileGeneric()
@@ -1578,7 +1593,9 @@ bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
         }
     }
     lEntry.oneWayBroadcastTypeExplicit = false;
-    lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
+    lEntry.oneWayDestinationMode = (iCmd == IoHomeCommand::Execute && lOneWayChannel)
+                                           ? effectiveOneWayDestinationMode(lOneWayChannel)
+                                           : OneWayDestinationMode::ProfileTyped;
     lEntry.oneWayExactDestination = 0;
     lEntry.sourceChannelIndex = 0xFF;
     lEntry.retries = 0;
@@ -1636,7 +1653,9 @@ bool IoHomeController::sendChannelCommand(IoHomecontrolChannel *iChannel,
         }
     }
     lEntry.oneWayBroadcastTypeExplicit = false;
-    lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
+    lEntry.oneWayDestinationMode = iCmd == IoHomeCommand::Execute
+                                           ? effectiveOneWayDestinationMode(iChannel)
+                                           : OneWayDestinationMode::ProfileTyped;
     lEntry.oneWayExactDestination = 0;
     lEntry.sourceChannelIndex = channelIndexFor(iChannel);
     lEntry.retries = 0;
@@ -1667,7 +1686,9 @@ bool IoHomeController::sendOneWayButton(uint32_t iDestNodeId, const uint8_t *iEn
     lEntry.oneWayFp1 = lOneWayProfile.fp1;
     lEntry.oneWayFp2 = lOneWayProfile.fp2;
     lEntry.oneWayBroadcastTypeExplicit = false;
-    lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
+    lEntry.oneWayDestinationMode = lOneWayChannel && lOneWayChannel->is1W()
+                                           ? effectiveOneWayDestinationMode(lOneWayChannel)
+                                           : OneWayDestinationMode::ProfileTyped;
     lEntry.oneWayExactDestination = 0;
     lEntry.sourceChannelIndex = 0xFF;
     lEntry.retries = 0;
@@ -1701,7 +1722,7 @@ bool IoHomeController::sendOneWayChannelButton(IoHomecontrolChannel *iChannel, u
     lEntry.oneWayFp1 = lOneWayProfile.fp1;
     lEntry.oneWayFp2 = lOneWayProfile.fp2;
     lEntry.oneWayBroadcastTypeExplicit = false;
-    lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
+    lEntry.oneWayDestinationMode = effectiveOneWayDestinationMode(iChannel);
     lEntry.oneWayExactDestination = 0;
     lEntry.sourceChannelIndex = channelIndexFor(iChannel);
     lEntry.retries = 0;
@@ -1729,11 +1750,16 @@ bool IoHomeController::sendOneWayRawExecute(uint32_t iDestNodeId, const uint8_t 
     lEntry.oneWayRawLen = iPayloadLen;
     lEntry.oneWayBroadcastType = oneWayBroadcastTypeForNode(iDestNodeId);
     const OneWayCommandProfile lOneWayProfile = oneWayCommandProfileForType(lEntry.oneWayBroadcastType);
-    lEntry.oneWayAcei = lOneWayProfile.acei;
+    IoHomecontrolChannel *lOneWayChannel = channelForNode(iDestNodeId);
+    lEntry.oneWayAcei = lOneWayChannel && lOneWayChannel->is1W()
+                            ? effectiveOneWayAcei(lOneWayChannel)
+                            : lOneWayProfile.acei;
     lEntry.oneWayFp1 = lOneWayProfile.fp1;
     lEntry.oneWayFp2 = lOneWayProfile.fp2;
     lEntry.oneWayBroadcastTypeExplicit = false;
-    lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
+    lEntry.oneWayDestinationMode = lOneWayChannel && lOneWayChannel->is1W()
+                                           ? effectiveOneWayDestinationMode(lOneWayChannel)
+                                           : OneWayDestinationMode::ProfileTyped;
     lEntry.oneWayExactDestination = 0;
     lEntry.sourceChannelIndex = 0xFF;
     memcpy(lEntry.oneWayRawData, iPayload, iPayloadLen);
@@ -1771,7 +1797,7 @@ bool IoHomeController::sendOneWayChannelRawExecute(IoHomecontrolChannel *iChanne
     lEntry.oneWayFp1 = lOneWayProfile.fp1;
     lEntry.oneWayFp2 = lOneWayProfile.fp2;
     lEntry.oneWayBroadcastTypeExplicit = false;
-    lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
+    lEntry.oneWayDestinationMode = effectiveOneWayDestinationMode(iChannel);
     lEntry.oneWayExactDestination = 0;
     lEntry.sourceChannelIndex = channelIndexFor(iChannel);
     memcpy(lEntry.oneWayRawData, iPayload, iPayloadLen);
@@ -2188,6 +2214,24 @@ uint8_t IoHomeController::effectiveOneWayAcei(IoHomecontrolChannel *iChannel) co
                  : static_cast<uint8_t>(IoHomeManufacturer::Unknown));
 }
 
+OneWayDestinationMode IoHomeController::effectiveOneWayDestinationMode(IoHomecontrolChannel *iChannel) const
+{
+    if (!iChannel)
+        return OneWayDestinationMode::ProfileTyped;
+
+    return iChannel->getConfigured1WExecuteDestinationPolicy() == OneWayExecuteDestinationPolicy::All
+               ? OneWayDestinationMode::All
+               : OneWayDestinationMode::ProfileTyped;
+}
+
+uint8_t IoHomeController::effectiveOneWayEnrollmentClassMask(IoHomecontrolChannel *iChannel) const
+{
+    if (!iChannel)
+        return IOHC_1W_ENROLL_CLASS_ALL;
+    const uint8_t lConfigured = iChannel->getConfigured1WEnrollmentClassMask() & IOHC_1W_ENROLL_CLASS_ALL;
+    return lConfigured == 0 ? IOHC_1W_ENROLL_CLASS_ALL : lConfigured;
+}
+
 // --- Pairing ---
 
 bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId)
@@ -2277,6 +2321,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
         IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lCh);
         const uint8_t lManufacturer = lProfile ? lProfile->getOneWayControllerManufacturer() : 0;
         mPairing1WVeluxProfile = lManufacturer == static_cast<uint8_t>(IoHomeManufacturer::Velux);
+        mPairing1WEnrollmentClassMask = effectiveOneWayEnrollmentClassMask(lCh);
         mPairing1WFinalizer = resolveOneWayEnrollmentFinalizer(
             lCh->getConfigured1WEnrollmentFinalizer(), lManufacturer);
         resetOneWayEnrollmentTrace();
@@ -2328,10 +2373,11 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
         logInfoP("Pairing: 1W class type=%u dst=0x%06X; it must match the actuator class or enrollment and commands will not be accepted",
                  static_cast<unsigned>(mPairing1WBroadcastType),
                  static_cast<unsigned>(oneWayBroadcastTarget(mPairing1WBroadcastType)));
-        logInfoP("Pairing: 1W profile=%s manufacturer=0x%02X addDestinations=%u configuredFinalizer=%s resolvedFinalizer=%s",
+        logInfoP("Pairing: 1W profile=%s manufacturer=0x%02X addDestinations=%u classMask=0x%02X configuredFinalizer=%s resolvedFinalizer=%s",
                  pairing1WProfile().name,
                  static_cast<unsigned>(lManufacturer),
                  static_cast<unsigned>(pairing1WAddDestinationCount()),
+                 static_cast<unsigned>(mPairing1WEnrollmentClassMask),
                  oneWayEnrollmentFinalizerName(lCh->getConfigured1WEnrollmentFinalizer()),
                  oneWayEnrollmentFinalizerName(mPairing1WFinalizer));
         logInfoP("Pairing: 1W remove dst=0x%06X finalizer dst=0x%06X ctrl1LowPower=%u",

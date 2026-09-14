@@ -7500,6 +7500,38 @@ TEST(controller_velux_1w_strict_profile_destinations_and_ctrl1)
     ASSERT_TRUE(!lGeneric.pairingLowPower);
 }
 
+TEST(controller_velux_1w_enrollment_class_mask_can_select_awning_only)
+{
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initOneWayPairingModeControllerForTest(lController, lModule, lChannel,
+                                           0x831F2A, 0x7E9E6E, lKey);
+    lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Velux));
+    lChannel.setConfigured1WEnrollmentClassMask(IOHC_1W_ENROLL_CLASS_AWNING);
+    lChannel.setConfigured1WEnrollmentFinalizer(OneWayEnrollmentFinalizer::None);
+
+    ASSERT_TRUE(lController.startPairing1WAddOnly(0, 0x7E9E6E));
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x0000FFU);
+    ASSERT_EQ(oneWaySequenceForTest(lFrame), 1U);
+    finishCurrentBlind1WPairingTxForTest(lController);
+    ASSERT_EQ(lController.state(), ControllerState::PairComplete);
+    ASSERT_EQ(lController.oneWayEnrollmentTraceCount(), 2U);
+    ASSERT_EQ(lController.oneWayEnrollmentTrace()[0].destination, 0x0000FFU);
+}
+
 TEST(controller_velux_1w_remove_ignores_typed_broadcast_class)
 {
     const uint8_t lKey[16] = {
@@ -11899,6 +11931,45 @@ TEST(controller_1w_destination_modes_cover_default_typed_all_and_exact)
         const auto &lPacket = lController.radio().testLastTransmittedPacket();
         ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
         ASSERT_EQ(lFrame.getDestNodeId(), 0x123456);
+    }
+}
+
+TEST(controller_1w_persistent_execute_destination_policy_keeps_auto_typed_and_all_explicit)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    for (uint8_t i = 0; i < 2; i++)
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        lModule.testSetChannel(0, &lChannel);
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lRemoteNodeId);
+        lController.init();
+        lChannel.setNodeId(lDeviceNodeId);
+        lChannel.setEncryptionKey(lKey);
+        lChannel.setIs1W(true);
+        lChannel.setConfigured1WBroadcastType(3);
+        lChannel.setConfigured1WExecuteDestinationPolicy(
+            i == 0 ? OneWayExecuteDestinationPolicy::Automatic
+                   : OneWayExecuteDestinationPolicy::All);
+        lChannel.setOneWayControllerNodeId(lRemoteNodeId);
+        lChannel.setOneWayControllerKey(lKey);
+
+        ASSERT_TRUE(lController.sendChannelCommand(&lChannel, IoHomeCommand::Execute, 0xD8, 0x03));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        lController.loop();
+
+        IoHomeFrame lFrame;
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lFrame.getDestNodeId(), i == 0 ? 0x0000FFU : 0x00003FU);
     }
 }
 

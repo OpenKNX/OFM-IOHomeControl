@@ -177,6 +177,24 @@ enum class OneWayEnrollmentFinalizer : uint8_t
     StopDown = 2,
 };
 
+// Persistent policy for ordinary 1W Execute destinations. Automatic keeps the
+// established typed-broadcast behavior; All is an explicit remote-wire-profile
+// choice and is deliberately not inferred from the manufacturer.
+enum class OneWayExecuteDestinationPolicy : uint8_t
+{
+    Automatic = 0,
+    Typed = 1,
+    All = 2,
+};
+
+// Configurable VELUX enrollment class sweep. A stored value of zero means the
+// captured default sweep containing all three classes.
+constexpr uint8_t IOHC_1W_ENROLL_CLASS_ROLLER = 0x01;
+constexpr uint8_t IOHC_1W_ENROLL_CLASS_AWNING = 0x02;
+constexpr uint8_t IOHC_1W_ENROLL_CLASS_DUAL = 0x04;
+constexpr uint8_t IOHC_1W_ENROLL_CLASS_ALL =
+    IOHC_1W_ENROLL_CLASS_ROLLER | IOHC_1W_ENROLL_CLASS_AWNING | IOHC_1W_ENROLL_CLASS_DUAL;
+
 enum class TwoWayPowerClass : uint8_t
 {
     Automatic = 0,

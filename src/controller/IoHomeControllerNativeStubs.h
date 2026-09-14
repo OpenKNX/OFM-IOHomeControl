@@ -111,6 +111,10 @@ public:
   bool getConfigured1WEnrollmentMac() const { return mConfigured1WEnrollmentMac; }
   void setConfigured1WEnrollmentFinalizer(OneWayEnrollmentFinalizer iFinalizer) { mConfigured1WEnrollmentFinalizer = iFinalizer; }
   OneWayEnrollmentFinalizer getConfigured1WEnrollmentFinalizer() const { return mConfigured1WEnrollmentFinalizer; }
+  void setConfigured1WExecuteDestinationPolicy(OneWayExecuteDestinationPolicy iPolicy) { mConfigured1WExecuteDestinationPolicy = iPolicy; }
+  OneWayExecuteDestinationPolicy getConfigured1WExecuteDestinationPolicy() const { return mConfigured1WExecuteDestinationPolicy; }
+  void setConfigured1WEnrollmentClassMask(uint8_t iMask) { mConfigured1WEnrollmentClassMask = iMask & IOHC_1W_ENROLL_CLASS_ALL; }
+  uint8_t getConfigured1WEnrollmentClassMask() const { return mConfigured1WEnrollmentClassMask; }
 
   void setNodeId(uint32_t iNodeId)
   {
@@ -305,6 +309,8 @@ private:
   uint8_t mConfigured1WAcei = 0; // mirrors production automatic-by-manufacturer default
   bool mConfigured1WEnrollmentMac = false;
   OneWayEnrollmentFinalizer mConfigured1WEnrollmentFinalizer = OneWayEnrollmentFinalizer::Automatic;
+  OneWayExecuteDestinationPolicy mConfigured1WExecuteDestinationPolicy = OneWayExecuteDestinationPolicy::Automatic;
+  uint8_t mConfigured1WEnrollmentClassMask = 0;
   bool mHasPositionFeedback = false;
   float mPositionFeedback = 0.0f;
   bool mHasTargetPositionFeedback = false;

@@ -263,6 +263,44 @@ class ChannelUiTest(unittest.TestCase):
         for suffix in ("086", "087", "088", "089", "090"):
             self.assertIn(f"%AID%_UP-%TT%%CC%{suffix}_R-%TT%%CC%{suffix}01", shown)
 
+    def test_one_way_wire_profile_overrides_are_persistent_and_default_auto(self) -> None:
+        destination = self.share.find(
+            ".//k:ParameterType[@Name='IOHCOneWayExecuteDestination']", NS
+        )
+        self.assertIsNotNone(destination)
+        self.assertEqual(
+            {item.get("Value"): item.get("Text") for item in destination.findall(".//k:Enumeration", NS)},
+            {
+                "0": "Automatisch (Typ-Broadcast)",
+                "1": "Typ-Broadcast",
+                "2": "Alle Geräte (00003F)",
+            },
+        )
+
+        classes = self.share.find(
+            ".//k:ParameterType[@Name='IOHCOneWayEnrollmentClasses']", NS
+        )
+        self.assertIsNotNone(classes)
+        class_values = {item.get("Value") for item in classes.findall(".//k:Enumeration", NS)}
+        self.assertEqual(class_values, {str(value) for value in range(8)})
+
+        parameters = {
+            parameter.get("Name"): parameter
+            for parameter in self.template.findall(".//k:Parameter", NS)
+        }
+        self.assertEqual(parameters["c%C%OneWayExecuteDestination"].get("Offset"), "59")
+        self.assertEqual(parameters["c%C%OneWayEnrollmentClasses"].get("Offset"), "60")
+        self.assertEqual(parameters["c%C%OneWayExecuteDestination"].get("Value"), "0")
+        self.assertEqual(parameters["c%C%OneWayEnrollmentClasses"].get("Value"), "0")
+
+        protocol_choice = self.template.find(
+            ".//k:choose[@ParamRefId='%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901']", NS
+        )
+        one_way = protocol_choice.find("k:when[@test='1']", NS)
+        shown = {ref.get("RefId") for ref in one_way.findall("k:ParameterRefRef", NS)}
+        for suffix in ("091", "092"):
+            self.assertIn(f"%AID%_UP-%TT%%CC%{suffix}_R-%TT%%CC%{suffix}01", shown)
+
 
 if __name__ == "__main__":
     unittest.main()

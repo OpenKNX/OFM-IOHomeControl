@@ -639,6 +639,8 @@ public:
   static const char *oneWayEnrollmentFinalizerName(OneWayEnrollmentFinalizer iFinalizer);
   IoHomecontrolChannel *oneWayProfileForChannel(IoHomecontrolChannel *iChannel) const;
   uint8_t effectiveOneWayAcei(IoHomecontrolChannel *iChannel) const;
+  OneWayDestinationMode effectiveOneWayDestinationMode(IoHomecontrolChannel *iChannel) const;
+  uint8_t effectiveOneWayEnrollmentClassMask(IoHomecontrolChannel *iChannel) const;
 
   // Set pointer to parent module (for channel callbacks)
   void setModule(IoHomecontrol *iModule);
@@ -828,6 +830,7 @@ private:
   uint8_t mPairing1WBroadcastType = 0;
   OneWayEnrollmentFinalizer mPairing1WFinalizer = OneWayEnrollmentFinalizer::None;
   bool mPairing1WVeluxProfile = false;
+  uint8_t mPairing1WEnrollmentClassMask = IOHC_1W_ENROLL_CLASS_ALL;
   uint8_t mPairing1WAddDestinationIndex = 0;
   uint16_t mPairing1WAddSequence = 0;
   uint32_t mPairing1WEnrollmentOpenedAt = 0;
