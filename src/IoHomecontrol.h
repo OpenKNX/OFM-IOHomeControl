@@ -56,6 +56,7 @@ public:
   bool ensureOneWayControllerProfile(IoHomecontrolChannel *iChannel);
   IoHomeRemoteMap &remoteMap();
   void onPassiveKeyCaptured(const IoHomeController::PassiveKeyResult &iResult);
+  void onDiscoveryResponse(const IoHomeFrame &iFrame);
 
 private:
   struct FlashChannelState
@@ -94,6 +95,40 @@ private:
   uint8_t mLastObservedCount = 0;
   bool mAutoSpeDiscoveryAfterPairing = false;
   bool mPendingPostPairSpeDiscovery = false;
+
+  enum class KeyImportPhase : uint8_t
+  {
+    Idle = 0,
+    Extracting = 1,
+    Captured = 2,
+    Scanning = 3,
+    Complete = 4,
+    Timeout = 5,
+    Failed = 6
+  };
+
+  struct KeyImportDevice
+  {
+    bool valid = false;
+    uint32_t nodeId = 0;
+    uint16_t deviceType = 0;
+    uint8_t subtype = 0;
+    uint8_t manufacturer = 0;
+    uint8_t powerClass = 0; // 0=unknown, 1=always alive, 2=low power
+  };
+
+  static constexpr uint8_t kMaxKeyImportDevices = IOHC_ChannelCount;
+  KeyImportPhase mKeyImportPhase = KeyImportPhase::Idle;
+  IoHomeController::PassiveKeyResult mKeyImportKey = {};
+  uint32_t mKeyImportControllerNodeId = 0;
+  KeyImportDevice mKeyImportDevices[kMaxKeyImportDevices] = {};
+  uint8_t mKeyImportDeviceCount = 0;
+  bool mKeyImportOverflow = false;
+
+  void resetKeyImportWorkflow();
+  void processKeyImportWorkflow();
+  uint8_t assignKeyImportDevice(uint8_t iResultIndex, uint8_t iChannelIndex,
+                                uint8_t &oExistingChannel);
 
   struct RadioSweepStat
   {

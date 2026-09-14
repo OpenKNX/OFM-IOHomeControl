@@ -367,6 +367,8 @@ public:
     mLastPassiveKeyResult = iResult;
   }
 
+  void onDiscoveryResponse(const IoHomeFrame &) {}
+
   uint8_t testPassiveCaptureCount() const { return mPassiveCaptureCount; }
   const IoHomeController::PassiveKeyResult &testLastPassiveKeyResult() const { return mLastPassiveKeyResult; }
 

@@ -665,6 +665,15 @@ void IoHomecontrol::onPassiveKeyCaptured(const IoHomeController::PassiveKeyResul
     if (!iResult.valid)
         return;
 
+    if (mKeyImportPhase == KeyImportPhase::Extracting)
+    {
+        mKeyImportKey = iResult;
+        mKeyImportControllerNodeId = mController.keyExtractControllerNodeId();
+        mKeyImportPhase = KeyImportPhase::Captured;
+        logInfoP("ETS key import: captured network key; hub=0x%06X controller=0x%06X",
+                 iResult.nodeId, mKeyImportControllerNodeId);
+    }
+
     mRemoteMap.observeAddress(iResult.nodeId);
     openknx.console.writeDiagnoseKo("Key found");
     logInfoP("Passive sniff result: node=0x%06X freq=%u key=%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
@@ -673,6 +682,162 @@ void IoHomecontrol::onPassiveKeyCaptured(const IoHomeController::PassiveKeyResul
              iResult.key[4], iResult.key[5], iResult.key[6], iResult.key[7],
              iResult.key[8], iResult.key[9], iResult.key[10], iResult.key[11],
              iResult.key[12], iResult.key[13], iResult.key[14], iResult.key[15]);
+}
+
+void IoHomecontrol::resetKeyImportWorkflow()
+{
+    mKeyImportPhase = KeyImportPhase::Idle;
+    memset(&mKeyImportKey, 0, sizeof(mKeyImportKey));
+    mKeyImportControllerNodeId = 0;
+    memset(mKeyImportDevices, 0, sizeof(mKeyImportDevices));
+    mKeyImportDeviceCount = 0;
+    mKeyImportOverflow = false;
+}
+
+void IoHomecontrol::onDiscoveryResponse(const IoHomeFrame &iFrame)
+{
+    if (mKeyImportPhase != KeyImportPhase::Scanning ||
+        (iFrame.commandId != IoHomeCommand::DiscoverResponse &&
+         iFrame.commandId != IoHomeCommand::DiscoverSPEResponse))
+        return;
+
+    const uint32_t lNodeId = iFrame.getSrcNodeId() & 0x00FFFFFF;
+    if (lNodeId == 0 || lNodeId == mController.getOwnNodeId() ||
+        getAddressClass(lNodeId) != IoHomeAddressClass::Unicast ||
+        iFrame.getDestNodeId() != mController.getOwnNodeId())
+        return;
+
+    KeyImportDevice *lDevice = nullptr;
+    for (uint8_t i = 0; i < mKeyImportDeviceCount; i++)
+    {
+        if (mKeyImportDevices[i].nodeId == lNodeId)
+        {
+            lDevice = &mKeyImportDevices[i];
+            break;
+        }
+    }
+
+    if (lDevice == nullptr)
+    {
+        if (mKeyImportDeviceCount >= kMaxKeyImportDevices)
+        {
+            mKeyImportOverflow = true;
+            return;
+        }
+        lDevice = &mKeyImportDevices[mKeyImportDeviceCount++];
+        lDevice->valid = true;
+        lDevice->nodeId = lNodeId;
+    }
+
+    if (iFrame.dataLen >= 3)
+    {
+        lDevice->deviceType = static_cast<uint16_t>(iFrame.data[0]) |
+                              (static_cast<uint16_t>(iFrame.data[1] & 0x03) << 8);
+        lDevice->subtype = static_cast<uint8_t>((iFrame.data[1] >> 2) & 0x3F);
+        lDevice->manufacturer = iFrame.data[2];
+    }
+    if (iFrame.dataLen >= IOHC_DISCOVERY_EXTENDED_SIZE)
+    {
+        const uint8_t lPowerSave = iFrame.data[IOHC_DISCOVERY_FLAGS_OFFSET] &
+                                   IOHC_DISCOVERY_POWER_SAVE_MASK;
+        if (lPowerSave == IOHC_POWER_SAVE_ALWAYS_ALIVE)
+            lDevice->powerClass = 1;
+        else if (lPowerSave == IOHC_POWER_SAVE_LOW_POWER)
+            lDevice->powerClass = 2;
+    }
+}
+
+void IoHomecontrol::processKeyImportWorkflow()
+{
+    if (mKeyImportPhase == KeyImportPhase::Extracting &&
+        mController.keyExtractStatus() == IoHomeController::KeyExtractStatus::Timeout)
+    {
+        mKeyImportPhase = KeyImportPhase::Timeout;
+        logInfoP("ETS key import: extraction timed out");
+        return;
+    }
+
+    if (mKeyImportPhase == KeyImportPhase::Captured && !mController.isKeyExtractionActive())
+    {
+        if (!mKeyImportKey.valid || mKeyImportControllerNodeId == 0 ||
+            mController.state() != ControllerState::Idle)
+        {
+            mKeyImportPhase = KeyImportPhase::Failed;
+            logInfoP("ETS key import: extracted identity is incomplete");
+            return;
+        }
+
+        // Continue as the controller identity that the owned gateway just
+        // enrolled. Reusing the hub's own address would cause an address
+        // collision while the original gateway is still online.
+        mController.setOwnNodeId(mKeyImportControllerNodeId);
+        mController.setSystemKey(mKeyImportKey.key);
+        openknx.flash.save(true);
+
+        mKeyImportPhase = KeyImportPhase::Scanning;
+        logInfoP("ETS key import: starting authenticated discovery as 0x%06X",
+                 mKeyImportControllerNodeId);
+        mController.startDiscovery(true);
+        if (mController.state() != ControllerState::DiscoverySending &&
+            mController.state() != ControllerState::DiscoveryListening)
+        {
+            mKeyImportPhase = KeyImportPhase::Failed;
+            logInfoP("ETS key import: authenticated discovery could not start");
+        }
+        return;
+    }
+
+    if (mKeyImportPhase == KeyImportPhase::Scanning &&
+        mController.state() == ControllerState::Idle)
+    {
+        mKeyImportPhase = KeyImportPhase::Complete;
+        logInfoP("ETS key import: discovery complete, %u device(s) found%s",
+                 static_cast<unsigned>(mKeyImportDeviceCount),
+                 mKeyImportOverflow ? " (result buffer full)" : "");
+    }
+}
+
+uint8_t IoHomecontrol::assignKeyImportDevice(uint8_t iResultIndex,
+                                             uint8_t iChannelIndex,
+                                             uint8_t &oExistingChannel)
+{
+    oExistingChannel = 0xFF;
+    if (mKeyImportPhase != KeyImportPhase::Complete ||
+        iResultIndex >= mKeyImportDeviceCount ||
+        !mKeyImportDevices[iResultIndex].valid)
+        return 0x03;
+
+    const KeyImportDevice &lDevice = mKeyImportDevices[iResultIndex];
+    for (uint8_t i = 0; i < mNumChannels; i++)
+    {
+        if (mChannels[i] != nullptr && mChannels[i]->getNodeId() == lDevice.nodeId)
+        {
+            oExistingChannel = i;
+            return 0x01;
+        }
+    }
+
+    if (iChannelIndex >= mNumChannels || mChannels[iChannelIndex] == nullptr ||
+        mChannels[iChannelIndex]->getNodeId() != 0 ||
+        mChannels[iChannelIndex]->isOperational())
+        return 0x02;
+
+    IoHomecontrolChannel *lChannel = mChannels[iChannelIndex];
+    lChannel->setIs1W(false);
+    lChannel->setNodeId(lDevice.nodeId);
+    lChannel->setEncryptionKey(mKeyImportKey.key);
+    lChannel->setOneWayEnrolled(false);
+    if (lDevice.powerClass == 2)
+        lChannel->setLowPower2W(true);
+    else if (lDevice.powerClass == 1)
+        lChannel->setLowPower2W(false);
+    else
+        lChannel->clearLearnedLowPower2W();
+    lChannel->onDeviceInfo(lDevice.deviceType, lDevice.subtype, lDevice.manufacturer);
+    openknx.flash.save();
+    logInfoP("ETS key import: assigned 0x%06X to channel %u",
+             lDevice.nodeId, static_cast<unsigned>(iChannelIndex + 1));
+    return 0x00;
 }
 
 IoHomecontrolChannel *IoHomecontrol::getChannel(uint8_t iIndex)
@@ -1163,6 +1328,9 @@ void IoHomecontrol::loop()
         processRadioDiagnostic();
     else
         mController.loop();
+
+    if (!mRadioDiagnostic.active)
+        processKeyImportWorkflow();
 
     if (mPendingPostPairSpeDiscovery && !mRadioDiagnostic.active &&
         mController.state() == ControllerState::Idle)
@@ -2126,12 +2294,79 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
     }
     case 0x17: // Start active 2W key extraction
     {
-        resultData[0] = mController.startKeyExtraction(IoHomeController::kKeyExtractDefaultTimeoutMs) ? 0x00 : 0x04;
+        const bool lStarted = mController.startKeyExtraction(IoHomeController::kKeyExtractDefaultTimeoutMs);
+        resultData[0] = lStarted ? 0x00 : 0x04;
         if (resultData[0] == 0x00)
+        {
+            resetKeyImportWorkflow();
+            mKeyImportPhase = KeyImportPhase::Extracting;
             logInfoP("ETS: active 2W key extraction armed");
+        }
         else
             logInfoP("ETS: active 2W key extraction blocked, controller state=%s",
                      IoHomeController::stateName(mController.state()));
+        resultLength = 1;
+        return true;
+    }
+    case 0x18: // Query 2W extraction/import workflow status
+    {
+        const uint32_t lHubNodeId = mKeyImportKey.valid ? mKeyImportKey.nodeId : 0;
+        resultData[0] = 0x00;
+        resultData[1] = static_cast<uint8_t>(mKeyImportPhase);
+        resultData[2] = (lHubNodeId >> 16) & 0xFF;
+        resultData[3] = (lHubNodeId >> 8) & 0xFF;
+        resultData[4] = lHubNodeId & 0xFF;
+        resultData[5] = (mKeyImportControllerNodeId >> 16) & 0xFF;
+        resultData[6] = (mKeyImportControllerNodeId >> 8) & 0xFF;
+        resultData[7] = mKeyImportControllerNodeId & 0xFF;
+        resultData[8] = mKeyImportDeviceCount;
+        resultData[9] = static_cast<uint8_t>(mController.state());
+        resultData[10] = mKeyImportOverflow ? 0x01 : 0x00;
+        resultLength = 11;
+        return true;
+    }
+    case 0x19: // Read one authenticated discovery result
+    {
+        if (length < 2)
+            break;
+        const uint8_t lIndex = data[1];
+        resultData[0] = 0x03;
+        resultData[1] = lIndex;
+        resultData[2] = mKeyImportDeviceCount;
+        resultLength = 3;
+        if (mKeyImportPhase == KeyImportPhase::Complete &&
+            lIndex < mKeyImportDeviceCount && mKeyImportDevices[lIndex].valid)
+        {
+            const KeyImportDevice &lDevice = mKeyImportDevices[lIndex];
+            resultData[0] = 0x00;
+            resultData[3] = (lDevice.nodeId >> 16) & 0xFF;
+            resultData[4] = (lDevice.nodeId >> 8) & 0xFF;
+            resultData[5] = lDevice.nodeId & 0xFF;
+            resultData[6] = lDevice.deviceType & 0xFF;
+            resultData[7] = (lDevice.deviceType >> 8) & 0x03;
+            resultData[8] = lDevice.subtype;
+            resultData[9] = lDevice.manufacturer;
+            resultData[10] = lDevice.powerClass;
+            resultLength = 11;
+        }
+        return true;
+    }
+    case 0x1A: // Assign one discovery result to an unused runtime channel
+    {
+        if (length < 3)
+            break;
+        uint8_t lExistingChannel = 0xFF;
+        resultData[0] = assignKeyImportDevice(data[1], data[2], lExistingChannel);
+        resultData[1] = lExistingChannel;
+        resultLength = 2;
+        return true;
+    }
+    case 0x1B: // Persist all imported assignments
+    {
+        if (mKeyImportPhase != KeyImportPhase::Complete)
+            break;
+        openknx.flash.save(true);
+        resultData[0] = 0x00;
         resultLength = 1;
         return true;
     }

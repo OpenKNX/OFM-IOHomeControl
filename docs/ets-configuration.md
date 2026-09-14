@@ -16,6 +16,27 @@ and protocol diagnostics. Other application modules are unaffected.
 - Global diagnostics distinguishes active device discovery from passive radio
   monitoring.
 
+## 2W key extraction and automatic import
+
+The **2W-Schlüssel extrahieren** ETS action keeps its online dialog open for the
+complete workflow:
+
+1. The firmware enrolls as a temporary device at the existing, owned gateway
+   and extracts the network key.
+2. After the gateway address-verification window closes, it adopts the newly
+   enrolled controller ID and automatically starts authenticated SPE discovery
+   with the long wake-up preamble.
+3. ETS displays all discovered Node IDs. Devices that are not already assigned
+   are added only to unused channels without a stored device identity. Occupied
+   channels are never overwritten.
+4. If channel parameters changed, ETS explicitly requests a new application
+   download. The imported communication objects and channel configuration only
+   become active after that programming step.
+
+The last result and up to 16 discovered Node IDs remain visible on the
+commissioning page. If too few unused channels are available, the remaining
+devices stay unassigned and the final message reports that condition.
+
 ## Configuration ownership
 
 ETS supplies explicit behavior and protocol overrides. Existing device flash

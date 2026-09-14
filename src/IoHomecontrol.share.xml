@@ -297,11 +297,21 @@
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="1" BitOffset="0" />
               </Parameter>
               <Parameter Id="%AID%_P-%TT%00003" Name="OverviewLastRefresh" ParameterType="%AID%_PT-IOHCText40Byte" Text="Zuletzt aktualisiert" Value="Noch nicht aktualisiert" Access="Read" />
+              <Parameter Id="%AID%_P-%TT%00004" Name="ExtractionLastResult" ParameterType="%AID%_PT-IOHCText40Byte" Text="Letzte 2W-Übernahme" Value="Noch nicht ausgeführt" Access="Read" />
+              <Parameter Id="%AID%_P-%TT%00005" Name="ExtractionNodeIds1" ParameterType="%AID%_PT-IOHCText40Byte" Text="Gefundene Node-IDs 1–5" Value="-" Access="Read" />
+              <Parameter Id="%AID%_P-%TT%00006" Name="ExtractionNodeIds2" ParameterType="%AID%_PT-IOHCText40Byte" Text="Gefundene Node-IDs 6–10" Value="-" Access="Read" />
+              <Parameter Id="%AID%_P-%TT%00007" Name="ExtractionNodeIds3" ParameterType="%AID%_PT-IOHCText40Byte" Text="Gefundene Node-IDs 11–15" Value="-" Access="Read" />
+              <Parameter Id="%AID%_P-%TT%00008" Name="ExtractionNodeIds4" ParameterType="%AID%_PT-IOHCText40Byte" Text="Gefundene Node-ID 16" Value="-" Access="Read" />
             </Parameters>
 
             <ParameterRefs>
               <ParameterRef Id="%AID%_P-%TT%00002_R-%TT%0000201" RefId="%AID%_P-%TT%00002" />
               <ParameterRef Id="%AID%_P-%TT%00003_R-%TT%0000301" RefId="%AID%_P-%TT%00003" />
+              <ParameterRef Id="%AID%_P-%TT%00004_R-%TT%0000401" RefId="%AID%_P-%TT%00004" />
+              <ParameterRef Id="%AID%_P-%TT%00005_R-%TT%0000501" RefId="%AID%_P-%TT%00005" />
+              <ParameterRef Id="%AID%_P-%TT%00006_R-%TT%0000601" RefId="%AID%_P-%TT%00006" />
+              <ParameterRef Id="%AID%_P-%TT%00007_R-%TT%0000701" RefId="%AID%_P-%TT%00007" />
+              <ParameterRef Id="%AID%_P-%TT%00008_R-%TT%0000801" RefId="%AID%_P-%TT%00008" />
               <!-- ETS defaults: the first channel is enabled, all remaining channels are disabled. -->
               <ParameterRef Id="%AID%_UP-%TT%01001_R-%TT%0100101" RefId="%AID%_UP-%TT%01001" Value="1" />
               <ParameterRef Id="%AID%_UP-%TT%02001_R-%TT%0200101" RefId="%AID%_UP-%TT%02001" Value="0" />
@@ -376,8 +386,13 @@
 
               <ParameterBlock Id="%AID%_PB-nnn" Name="CommissioningGlobal" Text="Inbetriebnahme">
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="2W-Schlüsselextraktion" UIHint="Headline" />
-                <ParameterSeparator Id="%AID%_PS-nnn" Text="Aktiviert die 2W-Schlüsselextraktion. Danach am vorhandenen Fremd-Gateway 'Gerät hinzufügen' auslösen." UIHint="Information" />
-                <Button Id="%AID%_B-%TT%00011" Text="2W-Schlüssel extrahieren" EventHandler="IOHC_startKeyExtract" EventHandlerOnline="ConnectionOriented" />
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="Nach erfolgreicher Extraktion startet automatisch eine authentifizierte Gerätesuche. Gefundene Geräte werden ausschließlich freien Kanälen ohne gespeicherte Gerätezuordnung zugeordnet." UIHint="Information" />
+                <Button Id="%AID%_B-%TT%00011" Text="2W-Schlüssel extrahieren" EventHandler="IOHC_startKeyExtract" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelCount&quot;: %N% }" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00004_R-%TT%0000401" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00005_R-%TT%0000501" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00006_R-%TT%0000601" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00007_R-%TT%0000701" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00008_R-%TT%0000801" />
 
               </ParameterBlock>
               <ParameterBlock Id="%AID%_PB-nnn" Name="DiagnosticsGlobal" Text="Diagnose und Funkmonitor">

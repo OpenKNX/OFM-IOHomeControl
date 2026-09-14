@@ -162,6 +162,41 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn("activeChannels.push(channelIndex)", refresh)
         self.assertNotIn("Suspend", refresh)
 
+    def test_key_extraction_import_workflow_is_visible_and_safe(self) -> None:
+        commissioning = self.share.find(
+            ".//k:ParameterBlock[@Name='CommissioningGlobal']", NS
+        )
+        self.assertIsNotNone(commissioning)
+        button = commissioning.find("k:Button[@EventHandler='IOHC_startKeyExtract']", NS)
+        self.assertIsNotNone(button)
+        self.assertIn("channelCount", button.get("EventHandlerParameters", ""))
+
+        result_names = {
+            parameter.get("Name")
+            for parameter in self.share.findall(".//k:Parameter", NS)
+            if parameter.get("Name", "").startswith("Extraction")
+        }
+        self.assertEqual(
+            result_names,
+            {
+                "ExtractionLastResult",
+                "ExtractionNodeIds1",
+                "ExtractionNodeIds2",
+                "ExtractionNodeIds3",
+                "ExtractionNodeIds4",
+            },
+        )
+
+        script = (ROOT / "src" / "IoHomecontrol.script.js").read_text()
+        workflow = script.split("function IOHC_startKeyExtract", 1)[1]
+        for command in ("[0x17]", "[0x18]", "[0x19, resultIndex]", "[0x1A, discoveries[d].index, targetChannel]", "[0x1B]"):
+            self.assertIn(command, workflow)
+        self.assertIn('Number(activeParameter.value) == 1', workflow)
+        self.assertIn('[0x12, channelIndex]', workflow)
+        self.assertIn('IOHC_readNodeId(channelStatus, 1) == 0', workflow)
+        self.assertIn('prefix + "Active", 1', script)
+        self.assertIn("neu programmiert werden", workflow)
+
     def test_one_way_enrollment_finalizer_is_labeled_stop_runter(self) -> None:
         finalizer = self.share.find(
             ".//k:ParameterType[@Name='IOHCOneWayEnrollmentFinalizer']", NS

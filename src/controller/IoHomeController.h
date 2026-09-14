@@ -480,6 +480,8 @@ public:
   void clearKeyExtractResult();
   KeyExtractStatus keyExtractStatus() const;
   const PassiveKeyResult &keyExtractResult() const;
+  bool isKeyExtractionActive() const;
+  uint32_t keyExtractControllerNodeId() const;
 
   // 1W key copy/clone: listen for an existing remote's over-air SendKey1W
   // (0x30) "copy remote" frame, decrypt its key with the well-known transfer

@@ -70,6 +70,103 @@ function IOHC_appendNodeId(data, nodeId) {
     data.push(normalizedNodeId & 0xFF);
 }
 
+function IOHC_waitMilliseconds(milliseconds) {
+    var deadline = new Date().getTime() + milliseconds;
+    while (new Date().getTime() < deadline) {
+        // ETS event handlers are synchronous. Keep the polling rate bounded so
+        // the KNX connection is not flooded while the radio workflow runs.
+    }
+}
+
+function IOHC_etsDeviceType(protocolType) {
+    switch (protocolType) {
+    case 0x01: // Venetian blind
+    case 0x02: // Roller shutter
+    case 0x0A: // Blind
+    case 0x0D: // Dual shutter
+    case 0x11: // External Venetian blind
+    case 0x12: // Louvre blind
+    case 0x18: // Swinging shutter
+        return 1;
+    case 0x04:
+        return 2;
+    case 0x03:
+        return 3;
+    case 0x05:
+    case 0x08:
+        return 4;
+    case 0x0E:
+    case 0x15:
+    case 0x16:
+        return 5;
+    case 0x06:
+        return 6;
+    case 0x07:
+        return 7;
+    case 0x09:
+        return 8;
+    case 0x10:
+        return 9;
+    case 0x13:
+        return 10;
+    case 0x14:
+        return 11;
+    case 0x0F:
+        return 12;
+    default:
+        return 0;
+    }
+}
+
+function IOHC_importDeviceLabel(etsType) {
+    switch (etsType) {
+    case 1: return "Rollladen/Jalousie";
+    case 2: return "Fenster";
+    case 3: return "Markise";
+    case 4: return "Garagentor";
+    case 5: return "Thermostat";
+    case 6: return "Licht";
+    case 7: return "Tor";
+    case 8: return "Schloss";
+    case 9: return "Sonnenschutz";
+    case 10: return "Vorhangschiene";
+    case 11: return "Lüftung";
+    case 12: return "Schalter";
+    default: return "ioHC-Gerät";
+    }
+}
+
+function IOHC_setExtractionResult(device, statusText, nodeIds) {
+    IOHC_setParameterValue(device, "IOHC_ExtractionLastResult", statusText);
+    for (var part = 0; part < 4; part++) {
+        var first = part * 5;
+        var values = [];
+        for (var i = first; i < nodeIds.length && i < first + 5; i++) {
+            values.push(IOHC_formatNodeId(nodeIds[i]));
+        }
+        IOHC_setParameterValue(device, "IOHC_ExtractionNodeIds" + (part + 1),
+                               values.length ? values.join(", ") : "-");
+    }
+}
+
+function IOHC_configureImportedChannel(device, channelNumber, discovery) {
+    var prefix = "IOHC_c" + channelNumber;
+    var etsType = IOHC_etsDeviceType(discovery.protocolType);
+    IOHC_setParameterValue(device, prefix + "Name",
+                           IOHC_importDeviceLabel(etsType) + " " + IOHC_formatNodeId(discovery.nodeId));
+    IOHC_setParameterValue(device, prefix + "ProtocolMode", 0);
+    IOHC_setParameterValue(device, prefix + "DeviceType", etsType);
+    IOHC_setParameterValue(device, prefix + "TwoWayPowerClass", discovery.powerClass);
+    IOHC_setParameterValue(device, prefix + "Suspend", 0);
+    IOHC_setParameterValue(device, prefix + "PairingLastResult", "Automatisch importiert");
+    IOHC_setParameterValue(device, prefix + "PairedNodeIdDisplay", IOHC_formatNodeId(discovery.nodeId));
+    IOHC_setParameterValue(device, prefix + "OneWaySummary", "2W (bidirektional)");
+    IOHC_setParameterValue(device, prefix + "PairingDiag", "Programmierung erforderlich");
+    // Activate last so all settings are already coherent when ETS refreshes
+    // the dynamic channel view.
+    IOHC_setParameterValue(device, prefix + "Active", 1);
+}
+
 function IOHC_controllerStateText(state) {
     switch (state) {
     case 0:
@@ -467,7 +564,7 @@ function IOHC_startOneWayClone(device, online, progress, context) {
 
 function IOHC_startKeyExtract(device, online, progress, context) {
     progress.setText("2W-Schlüsselextraktion wird vorbereitet ...");
-    progress.setProgress(20);
+    progress.setProgress(5);
     online.connect();
     try {
         var resp = IOHC_invokeFunctionProperty(online, [0x17]);
@@ -475,11 +572,173 @@ function IOHC_startKeyExtract(device, online, progress, context) {
             throw new Error("io-homecontrol: Keine Antwort beim Start der 2W-Schlüsselextraktion");
         }
         if (resp[0] == 0) {
+            IOHC_setExtractionResult(device, "Extraktion läuft", []);
             progress.setText("2W-Schlüsselextraktion aktiv. Jetzt am Fremd-Gateway 'Gerät hinzufügen' starten.");
-            progress.setProgress(100);
-            return;
+            progress.setProgress(15);
+        } else {
+            throw new Error("io-homecontrol: 2W-Schlüsselextraktion ist gerade blockiert");
         }
-        throw new Error("io-homecontrol: 2W-Schlüsselextraktion ist gerade blockiert");
+
+        var startedAt = new Date().getTime();
+        var workflowTimeoutMs = 12 * 60 * 1000;
+        var lastPhase = -1;
+        var status = null;
+        while (new Date().getTime() - startedAt < workflowTimeoutMs) {
+            status = IOHC_invokeFunctionProperty(online, [0x18]);
+            if (!status || status.length < 11 || status[0] != 0) {
+                throw new Error("io-homecontrol: Ungültige Statusantwort während der 2W-Übernahme");
+            }
+
+            var phase = status[1] || 0;
+            if (phase != lastPhase) {
+                if (phase == 1) {
+                    progress.setText("Schlüsselextraktion läuft. Am Fremd-Gateway 'Gerät hinzufügen' starten.");
+                    progress.setProgress(20);
+                } else if (phase == 2) {
+                    var hubNode = IOHC_readNodeId(status, 2);
+                    var controllerNode = IOHC_readNodeId(status, 5);
+                    progress.setText("2W-Schlüssel erfolgreich extrahiert (Gateway " +
+                                     IOHC_formatNodeId(hubNode) + ", neue Controller-ID " +
+                                     IOHC_formatNodeId(controllerNode) + "). Automatische Gerätesuche folgt ...");
+                    progress.setProgress(55);
+                    IOHC_setExtractionResult(device, "Schlüssel extrahiert; Scan folgt", []);
+                } else if (phase == 3) {
+                    progress.setText("2W-Schlüssel erfolgreich extrahiert. Geräte werden automatisch gesucht ...");
+                    progress.setProgress(70);
+                }
+                lastPhase = phase;
+            }
+
+            if (phase == 4) {
+                break;
+            }
+            if (phase == 5) {
+                IOHC_setExtractionResult(device, "Zeitüberschreitung", []);
+                throw new Error("io-homecontrol: Zeitüberschreitung – kein 2W-Schlüssel wurde empfangen");
+            }
+            if (phase == 6) {
+                IOHC_setExtractionResult(device, "Übernahme fehlgeschlagen", []);
+                throw new Error("io-homecontrol: Schlüssel wurde extrahiert, die automatische Gerätesuche konnte aber nicht gestartet werden");
+            }
+            IOHC_waitMilliseconds(750);
+        }
+
+        if (!status || status[1] != 4) {
+            IOHC_setExtractionResult(device, "Zeitüberschreitung", []);
+            throw new Error("io-homecontrol: Zeitüberschreitung während der 2W-Schlüsselübernahme");
+        }
+
+        var resultCount = status[8] || 0;
+        var overflow = (status[10] || 0) != 0;
+        var discoveries = [];
+        var nodeIds = [];
+        for (var resultIndex = 0; resultIndex < resultCount; resultIndex++) {
+            var found = IOHC_invokeFunctionProperty(online, [0x19, resultIndex]);
+            if (!found || found.length < 11 || found[0] != 0) {
+                throw new Error("io-homecontrol: Scan-Ergebnis " + (resultIndex + 1) + " konnte nicht gelesen werden");
+            }
+            var discovery = {
+                index: resultIndex,
+                nodeId: IOHC_readNodeId(found, 3),
+                protocolType: (found[6] || 0) | ((found[7] || 0) << 8),
+                subtype: found[8] || 0,
+                manufacturer: found[9] || 0,
+                powerClass: found[10] || 0
+            };
+            discoveries.push(discovery);
+            nodeIds.push(discovery.nodeId);
+        }
+
+        var channelCount = context && context.channelCount ? context.channelCount : 16;
+        var channelActive = [];
+        var freeChannels = [];
+        for (var channelIndex = 0; channelIndex < channelCount; channelIndex++) {
+            var activeParameter = IOHC_getParameter(device, "IOHC_c" + (channelIndex + 1) + "Active");
+            var isActive = activeParameter && Number(activeParameter.value) == 1;
+            channelActive[channelIndex] = isActive;
+            var channelStatus = IOHC_invokeFunctionProperty(online, [0x12, channelIndex]);
+            if (!channelStatus || channelStatus.length < 4) {
+                throw new Error("io-homecontrol: Kanalstatus " + (channelIndex + 1) + " konnte nicht gelesen werden");
+            }
+            var runtimeUnused = (channelStatus[0] || 0) == 0 && IOHC_readNodeId(channelStatus, 1) == 0;
+            if (runtimeUnused) {
+                freeChannels.push(channelIndex);
+            }
+        }
+
+        var configuredChannels = 0;
+        var alreadyConfigured = 0;
+        var unassigned = 0;
+        var unusableChannels = {};
+        for (var d = 0; d < discoveries.length; d++) {
+            var assigned = false;
+            while (freeChannels.length > 0 && !assigned) {
+                var targetChannel = freeChannels.shift();
+                if (unusableChannels[targetChannel]) {
+                    continue;
+                }
+                var assignedResp = IOHC_invokeFunctionProperty(online, [0x1A, discoveries[d].index, targetChannel]);
+                if (!assignedResp || assignedResp.length < 2) {
+                    throw new Error("io-homecontrol: Keine Antwort beim Zuordnen von " + IOHC_formatNodeId(discoveries[d].nodeId));
+                }
+                if (assignedResp[0] == 0) {
+                    IOHC_configureImportedChannel(device, targetChannel + 1, discoveries[d]);
+                    channelActive[targetChannel] = true;
+                    configuredChannels++;
+                    assigned = true;
+                } else if (assignedResp[0] == 1) {
+                    var existingChannel = assignedResp[1];
+                    if (existingChannel < channelCount && !channelActive[existingChannel]) {
+                        IOHC_configureImportedChannel(device, existingChannel + 1, discoveries[d]);
+                        channelActive[existingChannel] = true;
+                        unusableChannels[existingChannel] = true;
+                        configuredChannels++;
+                    } else {
+                        alreadyConfigured++;
+                    }
+                    // The proposed target was untouched because the node was
+                    // already stored elsewhere, so it remains available.
+                    freeChannels.push(targetChannel);
+                    assigned = true;
+                } else if (assignedResp[0] == 2) {
+                    unusableChannels[targetChannel] = true;
+                } else {
+                    throw new Error("io-homecontrol: Scan-Ergebnis " + (d + 1) + " ist nicht mehr verfügbar");
+                }
+            }
+            if (!assigned) {
+                unassigned++;
+            }
+            progress.setProgress(80 + Math.floor(((d + 1) * 15) / Math.max(1, discoveries.length)));
+        }
+
+        if (configuredChannels > 0) {
+            var saveResp = IOHC_invokeFunctionProperty(online, [0x1B]);
+            if (!saveResp || saveResp.length < 1 || saveResp[0] != 0) {
+                throw new Error("io-homecontrol: Importierte Geräte konnten nicht dauerhaft gespeichert werden");
+            }
+        }
+
+        var nodeText = nodeIds.length ? nodeIds.map(IOHC_formatNodeId).join(", ") : "keine";
+        var summary = configuredChannels + " importiert, " + alreadyConfigured + " vorhanden";
+        if (unassigned > 0) {
+            summary += ", " + unassigned + " ohne freien Kanal";
+        }
+        if (overflow) {
+            summary += ", weitere Ergebnisse verworfen";
+        }
+        IOHC_setExtractionResult(device,
+                                 configuredChannels > 0 ? "Erfolgreich; Programmierung nötig" : "Erfolgreich; keine Änderung",
+                                 nodeIds);
+
+        if (configuredChannels > 0) {
+            progress.setText("2W-Schlüssel erfolgreich extrahiert. Gefundene Node-IDs: " + nodeText +
+                             ". " + summary + ". Das KNX-Gerät muss jetzt in ETS neu programmiert werden, bevor die Geräte gesteuert werden können.");
+        } else {
+            progress.setText("2W-Schlüssel erfolgreich extrahiert. Gefundene Node-IDs: " + nodeText +
+                             ". " + summary + ". Es wurden keine ETS-Kanäle geändert.");
+        }
+        progress.setProgress(100);
     } finally {
         online.disconnect();
     }

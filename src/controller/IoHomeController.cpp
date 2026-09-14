@@ -3024,6 +3024,16 @@ const IoHomeController::PassiveKeyResult &IoHomeController::keyExtractResult() c
     return mKeyExtractResult;
 }
 
+bool IoHomeController::isKeyExtractionActive() const
+{
+    return mKeyExtractArmed;
+}
+
+uint32_t IoHomeController::keyExtractControllerNodeId() const
+{
+    return mKeyExtractThrowawayId;
+}
+
 bool IoHomeController::startOneWayKeyReceive(uint8_t iChannelIndex, uint32_t iTimeoutMs)
 {
     if (mState != ControllerState::Idle && mState != ControllerState::PassiveListening)
@@ -7672,6 +7682,7 @@ void IoHomeController::dispatchRxFrame()
         (mRxFrame.commandId == IoHomeCommand::DiscoverResponse ||
          mRxFrame.commandId == IoHomeCommand::DiscoverSPEResponse))
     {
+        mModule->onDiscoveryResponse(mRxFrame);
         learnPowerClassFromDiscovery(channelForNode(lSrcNode), mRxFrame,
                                      "roll-call discovery");
         mModule->remoteMap().observeAddress(lSrcNode);

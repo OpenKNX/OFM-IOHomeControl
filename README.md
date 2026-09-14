@@ -207,7 +207,11 @@ ETS function property interface (objectIndex=160, propertyId=10).
 | 0x13 | `cmd, channel` | `status` | Unpair the selected channel, erase the stored key, and persist the change. |
 | 0x15 | `cmd, channel` | `status` | Generate a new own 1W controller profile. Rejected for shared profiles or while any paired channel uses the profile. |
 | 0x16 | `cmd, channel` | `status` | Start the 1W clone listener on the selected channel with the default timeout. The original remote must then send its manufacturer copy frame. |
-| 0x17 | `cmd` | `status` | Start the active 2W key extraction responder with the default timeout. Afterwards trigger the manual add-device flow on the owned third-party gateway. |
+| 0x17 | `cmd` | `status` | Start the active 2W key extraction/import workflow with the default timeout. Afterwards trigger the manual add-device flow on the owned third-party gateway. |
+| 0x18 | `cmd` | `status, phase, hubNodeId[3], controllerNodeId[3], resultCount, controllerState, flags` | Read extraction/import progress. After the gateway verification window, the module adopts the newly enrolled controller identity and automatically starts authenticated SPE discovery. |
+| 0x19 | `cmd, resultIndex` | `status, index, count, nodeId[3], type[2], subtype, manufacturer, powerClass` | Read one deduplicated device found by the automatic discovery. |
+| 0x1A | `cmd, resultIndex, channel` | `status, existingChannel` | Store a discovered device and the extracted network key in an unused channel. Existing device assignments are reported and never overwritten. |
+| 0x1B | `cmd` | `status` | Force-persist the imported controller identity and all channel assignments. |
 | 0x20 | `cmd, channel, percent` | `status` | Test helper for sending a position command to an already paired device. |
 
 Common status byte values used by commands `0x10`, `0x11`, `0x13`, `0x17`, and `0x20`:
