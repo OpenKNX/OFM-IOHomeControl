@@ -95,6 +95,10 @@ struct IoHomeQueueEntry
   bool oneWayRawExecute;     // true: send exact raw Execute payload bytes before sequence/HMAC
   uint8_t oneWayRawData[IOHC_1W_RAW_EXEC_MAX_DATA];
   uint8_t oneWayRawLen;
+  bool privateProbe;
+  PrivateProbeShape privateProbeShape;
+  uint8_t privateProbeFunction;
+  uint8_t privateProbeValue;
   bool oneWayStandardExecute; // true: standard 14-byte 1W Execute payload mapping
   uint8_t oneWayAcei;         // ACEI byte for reference/default 1W Execute/Activate templates
   uint16_t oneWayMain;        // low-level raw IOHC main[2], e.g. 0x0000=open, 0xC800=closed, 0xD200=stop
@@ -372,6 +376,14 @@ public:
   bool sendBatteryStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
   bool sendBatteryStateQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
   bool sendTiltStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
+  bool sendPrivateProbe(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                        PrivateProbeShape iShape, uint8_t iFunctionId,
+                        uint8_t iSelectorOrBlock = 0);
+  static bool buildTwoWayPrivateProbePayload(uint8_t *oData, uint8_t &oLen,
+                                             PrivateProbeShape iShape,
+                                             uint8_t iFunctionId,
+                                             uint8_t iSelectorOrBlock);
+  static bool decodeStatusUpdateOriginator(const IoHomeFrame &iFrame, uint8_t &oOriginator);
   bool sendTiltCommand(uint32_t iDestNodeId, const uint8_t *iEncKey, uint8_t iTiltPercent);
 
   // Start pairing process for a channel

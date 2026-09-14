@@ -888,6 +888,23 @@ namespace
         return true;
     }
 
+    const char *commandOriginatorName(uint8_t iOriginator)
+    {
+        switch (iOriginator)
+        {
+        case IOHC_ORIGINATOR_LOCAL: return "local";
+        case IOHC_ORIGINATOR_USER: return "user-remote";
+        case IOHC_ORIGINATOR_RAIN: return "rain";
+        case IOHC_ORIGINATOR_TIMER: return "timer";
+        case IOHC_ORIGINATOR_SCD: return "security-comfort";
+        case IOHC_ORIGINATOR_SAAC: return "saac";
+        case IOHC_ORIGINATOR_WIND: return "wind";
+        case IOHC_ORIGINATOR_SELF: return "self";
+        case IOHC_ORIGINATOR_EMERGENCY: return "emergency";
+        default: return "unknown";
+        }
+    }
+
     bool build2WSetConfig1Payload(uint8_t *oData, uint8_t &oLen)
     {
         static constexpr uint8_t kSetConfig1Payload[] = {0xE0, 0x10, 0x0A, 0x08, 0x00};
@@ -1211,6 +1228,46 @@ bool IoHomeController::buildTwoWayDiscoveryFrame(
     const uint8_t iChallenge[6])
 {
     return ::build2WDiscoveryFrame(oFrame, iSrcNodeId, iOptions, iSystemKey, iChallenge);
+}
+
+bool IoHomeController::buildTwoWayPrivateProbePayload(
+    uint8_t *oData, uint8_t &oLen, PrivateProbeShape iShape,
+    uint8_t iFunctionId, uint8_t iSelectorOrBlock)
+{
+    if (!oData)
+        return false;
+
+    oData[0] = iFunctionId;
+    switch (iShape)
+    {
+    case PrivateProbeShape::Function:
+        oData[1] = 0x00;
+        oData[2] = 0x00;
+        oLen = 3;
+        return true;
+    case PrivateProbeShape::FunctionSubIndex:
+        oData[1] = iSelectorOrBlock;
+        oData[2] = 0x00;
+        oLen = 3;
+        return true;
+    case PrivateProbeShape::StatusExtended:
+        oData[1] = 0x80;
+        oData[2] = iSelectorOrBlock;
+        oData[3] = 0x00;
+        oLen = 4;
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool IoHomeController::decodeStatusUpdateOriginator(const IoHomeFrame &iFrame, uint8_t &oOriginator)
+{
+    if (iFrame.commandId != IoHomeCommand::StatusUpdate ||
+        iFrame.dataLen <= IOHC_STATUS_UPDATE_ORIGINATOR_OFFSET)
+        return false;
+    oOriginator = iFrame.data[IOHC_STATUS_UPDATE_ORIGINATOR_OFFSET];
+    return true;
 }
 
 IoHomeController::IoHomeController()
@@ -1942,6 +1999,37 @@ bool IoHomeController::sendTiltStatusQuery(uint32_t iDestNodeId, const uint8_t *
     if (lCh && lCh->is1W())
         return false;
     return sendCommand(iDestNodeId, iEncKey, IoHomeCommand::Private, 0x03, 0x20, 0x01);
+}
+
+bool IoHomeController::sendPrivateProbe(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                                        PrivateProbeShape iShape, uint8_t iFunctionId,
+                                        uint8_t iSelectorOrBlock)
+{
+    IoHomecontrolChannel *lCh = channelForNode(iDestNodeId);
+    if (lCh && lCh->is1W())
+        return false;
+
+    uint8_t lProbe[4] = {};
+    uint8_t lProbeLen = 0;
+    if (!buildTwoWayPrivateProbePayload(lProbe, lProbeLen, iShape,
+                                        iFunctionId, iSelectorOrBlock))
+        return false;
+
+    IoHomeQueueEntry lEntry;
+    memset(&lEntry, 0, sizeof(lEntry));
+    lEntry.destNodeId = iDestNodeId & 0x00FFFFFF;
+    lEntry.encKey = iEncKey;
+    lEntry.command = IoHomeCommand::Private;
+    lEntry.param = 0xFF;
+    lEntry.param2 = 0xFF;
+    lEntry.param3 = 0xFF;
+    lEntry.privateProbe = true;
+    lEntry.privateProbeShape = iShape;
+    lEntry.privateProbeFunction = iFunctionId;
+    lEntry.privateProbeValue = iSelectorOrBlock;
+    lEntry.sourceChannelIndex = channelIndexFor(lCh);
+    lEntry.active = true;
+    return queuePush(lEntry);
 }
 
 bool IoHomeController::sendTiltCommand(uint32_t iDestNodeId, const uint8_t *iEncKey, uint8_t iTiltPercent)
@@ -7221,8 +7309,16 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         // build2WPrivatePayload(). Known reference forms:
         //   03 00 00       = status
         //   03 20 01 00    = tilt status
-        if (!build2WPrivatePayload(iEntry.param, iEntry.param2, iEntry.param3,
-                                   mTxFrame.data, mTxFrame.dataLen))
+        if (iEntry.privateProbe)
+        {
+            if (!buildTwoWayPrivateProbePayload(mTxFrame.data, mTxFrame.dataLen,
+                                                iEntry.privateProbeShape,
+                                                iEntry.privateProbeFunction,
+                                                iEntry.privateProbeValue))
+                return false;
+        }
+        else if (!build2WPrivatePayload(iEntry.param, iEntry.param2, iEntry.param3,
+                                        mTxFrame.data, mTxFrame.dataLen))
             return false;
         mTxFrame.hasHmac = false;
         break;
@@ -7589,6 +7685,7 @@ void IoHomeController::dispatchRxFrame()
                 //   data[5:6]:  target position (16-bit BE)
                 //   data[7:8]:  current position (16-bit BE)
                 //   data[10]:   estimate / timer
+                //   data[14]:   command originator when this optional field is present
                 //   Position encoding: raw * 100 / IOHC_POSITION_MAX (0xC800)
                 //   Minimum 11 bytes for full status
                 if (mRxFrame.dataLen >= 11)
@@ -7606,6 +7703,11 @@ void IoHomeController::dispatchRxFrame()
                     if (lBattery <= 100)
                         lCh->onBatteryLevel(lBattery);
                 }
+                uint8_t lOriginator = 0;
+                if (decodeStatusUpdateOriginator(mRxFrame, lOriginator))
+                    logDebugP("StatusUpdate: originator=0x%02X (%s)",
+                              static_cast<unsigned>(lOriginator),
+                              commandOriginatorName(lOriginator));
                 // Send StatusUpdateResponse ACK for unsolicited StatusUpdate
                 // Only if addressed directly to us (not broadcast)
                 {

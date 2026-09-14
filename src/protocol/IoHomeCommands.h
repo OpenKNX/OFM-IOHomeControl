@@ -195,6 +195,13 @@ constexpr uint8_t IOHC_1W_ENROLL_CLASS_DUAL = 0x04;
 constexpr uint8_t IOHC_1W_ENROLL_CLASS_ALL =
     IOHC_1W_ENROLL_CLASS_ROLLER | IOHC_1W_ENROLL_CLASS_AWNING | IOHC_1W_ENROLL_CLASS_DUAL;
 
+enum class PrivateProbeShape : uint8_t
+{
+    Function = 0,       // <function> 00 00
+    FunctionSubIndex,   // <function> <sub-index> 00
+    StatusExtended,     // <function> 80 <block> 00
+};
+
 enum class TwoWayPowerClass : uint8_t
 {
     Automatic = 0,
@@ -294,6 +301,7 @@ inline bool isOpenCloseOnly(IoHomeDeviceType iType)
 #define IOHC_ORIGINATOR_WIND 0x09      // wind sensor
 #define IOHC_ORIGINATOR_SELF 0x10      // actuator itself
 #define IOHC_ORIGINATOR_EMERGENCY 0xFF // emergency override
+#define IOHC_STATUS_UPDATE_ORIGINATOR_OFFSET 14
 
 // ACEI priority levels (bits[7:5] of ACEI byte)
 #define IOHC_PRIORITY_PROTECTION 0  // human protection (highest)

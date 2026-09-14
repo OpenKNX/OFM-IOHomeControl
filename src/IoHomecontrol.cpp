@@ -2578,6 +2578,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc discover spe", "Encrypted SPE/sub-device discovery");
     openknx.console.printHelpLine("iohc autospe on|off|status", "Runtime post-pair SPE discovery");
     openknx.console.printHelpLine("iohcNN identify", "Ask paired 2W device NN to identify itself");
+    openknx.console.printHelpLine("iohcNN probe TYPE [HH]", "2W probes: private-fn/private-sub/status-ext/status-ext-fn6/status-ext-fn9/info1/info2");
     openknx.console.printHelpLine("iohcNN send PP", "Send position PP% to channel NN");
     openknx.console.printHelpLine("iohcNN send1wbtn up|down|stop|my|prog|release|stop2", "Send 1W remote button command");
     openknx.console.printHelpLine("iohcNN raw1w HEX", "Send raw 1W button code, e.g. 0000/00FE/00FF");
@@ -3992,6 +3993,93 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             logInfoP("Sent 1W button %s (0x%04X) to channel %d", lButtonName, static_cast<unsigned>(lCodeValue), lIdx + 1);
         else
             logInfoP("Failed to queue 1W button %s (0x%04X) for channel %d", lButtonName, static_cast<unsigned>(lCodeValue), lIdx + 1);
+        return true;
+    }
+
+    if (lSub.rfind("probe", 0) == 0)
+    {
+        std::string lArgs = trimSpaces(lSub.length() > strlen("probe") ? lSub.substr(strlen("probe")) : "");
+        std::string lChannelText;
+        std::string lProbeType;
+        std::string lValueText;
+        if (!takeToken(lArgs, lChannelText) || !takeToken(lArgs, lProbeType))
+        {
+            logInfoP("Usage: iohcNN probe private-fn|private-sub|status-ext|status-ext-fn6|status-ext-fn9 HH | info1 | info2");
+            return true;
+        }
+
+        uint8_t lIdx = 0;
+        if (!parseChannelIndex(lChannelText, mNumChannels, lIdx) ||
+            !mChannels[lIdx] || !mChannels[lIdx]->isPaired() || mChannels[lIdx]->is1W())
+        {
+            logInfoP("Probe requires a paired 2W channel");
+            return true;
+        }
+
+        IoHomecontrolChannel *lCh = mChannels[lIdx];
+        bool lQueued = false;
+        if (lProbeType == "info1" || lProbeType == "get-info1")
+        {
+            lQueued = lArgs.empty() && mController.sendCommand(
+                lCh->getNodeId(), lCh->getEncryptionKey(), IoHomeCommand::GetGeneralInfo1, 0);
+        }
+        else if (lProbeType == "info2" || lProbeType == "get-info2")
+        {
+            lQueued = lArgs.empty() && mController.sendCommand(
+                lCh->getNodeId(), lCh->getEncryptionKey(), IoHomeCommand::GetGeneralInfo2, 0);
+        }
+        else
+        {
+            uint8_t lValue = 0;
+            if (!takeToken(lArgs, lValueText) || !lArgs.empty() ||
+                !parseHexByteToken(lValueText, lValue))
+            {
+                logInfoP("Probe %s requires one two-digit hex value", lProbeType.c_str());
+                return true;
+            }
+
+            PrivateProbeShape lShape = PrivateProbeShape::Function;
+            uint8_t lFunction = lValue;
+            uint8_t lSelector = 0;
+            if (lProbeType == "private-fn" || lProbeType == "private_fn")
+            {
+                lShape = PrivateProbeShape::Function;
+            }
+            else if (lProbeType == "private-sub" || lProbeType == "private_fn_sub")
+            {
+                lShape = PrivateProbeShape::FunctionSubIndex;
+                lFunction = 0x09;
+                lSelector = lValue;
+            }
+            else if (lProbeType == "status-ext" || lProbeType == "status_ext")
+            {
+                lShape = PrivateProbeShape::StatusExtended;
+                lFunction = 0x03;
+                lSelector = lValue;
+            }
+            else if (lProbeType == "status-ext-fn6" || lProbeType == "status_ext_fn6")
+            {
+                lShape = PrivateProbeShape::StatusExtended;
+                lFunction = 0x06;
+                lSelector = lValue;
+            }
+            else if (lProbeType == "status-ext-fn9" || lProbeType == "status_ext_fn9")
+            {
+                lShape = PrivateProbeShape::StatusExtended;
+                lFunction = 0x09;
+                lSelector = lValue;
+            }
+            else
+            {
+                logInfoP("Unknown probe type: %s", lProbeType.c_str());
+                return true;
+            }
+            lQueued = mController.sendPrivateProbe(lCh->getNodeId(), lCh->getEncryptionKey(),
+                                                   lShape, lFunction, lSelector);
+        }
+
+        logInfoP("Probe ch%02u %s: %s", static_cast<unsigned>(lIdx + 1),
+                 lProbeType.c_str(), lQueued ? "queued" : "failed");
         return true;
     }
 

@@ -3019,6 +3019,63 @@ TEST(private_command_payload)
     ASSERT_TRUE(!parsed.hasHmac);
 }
 
+TEST(private_probe_payload_matrix)
+{
+    struct TestCase
+    {
+        PrivateProbeShape shape;
+        uint8_t functionId;
+        uint8_t value;
+        uint8_t expected[4];
+        uint8_t expectedLen;
+    };
+    static const TestCase kCases[] = {
+        {PrivateProbeShape::Function, 0x06, 0x00, {0x06, 0x00, 0x00, 0x00}, 3},
+        {PrivateProbeShape::FunctionSubIndex, 0x09, 0x07, {0x09, 0x07, 0x00, 0x00}, 3},
+        {PrivateProbeShape::StatusExtended, 0x03, 0x00, {0x03, 0x80, 0x00, 0x00}, 4},
+        {PrivateProbeShape::StatusExtended, 0x03, 0x01, {0x03, 0x80, 0x01, 0x00}, 4},
+        {PrivateProbeShape::StatusExtended, 0x06, 0x80, {0x06, 0x80, 0x80, 0x00}, 4},
+        {PrivateProbeShape::StatusExtended, 0x09, 0x01, {0x09, 0x80, 0x01, 0x00}, 4},
+    };
+
+    for (const TestCase &lCase : kCases)
+    {
+        uint8_t lPayload[4] = {};
+        uint8_t lLen = 0;
+        ASSERT_TRUE(IoHomeController::buildTwoWayPrivateProbePayload(
+            lPayload, lLen, lCase.shape, lCase.functionId, lCase.value));
+        ASSERT_EQ(lLen, lCase.expectedLen);
+        ASSERT_MEM_EQ(lPayload, lCase.expected, lCase.expectedLen);
+    }
+}
+
+TEST(status_update_originator_uses_optional_data14_only)
+{
+    IoHomeFrame lFrame;
+    lFrame.init();
+    lFrame.commandId = IoHomeCommand::StatusUpdate;
+    lFrame.dataLen = 15;
+    lFrame.data[1] = 0x60;
+    lFrame.data[IOHC_STATUS_UPDATE_ORIGINATOR_OFFSET] = IOHC_ORIGINATOR_USER;
+
+    uint8_t lOriginator = 0xFF;
+    ASSERT_TRUE(IoHomeController::decodeStatusUpdateOriginator(lFrame, lOriginator));
+    ASSERT_EQ(lOriginator, IOHC_ORIGINATOR_USER);
+
+    // Captures use 0x60/0x61 at data[1]. It is status metadata, never the
+    // originator; bit 0 remains a capture hypothesis and is not used here to
+    // change production status behavior without actuator validation.
+    lFrame.data[1] = 0x61;
+    ASSERT_TRUE(IoHomeController::decodeStatusUpdateOriginator(lFrame, lOriginator));
+    ASSERT_EQ(lOriginator, IOHC_ORIGINATOR_USER);
+    ASSERT_EQ(lFrame.data[1] & 0x01, 0x01);
+
+    lFrame.dataLen = IOHC_STATUS_UPDATE_ORIGINATOR_OFFSET;
+    lOriginator = 0xA5;
+    ASSERT_TRUE(!IoHomeController::decodeStatusUpdateOriginator(lFrame, lOriginator));
+    ASSERT_EQ(lOriginator, 0xA5);
+}
+
 // =====================================================================
 // 56. ChallengeResponse (0x3D) data payload in deserialize
 // =====================================================================
@@ -9553,6 +9610,37 @@ TEST(controller_private_query_payload_variants)
         ASSERT_EQ(lFrame.data[1], 0x20);
         ASSERT_EQ(lFrame.data[2], 0x01);
         ASSERT_EQ(lFrame.data[3], 0x00);
+    }
+
+    struct ProbeCase
+    {
+        PrivateProbeShape shape;
+        uint8_t functionId;
+        uint8_t value;
+        uint8_t expected[4];
+        uint8_t expectedLen;
+    };
+    static const ProbeCase kProbeCases[] = {
+        {PrivateProbeShape::Function, 0x0A, 0x00, {0x0A, 0x00, 0x00, 0x00}, 3},
+        {PrivateProbeShape::FunctionSubIndex, 0x09, 0x02, {0x09, 0x02, 0x00, 0x00}, 3},
+        {PrivateProbeShape::StatusExtended, 0x03, 0x01, {0x03, 0x80, 0x01, 0x00}, 4},
+        {PrivateProbeShape::StatusExtended, 0x06, 0x80, {0x06, 0x80, 0x80, 0x00}, 4},
+        {PrivateProbeShape::StatusExtended, 0x09, 0x01, {0x09, 0x80, 0x01, 0x00}, 4},
+    };
+    for (const ProbeCase &lCase : kProbeCases)
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, lDeviceNodeId, lKey);
+        ASSERT_TRUE(lController.sendPrivateProbe(lDeviceNodeId, lKey, lCase.shape,
+                                                 lCase.functionId, lCase.value));
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+        ASSERT_EQ(lFrame.commandId, IoHomeCommand::Private);
+        ASSERT_EQ(lFrame.dataLen, lCase.expectedLen);
+        ASSERT_MEM_EQ(lFrame.data, lCase.expected, lCase.expectedLen);
     }
 }
 
