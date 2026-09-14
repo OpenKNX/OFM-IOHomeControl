@@ -413,6 +413,7 @@ public:
   // the preamble.  The defaults preserve generic cold-pairing behavior for
   // 0x28 and model the captured KLR300 shapes for 0x2E and authenticated SPE.
   static TwoWayDiscoveryFrameOptions referenceTwoWayDiscoveryOptions(IoHomeCommand iCommand);
+  static TwoWayDiscoveryFrameOptions klr300TwoWayDiscoveryOptions(IoHomeCommand iCommand);
   static TwoWayDiscoverySettings mergeTwoWayDiscoverySettings(
       const TwoWayDiscoverySettings &iBase,
       const TwoWayDiscoverySettings &iOverride);

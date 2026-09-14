@@ -217,7 +217,8 @@ class ChannelUiTest(unittest.TestCase):
     def test_two_way_discovery_controls_are_independent_and_default_auto(self) -> None:
         expected_types = {
             "IOHCTwoWayDiscoveryCommand": {
-                "0": "Automatisch (0x28)", "1": "Discover 0x28", "2": "Alternativ 0x2E"
+                "0": "Automatisch (0x28)", "1": "Discover 0x28", "2": "Alternativ 0x2E",
+                "3": "Authentifiziert SPE 0x2A"
             },
             "IOHCTwoWayDiscoveryDestination": {
                 "0": "Automatisch nach Befehl", "1": "0x00003B", "2": "0x00003F"

@@ -7981,10 +7981,8 @@ TEST(discovery_klr300_reference_profiles_are_byte_exact)
     const uint8_t lChallenge[6] = {1, 2, 3, 4, 5, 6};
     uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE] = {};
 
-    TwoWayDiscoverySettings lColdSettings;
-    lColdSettings.ack = TwoWayDiscoveryFlagMode::On;
     const TwoWayDiscoveryFrameOptions lCold =
-        IoHomeController::resolveTwoWayDiscoveryOptions(IoHomeCommand::DiscoverRequest, lColdSettings);
+        IoHomeController::klr300TwoWayDiscoveryOptions(IoHomeCommand::DiscoverRequest);
     ASSERT_EQ(lCold.destination, 0x00003BU);
     ASSERT_TRUE(lCold.ackCapable);
     ASSERT_TRUE(!lCold.lowPower);
@@ -7998,7 +7996,7 @@ TEST(discovery_klr300_reference_profiles_are_byte_exact)
     ASSERT_MEM_EQ(lBuffer, lColdExpected, sizeof(lColdExpected));
 
     const TwoWayDiscoveryFrameOptions lAlt =
-        IoHomeController::referenceTwoWayDiscoveryOptions(IoHomeCommand::Discover2ERequest);
+        IoHomeController::klr300TwoWayDiscoveryOptions(IoHomeCommand::Discover2ERequest);
     ASSERT_TRUE(IoHomeController::buildTwoWayDiscoveryFrame(lFrame, lKlrNodeId, lAlt));
     const uint8_t lAltExpected[] = {0xC9, 0x20, 0x00, 0x00, 0x3F, 0xE2, 0xD1, 0xFF, 0x2E, 0x00};
     const uint8_t lAltLen = lFrame.serialize2W(lBuffer, sizeof(lBuffer));
@@ -8006,7 +8004,7 @@ TEST(discovery_klr300_reference_profiles_are_byte_exact)
     ASSERT_MEM_EQ(lBuffer, lAltExpected, sizeof(lAltExpected));
 
     const TwoWayDiscoveryFrameOptions lSpe =
-        IoHomeController::referenceTwoWayDiscoveryOptions(IoHomeCommand::DiscoverSPERequest);
+        IoHomeController::klr300TwoWayDiscoveryOptions(IoHomeCommand::DiscoverSPERequest);
     ASSERT_EQ(lSpe.destination, 0x00003BU);
     ASSERT_TRUE(lSpe.ackCapable);
     ASSERT_TRUE(lSpe.lowPower);
@@ -12920,8 +12918,8 @@ int main()
     RUN(controller_1w_execute_uses_configured_channel_acei);
     RUN(controller_passive_remote_activity_schedules_follow_up_poll_for_target_device);
     RUN(controller_linked_remote_activity_schedules_follow_up_poll_for_linked_device);
-    RUN(controller_2w_challenge_response_uses_controller_role_flags_for_low_power_device);
-    RUN(controller_2w_challenge_response_uses_controller_role_flags_for_always_alive_device);
+    RUN(controller_2w_challenge_response_matches_klr300_continuation_flags_for_low_power_device);
+    RUN(controller_2w_challenge_response_matches_klr300_continuation_flags_for_always_alive_device);
     RUN(controller_status_update_receive_auth_uses_saved_command_data);
     RUN(controller_2w_initial_response_wait_uses_retry_gap);
     RUN(controller_2w_exchange_uses_three_total_attempts_without_trailing_gap);

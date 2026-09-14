@@ -167,6 +167,7 @@
                   <Enumeration Text="Automatisch (0x28)" Value="0" Id="%ENID%" />
                   <Enumeration Text="Discover 0x28" Value="1" Id="%ENID%" />
                   <Enumeration Text="Alternativ 0x2E" Value="2" Id="%ENID%" />
+                  <Enumeration Text="Authentifiziert SPE 0x2A" Value="3" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
               <ParameterType Id="%AID%_PT-IOHCTwoWayDiscoveryDestination" Name="IOHCTwoWayDiscoveryDestination">

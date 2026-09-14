@@ -250,7 +250,7 @@ void IoHomecontrolChannel::setup()
             ? static_cast<TwoWayPowerClass>(lTwoWayPowerClass)
             : TwoWayPowerClass::Automatic);
     TwoWayDiscoverySettings lDiscoverySettings;
-    if (lTwoWayDiscoveryCommand <= static_cast<uint8_t>(TwoWayDiscoveryCommandMode::Discover2E))
+    if (lTwoWayDiscoveryCommand <= static_cast<uint8_t>(TwoWayDiscoveryCommandMode::DiscoverSPE))
         lDiscoverySettings.command = static_cast<TwoWayDiscoveryCommandMode>(lTwoWayDiscoveryCommand);
     if (lTwoWayDiscoveryDestination <= static_cast<uint8_t>(TwoWayDiscoveryDestinationMode::DiscoverAlt))
         lDiscoverySettings.destination = static_cast<TwoWayDiscoveryDestinationMode>(lTwoWayDiscoveryDestination);

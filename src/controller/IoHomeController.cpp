@@ -1148,6 +1148,14 @@ TwoWayDiscoveryFrameOptions IoHomeController::referenceTwoWayDiscoveryOptions(Io
     return lOptions;
 }
 
+TwoWayDiscoveryFrameOptions IoHomeController::klr300TwoWayDiscoveryOptions(IoHomeCommand iCommand)
+{
+    TwoWayDiscoveryFrameOptions lOptions = referenceTwoWayDiscoveryOptions(iCommand);
+    if (lOptions.command == IoHomeCommand::DiscoverRequest)
+        lOptions.ackCapable = true;
+    return lOptions;
+}
+
 TwoWayDiscoverySettings IoHomeController::mergeTwoWayDiscoverySettings(
     const TwoWayDiscoverySettings &iBase,
     const TwoWayDiscoverySettings &iOverride)
