@@ -27,7 +27,7 @@
               <Parameter Id="%AID%_P-%TT%%CC%015" Name="c%C%PairingDiag" ParameterType="%AID%_PT-IOHCText40Byte" Text="Letzte Pairing-Diagnose" Value="Noch keine Diagnose" Access="Read" />
 
               <!-- Main configuration Union including 10 ETS-backed scene slots -->
-              <Union SizeInBit="432">
+              <Union SizeInBit="488">
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%001" Name="c%C%Active" ParameterType="%AID%_PT-IOHCChannelActivity" Offset="0" BitOffset="0" Text="Kanalaktivität" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%008" Name="c%C%Suspend" ParameterType="%AID%_PT-Suspended" Offset="0" BitOffset="2" Text="Suspendiert" Value="0" />
