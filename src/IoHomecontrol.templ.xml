@@ -21,10 +21,14 @@
 
               <!-- Pairing mode selector (P0) — standalone, outside Union -->
               <Parameter Id="%AID%_P-%TT%%CC%010" Name="c%C%PairingMode" ParameterType="%AID%_PT-IOHCPairingMode" Text="Pairing-Modus" Value="0" />
-              <Parameter Id="%AID%_P-%TT%%CC%012" Name="c%C%PairingLastResult" ParameterType="%AID%_PT-IOHCText40Byte" Text="Letztes Pairing-Ergebnis" Value="Noch nicht abgefragt" Access="Read" />
-              <Parameter Id="%AID%_P-%TT%%CC%013" Name="c%C%PairedNodeIdDisplay" ParameterType="%AID%_PT-IOHCText40Byte" Text="Aktuell gepaarte Node-ID" Value="unbekannt" Access="Read" />
+              <Parameter Id="%AID%_P-%TT%%CC%012" Name="c%C%PairingLastResult" ParameterType="%AID%_PT-IOHCText40Byte" Text="Pairing-Ergebnis (zuletzt gelesen)" Value="Noch nicht abgefragt" Access="Read" />
+              <Parameter Id="%AID%_P-%TT%%CC%013" Name="c%C%PairedNodeIdDisplay" ParameterType="%AID%_PT-IOHCText40Byte" Text="Node-ID (zuletzt gelesen)" Value="unbekannt" Access="Read" />
               <Parameter Id="%AID%_P-%TT%%CC%014" Name="c%C%OneWaySummary" ParameterType="%AID%_PT-IOHCText40Byte" Text="Protokoll / Ziel" Value="Noch nicht gelesen" Access="Read" />
               <Parameter Id="%AID%_P-%TT%%CC%015" Name="c%C%PairingDiag" ParameterType="%AID%_PT-IOHCText40Byte" Text="Letzte Pairing-Diagnose" Value="Noch keine Diagnose" Access="Read" />
+
+              <!-- ETS-only visibility: no device memory and no configuration reset. -->
+              <Parameter Id="%AID%_P-%TT%%CC%094" Name="c%C%ExpertView" ParameterType="%AID%_PT-IOHCCheckBox" Text="Experteneinstellungen anzeigen" Value="0" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%095" Name="c%C%DiagnosticObjects" ParameterType="%AID%_PT-IOHCCheckBox" Text="Batterie- und Signalstärkeobjekte verwenden" Value="1" />
 
               <!-- Main configuration Union including 10 ETS-backed scene slots -->
               <Union SizeInBit="496">
@@ -67,6 +71,8 @@
             </Parameters>
 
             <ParameterRefs>
+              <ParameterRef Id="%AID%_P-%TT%%CC%094_R-%TT%%CC%09401" RefId="%AID%_P-%TT%%CC%094" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%095_R-%TT%%CC%09501" RefId="%AID%_P-%TT%%CC%095" />
               <ParameterRef Id="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" RefId="%AID%_P-%TT%%CC%000" />
               <ParameterRef Id="%AID%_P-%TT%%CC%999_R-%TT%%CC%99901" RefId="%AID%_P-%TT%%CC%999" />
               <ParameterRef Id="%AID%_P-%TT%%CC%010_R-%TT%%CC%01001" RefId="%AID%_P-%TT%%CC%010" />
@@ -285,73 +291,90 @@
                         <!-- Basic configuration (channel is activated) -->
                         <ParameterRefRef RefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201" IndentLevel="1" HelpContext="IOHC-Geraetetyp" />
                         <ParameterRefRef RefId="%AID%_UP-%TT%%CC%008_R-%TT%%CC%00801" IndentLevel="1" HelpContext="BASE-ChannelSuspended" />
-                        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%003_R-%TT%%CC%00301" IndentLevel="1" HelpContext="IOHC-Status-Abfrageintervall" />
-
-                        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%007_R-%TT%%CC%00701" IndentLevel="1" HelpContext="IOHC-Verhalten-nach-Neustart" />
-                        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901" IndentLevel="1" HelpContext="IOHC-Protokoll-Modus" />
+                      <ParameterRefRef RefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901" IndentLevel="1" HelpContext="IOHC-Protokoll-Modus" />
+                      <choose ParamRefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901">
+                        <when test="1">
+                          <ParameterRefRef RefId="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801" IndentLevel="1" HelpContext="IOHC-1W-Profil" />
+                          <choose ParamRefId="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801">
+                            <when test="0">
+                              <ParameterRefRef RefId="%AID%_UP-%TT%%CC%017_R-%TT%%CC%01701" IndentLevel="1" HelpContext="IOHC-1W-Hersteller" />
+                              <ParameterRefRef RefId="%AID%_UP-%TT%%CC%093_R-%TT%%CC%09301" IndentLevel="1" HelpContext="IOHC-1W-Energieklasse" />
+                            </when>
+                          </choose>
+                          <ParameterSeparator Id="%AID%_PS-nnn" Text="1W: Positions- und Bewegungswerte sind Schätzwerte, keine bestätigten Aktorrückmeldungen. Bei geteiltem Profil gelten Hersteller und Energieklasse des Profilkanals." UIHint="Information" />
+                        </when>
+                        <when test="0">
+                          <ParameterRefRef RefId="%AID%_UP-%TT%%CC%085_R-%TT%%CC%08501" IndentLevel="1" HelpContext="IOHC-2W-Energieklasse" />
+                          <ParameterSeparator Id="%AID%_PS-nnn" Text="Automatisch: gelernte Energieklasse, sonst immer erreichbar. Solar-/Batteriegeräte bei unbekannter Klasse ausdrücklich auf Low Power einstellen." UIHint="Information" />
+                        </when>
+                      </choose>
+                      <ParameterRefRef RefId="%AID%_UP-%TT%%CC%007_R-%TT%%CC%00701" IndentLevel="1" HelpContext="IOHC-Verhalten-nach-Neustart" />
+                      <ParameterBlock Id="%AID%_PB-nnn" Name="Functions" Text="Funktionen und Rückmeldung">
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%095_R-%TT%%CC%09501" />
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur bei verfügbaren Messwerten verwenden. Das Abschalten entfernt diese Objekte aus der ETS-Objektansicht; bestehende Verknüpfungen vorher prüfen." UIHint="Information" />
                         <choose ParamRefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901">
-                          <when test="1">
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%011_R-%TT%%CC%01101" IndentLevel="1" HelpContext="IOHC-Kanal" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%016_R-%TT%%CC%01601" IndentLevel="1" HelpContext="IOHC-1W-Broadcast-Typ" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%091_R-%TT%%CC%09101" IndentLevel="1" HelpContext="IOHC-1W-Befehls-Ziel" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%092_R-%TT%%CC%09201" IndentLevel="1" HelpContext="IOHC-1W-Anmeldeklassen" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%019_R-%TT%%CC%01901" IndentLevel="1" HelpContext="IOHC-1W-Prioritaet" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801" IndentLevel="1" HelpContext="IOHC-1W-Profil" />
-                            <choose ParamRefId="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801">
-                              <when test="0">
-                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%017_R-%TT%%CC%01701" IndentLevel="1" HelpContext="IOHC-1W-Hersteller" />
-                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%093_R-%TT%%CC%09301" IndentLevel="1" HelpContext="IOHC-1W-Energieklasse" />
-                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%082_R-%TT%%CC%08201" IndentLevel="1" HelpContext="IOHC-1W-MAC" />
-                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%084_R-%TT%%CC%08401" IndentLevel="1" HelpContext="IOHC-1W-Anmeldeabschluss" />
-                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Ein neues Controllerprofil erfordert danach ein erneutes 1W-Pairing. Die Aktion ist nur möglich, solange kein Kanal dieses Profil gepaart verwendet." UIHint="Information" />
-                                <ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
-                                  <Rows>
-                                    <Row Id="%AID%_PB-nnn_R-1" />
-                                    <Row Id="%AID%_PB-nnn_R-2" />
-                                  </Rows>
-                                  <Columns>
-                                    <Column Id="%AID%_PB-nnn_C-1" Width="2%" />
-                                    <Column Id="%AID%_PB-nnn_C-2" Width="98%" />
-                                  </Columns>
-                                  <Button Id="%AID%_B-%TT%%CC%004" Text="Neues eigenes 1W-Controllerprofil erzeugen" Cell="1,2" EventHandler="IOHC_generateOneWayProfile" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
-                                  <Button Id="%AID%_B-%TT%%CC%005" Text="Original-1W-Fernbedienung klonen" Cell="2,2" EventHandler="IOHC_startOneWayClone" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
-                                </ParameterBlock>
-                              </when>
-                            </choose>
-                          </when>
                           <when test="0">
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%085_R-%TT%%CC%08501" IndentLevel="1" HelpContext="IOHC-2W-Energieklasse" />
-                            <ParameterSeparator Id="%AID%_PS-nnn" Text="2W Discovery (Experimentell)" UIHint="Headline" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%086_R-%TT%%CC%08601" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%087_R-%TT%%CC%08701" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%088_R-%TT%%CC%08801" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%089_R-%TT%%CC%08901" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%090_R-%TT%%CC%09001" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%083_R-%TT%%CC%08301" IndentLevel="1" HelpContext="IOHC-Silentbetrieb" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%003_R-%TT%%CC%00301" IndentLevel="1" HelpContext="IOHC-Status-Abfrageintervall" />
                           </when>
                         </choose>
-
-                        <!-- Position-only parameters: Fahrzeit, Richtung (types 0-4, 7, 9-11) -->
                         <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
                           <when test="0 1 2 3 4 7 9 10 11">
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Fahrzeiten dienen der Positionsschätzung. Empfangene Positionswerte bleiben die maßgebliche Rückmeldung." UIHint="Information" />
                           </when>
                           <when test="6">
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%081_R-%TT%%CC%08101" IndentLevel="1" HelpContext="IOHC-Dimmbar" />
                           </when>
                         </choose>
-
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901">
+                          <when test="0">
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%083_R-%TT%%CC%08301" IndentLevel="1" HelpContext="IOHC-Silentbetrieb" />
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Leiser Betrieb ist nur für unterstützte Somfy-RS100-Aktoren vorgesehen." UIHint="Information" />
+                          </when>
+                        </choose>
+                      </ParameterBlock>
+                      <ParameterBlock Id="%AID%_PB-nnn" Name="Scenes" Text="Szenen">
                         <!-- Scene support: available for all device types.
                              The complete per-scene UI selection is generated from IoHomecontrol.scene.part.xml. -->
-                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenen" UIHint="Headline" />
                         <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
                         <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
                           <when test="&gt;=1">
                             <op:usePart name="IOHCScene" xpath="//Dynamic/*" />
                           </when>
                         </choose>
+
+
+                      </ParameterBlock>
+                      <ParameterRefRef RefId="%AID%_P-%TT%%CC%094_R-%TT%%CC%09401" />
+                      <choose ParamRefId="%AID%_P-%TT%%CC%094_R-%TT%%CC%09401"><when test="1">
+                          <ParameterBlock Id="%AID%_PB-nnn" Name="ExpertSettings" Text="Experten: Protokoll und Discovery">
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Diese Ansicht blendet Einstellungen nur ein oder aus. Bereits konfigurierte Expertenwerte bleiben auch bei ausgeblendeter Ansicht wirksam." UIHint="Information" />
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901">
+                              <when test="1">
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%011_R-%TT%%CC%01101" IndentLevel="1" HelpContext="IOHC-Kanal" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%016_R-%TT%%CC%01601" IndentLevel="1" HelpContext="IOHC-1W-Broadcast-Typ" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%091_R-%TT%%CC%09101" IndentLevel="1" HelpContext="IOHC-1W-Befehls-Ziel" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%092_R-%TT%%CC%09201" IndentLevel="1" HelpContext="IOHC-1W-Anmeldeklassen" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%019_R-%TT%%CC%01901" IndentLevel="1" HelpContext="IOHC-1W-Prioritaet" />
+                                <choose ParamRefId="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801">
+                                  <when test="0">
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%082_R-%TT%%CC%08201" IndentLevel="1" HelpContext="IOHC-1W-MAC" />
+                                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%084_R-%TT%%CC%08401" IndentLevel="1" HelpContext="IOHC-1W-Anmeldeabschluss" />
+                                  </when>
+                                </choose>
+                              </when>
+                              <when test="0">
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%086_R-%TT%%CC%08601" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%087_R-%TT%%CC%08701" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%088_R-%TT%%CC%08801" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%089_R-%TT%%CC%08901" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%090_R-%TT%%CC%09001" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
+                              </when>
+                            </choose>
+                          </ParameterBlock>
+                        </when></choose>
 
                         <!-- === Device-type-specific KOs === -->
                         <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
@@ -376,8 +399,12 @@
                         </choose>
 
                         <!-- === Always-visible channel diagnostics/control KOs === -->
+                        <choose ParamRefId="%AID%_P-%TT%%CC%095_R-%TT%%CC%09501">
+                          <when test="1">
                         <ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" />
                         <ComObjectRefRef RefId="%AID%_O-%TT%%CC%013_R-%TT%%CC%01301" />
+                          </when>
+                        </choose>
                         <ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" />
                         <ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" />
 
@@ -401,8 +428,32 @@
                             <ComObjectRefRef RefId="%AID%_O-%TT%%CC%017_R-%TT%%CC%01701" />
                           </when>
                         </choose>
+                      <ParameterBlock Id="%AID%_PB-nnn" Name="Commissioning" Text="Inbetriebnahme">
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Die angezeigten Werte sind der zuletzt online gelesene Stand. ETS-Einstellungen und im Gerät gespeicherte Zuordnungen können davon abweichen." UIHint="Information" />
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901">
+                          <when test="1">
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801">
+                              <when test="0">
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Ein neues Controllerprofil erfordert danach ein erneutes 1W-Pairing. Die Aktion ist nur möglich, solange kein Kanal dieses Profil gepaart verwendet." UIHint="Information" />
+                                <ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
+                                  <Rows>
+                                    <Row Id="%AID%_PB-nnn_R-1" />
+                                    <Row Id="%AID%_PB-nnn_R-2" />
+                                  </Rows>
+                                  <Columns>
+                                    <Column Id="%AID%_PB-nnn_C-1" Width="2%" />
+                                    <Column Id="%AID%_PB-nnn_C-2" Width="98%" />
+                                  </Columns>
+                                  <Button Id="%AID%_B-%TT%%CC%004" Text="Neues eigenes 1W-Controllerprofil erzeugen" Cell="1,2" EventHandler="IOHC_generateOneWayProfile" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                                  <Button Id="%AID%_B-%TT%%CC%005" Text="Original-1W-Fernbedienung klonen" Cell="2,2" EventHandler="IOHC_startOneWayClone" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                                </ParameterBlock>
+
+                              </when>
+                            </choose>
+                          </when>
+                        </choose>
                         <!-- === P0: Pairing Section === -->
-                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Pairing" UIHint="Headline" />
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Gerätezuordnung" UIHint="Headline" />
                         <ParameterSeparator Id="%AID%_PS-nnn" Text="Hinweis: Diese Schaltflächen funktionieren nur bei aktiver ETS-Onlineverbindung zum Gerät. Sie starten oder entfernen das Pairing direkt im Gerät." UIHint="Information" />
                         <ParameterSeparator Id="%AID%_PS-nnn" Text="Ein fehlendes oder verlorenes Pairing wird im Fehlerstatus des Kanals gemeldet; Details stehen in den Diagnosefeldern unten." UIHint="Information" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%010_R-%TT%%CC%01001" IndentLevel="1" HelpContext="IOHC-Pairing-Modus" />
@@ -437,6 +488,8 @@
                             <ParameterSeparator Id="%AID%_PS-nnn" Text="Das Gerät muss nach dem Entfernen erneut angelernt werden." UIHint="Error" />
                           </when>
                         </choose>
+
+                      </ParameterBlock>
 
                   </ParameterBlock>
                   </when>

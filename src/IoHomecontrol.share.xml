@@ -347,15 +347,9 @@
 
           <Dynamic>
             <Channel Id="%AID%_CH-%PREFIX%" Number="%PREFIX%" Name="IOHC_Global" Text="IO-HomeControl" Icon="remote" HelpContext="BASE-OpenKNX">
-              <ParameterBlock Id="%AID%_PB-nnn" Name="IOHC_Global" Text="Allgemein" Icon="cog" HelpContext="IOHC-Allgemein">
-                <ParameterSeparator Id="%AID%_PS-nnn" Text="Allgemein" UIHint="Headline" />
-                <ParameterRefRef RefId="%AID%_P-%TT%00002_R-%TT%0000201" HelpContext="IOHC-Fernbedienungs-Beobachtung" />
-                <ComObjectRefRef RefId="%AID%_O-%TT%00000_R-%TT%0000001" />
-                <ParameterSeparator Id="%AID%_PS-nnn" Text="2W-Schlüsselextraktion" UIHint="Headline" />
-                <ParameterSeparator Id="%AID%_PS-nnn" Text="Aktiviert die 2W-Schlüsselextraktion. Danach am vorhandenen Fremd-Gateway 'Gerät hinzufügen' auslösen." UIHint="Information" />
-                <Button Id="%AID%_B-%TT%00011" Text="2W-Schlüssel extrahieren" EventHandler="IOHC_startKeyExtract" EventHandlerOnline="ConnectionOriented" />
+              <ParameterBlock Id="%AID%_PB-nnn" Name="IOHC_Global" Text="Übersicht" Icon="cog" HelpContext="IOHC-Allgemein">
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="Pairing-Übersicht" UIHint="Headline" />
-                <ParameterSeparator Id="%AID%_PS-nnn" Text="Die Werte werden durch die Online-Aktionen in den jeweiligen Kanal-Seiten aktualisiert." UIHint="Information" />
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="Zuletzt online gelesener Stand; keine Live-Anzeige. Mit Aktualisieren werden die gespeicherten Gerätezuordnungen erneut ausgelesen." UIHint="Information" />
                 <Button Id="%AID%_B-%TT%00010" Text="Pairing-Übersicht aktualisieren" EventHandler="IOHC_refreshAllPairingInfo" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelCount&quot;: %N% }" />
                 <ParameterRefRef RefId="%AID%_P-%TT%00003_R-%TT%0000301" />
                 <ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
@@ -378,15 +372,26 @@
                 </ParameterBlock>
                 <op:include href="IoHomecontrol.templ.xml" xpath="//Dynamic/ChannelIndependentBlock/ParameterBlock[@Name='PairingOverview']/*" type="template" prefix="IOHC" IsInner="true" />
 
-                <ParameterSeparator Id="%AID%_PS-nnn" Text="Discovery und Netzwerk-Scan" UIHint="Headline" />
-                <ParameterSeparator Id="%AID%_PS-nnn" Text="Discovery und Netzwerk-Scan werden über Kommunikationsobjekte gesteuert. Die zugehörigen KOs findest du in der Objekttabelle dieses Kanals." UIHint="Information" />
+              </ParameterBlock>
+
+              <ParameterBlock Id="%AID%_PB-nnn" Name="CommissioningGlobal" Text="Inbetriebnahme">
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="2W-Schlüsselextraktion" UIHint="Headline" />
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="Aktiviert die 2W-Schlüsselextraktion. Danach am vorhandenen Fremd-Gateway 'Gerät hinzufügen' auslösen." UIHint="Information" />
+                <Button Id="%AID%_B-%TT%00011" Text="2W-Schlüssel extrahieren" EventHandler="IOHC_startKeyExtract" EventHandlerOnline="ConnectionOriented" />
+
+              </ParameterBlock>
+              <ParameterBlock Id="%AID%_PB-nnn" Name="DiagnosticsGlobal" Text="Diagnose und Funkmonitor">
+                <ParameterRefRef RefId="%AID%_P-%TT%00002_R-%TT%0000201" HelpContext="IOHC-Fernbedienungs-Beobachtung" />
+                <ComObjectRefRef RefId="%AID%_O-%TT%00000_R-%TT%0000001" />
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="Gerätesuche und passiver Funkmonitor" UIHint="Headline" />
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="Discovery sendet Suchanfragen. Der passive Funkmonitor empfängt ausschließlich Funkverkehr. Die Kommunikationsobjekte starten und stoppen diese Funktionen." UIHint="Information" />
                 <ComObjectRefRef RefId="%AID%_O-%TT%00001_R-%TT%0000101" />
                 <ComObjectRefRef RefId="%AID%_O-%TT%00002_R-%TT%0000201" />
                 <ComObjectRefRef RefId="%AID%_O-%TT%00003_R-%TT%0000301" />
                 <ComObjectRefRef RefId="%AID%_O-%TT%00004_R-%TT%0000401" />
                 <ComObjectRefRef RefId="%AID%_O-%TT%00005_R-%TT%0000501" />
-              </ParameterBlock>
 
+              </ParameterBlock>
               <ParameterBlock Id="%AID%_PB-nnn" Text="Kanalauswahl" Icon="format-list-bulleted-type" HelpContext="BASE-ChannelSelect">
                 <ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
                   <Rows>

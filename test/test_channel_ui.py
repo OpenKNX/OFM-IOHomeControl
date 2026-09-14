@@ -259,7 +259,8 @@ class ChannelUiTest(unittest.TestCase):
         protocol_choice = self.template.find(
             ".//k:choose[@ParamRefId='%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901']", NS
         )
-        two_way = protocol_choice.find("k:when[@test='0']", NS)
+        expert = self.template.find(".//k:ParameterBlock[@Name='ExpertSettings']", NS)
+        two_way = expert.find("k:choose/k:when[@test='0']", NS)
         shown = {ref.get("RefId") for ref in two_way.findall("k:ParameterRefRef", NS)}
         for suffix in ("086", "087", "088", "089", "090"):
             self.assertIn(f"%AID%_UP-%TT%%CC%{suffix}_R-%TT%%CC%{suffix}01", shown)
@@ -309,7 +310,9 @@ class ChannelUiTest(unittest.TestCase):
             ".//k:choose[@ParamRefId='%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901']", NS
         )
         one_way = protocol_choice.find("k:when[@test='1']", NS)
-        shown = {ref.get("RefId") for ref in one_way.findall("k:ParameterRefRef", NS)}
+        expert = self.template.find(".//k:ParameterBlock[@Name='ExpertSettings']", NS)
+        advanced_one_way = expert.find("k:choose/k:when[@test='1']", NS)
+        shown = {ref.get("RefId") for ref in advanced_one_way.findall("k:ParameterRefRef", NS)}
         for suffix in ("091", "092"):
             self.assertIn(f"%AID%_UP-%TT%%CC%{suffix}_R-%TT%%CC%{suffix}01", shown)
 
@@ -319,6 +322,35 @@ class ChannelUiTest(unittest.TestCase):
         )
         own_profile_refs = {ref.get("RefId") for ref in own_profile.findall("k:ParameterRefRef", NS)}
         self.assertIn("%AID%_UP-%TT%%CC%093_R-%TT%%CC%09301", own_profile_refs)
+
+    def test_expert_visibility_does_not_allocate_or_reset_device_configuration(self) -> None:
+        param = self.template.find(".//k:Parameter[@Name='c%C%ExpertView']", NS)
+        self.assertEqual(param.get("Value"), "0")
+        self.assertIsNone(param.find("k:Memory", NS))
+        self.assertIsNone(self.template.find(".//k:Union/k:Parameter[@Name='c%C%ExpertView']", NS))
+        gate = self.template.find(".//k:choose[@ParamRefId='%AID%_P-%TT%%CC%094_R-%TT%%CC%09401']", NS)
+        self.assertIsNotNone(gate.find("k:when[@test='1']/k:ParameterBlock[@Name='ExpertSettings']", NS))
+        self.assertEqual(gate.findall('.//k:Assign', NS), [])
+
+    def test_main_page_keeps_suspend_and_groups_configuration(self) -> None:
+        page = self.template.find(".//k:ParameterBlock[@Name='IOHCChannel%C%Page']", NS)
+        self.assertIsNotNone(page.find("k:ParameterRefRef[@RefId='%AID%_UP-%TT%%CC%008_R-%TT%%CC%00801']", NS))
+        for name in ('Functions', 'Scenes', 'Commissioning'):
+            self.assertIsNotNone(page.find(f"k:ParameterBlock[@Name='{name}']", NS))
+        functions = page.find("k:ParameterBlock[@Name='Functions']", NS)
+        self.assertIsNotNone(functions.find("k:choose/k:when[@test='0']/k:ParameterRefRef[@RefId='%AID%_UP-%TT%%CC%003_R-%TT%%CC%00301']", NS))
+
+    def test_global_navigation_separates_overview_and_online_tools(self) -> None:
+        channel = self.share.find(".//k:Channel[@Name='IOHC_Global']", NS)
+        texts = {block.get('Text') for block in channel.findall('k:ParameterBlock', NS)}
+        self.assertTrue({'Übersicht', 'Kanalauswahl', 'Inbetriebnahme', 'Diagnose und Funkmonitor'} <= texts)
+
+    def test_diagnostic_objects_remain_enabled_by_default(self) -> None:
+        param = self.template.find(".//k:Parameter[@Name='c%C%DiagnosticObjects']", NS)
+        self.assertEqual(param.get('Value'), '1')
+        gate = self.template.find(".//k:choose[@ParamRefId='%AID%_P-%TT%%CC%095_R-%TT%%CC%09501']", NS)
+        refs = {r.get('RefId') for r in gate.findall('k:when/k:ComObjectRefRef', NS)}
+        self.assertEqual(refs, {'%AID%_O-%TT%%CC%012_R-%TT%%CC%01201', '%AID%_O-%TT%%CC%013_R-%TT%%CC%01301'})
 
 
 if __name__ == "__main__":
