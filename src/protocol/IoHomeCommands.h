@@ -115,6 +115,58 @@ enum class IoHomeCommand : uint8_t
     ErrorResponse = 0xFE
 };
 
+// Discovery-family wire policy.  These settings deliberately keep command,
+// destination, CTRL1 flags and preamble independent: hardware captures show
+// different CTRL1 combinations for 0x28, 0x2E and 0x2A, while the wake-up
+// preamble is a separate receiver/power-class decision.
+enum class TwoWayDiscoveryCommandMode : uint8_t
+{
+    Automatic = 0,
+    Discover28 = 1,
+    Discover2E = 2,
+    DiscoverSPE = 3,
+};
+
+enum class TwoWayDiscoveryDestinationMode : uint8_t
+{
+    Automatic = 0,
+    DiscoverAll = 1, // 0x00003B
+    DiscoverAlt = 2, // 0x00003F
+};
+
+enum class TwoWayDiscoveryFlagMode : uint8_t
+{
+    Automatic = 0,
+    Off = 1,
+    On = 2,
+};
+
+enum class TwoWayDiscoveryPreambleMode : uint8_t
+{
+    Automatic = 0,
+    Long = 1,
+    Normal = 2,
+    Short = 3,
+};
+
+struct TwoWayDiscoverySettings
+{
+    TwoWayDiscoveryCommandMode command = TwoWayDiscoveryCommandMode::Automatic;
+    TwoWayDiscoveryDestinationMode destination = TwoWayDiscoveryDestinationMode::Automatic;
+    TwoWayDiscoveryFlagMode ack = TwoWayDiscoveryFlagMode::Automatic;
+    TwoWayDiscoveryFlagMode lowPower = TwoWayDiscoveryFlagMode::Automatic;
+    TwoWayDiscoveryPreambleMode preamble = TwoWayDiscoveryPreambleMode::Automatic;
+};
+
+struct TwoWayDiscoveryFrameOptions
+{
+    IoHomeCommand command = IoHomeCommand::DiscoverRequest;
+    uint32_t destination = 0x00003B;
+    bool lowPower = false;
+    bool ackCapable = false;
+    uint16_t preamble = 1024;
+};
+
 // Configured 1W enrollment completion policy. Automatic stays conservative:
 // it resolves to STOP+DOWN only for a controller profile whose manufacturer is
 // explicitly VELUX; unknown and Somfy-style profiles resolve to no finalizer.

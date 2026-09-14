@@ -140,6 +140,8 @@ public:
   bool hasLearnedLowPower2W() const { return mHasLearnedLowPower2W; }
   void setConfigured2WPowerClass(TwoWayPowerClass iPowerClass) { mConfigured2WPowerClass = iPowerClass; }
   TwoWayPowerClass getConfigured2WPowerClass() const { return mConfigured2WPowerClass; }
+  void setConfigured2WDiscoverySettings(const TwoWayDiscoverySettings &iSettings) { mConfigured2WDiscoverySettings = iSettings; }
+  const TwoWayDiscoverySettings &getConfigured2WDiscoverySettings() const { return mConfigured2WDiscoverySettings; }
   bool effectiveLowPower2W() const
   {
     if (mIs1W || mConfigured2WPowerClass == TwoWayPowerClass::AlwaysAlive)
@@ -294,6 +296,7 @@ private:
   bool mLowPower2W = false;
   bool mHasLearnedLowPower2W = false;
   TwoWayPowerClass mConfigured2WPowerClass = TwoWayPowerClass::Automatic;
+  TwoWayDiscoverySettings mConfigured2WDiscoverySettings{};
   bool mOneWayEnrolled = false;
   uint32_t mConfigured1WTargetNodeId = 0;
   // TEST_NATIVE mirrors the production channel default: unspecified 1W type is

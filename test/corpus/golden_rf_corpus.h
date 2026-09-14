@@ -173,7 +173,88 @@ static const uint8_t kExtractionAddressResponse[] = {
     0xA1, 0xB2, 0xC3, 0x00, 0x00, 0x01,
 };
 
+// Sanitized KLR300 controller-role pairing/search sequence captured on
+// 2026-09-12.  Node IDs are the published capture shape; challenge/HMAC/key
+// bytes below are synthetic public placeholders.  The stable regression
+// targets are command, endpoints, CTRL1 and declared payload length.
+static const uint8_t kKlr300Discover28Ack[] = {
+    0xC8, 0x10, 0x00, 0x00, 0x3B, 0xE2, 0xD1, 0xFF, 0x28,
+};
+
+static const uint8_t kKlr300Discover2EBroadcast[] = {
+    0xC9, 0x20, 0x00, 0x00, 0x3F, 0xE2, 0xD1, 0xFF, 0x2E, 0x00,
+};
+
+static const uint8_t kKlr300DiscoveryConfirmation[] = {
+    0x48, 0x20, 0x7E, 0x9E, 0x6E, 0xE2, 0xD1, 0xFF, 0x2C,
+};
+
+static const uint8_t kKlr300KeyInit[] = {
+    0x48, 0x20, 0x7E, 0x9E, 0x6E, 0xE2, 0xD1, 0xFF, 0x31,
+};
+
+static const uint8_t kKlr300KeyTransfer[] = {
+    0x18, 0x00, 0x7E, 0x9E, 0x6E, 0xE2, 0xD1, 0xFF, 0x32,
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+};
+
+static const uint8_t kKlr300DiscoverSpe[] = {
+    0xD4, 0x30, 0x00, 0x00, 0x3B, 0xE2, 0xD1, 0xFF, 0x2A,
+    0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+    0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5,
+};
+
+static const uint8_t kKlr300Discover2EDirected[] = {
+    0x49, 0x20, 0x7E, 0x9E, 0x6E, 0xE2, 0xD1, 0xFF, 0x2E, 0x02,
+};
+
+static const uint8_t kKlr300ChallengeResponse[] = {
+    0x0E, 0x00, 0x7E, 0x9E, 0x6E, 0xE2, 0xD1, 0xFF, 0x3D,
+    0x10, 0x20, 0x30, 0x40, 0x50, 0x60,
+};
+
+static const uint8_t kKlr300AddressRequest[] = {
+    0x48, 0x24, 0x7E, 0x9E, 0x6E, 0xE2, 0xD1, 0xFF, 0x36,
+};
+
 static const Frame kFrames[] = {
+    {"klr300_discover_28_ack", "klr300_pairing_search_2026_09_12",
+     "sanitized KLR300 capture; ACK bit and header preserved", RadioPath::ProtocolOnly,
+     kKlr300Discover28Ack, sizeof(kKlr300Discover28Ack), IoHomeCommand::DiscoverRequest,
+     0xE2D1FF, 0x00003B, false, false, false, CryptoExpectation::NoCrypto},
+    {"klr300_discover_2e_broadcast", "klr300_pairing_search_2026_09_12",
+     "sanitized KLR300 capture", RadioPath::ProtocolOnly,
+     kKlr300Discover2EBroadcast, sizeof(kKlr300Discover2EBroadcast), IoHomeCommand::Discover2ERequest,
+     0xE2D1FF, 0x00003F, false, false, false, CryptoExpectation::NoCrypto},
+    {"klr300_discovery_confirmation", "klr300_pairing_search_2026_09_12",
+     "sanitized KLR300 capture; peer address substituted", RadioPath::ProtocolOnly,
+     kKlr300DiscoveryConfirmation, sizeof(kKlr300DiscoveryConfirmation), IoHomeCommand::Confirmation,
+     0xE2D1FF, 0x7E9E6E, false, false, false, CryptoExpectation::NoCrypto},
+    {"klr300_key_init", "klr300_pairing_search_2026_09_12",
+     "sanitized KLR300 capture; peer address substituted", RadioPath::ProtocolOnly,
+     kKlr300KeyInit, sizeof(kKlr300KeyInit), IoHomeCommand::KeyInitTransfer,
+     0xE2D1FF, 0x7E9E6E, false, false, false, CryptoExpectation::NoCrypto},
+    {"klr300_key_transfer", "klr300_pairing_search_2026_09_12",
+     "sanitized KLR300 capture; encrypted key replaced", RadioPath::ProtocolOnly,
+     kKlr300KeyTransfer, sizeof(kKlr300KeyTransfer), IoHomeCommand::KeyTransfer,
+     0xE2D1FF, 0x7E9E6E, false, false, false, CryptoExpectation::NoCrypto},
+    {"klr300_discover_spe", "klr300_pairing_search_2026_09_12",
+     "sanitized KLR300 capture; challenge and HMAC replaced", RadioPath::ProtocolOnly,
+     kKlr300DiscoverSpe, sizeof(kKlr300DiscoverSpe), IoHomeCommand::DiscoverSPERequest,
+     0xE2D1FF, 0x00003B, false, false, false, CryptoExpectation::NoCrypto},
+    {"klr300_discover_2e_directed", "klr300_pairing_search_2026_09_12",
+     "sanitized KLR300 capture; peer address substituted", RadioPath::ProtocolOnly,
+     kKlr300Discover2EDirected, sizeof(kKlr300Discover2EDirected), IoHomeCommand::Discover2ERequest,
+     0xE2D1FF, 0x7E9E6E, false, false, false, CryptoExpectation::NoCrypto},
+    {"klr300_challenge_response", "klr300_pairing_search_2026_09_12",
+     "sanitized KLR300 capture; HMAC replaced", RadioPath::ProtocolOnly,
+     kKlr300ChallengeResponse, sizeof(kKlr300ChallengeResponse), IoHomeCommand::ChallengeResponse,
+     0xE2D1FF, 0x7E9E6E, false, false, false, CryptoExpectation::NoCrypto},
+    {"klr300_address_request", "klr300_pairing_search_2026_09_12",
+     "sanitized KLR300 capture; unknown CTRL1 bit 0x04 preserved without semantics", RadioPath::ProtocolOnly,
+     kKlr300AddressRequest, sizeof(kKlr300AddressRequest), IoHomeCommand::AddressRequest,
+     0xE2D1FF, 0x7E9E6E, false, false, false, CryptoExpectation::NoCrypto},
     {"smoove_remove_controller", "smoove_remove_add_sx1276",
      "sanitized/re-keyed August Smoove remove-add shape", RadioPath::SX1276,
      kSmooveRemoveController, sizeof(kSmooveRemoveController), IoHomeCommand::RemoveController,
@@ -234,9 +315,23 @@ static const Scenario kScenarios[] = {
      "address response is available for responder address verification"},
 };
 
+static const char *const kKlr300PairingSearchSequence[] = {
+    "klr300_discover_2e_broadcast",
+    "klr300_discover_28_ack",
+    "klr300_discovery_confirmation",
+    "klr300_key_init",
+    "klr300_key_transfer",
+    "klr300_discover_spe",
+    "klr300_discover_2e_directed",
+    "klr300_challenge_response",
+    "klr300_address_request",
+};
+
 static constexpr uint8_t frameCount = sizeof(kFrames) / sizeof(kFrames[0]);
 static constexpr uint8_t pairingWaitInjectionCount = sizeof(kPairingWaitInjections) / sizeof(kPairingWaitInjections[0]);
 static constexpr uint8_t scenarioCount = sizeof(kScenarios) / sizeof(kScenarios[0]);
+static constexpr uint8_t klr300PairingSearchSequenceCount =
+    sizeof(kKlr300PairingSearchSequence) / sizeof(kKlr300PairingSearchSequence[0]);
 
 inline const Frame *findFrame(const char *iId)
 {

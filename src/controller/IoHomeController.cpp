@@ -894,28 +894,46 @@ namespace
         return copy2WPayload(oData, oLen, kSetConfig1Payload, static_cast<uint8_t>(sizeof(kSetConfig1Payload)));
     }
 
-    bool build2WDiscover(IoHomeFrame &oFrame, uint32_t iSrcNodeId, bool iSpeDiscovery, const uint8_t iSystemKey[16])
+    bool build2WDiscoveryFrame(IoHomeFrame &oFrame,
+                               uint32_t iSrcNodeId,
+                               const TwoWayDiscoveryFrameOptions &iOptions,
+                               const uint8_t iSystemKey[16],
+                               const uint8_t iChallenge[6])
     {
         oFrame.init();
         oFrame.setStart2W();
         oFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
         oFrame.setSrcNode(iSrcNodeId);
-        oFrame.setDestBroadcast();
+        oFrame.setDestNode(iOptions.destination);
+        oFrame.setLowPower(iOptions.lowPower);
+        oFrame.setAckCapable(iOptions.ackCapable);
         oFrame.hasHmac = false;
+        oFrame.commandId = iOptions.command;
 
-        if (!iSpeDiscovery)
+        if (iOptions.command == IoHomeCommand::DiscoverRequest)
         {
-            oFrame.commandId = IoHomeCommand::DiscoverRequest;
             oFrame.dataLen = 0;
             return true;
         }
 
+        if (iOptions.command == IoHomeCommand::Discover2ERequest)
+        {
+            oFrame.data[0] = 0x00;
+            oFrame.dataLen = 1;
+            return true;
+        }
+
+        if (iOptions.command != IoHomeCommand::DiscoverSPERequest)
+            return false;
+
         if (iSystemKey == nullptr)
             return false;
 
-        oFrame.commandId = IoHomeCommand::DiscoverSPERequest;
         uint8_t lChallenge[6];
-        IoHomeCrypto::generateChallenge(lChallenge);
+        if (iChallenge)
+            memcpy(lChallenge, iChallenge, sizeof(lChallenge));
+        else
+            IoHomeCrypto::generateChallenge(lChallenge);
         memcpy(oFrame.data, lChallenge, sizeof(lChallenge));
 
         uint8_t lHmac[IOHC_HMAC_SIZE];
@@ -955,11 +973,11 @@ namespace
             return false;
 
         oFrame.init();
-        // Captured controller-role 0x32 continuation frames keep START/END
-        // clear while setting LOW_POWER independently of the target profile.
+        // KLR300 controller-role capture: continuation frame with START/END
+        // clear and CTRL1=0x00.  Wake-up behavior belongs to the preamble of
+        // START requests, not to this key-transfer continuation.
         oFrame.ctrlByte0 = 0;
         oFrame.ctrlByte1 = 0x00;
-        oFrame.setLowPower(true);
         oFrame.setSrcNode(iSrcNodeId);
         oFrame.setDestNode(iDestNodeId);
         oFrame.commandId = IoHomeCommand::KeyTransfer;
@@ -983,11 +1001,11 @@ namespace
 
         oFrame.init();
         // 0x3D carries the 6-byte HMAC as normal data in a 2W continuation
-        // frame. Captures distinguish the sender role here, not target sleep
-        // behavior: controllers set LOW_POWER and devices leave it clear.
+        // frame. Real KLR300 controller traffic uses CTRL1=0x00 here; target
+        // sleep behavior must not leak into continuation flags.
         oFrame.ctrlByte0 = 0;
         oFrame.ctrlByte1 = 0x00;
-        oFrame.setLowPower(iSenderRole == TwoWaySenderRole::Controller);
+        (void)iSenderRole;
         oFrame.setSrcNode(iSrcNodeId);
         oFrame.setDestNode(iDestNodeId);
         oFrame.commandId = IoHomeCommand::ChallengeResponse;
@@ -1072,6 +1090,127 @@ namespace
         return true;
     }
 #endif
+}
+
+TwoWayDiscoveryFrameOptions IoHomeController::referenceTwoWayDiscoveryOptions(IoHomeCommand iCommand)
+{
+    TwoWayDiscoveryFrameOptions lOptions;
+    lOptions.command = iCommand;
+
+    switch (iCommand)
+    {
+    case IoHomeCommand::Discover2ERequest:
+        // Real KLR300 broadcast search: 0x2E -> 0x00003F, CTRL1=0x20.
+        lOptions.destination = 0x00003F;
+        lOptions.lowPower = true;
+        lOptions.ackCapable = false;
+        lOptions.preamble = IOHC_PREAMBLE_LONG;
+        break;
+
+    case IoHomeCommand::DiscoverSPERequest:
+        // Real KLR300 authenticated roll-call: 0x2A -> 0x00003B,
+        // CTRL1=0x30.  The normal preamble remains independent of CTRL1.
+        lOptions.destination = 0x00003B;
+        lOptions.lowPower = true;
+        lOptions.ackCapable = true;
+        lOptions.preamble = IOHC_PREAMBLE_NORMAL_START;
+        break;
+
+    case IoHomeCommand::DiscoverRequest:
+    default:
+        // Generic cold pairing intentionally remains ACK-off until the
+        // actuator-side requirement is hardware-proven.
+        lOptions.command = IoHomeCommand::DiscoverRequest;
+        lOptions.destination = 0x00003B;
+        lOptions.lowPower = false;
+        lOptions.ackCapable = false;
+        lOptions.preamble = IOHC_PREAMBLE_LONG;
+        break;
+    }
+
+    return lOptions;
+}
+
+TwoWayDiscoverySettings IoHomeController::mergeTwoWayDiscoverySettings(
+    const TwoWayDiscoverySettings &iBase,
+    const TwoWayDiscoverySettings &iOverride)
+{
+    TwoWayDiscoverySettings lMerged = iBase;
+    if (iOverride.command != TwoWayDiscoveryCommandMode::Automatic)
+        lMerged.command = iOverride.command;
+    if (iOverride.destination != TwoWayDiscoveryDestinationMode::Automatic)
+        lMerged.destination = iOverride.destination;
+    if (iOverride.ack != TwoWayDiscoveryFlagMode::Automatic)
+        lMerged.ack = iOverride.ack;
+    if (iOverride.lowPower != TwoWayDiscoveryFlagMode::Automatic)
+        lMerged.lowPower = iOverride.lowPower;
+    if (iOverride.preamble != TwoWayDiscoveryPreambleMode::Automatic)
+        lMerged.preamble = iOverride.preamble;
+    return lMerged;
+}
+
+TwoWayDiscoveryFrameOptions IoHomeController::resolveTwoWayDiscoveryOptions(
+    IoHomeCommand iRequestedCommand,
+    const TwoWayDiscoverySettings &iSettings)
+{
+    IoHomeCommand lCommand = iRequestedCommand;
+    switch (iSettings.command)
+    {
+    case TwoWayDiscoveryCommandMode::Discover28:
+        lCommand = IoHomeCommand::DiscoverRequest;
+        break;
+    case TwoWayDiscoveryCommandMode::Discover2E:
+        lCommand = IoHomeCommand::Discover2ERequest;
+        break;
+    case TwoWayDiscoveryCommandMode::DiscoverSPE:
+        lCommand = IoHomeCommand::DiscoverSPERequest;
+        break;
+    case TwoWayDiscoveryCommandMode::Automatic:
+    default:
+        break;
+    }
+
+    TwoWayDiscoveryFrameOptions lOptions = referenceTwoWayDiscoveryOptions(lCommand);
+    switch (iSettings.destination)
+    {
+    case TwoWayDiscoveryDestinationMode::DiscoverAll:
+        lOptions.destination = 0x00003B;
+        break;
+    case TwoWayDiscoveryDestinationMode::DiscoverAlt:
+        lOptions.destination = 0x00003F;
+        break;
+    default:
+        break;
+    }
+    if (iSettings.ack != TwoWayDiscoveryFlagMode::Automatic)
+        lOptions.ackCapable = iSettings.ack == TwoWayDiscoveryFlagMode::On;
+    if (iSettings.lowPower != TwoWayDiscoveryFlagMode::Automatic)
+        lOptions.lowPower = iSettings.lowPower == TwoWayDiscoveryFlagMode::On;
+    switch (iSettings.preamble)
+    {
+    case TwoWayDiscoveryPreambleMode::Long:
+        lOptions.preamble = IOHC_PREAMBLE_LONG;
+        break;
+    case TwoWayDiscoveryPreambleMode::Normal:
+        lOptions.preamble = IOHC_PREAMBLE_NORMAL_START;
+        break;
+    case TwoWayDiscoveryPreambleMode::Short:
+        lOptions.preamble = IOHC_PREAMBLE_SHORT;
+        break;
+    default:
+        break;
+    }
+    return lOptions;
+}
+
+bool IoHomeController::buildTwoWayDiscoveryFrame(
+    IoHomeFrame &oFrame,
+    uint32_t iSrcNodeId,
+    const TwoWayDiscoveryFrameOptions &iOptions,
+    const uint8_t iSystemKey[16],
+    const uint8_t iChallenge[6])
+{
+    return ::build2WDiscoveryFrame(oFrame, iSrcNodeId, iOptions, iSystemKey, iChallenge);
 }
 
 IoHomeController::IoHomeController()
@@ -1927,6 +2066,18 @@ bool IoHomeController::pairingLowPower2W() const
     if (mDiagnostic2WPowerClass == TwoWayPowerClass::LowPower)
         return true;
     return lCh->effectiveLowPower2W();
+}
+
+TwoWayDiscoverySettings IoHomeController::pairingDiscoverySettings() const
+{
+    TwoWayDiscoverySettings lConfigured;
+    if (mModule)
+    {
+        IoHomecontrolChannel *lChannel = mModule->getChannel(mPairingChannel);
+        if (lChannel && !lChannel->is1W())
+            lConfigured = lChannel->getConfigured2WDiscoverySettings();
+    }
+    return mergeTwoWayDiscoverySettings(lConfigured, mDiagnosticDiscoverySettings);
 }
 
 uint16_t IoHomeController::preambleFor2WRequest(const IoHomeFrame &iFrame) const
@@ -2911,6 +3062,16 @@ uint16_t IoHomeController::diagnostic2WStartPreamble() const
     return mDiagnostic2WStartPreamble;
 }
 
+void IoHomeController::setDiagnosticDiscoverySettings(const TwoWayDiscoverySettings &iSettings)
+{
+    mDiagnosticDiscoverySettings = iSettings;
+}
+
+const TwoWayDiscoverySettings &IoHomeController::diagnosticDiscoverySettings() const
+{
+    return mDiagnosticDiscoverySettings;
+}
+
 void IoHomeController::setRxScanEnabled(bool iEnabled)
 {
     mRxScanEnabled = iEnabled;
@@ -3445,12 +3606,13 @@ void IoHomeController::tracePairDiagnosticTx2W(const IoHomeFrame &iFrame, uint16
         return;
 
     const uint32_t lFreqHz = (mCurrentFreqIdx < IOHC_NUM_FREQUENCIES) ? IOHC_FREQUENCIES[mCurrentFreqIdx] : 0;
-    logInfoP("tx2w: ch=%u freq=%lu cmd=0x%02X preamble=%u start=%u lp=%u",
+    logInfoP("tx2w: ch=%u freq=%lu cmd=0x%02X preamble=%u start=%u ack=%u lp=%u",
              static_cast<unsigned>(iohcChannelNumberForFrequency(lFreqHz)),
              static_cast<unsigned long>(lFreqHz),
              static_cast<unsigned>(static_cast<uint8_t>(iFrame.commandId)),
              static_cast<unsigned>(iPreambleSymbols),
              (iFrame.ctrlByte0 & IOHC_CTRL0_START) ? 1U : 0U,
+             (iFrame.ctrlByte1 & IOHC_CTRL1_ACK) ? 1U : 0U,
              (iFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) ? 1U : 0U);
 }
 
@@ -4805,8 +4967,14 @@ void IoHomeController::processPairSendDiscovery()
         return;
     }
 
-    // Build discovery frame through the centralized 2W builder.
-    if (!build2WDiscover(mTxFrame, mOwnNodeId, mDiscoverySPE, mSystemKey))
+    // Resolve command, destination, CTRL1 and preamble independently.  The
+    // channel's ETS choices are overlaid by runtime diagnostics, if any.
+    const IoHomeCommand lRequestedCommand = mDiscoverySPE
+                                                ? IoHomeCommand::DiscoverSPERequest
+                                                : IoHomeCommand::DiscoverRequest;
+    const TwoWayDiscoveryFrameOptions lDiscoveryOptions =
+        resolveTwoWayDiscoveryOptions(lRequestedCommand, pairingDiscoverySettings());
+    if (!buildTwoWayDiscoveryFrame(mTxFrame, mOwnNodeId, lDiscoveryOptions, mSystemKey))
     {
         mState = ControllerState::PairFailed;
         return;
@@ -4823,9 +4991,9 @@ void IoHomeController::processPairSendDiscovery()
         return;
     }
     updateCurrentFrequencyIndex(lDiscoveryFreq);
-    const RadioError lPrepErr = mRadio.setPreambleLengthBlocking(IOHC_PREAMBLE_LONG);
+    const RadioError lPrepErr = mRadio.setPreambleLengthBlocking(lDiscoveryOptions.preamble);
 #else
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_LONG, &lDiscoveryFreq);
+    const RadioError lPrepErr = configureTxRadio(lDiscoveryOptions.preamble, &lDiscoveryFreq);
 #endif
     if (lPrepErr == RadioError::Busy)
         return;
@@ -4838,7 +5006,7 @@ void IoHomeController::processPairSendDiscovery()
     mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        tracePairDiagnosticTx2W(mTxFrame, IOHC_PREAMBLE_LONG);
+        tracePairDiagnosticTx2W(mTxFrame, lDiscoveryOptions.preamble);
 #if defined(RADIO_SX1262)
         const RadioError lErr = mRadio.startTransmitBlocking(mTxBuffer, mTxLen);
 #else
@@ -6320,48 +6488,24 @@ void IoHomeController::processDiscovery()
         if (mDiscoverySendPhase == DiscoverySendPhase::SetFrequency && mDiscoveryTimingTrace.hopStartUs == 0)
             mDiscoveryTimingTrace.hopStartUs = micros();
 
-        mTxFrame.init();
-        mTxFrame.setStart2W();
-        mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END); // standalone: START+END (per nicolas5000)
-        mTxFrame.setSrcNode(mOwnNodeId);
-        mTxFrame.hasHmac = false;
-
-        if (mDiscoveryAltFrame)
+        const IoHomeCommand lRequestedCommand = mDiscoveryAltFrame
+                                                    ? IoHomeCommand::Discover2ERequest
+                                                : mDiscoverySPE
+                                                    ? IoHomeCommand::DiscoverSPERequest
+                                                    : IoHomeCommand::DiscoverRequest;
+        const TwoWayDiscoveryFrameOptions lDiscoveryOptions =
+            resolveTwoWayDiscoveryOptions(lRequestedCommand, mDiagnosticDiscoverySettings);
+        if (!buildTwoWayDiscoveryFrame(mTxFrame, mOwnNodeId, lDiscoveryOptions, mSystemKey))
         {
-            // Alternative discovery broadcast, mirroring a TaHoma box: the
-            // Discover2ERequest (0x2E) is unauthenticated, carries a single
-            // 0x00 data byte, and targets the 0x00003F broadcast address.
-            mTxFrame.setDestBroadcast2E();
-            mTxFrame.commandId = IoHomeCommand::Discover2ERequest;
-            mTxFrame.data[0] = 0x00;
-            mTxFrame.dataLen = 1;
-        }
-        else if (mDiscoverySPE)
-        {
-            mTxFrame.setDestBroadcast();
-            mTxFrame.commandId = IoHomeCommand::DiscoverSPERequest;
-            // SPE discovery payload: 6B random challenge + 6B HMAC(challenge, systemKey)
-            uint8_t lChallenge[6];
-            IoHomeCrypto::generateChallenge(lChallenge);
-            memcpy(mTxFrame.data, lChallenge, 6);
-            uint8_t lHmac[6];
-            IoHomeCrypto::createHmac2W(lChallenge, 6, lChallenge, mSystemKey, lHmac);
-            memcpy(mTxFrame.data + 6, lHmac, 6);
-            mTxFrame.dataLen = 12;
-        }
-        else
-        {
-            mTxFrame.setDestBroadcast();
-            mTxFrame.commandId = IoHomeCommand::DiscoverRequest;
-            mTxFrame.dataLen = 0;
+            mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
+            mDiscoveryAltFrame = false;
+            resetDiscoveryTimingTrace();
+            mState = ControllerState::Idle;
+            return;
         }
 
         const uint32_t lDiscoveryFreq = IOHC_FREQUENCIES[mPairingFreqIdx];
-        // SPE roll-call addresses already paired devices, so it does not need
-        // the cold-discovery wake-up preamble. CTRL1 remains zero.
-        const uint16_t lDiscoveryPreamble = mDiscoverySPE
-                                                ? IOHC_PREAMBLE_NORMAL_START
-                                                : IOHC_PREAMBLE_LONG;
+        const uint16_t lDiscoveryPreamble = lDiscoveryOptions.preamble;
 #if defined(RADIO_SX1262)
         RadioError lPrepErr = RadioError::None;
         if (mDiscoverySendPhase == DiscoverySendPhase::SetFrequency)
@@ -6419,7 +6563,10 @@ void IoHomeController::processDiscovery()
                 // Standard discovery sends the classic 0x28 frame first and then,
                 // like a TaHoma box, the alternative 0x2E frame on the same
                 // frequency before listening. SPE discovery keeps its single frame.
-                if (!mDiscoverySPE && !mDiscoveryAltFrame)
+                const bool lAutomaticClassicAndAlt =
+                    !mDiscoverySPE &&
+                    mDiagnosticDiscoverySettings.command == TwoWayDiscoveryCommandMode::Automatic;
+                if (lAutomaticClassicAndAlt && !mDiscoveryAltFrame)
                 {
                     mDiscoveryAltFrame = true;
                     resetDiscoveryTimingTrace();

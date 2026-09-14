@@ -52,6 +52,11 @@
                 <Parameter Id="%AID%_UP-%TT%%CC%083" Name="c%C%SilentOperation" ParameterType="%AID%_PT-IOHCCheckBox" Offset="53" BitOffset="1" Text="Somfy RS100: leiser Betrieb" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%084" Name="c%C%OneWayEnrollmentFinalizer" ParameterType="%AID%_PT-IOHCOneWayEnrollmentFinalizer" Offset="53" BitOffset="2" Text="1W Anmeldeabschluss" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%085" Name="c%C%TwoWayPowerClass" ParameterType="%AID%_PT-IOHCTwoWayPowerClass" Offset="53" BitOffset="4" Text="2W Energieklasse" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%086" Name="c%C%TwoWayDiscoveryCommand" ParameterType="%AID%_PT-IOHCTwoWayDiscoveryCommand" Offset="54" BitOffset="0" Text="2W Discovery-Befehl" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%087" Name="c%C%TwoWayDiscoveryDestination" ParameterType="%AID%_PT-IOHCTwoWayDiscoveryDestination" Offset="55" BitOffset="0" Text="2W Discovery-Ziel" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%088" Name="c%C%TwoWayDiscoveryAck" ParameterType="%AID%_PT-IOHCTwoWayDiscoveryFlag" Offset="56" BitOffset="0" Text="2W Discovery ACK" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%089" Name="c%C%TwoWayDiscoveryLowPower" ParameterType="%AID%_PT-IOHCTwoWayDiscoveryFlag" Offset="57" BitOffset="0" Text="2W Discovery LOW_POWER" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%090" Name="c%C%TwoWayDiscoveryPreamble" ParameterType="%AID%_PT-IOHCTwoWayDiscoveryPreamble" Offset="58" BitOffset="0" Text="2W Discovery-Präambel" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%020" Name="c%C%SceneCount" ParameterType="%AID%_PT-IOHCSceneCount" Offset="13" BitOffset="0" Text="Anzahl Szenen" Value="0" />
                 <!-- Scene slot parameters 1..10 are generated from IoHomecontrol.scene.part.xml. -->
                 <op:usePart name="IOHCScene" xpath="//Parameters/*" />
@@ -85,6 +90,11 @@
               <ParameterRef Id="%AID%_UP-%TT%%CC%083_R-%TT%%CC%08301" RefId="%AID%_UP-%TT%%CC%083" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%084_R-%TT%%CC%08401" RefId="%AID%_UP-%TT%%CC%084" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%085_R-%TT%%CC%08501" RefId="%AID%_UP-%TT%%CC%085" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%086_R-%TT%%CC%08601" RefId="%AID%_UP-%TT%%CC%086" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%087_R-%TT%%CC%08701" RefId="%AID%_UP-%TT%%CC%087" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%088_R-%TT%%CC%08801" RefId="%AID%_UP-%TT%%CC%088" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%089_R-%TT%%CC%08901" RefId="%AID%_UP-%TT%%CC%089" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%090_R-%TT%%CC%09001" RefId="%AID%_UP-%TT%%CC%090" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_UP-%TT%%CC%020" />
               <!-- Scene slot ParameterRefs 1..10 are generated from IoHomecontrol.scene.part.xml. -->
               <op:usePart name="IOHCScene" xpath="//ParameterRefs/*" />
@@ -302,6 +312,12 @@
                           </when>
                           <when test="0">
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%085_R-%TT%%CC%08501" IndentLevel="1" HelpContext="IOHC-2W-Energieklasse" />
+                            <ParameterSeparator Id="%AID%_PS-nnn" Text="2W Discovery (Experimentell)" UIHint="Headline" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%086_R-%TT%%CC%08601" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%087_R-%TT%%CC%08701" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%088_R-%TT%%CC%08801" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%089_R-%TT%%CC%08901" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
+                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%090_R-%TT%%CC%09001" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%083_R-%TT%%CC%08301" IndentLevel="1" HelpContext="IOHC-Silentbetrieb" />
                           </when>
                         </choose>

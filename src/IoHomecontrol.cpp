@@ -58,6 +58,48 @@ namespace
         return keyHasNonZeroByte(iKey) ? "set" : "missing";
     }
 
+    const char *discoveryCommandName(TwoWayDiscoveryCommandMode iMode)
+    {
+        switch (iMode)
+        {
+        case TwoWayDiscoveryCommandMode::Discover28: return "0x28";
+        case TwoWayDiscoveryCommandMode::Discover2E: return "0x2E";
+        case TwoWayDiscoveryCommandMode::DiscoverSPE: return "0x2A";
+        default: return "auto";
+        }
+    }
+
+    const char *discoveryDestinationName(TwoWayDiscoveryDestinationMode iMode)
+    {
+        switch (iMode)
+        {
+        case TwoWayDiscoveryDestinationMode::DiscoverAll: return "0x00003B";
+        case TwoWayDiscoveryDestinationMode::DiscoverAlt: return "0x00003F";
+        default: return "auto";
+        }
+    }
+
+    const char *discoveryFlagName(TwoWayDiscoveryFlagMode iMode)
+    {
+        switch (iMode)
+        {
+        case TwoWayDiscoveryFlagMode::Off: return "off";
+        case TwoWayDiscoveryFlagMode::On: return "on";
+        default: return "auto";
+        }
+    }
+
+    const char *discoveryPreambleName(TwoWayDiscoveryPreambleMode iMode)
+    {
+        switch (iMode)
+        {
+        case TwoWayDiscoveryPreambleMode::Long: return "1024";
+        case TwoWayDiscoveryPreambleMode::Normal: return "32";
+        case TwoWayDiscoveryPreambleMode::Short: return "8";
+        default: return "auto";
+        }
+    }
+
     bool identityEquals2W(uint32_t iNodeId, const uint8_t *iKey, uint32_t iTwoWayNodeId, const uint8_t *iTwoWayKey)
     {
         return (iNodeId & 0x00FFFFFF) == (iTwoWayNodeId & 0x00FFFFFF) &&
@@ -2452,6 +2494,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc pairdiag on|off|status", "Verbose pairing/discovery diagnostics");
     openknx.console.printHelpLine("iohc 2wdiag power auto|always|low", "Runtime-only 2W power-class override");
     openknx.console.printHelpLine("iohc 2wdiag preamble auto|N", "Runtime-only directed 2W START preamble override");
+    openknx.console.printHelpLine("iohc 2wdiag discovery FIELD VALUE", "Override discovery command/dest/ACK/LOW_POWER/preamble independently");
     openknx.console.printHelpLine("iohc 2wdiag status|reset", "Show or clear runtime-only 2W overrides");
     openknx.console.printHelpLine("iohcNN unpair", "Remove pairing for channel NN");
     openknx.console.printHelpLine("iohc discover", "Broadcast discovery, list devices");
@@ -2636,6 +2679,67 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         {
             mController.setDiagnostic2WPowerClass(TwoWayPowerClass::Automatic);
             mController.setDiagnostic2WStartPreamble(0);
+            mController.setDiagnosticDiscoverySettings(TwoWayDiscoverySettings{});
+        }
+        else if (lArg.rfind("discovery ", 0) == 0)
+        {
+            std::string lDiscoveryArgs = trimSpaces(lArg.substr(strlen("discovery ")));
+            std::string lField;
+            std::string lValue;
+            if (!takeToken(lDiscoveryArgs, lField) || !takeToken(lDiscoveryArgs, lValue) || !lDiscoveryArgs.empty())
+            {
+                logInfoP("Usage: iohc 2wdiag discovery command|destination|ack|lowpower|preamble VALUE");
+                return true;
+            }
+
+            TwoWayDiscoverySettings lSettings = mController.diagnosticDiscoverySettings();
+            bool lValid = true;
+            if (lField == "command" || lField == "cmd")
+            {
+                if (lValue == "auto") lSettings.command = TwoWayDiscoveryCommandMode::Automatic;
+                else if (lValue == "28" || lValue == "0x28") lSettings.command = TwoWayDiscoveryCommandMode::Discover28;
+                else if (lValue == "2e" || lValue == "0x2e") lSettings.command = TwoWayDiscoveryCommandMode::Discover2E;
+                else if (lValue == "2a" || lValue == "0x2a" || lValue == "spe") lSettings.command = TwoWayDiscoveryCommandMode::DiscoverSPE;
+                else lValid = false;
+            }
+            else if (lField == "destination" || lField == "dest")
+            {
+                if (lValue == "auto") lSettings.destination = TwoWayDiscoveryDestinationMode::Automatic;
+                else if (lValue == "3b" || lValue == "0x00003b") lSettings.destination = TwoWayDiscoveryDestinationMode::DiscoverAll;
+                else if (lValue == "3f" || lValue == "0x00003f") lSettings.destination = TwoWayDiscoveryDestinationMode::DiscoverAlt;
+                else lValid = false;
+            }
+            else if (lField == "ack" || lField == "lowpower" || lField == "lp")
+            {
+                TwoWayDiscoveryFlagMode lFlag = TwoWayDiscoveryFlagMode::Automatic;
+                if (lValue == "off" || lValue == "0") lFlag = TwoWayDiscoveryFlagMode::Off;
+                else if (lValue == "on" || lValue == "1") lFlag = TwoWayDiscoveryFlagMode::On;
+                else if (lValue != "auto") lValid = false;
+                if (lValid)
+                {
+                    if (lField == "ack") lSettings.ack = lFlag;
+                    else lSettings.lowPower = lFlag;
+                }
+            }
+            else if (lField == "preamble")
+            {
+                if (lValue == "auto") lSettings.preamble = TwoWayDiscoveryPreambleMode::Automatic;
+                else if (lValue == "1024" || lValue == "long") lSettings.preamble = TwoWayDiscoveryPreambleMode::Long;
+                else if (lValue == "32" || lValue == "normal") lSettings.preamble = TwoWayDiscoveryPreambleMode::Normal;
+                else if (lValue == "8" || lValue == "short") lSettings.preamble = TwoWayDiscoveryPreambleMode::Short;
+                else lValid = false;
+            }
+            else
+            {
+                lValid = false;
+            }
+
+            if (!lValid)
+            {
+                logInfoP("Usage: discovery command auto|28|2e|spe; destination auto|3b|3f; ack/lowpower auto|off|on; preamble auto|1024|32|8");
+                return true;
+            }
+            mController.setDiagnosticDiscoverySettings(lSettings);
         }
         else if (lArg.rfind("power ", 0) == 0)
         {
@@ -2672,7 +2776,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         }
         else if (!lArg.empty() && lArg != "status")
         {
-            logInfoP("Usage: iohc 2wdiag power auto|always|low | preamble auto|N | status | reset");
+            logInfoP("Usage: iohc 2wdiag power ... | preamble ... | discovery FIELD VALUE | status | reset");
             return true;
         }
 
@@ -2684,6 +2788,13 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             logInfoP("2WDiag: power=%s startPreamble=%u runtime-only (continuations stay short)",
                      IoHomecontrolChannel::twoWayPowerClassName(mController.diagnostic2WPowerClass()),
                      static_cast<unsigned>(lPreamble));
+        const TwoWayDiscoverySettings &lDiscovery = mController.diagnosticDiscoverySettings();
+        logInfoP("2WDiag discovery: cmd=%s dest=%s ack=%s lp=%s preamble=%s runtime-only",
+                 discoveryCommandName(lDiscovery.command),
+                 discoveryDestinationName(lDiscovery.destination),
+                 discoveryFlagName(lDiscovery.ack),
+                 discoveryFlagName(lDiscovery.lowPower),
+                 discoveryPreambleName(lDiscovery.preamble));
         return true;
     }
     if (lSub.substr(0, 6) == "status")
@@ -2732,6 +2843,17 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                              lEffectiveLowPower ? "low-power" : "always-alive",
                              static_cast<unsigned>(lEffectiveLowPower ? IOHC_PREAMBLE_LONG
                                                                       : IOHC_PREAMBLE_NORMAL_START));
+                    const TwoWayDiscoverySettings &lDiscovery = lCh->getConfigured2WDiscoverySettings();
+                    const TwoWayDiscoveryFrameOptions lResolvedDiscovery =
+                        IoHomeController::resolveTwoWayDiscoveryOptions(IoHomeCommand::DiscoverRequest, lDiscovery);
+                    logInfoP("  2W discovery: configured cmd=%s dest=%s ack=%s lp=%s preamble=%s; effective cmd=0x%02X dst=0x%06X ack=%u lp=%u preamble=%u",
+                             discoveryCommandName(lDiscovery.command), discoveryDestinationName(lDiscovery.destination),
+                             discoveryFlagName(lDiscovery.ack), discoveryFlagName(lDiscovery.lowPower),
+                             discoveryPreambleName(lDiscovery.preamble),
+                             static_cast<unsigned>(static_cast<uint8_t>(lResolvedDiscovery.command)),
+                             lResolvedDiscovery.destination, lResolvedDiscovery.ackCapable ? 1U : 0U,
+                             lResolvedDiscovery.lowPower ? 1U : 0U,
+                             static_cast<unsigned>(lResolvedDiscovery.preamble));
                 }
                 if (iDebugKo)
                     openknx.console.writeDiagnoseKo("Ch%02d %s %06X", lIdx + 1,
@@ -2783,6 +2905,14 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                              lEffectiveLowPower ? "low-power" : "always-alive",
                              static_cast<unsigned>(lEffectiveLowPower ? IOHC_PREAMBLE_LONG
                                                                       : IOHC_PREAMBLE_NORMAL_START));
+                    const TwoWayDiscoveryFrameOptions lDiscovery =
+                        IoHomeController::resolveTwoWayDiscoveryOptions(
+                            IoHomeCommand::DiscoverRequest, lCh->getConfigured2WDiscoverySettings());
+                    logInfoP("       discovery cmd=0x%02X dst=0x%06X ack=%u lp=%u preamble=%u",
+                             static_cast<unsigned>(static_cast<uint8_t>(lDiscovery.command)),
+                             lDiscovery.destination, lDiscovery.ackCapable ? 1U : 0U,
+                             lDiscovery.lowPower ? 1U : 0U,
+                             static_cast<unsigned>(lDiscovery.preamble));
                 }
             }
         }

@@ -162,6 +162,35 @@
                   <Enumeration Text="Energiesparend" Value="2" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCTwoWayDiscoveryCommand" Name="IOHCTwoWayDiscoveryCommand">
+                <TypeRestriction Base="Value" SizeInBit="2">
+                  <Enumeration Text="Automatisch (0x28)" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Discover 0x28" Value="1" Id="%ENID%" />
+                  <Enumeration Text="Alternativ 0x2E" Value="2" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCTwoWayDiscoveryDestination" Name="IOHCTwoWayDiscoveryDestination">
+                <TypeRestriction Base="Value" SizeInBit="2">
+                  <Enumeration Text="Automatisch nach Befehl" Value="0" Id="%ENID%" />
+                  <Enumeration Text="0x00003B" Value="1" Id="%ENID%" />
+                  <Enumeration Text="0x00003F" Value="2" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCTwoWayDiscoveryFlag" Name="IOHCTwoWayDiscoveryFlag">
+                <TypeRestriction Base="Value" SizeInBit="2">
+                  <Enumeration Text="Automatisch nach Befehl" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Aus" Value="1" Id="%ENID%" />
+                  <Enumeration Text="Ein" Value="2" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCTwoWayDiscoveryPreamble" Name="IOHCTwoWayDiscoveryPreamble">
+                <TypeRestriction Base="Value" SizeInBit="2">
+                  <Enumeration Text="Automatisch nach Befehl" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Lang (1024)" Value="1" Id="%ENID%" />
+                  <Enumeration Text="Normal (32)" Value="2" Id="%ENID%" />
+                  <Enumeration Text="Kurz (8)" Value="3" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
               <ParameterType Id="%AID%_PT-IOHCOneWayBroadcastType" Name="IOHCOneWayBroadcastType">
                 <TypeRestriction Base="Value" SizeInBit="8">
                   <Enumeration Text="Automatisch nach Gerätetyp" Value="255" Id="%ENID%" />

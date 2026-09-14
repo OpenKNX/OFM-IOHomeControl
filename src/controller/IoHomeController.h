@@ -397,6 +397,22 @@ public:
   // Start discovery scan (no pairing); encrypted mode only lets paired/known devices respond
   void startDiscovery(bool iEncrypted = false);
 
+  // Resolve and build discovery-family frames without coupling CTRL1 flags to
+  // the preamble.  The defaults preserve generic cold-pairing behavior for
+  // 0x28 and model the captured KLR300 shapes for 0x2E and authenticated SPE.
+  static TwoWayDiscoveryFrameOptions referenceTwoWayDiscoveryOptions(IoHomeCommand iCommand);
+  static TwoWayDiscoverySettings mergeTwoWayDiscoverySettings(
+      const TwoWayDiscoverySettings &iBase,
+      const TwoWayDiscoverySettings &iOverride);
+  static TwoWayDiscoveryFrameOptions resolveTwoWayDiscoveryOptions(
+      IoHomeCommand iRequestedCommand,
+      const TwoWayDiscoverySettings &iSettings);
+  static bool buildTwoWayDiscoveryFrame(IoHomeFrame &oFrame,
+                                        uint32_t iSrcNodeId,
+                                        const TwoWayDiscoveryFrameOptions &iOptions,
+                                        const uint8_t iSystemKey[16] = nullptr,
+                                        const uint8_t iChallenge[6] = nullptr);
+
   // Start command scan (probe device for supported commands)
   void startCommandScan(uint32_t iNodeId);
 
@@ -489,6 +505,8 @@ public:
   TwoWayPowerClass diagnostic2WPowerClass() const;
   void setDiagnostic2WStartPreamble(uint16_t iPreambleSymbols);
   uint16_t diagnostic2WStartPreamble() const;
+  void setDiagnosticDiscoverySettings(const TwoWayDiscoverySettings &iSettings);
+  const TwoWayDiscoverySettings &diagnosticDiscoverySettings() const;
   static const char *stateName(ControllerState iState);
   static const char *pairingOutcomeName(PairingOutcome iOutcome);
   const PairingTelemetry &pairingTelemetry() const;
@@ -923,6 +941,7 @@ private:
   uint8_t mLastResponseFreqIdx; // frequency index where last response was received
   TwoWayPowerClass mDiagnostic2WPowerClass = TwoWayPowerClass::Automatic;
   uint16_t mDiagnostic2WStartPreamble = 0; // 0 = derive from effective power class
+  TwoWayDiscoverySettings mDiagnosticDiscoverySettings{};
   bool mPairDiagnosticTraceEnabled;
   ControllerState mLastPairDiagnosticTraceState;
 
@@ -1108,6 +1127,7 @@ private:
   bool resolveLowPower2W(uint32_t iNodeId) const;
   bool pairingLowPower2W() const;
   uint16_t preambleFor2WRequest(const IoHomeFrame &iFrame) const;
+  TwoWayDiscoverySettings pairingDiscoverySettings() const;
   bool learnPowerClassFromDiscovery(IoHomecontrolChannel *iChannel,
                                     const IoHomeFrame &iFrame,
                                     const char *iSource);

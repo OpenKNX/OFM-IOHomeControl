@@ -32,6 +32,14 @@ void IoHomeFrame::setLowPower(bool iLowPower)
         ctrlByte1 &= ~IOHC_CTRL1_LOW_POWER;
 }
 
+void IoHomeFrame::setAckCapable(bool iEnabled)
+{
+    if (iEnabled)
+        ctrlByte1 |= IOHC_CTRL1_ACK;
+    else
+        ctrlByte1 &= ~IOHC_CTRL1_ACK;
+}
+
 void IoHomeFrame::setSrcNode(uint32_t iNodeId)
 {
     srcNode[0] = (iNodeId >> 16) & 0xFF;

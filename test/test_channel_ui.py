@@ -214,6 +214,55 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIsNotNone(ref)
         self.assertEqual(ref.get("HelpContext"), "IOHC-2W-Energieklasse")
 
+    def test_two_way_discovery_controls_are_independent_and_default_auto(self) -> None:
+        expected_types = {
+            "IOHCTwoWayDiscoveryCommand": {
+                "0": "Automatisch (0x28)", "1": "Discover 0x28", "2": "Alternativ 0x2E"
+            },
+            "IOHCTwoWayDiscoveryDestination": {
+                "0": "Automatisch nach Befehl", "1": "0x00003B", "2": "0x00003F"
+            },
+            "IOHCTwoWayDiscoveryFlag": {
+                "0": "Automatisch nach Befehl", "1": "Aus", "2": "Ein"
+            },
+            "IOHCTwoWayDiscoveryPreamble": {
+                "0": "Automatisch nach Befehl", "1": "Lang (1024)",
+                "2": "Normal (32)", "3": "Kurz (8)"
+            },
+        }
+        for name, expected in expected_types.items():
+            parameter_type = self.share.find(
+                f".//k:ParameterType[@Name='{name}']", NS
+            )
+            self.assertIsNotNone(parameter_type)
+            self.assertEqual(
+                {item.get("Value"): item.get("Text") for item in parameter_type.findall(".//k:Enumeration", NS)},
+                expected,
+            )
+
+        parameters = {
+            parameter.get("Name"): parameter
+            for parameter in self.template.findall(".//k:Parameter", NS)
+        }
+        for name, offset in {
+            "c%C%TwoWayDiscoveryCommand": "54",
+            "c%C%TwoWayDiscoveryDestination": "55",
+            "c%C%TwoWayDiscoveryAck": "56",
+            "c%C%TwoWayDiscoveryLowPower": "57",
+            "c%C%TwoWayDiscoveryPreamble": "58",
+        }.items():
+            self.assertIn(name, parameters)
+            self.assertEqual(parameters[name].get("Value"), "0")
+            self.assertEqual(parameters[name].get("Offset"), offset)
+
+        protocol_choice = self.template.find(
+            ".//k:choose[@ParamRefId='%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901']", NS
+        )
+        two_way = protocol_choice.find("k:when[@test='0']", NS)
+        shown = {ref.get("RefId") for ref in two_way.findall("k:ParameterRefRef", NS)}
+        for suffix in ("086", "087", "088", "089", "090"):
+            self.assertIn(f"%AID%_UP-%TT%%CC%{suffix}_R-%TT%%CC%{suffix}01", shown)
+
 
 if __name__ == "__main__":
     unittest.main()

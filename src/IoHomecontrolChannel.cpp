@@ -21,6 +21,22 @@
 #define ParamIOHC_cTwoWayPowerClass 0
 #endif
 
+#ifndef ParamIOHC_cTwoWayDiscoveryCommand
+#define ParamIOHC_cTwoWayDiscoveryCommand 0
+#endif
+#ifndef ParamIOHC_cTwoWayDiscoveryDestination
+#define ParamIOHC_cTwoWayDiscoveryDestination 0
+#endif
+#ifndef ParamIOHC_cTwoWayDiscoveryAck
+#define ParamIOHC_cTwoWayDiscoveryAck 0
+#endif
+#ifndef ParamIOHC_cTwoWayDiscoveryLowPower
+#define ParamIOHC_cTwoWayDiscoveryLowPower 0
+#endif
+#ifndef ParamIOHC_cTwoWayDiscoveryPreamble
+#define ParamIOHC_cTwoWayDiscoveryPreamble 0
+#endif
+
 // ---------------------------------------------------------------------------
 // Scene parameter access
 //
@@ -180,6 +196,11 @@ void IoHomecontrolChannel::setup()
     const bool lOneWayEnrollmentMac = ParamIOHC_cOneWayEnrollmentMac != 0;
     const uint8_t lOneWayEnrollmentFinalizer = static_cast<uint8_t>(ParamIOHC_cOneWayEnrollmentFinalizer);
     const uint8_t lTwoWayPowerClass = static_cast<uint8_t>(ParamIOHC_cTwoWayPowerClass);
+    const uint8_t lTwoWayDiscoveryCommand = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryCommand);
+    const uint8_t lTwoWayDiscoveryDestination = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryDestination);
+    const uint8_t lTwoWayDiscoveryAck = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryAck);
+    const uint8_t lTwoWayDiscoveryLowPower = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryLowPower);
+    const uint8_t lTwoWayDiscoveryPreamble = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryPreamble);
     const bool lSilentOperation = ParamIOHC_cSilentOperation != 0;
 
     // A channel is active when it is activated (Kanalaktivität = Aktiviert) and not temporarily suspended.
@@ -220,6 +241,18 @@ void IoHomecontrolChannel::setup()
         lTwoWayPowerClass <= static_cast<uint8_t>(TwoWayPowerClass::LowPower)
             ? static_cast<TwoWayPowerClass>(lTwoWayPowerClass)
             : TwoWayPowerClass::Automatic);
+    TwoWayDiscoverySettings lDiscoverySettings;
+    if (lTwoWayDiscoveryCommand <= static_cast<uint8_t>(TwoWayDiscoveryCommandMode::Discover2E))
+        lDiscoverySettings.command = static_cast<TwoWayDiscoveryCommandMode>(lTwoWayDiscoveryCommand);
+    if (lTwoWayDiscoveryDestination <= static_cast<uint8_t>(TwoWayDiscoveryDestinationMode::DiscoverAlt))
+        lDiscoverySettings.destination = static_cast<TwoWayDiscoveryDestinationMode>(lTwoWayDiscoveryDestination);
+    if (lTwoWayDiscoveryAck <= static_cast<uint8_t>(TwoWayDiscoveryFlagMode::On))
+        lDiscoverySettings.ack = static_cast<TwoWayDiscoveryFlagMode>(lTwoWayDiscoveryAck);
+    if (lTwoWayDiscoveryLowPower <= static_cast<uint8_t>(TwoWayDiscoveryFlagMode::On))
+        lDiscoverySettings.lowPower = static_cast<TwoWayDiscoveryFlagMode>(lTwoWayDiscoveryLowPower);
+    if (lTwoWayDiscoveryPreamble <= static_cast<uint8_t>(TwoWayDiscoveryPreambleMode::Short))
+        lDiscoverySettings.preamble = static_cast<TwoWayDiscoveryPreambleMode>(lTwoWayDiscoveryPreamble);
+    setConfigured2WDiscoverySettings(lDiscoverySettings);
     setConfigured1WTargetNodeId(lOneWayTargetNodeId);
     setConfigured1WBroadcastType(resolveOneWayBroadcastType(
         lOneWayBroadcastType,
@@ -792,6 +825,16 @@ const char *IoHomecontrolChannel::twoWayPowerClassName(TwoWayPowerClass iPowerCl
     default:
         return "automatic";
     }
+}
+
+void IoHomecontrolChannel::setConfigured2WDiscoverySettings(const TwoWayDiscoverySettings &iSettings)
+{
+    mConfigured2WDiscoverySettings = iSettings;
+}
+
+const TwoWayDiscoverySettings &IoHomecontrolChannel::getConfigured2WDiscoverySettings() const
+{
+    return mConfigured2WDiscoverySettings;
 }
 
 void IoHomecontrolChannel::setLastChallenge(const uint8_t *iChallenge)

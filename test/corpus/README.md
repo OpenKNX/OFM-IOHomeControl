@@ -20,6 +20,7 @@ The initial scenarios cover the August regression families:
 | Key extraction | KIG300/KLR200-style address-response shape pins address verification parsing |
 | Pairing interference | One unrelated frame is assigned to each pairing wait state with its required outcome |
 | VELUX KLI-compatible enrollment | Public source-derived `0x30` shape with source, wrapped key and sequence masked; four ADD destinations plus STOP/DOWN timing metadata |
+| KLR300 2W pairing/search (2026-09-12) | Sanitized 0x28/0x2E/0x2C/0x31/0x32/0x2A/0x3D/0x36 sequence; CTRL1 and payload lengths preserved, secrets replaced |
 
 Radio labels describe the originating hardware path. The protocol corpus is
 driver-independent; OFM has no LR1121 driver, so the retained LR1121 fixture is

@@ -4765,6 +4765,19 @@ TEST(golden_rf_corpus_covers_every_pairing_wait_injection)
     }
 }
 
+TEST(golden_rf_corpus_preserves_complete_klr300_pairing_search_ctrl1_sequence)
+{
+    using namespace IoHomeGoldenRfCorpus;
+    const uint8_t lExpectedCtrl1[] = {0x20, 0x10, 0x20, 0x20, 0x00, 0x30, 0x20, 0x00, 0x24};
+    ASSERT_EQ(klr300PairingSearchSequenceCount, sizeof(lExpectedCtrl1));
+    for (uint8_t i = 0; i < klr300PairingSearchSequenceCount; ++i)
+    {
+        const Frame *lFixture = findFrame(kKlr300PairingSearchSequence[i]);
+        ASSERT_TRUE(lFixture != nullptr);
+        ASSERT_EQ(lFixture->bytes[1], lExpectedCtrl1[i]);
+    }
+}
+
 TEST(serializer_boundary_raw_crc_explicit_only)
 {
     // Normal protocol serializers reject CRC. Only the raw/diagnostic helper may
@@ -7810,6 +7823,7 @@ TEST(controller_discovery_sends_standard_28_then_alt_2e_broadcast)
     ASSERT_EQ(lStd.getSrcNodeId(), lOwnNodeId);
     ASSERT_EQ(lStd.getDestNodeId(), 0x00003B);
     ASSERT_EQ(lStd.dataLen, 0);
+    ASSERT_EQ(lStd.ctrlByte1, 0x00); // generic cold pairing remains ACK-off
     ASSERT_TRUE(!lStd.hasHmac);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
 
@@ -7827,6 +7841,7 @@ TEST(controller_discovery_sends_standard_28_then_alt_2e_broadcast)
     ASSERT_EQ(lAlt.getDestNodeId(), 0x00003F);
     ASSERT_EQ(lAlt.dataLen, 1);
     ASSERT_EQ(lAlt.data[0], 0x00);
+    ASSERT_EQ(lAlt.ctrlByte1, IOHC_CTRL1_LOW_POWER); // KLR300 0x2E profile
     ASSERT_TRUE(!lAlt.hasHmac);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
 }
@@ -7864,8 +7879,104 @@ TEST(controller_spe_discovery_sends_single_2a_broadcast)
     ASSERT_TRUE(deserializeFrameForTest(lSpe, lSpePacket.data(), static_cast<uint8_t>(lSpePacket.size())));
     ASSERT_EQ(lSpe.commandId, IoHomeCommand::DiscoverSPERequest);
     ASSERT_EQ(lSpe.getDestNodeId(), 0x00003B);
-    ASSERT_EQ(lSpe.ctrlByte1, 0x00);
+    ASSERT_EQ(lSpe.ctrlByte1, static_cast<uint8_t>(IOHC_CTRL1_ACK | IOHC_CTRL1_LOW_POWER));
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+}
+
+TEST(discovery_klr300_reference_profiles_are_byte_exact)
+{
+    const uint32_t lKlrNodeId = 0xE2D1FF;
+    const uint8_t lSystemKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    const uint8_t lChallenge[6] = {1, 2, 3, 4, 5, 6};
+    uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE] = {};
+
+    TwoWayDiscoverySettings lColdSettings;
+    lColdSettings.ack = TwoWayDiscoveryFlagMode::On;
+    const TwoWayDiscoveryFrameOptions lCold =
+        IoHomeController::resolveTwoWayDiscoveryOptions(IoHomeCommand::DiscoverRequest, lColdSettings);
+    ASSERT_EQ(lCold.destination, 0x00003BU);
+    ASSERT_TRUE(lCold.ackCapable);
+    ASSERT_TRUE(!lCold.lowPower);
+    ASSERT_EQ(lCold.preamble, IOHC_PREAMBLE_LONG);
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(IoHomeController::buildTwoWayDiscoveryFrame(lFrame, lKlrNodeId, lCold));
+    const uint8_t lColdExpected[] = {0xC8, 0x10, 0x00, 0x00, 0x3B, 0xE2, 0xD1, 0xFF, 0x28};
+    const uint8_t lColdLen = lFrame.serialize2W(lBuffer, sizeof(lBuffer));
+    ASSERT_EQ(lColdLen, sizeof(lColdExpected));
+    ASSERT_MEM_EQ(lBuffer, lColdExpected, sizeof(lColdExpected));
+
+    const TwoWayDiscoveryFrameOptions lAlt =
+        IoHomeController::referenceTwoWayDiscoveryOptions(IoHomeCommand::Discover2ERequest);
+    ASSERT_TRUE(IoHomeController::buildTwoWayDiscoveryFrame(lFrame, lKlrNodeId, lAlt));
+    const uint8_t lAltExpected[] = {0xC9, 0x20, 0x00, 0x00, 0x3F, 0xE2, 0xD1, 0xFF, 0x2E, 0x00};
+    const uint8_t lAltLen = lFrame.serialize2W(lBuffer, sizeof(lBuffer));
+    ASSERT_EQ(lAltLen, sizeof(lAltExpected));
+    ASSERT_MEM_EQ(lBuffer, lAltExpected, sizeof(lAltExpected));
+
+    const TwoWayDiscoveryFrameOptions lSpe =
+        IoHomeController::referenceTwoWayDiscoveryOptions(IoHomeCommand::DiscoverSPERequest);
+    ASSERT_EQ(lSpe.destination, 0x00003BU);
+    ASSERT_TRUE(lSpe.ackCapable);
+    ASSERT_TRUE(lSpe.lowPower);
+    ASSERT_EQ(lSpe.preamble, IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_TRUE(IoHomeController::buildTwoWayDiscoveryFrame(
+        lFrame, lKlrNodeId, lSpe, lSystemKey, lChallenge));
+    const uint8_t lSpeLen = lFrame.serialize2W(lBuffer, sizeof(lBuffer));
+    ASSERT_EQ(lSpeLen, 21);
+    const uint8_t lSpePrefix[] = {0xD4, 0x30, 0x00, 0x00, 0x3B, 0xE2, 0xD1, 0xFF, 0x2A};
+    ASSERT_MEM_EQ(lBuffer, lSpePrefix, sizeof(lSpePrefix));
+    ASSERT_MEM_EQ(lBuffer + sizeof(lSpePrefix), lChallenge, sizeof(lChallenge));
+}
+
+TEST(discovery_ack_and_low_power_are_independent_of_start)
+{
+    IoHomeFrame lFrame;
+    lFrame.init();
+    lFrame.setStart2W();
+    ASSERT_EQ(lFrame.ctrlByte1, 0x00);
+    lFrame.setAckCapable(true);
+    ASSERT_EQ(lFrame.ctrlByte1, IOHC_CTRL1_ACK);
+    lFrame.setLowPower(true);
+    ASSERT_EQ(lFrame.ctrlByte1, static_cast<uint8_t>(IOHC_CTRL1_ACK | IOHC_CTRL1_LOW_POWER));
+    lFrame.setAckCapable(false);
+    ASSERT_EQ(lFrame.ctrlByte1, IOHC_CTRL1_LOW_POWER);
+    lFrame.setLowPower(false);
+    ASSERT_EQ(lFrame.ctrlByte1, 0x00);
+}
+
+TEST(controller_pairing_discovery_ack_override_keeps_long_preamble)
+{
+    const uint32_t lOwnNodeId = 0xE2D1FF;
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lOwnNodeId);
+    lController.setSystemKey(lKey);
+    lController.init();
+    lChannel.setIs1W(false);
+
+    TwoWayDiscoverySettings lSettings;
+    lSettings.ack = TwoWayDiscoveryFlagMode::On;
+    lChannel.setConfigured2WDiscoverySettings(lSettings);
+    ASSERT_TRUE(lController.startPairing(0));
+
+    IoHomeFrame lDiscovery;
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    lController.loop();
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lPacket.empty());
+    ASSERT_TRUE(deserializeFrameForTest(lDiscovery, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lDiscovery.commandId, IoHomeCommand::DiscoverRequest);
+    ASSERT_EQ(lDiscovery.getDestNodeId(), 0x00003BU);
+    ASSERT_EQ(lDiscovery.ctrlByte1, IOHC_CTRL1_ACK);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
 }
 
 TEST(controller_1w_pairing_allows_add_without_target_node)
@@ -8614,7 +8725,7 @@ static bool advancePairingToWaitKeyTransferConfirmation(IoHomeController &iContr
     return iController.state() == ControllerState::PairWaitKeyTransferConfirmation;
 }
 
-TEST(controller_2w_pairing_continuations_use_controller_role_flags)
+TEST(controller_2w_pairing_continuations_match_klr300_ctrl1)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -8639,7 +8750,7 @@ TEST(controller_2w_pairing_continuations_use_controller_role_flags)
                                         static_cast<uint8_t>(lKeyTransferPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::KeyTransfer);
     ASSERT_TRUE((lFrame.ctrlByte0 & (IOHC_CTRL0_START | IOHC_CTRL0_END)) == 0);
-    ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+    ASSERT_EQ(lFrame.ctrlByte1, 0x00);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
 
     IoHomeFrame lChallengeRequest;
@@ -8654,7 +8765,7 @@ TEST(controller_2w_pairing_continuations_use_controller_role_flags)
                                         static_cast<uint8_t>(lAuthPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_TRUE((lFrame.ctrlByte0 & (IOHC_CTRL0_START | IOHC_CTRL0_END)) == 0);
-    ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+    ASSERT_EQ(lFrame.ctrlByte1, 0x00);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
 }
 
@@ -9327,7 +9438,7 @@ TEST(controller_2w_pairing_setconfig1_auth_challenge_completes_on_final_reject)
     ASSERT_TRUE(deserializeFrameForTest(lAuthResponse, lAuthPacket.data(), static_cast<uint8_t>(lAuthPacket.size())));
     ASSERT_EQ(lAuthResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_TRUE((lAuthResponse.ctrlByte0 & (IOHC_CTRL0_START | IOHC_CTRL0_END)) == 0);
-    ASSERT_TRUE((lAuthResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+    ASSERT_EQ(lAuthResponse.ctrlByte1, 0x00);
     ASSERT_EQ(lController.state(), ControllerState::PairWaitSetConfig1FinalResponse);
 
     IoHomeFrame lErrorResponse;
@@ -10592,7 +10703,7 @@ static void buildChallengeResponseFrame(IoHomeFrame &oFrame,
     oFrame.hasHmac = false;
 }
 
-TEST(controller_2w_challenge_response_uses_controller_role_flags_for_low_power_device)
+TEST(controller_2w_challenge_response_matches_klr300_continuation_flags_for_low_power_device)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -10618,10 +10729,10 @@ TEST(controller_2w_challenge_response_uses_controller_role_flags_for_low_power_d
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_EQ(lResponse.dataLen, IOHC_HMAC_SIZE);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), 64);
-    ASSERT_TRUE(lResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER);
+    ASSERT_EQ(lResponse.ctrlByte1, 0x00);
 }
 
-TEST(controller_2w_challenge_response_uses_controller_role_flags_for_always_alive_device)
+TEST(controller_2w_challenge_response_matches_klr300_continuation_flags_for_always_alive_device)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -10646,7 +10757,7 @@ TEST(controller_2w_challenge_response_uses_controller_role_flags_for_always_aliv
                                               lDeviceNodeId, lKey, lResponse));
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_EQ(lResponse.dataLen, IOHC_HMAC_SIZE);
-    ASSERT_TRUE((lResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+    ASSERT_EQ(lResponse.ctrlByte1, 0x00);
 }
 
 TEST(controller_status_update_receive_auth_uses_saved_command_data)
