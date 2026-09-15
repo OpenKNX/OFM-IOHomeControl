@@ -462,6 +462,62 @@ inline const char *ioHomeCommandResultName(uint8_t iCode)
     }
 }
 
+inline const char *ioHomeCommandResultDescription(uint8_t iCode)
+{
+    switch (iCode)
+    {
+    case 0x01: return "command completed successfully";
+    case 0x02: return "device could not establish contact";
+    case 0x03: return "device was operated manually";
+    case 0x04: return "movement or command is blocked";
+    case 0x05: return "device rejected the system key";
+    case 0x06: case 0x38: return "a higher priority level currently holds the device";
+    case 0x07: case 0x21: return "device did not reach the requested position";
+    case 0x08: return "an error occurred while executing the command";
+    case 0x09: return "device did not execute the command";
+    case 0x0A: return "device is calibrating";
+    case 0x0B: return "measured power consumption is too high";
+    case 0x0C: return "measured power consumption is too low";
+    case 0x0D: return "lock reports an open position";
+    case 0x0E: return "movement exceeded the permitted duration";
+    case 0x0F: return "thermal protection is active";
+    case 0x10: return "product is not operational";
+    case 0x11: return "filter maintenance is required";
+    case 0x12: return "battery status information";
+    case 0x13: return "target was modified by the device";
+    case 0x14: return "requested mode is not implemented";
+    case 0x15: return "command is incompatible with current movement";
+    case 0x16: return "local user action affected the command";
+    case 0x17: return "dead bolt operation failed";
+    case 0x18: return "automatic cycle is engaged";
+    case 0x19: return "an incompatible load is connected";
+    case 0x1A: return "requested colour cannot be reached";
+    case 0x1B: return "requested target cannot be reached";
+    case 0x1C: case 0x58: return "requested function or index is invalid";
+    case 0x1D: return "another command overruled this command";
+    case 0x1E: return "node is waiting for power";
+    case 0x20: return "node is locked";
+    case 0x22: return "movement limits have not been set";
+    case 0x23: return "IP configuration has not been set";
+    case 0x24: return "requested value is outside the supported range";
+    case 0xDF: return "device returned informational status";
+    case 0xE0: return "device limited the requested parameter";
+    case 0xE1: return "operation is limited by a local user";
+    case 0xE2: return "operation is limited by a user";
+    case 0xE3: return "operation is limited by rain protection";
+    case 0xE4: return "operation is limited by a timer";
+    case 0xE5: return "operation is limited by an SCD";
+    case 0xE6: return "operation is limited by the power supply";
+    case 0xE7: return "operation is limited by another device";
+    case 0xEA: return "operation is limited by stand-alone automation";
+    case 0xEB: return "operation is limited by wind protection";
+    case 0xEC: return "operation is limited by the node itself";
+    case 0xED: return "operation is limited by an automatic cycle";
+    case 0xEE: return "operation is limited by an emergency condition";
+    default: return "unknown or unspecified command result";
+    }
+}
+
 // 1W repeat transmission (fire-and-forget sends 4x at 40ms intervals)
 #define IOHC_1W_REPEAT_COUNT 3        // 3 additional repeats (4 total transmissions, matches reference)
 #define IOHC_1W_REPEAT_INTERVAL_MS 40 // ms between 1W repeat transmissions

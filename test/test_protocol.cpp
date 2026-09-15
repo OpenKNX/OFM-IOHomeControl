@@ -2133,6 +2133,16 @@ TEST(error_response_codes)
     ASSERT_TRUE(ERR_UNKNOWN_CMD != 0x00);
 }
 
+TEST(error_response_semantics_are_human_readable)
+{
+    ASSERT_TRUE(strcmp(ioHomeCommandResultName(0x05), "wrong-system-key") == 0);
+    ASSERT_TRUE(strcmp(ioHomeCommandResultDescription(0x05),
+                       "device rejected the system key") == 0);
+    ASSERT_TRUE(strcmp(ioHomeCommandResultName(0xEB), "limited-by-wind") == 0);
+    ASSERT_TRUE(strcmp(ioHomeCommandResultDescription(0xFF),
+                       "unknown or unspecified command result") == 0);
+}
+
 // =====================================================================
 // 33. GetGeneralInfo1 response decoding
 // =====================================================================

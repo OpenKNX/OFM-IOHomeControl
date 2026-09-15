@@ -6644,9 +6644,10 @@ void IoHomeController::interpretSetConfig1Result(bool iFinalResponse)
     else if (mRxFrame.commandId == IoHomeCommand::ErrorResponse)
     {
         const uint8_t lCode = mRxFrame.dataLen > 0 ? mRxFrame.data[0] : 0x00;
-        logInfoP(iFinalResponse ? "Pairing: device 0x%06X rejected automatic status feedback: 0x%02X (%s)"
-                                : "Pairing: device 0x%06X does not support automatic status feedback: 0x%02X (%s)",
-                 mDiscoveredNodeId, static_cast<unsigned>(lCode), ioHomeCommandResultName(lCode));
+        logInfoP(iFinalResponse ? "Pairing: device 0x%06X rejected automatic status feedback: 0x%02X (%s): %s"
+                                : "Pairing: device 0x%06X does not support automatic status feedback: 0x%02X (%s): %s",
+                 mDiscoveredNodeId, static_cast<unsigned>(lCode), ioHomeCommandResultName(lCode),
+                 ioHomeCommandResultDescription(lCode));
         recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
                                 "The key was stored, but the actuator rejected optional automatic status feedback.");
     }
@@ -8005,8 +8006,9 @@ void IoHomeController::dispatchRxFrame()
             case IoHomeCommand::StatusUpdateResponse:    // 0x72 — we send this, shouldn't receive it
             case IoHomeCommand::ErrorResponse:           // 0xFE — error from device
                 if (mRxFrame.commandId == IoHomeCommand::ErrorResponse && mRxFrame.dataLen > 0)
-                    logInfoP("Device 0x%06X returned error 0x%02X (%s)", lSrcNode,
-                             static_cast<unsigned>(mRxFrame.data[0]), ioHomeCommandResultName(mRxFrame.data[0]));
+                    logInfoP("Device 0x%06X returned error 0x%02X (%s): %s", lSrcNode,
+                             static_cast<unsigned>(mRxFrame.data[0]), ioHomeCommandResultName(mRxFrame.data[0]),
+                             ioHomeCommandResultDescription(mRxFrame.data[0]));
                 break;
 
             default:
