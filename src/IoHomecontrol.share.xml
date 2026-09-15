@@ -233,7 +233,7 @@
               </ParameterType>
               <ParameterType Id="%AID%_PT-IOHCOneWayPowerClass" Name="IOHCOneWayPowerClass">
                 <TypeRestriction Base="Value" SizeInBit="2">
-                  <Enumeration Text="Automatisch (bisheriges Profil)" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Automatisch (VELUX: immer erreichbar)" Value="0" Id="%ENID%" />
                   <Enumeration Text="Immer erreichbar (32 / 32 / 32 / 32)" Value="1" Id="%ENID%" />
                   <Enumeration Text="Low Power (1024 / 32 / 32 / 32)" Value="2" Id="%ENID%" />
                 </TypeRestriction>

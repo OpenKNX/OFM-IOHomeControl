@@ -6129,17 +6129,20 @@ TEST(test_1w_power_class_copy_shapes)
     const uint8_t lSomfy = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
     const uint8_t lVelux = static_cast<uint8_t>(IoHomeManufacturer::Velux);
 
-    // Automatic is backwards-compatible with OFM's existing manufacturer
-    // profile: every first copy is long, VELUX repeats short, others long.
+    // Automatic keeps the legacy shape for unknown/Somfy profiles, while
+    // VELUX uses the KUX-110-tested always-alive 32/32/32/32 shape.
     OneWayCopyShape lShape = IoHomeController::oneWayCopyShape(OneWayPowerClass::Automatic, lSomfy, 0);
     ASSERT_EQ(lShape.preamble, IOHC_PREAMBLE_LONG);
     ASSERT_TRUE(!lShape.lowPower);
     lShape = IoHomeController::oneWayCopyShape(OneWayPowerClass::Automatic, lSomfy, 1);
     ASSERT_EQ(lShape.preamble, IOHC_PREAMBLE_LONG);
     ASSERT_TRUE(!lShape.lowPower);
-    lShape = IoHomeController::oneWayCopyShape(OneWayPowerClass::Automatic, lVelux, 1);
-    ASSERT_EQ(lShape.preamble, IOHC_PREAMBLE_SHORT);
-    ASSERT_TRUE(!lShape.lowPower);
+    for (uint8_t lCopy = 0; lCopy < 4; ++lCopy)
+    {
+        lShape = IoHomeController::oneWayCopyShape(OneWayPowerClass::Automatic, lVelux, lCopy);
+        ASSERT_EQ(lShape.preamble, IOHC_PREAMBLE_NORMAL_START);
+        ASSERT_TRUE(!lShape.lowPower);
+    }
 
     for (uint8_t lCopy = 0; lCopy < 4; ++lCopy)
     {
@@ -11639,7 +11642,7 @@ TEST(byte_vector_controller_1w_sendkey_no_hmac_and_20_byte_payload)
     ASSERT_EQ(lFrame.data[17], 0x01);
 }
 
-TEST(byte_vector_controller_velux_1w_repeat_plan_long_then_three_short_40ms)
+TEST(byte_vector_controller_velux_1w_automatic_uses_four_normal_preambles)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -11668,7 +11671,7 @@ TEST(byte_vector_controller_velux_1w_repeat_plan_long_then_three_short_40ms)
     lController.loop();
     lController.loop();
     ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
 
     lController.loop();
     for (uint8_t i = 0; i < IOHC_1W_REPEAT_COUNT; i++)
@@ -11680,7 +11683,7 @@ TEST(byte_vector_controller_velux_1w_repeat_plan_long_then_three_short_40ms)
         ioHomeTestAdvanceMillis(1);
         lController.loop();
         ASSERT_EQ(lController.radio().testTransmitCount(), static_cast<uint32_t>(i + 2));
-        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
         lController.loop();
     }
 
@@ -11955,7 +11958,7 @@ TEST(controller_1w_pairing_uses_four_reference_long_preambles)
     ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
 }
 
-TEST(controller_velux_1w_pairing_keeps_short_repeat_preamble)
+TEST(controller_velux_1w_pairing_automatic_uses_normal_preambles)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -11976,12 +11979,12 @@ TEST(controller_velux_1w_pairing_keeps_short_repeat_preamble)
 
     ASSERT_TRUE(lController.startPairing1WAddOnly(0, lDeviceNodeId));
     lController.loop(); // first ADD_CONTROLLER copy
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
 
     lController.loop(); // finish first copy and arm repeat timer
     ioHomeTestAdvanceMillis(IOHC_1W_REPEAT_INTERVAL_MS);
     lController.loop(); // first VELUX repeat
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
 }
 
 TEST(controller_1w_low_power_class_shapes_pairing_burst)

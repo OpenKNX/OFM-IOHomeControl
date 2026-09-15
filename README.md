@@ -75,17 +75,19 @@ The 1W path follows the reference remote model more closely than older gateway-d
 - A channel can clone an existing original remote instead of enrolling a new identity: `iohcNN pair1w receive` arms a listener that captures the remote's `0x30 SendKey1W` "copy remote" frame, decrypts the contained key with the public transfer key, and stores the remote's address, key, manufacturer, and a future reserved sequence window into the channel's own unshared 1W profile. This is required for actuators that only obey remotes added through the manufacturer's copy procedure. Use `pair1w stop`/`pair1w status` to cancel or inspect the capture.
 - Normal 1W commands use typed broadcast destinations by default, computed as `dst=((type << 6) | 0x3F)`. Automatic mode maps the ETS device role to its protocol class; type `0` remains the explicit all-device target.
 - Normal 1W control uses the raw io-homecontrol closedness convention internally (`0=open`, `100=closed`). UI/KNX open percentages are converted explicitly at the channel boundary.
-- 1W radio transmission uses four total sends by default: one long-preamble first TX followed by three short-preamble repeats with 40 ms spacing. Enrollment is an asynchronous serialized operation, so normal queued traffic cannot appear between REMOVE, ADD, STOP, and DOWN.
+- 1W radio transmission uses four total sends with 40 ms spacing. The exact preamble shape comes from the controller profile and configured power class. Enrollment is an asynchronous serialized operation, so normal queued traffic cannot appear between REMOVE, ADD, STOP, and DOWN.
+- VELUX automatic power shaping follows the first hardware-confirmed KUX 110 enrollment profile: four normal 32-symbol preambles with no `LOW_POWER` bit. Select **Low Power** explicitly for solar/battery products; it sends `1024/32/32/32` and sets `LOW_POWER` only on the wake-up copy.
 
 ### VELUX KUX/KLI commissioning and troubleshooting
 
 1. Put the owned KUX, actuator, or window product into its physical PROG/association window before starting module enrollment. The exact gesture and confirmation movement are device-specific; follow the relevant VELUX manual.
 2. Configure the effective 1W controller manufacturer as **VELUX** (`0x01`). Automatic finalization depends on this profile value.
 3. Leave the 1W command ACEI at the VELUX remote value `0x61` unless a capture of the original remote proves another value.
-4. Use the automatic broadcast class first. The KLI-compatible ADD flow covers ALL plus the public window/shutter/other type destinations; the finalizer deliberately uses ALL.
-5. Leave the `0x30` MAC trailer disabled unless the original remote or actuator is known to require the 35-byte variant. Both MAC and no-MAC forms remain supported.
-6. If enrollment fails, run `iohcNN 1wctrl status` and `iohc pairdiag status`. Check profile ownership, controller source/key, finalizer resolution, per-phase destination/sequence/TX result, and STOP-to-DOWN timing. Diagnostics redact wrapped keys and key material.
-7. After the target confirms pairing, test OPEN, STOP, and CLOSE, then reboot the module and repeat a command to verify that the persistent controller key and reserved sequence remain accepted.
+4. For a KUX 110 or exterior KLI profile, use the automatic enrollment classes (`roller_shutter`, `awning`, `dual_shutter`). For KLI 312 interior blinds, select **Interior blinds KLI 312**, which sends ADD to `blind` and `venetian_blind`. The classes visible in an original remote's `0x2E` frames are the classes the ADD sweep must contain.
+5. Use **Automatic** or **Always alive** for a mains-powered KUX 110 (`32/32/32/32`). Use **Low Power** for solar/battery receivers (`1024/32/32/32`, `LOW_POWER` on the first copy).
+6. Leave the `0x30` MAC trailer disabled unless the original remote or actuator is known to require the 35-byte variant. Both MAC and no-MAC forms remain supported.
+7. If enrollment fails, run `iohcNN 1wctrl status` and `iohc pairdiag status`. Check profile ownership, controller source/key, finalizer resolution, per-phase destination/sequence/TX result, and STOP-to-DOWN timing. Diagnostics redact wrapped keys and key material.
+8. After the target confirms pairing, test OPEN, STOP, and CLOSE, then reboot the module and repeat a command to verify that the persistent controller key and reserved sequence remain accepted.
 
 Because 1W devices do not acknowledge these frames, a successful local TX trace alone is not proof of physical enrollment. A second receiver capture and the target's confirmation movement are the definitive checks.
 

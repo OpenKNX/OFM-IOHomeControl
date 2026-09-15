@@ -1577,9 +1577,15 @@ OneWayCopyShape IoHomeController::oneWayCopyShape(OneWayPowerClass iPowerClass,
                    : OneWayCopyShape{IOHC_PREAMBLE_NORMAL_START, false};
     case OneWayPowerClass::Automatic:
     default:
-        // Preserve the OFM wire behavior existing installations already use:
-        // the first copy is a long, flag-free start; repeats are short for the
-        // capture-backed VELUX profile and long for other manufacturers.
+        // Issue #74 provides the first confirmed KUX 110 enrollment: the
+        // mains-powered VELUX receiver accepted 32/32/32/32 and had ignored
+        // the legacy long-preamble shape. Use that proven profile by default;
+        // solar/battery products remain explicitly selectable as LowPower.
+        if (iManufacturer == static_cast<uint8_t>(IoHomeManufacturer::Velux))
+            return {IOHC_PREAMBLE_NORMAL_START, false};
+
+        // Preserve the established shape for manufacturers without matching
+        // hardware evidence.
         return {static_cast<uint16_t>(iCopyIndex == 0 ? IOHC_PREAMBLE_LONG
                                                       : oneWayRepeatPreambleForManufacturer(iManufacturer)),
                 false};
