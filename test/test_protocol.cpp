@@ -9850,6 +9850,7 @@ TEST(controller_2w_tilt_execute_payload)
     IoHomecontrolChannel lChannel;
     initPaired2WControllerForTest(lController, lModule, lChannel,
                                   lRemoteNodeId, lDeviceNodeId, lKey);
+    lChannel.setConfigured2WAcei(0x63); // tilt keeps its captured 0xE7 profile
 
     ASSERT_TRUE(lController.sendTiltCommand(lDeviceNodeId, lKey, 25));
     lController.radio().testClearTransmittedPacket();
@@ -9897,6 +9898,34 @@ TEST(controller_2w_execute_ignores_combined_slat_param)
     ASSERT_EQ(lFrame.data[5], 0xD8);
     ASSERT_EQ(lFrame.data[6], 0x06);
     ASSERT_EQ(lFrame.data[7], 0x00);
+}
+
+TEST(controller_2w_execute_uses_configured_channel_acei)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    for (const uint8_t lCommandParam : {static_cast<uint8_t>(50), static_cast<uint8_t>(0xD2)})
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, lDeviceNodeId, lKey);
+
+        ASSERT_EQ(lChannel.getConfigured2WAcei(), IOHC_ACEI_DEFAULT);
+        lChannel.setConfigured2WAcei(0x63);
+        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, lCommandParam));
+
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+        ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
+        ASSERT_EQ(lFrame.data[0], IOHC_ORIGINATOR_USER);
+        ASSERT_EQ(lFrame.data[1], 0x63);
+    }
 }
 
 TEST(controller_private_response_decodes_battery_lowpower_and_tilt)

@@ -368,6 +368,35 @@ class ChannelUiTest(unittest.TestCase):
         own_profile_refs = {ref.get("RefId") for ref in own_profile.findall("k:ParameterRefRef", NS)}
         self.assertIn("%AID%_UP-%TT%%CC%093_R-%TT%%CC%09301", own_profile_refs)
 
+    def test_two_way_command_profile_is_per_channel_and_defaults_to_somfy(self) -> None:
+        profile_type = self.share.find(
+            ".//k:ParameterType[@Name='IOHCTwoWayCommandProfile']", NS
+        )
+        self.assertIsNotNone(profile_type)
+        self.assertEqual(
+            {item.get("Value"): item.get("Text") for item in profile_type.findall(".//k:Enumeration", NS)},
+            {
+                "103": "Standard / Somfy (0x67)",
+                "99": "Alternative / KIG300-Capture (0x63)",
+            },
+        )
+
+        parameter = self.template.find(".//k:Parameter[@Name='c%C%TwoWayAcei']", NS)
+        self.assertIsNotNone(parameter)
+        self.assertEqual(parameter.get("Offset"), "62")
+        self.assertEqual(parameter.get("Value"), "103")
+
+        protocol_choice = self.template.find(
+            ".//k:choose[@ParamRefId='%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901']", NS
+        )
+        two_way = protocol_choice.find("k:when[@test='0']", NS)
+        self.assertIsNotNone(
+            two_way.find(
+                "k:ParameterRefRef[@RefId='%AID%_UP-%TT%%CC%097_R-%TT%%CC%09701']",
+                NS,
+            )
+        )
+
     def test_expert_visibility_does_not_allocate_or_reset_device_configuration(self) -> None:
         param = self.template.find(".//k:Parameter[@Name='c%C%ExpertView']", NS)
         self.assertEqual(param.get("Value"), "0")

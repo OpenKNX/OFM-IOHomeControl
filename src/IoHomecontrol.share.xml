@@ -181,6 +181,12 @@
                   <Enumeration Text="Energiesparend" Value="2" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCTwoWayCommandProfile" Name="IOHCTwoWayCommandProfile">
+                <TypeRestriction Base="Value" SizeInBit="8">
+                  <Enumeration Text="Standard / Somfy (0x67)" Value="103" Id="%ENID%" />
+                  <Enumeration Text="Alternative / KIG300-Capture (0x63)" Value="99" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
               <ParameterType Id="%AID%_PT-IOHCTwoWayDiscoveryCommand" Name="IOHCTwoWayDiscoveryCommand">
                 <TypeRestriction Base="Value" SizeInBit="2">
                   <Enumeration Text="Automatisch (0x28)" Value="0" Id="%ENID%" />

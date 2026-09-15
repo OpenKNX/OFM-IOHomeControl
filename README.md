@@ -60,6 +60,7 @@ The protocol implementation covers manufacturers such as Velux, Somfy, Atlantic,
 - **Network scan** with per-node packet statistics and RSSI tracking; observation-only
 - **Encrypted discovery (SPE)** for scanning already-paired devices
 - **Flash persistence** of 2W identity/pairing data and complete per-channel 1W controller profiles
+- **Per-channel 2W Execute profile** with the captured Somfy default ACEI `0x67` and selectable KIG300 alternative `0x63`
 - **Byte-exact protocol self-tests** for serializer boundaries, 1W/2W crypto vectors and key-transfer transcripts
 
 For 2W, the module uses one global controller node ID and system key. For 1W, each channel uses a Cyril-style virtual remote profile containing its own controller address, key, sequence counter, reserved sequence watermark, type and manufacturer. Channels that should control the same 1W group can explicitly share one profile. Normal 1W commands reserve sequence numbers ahead in flash instead of saving after every frame; pairing/add/remove still force an immediate persistence update. New/imported profiles use sequence `1` for their first frame.

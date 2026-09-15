@@ -34,7 +34,7 @@
               <Parameter Id="%AID%_P-%TT%%CC%095" Name="c%C%DiagnosticObjects" ParameterType="%AID%_PT-IOHCCheckBox" Text="Batterie- und Signalstärkeobjekte verwenden" Value="1" />
 
               <!-- Main configuration Union including 10 ETS-backed scene slots -->
-              <Union SizeInBit="496">
+              <Union SizeInBit="504">
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%001" Name="c%C%Active" ParameterType="%AID%_PT-IOHCChannelActivity" Offset="0" BitOffset="0" Text="Kanalaktivität" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%008" Name="c%C%Suspend" ParameterType="%AID%_PT-Suspended" Offset="0" BitOffset="2" Text="Suspendiert" Value="0" />
@@ -67,6 +67,7 @@
                 <Parameter Id="%AID%_UP-%TT%%CC%091" Name="c%C%OneWayExecuteDestination" ParameterType="%AID%_PT-IOHCOneWayExecuteDestination" Offset="59" BitOffset="0" Text="1W Befehls-Ziel" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%092" Name="c%C%OneWayEnrollmentClasses" ParameterType="%AID%_PT-IOHCOneWayEnrollmentClasses" Offset="60" BitOffset="0" Text="VELUX 1W Anmeldeklassen" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%093" Name="c%C%OneWayPowerClass" ParameterType="%AID%_PT-IOHCOneWayPowerClass" Offset="61" BitOffset="0" Text="1W Energieklasse des Controllerprofils" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%097" Name="c%C%TwoWayAcei" ParameterType="%AID%_PT-IOHCTwoWayCommandProfile" Offset="62" BitOffset="0" Text="2W Befehlsprofil" Value="103" />
                 <Parameter Id="%AID%_UP-%TT%%CC%020" Name="c%C%SceneCount" ParameterType="%AID%_PT-IOHCSceneCount" Offset="13" BitOffset="0" Text="Anzahl Szenen" Value="0" />
                 <!-- Scene slot parameters 1..10 are generated from IoHomecontrol.scene.part.xml. -->
                 <op:usePart name="IOHCScene" xpath="//Parameters/*" />
@@ -112,6 +113,7 @@
               <ParameterRef Id="%AID%_UP-%TT%%CC%091_R-%TT%%CC%09101" RefId="%AID%_UP-%TT%%CC%091" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%092_R-%TT%%CC%09201" RefId="%AID%_UP-%TT%%CC%092" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%093_R-%TT%%CC%09301" RefId="%AID%_UP-%TT%%CC%093" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%097_R-%TT%%CC%09701" RefId="%AID%_UP-%TT%%CC%097" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_UP-%TT%%CC%020" />
               <!-- Scene slot ParameterRefs 1..10 are generated from IoHomecontrol.scene.part.xml. -->
               <op:usePart name="IOHCScene" xpath="//ParameterRefs/*" />
@@ -317,6 +319,7 @@
                           <ParameterSeparator Id="%AID%_PS-nnn" Text="1W: Positions- und Bewegungswerte sind Schätzwerte, keine bestätigten Aktorrückmeldungen. Bei geteiltem Profil gelten Hersteller und Energieklasse des Profilkanals." UIHint="Information" />
                         </when>
                         <when test="0">
+                          <ParameterRefRef RefId="%AID%_UP-%TT%%CC%097_R-%TT%%CC%09701" IndentLevel="1" HelpContext="IOHC-2W-Befehlsprofil" />
                           <ParameterRefRef RefId="%AID%_UP-%TT%%CC%085_R-%TT%%CC%08501" IndentLevel="1" HelpContext="IOHC-2W-Energieklasse" />
                           <ParameterSeparator Id="%AID%_PS-nnn" Text="Automatisch: gelernte Energieklasse, sonst immer erreichbar. Solar-/Batteriegeräte bei unbekannter Klasse ausdrücklich auf Low Power einstellen." UIHint="Information" />
                         </when>

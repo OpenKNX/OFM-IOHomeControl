@@ -217,6 +217,10 @@ Im bidirektionalen Modus sendet das Modul einen Befehl und erwartet eine Bestät
 
 Dieser Modus ist für alle Geräte zu bevorzugen, die 2W unterstützen.
 
+#### **2W Befehlsprofil**
+
+Das Befehlsprofil legt das ACEI-Byte für normale 2W-Execute-Befehle kanalweise fest. **Standard / Somfy (0x67)** bleibt die Voreinstellung und entspricht einem realen Somfy-Hub-Mitschnitt. Für Vergleichstests kann **Alternative / KIG300-Capture (0x63)** gewählt werden, ohne die Firmware neu zu kompilieren. Spezielle Telegrammformen wie Lamellen- und Atlantic-Cozy-Befehle behalten ihr eigenes protokollspezifisches ACEI.
+
 ### **1W (unidirektional)**
 
 Im unidirektionalen Modus sendet das Modul Befehle, ohne auf eine Antwort zu warten. Dieser Modus ist für Geräte vorgesehen, die ausschließlich Einweg-Kommunikation unterstützen.

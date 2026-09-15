@@ -98,6 +98,8 @@ public:
   uint8_t getConfigured1WBroadcastType() const;
   void setConfigured1WAcei(uint8_t iAcei);
   uint8_t getConfigured1WAcei() const;
+  void setConfigured2WAcei(uint8_t iAcei);
+  uint8_t getConfigured2WAcei() const;
   void setConfigured1WEnrollmentMac(bool iEnabled);
   bool getConfigured1WEnrollmentMac() const;
   void setConfigured1WEnrollmentFinalizer(OneWayEnrollmentFinalizer iFinalizer);
@@ -150,6 +152,7 @@ private:
   uint32_t mConfigured1WTargetNodeId = 0;
   uint8_t mConfigured1WBroadcastType = 0;
   uint8_t mConfigured1WAcei = 0; // 0 = derive ACEI from the controller-profile manufacturer
+  uint8_t mConfigured2WAcei = IOHC_ACEI_DEFAULT;
   bool mConfigured1WEnrollmentMac = false;
   OneWayEnrollmentFinalizer mConfigured1WEnrollmentFinalizer = OneWayEnrollmentFinalizer::Automatic;
   OneWayExecuteDestinationPolicy mConfigured1WExecuteDestinationPolicy = OneWayExecuteDestinationPolicy::Automatic;

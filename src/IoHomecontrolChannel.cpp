@@ -45,6 +45,9 @@
 #ifndef ParamIOHC_cOneWayPowerClass
 #define ParamIOHC_cOneWayPowerClass 0
 #endif
+#ifndef ParamIOHC_cTwoWayAcei
+#define ParamIOHC_cTwoWayAcei IOHC_ACEI_DEFAULT
+#endif
 
 // ---------------------------------------------------------------------------
 // Scene parameter access
@@ -213,6 +216,7 @@ void IoHomecontrolChannel::setup()
     const uint8_t lTwoWayDiscoveryAck = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryAck);
     const uint8_t lTwoWayDiscoveryLowPower = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryLowPower);
     const uint8_t lTwoWayDiscoveryPreamble = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryPreamble);
+    const uint8_t lTwoWayAcei = static_cast<uint8_t>(ParamIOHC_cTwoWayAcei);
     const bool lSilentOperation = ParamIOHC_cSilentOperation != 0;
 
     // The visible combined channel selector is synchronized to these historic
@@ -254,6 +258,7 @@ void IoHomecontrolChannel::setup()
         lTwoWayPowerClass <= static_cast<uint8_t>(TwoWayPowerClass::LowPower)
             ? static_cast<TwoWayPowerClass>(lTwoWayPowerClass)
             : TwoWayPowerClass::Automatic);
+    setConfigured2WAcei(lTwoWayAcei == 0x63 ? 0x63 : IOHC_ACEI_DEFAULT);
     TwoWayDiscoverySettings lDiscoverySettings;
     if (lTwoWayDiscoveryCommand <= static_cast<uint8_t>(TwoWayDiscoveryCommandMode::DiscoverSPE))
         lDiscoverySettings.command = static_cast<TwoWayDiscoveryCommandMode>(lTwoWayDiscoveryCommand);
@@ -933,6 +938,8 @@ void IoHomecontrolChannel::setConfigured1WBroadcastType(uint8_t iBroadcastType) 
 uint8_t IoHomecontrolChannel::getConfigured1WBroadcastType() const { return mConfigured1WBroadcastType; }
 void IoHomecontrolChannel::setConfigured1WAcei(uint8_t iAcei) { mConfigured1WAcei = iAcei; }
 uint8_t IoHomecontrolChannel::getConfigured1WAcei() const { return mConfigured1WAcei; }
+void IoHomecontrolChannel::setConfigured2WAcei(uint8_t iAcei) { mConfigured2WAcei = iAcei; }
+uint8_t IoHomecontrolChannel::getConfigured2WAcei() const { return mConfigured2WAcei; }
 void IoHomecontrolChannel::setConfigured1WEnrollmentMac(bool iEnabled) { mConfigured1WEnrollmentMac = iEnabled; }
 bool IoHomecontrolChannel::getConfigured1WEnrollmentMac() const { return mConfigured1WEnrollmentMac; }
 void IoHomecontrolChannel::setConfigured1WEnrollmentFinalizer(OneWayEnrollmentFinalizer iFinalizer) { mConfigured1WEnrollmentFinalizer = iFinalizer; }

@@ -801,15 +801,15 @@ namespace
         return true;
     }
 
-    bool build2WExecutePositionPayload(uint8_t iPositionPercent, bool iSilentOperation,
+    bool build2WExecutePositionPayload(uint8_t iPositionPercent, bool iSilentOperation, uint8_t iAcei,
                                        uint8_t *oData, uint8_t &oLen)
     {
         if (oData == nullptr || iPositionPercent > 100)
             return false;
 
-        // Reference template: 01 67 <pos*2> 00 80 D8 <profile> 00
+        // Reference template: 01 <ACEI> <pos*2> 00 80 D8 <profile> 00
         oData[0] = IOHC_ORIGINATOR_USER;
-        oData[1] = IOHC_ACEI_DEFAULT;
+        oData[1] = iAcei;
         oData[2] = static_cast<uint8_t>(iPositionPercent * 2U);
         oData[3] = 0x00;
         oData[4] = 0x80;
@@ -820,16 +820,16 @@ namespace
         return true;
     }
 
-    bool build2WExecuteSpecialPayload(uint8_t iSpecialPosition, bool iSilentOperation,
+    bool build2WExecuteSpecialPayload(uint8_t iSpecialPosition, bool iSilentOperation, uint8_t iAcei,
                                       uint8_t *oData, uint8_t &oLen)
     {
         if (oData == nullptr)
             return false;
 
-        // Reference template: 01 67 <D2/D8> 00 00 00. RS100 favourite uses
-        // the observed extended silent form: 01 67 D8 00 80 D8 05 00.
+        // Reference template: 01 <ACEI> <D2/D8> 00 00 00. RS100 favourite
+        // uses the observed extended silent form with the selected ACEI.
         oData[0] = IOHC_ORIGINATOR_USER;
-        oData[1] = IOHC_ACEI_DEFAULT;
+        oData[1] = iAcei;
         oData[2] = iSpecialPosition;
         oData[3] = 0x00;
         if (iSilentOperation && iSpecialPosition == 0xD8)
@@ -1067,27 +1067,27 @@ namespace
         uint8_t lLen = 0;
 
         static constexpr uint8_t kExecutePosition50[] = {0x01, 0x67, 0x64, 0x00, 0x80, 0xD8, 0x06, 0x00};
-        if (!build2WExecutePositionPayload(50, false, lPayload, lLen) ||
+        if (!build2WExecutePositionPayload(50, false, IOHC_ACEI_DEFAULT, lPayload, lLen) ||
             !payloadEquals(lPayload, lLen, kExecutePosition50, sizeof(kExecutePosition50)))
             return false;
 
         static constexpr uint8_t kExecuteStop[] = {0x01, 0x67, 0xD2, 0x00, 0x00, 0x00};
-        if (!build2WExecuteSpecialPayload(0xD2, false, lPayload, lLen) ||
+        if (!build2WExecuteSpecialPayload(0xD2, false, IOHC_ACEI_DEFAULT, lPayload, lLen) ||
             !payloadEquals(lPayload, lLen, kExecuteStop, sizeof(kExecuteStop)))
             return false;
 
         static constexpr uint8_t kExecuteFavorite[] = {0x01, 0x67, 0xD8, 0x00, 0x00, 0x00};
-        if (!build2WExecuteSpecialPayload(0xD8, false, lPayload, lLen) ||
+        if (!build2WExecuteSpecialPayload(0xD8, false, IOHC_ACEI_DEFAULT, lPayload, lLen) ||
             !payloadEquals(lPayload, lLen, kExecuteFavorite, sizeof(kExecuteFavorite)))
             return false;
 
         static constexpr uint8_t kExecutePosition50Silent[] = {0x01, 0x67, 0x64, 0x00, 0x80, 0xD8, 0x05, 0x00};
-        if (!build2WExecutePositionPayload(50, true, lPayload, lLen) ||
+        if (!build2WExecutePositionPayload(50, true, IOHC_ACEI_DEFAULT, lPayload, lLen) ||
             !payloadEquals(lPayload, lLen, kExecutePosition50Silent, sizeof(kExecutePosition50Silent)))
             return false;
 
         static constexpr uint8_t kExecuteFavoriteSilent[] = {0x01, 0x67, 0xD8, 0x00, 0x80, 0xD8, 0x05, 0x00};
-        if (!build2WExecuteSpecialPayload(0xD8, true, lPayload, lLen) ||
+        if (!build2WExecuteSpecialPayload(0xD8, true, IOHC_ACEI_DEFAULT, lPayload, lLen) ||
             !payloadEquals(lPayload, lLen, kExecuteFavoriteSilent, sizeof(kExecuteFavoriteSilent)))
             return false;
 
@@ -7445,6 +7445,9 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         }
         else
         {
+            const uint8_t lTwoWayAcei = lTargetCh
+                                             ? lTargetCh->getConfigured2WAcei()
+                                             : IOHC_ACEI_DEFAULT;
             // 2W Execute: challenge-response authentication. Keep the
             // payload bytes in the central reference-template builders above.
             if (iEntry.twoWayTilt)
@@ -7456,6 +7459,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             {
                 if (!build2WExecutePositionPayload(iEntry.param,
                                                    iEntry.param3 == IOHC_EXECUTE_PROFILE_SILENT,
+                                                   lTwoWayAcei,
                                                    mTxFrame.data, mTxFrame.dataLen))
                     return false;
             }
@@ -7463,6 +7467,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             {
                 if (!build2WExecuteSpecialPayload(iEntry.param,
                                                   iEntry.param3 == IOHC_EXECUTE_PROFILE_SILENT,
+                                                  lTwoWayAcei,
                                                   mTxFrame.data, mTxFrame.dataLen))
                     return false;
             }
