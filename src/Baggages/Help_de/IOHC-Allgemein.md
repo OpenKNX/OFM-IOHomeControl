@@ -2,7 +2,7 @@
 
 Auf dieser Seite werden die globalen Einstellungen des io-homecontrol-Bereichs festgelegt.
 
-Die benötigten Kanäle werden auf der separaten Seite **Kanalauswahl** aktiviert. Pairing, Betriebsparameter und Bedienfunktionen werden anschließend je Kanal konfiguriert.
+Die benötigten Kanäle werden auf der separaten Seite **Kanalauswahl** durch Wahl des Gerätetyps aktiviert. Pairing, Betriebsparameter und Bedienfunktionen werden anschließend je Kanal konfiguriert.
 Dadurch bleibt die Zuordnung zwischen Kanal und Antrieb bzw. Fenster eindeutig nachvollziehbar.
 
 Die globale Systemidentität wird ausschließlich für 2W verwendet. Jeder 1W-Kanal besitzt standardmäßig ein eigenes persistentes Controllerprofil; mehrere Kanäle können ein solches Profil gezielt teilen.

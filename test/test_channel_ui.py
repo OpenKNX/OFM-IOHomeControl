@@ -2,6 +2,7 @@
 """Regression checks for the shared OpenKNX channel-selection convention."""
 
 from pathlib import Path
+import re
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -22,7 +23,7 @@ class ChannelUiTest(unittest.TestCase):
         cls.share = parse("IoHomecontrol.share.xml")
         cls.template = parse("IoHomecontrol.templ.xml")
 
-    def test_all_channels_are_selected_by_activity(self) -> None:
+    def test_all_channels_are_selected_by_device_type(self) -> None:
         visible = self.share.find(".//k:Parameter[@Name='VisibleChannels']", NS)
         self.assertIsNotNone(visible)
         self.assertEqual(visible.get("Access"), "None")
@@ -45,24 +46,32 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIsNotNone(settings)
         self.assertIsNone(settings.find("k:choose", NS))
 
-    def test_first_channel_is_enabled_by_default(self) -> None:
+    def test_every_channel_is_disabled_by_default(self) -> None:
         activity = self.template.find(".//k:Parameter[@Name='c%C%Active']", NS)
         self.assertIsNotNone(activity)
         self.assertEqual(activity.get("Value"), "0")
-        self.assertIsNone(
-            self.template.find(
-                ".//k:ParameterRef[@RefId='%AID%_UP-%TT%%CC%001']", NS
-            )
+        device_type = self.template.find(".//k:Parameter[@Name='c%C%DeviceType']", NS)
+        self.assertIsNotNone(device_type)
+        self.assertEqual(device_type.get("Value"), "1")
+        selection = self.template.find(".//k:Parameter[@Name='c%C%ChannelSelection']", NS)
+        self.assertIsNotNone(selection)
+        self.assertEqual(selection.get("Value"), "0")
+
+        parameter_type = self.share.find(
+            ".//k:ParameterType[@Name='IOHCChannelSelection']", NS
+        )
+        choices = parameter_type.findall(".//k:Enumeration", NS)
+        self.assertEqual((choices[0].get("Text"), choices[0].get("Value")), ("Deaktiviert", "0"))
+        self.assertEqual(
+            {choice.get("Value") for choice in choices},
+            {str(value) for value in range(14)},
         )
 
-        defaults = {}
-        for ref in self.share.findall(".//k:ParameterRef", NS):
-            ref_id = ref.get("RefId", "")
-            if ref_id.startswith("%AID%_UP-%TT%") and ref_id.endswith("001"):
-                channel = int(ref_id[len("%AID%_UP-%TT%") : -3])
-                defaults[channel] = ref.get("Value")
-
-        self.assertEqual(defaults, {1: "1", **{channel: "0" for channel in range(2, 17)}})
+        overrides = [
+            ref for ref in self.share.findall(".//k:ParameterRef", NS)
+            if ref.get("RefId", "").endswith("001")
+        ]
+        self.assertEqual(overrides, [])
 
     def test_selection_table_matches_shared_layout(self) -> None:
         selection = self.share.find(
@@ -79,7 +88,7 @@ class ChannelUiTest(unittest.TestCase):
         )
         self.assertEqual(
             [item.get("Text") for item in header.findall("k:ParameterSeparator", NS)],
-            ["Kanal", "Kanalaktivität", "Beschreibung"],
+            ["Kanal", "Gerätetyp", "Beschreibung"],
         )
 
         include = selection.find("op:include", NS)
@@ -96,7 +105,7 @@ class ChannelUiTest(unittest.TestCase):
         )
         self.assertEqual(row.find("k:ParameterSeparator", NS).get("Text"), "Kanal %C%")
         refs = row.findall("k:ParameterRefRef", NS)
-        self.assertEqual(refs[0].get("RefId"), "%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101")
+        self.assertEqual(refs[0].get("RefId"), "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601")
         self.assertEqual(refs[1].get("HelpContext"), "BASE-ChannelName")
 
     def test_suspension_uses_shared_radio_type_and_header_order(self) -> None:
@@ -113,16 +122,15 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIsNotNone(channel)
         choose = channel.find("k:choose", NS)
         self.assertEqual(
-            choose.get("ParamRefId"), "%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101"
+            choose.get("ParamRefId"), "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"
         )
         page = choose.find("k:when/k:ParameterBlock", NS)
         children = list(page)
         self.assertEqual(children[0].get("Text"), "Kanal %C%")
         self.assertEqual(children[1].get("RefId"), "%AID%_P-%TT%%CC%000_R-%TT%%CC%00001")
         self.assertEqual(children[1].get("HelpContext"), "BASE-ChannelName")
-        self.assertEqual(children[2].get("RefId"), "%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201")
-        self.assertEqual(children[3].get("RefId"), "%AID%_UP-%TT%%CC%008_R-%TT%%CC%00801")
-        self.assertEqual(children[3].get("HelpContext"), "BASE-ChannelSuspended")
+        self.assertEqual(children[2].get("RefId"), "%AID%_UP-%TT%%CC%008_R-%TT%%CC%00801")
+        self.assertEqual(children[2].get("HelpContext"), "BASE-ChannelSuspended")
 
     def test_pairing_overview_only_shows_activated_channels(self) -> None:
         overview_include = next(
@@ -142,7 +150,7 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIsNotNone(overview)
         choose = overview.find("k:choose", NS)
         self.assertEqual(
-            choose.get("ParamRefId"), "%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101"
+            choose.get("ParamRefId"), "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"
         )
         self.assertIsNone(
             overview.find(
@@ -150,7 +158,7 @@ class ChannelUiTest(unittest.TestCase):
                 NS,
             )
         )
-        row = choose.find("k:when[@test='1']/k:ParameterBlock", NS)
+        row = choose.find("k:when[@test='>0']/k:ParameterBlock", NS)
         self.assertIsNotNone(row)
         self.assertEqual(row.find("k:ParameterSeparator", NS).get("Text"), "%C%")
 
@@ -195,6 +203,8 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn('[0x12, channelIndex]', workflow)
         self.assertIn('IOHC_readNodeId(channelStatus, 1) == 0', workflow)
         self.assertIn('prefix + "Active", 1', script)
+        self.assertIn('prefix + "DeviceType", etsType', script)
+        self.assertIn("function IOHC_syncChannelSelection", script)
         self.assertIn("neu programmiert werden", workflow)
 
     def test_one_way_enrollment_finalizer_is_labeled_stop_runter(self) -> None:
@@ -386,6 +396,12 @@ class ChannelUiTest(unittest.TestCase):
         gate = self.template.find(".//k:choose[@ParamRefId='%AID%_P-%TT%%CC%095_R-%TT%%CC%09501']", NS)
         refs = {r.get('RefId') for r in gate.findall('k:when/k:ComObjectRefRef', NS)}
         self.assertEqual(refs, {'%AID%_O-%TT%%CC%012_R-%TT%%CC%01201', '%AID%_O-%TT%%CC%013_R-%TT%%CC%01301'})
+
+    def test_application_help_uses_relative_ko_references_only(self) -> None:
+        documentation = (ROOT / "doc" / "Applikationsbeschreibung-IoHomecontrol.md").read_text()
+        self.assertRegex(documentation, r"\bKn\+\d+\b")
+        self.assertIsNone(re.search(r"\bKO\s*[-#:]?\s*\d+\b", documentation))
+        self.assertIsNone(re.search(r"^\|\s*\d+\s*\|", documentation, re.MULTILINE))
 
 
 if __name__ == "__main__":

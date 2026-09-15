@@ -162,9 +162,24 @@ function IOHC_configureImportedChannel(device, channelNumber, discovery) {
     IOHC_setParameterValue(device, prefix + "PairedNodeIdDisplay", IOHC_formatNodeId(discovery.nodeId));
     IOHC_setParameterValue(device, prefix + "OneWaySummary", "2W (bidirektional)");
     IOHC_setParameterValue(device, prefix + "PairingDiag", "Programmierung erforderlich");
-    // Activate last so all settings are already coherent when ETS refreshes
-    // the dynamic channel view.
+    // Activate last so all settings are coherent before the calculated
+    // channel selector refreshes the dynamic view.
     IOHC_setParameterValue(device, prefix + "Active", 1);
+}
+
+function IOHC_syncChannelSelection(input, output, context) {
+    if (input.Selection !== undefined) {
+        var selection = Number(input.Selection);
+        output.Active = selection > 0 ? 1 : 0;
+        if (selection > 0) {
+            output.DeviceType = selection - 1;
+        }
+        return;
+    }
+
+    output.Selection = Number(input.Active) == 1
+        ? Number(input.DeviceType) + 1
+        : 0;
 }
 
 function IOHC_controllerStateText(state) {

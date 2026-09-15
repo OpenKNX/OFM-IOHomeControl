@@ -345,9 +345,9 @@ Wird eine 1 auf das KO "Netzwerk-Scan" gesendet, beginnt das Modul einen passive
 
 ## **Kanalauswahl**
 
-Die Kanalauswahl steht direkt vor dem ersten Kanal. Sie listet alle io-homecontrol-Kanäle in einer Tabelle mit den Spalten **Kanal**, **Kanalaktivität** und **Beschreibung** auf.
+Die Kanalauswahl steht direkt vor dem ersten Kanal. Sie listet alle io-homecontrol-Kanäle in einer Tabelle mit den Spalten **Kanal**, **Gerätetyp** und **Beschreibung** auf.
 
-Die Beschreibung bleibt auch bei deaktivierten Kanälen sichtbar und editierbar. Nur aktivierte Kanäle erhalten eine eigene Kanalseite mit den weiteren Einstellungen.
+Die Auswahl **Deaktiviert** ist für jeden Kanal der Standardwert, auch für Kanal 1. Die Beschreibung bleibt bei deaktivierten Kanälen sichtbar und editierbar. Erst die Auswahl eines Gerätetyps aktiviert den Kanal und blendet seine eigene Kanalseite ein.
 
 ----
 
@@ -362,41 +362,32 @@ Jeder io-homecontrol-Kanal repräsentiert ein einzelnes io-homecontrol-Gerät. D
 
 Ein Freitextfeld mit bis zu 40 Zeichen zur Benennung des Kanals. Der Text wird in ETS als Kanalname sowie in den Kommunikationsobjekten angezeigt.
 
-<!-- DOC HelpContext="IOHC-Kanal-aktiv" -->
-#### **Kanalaktivität**
-
-Legt fest, ob der Kanal verwendet wird. Nur aktivierte Kanäle werden von der Firmware verarbeitet und blenden ihre weiteren Konfigurationsparameter ein.
-
-* **Deaktiviert**: Kanal wird nicht verwendet (Standard für Kanal 2 bis 16)
-* **Aktiviert**: Kanal ist aktiv (Standard für Kanal 1)
-
 <!-- DOC HelpContext="IOHC-Geraetetyp" -->
 ### **Gerätetyp**
 
-Erscheint nur, wenn die Kanalaktivität auf "Aktiviert" steht.
-
-Bestimmt den Typ des angeschlossenen io-homecontrol-Geräts. Die Auswahl beeinflusst, welche Kommunikationsobjekte und Parameter für diesen Kanal sichtbar sind.
+Wird direkt auf der Seite **Kanalauswahl** eingestellt. **Deaktiviert** ist der Standardwert. Die Auswahl eines Gerätetyps aktiviert den Kanal und beeinflusst, welche Kommunikationsobjekte und Parameter sichtbar sind.
 
 Mögliche Werte:
-* Generisch (0)
-* Jalousie / Rollladen (1) — Standard
-* Fenster (2)
-* Markise (3)
-* Garagentor (4)
-* Thermostat (5)
-* Licht (6)
-* Tor (7)
-* Schloss (8)
-* Sonnenschutz horizontal (9)
-* Vorhangschiene (10)
-* Lüftung (11)
-* Schalter (12)
+* Deaktiviert — Standard
+* Generisch
+* Jalousie / Rollladen
+* Fenster
+* Markise
+* Garagentor
+* Thermostat
+* Licht
+* Tor
+* Schloss
+* Sonnenschutz horizontal
+* Vorhangschiene
+* Lüftung
+* Schalter
 
-> Bei Gerätetypen mit Positionssteuerung (0-4, 7, 9-11) werden zusätzlich die Parameter Öffnungszeit, Schließzeit und Richtung invertieren angezeigt. Beim Gerätetyp Thermostat (5) erscheinen die Thermostat-spezifischen KOs.
+> Bei Gerätetypen mit Positionssteuerung werden zusätzlich die Parameter Öffnungszeit, Schließzeit und Richtung invertieren angezeigt. Beim Gerätetyp Thermostat erscheinen die Thermostat-spezifischen KOs.
 
 #### **Suspendiert**
 
-Erscheint nur, wenn die Kanalaktivität auf "Aktiviert" steht.
+Erscheint, sobald in der Kanalauswahl ein Gerätetyp gewählt wurde.
 
 Setzt den Kanal vorübergehend still, ohne die Konfiguration zu verlieren. Ein suspendierter Kanal wird von der Firmware nicht verarbeitet (kein Senden, keine Statusabfrage), behält aber alle Einstellungen.
 
@@ -406,7 +397,7 @@ Setzt den Kanal vorübergehend still, ohne die Konfiguration zu verlieren. Ein s
 <!-- DOC HelpContext="IOHC-Status-Abfrageintervall" -->
 ### **Status-Abfrageintervall**
 
-Erscheint nur, wenn die Kanalaktivität auf "Aktiviert" steht.
+Erscheint, sobald in der Kanalauswahl ein Gerätetyp gewählt wurde.
 
 Legt fest, in welchem Intervall das Modul den Gerätestatus abfragt. Dieses Intervall dient als Fallback; bei Geräten mit eigenständigen Statusmeldungen wird es lediglich ergänzend verwendet.
 
@@ -448,7 +439,7 @@ Vertauscht die Bedeutung von 0 % und 100 %. Dies ist sinnvoll, wenn Geräte in e
 <!-- DOC HelpContext="IOHC-Verhalten-nach-Neustart" -->
 ### **Verhalten nach Neustart**
 
-Erscheint nur, wenn die Kanalaktivität auf "Aktiviert" steht.
+Erscheint, sobald in der Kanalauswahl ein Gerätetyp gewählt wurde.
 
 Bestimmt, was das Modul nach einem Neustart (z.B. Stromausfall) für diesen Kanal tut.
 
@@ -460,7 +451,7 @@ Mögliche Werte:
 <!-- DOC HelpContext="IOHC-Protokoll-Modus" -->
 ### **Protokoll-Modus**
 
-Erscheint nur, wenn die Kanalaktivität auf "Aktiviert" steht.
+Erscheint, sobald in der Kanalauswahl ein Gerätetyp gewählt wurde.
 
 Wählt den Kommunikationsmodus für diesen Kanal.
 
@@ -486,7 +477,7 @@ STOP und RUNTER werden als vollständige 1W-Sendebursts mit eigenen fortlaufende
 <!-- DOC HelpContext="IOHC-Anzahl-Szenen" -->
 ### **Szenen**
 
-Erscheint nur, wenn die Kanalaktivität auf "Aktiviert" steht.
+Erscheint, sobald in der Kanalauswahl ein Gerätetyp gewählt wurde.
 
 #### **Anzahl Szenen**
 
@@ -670,18 +661,18 @@ Für den Betrieb des io-homecontrol-Moduls ist folgende Hardware erforderlich:
 
 Folgende Kommunikationsobjekte gelten für das gesamte io-homecontrol-Modul:
 
-| KO | Name | DPT | Richtung | Beschreibung |
-|----|------|-----|----------|-------------|
-| 20 | Modulstatus | 1.011 | Lesen | 1 = Radio initialisiert, 0 = nicht bereit |
-| 21 | Discovery starten | 1.010 | Schreiben | 1 = Broadcast-Discovery starten |
-| 22 | Discovery aktiv | 1.011 | Lesen | 1 = Discovery läuft |
-| 23 | Netzwerk-Scan | 1.010 | Schreiben | 1 = Passiven Scan starten, 0 = Stoppen |
-| 24 | Netzwerk-Scan aktiv | 1.011 | Lesen | 1 = Scan läuft |
-| 25 | Beobachtete Fernbedienung | 12.001 | Lesen | Zuletzt beobachtete Fernbedienungs-Adresse |
+| Name | DPT | Richtung | Beschreibung |
+|------|-----|----------|-------------|
+| Modulstatus | 1.011 | Lesen | 1 = Radio initialisiert, 0 = nicht bereit |
+| Discovery starten | 1.010 | Schreiben | 1 = Broadcast-Discovery starten |
+| Discovery aktiv | 1.011 | Lesen | 1 = Discovery läuft |
+| Netzwerk-Scan | 1.010 | Schreiben | 1 = Passiven Scan starten, 0 = Stoppen |
+| Netzwerk-Scan aktiv | 1.011 | Lesen | 1 = Scan läuft |
+| Beobachtete Fernbedienung | 12.001 | Lesen | Zuletzt beobachtete Fernbedienungs-Adresse |
 
 ### **Kommunikationsobjekte pro Kanal**
 
-Jeder Kanal hat bis zu 25 Kommunikationsobjekte. Die KO-Nummern sind relativ zum Kanal-Offset (Kn = erster KO des Kanals n).
+Jeder Kanal hat bis zu 25 Kommunikationsobjekte. Die Tabellen verwenden relative Offsets (`Kn` = erster KO des Kanals `n`), weil die absoluten KO-Nummern von der einbettenden OAM-Applikation abhängen.
 
 Welche dieser Objekte sichtbar sind, hängt vom Gerätetyp ab. Die folgenden Tabellen sind nach Funktionsgruppe gegliedert.
 

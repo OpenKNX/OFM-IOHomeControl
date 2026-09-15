@@ -215,7 +215,8 @@ void IoHomecontrolChannel::setup()
     const uint8_t lTwoWayDiscoveryPreamble = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryPreamble);
     const bool lSilentOperation = ParamIOHC_cSilentOperation != 0;
 
-    // A channel is active when it is activated (Kanalaktivität = Aktiviert) and not temporarily suspended.
+    // The visible combined channel selector is synchronized to these historic
+    // fields so existing ETS projects retain their activation state and type.
     const bool lChannelActive = ParamIOHC_cActive && !ParamIOHC_cSuspend;
 
     logInfoP("ETS config: active=%u protocol=%u (%s) oneWayTarget=0x%06X oneWayType=%u oneWayProfile=%u oneWayMfg=0x%02X",

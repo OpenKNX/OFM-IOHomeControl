@@ -2,6 +2,8 @@
 
 Dieser Parameter legt fest, welcher Gerätetyp dem Kanal zugeordnet ist.
 
+**Deaktiviert** ist der Standardwert für jeden Kanal. Erst die Auswahl eines Gerätetyps aktiviert den Kanal und blendet seine Konfigurationsseite ein.
+
 Die Auswahl beeinflusst die in ETS verfügbaren Funktionen sowie die interne Behandlung einzelner Befehle.
 Daher sollte nach Möglichkeit der tatsächlich verwendete Gerätetyp gewählt werden.
 
