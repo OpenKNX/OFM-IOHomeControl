@@ -108,6 +108,55 @@ class ChannelUiTest(unittest.TestCase):
         self.assertEqual(refs[0].get("RefId"), "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601")
         self.assertEqual(refs[1].get("HelpContext"), "BASE-ChannelName")
 
+    def test_device_type_dynamics_follow_visible_selection_directly(self) -> None:
+        selection_ref = "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"
+        device_type_ref = "%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201"
+
+        # ETS must not have to propagate a calculated DeviceType change before
+        # rebuilding parameter or communication-object visibility.
+        self.assertEqual(
+            self.template.findall(f".//k:choose[@ParamRefId='{device_type_ref}']", NS),
+            [],
+        )
+
+        selector_choices = self.template.findall(
+            f".//k:choose[@ParamRefId='{selection_ref}']", NS
+        )
+        ko_choice = next(
+            choice
+            for choice in selector_choices
+            if {when.get("test") for when in choice.findall("k:when", NS)}
+            == {str(value) for value in range(1, 14)}
+        )
+
+        roller = ko_choice.find("k:when[@test='2']", NS)
+        roller_refs = {ref.get("RefId") for ref in roller.findall("k:ComObjectRefRef", NS)}
+        self.assertEqual(
+            roller_refs,
+            {
+                "%AID%_O-%TT%%CC%000_R-%TT%%CC%00001",
+                "%AID%_O-%TT%%CC%001_R-%TT%%CC%00101",
+                "%AID%_O-%TT%%CC%002_R-%TT%%CC%00201",
+                "%AID%_O-%TT%%CC%004_R-%TT%%CC%00401",
+                "%AID%_O-%TT%%CC%005_R-%TT%%CC%00501",
+                "%AID%_O-%TT%%CC%008_R-%TT%%CC%00801",
+                "%AID%_O-%TT%%CC%009_R-%TT%%CC%00901",
+                "%AID%_O-%TT%%CC%010_R-%TT%%CC%01001",
+                "%AID%_O-%TT%%CC%019_R-%TT%%CC%01901",
+            },
+        )
+
+        light = ko_choice.find("k:when[@test='7']", NS)
+        dimmable = light.find("k:choose", NS)
+        self.assertIsNotNone(dimmable)
+        self.assertEqual(
+            {ref.get("RefId") for ref in dimmable.findall("k:when[@test='0']/k:ComObjectRefRef", NS)},
+            {
+                "%AID%_O-%TT%%CC%003_R-%TT%%CC%00301",
+                "%AID%_O-%TT%%CC%006_R-%TT%%CC%00601",
+            },
+        )
+
     def test_suspension_uses_shared_radio_type_and_header_order(self) -> None:
         suspended = self.template.find(".//k:Parameter[@Name='c%C%Suspend']", NS)
         self.assertIsNotNone(suspended)
