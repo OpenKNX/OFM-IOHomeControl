@@ -135,6 +135,11 @@ namespace
         if (!oText || iSize == 0)
             return;
         oText[0] = '\0';
+        if (iMask == IOHC_1W_ENROLL_CLASS_INTERIOR)
+        {
+            snprintf(oText, iSize, "0002BF,00007F");
+            return;
+        }
         const char *lSeparator = "";
         if ((iMask & IOHC_1W_ENROLL_CLASS_ROLLER) != 0)
         {

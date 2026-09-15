@@ -207,6 +207,7 @@ constexpr uint8_t IOHC_1W_ENROLL_CLASS_AWNING = 0x02;
 constexpr uint8_t IOHC_1W_ENROLL_CLASS_DUAL = 0x04;
 constexpr uint8_t IOHC_1W_ENROLL_CLASS_ALL =
     IOHC_1W_ENROLL_CLASS_ROLLER | IOHC_1W_ENROLL_CLASS_AWNING | IOHC_1W_ENROLL_CLASS_DUAL;
+constexpr uint8_t IOHC_1W_ENROLL_CLASS_INTERIOR = 0x08; // KLI 312: Blind + VenetianBlind
 
 enum class PrivateProbeShape : uint8_t
 {

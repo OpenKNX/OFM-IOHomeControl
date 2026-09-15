@@ -319,7 +319,7 @@ class ChannelUiTest(unittest.TestCase):
         )
         self.assertIsNotNone(classes)
         class_values = {item.get("Value") for item in classes.findall(".//k:Enumeration", NS)}
-        self.assertEqual(class_values, {str(value) for value in range(8)})
+        self.assertEqual(class_values, {str(value) for value in range(9)})
 
         power_class = self.share.find(
             ".//k:ParameterType[@Name='IOHCOneWayPowerClass']", NS

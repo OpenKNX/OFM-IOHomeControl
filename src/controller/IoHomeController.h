@@ -284,8 +284,8 @@ public:
     const char *name;
     uint32_t removeDestination; // 0 = derive from the configured broadcast type
     uint32_t finalizerDestination;
-    const uint32_t *addDestinations; // nullptr = derive from the broadcast type
-    uint8_t addDestinationCount;
+    const IoHomeDeviceType *addClasses; // nullptr = derive from the broadcast type
+    uint8_t addClassCount;
   };
 
   static const OneWayPairingProfile &oneWayPairingProfileGeneric();

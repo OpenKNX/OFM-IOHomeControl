@@ -219,7 +219,7 @@
                 </TypeRestriction>
               </ParameterType>
               <ParameterType Id="%AID%_PT-IOHCOneWayEnrollmentClasses" Name="IOHCOneWayEnrollmentClasses">
-                <TypeRestriction Base="Value" SizeInBit="3">
+                <TypeRestriction Base="Value" SizeInBit="4">
                   <Enumeration Text="Automatisch (BF + FF + 37F)" Value="0" Id="%ENID%" />
                   <Enumeration Text="Rollladen/Jalousie (BF)" Value="1" Id="%ENID%" />
                   <Enumeration Text="Markise (FF)" Value="2" Id="%ENID%" />
@@ -228,6 +228,7 @@
                   <Enumeration Text="Rollladen + Dual Shutter (BF + 37F)" Value="5" Id="%ENID%" />
                   <Enumeration Text="Markise + Dual Shutter (FF + 37F)" Value="6" Id="%ENID%" />
                   <Enumeration Text="Alle explizit (BF + FF + 37F)" Value="7" Id="%ENID%" />
+                  <Enumeration Text="Innenjalousien KLI 312 (2BF + 7F)" Value="8" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
               <ParameterType Id="%AID%_PT-IOHCOneWayPowerClass" Name="IOHCOneWayPowerClass">

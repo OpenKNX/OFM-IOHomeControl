@@ -938,7 +938,7 @@ void IoHomecontrolChannel::setConfigured1WEnrollmentFinalizer(OneWayEnrollmentFi
 OneWayEnrollmentFinalizer IoHomecontrolChannel::getConfigured1WEnrollmentFinalizer() const { return mConfigured1WEnrollmentFinalizer; }
 void IoHomecontrolChannel::setConfigured1WExecuteDestinationPolicy(OneWayExecuteDestinationPolicy iPolicy) { mConfigured1WExecuteDestinationPolicy = iPolicy; }
 OneWayExecuteDestinationPolicy IoHomecontrolChannel::getConfigured1WExecuteDestinationPolicy() const { return mConfigured1WExecuteDestinationPolicy; }
-void IoHomecontrolChannel::setConfigured1WEnrollmentClassMask(uint8_t iMask) { mConfigured1WEnrollmentClassMask = iMask & IOHC_1W_ENROLL_CLASS_ALL; }
+void IoHomecontrolChannel::setConfigured1WEnrollmentClassMask(uint8_t iMask) { mConfigured1WEnrollmentClassMask = iMask <= IOHC_1W_ENROLL_CLASS_INTERIOR ? iMask : 0; }
 uint8_t IoHomecontrolChannel::getConfigured1WEnrollmentClassMask() const { return mConfigured1WEnrollmentClassMask; }
 void IoHomecontrolChannel::setConfigured1WPowerClass(OneWayPowerClass iPowerClass) { mConfigured1WPowerClass = iPowerClass; }
 OneWayPowerClass IoHomecontrolChannel::getConfigured1WPowerClass() const { return mConfigured1WPowerClass; }

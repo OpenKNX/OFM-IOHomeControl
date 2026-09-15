@@ -113,7 +113,7 @@ public:
   OneWayEnrollmentFinalizer getConfigured1WEnrollmentFinalizer() const { return mConfigured1WEnrollmentFinalizer; }
   void setConfigured1WExecuteDestinationPolicy(OneWayExecuteDestinationPolicy iPolicy) { mConfigured1WExecuteDestinationPolicy = iPolicy; }
   OneWayExecuteDestinationPolicy getConfigured1WExecuteDestinationPolicy() const { return mConfigured1WExecuteDestinationPolicy; }
-  void setConfigured1WEnrollmentClassMask(uint8_t iMask) { mConfigured1WEnrollmentClassMask = iMask & IOHC_1W_ENROLL_CLASS_ALL; }
+  void setConfigured1WEnrollmentClassMask(uint8_t iMask) { mConfigured1WEnrollmentClassMask = iMask <= IOHC_1W_ENROLL_CLASS_INTERIOR ? iMask : 0; }
   uint8_t getConfigured1WEnrollmentClassMask() const { return mConfigured1WEnrollmentClassMask; }
   void setConfigured1WPowerClass(OneWayPowerClass iPowerClass) { mConfigured1WPowerClass = iPowerClass; }
   OneWayPowerClass getConfigured1WPowerClass() const { return mConfigured1WPowerClass; }

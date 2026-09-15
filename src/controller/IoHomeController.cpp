@@ -1437,34 +1437,42 @@ uint32_t IoHomeController::oneWayBroadcastTarget(uint8_t iBroadcastType) const
 uint8_t IoHomeController::pairing1WAddDestinationCount() const
 {
     const OneWayPairingProfile &lProfile = pairing1WProfile();
-    if (lProfile.addDestinations == nullptr)
+    if (lProfile.addClasses == nullptr)
         return 1U;
+    if (mPairing1WEnrollmentClassMask == IOHC_1W_ENROLL_CLASS_INTERIOR)
+        return 2U;
 
     uint8_t lCount = 0;
-    for (uint8_t i = 0; i < lProfile.addDestinationCount; i++)
+    for (uint8_t i = 0; i < lProfile.addClassCount; i++)
     {
         if ((mPairing1WEnrollmentClassMask & (1U << i)) != 0)
             lCount++;
     }
-    return lCount > 0 ? lCount : lProfile.addDestinationCount;
+    return lCount > 0 ? lCount : lProfile.addClassCount;
 }
 
 uint32_t IoHomeController::pairing1WAddDestination() const
 {
     const OneWayPairingProfile &lProfile = pairing1WProfile();
-    if (lProfile.addDestinations == nullptr)
+    if (lProfile.addClasses == nullptr)
         return oneWayBroadcastTarget(mPairing1WBroadcastType);
 
+    static constexpr IoHomeDeviceType kInteriorClasses[] = {
+        IoHomeDeviceType::Blind, IoHomeDeviceType::VenetianBlind};
+    if (mPairing1WEnrollmentClassMask == IOHC_1W_ENROLL_CLASS_INTERIOR)
+        return oneWayBroadcastTarget(static_cast<uint8_t>(
+            kInteriorClasses[mPairing1WAddDestinationIndex % 2U]));
+
     uint8_t lSelectedIndex = 0;
-    for (uint8_t i = 0; i < lProfile.addDestinationCount; i++)
+    for (uint8_t i = 0; i < lProfile.addClassCount; i++)
     {
         if ((mPairing1WEnrollmentClassMask & (1U << i)) == 0)
             continue;
         if (lSelectedIndex == mPairing1WAddDestinationIndex)
-            return lProfile.addDestinations[i];
+            return oneWayBroadcastTarget(static_cast<uint8_t>(lProfile.addClasses[i]));
         lSelectedIndex++;
     }
-    return lProfile.addDestinations[0];
+    return oneWayBroadcastTarget(static_cast<uint8_t>(lProfile.addClasses[0]));
 }
 
 const IoHomeController::OneWayPairingProfile &IoHomeController::oneWayPairingProfileGeneric()
@@ -1484,17 +1492,17 @@ const IoHomeController::OneWayPairingProfile &IoHomeController::oneWayPairingPro
     // Observed KLI 310 enrollment ring: REMOVE goes to All, then the same
     // logical ADD (and the same rolling sequence) is repeated to the three
     // captured product classes. A real KLI sends CTRL1=0x00 on both.
-    static const uint32_t kAddDestinations[] = {
-        0x0000BF, // roller shutter
-        0x0000FF, // awning
-        0x00037F, // dual shutter
+    static constexpr IoHomeDeviceType kAddClasses[] = {
+        IoHomeDeviceType::RollerShutter,
+        IoHomeDeviceType::Awning,
+        IoHomeDeviceType::DualShutter,
     };
     static const OneWayPairingProfile kVeluxKli = {
         "velux-kli",
         0x00003F,
         0x00003F,
-        kAddDestinations,
-        static_cast<uint8_t>(sizeof(kAddDestinations) / sizeof(kAddDestinations[0])),
+        kAddClasses,
+        static_cast<uint8_t>(sizeof(kAddClasses) / sizeof(kAddClasses[0])),
     };
     return kVeluxKli;
 }
@@ -2364,8 +2372,9 @@ uint8_t IoHomeController::effectiveOneWayEnrollmentClassMask(IoHomecontrolChanne
 {
     if (!iChannel)
         return IOHC_1W_ENROLL_CLASS_ALL;
-    const uint8_t lConfigured = iChannel->getConfigured1WEnrollmentClassMask() & IOHC_1W_ENROLL_CLASS_ALL;
-    return lConfigured == 0 ? IOHC_1W_ENROLL_CLASS_ALL : lConfigured;
+    const uint8_t lConfigured = iChannel->getConfigured1WEnrollmentClassMask();
+    return lConfigured == 0 || lConfigured > IOHC_1W_ENROLL_CLASS_INTERIOR
+               ? IOHC_1W_ENROLL_CLASS_ALL : lConfigured;
 }
 
 OneWayPowerClass IoHomeController::effectiveOneWayPowerClass(IoHomecontrolChannel *iChannel) const

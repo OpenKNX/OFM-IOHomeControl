@@ -7588,16 +7588,14 @@ TEST(controller_velux_1w_strict_profile_destinations_and_ctrl1)
     const auto &lVelux = IoHomeController::oneWayPairingProfileVeluxKli();
     ASSERT_EQ(lVelux.removeDestination, 0x00003FU);
     ASSERT_EQ(lVelux.finalizerDestination, 0x00003FU);
-    ASSERT_EQ(lVelux.addDestinationCount, 3U);
-    ASSERT_EQ(lVelux.addDestinations[0], 0x0000BFU);
-    ASSERT_EQ(lVelux.addDestinations[1], 0x0000FFU);
-    ASSERT_EQ(lVelux.addDestinations[2], 0x00037FU);
-    for (uint8_t i = 0; i < lVelux.addDestinationCount; ++i)
-        ASSERT_NE(lVelux.addDestinations[i], 0x00003FU);
+    ASSERT_EQ(lVelux.addClassCount, 3U);
+    ASSERT_EQ(lVelux.addClasses[0], IoHomeDeviceType::RollerShutter);
+    ASSERT_EQ(lVelux.addClasses[1], IoHomeDeviceType::Awning);
+    ASSERT_EQ(lVelux.addClasses[2], IoHomeDeviceType::DualShutter);
 
     const auto &lGeneric = IoHomeController::oneWayPairingProfileGeneric();
     ASSERT_EQ(lGeneric.removeDestination, 0U); // derived from the broadcast type
-    ASSERT_TRUE(lGeneric.addDestinations == nullptr);
+    ASSERT_TRUE(lGeneric.addClasses == nullptr);
 }
 
 TEST(controller_velux_1w_enrollment_class_mask_can_select_awning_only)
@@ -7630,6 +7628,32 @@ TEST(controller_velux_1w_enrollment_class_mask_can_select_awning_only)
     ASSERT_EQ(lController.state(), ControllerState::PairComplete);
     ASSERT_EQ(lController.oneWayEnrollmentTraceCount(), 2U);
     ASSERT_EQ(lController.oneWayEnrollmentTrace()[0].destination, 0x0000FFU);
+}
+
+TEST(controller_velux_kli312_enrolls_interior_blind_classes)
+{
+    const uint8_t lKey[16] = {1};
+    const uint32_t lExpected[] = {0x0002BFU, 0x00007FU};
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initOneWayPairingModeControllerForTest(lController, lModule, lChannel,
+                                           0x831F2A, 0x7E9E6E, lKey);
+    lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Velux));
+    lChannel.setConfigured1WEnrollmentClassMask(IOHC_1W_ENROLL_CLASS_INTERIOR);
+    lChannel.setConfigured1WEnrollmentFinalizer(OneWayEnrollmentFinalizer::None);
+    ASSERT_TRUE(lController.startPairing1WAddOnly(0, 0x7E9E6E));
+    for (uint8_t i = 0; i < 2; i++)
+    {
+        lController.loop();
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+        ASSERT_EQ(lFrame.getDestNodeId(), lExpected[i]);
+        finishCurrentBlind1WPairingTxForTest(lController);
+    }
+    ASSERT_EQ(lController.state(), ControllerState::PairComplete);
 }
 
 TEST(controller_velux_1w_remove_ignores_typed_broadcast_class)
