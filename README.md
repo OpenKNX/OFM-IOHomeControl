@@ -32,7 +32,7 @@ The protocol implementation covers manufacturers such as Velux, Somfy, Atlantic,
 - **Position control** (0–100%) with position feedback from the device
 - **Up/Down/Stop commands** via standard KNX datapoints
 - **Slat/tilt control** for venetian blinds
-- **Thermostat control** for Atlantic Cozy io — temperature setpoint, operating mode, presence, window contact
+- **Thermostat control** for Atlantic Cozy io — temperature setpoint, operating mode, presence, window contact. Setpoints use the protocol's unsigned 16-bit little-endian tenths encoding across the full supported 7.0–28.0 °C range.
 - **Direction inversion** per channel for different mounting orientations
 - **Protocol mode** selectable per channel (2-way bidirectional or 1-way unidirectional)
 - **Independent persistent 1W controller profiles** per channel, with explicit profile sharing for 1W groups

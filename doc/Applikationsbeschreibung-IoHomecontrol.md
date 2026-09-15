@@ -549,6 +549,8 @@ Erscheint nur bei Gerätetyp "Thermostat" (5).
 
 Für Atlantic Cozy io Thermostate stehen zusätzliche Kommunikationsobjekte zur Verfügung:
 
+Temperatursollwerte von 7,0 bis 28,0 °C werden als vorzeichenloser 16-Bit-Wert in Zehntelgrad und Little-Endian-Reihenfolge übertragen. Beispielsweise wird 28,0 °C als `18 01` codiert; Werte oberhalb von 25,5 °C werden dadurch nicht auf ein Byte abgeschnitten.
+
 * **Temperatur Sollwert** (KO Kn+20, DPT 9.001): Setzt die Zieltemperatur
 * **Temperatur Rückmeldung** (KO Kn+21, DPT 9.001): Aktuelle Temperatur vom Gerät
 * **Betriebsmodus** (KO Kn+22, DPT 20.102): HVAC-Betriebsmodus

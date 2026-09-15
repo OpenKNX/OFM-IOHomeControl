@@ -1661,14 +1661,24 @@ bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
 }
 
 bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
-                                   IoHomeCommand iCmd, uint8_t iParam, uint8_t iParam2)
+                                   IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2)
 {
     return sendCommand(iDestNodeId, iEncKey, iCmd, iParam, iParam2, 0xFF);
 }
 
 bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
-                                   IoHomeCommand iCmd, uint8_t iParam, uint8_t iParam2, uint8_t iParam3)
+                                   IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2, uint8_t iParam3)
 {
+    if (iCmd == IoHomeCommand::WritePrivate && iParam == 0x03)
+    {
+        if (iParam2 < IOHC_COZY_TEMP_MIN_TENTHS || iParam2 > IOHC_COZY_TEMP_MAX_TENTHS)
+            return false;
+    }
+    else if (iParam2 > 0xFF)
+    {
+        return false;
+    }
+
     IoHomeQueueEntry lEntry;
     memset(&lEntry, 0, sizeof(lEntry));
     lEntry.destNodeId = iDestNodeId;
@@ -7402,7 +7412,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 lProfileTemplate.acei = iEntry.oneWayAcei ? iEntry.oneWayAcei : lProfileTemplate.acei;
                 if (!build1WExecute16(mTxFrame, lProfileTemplate,
                                       static_cast<uint16_t>(iEntry.param) << 8,
-                                      iEntry.param2, iEntry.param3, 0x00, 0x00, lSeq))
+                                      static_cast<uint8_t>(iEntry.param2), iEntry.param3, 0x00, 0x00, lSeq))
                     return false;
 
                 // HMAC input: cmd(1) + origin+acei+main[2]+fp1+fp2+data[2] = 9 bytes
@@ -7499,7 +7509,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                                                 iEntry.privateProbeValue))
                 return false;
         }
-        else if (!build2WPrivatePayload(iEntry.param, iEntry.param2, iEntry.param3,
+        else if (!build2WPrivatePayload(iEntry.param, static_cast<uint8_t>(iEntry.param2), iEntry.param3,
                                         mTxFrame.data, mTxFrame.dataLen))
             return false;
         mTxFrame.hasHmac = false;
@@ -7555,7 +7565,9 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             uint16_t lSeqAM = nextSequence1W(lProfile, false);
             OneWayCommandProfile lProfileTemplate = oneWayCommandProfileForType(iEntry.oneWayBroadcastType);
             lProfileTemplate.acei = iEntry.oneWayAcei ? iEntry.oneWayAcei : lProfileTemplate.acei;
-            const uint8_t lActivateFp1 = (iEntry.param2 != 0xFF) ? iEntry.param2 : 0x01;
+            const uint8_t lActivateFp1 = (iEntry.param2 != 0xFF)
+                                             ? static_cast<uint8_t>(iEntry.param2)
+                                             : 0x01;
             if (!build1WActivateMode13(mTxFrame, lProfileTemplate, iEntry.param, lActivateFp1, 0x00, lSeqAM))
                 return false;
 
@@ -7582,7 +7594,9 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             mTxFrame.data[1] = IOHC_ACEI_DEFAULT;
             // FP1: param as 16-bit value (high byte in param, low byte in param2 if != 0xFF)
             mTxFrame.data[2] = iEntry.param;
-            mTxFrame.data[3] = (iEntry.param2 != 0xFF) ? iEntry.param2 : 0x00;
+            mTxFrame.data[3] = (iEntry.param2 != 0xFF)
+                                   ? static_cast<uint8_t>(iEntry.param2)
+                                   : 0x00;
             // FP2: ignore
             mTxFrame.data[4] = (IOHC_POSITION_UNKNOWN >> 8) & 0xFF;
             mTxFrame.data[5] = IOHC_POSITION_UNKNOWN & 0xFF;
@@ -7623,16 +7637,17 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
     case IoHomeCommand::WritePrivate:
     {
         // WritePrivate (0x20) — Cozy/Atlantic thermostat command
-        // param = function selector (0x03=temp, 0x04=mode, etc.), param2 = value
+        // param = function selector (0x03=temp, 0x04=mode, etc.). Temperature
+        // uses the full uint16_t param2; all other values remain one byte.
         // Authenticated with HMAC
         if (iEntry.param == 0x03)
             mTxFrame.dataLen = IoHomeCozyPayload::buildTemperature(mTxFrame.data, iEntry.param2);
         else if (iEntry.param == 0x04)
-            mTxFrame.dataLen = IoHomeCozyPayload::buildMode(mTxFrame.data, iEntry.param2);
+            mTxFrame.dataLen = IoHomeCozyPayload::buildMode(mTxFrame.data, static_cast<uint8_t>(iEntry.param2));
         else if (iEntry.param == 0x10)
-            mTxFrame.dataLen = IoHomeCozyPayload::buildPresence(mTxFrame.data, iEntry.param2);
+            mTxFrame.dataLen = IoHomeCozyPayload::buildPresence(mTxFrame.data, static_cast<uint8_t>(iEntry.param2));
         else if (iEntry.param == 0x0E)
-            mTxFrame.dataLen = IoHomeCozyPayload::buildWindow(mTxFrame.data, iEntry.param2);
+            mTxFrame.dataLen = IoHomeCozyPayload::buildWindow(mTxFrame.data, static_cast<uint8_t>(iEntry.param2));
         else if (iEntry.param == 0x0C)
             mTxFrame.dataLen = IoHomeCozyPayload::buildPowerOn(mTxFrame.data);
         else if (iEntry.param == 0x00)
@@ -7644,7 +7659,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             mTxFrame.data[1] = IOHC_COZY_ACEI_WRITE;
             mTxFrame.data[2] = 0x01;
             mTxFrame.data[3] = iEntry.param;
-            mTxFrame.data[4] = iEntry.param2;
+            mTxFrame.data[4] = static_cast<uint8_t>(iEntry.param2);
             mTxFrame.dataLen = 5;
         }
 

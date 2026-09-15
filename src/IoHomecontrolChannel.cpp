@@ -484,7 +484,7 @@ void IoHomecontrolChannel::processInputKo(uint8_t iIoIndex, GroupObject &iKo)
             lTenths = 70;
         if (lTenths > 280)
             lTenths = 280;
-        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::WritePrivate, 0x03, (uint8_t)lTenths);
+        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::WritePrivate, 0x03, lTenths);
         logDebugP("Cozy temp: %.1f°C (%d tenths)", lTempC, lTenths);
         break;
     }
@@ -1513,7 +1513,7 @@ void IoHomecontrolChannel::handleSceneRecall(uint8_t iScene)
         if (lTenths > 280)
             lTenths = 280;
         logDebugP("Scene %d recall -> thermostat: %d°C, mode %d", iScene, lTempC, lMode);
-        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::WritePrivate, 0x03, (uint8_t)lTenths);
+        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::WritePrivate, 0x03, lTenths);
         mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::WritePrivate, 0x04, lMode);
         return;
     }

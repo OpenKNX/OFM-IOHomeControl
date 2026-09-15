@@ -94,7 +94,7 @@ struct IoHomeQueueEntry
   const uint8_t *encKey; // pointer to channel's key (valid as long as channel exists)
   IoHomeCommand command;
   uint8_t param;
-  uint8_t param2;            // second parameter (e.g., slat angle); 0xFF = unused
+  uint16_t param2;           // second parameter; widened for Cozy LE16 temperature, 0xFF = unused elsewhere
   uint8_t param3;            // third parameter (for _p0x00_16 extended format); 0xFF = unused
   bool oneWayButton;         // true: 1W button-style Execute command
   uint16_t oneWayButtonCode; // 0x0000=up, 0x0001=down, 0x0002=stop, 0x0003=my/prog, 0x00FE=release, 0x00FF=stop2
@@ -323,9 +323,9 @@ public:
   bool sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
                    IoHomeCommand iCmd, uint8_t iParam);
   bool sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
-                   IoHomeCommand iCmd, uint8_t iParam, uint8_t iParam2);
+                   IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2);
   bool sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
-                   IoHomeCommand iCmd, uint8_t iParam, uint8_t iParam2, uint8_t iParam3);
+                   IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2, uint8_t iParam3);
 
   // Queue a command for a concrete 1W channel profile. This path does not
   // require a bound actuator node ID; targetNode=0 is a valid broadcast-only

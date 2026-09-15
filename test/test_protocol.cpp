@@ -5228,6 +5228,39 @@ TEST(cozy_temperature_payload)
     ASSERT_EQ(data[5], 0x00);
 }
 
+TEST(cozy_temperature_payload_full_range_le16)
+{
+    struct TemperatureCase
+    {
+        uint16_t tenths;
+        uint8_t low;
+        uint8_t high;
+    };
+    const TemperatureCase kCases[] = {
+        {70, 0x46, 0x00},
+        {255, 0xFF, 0x00},
+        {260, 0x04, 0x01},
+        {280, 0x18, 0x01},
+    };
+
+    for (const TemperatureCase &lCase : kCases)
+    {
+        uint8_t lData[6] = {};
+        ASSERT_EQ(IoHomeCozyPayload::buildTemperature(lData, lCase.tenths), 6);
+        ASSERT_EQ(lData[0], IOHC_COZY_ORIGINATOR);
+        ASSERT_EQ(lData[1], IOHC_COZY_ACEI_WRITE);
+        ASSERT_EQ(lData[2], 0x01);
+        ASSERT_EQ(lData[3], 0x03);
+        ASSERT_EQ(lData[4], lCase.low);
+        ASSERT_EQ(lData[5], lCase.high);
+    }
+
+    uint8_t lData[6] = {};
+    ASSERT_EQ(IoHomeCozyPayload::buildTemperature(lData, 69), 0);
+    ASSERT_EQ(IoHomeCozyPayload::buildTemperature(lData, 281), 0);
+    ASSERT_EQ(IoHomeCozyPayload::buildTemperature(nullptr, 200), 0);
+}
+
 TEST(cozy_mode_payload)
 {
     uint8_t data[13];
@@ -8887,6 +8920,63 @@ static bool queueControllerResponse(IoHomeController &iController,
     iController.radio().testQueueReceivedPacket(lBuffer, lLen);
     iController.loop();
     return true;
+}
+
+TEST(controller_cozy_temperature_preserves_le16_queue_value)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    struct TemperatureCase
+    {
+        uint16_t tenths;
+        uint8_t low;
+        uint8_t high;
+    };
+    const TemperatureCase kCases[] = {
+        {70, 0x46, 0x00},
+        {255, 0xFF, 0x00},
+        {260, 0x04, 0x01},
+        {280, 0x18, 0x01},
+    };
+
+    for (const TemperatureCase &lCase : kCases)
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, lDeviceNodeId, lKey);
+        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey,
+                                            IoHomeCommand::WritePrivate, 0x03,
+                                            lCase.tenths));
+
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+        ASSERT_EQ(lFrame.commandId, IoHomeCommand::WritePrivate);
+        ASSERT_EQ(lFrame.dataLen, 6);
+        ASSERT_EQ(lFrame.data[0], IOHC_COZY_ORIGINATOR);
+        ASSERT_EQ(lFrame.data[1], IOHC_COZY_ACEI_WRITE);
+        ASSERT_EQ(lFrame.data[2], 0x01);
+        ASSERT_EQ(lFrame.data[3], 0x03);
+        ASSERT_EQ(lFrame.data[4], lCase.low);
+        ASSERT_EQ(lFrame.data[5], lCase.high);
+    }
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+    ASSERT_TRUE(!lController.sendCommand(lDeviceNodeId, lKey,
+                                         IoHomeCommand::WritePrivate, 0x03, 69));
+    ASSERT_TRUE(!lController.sendCommand(lDeviceNodeId, lKey,
+                                         IoHomeCommand::WritePrivate, 0x03, 281));
+    ASSERT_TRUE(!lController.sendCommand(lDeviceNodeId, lKey,
+                                         IoHomeCommand::Execute, 50, 280));
 }
 
 static bool retryKeepsStartForQueued2WCommand(IoHomeCommand iCommand, uint8_t iParam)

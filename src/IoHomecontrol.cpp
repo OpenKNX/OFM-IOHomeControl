@@ -4503,11 +4503,18 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 
         if (lAction == "temp" && lHasValue)
         {
-            uint8_t lTemp = static_cast<uint8_t>(lValue);
+            if (lValue < IOHC_COZY_TEMP_MIN_TENTHS || lValue > IOHC_COZY_TEMP_MAX_TENTHS)
+            {
+                logInfoP("Cozy temperature must be %u-%u tenths", IOHC_COZY_TEMP_MIN_TENTHS,
+                         IOHC_COZY_TEMP_MAX_TENTHS);
+                return true;
+            }
+            const uint16_t lTemp = static_cast<uint16_t>(lValue);
             mController.sendCommand(mChannels[lIdx]->getNodeId(),
                                     mChannels[lIdx]->getEncryptionKey(),
                                     IoHomeCommand::WritePrivate, 0x03, lTemp);
-            logInfoP("Cozy: set temperature %d (tenths) on channel %d", lTemp, lIdx + 1);
+            logInfoP("Cozy: set temperature %u (tenths) on channel %d",
+                     static_cast<unsigned>(lTemp), lIdx + 1);
         }
         else if (lAction == "mode" && lHasValue)
         {

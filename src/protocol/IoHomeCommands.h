@@ -565,17 +565,23 @@ constexpr uint8_t IOHC_EMS2_SYNC_WORD[2] = {0x2D, 0xD4};
 #define IOHC_COZY_ORIGINATOR 0x0C
 #define IOHC_COZY_ACEI_READ 0x60  // read/trigger commands (powerOn, midnight)
 #define IOHC_COZY_ACEI_WRITE 0x61 // write commands (temp, mode, presence, window)
+#define IOHC_COZY_TEMP_MIN_TENTHS 70
+#define IOHC_COZY_TEMP_MAX_TENTHS 280
 
 namespace IoHomeCozyPayload
 {
-    inline uint8_t buildTemperature(uint8_t *oData, uint8_t iTempTenths)
+    inline uint8_t buildTemperature(uint8_t *oData, uint16_t iTempTenths)
     {
+        if (oData == nullptr || iTempTenths < IOHC_COZY_TEMP_MIN_TENTHS ||
+            iTempTenths > IOHC_COZY_TEMP_MAX_TENTHS)
+            return 0;
         oData[0] = IOHC_COZY_ORIGINATOR;
         oData[1] = IOHC_COZY_ACEI_WRITE;
         oData[2] = 0x01;
-        oData[3] = 0x03;        // temp set sub-command
-        oData[4] = iTempTenths; // temperature × 10 (70-280 for 7.0-28.0°C)
-        oData[5] = 0x00;
+        oData[3] = 0x03; // temperature set register 0x0103
+        // Atlantic/Thermor setpoint: unsigned 16-bit little-endian tenths.
+        oData[4] = static_cast<uint8_t>(iTempTenths & 0xFF);
+        oData[5] = static_cast<uint8_t>(iTempTenths >> 8);
         return 6;
     }
     inline uint8_t buildMode(uint8_t *oData, uint8_t iMode)
