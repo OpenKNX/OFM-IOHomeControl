@@ -20,7 +20,8 @@ enum class IoHomeCommand : uint8_t
                              // Unknown0E = 0x0E,  // not used — observed in rspaargaren scan list only
                              // Unknown14 = 0x14,  // not used — observed in rspaargaren scan list only
                              // Unknown16 = 0x16,  // not used — observed in rspaargaren scan list only
-                             // Unknown19 = 0x19,  // not used — observed in rspaargaren scan list only
+    SetSensor = 0x19,         // capture-only; no active handler
+    SetSensorAck = 0x1A,
     Identify = 0x1E,         // Authenticated - make device identify itself
 
     // Cozy/Atlantic thermostat control
@@ -37,6 +38,7 @@ enum class IoHomeCommand : uint8_t
     Confirmation = 0x2C,
     ConfirmationACK = 0x2D,   // Device ACKs discovery confirmation (not used — consumed implicitly in reference)
     Discover2ERequest = 0x2E, // 1W learning mode / pairing start
+    Discover2EResponse = 0x2F, // addressed authenticated response; passive diagnosis only
 
     // Key exchange
     SendKey1W = 0x30,               // 1W key transfer (encrypted key + manufacturer + sequence; optional HMAC)
@@ -234,7 +236,7 @@ enum class IoHomeDeviceType : uint8_t
     RollingDoorOpener = 0x08,
     Lock = 0x09,
     Blind = 0x0A,
-    Unknown0B = 0x0B, // observed but unidentified
+    Screen = 0x0B,
     Beacon = 0x0C,
     DualShutter = 0x0D,
     HeatingTempInterface = 0x0E,
@@ -386,6 +388,71 @@ constexpr uint32_t IOHC_FREQUENCIES[IOHC_NUM_FREQUENCIES] = {
 #define IOHC_DISCOVERY_POWER_SAVE_MASK 0x03
 #define IOHC_POWER_SAVE_ALWAYS_ALIVE 0x00
 #define IOHC_POWER_SAVE_LOW_POWER 0x01
+
+struct IoHomeDiscoveryMetadata
+{
+    bool valid = false;
+    uint16_t deviceType = 0;
+    uint8_t subtype = 0;
+    uint8_t manufacturer = 0;
+    bool hasPowerClass = false;
+    bool lowPower = false;
+};
+
+inline IoHomeDiscoveryMetadata decodeDiscoveryMetadata(const uint8_t *iData, uint8_t iDataLen)
+{
+    IoHomeDiscoveryMetadata lResult;
+    if (!iData || iDataLen < 3) return lResult;
+    lResult.valid = true;
+    lResult.deviceType = static_cast<uint16_t>(iData[0]) |
+                         (static_cast<uint16_t>(iData[1] & 0x03) << 8);
+    lResult.subtype = static_cast<uint8_t>((iData[1] >> 2) & 0x3F);
+    lResult.manufacturer = iData[2];
+    if (iDataLen >= IOHC_DISCOVERY_EXTENDED_SIZE)
+    {
+        const uint8_t lPowerSave = iData[IOHC_DISCOVERY_FLAGS_OFFSET] & IOHC_DISCOVERY_POWER_SAVE_MASK;
+        if (lPowerSave == IOHC_POWER_SAVE_ALWAYS_ALIVE || lPowerSave == IOHC_POWER_SAVE_LOW_POWER)
+        {
+            lResult.hasPowerClass = true;
+            lResult.lowPower = lPowerSave == IOHC_POWER_SAVE_LOW_POWER;
+        }
+    }
+    return lResult;
+}
+
+inline const char *ioHomeCommandResultName(uint8_t iCode)
+{
+    switch (iCode)
+    {
+    case 0x00: return "unknown-status-reply"; case 0x01: return "completed-ok";
+    case 0x02: return "no-contact"; case 0x03: return "manually-operated";
+    case 0x04: return "blocked"; case 0x05: return "wrong-system-key";
+    case 0x06: return "priority-level-locked"; case 0x07: return "wrong-position-reached";
+    case 0x08: return "execution-error"; case 0x09: return "not-executed";
+    case 0x0A: return "calibrating"; case 0x0B: return "power-too-high";
+    case 0x0C: return "power-too-low"; case 0x0D: return "lock-position-open";
+    case 0x0E: return "motion-time-too-long"; case 0x0F: return "thermal-protection";
+    case 0x10: return "not-operational"; case 0x11: return "filter-maintenance";
+    case 0x12: return "battery-level"; case 0x13: return "target-modified";
+    case 0x14: return "mode-not-implemented"; case 0x15: return "command-incompatible-with-movement";
+    case 0x16: return "user-action"; case 0x17: return "dead-bolt-error";
+    case 0x18: return "automatic-cycle-engaged"; case 0x19: return "wrong-load";
+    case 0x1A: return "colour-not-reachable"; case 0x1B: return "target-not-reachable";
+    case 0x1C: return "bad-index"; case 0x1D: return "command-overruled";
+    case 0x1E: return "waiting-for-power"; case 0x20: return "node-locked";
+    case 0x21: return "wrong-position"; case 0x22: return "limits-not-set";
+    case 0x23: return "ip-not-set"; case 0x24: return "out-of-range";
+    case 0x38: return "priority-locked-not-executed"; case 0x58: return "invalid-function-index";
+    case 0xDF: return "information"; case 0xE0: return "parameter-limited";
+    case 0xE1: return "limited-by-local-user"; case 0xE2: return "limited-by-user";
+    case 0xE3: return "limited-by-rain"; case 0xE4: return "limited-by-timer";
+    case 0xE5: return "limited-by-scd"; case 0xE6: return "limited-by-ups";
+    case 0xE7: return "limited-by-unknown-device"; case 0xEA: return "limited-by-saac";
+    case 0xEB: return "limited-by-wind"; case 0xEC: return "limited-by-self";
+    case 0xED: return "limited-by-automatic-cycle"; case 0xEE: return "limited-by-emergency";
+    default: return "unknown";
+    }
+}
 
 // 1W repeat transmission (fire-and-forget sends 4x at 40ms intervals)
 #define IOHC_1W_REPEAT_COUNT 3        // 3 additional repeats (4 total transmissions, matches reference)

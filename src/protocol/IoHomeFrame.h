@@ -35,7 +35,8 @@
 #define IOHC_CTRL1_ROUTED 0x40
 #define IOHC_CTRL1_LOW_POWER 0x20
 #define IOHC_CTRL1_ACK 0x10
-#define IOHC_CTRL1_VER_MASK 0x0F // protocol version
+#define IOHC_CTRL1_PRIORITY 0x04
+#define IOHC_CTRL1_VER_MASK 0x03 // protocol version (bits 1:0)
 
 struct IoHomeFrame
 {

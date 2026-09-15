@@ -374,6 +374,7 @@ namespace
         case IoHomeCommand::DiscoverSPERequest:
         case IoHomeCommand::DiscoverSPEResponse:
         case IoHomeCommand::Discover2ERequest:
+        case IoHomeCommand::Discover2EResponse:
         case IoHomeCommand::Confirmation:
         case IoHomeCommand::ConfirmationACK:
         case IoHomeCommand::SendKey1W:
@@ -2262,15 +2263,13 @@ bool IoHomeController::learnPowerClassFromDiscovery(IoHomecontrolChannel *iChann
         return false;
     }
 
-    const uint8_t lPowerSave = iFrame.data[IOHC_DISCOVERY_FLAGS_OFFSET] &
-                               IOHC_DISCOVERY_POWER_SAVE_MASK;
-    if (lPowerSave != IOHC_POWER_SAVE_ALWAYS_ALIVE &&
-        lPowerSave != IOHC_POWER_SAVE_LOW_POWER)
+    const IoHomeDiscoveryMetadata lMetadata = decodeDiscoveryMetadata(iFrame.data, iFrame.dataLen);
+    if (!lMetadata.hasPowerClass)
     {
         return false;
     }
 
-    const bool lLowPower = lPowerSave == IOHC_POWER_SAVE_LOW_POWER;
+    const bool lLowPower = lMetadata.lowPower;
     const bool lChanged = !iChannel->hasLearnedLowPower2W() ||
                           iChannel->isLowPower2W() != lLowPower;
     iChannel->setLowPower2W(lLowPower);
@@ -3461,6 +3460,10 @@ const char *IoHomeController::commandName(IoHomeCommand iCmd)
         return "Private2";
     case IoHomeCommand::Private2Response:
         return "Private2Response";
+    case IoHomeCommand::SetSensor:
+        return "SetSensor";
+    case IoHomeCommand::SetSensorAck:
+        return "SetSensorAck";
     case IoHomeCommand::WritePrivate:
         return "WritePrivate";
     case IoHomeCommand::WritePrivateResponse:
@@ -3481,6 +3484,8 @@ const char *IoHomeController::commandName(IoHomeCommand iCmd)
         return "ConfirmationACK";
     case IoHomeCommand::Discover2ERequest:
         return "Discover2ERequest";
+    case IoHomeCommand::Discover2EResponse:
+        return "Discover2EResponse";
     case IoHomeCommand::SendKey1W:
         return "SendKey1W";
     case IoHomeCommand::KeyInitTransfer:
@@ -4272,8 +4277,7 @@ void IoHomeController::loop()
             }
             else if (mState == ControllerState::PairWaitDiscoveryResponse)
             {
-                if (mRxFrame.commandId == IoHomeCommand::DiscoverResponse ||
-                    mRxFrame.commandId == IoHomeCommand::DiscoverSPEResponse)
+                if (mRxFrame.commandId == IoHomeCommand::DiscoverResponse)
                 {
                     // Discovery is broadcast, but its response is not. Do not
                     // bind this pairing transaction to another controller's
@@ -4292,7 +4296,9 @@ void IoHomeController::loop()
                         mPairKeyExchangeStartTime = 0;
 
                     // Default laberning-style path:
-                    // 0x28 DiscoverRequest -> 0x29/0x2B DiscoverResponse
+                    // Fresh pairing accepts only 0x29; 0x2B belongs to an
+                    // already-keyed SPE roll-call.
+                    // 0x28 DiscoverRequest -> 0x29 DiscoverResponse
                     // -> 0x31 KeyInitTransfer -> 0x3C -> 0x32 -> 0x33.
                     // Experimental branches are only reachable via explicit
                     // diagnostic pairing modes.
@@ -6614,9 +6620,10 @@ void IoHomeController::interpretSetConfig1Result(bool iFinalResponse)
     }
     else if (mRxFrame.commandId == IoHomeCommand::ErrorResponse)
     {
-        logInfoP(iFinalResponse ? "Pairing: device 0x%06X rejected automatic status feedback"
-                                : "Pairing: device 0x%06X does not support automatic status feedback",
-                 mDiscoveredNodeId);
+        const uint8_t lCode = mRxFrame.dataLen > 0 ? mRxFrame.data[0] : 0x00;
+        logInfoP(iFinalResponse ? "Pairing: device 0x%06X rejected automatic status feedback: 0x%02X (%s)"
+                                : "Pairing: device 0x%06X does not support automatic status feedback: 0x%02X (%s)",
+                 mDiscoveredNodeId, static_cast<unsigned>(lCode), ioHomeCommandResultName(lCode));
         recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
                                 "The key was stored, but the actuator rejected optional automatic status feedback.");
     }
@@ -7693,6 +7700,15 @@ void IoHomeController::dispatchRxFrame()
         return;
     }
 
+    if (mRxFrame.commandId == IoHomeCommand::Discover2EResponse)
+    {
+        recordScanFrame(mRxFrame, mRxBuffer, mRxRawLen, mRadio.lastRssi(), mCurrentFreqIdx);
+        updateNodeStats(lSrcNode, mRadio.lastRssi(), mRxFrame.commandId);
+        logInfoP("Discovery: passive addressed 0x2F response from 0x%06X to 0x%06X freq=%d rssi=%ddBm",
+                 lSrcNode, lDestNode, mCurrentFreqIdx, mRadio.lastRssi());
+        return;
+    }
+
     const auto lScheduleStatusPollForDevice = [this](uint32_t iNodeId) -> bool
     {
         IoHomecontrolChannel *lCh = channelForNode(iNodeId);
@@ -7938,13 +7954,18 @@ void IoHomeController::dispatchRxFrame()
             }
             // --- Unused commands (documented for protocol completeness) ---
             case IoHomeCommand::Private2Response:        // 0x0D — response to alternate private command (not used)
+            case IoHomeCommand::SetSensorAck:             // 0x1A — capture-only
             case IoHomeCommand::ConfirmationACK:         // 0x2D — device ACKs discovery confirmation (consumed implicitly)
+            case IoHomeCommand::Discover2EResponse:      // 0x2F — handled passively above
             case IoHomeCommand::KeyTransferConfirmation: // 0x33 — device confirms key storage (not parsed in reference)
             case IoHomeCommand::Unknown46Response:       // 0x47 — undocumented (not used)
             case IoHomeCommand::Unknown4AResponse:       // 0x4B — undocumented (not used)
             case IoHomeCommand::SetConfig1Response:      // 0x70 — handled during pairing post-configuration
             case IoHomeCommand::StatusUpdateResponse:    // 0x72 — we send this, shouldn't receive it
             case IoHomeCommand::ErrorResponse:           // 0xFE — error from device
+                if (mRxFrame.commandId == IoHomeCommand::ErrorResponse && mRxFrame.dataLen > 0)
+                    logInfoP("Device 0x%06X returned error 0x%02X (%s)", lSrcNode,
+                             static_cast<unsigned>(mRxFrame.data[0]), ioHomeCommandResultName(mRxFrame.data[0]));
                 break;
 
             default:

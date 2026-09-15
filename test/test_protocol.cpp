@@ -1981,6 +1981,15 @@ TEST(ctrl1_ack_flag)
     ASSERT_TRUE((parsed.ctrlByte1 & IOHC_CTRL1_ACK) != 0);
 }
 
+TEST(ctrl1_priority_is_not_protocol_version)
+{
+    IoHomeFrame frame;
+    frame.init();
+    frame.ctrlByte1 = static_cast<uint8_t>(IOHC_CTRL1_PRIORITY | 0x02);
+    ASSERT_EQ(frame.ctrlByte1 & IOHC_CTRL1_PRIORITY, 0x04);
+    ASSERT_EQ(frame.ctrlByte1 & IOHC_CTRL1_VER_MASK, 0x02);
+}
+
 TEST(ctrl1_combined_flags)
 {
     // Set multiple CTRL1 flags simultaneously
@@ -2317,7 +2326,7 @@ TEST(device_type_enum_values)
     ASSERT_EQ((uint8_t)IoHomeDeviceType::RollingDoorOpener, 0x08);
     ASSERT_EQ((uint8_t)IoHomeDeviceType::Lock, 0x09);
     ASSERT_EQ((uint8_t)IoHomeDeviceType::Blind, 0x0A);
-    ASSERT_EQ((uint8_t)IoHomeDeviceType::Unknown0B, 0x0B);
+    ASSERT_EQ((uint8_t)IoHomeDeviceType::Screen, 0x0B);
     ASSERT_EQ((uint8_t)IoHomeDeviceType::Beacon, 0x0C);
     ASSERT_EQ((uint8_t)IoHomeDeviceType::DualShutter, 0x0D);
     ASSERT_EQ((uint8_t)IoHomeDeviceType::HeatingTempInterface, 0x0E);
@@ -2349,6 +2358,7 @@ TEST(command_id_enum_values)
     ASSERT_EQ((uint8_t)IoHomeCommand::Confirmation, 0x2C);
     ASSERT_EQ((uint8_t)IoHomeCommand::ConfirmationACK, 0x2D);
     ASSERT_EQ((uint8_t)IoHomeCommand::Discover2ERequest, 0x2E);
+    ASSERT_EQ((uint8_t)IoHomeCommand::Discover2EResponse, 0x2F);
     ASSERT_EQ((uint8_t)IoHomeCommand::KeyInitTransfer, 0x31);
     ASSERT_EQ((uint8_t)IoHomeCommand::KeyTransfer, 0x32);
     ASSERT_EQ((uint8_t)IoHomeCommand::KeyTransferConfirmation, 0x33);
@@ -2729,7 +2739,7 @@ TEST(device_type_complete_enum)
     ASSERT_EQ((uint8_t)IoHomeDeviceType::RollingDoorOpener, 0x08);
     ASSERT_EQ((uint8_t)IoHomeDeviceType::Lock, 0x09);
     ASSERT_EQ((uint8_t)IoHomeDeviceType::Blind, 0x0A);
-    ASSERT_EQ((uint8_t)IoHomeDeviceType::Unknown0B, 0x0B);
+    ASSERT_EQ((uint8_t)IoHomeDeviceType::Screen, 0x0B);
     ASSERT_EQ((uint8_t)IoHomeDeviceType::Beacon, 0x0C);
     ASSERT_EQ((uint8_t)IoHomeDeviceType::DualShutter, 0x0D);
     ASSERT_EQ((uint8_t)IoHomeDeviceType::HeatingTempInterface, 0x0E);
@@ -9333,6 +9343,10 @@ TEST(controller_2w_pairing_correlates_interleaved_frames)
     // A broadcast source, another unicast device, and a response addressed to
     // someone else must not take ownership of this known-target transaction.
     IoHomeFrame lDiscoverResponse;
+    buildDiscoverResponseFrame(lDiscoverResponse, lRemoteNodeId, lDeviceNodeId, true);
+    ASSERT_TRUE(queueControllerResponse(lController, lDiscoverResponse));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitDiscoveryResponse);
+
     buildDiscoverResponseFrame(lDiscoverResponse, lRemoteNodeId, 0);
     ASSERT_TRUE(queueControllerResponse(lController, lDiscoverResponse));
     ASSERT_EQ(lController.state(), ControllerState::PairWaitDiscoveryResponse);

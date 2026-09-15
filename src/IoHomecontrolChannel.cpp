@@ -140,8 +140,8 @@ namespace
             return "lock";
         case IoHomeDeviceType::Blind:
             return "blind";
-        case IoHomeDeviceType::Unknown0B:
-            return "unknown_0b";
+        case IoHomeDeviceType::Screen:
+            return "screen";
         case IoHomeDeviceType::Beacon:
             return "beacon";
         case IoHomeDeviceType::DualShutter:

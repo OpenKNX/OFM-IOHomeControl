@@ -729,22 +729,15 @@ void IoHomecontrol::onDiscoveryResponse(const IoHomeFrame &iFrame)
         lDevice->nodeId = lNodeId;
     }
 
-    if (iFrame.dataLen >= 3)
+    const IoHomeDiscoveryMetadata lMetadata = decodeDiscoveryMetadata(iFrame.data, iFrame.dataLen);
+    if (lMetadata.valid)
     {
-        lDevice->deviceType = static_cast<uint16_t>(iFrame.data[0]) |
-                              (static_cast<uint16_t>(iFrame.data[1] & 0x03) << 8);
-        lDevice->subtype = static_cast<uint8_t>((iFrame.data[1] >> 2) & 0x3F);
-        lDevice->manufacturer = iFrame.data[2];
+        lDevice->deviceType = lMetadata.deviceType;
+        lDevice->subtype = lMetadata.subtype;
+        lDevice->manufacturer = lMetadata.manufacturer;
     }
-    if (iFrame.dataLen >= IOHC_DISCOVERY_EXTENDED_SIZE)
-    {
-        const uint8_t lPowerSave = iFrame.data[IOHC_DISCOVERY_FLAGS_OFFSET] &
-                                   IOHC_DISCOVERY_POWER_SAVE_MASK;
-        if (lPowerSave == IOHC_POWER_SAVE_ALWAYS_ALIVE)
-            lDevice->powerClass = 1;
-        else if (lPowerSave == IOHC_POWER_SAVE_LOW_POWER)
-            lDevice->powerClass = 2;
-    }
+    if (lMetadata.hasPowerClass)
+        lDevice->powerClass = lMetadata.lowPower ? 2 : 1;
 }
 
 void IoHomecontrol::processKeyImportWorkflow()
