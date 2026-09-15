@@ -2383,6 +2383,10 @@ TEST(command_id_enum_values)
     ASSERT_EQ((uint8_t)IoHomeCommand::StatusUpdateResponse, 0x72);
     ASSERT_EQ((uint8_t)IoHomeCommand::Unknown86, 0x86);
     ASSERT_EQ((uint8_t)IoHomeCommand::ErrorResponse, 0xFE);
+    ASSERT_EQ((uint8_t)IoHomeCommand::ObservedF0, 0xF0);
+    ASSERT_EQ((uint8_t)IoHomeCommand::ObservedF1, 0xF1);
+    ASSERT_EQ((uint8_t)IoHomeCommand::ObservedF2, 0xF2);
+    ASSERT_EQ((uint8_t)IoHomeCommand::ObservedF3, 0xF3);
 }
 
 TEST(frame_deserialize_unknown_86_keeps_raw_payload)

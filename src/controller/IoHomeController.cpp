@@ -3551,6 +3551,14 @@ const char *IoHomeController::commandName(IoHomeCommand iCmd)
         return "StatusUpdateResponse";
     case IoHomeCommand::Unknown86:
         return "UNKNOWN_86";
+    case IoHomeCommand::ObservedF0:
+        return "OBSERVED_F0";
+    case IoHomeCommand::ObservedF1:
+        return "OBSERVED_F1";
+    case IoHomeCommand::ObservedF2:
+        return "OBSERVED_F2";
+    case IoHomeCommand::ObservedF3:
+        return "OBSERVED_F3";
     case IoHomeCommand::ErrorResponse:
         return "ErrorResponse";
     default:

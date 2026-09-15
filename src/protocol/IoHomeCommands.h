@@ -113,6 +113,13 @@ enum class IoHomeCommand : uint8_t
     // Unknown96 = 0x96,  // not used
     // Unknown98 = 0x98,  // not used
 
+    // Observed high command range. Public captures do not yet establish
+    // stable semantics, so keep neutral names and no active handlers.
+    ObservedF0 = 0xF0,
+    ObservedF1 = 0xF1,
+    ObservedF2 = 0xF2,
+    ObservedF3 = 0xF3,
+
     // Error
     ErrorResponse = 0xFE
 };
