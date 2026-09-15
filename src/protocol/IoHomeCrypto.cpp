@@ -260,6 +260,8 @@ namespace IoHomeCrypto
         // {n0,n1,n2, n0,n1,n2, n0,n1,n2, n0,n1,n2, n0,n1,n2, n0}
         // This is the iv=remote-node rule used by rspaargaren's ESP32 AES-CFB128 path.
         // Do not pass the actuator/discovered node here for SendKey1W/Add.
+        // The NID is independent input: never infer it from bytes 13..15 of a
+        // Data Matrix serial/wrapped key, because known remotes disprove that shortcut.
         uint8_t lIv[16];
         for (int i = 0; i < 16; i++)
             lIv[i] = iNodeAddress[i % 3];

@@ -96,7 +96,8 @@ uint32_t IoHomeFrame::getDestNodeId() const
 
 uint8_t IoHomeFrame::totalLength() const
 {
-    // ctrl0 + ctrl1 + dest(3) + src(3) + cmd(1) + data + optional hmac
+    // ctrl0 + ctrl1 + dest(3) + src(3) + cmd(1) + data,
+    // plus an optional in-frame HMAC, out-of-length trailer MAC, and raw CRC.
     uint8_t lLen = 9 + dataLen;
     if (hasHmac)
         lLen += IOHC_HMAC_SIZE;
@@ -191,7 +192,8 @@ uint8_t IoHomeFrame::serialize1W(uint8_t *oBuffer, uint8_t iMaxLen) const
 {
     // 1W has its own HMAC/length semantics:
     // - SendKey1W (0x30) is a dedicated 29-byte declared frame:
-    //   9-byte header + encryptedKey[16] + manufacturer + 0x01 + sequence[2].
+    //   9-byte header + serial/wrappedControllerKey[16] + manufacturer +
+    //   0x01 + sequence[2].
     //   A device-profile option may append its six-byte MAC outside CTRL0's
     //   declared length; that is not a normal 1W HMAC.
     // - Normal authenticated 1W commands include the appended HMAC in CTRL0.
@@ -298,8 +300,9 @@ bool IoHomeFrame::deserializeFrame(const uint8_t *iBuffer, uint8_t iLen)
         return false;
 
     const uint8_t lCmd = iBuffer[IOHC_FRAME_MIN_SIZE - 1];
-    // SendKey1W (0x30) may carry a six-byte MAC trailer outside its declared
-    // CTRL0 length. Normal authenticated 1W commands include HMAC in length.
+    // SendKey1W (0x30) may carry a six-byte trailer MAC outside its declared
+    // CTRL0 length. It is not a normal 1W HMAC; authenticated 1W commands
+    // include their HMAC inside the declared length.
     if (lIs1W)
     {
         const bool lSendKeyTrailer = lCmd == static_cast<uint8_t>(IoHomeCommand::SendKey1W) &&

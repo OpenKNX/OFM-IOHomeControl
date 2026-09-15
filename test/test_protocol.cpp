@@ -4591,6 +4591,139 @@ TEST(send_key_1w_parses_optional_trailer_mac)
     ASSERT_MEM_EQ(parsed.trailerMac, buf + len, IOHC_HMAC_SIZE);
 }
 
+TEST(issue36_sendkey_without_trailer_mac_roundtrips_with_crc)
+{
+    using namespace IoHomeGoldenRfCorpus;
+    const RawFrameReference &lReference = kIssue36SendKeyReferences[0];
+
+    ASSERT_EQ(issue36SendKeyReferenceCount, 2);
+    ASSERT_EQ(lReference.declaredLen, 29);
+    ASSERT_EQ(lReference.protocolLen, 29);
+    ASSERT_EQ(lReference.wireLen, 31);
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(deserializeRawWithOptionalCrcForTest(
+        lFrame, lReference.bytes, lReference.wireLen));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x00003F);
+    ASSERT_EQ(lFrame.getSrcNodeId(), 0xABCDEF);
+    ASSERT_EQ(lFrame.dataLen, 20);
+    ASSERT_TRUE(!lFrame.hasHmac);
+    ASSERT_TRUE(!lFrame.hasTrailerMac);
+    ASSERT_TRUE(lFrame.hasCrc);
+    ASSERT_EQ(lFrame.crc, 0x1139);
+    ASSERT_EQ(lFrame.data[16], 0x02);
+    ASSERT_EQ(lFrame.data[17], 0x01);
+    ASSERT_EQ(lFrame.data[18], 0x12);
+    ASSERT_EQ(lFrame.data[19], 0x34);
+
+    uint8_t lEncoded[64] = {};
+    const uint8_t lEncodedLen = lFrame.serializeRawWithCrc(lEncoded, sizeof(lEncoded));
+    ASSERT_EQ(lEncodedLen, lReference.wireLen);
+    ASSERT_MEM_EQ(lEncoded, lReference.bytes, lReference.wireLen);
+}
+
+TEST(issue36_sendkey_out_of_length_trailer_is_not_hmac)
+{
+    using namespace IoHomeGoldenRfCorpus;
+    const RawFrameReference &lReference = kIssue36SendKeyReferences[1];
+    const uint8_t lExpectedTrailer[IOHC_HMAC_SIZE] = {
+        0x19, 0xE8, 0x1E, 0xC4, 0x3D, 0x5E};
+
+    ASSERT_EQ(lReference.declaredLen, 29);
+    ASSERT_EQ(lReference.protocolLen, 35);
+    ASSERT_EQ(lReference.wireLen, 37);
+    ASSERT_EQ((lReference.bytes[0] & IOHC_CTRL0_LEN_MASK) + 1, 29);
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(deserializeRawWithOptionalCrcForTest(
+        lFrame, lReference.bytes, lReference.wireLen));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
+    ASSERT_EQ(lFrame.dataLen, 20);
+    ASSERT_TRUE(!lFrame.hasHmac);
+    ASSERT_TRUE(lFrame.hasTrailerMac);
+    ASSERT_MEM_EQ(lFrame.trailerMac, lExpectedTrailer, sizeof(lExpectedTrailer));
+    ASSERT_TRUE(lFrame.hasCrc);
+    ASSERT_EQ(lFrame.crc, 0xF29B);
+
+    uint8_t lEncoded[64] = {};
+    const uint8_t lEncodedLen = lFrame.serializeRawWithCrc(lEncoded, sizeof(lEncoded));
+    ASSERT_EQ(lEncodedLen, lReference.wireLen);
+    ASSERT_MEM_EQ(lEncoded, lReference.bytes, lReference.wireLen);
+}
+
+TEST(issue36_data_matrix_serial_crypto_vectors)
+{
+    struct Issue36Vector
+    {
+        uint32_t nid;
+        uint8_t serial[16];
+        uint8_t expectedSigningKey[16];
+    };
+
+    static const Issue36Vector kVectors[] = {
+        {0xDDB2FE,
+         {0x6D, 0x7D, 0x4A, 0x14, 0x74, 0x61, 0x51, 0xC4, 0x1E, 0x12, 0xAE, 0xD1, 0xAA, 0xDD, 0xB2, 0xFE},
+         {0x45, 0xAD, 0x08, 0xA2, 0x02, 0x69, 0x71, 0x08, 0x1F, 0x76, 0x03, 0x06, 0x1A, 0x1A, 0x44, 0xA3}},
+        {0x1851E2,
+         {0x86, 0xA2, 0x14, 0x31, 0xC0, 0x43, 0xA3, 0xA3, 0x5E, 0x70, 0x8E, 0xE1, 0x72, 0x18, 0x51, 0xE2},
+         {0x1B, 0xF3, 0xAF, 0x37, 0x9A, 0x73, 0x4A, 0xE6, 0xC9, 0x95, 0xF7, 0x9F, 0x5D, 0xD5, 0x96, 0x6C}},
+        {0xB2FD00,
+         {0x31, 0x26, 0xC4, 0x5B, 0xDF, 0xFF, 0xDE, 0xCD, 0xA4, 0x80, 0x38, 0x10, 0x25, 0xB2, 0xFD, 0x00},
+         {0x65, 0x94, 0x93, 0xF7, 0x91, 0xB1, 0x27, 0x62, 0x12, 0x73, 0xC6, 0x87, 0x1D, 0xCA, 0x0C, 0xFE}},
+        {0x7BDECA,
+         {0x28, 0xF5, 0xB1, 0x38, 0x73, 0xEA, 0x36, 0xF4, 0xED, 0x60, 0xA0, 0x7C, 0xC7, 0x7B, 0xDE, 0xCA},
+         {0x21, 0x7C, 0x5F, 0x42, 0x75, 0xCB, 0xF0, 0xE4, 0xDB, 0xD4, 0x13, 0x53, 0xEA, 0x9A, 0x39, 0xEC}},
+        {0xDDDFBB,
+         {0x65, 0xB6, 0xC8, 0x67, 0x94, 0x43, 0xEF, 0xE0, 0x65, 0xC2, 0xB3, 0xD2, 0xD9, 0xDD, 0xDF, 0xBB},
+         {0x00, 0x11, 0xB9, 0x77, 0x28, 0x94, 0x56, 0xD8, 0x35, 0x6B, 0xE5, 0x19, 0x16, 0x4A, 0x04, 0xC0}},
+        {0x8E38F1,
+         {0x7E, 0xC5, 0xBD, 0x8C, 0x0C, 0x6B, 0xE8, 0x23, 0x1A, 0x75, 0xBF, 0x06, 0xA4, 0x6D, 0xA3, 0x6F},
+         {0x0D, 0xB8, 0x0D, 0x8B, 0x8A, 0xFD, 0x19, 0xFC, 0x1E, 0xF3, 0x17, 0x2D, 0x3F, 0x7A, 0x5E, 0xE7}},
+        {0xD95749,
+         {0x73, 0x68, 0x73, 0x42, 0x41, 0x30, 0x52, 0x45, 0x52, 0x45, 0x54, 0x48, 0x69, 0x30, 0x44, 0x58},
+         {0x9A, 0x61, 0x06, 0x34, 0xF6, 0x7E, 0x99, 0x3C, 0xD8, 0x46, 0x17, 0xC5, 0x1E, 0x02, 0x36, 0xFF}},
+        {0xAED37D,
+         {0x6F, 0x67, 0xA6, 0x71, 0x8D, 0x0A, 0xDF, 0xC5, 0xDA, 0x69, 0x13, 0x10, 0xFE, 0x4A, 0x3D, 0xEF},
+         {0x98, 0x25, 0x49, 0xAA, 0x8E, 0xE6, 0xDC, 0x6E, 0x18, 0xA3, 0xB9, 0x62, 0xCA, 0x45, 0xCE, 0x79}},
+    };
+
+    ASSERT_EQ(sizeof(kVectors) / sizeof(kVectors[0]), 8);
+    for (const Issue36Vector &lVector : kVectors)
+    {
+        const uint8_t lNid[3] = {
+            static_cast<uint8_t>((lVector.nid >> 16) & 0xFF),
+            static_cast<uint8_t>((lVector.nid >> 8) & 0xFF),
+            static_cast<uint8_t>(lVector.nid & 0xFF)};
+        uint8_t lRecoveredKey[16] = {};
+        ASSERT_TRUE(IoHomeCrypto::decrypt1WKey(
+            lVector.serial, IOHC_TRANSFER_KEY, lNid, lRecoveredKey));
+        ASSERT_MEM_EQ(lRecoveredKey, lVector.expectedSigningKey, 16);
+
+        uint8_t lSerialRoundTrip[16] = {};
+        ASSERT_TRUE(IoHomeCrypto::encrypt1WKey(
+            lRecoveredKey, IOHC_TRANSFER_KEY, lNid, lSerialRoundTrip));
+        ASSERT_MEM_EQ(lSerialRoundTrip, lVector.serial, 16);
+    }
+}
+
+TEST(issue36_serial_suffix_is_not_node_id)
+{
+    static const uint8_t kNid[3] = {0x8E, 0x38, 0xF1};
+    static const uint8_t kSerial[16] = {
+        0x7E, 0xC5, 0xBD, 0x8C, 0x0C, 0x6B, 0xE8, 0x23,
+        0x1A, 0x75, 0xBF, 0x06, 0xA4, 0x6D, 0xA3, 0x6F};
+    static const uint8_t kExpectedSigningKey[16] = {
+        0x0D, 0xB8, 0x0D, 0x8B, 0x8A, 0xFD, 0x19, 0xFC,
+        0x1E, 0xF3, 0x17, 0x2D, 0x3F, 0x7A, 0x5E, 0xE7};
+
+    ASSERT_MEM_NEQ(kSerial + 13, kNid, sizeof(kNid));
+    uint8_t lRecoveredKey[16] = {};
+    ASSERT_TRUE(IoHomeCrypto::decrypt1WKey(
+        kSerial, IOHC_TRANSFER_KEY, kNid, lRecoveredKey));
+    ASSERT_MEM_EQ(lRecoveredKey, kExpectedSigningKey, sizeof(kExpectedSigningKey));
+}
+
 TEST(serializer_boundary_2w_challenge_response_hmac_as_data)
 {
     // 2W ChallengeResponse (0x3D) must carry the HMAC bytes as ordinary data.
@@ -4699,7 +4832,8 @@ TEST(serializer_boundary_1w_execute_hmac_declared_length)
 TEST(serializer_boundary_sendkey1w_unauthenticated_29)
 {
     // SendKey1W (0x30) is the dedicated Add/SendKey frame: 9-byte header +
-    // encryptedKey[16] + manufacturer + 0x01 + sequence[2]. No HMAC is appended.
+    // serial/wrappedControllerKey[16] + manufacturer + 0x01 + sequence[2].
+    // No normal in-frame 1W HMAC is appended.
     IoHomeFrame frame;
     frame.init();
     frame.set1WMode();
@@ -6856,7 +6990,8 @@ TEST(aes_consistency_across_multiple_calls)
 TEST(integration_1w_key_transfer_flow)
 {
     // Full 1W key-transfer frame simulation:
-    //   SendKey1W (0x30) carries encryptedKey[16] + manufacturer + 0x01 + sequence[2].
+    //   SendKey1W (0x30) carries serial/wrappedControllerKey[16] +
+    //   manufacturer + 0x01 + sequence[2].
     //   It is unauthenticated and serializes to exactly 29 bytes.
     //   The key-encryption IV is based on the remote/controller source node.
 

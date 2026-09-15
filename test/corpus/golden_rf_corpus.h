@@ -70,6 +70,23 @@ struct MaskedFrameReference
     uint8_t wireLen;
 };
 
+struct RawFrameReference
+{
+    const char *id;
+    const char *scenario;
+    const char *provenance;
+    const uint8_t *bytes;
+    uint8_t wireLen;
+    IoHomeCommand command;
+    uint32_t source;
+    uint32_t destination;
+    uint8_t declaredLen;
+    uint8_t protocolLen;
+    bool hasHmac;
+    bool hasTrailerMac;
+    uint16_t crc;
+};
+
 struct OneWayEnrollmentReference
 {
     const char *id;
@@ -108,6 +125,38 @@ static const uint8_t kSendKeyWithMac[] = {
     0x84, 0x26, 0xCE, 0x7C, 0x12, 0x51, 0xB8, 0xE0,
     0x01, 0x01, 0x1A, 0x2B,
     0x2D, 0x49, 0x8F, 0xBF, 0x1F, 0x7C,
+};
+
+// Velocet/iown-homecontrol Issue #36 documentation/reference vectors. The
+// displayed source NID ABCDEF is a placeholder, so neither entry is classified
+// as a raw OTA capture. They pin the corrected 29-byte MAC-less form and the
+// legacy out-of-declared-length trailer form respectively.
+static const uint8_t kIssue36SendKeyNoTrailerReference[] = {
+    0xFC, 0x00, 0x00, 0x00, 0x3F, 0xAB, 0xCD, 0xEF, 0x30,
+    0x7E, 0x60, 0x49, 0x1F, 0x97, 0x6A, 0xDF, 0x65,
+    0x3D, 0xB0, 0xED, 0x78, 0x5E, 0x49, 0xA2, 0x01,
+    0x02, 0x01, 0x12, 0x34,
+    0x39, 0x11,
+};
+
+static const uint8_t kIssue36SendKeyTrailerReference[] = {
+    0xFC, 0x00, 0x00, 0x00, 0x3F, 0xAB, 0xCD, 0xEF, 0x30,
+    0x7E, 0x60, 0x49, 0x1F, 0x97, 0x6A, 0xDF, 0x65,
+    0x3D, 0xB0, 0xED, 0x78, 0x5E, 0x49, 0xA2, 0x01,
+    0x02, 0x01, 0x12, 0x34,
+    0x19, 0xE8, 0x1E, 0xC4, 0x3D, 0x5E,
+    0x9B, 0xF2,
+};
+
+static const RawFrameReference kIssue36SendKeyReferences[] = {
+    {"issue36_sendkey_no_trailer_reference", "issue36_sendkey_documentation",
+     "Velocet/iown-homecontrol Issue #36 documentation/reference vector; corrected MAC-less 0x30 example; ABCDEF is a placeholder source NID, not a raw OTA capture",
+     kIssue36SendKeyNoTrailerReference, sizeof(kIssue36SendKeyNoTrailerReference),
+     IoHomeCommand::SendKey1W, 0xABCDEF, 0x00003F, 29, 29, false, false, 0x1139},
+    {"issue36_sendkey_trailer_reference", "issue36_sendkey_documentation",
+     "Velocet/iown-homecontrol Issue #36 legacy documentation/reference example; validates out-of-declared-length trailer framing only, not that the trailer is mandatory",
+     kIssue36SendKeyTrailerReference, sizeof(kIssue36SendKeyTrailerReference),
+     IoHomeCommand::SendKey1W, 0xABCDEF, 0x00003F, 29, 35, false, true, 0xF29B},
 };
 
 // Public KLI-compatible 0x30 wire shape. This is a source-derived regression
@@ -328,6 +377,8 @@ static const char *const kKlr300PairingSearchSequence[] = {
 };
 
 static constexpr uint8_t frameCount = sizeof(kFrames) / sizeof(kFrames[0]);
+static constexpr uint8_t issue36SendKeyReferenceCount =
+    sizeof(kIssue36SendKeyReferences) / sizeof(kIssue36SendKeyReferences[0]);
 static constexpr uint8_t pairingWaitInjectionCount = sizeof(kPairingWaitInjections) / sizeof(kPairingWaitInjections[0]);
 static constexpr uint8_t scenarioCount = sizeof(kScenarios) / sizeof(kScenarios[0]);
 static constexpr uint8_t klr300PairingSearchSequenceCount =

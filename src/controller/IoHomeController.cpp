@@ -170,9 +170,14 @@ namespace
         if (!iEncryptedKey)
             return false;
 
-        // Reference-compatible 0x30 Add/SendKey frame payload:
-        // encryptedKey[16] + manufacturer + 0x01 + sequence[2].
-        // This command is intentionally unauthenticated: no appended 1W HMAC.
+        // 0x30 payload:
+        // serial/wrappedControllerKey[16] + manufacturer + 0x01 + sequence[2].
+        // The 16-byte value is the controller signing key wrapped with the
+        // public 1W transfer key using the repeated controller NID as IV. On
+        // some physical remotes it is also printed as the Data Matrix serial.
+        // Never infer the controller NID from bytes 13..15: known remotes exist
+        // both with and without that coincidental serial suffix.
+        // The normal command is unauthenticated: no in-frame 1W HMAC.
         memcpy(oFrame.data, iEncryptedKey, 16);
         oFrame.data[16] = iManufacturer;
         oFrame.data[17] = 0x01;
@@ -3125,9 +3130,11 @@ uint32_t IoHomeController::oneWayKeyReceiveCapturedNode() const
 
 void IoHomeController::handleOneWayKeyReceiveFrame()
 {
-    // Incoming SendKey1W (0x30) carries the originating remote's key encrypted
-    // with the well-known transfer key, keyed by the remote's own node address:
-    //   data = encryptedKey[16] + manufacturer + 0x01 + sequence[2].
+    // Incoming SendKey1W (0x30) carries the originating remote's serial/wrapped
+    // controller signing key. It is wrapped with the public transfer key using
+    // the independently received source NID as IV:
+    //   data = serial/wrappedControllerKey[16] + manufacturer + 0x01 + sequence[2].
+    // Do not derive the NID from the last three bytes of the 16-byte field.
     if ((mRxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) == 0 ||
         mRxFrame.commandId != IoHomeCommand::SendKey1W ||
         mRxFrame.dataLen != 20 || mRxFrame.data[17] != 0x01)
@@ -7655,7 +7662,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         if (!lProfile || !lProfile->hasOneWayControllerIdentity())
             return false;
         // 1W key transfer: 1W mode, 20-byte payload
-        // Bytes 0-15: encrypted key, byte 16: manufacturer, byte 17: controller marker, bytes 18-19: sequence
+        // Bytes 0-15: serial/wrapped controller key, byte 16: manufacturer,
+        // byte 17: controller marker, bytes 18-19: sequence.
         mTxFrame.set1WMode();
         mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END); // standalone 1W: START+END (per rspaargaren)
 

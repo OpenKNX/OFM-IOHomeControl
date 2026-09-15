@@ -41,7 +41,13 @@ enum class IoHomeCommand : uint8_t
     Discover2EResponse = 0x2F, // addressed authenticated response; passive diagnosis only
 
     // Key exchange
-    SendKey1W = 0x30,               // 1W key transfer (encrypted key + manufacturer + sequence; optional HMAC)
+    // 1W controller-key enrollment / serial transfer.
+    // Declared payload: serial/wrappedControllerKey[16] + manufacturer +
+    // 0x01 + sequence[2]. The normal 29-byte frame has no in-frame 1W HMAC.
+    // Some reference profiles append an optional six-byte trailer MAC outside
+    // the CTRL0-declared length; it is not the normal HMAC used by authenticated
+    // 1W commands such as 0x00, 0x01, 0x2E and 0x39.
+    SendKey1W = 0x30,
     KeyInitTransfer = 0x31,         // 2W: ask challenge
     KeyTransfer = 0x32,             // 2W: send encrypted system key
     KeyTransferConfirmation = 0x33, // Device confirms key storage

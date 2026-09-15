@@ -236,7 +236,7 @@ Das 1W-Anlernen ist hersteller- und gerätefamilienabhängig. Für ein generisch
 
 Manche 1W-Aktoren akzeptieren ausschließlich Fernbedienungen, die zuvor über den herstellerseitigen Kopiervorgang angelernt wurden. Eine vom Modul selbst erzeugte 1W-Identität wird von solchen Aktoren verworfen, auch wenn der Funkrahmen formal korrekt aufgebaut ist. Für diesen Fall kann das Modul eine vorhandene Original-Fernbedienung klonen, anstatt sich als neues Gerät anzulernen.
 
-Beim Kopiervorgang sendet die Original-Fernbedienung ihren Schlüssel per Funk in einem `SendKey1W`-Rahmen (`0x30`). Dieser Schlüssel ist mit dem öffentlich bekannten io-homecontrol-Übertragungsschlüssel verschlüsselt. Das Modul empfängt diesen Rahmen, entschlüsselt ihn und übernimmt die Adresse, den Schlüssel und den Hersteller der Original-Fernbedienung in das 1W-Profil des Kanals. Anschließend sendet das Modul als exakte Kopie der Original-Fernbedienung, sodass der Aktor die Befehle annimmt.
+Beim Kopiervorgang sendet die Original-Fernbedienung ihre 16-Byte-Seriennummer beziehungsweise den verpackten Controller-Signaturschlüssel in einem `SendKey1W`-Rahmen (`0x30`). Der Schlüssel ist mit dem öffentlich bekannten io-homecontrol-Übertragungsschlüssel und der Controller-Node-ID als IV verpackt. Node-ID und Seriennummer sind unabhängige Werte; die Node-ID darf nicht aus den letzten drei Bytes der Seriennummer abgeleitet werden. Das Modul übernimmt die Quelladresse des Funkrahmens separat, entschlüsselt den Schlüssel und speichert Adresse, Schlüssel und Hersteller im 1W-Profil des Kanals.
 
 Ablauf:
 
@@ -254,7 +254,7 @@ Reagiert der Aktor nach einem erfolgreichen Klonen trotzdem nicht auf Befehle, l
 1. Den KUX, Antrieb oder das Fenster gemäß Herstelleranleitung in das physische PROG-/Zuordnungsfenster versetzen.
 2. Im wirksamen 1W-Profil den Controller-Hersteller **VELUX** und als ACEI normalerweise `0x61` wählen.
 3. Den Parameter **1W Anmeldeabschluss** auf **Automatisch** belassen. Das Modul sendet dann bei VELUX vier `0x30`-Broadcasts mit derselben logischen Sequenz und danach STOP (`0xD200`) sowie RUNTER/DOWN/GESCHLOSSEN (`0xC800`) an `0x00003F`. STOP und RUNTER erhalten jeweils eine neue Sequenz.
-4. Den MAC-Anhang nur aktivieren, wenn der Aktor oder eine Aufnahme der Originalfernbedienung ausdrücklich die 35-Byte-Form zeigt; üblich ist die 29-Byte-Form ohne Anhang.
+4. Den Trailer-MAC nur aktivieren, wenn der Aktor oder eine Aufnahme der Originalfernbedienung ausdrücklich die 35-Byte-Form zeigt; üblich ist die 29-Byte-Form ohne Anhang und ohne normalen 1W-HMAC. Die sechs Bytes liegen außerhalb der in CTRL0 deklarierten Länge.
 5. Die physische Bestätigung des Ziels abwarten und anschließend AUF, STOPP und AB testen. Nach einem Neustart erneut testen, damit Schlüssel und Sequenzreserve geprüft sind.
 
 Falls keine Bestätigung erfolgt, `iohcNN 1wctrl status` und `iohc pairdiag status` prüfen. Relevant sind Profilkanal, Controller-Quelle und -Hersteller, Broadcast-Typ, ACEI, MAC-Variante, aufgelöster Anmeldeabschluss sowie die Phasen REMOVE, ADD, STOP und DOWN mit Ziel, Sequenz, Zeit und TX-Ergebnis. Schlüsselmaterial wird nicht ausgegeben. Da 1W keine Bestätigung sendet, beweist ein erfolgreiches TX-Protokoll allein noch kein angenommenes Pairing; bei der Fehlersuche ist eine zweite Empfangseinheit hilfreich.
