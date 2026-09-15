@@ -395,10 +395,16 @@ constexpr uint32_t IOHC_FREQUENCIES[IOHC_NUM_FREQUENCIES] = {
 #define IOHC_PREAMBLE_SHORT 8         // symbols (bytes), for continuation frames
 #define IOHC_NAME_MAX_SIZE 16   // max name payload bytes (per nicolas5000: CMD_PARAM_NAME_MAXSIZE/2)
 
-// DiscoverResponse / DiscoverSPEResponse extended metadata. The Multi
-// Information Byte at data[6] reports POWER_SAVE in bits 1:0.
+// DiscoverResponse / DiscoverSPEResponse payload layout. Bytes 0-1 contain
+// device type/subtype, bytes 2-4 the backbone address, data[5] the
+// manufacturer, data[6] the Multi Information Byte, and data[7-8] a timestamp.
+#define IOHC_DISCOVERY_METADATA_SIZE 2
+#define IOHC_DISCOVERY_BACKBONE_OFFSET 2
+#define IOHC_DISCOVERY_MANUFACTURER_OFFSET 5
 #define IOHC_DISCOVERY_FLAGS_OFFSET 6
-#define IOHC_DISCOVERY_EXTENDED_SIZE 7
+#define IOHC_DISCOVERY_EXTENDED_SIZE (IOHC_DISCOVERY_FLAGS_OFFSET + 1)
+#define IOHC_DISCOVERY_TIMESTAMP_OFFSET 7
+#define IOHC_DISCOVERY_FULL_SIZE 9
 #define IOHC_DISCOVERY_POWER_SAVE_MASK 0x03
 #define IOHC_POWER_SAVE_ALWAYS_ALIVE 0x00
 #define IOHC_POWER_SAVE_LOW_POWER 0x01
@@ -416,13 +422,14 @@ struct IoHomeDiscoveryMetadata
 inline IoHomeDiscoveryMetadata decodeDiscoveryMetadata(const uint8_t *iData, uint8_t iDataLen)
 {
     IoHomeDiscoveryMetadata lResult;
-    if (!iData || iDataLen < 3) return lResult;
+    if (!iData || iDataLen < IOHC_DISCOVERY_METADATA_SIZE) return lResult;
     lResult.valid = true;
     lResult.deviceType = static_cast<uint16_t>(iData[0]) |
                          (static_cast<uint16_t>(iData[1] & 0x03) << 8);
     lResult.subtype = static_cast<uint8_t>((iData[1] >> 2) & 0x3F);
-    lResult.manufacturer = iData[2];
-    if (iDataLen >= IOHC_DISCOVERY_EXTENDED_SIZE)
+    if (iDataLen > IOHC_DISCOVERY_MANUFACTURER_OFFSET)
+        lResult.manufacturer = iData[IOHC_DISCOVERY_MANUFACTURER_OFFSET];
+    if (iDataLen > IOHC_DISCOVERY_FLAGS_OFFSET)
     {
         const uint8_t lPowerSave = iData[IOHC_DISCOVERY_FLAGS_OFFSET] & IOHC_DISCOVERY_POWER_SAVE_MASK;
         if (lPowerSave == IOHC_POWER_SAVE_ALWAYS_ALIVE || lPowerSave == IOHC_POWER_SAVE_LOW_POWER)

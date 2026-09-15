@@ -2278,11 +2278,10 @@ TEST(discovery_response_frame)
     frame.setSrcNode(0x485B37);  // discovered device
     frame.setDestNode(0x1A380B); // our node
     frame.commandId = IoHomeCommand::DiscoverResponse;
-    // Response data may contain device type info
+    // The first two payload bytes contain packed device type/subtype metadata.
     frame.data[0] = 0x02; // device type: roller shutter
     frame.data[1] = 0x00;
-    frame.data[2] = 0x02; // manufacturer: Somfy
-    frame.dataLen = 3;
+    frame.dataLen = 2;
     frame.hasHmac = false;
 
     uint8_t buf[32];
@@ -2294,6 +2293,30 @@ TEST(discovery_response_frame)
     ASSERT_EQ(parsed.getSrcNodeId(), 0x485B37);
     ASSERT_EQ(parsed.getDestNodeId(), 0x1A380B);
     ASSERT_TRUE(!parsed.hasHmac); // discovery has no HMAC
+}
+
+TEST(discovery_response_metadata_uses_full_layout_offsets)
+{
+    // Real VELUX 0x29 layout: type/subtype, backbone address, manufacturer,
+    // Multi Information Byte, timestamp. The backbone's first byte must not
+    // be mistaken for the manufacturer.
+    const uint8_t lData[] = {
+        0x00, 0x80, 0x00, 0x00, 0x00, 0x01, 0xDD, 0xFF, 0xFF};
+
+    const IoHomeDiscoveryMetadata lMetadata =
+        decodeDiscoveryMetadata(lData, sizeof(lData));
+
+    ASSERT_TRUE(lMetadata.valid);
+    ASSERT_EQ(lMetadata.manufacturer,
+              static_cast<uint8_t>(IoHomeManufacturer::Velux));
+    ASSERT_TRUE(lMetadata.hasPowerClass);
+    ASSERT_TRUE(lMetadata.lowPower);
+
+    const IoHomeDiscoveryMetadata lTypeOnly =
+        decodeDiscoveryMetadata(lData, IOHC_DISCOVERY_METADATA_SIZE);
+    ASSERT_TRUE(lTypeOnly.valid);
+    ASSERT_EQ(lTypeOnly.manufacturer, 0);
+    ASSERT_TRUE(!lTypeOnly.hasPowerClass);
 }
 
 TEST(discovery_spe_response_frame)
