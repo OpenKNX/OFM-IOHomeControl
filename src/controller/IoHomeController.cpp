@@ -26,6 +26,12 @@ static void delay(unsigned long) {}
 
 namespace
 {
+    uint8_t speDiscoveryFrequencyIndex(uint8_t iOrder)
+    {
+        static constexpr uint8_t kOrder[IOHC_NUM_FREQUENCIES] = {0, 2, 1};
+        return kOrder[iOrder % IOHC_NUM_FREQUENCIES]; // CH2, CH1, CH3
+    }
+
     constexpr uint8_t kPair1WFreqIdx = 1;
     constexpr uint32_t kNormal2WTxFreqHz = IOHC_FREQ_2;
     constexpr uint8_t kUnknownIohcChannel = 0;
@@ -6734,7 +6740,14 @@ void IoHomeController::processDiscovery()
                                                     : IoHomeCommand::DiscoverRequest;
         const TwoWayDiscoveryFrameOptions lDiscoveryOptions =
             resolveTwoWayDiscoveryOptions(lRequestedCommand, mDiagnosticDiscoverySettings);
-        if (!buildTwoWayDiscoveryFrame(mTxFrame, mOwnNodeId, lDiscoveryOptions, mSystemKey))
+        TwoWayDiscoveryFrameOptions lEffectiveOptions = lDiscoveryOptions;
+        if (mDiscoverySPE && mDiscoverySweep == 1)
+        {
+            lEffectiveOptions.lowPower = false;
+            lEffectiveOptions.ackCapable = false;
+            lEffectiveOptions.preamble = IOHC_PREAMBLE_NORMAL_START;
+        }
+        if (!buildTwoWayDiscoveryFrame(mTxFrame, mOwnNodeId, lEffectiveOptions, mSystemKey))
         {
             mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
             mDiscoveryAltFrame = false;
@@ -6743,8 +6756,9 @@ void IoHomeController::processDiscovery()
             return;
         }
 
-        const uint32_t lDiscoveryFreq = IOHC_FREQUENCIES[mPairingFreqIdx];
-        const uint16_t lDiscoveryPreamble = lDiscoveryOptions.preamble;
+        const uint8_t lTxFreqIdx = mDiscoverySPE ? speDiscoveryFrequencyIndex(mPairingFreqIdx) : mPairingFreqIdx;
+        const uint32_t lDiscoveryFreq = IOHC_FREQUENCIES[lTxFreqIdx];
+        const uint16_t lDiscoveryPreamble = lEffectiveOptions.preamble;
 #if defined(RADIO_SX1262)
         RadioError lPrepErr = RadioError::None;
         if (mDiscoverySendPhase == DiscoverySendPhase::SetFrequency)
@@ -6882,6 +6896,15 @@ void IoHomeController::processDiscovery()
             return;
         }
 
+        if (mDiscoverySPE)
+        {
+            const uint8_t lRequestFreqIdx = speDiscoveryFrequencyIndex(mPairingFreqIdx);
+            if (mDiscoverySweep == 0)
+                serviceBackgroundRxScan();
+            else
+                serviceBroadcastResponseScan(lRequestFreqIdx);
+        }
+
         const unsigned long lListenElapsedMs = static_cast<unsigned long>(millis() - mStateTimer);
         // Gate hopping: if a frame is currently arriving (preamble detected or
         // sync word matched), extend the listen window by a short grace period
@@ -6891,7 +6914,8 @@ void IoHomeController::processDiscovery()
         if (lListenElapsedMs > lListenLimitMs)
         {
             const bool lMoreFreqs = (mPairingFreqIdx + 1 < IOHC_NUM_FREQUENCIES);
-            const bool lMoreSweeps = (mDiscoverySweep + 1 < IOHC_DISCOVERY_MAX_SWEEPS);
+            const uint8_t lSweepCount = mDiscoverySPE ? 2U : IOHC_DISCOVERY_MAX_SWEEPS;
+            const bool lMoreSweeps = (mDiscoverySweep + 1 < lSweepCount);
             logDiscoveryTimingTrace((lMoreFreqs || lMoreSweeps) ? "next" : "done", lListenElapsedMs);
             // Next frequency, next sweep, or done
             mPairingFreqIdx++;

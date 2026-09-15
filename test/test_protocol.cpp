@@ -8015,6 +8015,41 @@ TEST(controller_spe_discovery_sends_single_2a_broadcast)
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
 }
 
+TEST(controller_spe_discovery_scans_both_power_classes_on_all_channels)
+{
+    const uint8_t lKey[16] = {1};
+    const uint32_t lExpected[] = {IOHC_FREQ_2, IOHC_FREQ_1, IOHC_FREQ_3,
+                                  IOHC_FREQ_2, IOHC_FREQ_1, IOHC_FREQ_3};
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(0x9F0071);
+    lController.setSystemKey(lKey);
+    lController.init();
+    lController.startDiscovery(true);
+    for (uint8_t i = 0; i < 6; i++)
+    {
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        IoHomeFrame lFrame;
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(!lPacket.empty());
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lController.radio().testCurrentFrequency(), lExpected[i]);
+        ASSERT_EQ(lFrame.ctrlByte1, i < 3 ? static_cast<uint8_t>(IOHC_CTRL1_ACK | IOHC_CTRL1_LOW_POWER) : 0);
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), i < 3 ? IOHC_PREAMBLE_LONG : IOHC_PREAMBLE_NORMAL_START);
+        if (i + 1 < 6)
+        {
+            ioHomeTestAdvanceMillis(IOHC_DISCOVERY_LISTEN_MS + 1);
+            ioHomeTestAdvanceMicros((IOHC_DISCOVERY_LISTEN_MS + 1) * 1000UL);
+            lController.loop();
+            ASSERT_EQ(lController.state(), ControllerState::DiscoverySending);
+        }
+    }
+}
+
 TEST(controller_spe_discovery_preamble_override_keeps_klr300_ab_test_available)
 {
     const uint8_t lKey[16] = {1};
