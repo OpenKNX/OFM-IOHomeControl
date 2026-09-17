@@ -1253,6 +1253,27 @@ bool IoHomeController::buildTwoWayDiscoveryFrame(
     return ::build2WDiscoveryFrame(oFrame, iSrcNodeId, iOptions, iSystemKey, iChallenge);
 }
 
+bool IoHomeController::buildTwoWayDiscoveryConfirmationFrame(
+    IoHomeFrame &oFrame, uint32_t iSrcNodeId, uint32_t iDestNodeId,
+    bool iLowPower, PairingDiscoverConfirmMode iMode)
+{
+    if (iMode == PairingDiscoverConfirmMode::Skip)
+        return false;
+
+    oFrame.init();
+    oFrame.setStart2W();
+    oFrame.setLowPower(iLowPower);
+    // Captured low-power receivers use CTRL1=0x20 even in SendWithAck mode.
+    // Always-alive receivers can explicitly request ACK with CTRL1=0x10.
+    oFrame.setAckCapable(!iLowPower && iMode == PairingDiscoverConfirmMode::SendWithAck);
+    oFrame.setSrcNode(iSrcNodeId);
+    oFrame.setDestNode(iDestNodeId);
+    oFrame.commandId = IoHomeCommand::Confirmation;
+    oFrame.dataLen = 0;
+    oFrame.hasHmac = false;
+    return true;
+}
+
 bool IoHomeController::buildTwoWayPrivateProbePayload(
     uint8_t *oData, uint8_t &oLen, PrivateProbeShape iShape,
     uint8_t iFunctionId, uint8_t iSelectorOrBlock)
@@ -2461,6 +2482,9 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mPairingKnownNodeId = iKnownNodeId & 0x00FFFFFF;
     mPairKeyExchangeAttempts = 0;
     mPairKeyExchangeStartTime = 0;
+    mPairDiscoverConfirmAttempts = 0;
+    mPairDiscoverConfirmMode = PairingDiscoverConfirmMode::Send;
+    mPairKeyInitDelayMs = IOHC_PAIR_KEY_INIT_DELAY_DEFAULT_MS;
     mTx1WRepeatRemaining = 0;
     mTx1WRepeatTimer = 0;
     mPairing1WAddDestinationIndex = 0;
@@ -2470,6 +2494,14 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mPairing1WDownStartedAt = 0;
 
     IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(iChannelIndex) : nullptr;
+    if (lCh)
+    {
+        mPairDiscoverConfirmMode = lCh->getConfigured2WDiscoverConfirmMode();
+        mPairKeyInitDelayMs = lCh->getConfigured2WKeyInitDelay();
+    }
+    if (mPairing2WMode == Pairing2WMode::DiscoveryConfirmation &&
+        mPairDiscoverConfirmMode == PairingDiscoverConfirmMode::Skip)
+        mPairDiscoverConfirmMode = PairingDiscoverConfirmMode::Send;
     if (lCh && lCh->is1W())
     {
         // A 1W remote can only build the authenticated 0x2E/0x30/0x39 frames
@@ -2600,6 +2632,9 @@ bool IoHomeController::startPairingExperimental(uint8_t iChannelIndex, uint32_t 
     if (lOk)
     {
         mPairing2WMode = iMode;
+        if (iMode == Pairing2WMode::DiscoveryConfirmation &&
+            mPairDiscoverConfirmMode == PairingDiscoverConfirmMode::Skip)
+            mPairDiscoverConfirmMode = PairingDiscoverConfirmMode::Send;
         logInfoP("Pairing: experimental 2W mode enabled: %u",
                  static_cast<unsigned>(mPairing2WMode));
     }
@@ -2882,12 +2917,14 @@ void IoHomeController::completePairingTelemetry(PairingOutcome iOutcome)
     mPairingTelemetry.keyExchangeAttempts = mPairKeyExchangeAttempts;
     if (iOutcome != PairingOutcome::Success && iOutcome != PairingOutcome::OneWayEnrollmentTransmitted)
         mPairingTelemetry.diagnostic = iOutcome;
-    logInfoP("Pairing outcome: %s channel=%u peer=0x%06X retries=%u rejected=%u",
+    logInfoP("Pairing outcome: %s channel=%u peer=0x%06X retries=%u rejected=%u discoverConfirm=%u attempts=%u",
              pairingOutcomeName(iOutcome),
              static_cast<unsigned>(mPairingTelemetry.channel + 1),
              mPairingTelemetry.peerNodeId,
              static_cast<unsigned>(mPairingTelemetry.keyExchangeAttempts),
-             static_cast<unsigned>(mPairingTelemetry.rejectedFrames));
+             static_cast<unsigned>(mPairingTelemetry.rejectedFrames),
+             static_cast<unsigned>(mPairingTelemetry.discoverConfirmResult),
+             static_cast<unsigned>(mPairingTelemetry.discoverConfirmAttempts));
 }
 
 void IoHomeController::startDiscovery(bool iEncrypted)
@@ -3631,6 +3668,8 @@ const char *IoHomeController::stateName(ControllerState iState)
         return "PairSendDiscoveryConfirmation";
     case ControllerState::PairWaitDiscoveryConfirmationAck:
         return "PairWaitDiscoveryConfirmationAck";
+    case ControllerState::PairWaitKeyInitDelay:
+        return "PairWaitKeyInitDelay";
     case ControllerState::PairSendLaunchKeyTransfer:
         return "PairSendLaunchKeyTransfer";
     case ControllerState::PairWaitLaunchKeyTransfer:
@@ -4341,13 +4380,12 @@ void IoHomeController::loop()
                         mPairKeyExchangeAttempts = 0;
                         mPairKeyExchangeStartTime = 0;
 
-                    // Default laberning-style path:
+                    // Capture-backed normal path:
                     // Fresh pairing accepts only 0x29; 0x2B belongs to an
                     // already-keyed SPE roll-call.
                     // 0x28 DiscoverRequest -> 0x29 DiscoverResponse
+                    // -> 0x2C Confirmation -> optional 0x2D
                     // -> 0x31 KeyInitTransfer -> 0x3C -> 0x32 -> 0x33.
-                    // Experimental branches are only reachable via explicit
-                    // diagnostic pairing modes.
                         switch (mPairing2WMode)
                         {
                         case Pairing2WMode::DiscoveryConfirmation:
@@ -4364,7 +4402,15 @@ void IoHomeController::loop()
 
                         case Pairing2WMode::Normal:
                         default:
-                            mState = ControllerState::PairSendKeyInit;
+                            if (mPairDiscoverConfirmMode == PairingDiscoverConfirmMode::Skip)
+                            {
+                                mPairingTelemetry.discoverConfirmResult = PairingTelemetry::DiscoverConfirmResult::Skipped;
+                                mState = ControllerState::PairSendKeyInit;
+                            }
+                            else
+                            {
+                                mState = ControllerState::PairSendDiscoveryConfirmation;
+                            }
                             break;
                         }
                     }
@@ -4376,7 +4422,14 @@ void IoHomeController::loop()
                     mRxFrame.getSrcNodeId() == mDiscoveredNodeId &&
                     mRxFrame.getDestNodeId() == mOwnNodeId)
                 {
-                    mState = ControllerState::PairSendLaunchKeyTransfer;
+                    beginPairKeyInitDelay(PairingTelemetry::DiscoverConfirmResult::Acknowledged);
+                }
+                else if (mRxFrame.commandId == IoHomeCommand::ErrorResponse &&
+                         mRxFrame.getSrcNodeId() == mDiscoveredNodeId &&
+                         mRxFrame.getDestNodeId() == mOwnNodeId)
+                {
+                    logDebugP("Pairing: device 0x%06X rejected discovery confirmation; continuing with key-init", mDiscoveredNodeId);
+                    beginPairKeyInitDelay(PairingTelemetry::DiscoverConfirmResult::ErrorResponse);
                 }
             }
             else if (mState == ControllerState::PairWaitLaunchKeyTransfer)
@@ -4614,6 +4667,9 @@ void IoHomeController::loop()
         break;
     case ControllerState::PairWaitDiscoveryConfirmationAck:
         processPairWaitDiscoveryConfirmationAck();
+        break;
+    case ControllerState::PairWaitKeyInitDelay:
+        processPairWaitKeyInitDelay();
         break;
     case ControllerState::PairSendLaunchKeyTransfer:
         processPairSendLaunchKeyTransfer();
@@ -5335,25 +5391,29 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
         return;
     }
 
-    mTxFrame.init();
-    mTxFrame.setStart2W();
-    mTxFrame.setLowPower(pairingLowPower2W());
-    mTxFrame.setSrcNode(mOwnNodeId);
-    mTxFrame.setDestNode(mDiscoveredNodeId);
-    mTxFrame.commandId = IoHomeCommand::Confirmation;
-    mTxFrame.dataLen = 0;
-    mTxFrame.hasHmac = false;
+    const bool lLowPower = pairingLowPower2W();
+    if (!buildTwoWayDiscoveryConfirmationFrame(mTxFrame, mOwnNodeId, mDiscoveredNodeId,
+                                               lLowPower, mPairDiscoverConfirmMode))
+    {
+        beginPairKeyInitDelay(PairingTelemetry::DiscoverConfirmResult::Skipped);
+        return;
+    }
 
     const uint32_t lConfirmationFreq = kNormal2WTxFreqHz;
-    const uint16_t lPreamble = preambleFor2WRequest(mTxFrame);
+    const uint16_t lPreamble = lLowPower ? IOHC_PREAMBLE_LONG : IOHC_PREAMBLE_NORMAL_START;
 #if defined(RADIO_SX1262)
     const RadioError lFreqErr = mRadio.setFrequencyBlocking(lConfirmationFreq);
     if (lFreqErr != RadioError::None)
     {
         if (lFreqErr == RadioError::Busy)
             return;
-        logDebugP("Pairing: failed to send discovery confirmation to 0x%06X, falling back to push flow", mDiscoveredNodeId);
-        mState = ControllerState::PairSendKeyInit;
+        ++mPairDiscoverConfirmAttempts;
+        mPairingTelemetry.discoverConfirmAttempts = mPairDiscoverConfirmAttempts;
+        mState = mPairDiscoverConfirmAttempts < IOHC_PAIR_DISCOVER_CONFIRM_MAX_ATTEMPTS
+                     ? ControllerState::PairSendDiscoveryConfirmation
+                     : ControllerState::PairWaitKeyInitDelay;
+        if (mState == ControllerState::PairWaitKeyInitDelay)
+            beginPairKeyInitDelay(PairingTelemetry::DiscoverConfirmResult::NoReply);
         return;
     }
     updateCurrentFrequencyIndex(lConfirmationFreq);
@@ -5365,8 +5425,12 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
         return;
     if (lPrepErr != RadioError::None)
     {
-        logDebugP("Pairing: failed to send discovery confirmation to 0x%06X, falling back to push flow", mDiscoveredNodeId);
-        mState = ControllerState::PairSendKeyInit;
+        ++mPairDiscoverConfirmAttempts;
+        mPairingTelemetry.discoverConfirmAttempts = mPairDiscoverConfirmAttempts;
+        if (mPairDiscoverConfirmAttempts < IOHC_PAIR_DISCOVER_CONFIRM_MAX_ATTEMPTS)
+            mState = ControllerState::PairSendDiscoveryConfirmation;
+        else
+            beginPairKeyInitDelay(PairingTelemetry::DiscoverConfirmResult::NoReply);
         return;
     }
 
@@ -5381,6 +5445,8 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
 #endif
         if (lErr == RadioError::None)
         {
+            ++mPairDiscoverConfirmAttempts;
+            mPairingTelemetry.discoverConfirmAttempts = mPairDiscoverConfirmAttempts;
             mStateTimer = millis();
             mState = ControllerState::PairWaitDiscoveryConfirmationAck;
         }
@@ -5390,14 +5456,22 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
         }
         else
         {
-            logDebugP("Pairing: failed to send discovery confirmation to 0x%06X, falling back to push flow", mDiscoveredNodeId);
-            mState = ControllerState::PairSendKeyInit;
+            ++mPairDiscoverConfirmAttempts;
+            mPairingTelemetry.discoverConfirmAttempts = mPairDiscoverConfirmAttempts;
+            if (mPairDiscoverConfirmAttempts < IOHC_PAIR_DISCOVER_CONFIRM_MAX_ATTEMPTS)
+                mState = ControllerState::PairSendDiscoveryConfirmation;
+            else
+                beginPairKeyInitDelay(PairingTelemetry::DiscoverConfirmResult::NoReply);
         }
     }
     else
     {
-        logDebugP("Pairing: failed to send discovery confirmation to 0x%06X, falling back to push flow", mDiscoveredNodeId);
-        mState = ControllerState::PairSendKeyInit;
+        ++mPairDiscoverConfirmAttempts;
+        mPairingTelemetry.discoverConfirmAttempts = mPairDiscoverConfirmAttempts;
+        if (mPairDiscoverConfirmAttempts < IOHC_PAIR_DISCOVER_CONFIRM_MAX_ATTEMPTS)
+            mState = ControllerState::PairSendDiscoveryConfirmation;
+        else
+            beginPairKeyInitDelay(PairingTelemetry::DiscoverConfirmResult::NoReply);
     }
 }
 
@@ -5408,15 +5482,50 @@ void IoHomeController::processPairWaitDiscoveryConfirmationAck()
         return;
     if (lRxErr != RadioError::None)
     {
-        mState = ControllerState::PairSendKeyInit;
+        if (mPairDiscoverConfirmAttempts < IOHC_PAIR_DISCOVER_CONFIRM_MAX_ATTEMPTS)
+            mState = ControllerState::PairSendDiscoveryConfirmation;
+        else
+            beginPairKeyInitDelay(PairingTelemetry::DiscoverConfirmResult::NoReply);
         return;
     }
 
-    if (millis() - mStateTimer > 1000)
+    // The middle attempt deliberately sweeps all three channels. The first and
+    // last attempts remain on the request channel to maximize dwell time.
+    if (mPairDiscoverConfirmAttempts == 2)
+        serviceBackgroundRxScan();
+
+    if (millis() - mStateTimer > IOHC_PAIR_DISCOVER_CONFIRM_TIMEOUT_MS)
     {
-        logDebugP("Pairing: discovery confirmation ack timed out for 0x%06X, falling back to push flow", mDiscoveredNodeId);
-        mState = ControllerState::PairSendKeyInit;
+        if (mPairDiscoverConfirmAttempts < IOHC_PAIR_DISCOVER_CONFIRM_MAX_ATTEMPTS)
+        {
+            logDebugP("Pairing: discovery confirmation reply timed out for 0x%06X (attempt %u/%u), retrying",
+                      mDiscoveredNodeId, static_cast<unsigned>(mPairDiscoverConfirmAttempts),
+                      static_cast<unsigned>(IOHC_PAIR_DISCOVER_CONFIRM_MAX_ATTEMPTS));
+            mState = ControllerState::PairSendDiscoveryConfirmation;
+        }
+        else
+        {
+            logDebugP("Pairing: no discovery confirmation reply from 0x%06X after %u attempts; continuing with key-init",
+                      mDiscoveredNodeId, static_cast<unsigned>(mPairDiscoverConfirmAttempts));
+            beginPairKeyInitDelay(PairingTelemetry::DiscoverConfirmResult::NoReply);
+        }
     }
+}
+
+void IoHomeController::beginPairKeyInitDelay(PairingTelemetry::DiscoverConfirmResult iResult)
+{
+    mPairingTelemetry.discoverConfirmResult = iResult;
+    mPairingTelemetry.discoverConfirmAttempts = mPairDiscoverConfirmAttempts;
+    mStateTimer = millis();
+    mState = mPairKeyInitDelayMs == 0
+                 ? ControllerState::PairSendKeyInit
+                 : ControllerState::PairWaitKeyInitDelay;
+}
+
+void IoHomeController::processPairWaitKeyInitDelay()
+{
+    if (millis() - mStateTimer >= mPairKeyInitDelayMs)
+        mState = ControllerState::PairSendKeyInit;
 }
 
 void IoHomeController::processPairSendLaunchKeyTransfer()
@@ -5595,7 +5704,10 @@ void IoHomeController::processPairSend1WAnnounce()
     mTxFrame.set1WMode();
     mTxFrame.setLowPower(lFirstShape.lowPower);
     mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
-    mTxFrame.setDestNode(oneWayBroadcastTarget(mPairing1WBroadcastType));
+    const bool lClassSweep = mPairing1WVeluxProfile &&
+                             mPairing1WMode == Pairing1WMode::AnnounceOnly;
+    mTxFrame.setDestNode(lClassSweep ? pairing1WAddDestination()
+                                    : oneWayBroadcastTarget(mPairing1WBroadcastType));
     mTxFrame.setSrcNode(lProfile->getOneWayControllerNodeId());
 
     // 1W Pair/announce frame matching rspaargaren reference:
@@ -5660,6 +5772,16 @@ void IoHomeController::processPairWait1WAnnounce()
                                            : ControllerState::PairSend1WKeyTransfer;
     if (!processPairWait1WBlind(lNextState))
         return;
+
+    if (mState == ControllerState::PairComplete &&
+        mPairing1WVeluxProfile &&
+        mPairing1WMode == Pairing1WMode::AnnounceOnly &&
+        mPairing1WAddDestinationIndex + 1 < pairing1WAddDestinationCount())
+    {
+        ++mPairing1WAddDestinationIndex;
+        mState = ControllerState::PairSend1WAnnounce;
+        return;
+    }
 
     if (mState == ControllerState::PairSend1WKeyTransfer)
     {

@@ -148,6 +148,10 @@ public:
   bool hasLearnedLowPower2W() const { return mHasLearnedLowPower2W; }
   void setConfigured2WPowerClass(TwoWayPowerClass iPowerClass) { mConfigured2WPowerClass = iPowerClass; }
   TwoWayPowerClass getConfigured2WPowerClass() const { return mConfigured2WPowerClass; }
+  void setConfigured2WDiscoverConfirmMode(PairingDiscoverConfirmMode iMode) { mConfigured2WDiscoverConfirmMode = iMode; }
+  PairingDiscoverConfirmMode getConfigured2WDiscoverConfirmMode() const { return mConfigured2WDiscoverConfirmMode; }
+  void setConfigured2WKeyInitDelay(uint16_t iDelayMs) { mConfigured2WKeyInitDelay = iDelayMs > 10000 ? 10000 : iDelayMs; }
+  uint16_t getConfigured2WKeyInitDelay() const { return mConfigured2WKeyInitDelay; }
   void setConfigured2WDiscoverySettings(const TwoWayDiscoverySettings &iSettings) { mConfigured2WDiscoverySettings = iSettings; }
   const TwoWayDiscoverySettings &getConfigured2WDiscoverySettings() const { return mConfigured2WDiscoverySettings; }
   bool effectiveLowPower2W() const
@@ -304,6 +308,8 @@ private:
   bool mLowPower2W = false;
   bool mHasLearnedLowPower2W = false;
   TwoWayPowerClass mConfigured2WPowerClass = TwoWayPowerClass::Automatic;
+  PairingDiscoverConfirmMode mConfigured2WDiscoverConfirmMode = PairingDiscoverConfirmMode::Send;
+  uint16_t mConfigured2WKeyInitDelay = 300;
   TwoWayDiscoverySettings mConfigured2WDiscoverySettings{};
   bool mOneWayEnrolled = false;
   uint32_t mConfigured1WTargetNodeId = 0;

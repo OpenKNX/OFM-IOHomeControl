@@ -18,9 +18,12 @@
 #define IOHC_PAIR_KEY_EXCHANGE_MAX_ATTEMPTS 3
 #endif
 #define IOHC_PAIR_KEY_EXCHANGE_TIMEOUT_MS 15000
+#define IOHC_PAIR_DISCOVER_CONFIRM_MAX_ATTEMPTS 3
+#define IOHC_PAIR_DISCOVER_CONFIRM_TIMEOUT_MS 1500
+#define IOHC_PAIR_KEY_INIT_DELAY_DEFAULT_MS 300
 #define IOHC_AUTH_DWELL_MS_SX1262 90
 #define IOHC_AUTH_PREAMBLE_SX1262 64
-#define IOHC_PAIR_TIMEOUT_MS 30000
+#define IOHC_PAIR_TIMEOUT_MS 45000
 // Diagnostic discovery sweep: listen window per frequency and how many full
 // frequency sweeps a single discovery broadcast performs before giving up.
 // The extended window adds a short grace period so a frame already arriving at
@@ -137,22 +140,21 @@ enum class ControllerState : uint8_t
   PairSendDiscovery,
   PairWaitDiscoveryResponse,
 
-  // Experimental / legacy 2W pairing states.
-  //
-  // These are intentionally not used by the default 2W pairing flow.
+  // 2W pairing states. The 0x2C/0x2D discovery confirmation is part of the
+  // normal flow; 0x38 and pull-key remain explicit research modes.
   // Normal 2W pairing follows:
   //   DiscoverRequest(0x28)
   //   -> DiscoverResponse(0x29)
-  //   -> KeyInitTransfer(0x31)
+  //   -> Confirmation(0x2C) -> optional ConfirmationACK(0x2D)
+  //   -> configurable non-blocking delay -> KeyInitTransfer(0x31)
   //   -> ChallengeRequest(0x3C)
   //   -> KeyTransfer(0x32)
   //   -> KeyTransferConfirmation(0x33/0x2D)
   //   -> optional SetConfig1(0x6F)
   //
-  // The states below are kept for protocol research and device-specific tests.
-  // They must only be entered through explicit diagnostic pairing modes.
   PairSendDiscoveryConfirmation,
   PairWaitDiscoveryConfirmationAck,
+  PairWaitKeyInitDelay,
   PairSendLaunchKeyTransfer,
   PairWaitLaunchKeyTransfer,
   PairSendPullKeyChallenge,
@@ -216,8 +218,8 @@ enum class ControllerState : uint8_t
 
 enum class Pairing2WMode : uint8_t
 {
-  Normal = 0,                // default: 0x28 -> 0x31 -> 0x32 -> 0x33 -> optional 0x6F
-  DiscoveryConfirmation = 1, // experimental: 0x2C/0x2D after discovery
+  Normal = 0,                // default: 0x28 -> 0x29 -> 0x2C -> 0x2D? -> 0x31 -> 0x32 -> 0x33
+  DiscoveryConfirmation = 1, // diagnostic alias for the normal confirmation step
   LaunchKeyTransfer = 2,     // experimental: 0x38 path
   PullKey = 3                // experimental: pull existing key from device
 };
@@ -265,6 +267,15 @@ public:
     uint8_t lastReceivedCommand = 0xFF;
     uint8_t rejectedFrames = 0;
     uint8_t keyExchangeAttempts = 0;
+    enum class DiscoverConfirmResult : uint8_t
+    {
+      NotRun = 0,
+      Skipped = 1,
+      Acknowledged = 2,
+      ErrorResponse = 3,
+      NoReply = 4,
+    } discoverConfirmResult = DiscoverConfirmResult::NotRun;
+    uint8_t discoverConfirmAttempts = 0;
   };
 
   enum class OneWayEnrollPhase : uint8_t
@@ -430,6 +441,9 @@ public:
                                         const TwoWayDiscoveryFrameOptions &iOptions,
                                         const uint8_t iSystemKey[16] = nullptr,
                                         const uint8_t iChallenge[6] = nullptr);
+  static bool buildTwoWayDiscoveryConfirmationFrame(
+      IoHomeFrame &oFrame, uint32_t iSrcNodeId, uint32_t iDestNodeId,
+      bool iLowPower, PairingDiscoverConfirmMode iMode);
 
   // Start command scan (probe device for supported commands)
   void startCommandScan(uint32_t iNodeId);
@@ -831,6 +845,9 @@ private:
   // response must not bind this pairing transaction to another learn-mode device.
   uint32_t mPairingKnownNodeId;
   uint8_t mPairKeyExchangeAttempts;
+  uint8_t mPairDiscoverConfirmAttempts = 0;
+  PairingDiscoverConfirmMode mPairDiscoverConfirmMode = PairingDiscoverConfirmMode::Send;
+  uint16_t mPairKeyInitDelayMs = IOHC_PAIR_KEY_INIT_DELAY_DEFAULT_MS;
   uint32_t mPairKeyExchangeStartTime;
   uint8_t mPairingFreqIdx;
   uint8_t mDiscoverySweep; // diagnostic discovery: current full-sweep attempt (0-based)
@@ -1006,6 +1023,7 @@ private:
   void processPairWaitDiscoveryResponse();
   void processPairSendDiscoveryConfirmation();
   void processPairWaitDiscoveryConfirmationAck();
+  void processPairWaitKeyInitDelay();
   void processPairSendLaunchKeyTransfer();
   void processPairWaitLaunchKeyTransfer();
   void processPairSendPullKeyChallenge();
@@ -1035,6 +1053,7 @@ private:
   void beginPairingTelemetry(uint8_t iChannelIndex, uint32_t iKnownNodeId);
   void recordPairingDiagnostic(PairingOutcome iOutcome, const char *iAction);
   void completePairingTelemetry(PairingOutcome iOutcome);
+  void beginPairKeyInitDelay(PairingTelemetry::DiscoverConfirmResult iResult);
   void resetOneWayEnrollmentTrace();
   void observeUnknown86Frame();
   void recordOneWayEnrollmentPhase(OneWayEnrollPhase iPhase, uint16_t iSequence,

@@ -187,6 +187,16 @@
                   <Enumeration Text="Alternative / KIG300-Capture (0x63)" Value="99" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCTwoWayDiscoverConfirmMode" Name="IOHCTwoWayDiscoverConfirmMode">
+                <TypeRestriction Base="Value" SizeInBit="2">
+                  <Enumeration Text="Überspringen" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Senden" Value="1" Id="%ENID%" />
+                  <Enumeration Text="Senden + ACK" Value="2" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCTwoWayKeyInitDelay" Name="IOHCTwoWayKeyInitDelay">
+                <TypeNumber SizeInBit="16" Type="unsignedInt" minInclusive="0" maxInclusive="10000" />
+              </ParameterType>
               <ParameterType Id="%AID%_PT-IOHCTwoWayDiscoveryCommand" Name="IOHCTwoWayDiscoveryCommand">
                 <TypeRestriction Base="Value" SizeInBit="2">
                   <Enumeration Text="Automatisch (0x28)" Value="0" Id="%ENID%" />

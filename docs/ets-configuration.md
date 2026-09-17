@@ -49,12 +49,22 @@ uses the learned class when available and otherwise defaults to always alive.
 Solar/battery devices with unknown metadata need an explicit Low Power setting.
 Shared 1W profiles use their owner's manufacturer and power-class settings.
 
+The per-channel 2W expert settings also expose the post-discovery handshake:
+
+- **2W Discovery-Bestätigung** defaults to **Senden**. `0x2C` is retried three
+  times with 1500 ms reply windows; ACK, refusal and silence all continue to
+  key initialization. **Senden + ACK** sets the ACK bit only for always-alive
+  targets, while **Überspringen** restores the direct `0x29 -> 0x31` path.
+- **2W Pause vor Schlüsselaustausch** defaults to 300 ms and accepts 0–10000 ms.
+  It is a nonblocking wait after the confirmation step and is omitted in Skip mode.
+
 ## Compatibility and verification
 
-Existing memory offsets, union size, parameter defaults and communication-object
-numbers are preserved. The new display selectors are ETS-only parameters outside
-device memory. Battery and RSSI objects remain enabled by default for existing
-installations; disabling them is an explicit project configuration change.
+Existing parameter offsets and communication-object numbers remain stable. The
+per-channel memory union grows by two bytes for the key-init delay; the confirmation
+mode uses previously free bits. The display selectors remain ETS-only parameters
+outside device memory. Battery and RSSI objects remain enabled by default for
+existing installations; disabling them is an explicit project configuration change.
 
 Run the ETS/UI regression checks and the full OAM producer before release.
 ETS import, navigation and project-upgrade behavior still require verification

@@ -359,6 +359,46 @@ class ChannelUiTest(unittest.TestCase):
         for suffix in ("086", "087", "088", "089", "090"):
             self.assertIn(f"%AID%_UP-%TT%%CC%{suffix}_R-%TT%%CC%{suffix}01", shown)
 
+    def test_two_way_discovery_confirmation_policy_and_delay(self) -> None:
+        mode_type = self.share.find(
+            ".//k:ParameterType[@Name='IOHCTwoWayDiscoverConfirmMode']", NS
+        )
+        self.assertIsNotNone(mode_type)
+        labels = {
+            item.get("Value"): item.get("Text")
+            for item in mode_type.findall(".//k:Enumeration", NS)
+        }
+        self.assertEqual(labels, {"0": "Überspringen", "1": "Senden", "2": "Senden + ACK"})
+
+        delay_type = self.share.find(
+            ".//k:ParameterType[@Name='IOHCTwoWayKeyInitDelay']", NS
+        )
+        self.assertIsNotNone(delay_type)
+        number = delay_type.find("k:TypeNumber", NS)
+        self.assertEqual(number.get("SizeInBit"), "16")
+        self.assertEqual(number.get("minInclusive"), "0")
+        self.assertEqual(number.get("maxInclusive"), "10000")
+
+        mode = self.template.find(".//k:Parameter[@Name='c%C%TwoWayDiscoverConfirmMode']", NS)
+        delay = self.template.find(".//k:Parameter[@Name='c%C%TwoWayKeyInitDelay']", NS)
+        self.assertEqual(mode.get("Value"), "1")
+        self.assertEqual(mode.get("Offset"), "53")
+        self.assertEqual(mode.get("BitOffset"), "6")
+        self.assertEqual(delay.get("Value"), "300")
+        self.assertEqual(delay.get("Offset"), "63")
+        self.assertEqual(self.template.find(".//k:Union", NS).get("SizeInBit"), "520")
+
+        expert = self.template.find(".//k:ParameterBlock[@Name='ExpertSettings']", NS)
+        two_way = expert.find("k:choose/k:when[@test='0']", NS)
+        refs = {ref.get("RefId"): ref for ref in two_way.findall("k:ParameterRefRef", NS)}
+        expected = {
+            "%AID%_UP-%TT%%CC%098_R-%TT%%CC%09801": "IOHC-2W-Discovery-Bestaetigung",
+            "%AID%_UP-%TT%%CC%099_R-%TT%%CC%09901": "IOHC-2W-KeyInit-Verzoegerung",
+        }
+        for ref_id, help_context in expected.items():
+            self.assertIn(ref_id, refs)
+            self.assertEqual(refs[ref_id].get("HelpContext"), help_context)
+
     def test_one_way_wire_profile_overrides_are_persistent_and_default_auto(self) -> None:
         destination = self.share.find(
             ".//k:ParameterType[@Name='IOHCOneWayExecuteDestination']", NS

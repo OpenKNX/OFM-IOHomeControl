@@ -242,6 +242,29 @@ static const uint8_t kKlr300KeyInit[] = {
     0x48, 0x20, 0x7E, 0x9E, 0x6E, 0xE2, 0xD1, 0xFF, 0x31,
 };
 
+// Captured VELUX KLI open-registration (0x2E) class sweeps. Each class starts
+// a new logical sub-burst and advances the rolling sequence. The first copy of
+// a low-power profile may carry CTRL1 LOW_POWER; repeats retain command/HMAC/
+// sequence while clearing that wake-up flag.
+static const uint8_t kKli310OpenRegistrationRoller[] = {
+    0xF1, 0x20, 0x00, 0x00, 0xBF, 0x5A, 0x9E, 0x00, 0x2E, 0x00, 0x0B, 0x57, 0x55, 0x31, 0x48, 0x9A, 0x2A, 0xCD,
+};
+static const uint8_t kKli310OpenRegistrationAwning[] = {
+    0xF1, 0x20, 0x00, 0x00, 0xFF, 0x5A, 0x9E, 0x00, 0x2E, 0x00, 0x0B, 0x58, 0x87, 0x37, 0x0B, 0xFE, 0x73, 0x6C,
+};
+static const uint8_t kKli310OpenRegistrationDual[] = {
+    0xF1, 0x00, 0x00, 0x03, 0x7F, 0x5A, 0x9E, 0x00, 0x2E, 0x00, 0x0B, 0x59, 0x27, 0x1B, 0x69, 0x1E, 0x50, 0x0E,
+};
+static const uint8_t kKli313OpenRegistrationRoller1[] = {
+    0xF1, 0x00, 0x00, 0x00, 0xBF, 0xDA, 0x2C, 0x93, 0x2E, 0x00, 0x05, 0x50, 0x51, 0x8E, 0xD6, 0xD8, 0x16, 0x0A,
+};
+static const uint8_t kKli313OpenRegistrationDual[] = {
+    0xF1, 0x00, 0x00, 0x03, 0x7F, 0xDA, 0x2C, 0x93, 0x2E, 0x00, 0x05, 0x52, 0xDC, 0x58, 0x9E, 0x0C, 0x08, 0x68,
+};
+static const uint8_t kKli313OpenRegistrationRoller2[] = {
+    0xF1, 0x00, 0x00, 0x00, 0xBF, 0xDA, 0x2C, 0x93, 0x2E, 0x00, 0x05, 0x53, 0x26, 0x56, 0x5D, 0xDC, 0xAA, 0xDC,
+};
+
 static const uint8_t kKlr300KeyTransfer[] = {
     0x18, 0x00, 0x7E, 0x9E, 0x6E, 0xE2, 0xD1, 0xFF, 0x32,
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
@@ -284,6 +307,30 @@ static const Frame kFrames[] = {
      "sanitized KLR300 capture; peer address substituted", RadioPath::ProtocolOnly,
      kKlr300KeyInit, sizeof(kKlr300KeyInit), IoHomeCommand::KeyInitTransfer,
      0xE2D1FF, 0x7E9E6E, false, false, false, CryptoExpectation::NoCrypto},
+    {"kli310_open_registration_roller", "velux_kli310_open_registration_sweep",
+     "captured first low-power copy; sequence 0x0B57", RadioPath::ProtocolOnly,
+     kKli310OpenRegistrationRoller, sizeof(kKli310OpenRegistrationRoller), IoHomeCommand::Discover2ERequest,
+     0x5A9E00, 0x0000BF, true, true, false, CryptoExpectation::HmacPresentKeyRedacted},
+    {"kli310_open_registration_awning", "velux_kli310_open_registration_sweep",
+     "captured first low-power copy; sequence 0x0B58", RadioPath::ProtocolOnly,
+     kKli310OpenRegistrationAwning, sizeof(kKli310OpenRegistrationAwning), IoHomeCommand::Discover2ERequest,
+     0x5A9E00, 0x0000FF, true, true, false, CryptoExpectation::HmacPresentKeyRedacted},
+    {"kli310_open_registration_dual", "velux_kli310_open_registration_sweep",
+     "captured class sub-burst; sequence 0x0B59", RadioPath::ProtocolOnly,
+     kKli310OpenRegistrationDual, sizeof(kKli310OpenRegistrationDual), IoHomeCommand::Discover2ERequest,
+     0x5A9E00, 0x00037F, true, true, false, CryptoExpectation::HmacPresentKeyRedacted},
+    {"kli313_open_registration_roller_1", "velux_kli313_open_registration_sweep",
+     "corrected captured destination; sequence 0x0550", RadioPath::ProtocolOnly,
+     kKli313OpenRegistrationRoller1, sizeof(kKli313OpenRegistrationRoller1), IoHomeCommand::Discover2ERequest,
+     0xDA2C93, 0x0000BF, true, true, false, CryptoExpectation::HmacPresentKeyRedacted},
+    {"kli313_open_registration_dual", "velux_kli313_open_registration_sweep",
+     "corrected captured destination; sequence 0x0552", RadioPath::ProtocolOnly,
+     kKli313OpenRegistrationDual, sizeof(kKli313OpenRegistrationDual), IoHomeCommand::Discover2ERequest,
+     0xDA2C93, 0x00037F, true, true, false, CryptoExpectation::HmacPresentKeyRedacted},
+    {"kli313_open_registration_roller_2", "velux_kli313_open_registration_sweep",
+     "corrected captured destination; sequence 0x0553", RadioPath::ProtocolOnly,
+     kKli313OpenRegistrationRoller2, sizeof(kKli313OpenRegistrationRoller2), IoHomeCommand::Discover2ERequest,
+     0xDA2C93, 0x0000BF, true, true, false, CryptoExpectation::HmacPresentKeyRedacted},
     {"klr300_key_transfer", "klr300_pairing_search_2026_09_12",
      "sanitized KLR300 capture; encrypted key replaced", RadioPath::ProtocolOnly,
      kKlr300KeyTransfer, sizeof(kKlr300KeyTransfer), IoHomeCommand::KeyTransfer,

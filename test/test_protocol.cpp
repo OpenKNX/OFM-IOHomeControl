@@ -7574,6 +7574,46 @@ TEST(controller_1w_announce_only_does_not_send_sendkey_after_repeats)
     ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
 }
 
+TEST(controller_velux_1w_announce_only_sweeps_classes_with_fresh_sequences)
+{
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initOneWayPairingModeControllerForTest(lController, lModule, lChannel,
+                                           0x5A9E00, 0, lKey);
+    lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Velux));
+    lChannel.setConfigured1WPowerClass(OneWayPowerClass::LowPower);
+    ASSERT_TRUE(lController.startPairing1WAnnounceOnly(0, 0));
+
+    const uint32_t lDestinations[] = {0x0000BF, 0x0000FF, 0x00037F};
+    uint16_t lPreviousSequence = 0;
+    for (uint8_t i = 0; i < 3; ++i)
+    {
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        IoHomeFrame lFirst;
+        ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFirst));
+        ASSERT_EQ(lFirst.commandId, IoHomeCommand::Discover2ERequest);
+        ASSERT_EQ(lFirst.getDestNodeId(), lDestinations[i]);
+        ASSERT_TRUE((lFirst.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+        const uint16_t lSequence = oneWaySequenceForTest(lFirst);
+        ASSERT_TRUE(i == 0 || lSequence == static_cast<uint16_t>(lPreviousSequence + 1U));
+
+        finishCurrentBlind1WPairingTxForTest(lController);
+        IoHomeFrame lRepeat;
+        ASSERT_TRUE(lastTransmittedFrameForTest(lController, lRepeat));
+        ASSERT_EQ(lRepeat.getDestNodeId(), lDestinations[i]);
+        ASSERT_EQ(oneWaySequenceForTest(lRepeat), lSequence);
+        ASSERT_TRUE((lRepeat.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
+        lPreviousSequence = lSequence;
+    }
+    ASSERT_EQ(lController.state(), ControllerState::PairComplete);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 12U);
+}
+
 TEST(controller_default_1w_pairing_uses_type0_all)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -8362,6 +8402,34 @@ TEST(discovery_ack_and_low_power_are_independent_of_start)
     ASSERT_EQ(lFrame.ctrlByte1, IOHC_CTRL1_LOW_POWER);
     lFrame.setLowPower(false);
     ASSERT_EQ(lFrame.ctrlByte1, 0x00);
+}
+
+TEST(discovery_confirmation_builder_matches_power_and_ack_policy)
+{
+    IoHomeFrame lFrame;
+    uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE] = {};
+
+    ASSERT_TRUE(IoHomeController::buildTwoWayDiscoveryConfirmationFrame(
+        lFrame, 0xE2D1FF, 0x7E9E6E, true, PairingDiscoverConfirmMode::Send));
+    uint8_t lLen = lFrame.serialize2W(lBuffer, sizeof(lBuffer));
+    ASSERT_EQ(lLen, sizeof(IoHomeGoldenRfCorpus::kKlr300DiscoveryConfirmation));
+    ASSERT_MEM_EQ(lBuffer, IoHomeGoldenRfCorpus::kKlr300DiscoveryConfirmation, lLen);
+    ASSERT_EQ(lFrame.ctrlByte1, IOHC_CTRL1_LOW_POWER);
+
+    ASSERT_TRUE(IoHomeController::buildTwoWayDiscoveryConfirmationFrame(
+        lFrame, 0xE2D1FF, 0x7E9E6E, true, PairingDiscoverConfirmMode::SendWithAck));
+    ASSERT_EQ(lFrame.ctrlByte1, IOHC_CTRL1_LOW_POWER);
+
+    ASSERT_TRUE(IoHomeController::buildTwoWayDiscoveryConfirmationFrame(
+        lFrame, 0xE2D1FF, 0x7E9E6E, false, PairingDiscoverConfirmMode::Send));
+    ASSERT_EQ(lFrame.ctrlByte1, 0U);
+
+    ASSERT_TRUE(IoHomeController::buildTwoWayDiscoveryConfirmationFrame(
+        lFrame, 0xE2D1FF, 0x7E9E6E, false, PairingDiscoverConfirmMode::SendWithAck));
+    ASSERT_EQ(lFrame.ctrlByte1, IOHC_CTRL1_ACK);
+
+    ASSERT_TRUE(!IoHomeController::buildTwoWayDiscoveryConfirmationFrame(
+        lFrame, 0xE2D1FF, 0x7E9E6E, false, PairingDiscoverConfirmMode::Skip));
 }
 
 TEST(controller_pairing_discovery_ack_override_keeps_long_preamble)
@@ -9179,6 +9247,20 @@ static void buildKeyTransferConfirmationFrame(IoHomeFrame &oFrame,
     oFrame.hasHmac = false;
 }
 
+static void buildDiscoveryConfirmationAckFrame(IoHomeFrame &oFrame,
+                                               uint32_t iRemoteNodeId,
+                                               uint32_t iDeviceNodeId)
+{
+    oFrame.init();
+    oFrame.ctrlByte0 = IOHC_CTRL0_END;
+    oFrame.ctrlByte1 = 0x00;
+    oFrame.setSrcNode(iDeviceNodeId);
+    oFrame.setDestNode(iRemoteNodeId);
+    oFrame.commandId = IoHomeCommand::ConfirmationACK;
+    oFrame.dataLen = 0;
+    oFrame.hasHmac = false;
+}
+
 static void buildErrorResponseFrame(IoHomeFrame &oFrame,
                                     uint32_t iRemoteNodeId,
                                     uint32_t iDeviceNodeId,
@@ -9218,13 +9300,128 @@ static bool advancePairingToWaitDeviceChallenge(IoHomeController &iController,
     iController.radio().testQueueReceivedPacket(lBuffer, lLen);
     iController.loop();
 
-    const auto &lKeyInitPacket = iController.radio().testLastTransmittedPacket();
-    if (lKeyInitPacket.empty() ||
-        !deserializeFrameForTest(lFrame, lKeyInitPacket.data(), static_cast<uint8_t>(lKeyInitPacket.size())) ||
+    const auto &lConfirmPacket = iController.radio().testLastTransmittedPacket();
+    if (lConfirmPacket.empty() ||
+        !deserializeFrameForTest(lFrame, lConfirmPacket.data(), static_cast<uint8_t>(lConfirmPacket.size())) ||
+        lFrame.commandId != IoHomeCommand::Confirmation)
+        return false;
+
+    IoHomeFrame lConfirmAck;
+    buildDiscoveryConfirmationAckFrame(lConfirmAck, iRemoteNodeId, iDeviceNodeId);
+    if (!queueControllerResponse(iController, lConfirmAck) ||
+        iController.state() != ControllerState::PairWaitKeyInitDelay)
+        return false;
+
+    ioHomeTestAdvanceMillis(IOHC_PAIR_KEY_INIT_DELAY_DEFAULT_MS);
+    if (!transmitQueuedControllerFrame(iController, lFrame) ||
         lFrame.commandId != IoHomeCommand::KeyInitTransfer)
         return false;
 
     return iController.state() == ControllerState::PairWaitDeviceChallenge;
+}
+
+static bool advancePairingToWaitDiscoveryConfirmation(IoHomeController &iController,
+                                                       uint32_t iRemoteNodeId,
+                                                       uint32_t iDeviceNodeId)
+{
+    if (!iController.startPairing(0))
+        return false;
+    IoHomeFrame lFrame;
+    if (!transmitQueuedControllerFrame(iController, lFrame) ||
+        lFrame.commandId != IoHomeCommand::DiscoverRequest)
+        return false;
+    IoHomeFrame lDiscoverResponse;
+    buildDiscoverResponseFrame(lDiscoverResponse, iRemoteNodeId, iDeviceNodeId);
+    if (!queueControllerResponse(iController, lDiscoverResponse))
+        return false;
+    return iController.state() == ControllerState::PairWaitDiscoveryConfirmationAck &&
+           lastTransmittedFrameForTest(iController, lFrame) &&
+           lFrame.commandId == IoHomeCommand::Confirmation;
+}
+
+TEST(controller_2w_discovery_confirmation_skip_has_no_delay)
+{
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel, 0x831F2A, 0, lKey);
+    lController.setSystemKey(lKey);
+    lChannel.setConfigured2WDiscoverConfirmMode(PairingDiscoverConfirmMode::Skip);
+    ASSERT_TRUE(lController.startPairing(0));
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    IoHomeFrame lDiscoverResponse;
+    buildDiscoverResponseFrame(lDiscoverResponse, 0x831F2A, 0x7E9E6E);
+    ASSERT_TRUE(queueControllerResponse(lController, lDiscoverResponse));
+    ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::KeyInitTransfer);
+    ASSERT_EQ(lController.pairingTelemetry().discoverConfirmResult,
+              IoHomeController::PairingTelemetry::DiscoverConfirmResult::Skipped);
+    ASSERT_EQ(lController.pairingTelemetry().discoverConfirmAttempts, 0U);
+}
+
+TEST(controller_2w_discovery_confirmation_error_continues_after_delay)
+{
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel, 0x831F2A, 0, lKey);
+    lController.setSystemKey(lKey);
+    ASSERT_TRUE(advancePairingToWaitDiscoveryConfirmation(lController, 0x831F2A, 0x7E9E6E));
+    IoHomeFrame lError;
+    buildErrorResponseFrame(lError, 0x831F2A, 0x7E9E6E);
+    ASSERT_TRUE(queueControllerResponse(lController, lError));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitKeyInitDelay);
+    ASSERT_EQ(lController.pairingTelemetry().discoverConfirmResult,
+              IoHomeController::PairingTelemetry::DiscoverConfirmResult::ErrorResponse);
+    ioHomeTestAdvanceMillis(IOHC_PAIR_KEY_INIT_DELAY_DEFAULT_MS);
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::KeyInitTransfer);
+}
+
+TEST(controller_2w_discovery_confirmation_retries_and_rotates_only_middle_wait)
+{
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel, 0x831F2A, 0, lKey);
+    lController.setSystemKey(lKey);
+    ASSERT_TRUE(advancePairingToWaitDiscoveryConfirmation(lController, 0x831F2A, 0x7E9E6E));
+    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
+
+    ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+    lController.loop();
+    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
+    ioHomeTestAdvanceMillis(IOHC_PAIR_DISCOVER_CONFIRM_TIMEOUT_MS + 1);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::PairSendDiscoveryConfirmation);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitDiscoveryConfirmationAck);
+
+    lController.loop(); // finish TX and enter receive mode
+    ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+    lController.loop();
+    ASSERT_TRUE(lController.radio().testCurrentFrequency() != IOHC_FREQ_2);
+    ioHomeTestAdvanceMillis(IOHC_PAIR_DISCOVER_CONFIRM_TIMEOUT_MS + 1);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::PairSendDiscoveryConfirmation);
+    lController.loop();
+    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
+
+    lController.loop(); // finish TX and enter receive mode
+    ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+    lController.loop();
+    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
+    ioHomeTestAdvanceMillis(IOHC_PAIR_DISCOVER_CONFIRM_TIMEOUT_MS + 1);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitKeyInitDelay);
+    ASSERT_EQ(lController.pairingTelemetry().discoverConfirmAttempts, 3U);
+    ASSERT_EQ(lController.pairingTelemetry().discoverConfirmResult,
+              IoHomeController::PairingTelemetry::DiscoverConfirmResult::NoReply);
 }
 
 static bool advancePairingToWaitKeyTransferConfirmation(IoHomeController &iController,
@@ -9293,6 +9490,14 @@ TEST(controller_2w_pairing_continuations_match_klr300_ctrl1)
     ASSERT_TRUE((lFrame.ctrlByte0 & (IOHC_CTRL0_START | IOHC_CTRL0_END)) == 0);
     ASSERT_EQ(lFrame.ctrlByte1, 0x00);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitKeyTransferConfirmation);
+
+    IoHomeFrame lKeyConfirmation;
+    buildKeyTransferConfirmationFrame(lKeyConfirmation, lRemoteNodeId, lDeviceNodeId);
+    lController.radio().testClearTransmittedPacket();
+    ASSERT_TRUE(queueControllerResponse(lController, lKeyConfirmation));
+    ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::SetConfig1);
 }
 
 static bool queueKeyTransferConfirmationAndCaptureSetConfig1(IoHomeController &iController,
@@ -9313,7 +9518,7 @@ static bool queueKeyTransferConfirmationAndCaptureSetConfig1(IoHomeController &i
     return deserializeFrameForTest(oSetConfig1Frame, lSetConfigPacket.data(), static_cast<uint8_t>(lSetConfigPacket.size()));
 }
 
-TEST(controller_default_2w_pairing_uses_key_init_after_discovery)
+TEST(controller_default_2w_pairing_confirms_discovery_before_key_init)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -9353,14 +9558,23 @@ TEST(controller_default_2w_pairing_uses_key_init_after_discovery)
     const auto &lPacket = lController.radio().testLastTransmittedPacket();
     ASSERT_TRUE(!lPacket.empty());
 
-    IoHomeFrame lKeyInitFrame;
-    ASSERT_TRUE(deserializeFrameForTest(lKeyInitFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
-    ASSERT_EQ(lKeyInitFrame.commandId, IoHomeCommand::KeyInitTransfer);
-    ASSERT_EQ(lKeyInitFrame.getSrcNodeId(), lRemoteNodeId);
-    ASSERT_EQ(lKeyInitFrame.getDestNodeId(), lDeviceNodeId);
-    ASSERT_EQ(lKeyInitFrame.dataLen, 0);
-    ASSERT_TRUE((lKeyInitFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+    IoHomeFrame lConfirmFrame;
+    ASSERT_TRUE(deserializeFrameForTest(lConfirmFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lConfirmFrame.commandId, IoHomeCommand::Confirmation);
+    ASSERT_EQ(lConfirmFrame.getSrcNodeId(), lRemoteNodeId);
+    ASSERT_EQ(lConfirmFrame.getDestNodeId(), lDeviceNodeId);
+    ASSERT_EQ(lConfirmFrame.dataLen, 0);
+    ASSERT_TRUE((lConfirmFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+
+    IoHomeFrame lAck;
+    buildDiscoveryConfirmationAckFrame(lAck, lRemoteNodeId, lDeviceNodeId);
+    ASSERT_TRUE(queueControllerResponse(lController, lAck));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitKeyInitDelay);
+    ioHomeTestAdvanceMillis(IOHC_PAIR_KEY_INIT_DELAY_DEFAULT_MS);
+    IoHomeFrame lKeyInitFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lKeyInitFrame));
+    ASSERT_EQ(lKeyInitFrame.commandId, IoHomeCommand::KeyInitTransfer);
 }
 
 TEST(controller_pairing_discovery_learns_always_alive)
@@ -9398,13 +9612,21 @@ TEST(controller_pairing_discovery_learns_always_alive)
     ASSERT_TRUE(!lChannel.isLowPower2W());
     ASSERT_EQ(openknx.flash.saveCount, lFlashSavesBeforeDiscovery + 1);
 
-    IoHomeFrame lKeyInitFrame;
+    IoHomeFrame lConfirmFrame;
     const auto &lPacket = lController.radio().testLastTransmittedPacket();
     ASSERT_TRUE(!lPacket.empty());
-    ASSERT_TRUE(deserializeFrameForTest(lKeyInitFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
-    ASSERT_EQ(lKeyInitFrame.commandId, IoHomeCommand::KeyInitTransfer);
-    ASSERT_TRUE((lKeyInitFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
+    ASSERT_TRUE(deserializeFrameForTest(lConfirmFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
+    ASSERT_EQ(lConfirmFrame.commandId, IoHomeCommand::Confirmation);
+    ASSERT_TRUE((lConfirmFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+
+    IoHomeFrame lAck;
+    buildDiscoveryConfirmationAckFrame(lAck, lRemoteNodeId, lDeviceNodeId);
+    ASSERT_TRUE(queueControllerResponse(lController, lAck));
+    ioHomeTestAdvanceMillis(IOHC_PAIR_KEY_INIT_DELAY_DEFAULT_MS);
+    IoHomeFrame lKeyInitFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lKeyInitFrame));
+    ASSERT_EQ(lKeyInitFrame.commandId, IoHomeCommand::KeyInitTransfer);
 }
 
 TEST(pairing_broadcast_scan_skips_request_channel_and_unicast_wait_holds_it)
@@ -9685,6 +9907,25 @@ TEST(controller_2w_pairing_correlates_interleaved_frames)
 
     buildDiscoverResponseFrame(lDiscoverResponse, lRemoteNodeId, lDeviceNodeId);
     ASSERT_TRUE(queueControllerResponse(lController, lDiscoverResponse));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitDiscoveryConfirmationAck);
+
+    // Repeated discovery and foreign/misdirected confirmation replies are
+    // unrelated to this exact transaction and must not advance it.
+    ASSERT_TRUE(queueControllerResponse(lController, lDiscoverResponse));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitDiscoveryConfirmationAck);
+    IoHomeFrame lConfirmAck;
+    buildDiscoveryConfirmationAckFrame(lConfirmAck, lRemoteNodeId, 0x123456);
+    ASSERT_TRUE(queueControllerResponse(lController, lConfirmAck));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitDiscoveryConfirmationAck);
+    buildDiscoveryConfirmationAckFrame(lConfirmAck, 0x654321, lDeviceNodeId);
+    ASSERT_TRUE(queueControllerResponse(lController, lConfirmAck));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitDiscoveryConfirmationAck);
+    buildDiscoveryConfirmationAckFrame(lConfirmAck, lRemoteNodeId, lDeviceNodeId);
+    ASSERT_TRUE(queueControllerResponse(lController, lConfirmAck));
+    ASSERT_EQ(lController.state(), ControllerState::PairWaitKeyInitDelay);
+    ioHomeTestAdvanceMillis(IOHC_PAIR_KEY_INIT_DELAY_DEFAULT_MS);
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::KeyInitTransfer);
     ASSERT_EQ(lController.state(), ControllerState::PairWaitDeviceChallenge);
 
     // Once the device is bound, only its correctly addressed, complete 0x3C
@@ -9881,6 +10122,67 @@ TEST(controller_2w_pairing_succeeds_when_setconfig1_returns_error_response)
 
     ASSERT_TRUE(lController.state() == ControllerState::PairComplete ||
                 lController.state() == ControllerState::Idle);
+}
+
+TEST(controller_2w_pairing_loopback_accepts_ack_and_dropped_confirm_replies)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    const uint8_t lChallenge[6] = {1, 2, 3, 4, 5, 6};
+
+    for (bool lDropDiscoverConfirmReplies : {false, true})
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, 0, lKey);
+        lController.setSystemKey(lKey);
+
+        if (!lDropDiscoverConfirmReplies)
+        {
+            ASSERT_TRUE(advancePairingToWaitKeyTransferConfirmation(
+                lController, lRemoteNodeId, lDeviceNodeId));
+        }
+        else
+        {
+            ASSERT_TRUE(advancePairingToWaitDiscoveryConfirmation(
+                lController, lRemoteNodeId, lDeviceNodeId));
+            for (uint8_t i = 0; i < IOHC_PAIR_DISCOVER_CONFIRM_MAX_ATTEMPTS; ++i)
+            {
+                ioHomeTestAdvanceMillis(IOHC_PAIR_DISCOVER_CONFIRM_TIMEOUT_MS + 1);
+                lController.loop();
+                if (i + 1 < IOHC_PAIR_DISCOVER_CONFIRM_MAX_ATTEMPTS)
+                    lController.loop();
+            }
+            ASSERT_EQ(lController.state(), ControllerState::PairWaitKeyInitDelay);
+            ioHomeTestAdvanceMillis(IOHC_PAIR_KEY_INIT_DELAY_DEFAULT_MS);
+            IoHomeFrame lKeyInit;
+            ASSERT_TRUE(transmitQueuedControllerFrame(lController, lKeyInit));
+            ASSERT_EQ(lKeyInit.commandId, IoHomeCommand::KeyInitTransfer);
+
+            IoHomeFrame lChallengeRequest;
+            buildPairChallengeRequestFrame(lChallengeRequest, lRemoteNodeId,
+                                           lDeviceNodeId, lChallenge);
+            ASSERT_TRUE(queueControllerResponse(lController, lChallengeRequest));
+            ASSERT_EQ(lController.state(), ControllerState::PairWaitKeyTransferConfirmation);
+        }
+
+        IoHomeFrame lSetConfig1;
+        ASSERT_TRUE(queueKeyTransferConfirmationAndCaptureSetConfig1(
+            lController, lRemoteNodeId, lDeviceNodeId, lSetConfig1));
+        ASSERT_EQ(lSetConfig1.commandId, IoHomeCommand::SetConfig1);
+        IoHomeFrame lOptionalConfigError;
+        buildErrorResponseFrame(lOptionalConfigError, lRemoteNodeId, lDeviceNodeId, 0x05);
+        ASSERT_TRUE(queueControllerResponse(lController, lOptionalConfigError));
+        lController.loop();
+        ASSERT_TRUE(lController.state() == ControllerState::PairComplete ||
+                    lController.state() == ControllerState::Idle);
+        ASSERT_EQ(lChannel.getNodeId(), lDeviceNodeId);
+    }
 }
 
 TEST(controller_2w_pairing_succeeds_when_setconfig1_send_or_setup_fails)

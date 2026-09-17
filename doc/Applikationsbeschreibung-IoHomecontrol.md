@@ -217,6 +217,12 @@ Im bidirektionalen Modus sendet das Modul einen Befehl und erwartet eine Bestät
 
 Dieser Modus ist für alle Geräte zu bevorzugen, die 2W unterstützen.
 
+Beim normalen Direkt-Pairing verwendet das Modul die tolerante Folge
+`0x28 -> 0x29 -> 0x2C -> [0x2D] -> Pause -> 0x31 -> 0x3C -> 0x32 -> 0x33`.
+Die Bestätigung `0x2D` ist optional: Nach drei Versuchen wird der Schlüsselaustausch auch bei
+Funkstille oder einer expliziten Ablehnung fortgesetzt. `0x38` bleibt ein separater
+Diagnosepfad und wird nach `0x2D` nicht automatisch gesendet.
+
 #### **2W Befehlsprofil**
 
 Das Befehlsprofil legt das ACEI-Byte für normale 2W-Execute-Befehle kanalweise fest. **Standard / Somfy (0x67)** bleibt die Voreinstellung und entspricht einem realen Somfy-Hub-Mitschnitt. Für Vergleichstests kann **Alternative / KIG300-Capture (0x63)** gewählt werden, ohne die Firmware neu zu kompilieren. Spezielle Telegrammformen wie Lamellen- und Atlantic-Cozy-Befehle behalten ihr eigenes protokollspezifisches ACEI.
@@ -249,13 +255,20 @@ Ablauf:
 
 Reagiert der Aktor nach einem erfolgreichen Klonen trotzdem nicht auf Befehle, liegt dies meist an der **1W Befehls-Priorität (ACEI)**. Manche Aktoren akzeptieren nur die exakte Priorität ihrer Original-Fernbedienung. Über den Parameter *1W Befehls-Priorität (ACEI)* lässt sich diese je Kanal einstellen; die Voreinstellung **Priorität 3 (Velux-Fernbedienung)** entspricht dem Byte einer originalen Velux-Fernbedienung und passt zu den meisten unterstützten 1W-Aktoren. Zum Ausprobieren ohne ETS-Download kann der Wert zur Laufzeit mit `iohcNN 1wacei HH` gesetzt werden (z. B. `iohcNN 1wacei 61` für Velux); diese Laufzeit-Einstellung wird beim Neustart wieder durch den ETS-Parameter ersetzt.
 
-### **VELUX KUX/KLI anlernen und prüfen**
+### **VELUX SML/KUX/KLI anlernen und prüfen**
 
-1. Den KUX, Antrieb oder das Fenster gemäß Herstelleranleitung in das physische PROG-/Zuordnungsfenster versetzen.
+1. Den Antrieb oder das Fenster gemäß Herstelleranleitung in das physische PROG-/Zuordnungsfenster versetzen. Der KUX 110 ist das 24-V-Netzteil, nicht der io-homecontrol-Aktor; ein typisches Funkprodukt ist etwa ein elektrischer VELUX-SML-Rollladen, der vom KUX 110 versorgt wird.
 2. Im wirksamen 1W-Profil den Controller-Hersteller **VELUX** und als ACEI normalerweise `0x61` wählen.
 3. Den Parameter **1W Anmeldeabschluss** auf **Automatisch** belassen. Das Modul sendet dann bei VELUX vier `0x30`-Broadcasts mit derselben logischen Sequenz und danach STOP (`0xD200`) sowie RUNTER/DOWN/GESCHLOSSEN (`0xC800`) an `0x00003F`. STOP und RUNTER erhalten jeweils eine neue Sequenz.
 4. Den Trailer-MAC nur aktivieren, wenn der Aktor oder eine Aufnahme der Originalfernbedienung ausdrücklich die 35-Byte-Form zeigt; üblich ist die 29-Byte-Form ohne Anhang und ohne normalen 1W-HMAC. Die sechs Bytes liegen außerhalb der in CTRL0 deklarierten Länge.
 5. Die physische Bestätigung des Ziels abwarten und anschließend AUF, STOPP und AB testen. Nach einem Neustart erneut testen, damit Schlüssel und Sequenzreserve geprüft sind.
+
+> Steuert eine KLI mehrere Produkte, kann ein einziger Druck auf **Gear** das
+> Registrierungsfenster aller dieser Produkte öffnen. Jedes Produkt mit Ready-/Jog-Sequenz
+> kann den nächsten Controller übernehmen. Für getrennt gesteuerte Behänge deshalb möglichst
+> je Produkt eine eigene 1W-Identität und eine Bedienung verwenden, die nur dieses Produkt
+> fährt. Ein Stromreset über einen gemeinsam genutzten KUX kann alle angeschlossenen Produkte
+> betreffen.
 
 Falls keine Bestätigung erfolgt, `iohcNN 1wctrl status` und `iohc pairdiag status` prüfen. Relevant sind Profilkanal, Controller-Quelle und -Hersteller, Broadcast-Typ, ACEI, MAC-Variante, aufgelöster Anmeldeabschluss sowie die Phasen REMOVE, ADD, STOP und DOWN mit Ziel, Sequenz, Zeit und TX-Ergebnis. Schlüsselmaterial wird nicht ausgegeben. Da 1W keine Bestätigung sendet, beweist ein erfolgreiches TX-Protokoll allein noch kein angenommenes Pairing; bei der Fehlersuche ist eine zweite Empfangseinheit hilfreich.
 
@@ -461,6 +474,26 @@ Wählt den Kommunikationsmodus für diesen Kanal.
 
 * **2W (bidirektional)** (Standard): Vollständige Zwei-Wege-Kommunikation mit Bestätigung und Statusrückmeldung
 * **1W (unidirektional)**: Nur Senden, keine Antwort erwartet. Für ältere Geräte ohne 2W-Unterstützung.
+
+<!-- DOC HelpContext="IOHC-2W-Discovery-Bestaetigung" -->
+#### **2W Discovery-Bestätigung**
+
+Sendet nach einer erfolgreichen `0x29`-Geräteerkennung ein gerichtetes
+`DISCOVER_CONFIRM (0x2C)`, bevor der Schlüsselaustausch beginnt.
+
+* **Senden** (Standard): Sendet `0x2C` mit dem zur Energieklasse passenden Funkprofil.
+* **Senden + ACK**: Alternatives Profil für immer erreichbare Geräte, die das ACK-Bit erwarten. Bei Low-Power-Geräten bleibt das ACK-Bit aus.
+* **Überspringen**: Kompatibilitäts- und Diagnosemodus mit direktem Übergang von `0x29` zu `0x31`.
+
+Eine ausbleibende `0x2D`-Antwort oder eine explizite Ablehnung bricht das Pairing nicht ab.
+
+<!-- DOC HelpContext="IOHC-2W-KeyInit-Verzoegerung" -->
+#### **2W Pause vor Schlüsselaustausch**
+
+Pause nach der Discovery-Bestätigung und vor `KEY_INIT (0x31)`. Der Standardwert ist
+`300 ms`, der Wertebereich `0 ... 10000 ms`. Bei Geräten mit langsamer Pairing-Sequenz kann
+testweise ein größerer Wert verwendet werden. Die Pause blockiert die übrige Modulverarbeitung
+nicht und entfällt im Modus **Überspringen**.
 
 Bei Auswahl von 1W erscheint zusätzlich:
 

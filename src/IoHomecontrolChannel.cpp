@@ -20,6 +20,12 @@
 #ifndef ParamIOHC_cTwoWayPowerClass
 #define ParamIOHC_cTwoWayPowerClass 0
 #endif
+#ifndef ParamIOHC_cTwoWayDiscoverConfirmMode
+#define ParamIOHC_cTwoWayDiscoverConfirmMode 1
+#endif
+#ifndef ParamIOHC_cTwoWayKeyInitDelay
+#define ParamIOHC_cTwoWayKeyInitDelay 300
+#endif
 
 #ifndef ParamIOHC_cTwoWayDiscoveryCommand
 #define ParamIOHC_cTwoWayDiscoveryCommand 0
@@ -211,6 +217,8 @@ void IoHomecontrolChannel::setup()
     const uint8_t lOneWayEnrollmentClasses = static_cast<uint8_t>(ParamIOHC_cOneWayEnrollmentClasses);
     const uint8_t lOneWayPowerClass = static_cast<uint8_t>(ParamIOHC_cOneWayPowerClass);
     const uint8_t lTwoWayPowerClass = static_cast<uint8_t>(ParamIOHC_cTwoWayPowerClass);
+    const uint8_t lTwoWayDiscoverConfirmMode = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoverConfirmMode);
+    const uint16_t lTwoWayKeyInitDelay = static_cast<uint16_t>(ParamIOHC_cTwoWayKeyInitDelay);
     const uint8_t lTwoWayDiscoveryCommand = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryCommand);
     const uint8_t lTwoWayDiscoveryDestination = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryDestination);
     const uint8_t lTwoWayDiscoveryAck = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryAck);
@@ -258,6 +266,11 @@ void IoHomecontrolChannel::setup()
         lTwoWayPowerClass <= static_cast<uint8_t>(TwoWayPowerClass::LowPower)
             ? static_cast<TwoWayPowerClass>(lTwoWayPowerClass)
             : TwoWayPowerClass::Automatic);
+    setConfigured2WDiscoverConfirmMode(
+        lTwoWayDiscoverConfirmMode <= static_cast<uint8_t>(PairingDiscoverConfirmMode::SendWithAck)
+            ? static_cast<PairingDiscoverConfirmMode>(lTwoWayDiscoverConfirmMode)
+            : PairingDiscoverConfirmMode::Send);
+    setConfigured2WKeyInitDelay(lTwoWayKeyInitDelay <= 10000 ? lTwoWayKeyInitDelay : 300);
     setConfigured2WAcei(lTwoWayAcei == 0x63 ? 0x63 : IOHC_ACEI_DEFAULT);
     TwoWayDiscoverySettings lDiscoverySettings;
     if (lTwoWayDiscoveryCommand <= static_cast<uint8_t>(TwoWayDiscoveryCommandMode::DiscoverSPE))
@@ -829,6 +842,26 @@ void IoHomecontrolChannel::setConfigured2WPowerClass(TwoWayPowerClass iPowerClas
 TwoWayPowerClass IoHomecontrolChannel::getConfigured2WPowerClass() const
 {
     return mConfigured2WPowerClass;
+}
+
+void IoHomecontrolChannel::setConfigured2WDiscoverConfirmMode(PairingDiscoverConfirmMode iMode)
+{
+    mConfigured2WDiscoverConfirmMode = iMode;
+}
+
+PairingDiscoverConfirmMode IoHomecontrolChannel::getConfigured2WDiscoverConfirmMode() const
+{
+    return mConfigured2WDiscoverConfirmMode;
+}
+
+void IoHomecontrolChannel::setConfigured2WKeyInitDelay(uint16_t iDelayMs)
+{
+    mConfigured2WKeyInitDelay = iDelayMs > 10000 ? 10000 : iDelayMs;
+}
+
+uint16_t IoHomecontrolChannel::getConfigured2WKeyInitDelay() const
+{
+    return mConfigured2WKeyInitDelay;
 }
 
 bool IoHomecontrolChannel::effectiveLowPower2W() const

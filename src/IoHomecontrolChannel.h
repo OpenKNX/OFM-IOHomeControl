@@ -64,6 +64,10 @@ public:
   bool hasLearnedLowPower2W() const;
   void setConfigured2WPowerClass(TwoWayPowerClass iPowerClass);
   TwoWayPowerClass getConfigured2WPowerClass() const;
+  void setConfigured2WDiscoverConfirmMode(PairingDiscoverConfirmMode iMode);
+  PairingDiscoverConfirmMode getConfigured2WDiscoverConfirmMode() const;
+  void setConfigured2WKeyInitDelay(uint16_t iDelayMs);
+  uint16_t getConfigured2WKeyInitDelay() const;
   bool effectiveLowPower2W() const;
   static const char *twoWayPowerClassName(TwoWayPowerClass iPowerClass);
   void setConfigured2WDiscoverySettings(const TwoWayDiscoverySettings &iSettings);
@@ -138,6 +142,8 @@ private:
   bool mLowPower2W = false;         // Unknown 2W devices default to always-alive
   bool mHasLearnedLowPower2W = false;
   TwoWayPowerClass mConfigured2WPowerClass = TwoWayPowerClass::Automatic;
+  PairingDiscoverConfirmMode mConfigured2WDiscoverConfirmMode = PairingDiscoverConfirmMode::Send;
+  uint16_t mConfigured2WKeyInitDelay = 300;
   TwoWayDiscoverySettings mConfigured2WDiscoverySettings{};
   bool mOneWayEnrolled = false;     // 1W enrollment burst was transmitted successfully
   bool mSilentOperation = false;    // Somfy RS100 2W Execute profile (0x05)

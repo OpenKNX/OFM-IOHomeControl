@@ -195,42 +195,58 @@ function IOHC_controllerStateText(state) {
     case 9:
         return "Warte Discovery-Ack";
     case 10:
-        return "Starte Key-Transfer";
+        return "Pause vor Key-Init";
     case 11:
-        return "Warte Key-Transfer";
+        return "Starte Key-Transfer";
     case 12:
-        return "1W Challenge senden";
+        return "Warte Key-Transfer";
     case 13:
-        return "Warte 1W Challenge";
+        return "1W Challenge senden";
     case 14:
-        return "1W Remove senden";
+        return "Warte 1W Challenge";
     case 15:
-        return "Warte 1W Remove";
+        return "1W Ankuendigung senden";
     case 16:
-        return "1W Key senden";
+        return "Warte 1W Ankuendigung";
     case 17:
-        return "Warte 1W Key";
+        return "1W Remove senden";
     case 18:
-        return "Key init senden";
+        return "Warte 1W Remove";
     case 19:
-        return "Warte Challenge";
+        return "1W Key senden";
     case 20:
-        return "Key senden";
+        return "Warte 1W Key";
     case 21:
-        return "Key-Antwort senden";
+        return "1W STOP senden";
     case 22:
-        return "Warte Key-Bestaetigung";
+        return "Warte 1W STOP";
     case 23:
-        return "SetConfig1 senden";
+        return "1W Abschluss-Pause";
     case 24:
-        return "Warte SetConfig1";
+        return "1W AB senden";
     case 25:
-        return "SetConfig1 Auth senden";
+        return "Warte 1W AB";
     case 26:
-        return "Warte SetConfig1 final";
+        return "Key init senden";
     case 27:
-        return "Pairing abgeschlossen";
+        return "Warte Challenge";
     case 28:
+        return "Key senden";
+    case 29:
+        return "Key-Antwort senden";
+    case 30:
+        return "Warte Key-Bestaetigung";
+    case 31:
+        return "SetConfig1 senden";
+    case 32:
+        return "Warte SetConfig1";
+    case 33:
+        return "SetConfig1 Auth senden";
+    case 34:
+        return "Warte SetConfig1 final";
+    case 35:
+        return "Pairing abgeschlossen";
+    case 36:
         return "Pairing fehlgeschlagen";
     default:
         return "State " + state;

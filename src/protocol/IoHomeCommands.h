@@ -36,7 +36,7 @@ enum class IoHomeCommand : uint8_t
     DiscoverSPERequest = 0x2A, // Encrypted discovery
     DiscoverSPEResponse = 0x2B,
     Confirmation = 0x2C,
-    ConfirmationACK = 0x2D,   // Device ACKs discovery confirmation (not used — consumed implicitly in reference)
+    ConfirmationACK = 0x2D,   // Device ACKs discovery confirmation
     Discover2ERequest = 0x2E, // 1W learning mode / pairing start
     Discover2EResponse = 0x2F, // addressed authenticated response; passive diagnosis only
 
@@ -162,6 +162,15 @@ enum class TwoWayDiscoveryPreambleMode : uint8_t
     Long = 1,
     Normal = 2,
     Short = 3,
+};
+
+// Post-discovery handshake policy. Send is the capture-backed default and is
+// deliberately tolerant: a missing 0x2D never prevents the following key-init.
+enum class PairingDiscoverConfirmMode : uint8_t
+{
+    Skip = 0,
+    Send = 1,
+    SendWithAck = 2,
 };
 
 struct TwoWayDiscoverySettings

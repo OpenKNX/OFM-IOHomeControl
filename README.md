@@ -61,6 +61,7 @@ The protocol implementation covers manufacturers such as Velux, Somfy, Atlantic,
 - **Encrypted discovery (SPE)** for scanning already-paired devices
 - **Flash persistence** of 2W identity/pairing data and complete per-channel 1W controller profiles
 - **Per-channel 2W Execute profile** with the captured Somfy default ACEI `0x67` and selectable KIG300 alternative `0x63`
+- **Tolerant 2W discovery confirmation**: normal pairing sends directed `0x2C` after `0x29`, accepts optional `0x2D`, retries three times and continues to `0x31` after ACK, refusal, or silence
 - **Byte-exact protocol self-tests** for serializer boundaries, 1W/2W crypto vectors and key-transfer transcripts
 
 For 2W, the module uses one global controller node ID and system key. For 1W, each channel uses a Cyril-style virtual remote profile containing its own controller address, key, sequence counter, reserved sequence watermark, type and manufacturer. Channels that should control the same 1W group can explicitly share one profile. Normal 1W commands reserve sequence numbers ahead in flash instead of saving after every frame; pairing/add/remove still force an immediate persistence update. New/imported profiles use sequence `1` for their first frame.
@@ -77,18 +78,19 @@ The 1W path follows the reference remote model more closely than older gateway-d
 - Normal 1W commands use typed broadcast destinations by default, computed as `dst=((type << 6) | 0x3F)`. Automatic mode maps the ETS device role to its protocol class; type `0` remains the explicit all-device target.
 - Normal 1W control uses the raw io-homecontrol closedness convention internally (`0=open`, `100=closed`). UI/KNX open percentages are converted explicitly at the channel boundary.
 - 1W radio transmission uses four total sends with 40 ms spacing. The exact preamble shape comes from the controller profile and configured power class. Enrollment is an asynchronous serialized operation, so normal queued traffic cannot appear between REMOVE, ADD, STOP, and DOWN.
-- VELUX automatic power shaping follows the first hardware-confirmed KUX 110 enrollment profile: four normal 32-symbol preambles with no `LOW_POWER` bit. Select **Low Power** explicitly for solar/battery products; it sends `1024/32/32/32` and sets `LOW_POWER` only on the wake-up copy.
+- VELUX automatic power shaping follows the first hardware-confirmed mains-powered SML roller-shutter profile (powered by a KUX 110 24 V supply): four normal 32-symbol preambles with no `LOW_POWER` bit. Select **Low Power** explicitly for solar/battery products; it sends `1024/32/32/32` and sets `LOW_POWER` only on the wake-up copy.
 
 ### VELUX KUX/KLI commissioning and troubleshooting
 
-1. Put the owned KUX, actuator, or window product into its physical PROG/association window before starting module enrollment. The exact gesture and confirmation movement are device-specific; follow the relevant VELUX manual.
+1. Put the owned actuator or window product into its physical PROG/association window before starting module enrollment. A KUX 110 is the 24 V power supply, not the io-homecontrol actuator; for example, the radio product can be an SML electric roller shutter powered by the KUX 110. Follow the relevant product manual.
 2. Configure the effective 1W controller manufacturer as **VELUX** (`0x01`). Automatic finalization depends on this profile value.
 3. Leave the 1W command ACEI at the VELUX remote value `0x61` unless a capture of the original remote proves another value.
-4. For a KUX 110 or exterior KLI profile, use the automatic enrollment classes (`roller_shutter`, `awning`, `dual_shutter`). For KLI 312 interior blinds, select **Interior blinds KLI 312**, which sends ADD to `blind` and `venetian_blind`. The classes visible in an original remote's `0x2E` frames are the classes the ADD sweep must contain.
-5. Use **Automatic** or **Always alive** for a mains-powered KUX 110 (`32/32/32/32`). Use **Low Power** for solar/battery receivers (`1024/32/32/32`, `LOW_POWER` on the first copy).
-6. Leave the `0x30` MAC trailer disabled unless the original remote or actuator is known to require the 35-byte variant. Both MAC and no-MAC forms remain supported.
-7. If enrollment fails, run `iohcNN 1wctrl status` and `iohc pairdiag status`. Check profile ownership, controller source/key, finalizer resolution, per-phase destination/sequence/TX result, and STOP-to-DOWN timing. Diagnostics redact wrapped keys and key material.
-8. After the target confirms pairing, test OPEN, STOP, and CLOSE, then reboot the module and repeat a command to verify that the persistent controller key and reserved sequence remain accepted.
+4. For exterior products use the automatic enrollment classes (`roller_shutter`, `awning`, `dual_shutter`). For KLI 312 interior blinds, select **Interior blinds KLI 312**, which sends ADD to `blind` and `venetian_blind`. The classes visible in an original remote's `0x2E` frames are the classes the ADD sweep must contain.
+5. Use **Automatic** or **Always alive** for a mains-powered actuator such as an SML supplied by a KUX 110 (`32/32/32/32`). Use **Low Power** for solar/battery receivers (`1024/32/32/32`, `LOW_POWER` on the first copy).
+6. One KLI Gear press can open registration on every product controlled by that KLI. Use a control that operates only the intended product and prefer one 1W identity per separately controlled cover. Power-cycling a shared KUX supply can affect every connected product.
+7. Leave the `0x30` MAC trailer disabled unless the original remote or actuator is known to require the 35-byte variant. Both MAC and no-MAC forms remain supported.
+8. If enrollment fails, run `iohcNN 1wctrl status` and `iohc pairdiag status`. Check profile ownership, controller source/key, finalizer resolution, per-phase destination/sequence/TX result, and STOP-to-DOWN timing. Diagnostics redact wrapped keys and key material.
+9. After the target confirms pairing, test OPEN, STOP, and CLOSE, then reboot the module and repeat a command to verify that the persistent controller key and reserved sequence remain accepted.
 
 Because 1W devices do not acknowledge these frames, a successful local TX trace alone is not proof of physical enrollment. A second receiver capture and the target's confirmation movement are the definitive checks.
 
