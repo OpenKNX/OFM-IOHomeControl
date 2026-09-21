@@ -547,8 +547,15 @@ void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
 
     if (!iIsMoving)
     {
+        clearStopTravelSnapshot();
         clearStatusPollTracking();
         stopTravelEstimation(false);
+    }
+    else if (mStopTravelSnapshot.valid)
+    {
+        // A real moving status resolves an ambiguous STOP in favour of the
+        // pre-STOP trajectory.
+        restoreStopTravelSnapshot();
     }
     else if (mTravelDurationMs == 0 && mTargetPosition != mCurrentPosition)
         startTravelEstimation(mTargetPosition);
@@ -989,7 +996,7 @@ OneWayPowerClass IoHomecontrolChannel::getConfigured1WPowerClass() const { retur
 void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPercent)
 {
     logDebugP("Send position %.1f%%", iPercent);
-    mTargetPosition = clampPercent(iPercent);
+    const float lTargetPosition = clampPercent(iPercent);
     uint8_t lParam = (uint8_t)(iPercent + 0.5f);
     const bool lQueued = mIs1W
                              ? mController.sendChannelCommand(this, IoHomeCommand::Execute, lParam, iSlatPercent)
@@ -998,7 +1005,8 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
     if (!lQueued)
         return;
 
-    startTravelEstimation(mTargetPosition);
+    clearStopTravelSnapshot();
+    startTravelEstimation(lTargetPosition);
     if (!mIs1W || mNodeId != 0)
         startStatusPollTracking(defaultTrackedStatusPollDelayMs());
 }
@@ -1014,6 +1022,7 @@ void IoHomecontrolChannel::sendUpDown(bool iDown)
     if (!lQueued)
         return;
 
+    clearStopTravelSnapshot();
     startTravelEstimation((float)lPercent);
     if (!mIs1W || mNodeId != 0)
         startStatusPollTracking(defaultTrackedStatusPollDelayMs());
@@ -1022,12 +1031,19 @@ void IoHomecontrolChannel::sendUpDown(bool iDown)
 void IoHomecontrolChannel::sendStop()
 {
     logDebugP("Send STOP");
-    stopTravelEstimation(true);
     const bool lQueued = mIs1W
                              ? mController.sendChannelCommand(this, IoHomeCommand::Execute, 0xD2)
                              : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD2);
     if (!lQueued)
         return;
+
+    mStopTravelSnapshot.valid = mTravelDurationMs != 0 || mIsMoving;
+    mStopTravelSnapshot.moving = mIsMoving;
+    mStopTravelSnapshot.targetPosition = mTargetPosition;
+    mStopTravelSnapshot.travelStartPosition = mTravelStartPosition;
+    mStopTravelSnapshot.travelStartTime = mTravelStartTime;
+    mStopTravelSnapshot.travelDurationMs = mTravelDurationMs;
+    stopTravelEstimation(true);
 
     if (!mIs1W || mNodeId != 0)
         startStatusPollTracking(defaultTrackedStatusPollDelayMs());
@@ -1043,6 +1059,7 @@ void IoHomecontrolChannel::sendFavorite()
     if (!lQueued)
         return;
 
+    clearStopTravelSnapshot();
     if (!mIs1W || mNodeId != 0)
         startStatusPollTracking(defaultTrackedStatusPollDelayMs());
 }
@@ -1313,6 +1330,68 @@ void IoHomecontrolChannel::stopTravelEstimation(bool iPublishPosition)
     mTravelStartTime = 0;
     mTravelStartPosition = mCurrentPosition;
     mTargetPosition = mCurrentPosition;
+}
+
+void IoHomecontrolChannel::clearStopTravelSnapshot()
+{
+    mStopTravelSnapshot = StopTravelSnapshot{};
+}
+
+void IoHomecontrolChannel::restoreStopTravelSnapshot()
+{
+    if (!mStopTravelSnapshot.valid)
+        return;
+
+    const StopTravelSnapshot lSnapshot = mStopTravelSnapshot;
+    clearStopTravelSnapshot();
+    mIsMoving = lSnapshot.moving;
+    mTargetPosition = lSnapshot.targetPosition;
+    mTravelStartPosition = lSnapshot.travelStartPosition;
+    mTravelStartTime = lSnapshot.travelStartTime;
+    mTravelDurationMs = lSnapshot.travelDurationMs;
+    if (!isBinaryDeviceType())
+        getKo(IOHC_KoCHMovementStatus).value(mIsMoving, Dpt(1, 11));
+    logInfoP("STOP exchange failed before authentication; restored travel target %.1f%%", mTargetPosition);
+}
+
+void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8_t iParam,
+                                                    IoHomeCommandExchangeResult iResult)
+{
+    if (iCommand != IoHomeCommand::Execute || iParam != 0xD2)
+        return;
+
+    switch (iResult)
+    {
+    case IoHomeCommandExchangeResult::Completed:
+        clearStopTravelSnapshot();
+        break;
+    case IoHomeCommandExchangeResult::FailedBeforeAuthentication:
+        restoreStopTravelSnapshot();
+        break;
+    case IoHomeCommandExchangeResult::AuthenticatedUnconfirmed:
+        // The actuator authenticated the STOP, so replay/rollback is unsafe.
+        // Keep the snapshot until a status update or a new movement resolves it.
+        break;
+    }
+}
+
+void IoHomecontrolChannel::onExchangeTimeout(bool iAuthenticatedUnconfirmed)
+{
+    uint16_t &lCounter = iAuthenticatedUnconfirmed
+                             ? mUnconfirmedExchangeCount
+                             : mExchangeTimeoutCount;
+    if (lCounter != UINT16_MAX)
+        ++lCounter;
+}
+
+uint16_t IoHomecontrolChannel::exchangeTimeoutCount() const
+{
+    return mExchangeTimeoutCount;
+}
+
+uint16_t IoHomecontrolChannel::unconfirmedExchangeCount() const
+{
+    return mUnconfirmedExchangeCount;
 }
 
 void IoHomecontrolChannel::updateEstimatedPosition()

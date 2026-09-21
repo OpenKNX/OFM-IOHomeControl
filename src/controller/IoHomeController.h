@@ -239,9 +239,9 @@ public:
     Failed = 3
   };
 
-  // Outcome of the most recent pairing attempt. `diagnostic` retains the
-  // latest actionable problem even when pairing later completes (for example,
-  // a device that accepted its key but rejected optional status configuration).
+  // Outcome of the most recent pairing attempt. Optional post-pair status
+  // configuration is reported separately and never turns a stored key into a
+  // failed pairing result.
   enum class PairingOutcome : uint8_t
   {
     None = 0,
@@ -256,6 +256,15 @@ public:
     // 1W has no return path: a completed enrollment burst only proves that the
     // frames left the radio, never that the actuator stored the controller.
     OneWayEnrollmentTransmitted = 9
+  };
+
+  enum class PairingOptionalConfigResult : uint8_t
+  {
+    NotAttempted = 0,
+    Accepted = 1,
+    Rejected = 2,
+    NoReply = 3,
+    TxFailure = 4,
   };
 
   struct PairingTelemetry
@@ -276,6 +285,31 @@ public:
       NoReply = 4,
     } discoverConfirmResult = DiscoverConfirmResult::NotRun;
     uint8_t discoverConfirmAttempts = 0;
+    PairingOptionalConfigResult optionalConfig = PairingOptionalConfigResult::NotAttempted;
+  };
+
+  struct ExchangeRadioSnapshot
+  {
+    bool valid = false;
+    uint32_t nodeId = 0;
+    IoHomeCommand command = IoHomeCommand::Execute;
+    uint8_t attempt = 0;
+    bool sawChallenge = false;
+    uint32_t frequencyHz = 0;
+    bool rxDone = false;
+    bool crcError = false;
+    bool preambleDetected = false;
+    bool syncDetected = false;
+    uint16_t lastIrq = 0;
+    uint8_t lastLength = 0;
+    int16_t rssi = 0;
+  };
+
+  struct ExchangeDiagnostics
+  {
+    uint16_t timeoutCount = 0;
+    uint16_t unconfirmedCount = 0;
+    ExchangeRadioSnapshot lastUnconfirmed{};
   };
 
   enum class OneWayEnrollPhase : uint8_t
@@ -544,6 +578,7 @@ public:
   static const char *stateName(ControllerState iState);
   static const char *pairingOutcomeName(PairingOutcome iOutcome);
   const PairingTelemetry &pairingTelemetry() const;
+  const ExchangeDiagnostics &exchangeDiagnostics() const;
   void logPairDiagnosticStatus() const;
   const OneWayEnrollmentTraceEntry *oneWayEnrollmentTrace() const;
   uint8_t oneWayEnrollmentTraceCount() const;
@@ -822,6 +857,11 @@ private:
   uint32_t mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
   uint32_t mRetryAtMs = 0;
   uint32_t mExchangeStartMs = 0;
+  ExchangeDiagnostics mExchangeDiagnostics{};
+  uint32_t mExchangeStartRxDoneCount = 0;
+  uint32_t mExchangeStartCrcErrorCount = 0;
+  uint32_t mExchangeStartPreambleCount = 0;
+  uint32_t mExchangeStartSyncCount = 0;
 
   // Passive UNKNOWN_86 (0x86) observation. No semantics are assumed; only the
   // raw frame and any traffic between the same node pair are logged.
@@ -848,6 +888,8 @@ private:
   uint8_t mPairDiscoverConfirmAttempts = 0;
   PairingDiscoverConfirmMode mPairDiscoverConfirmMode = PairingDiscoverConfirmMode::Send;
   uint16_t mPairKeyInitDelayMs = IOHC_PAIR_KEY_INIT_DELAY_DEFAULT_MS;
+  uint16_t mPairDiscoveryTxPreamble = 0;
+  uint16_t mPairAcceptedDiscoveryPreamble = 0;
   uint32_t mPairKeyExchangeStartTime;
   uint8_t mPairingFreqIdx;
   uint8_t mDiscoverySweep; // diagnostic discovery: current full-sweep attempt (0-based)
@@ -1053,7 +1095,14 @@ private:
   void beginPairingTelemetry(uint8_t iChannelIndex, uint32_t iKnownNodeId);
   void recordPairingDiagnostic(PairingOutcome iOutcome, const char *iAction);
   void completePairingTelemetry(PairingOutcome iOutcome);
+  void setPairingOptionalConfigResult(PairingOptionalConfigResult iResult);
   void beginPairKeyInitDelay(PairingTelemetry::DiscoverConfirmResult iResult);
+  uint16_t pairingStartPreamble(const IoHomeFrame &iFrame) const;
+  void resetPairingPreambleState();
+  void beginExchangeDiagnosticsWindow();
+  void recordExchangeFailure(const IoHomeQueueEntry &iEntry, bool iAuthenticatedUnconfirmed);
+  void notifyCommandExchangeResult(const IoHomeQueueEntry &iEntry,
+                                   IoHomeCommandExchangeResult iResult);
   void resetOneWayEnrollmentTrace();
   void observeUnknown86Frame();
   void recordOneWayEnrollmentPhase(OneWayEnrollPhase iPhase, uint16_t iSequence,

@@ -3175,6 +3175,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                              lResolvedDiscovery.lowPower ? 1U : 0U,
                              static_cast<unsigned>(lResolvedDiscovery.preamble));
                 }
+                logInfoP("  exchanges: timeout=%u authenticated-unconfirmed=%u",
+                         static_cast<unsigned>(lCh->exchangeTimeoutCount()),
+                         static_cast<unsigned>(lCh->unconfirmedExchangeCount()));
                 if (iDebugKo)
                     openknx.console.writeDiagnoseKo("Ch%02d %s %06X", lIdx + 1,
                                                     lCh->isOperational() ? "P" : "-",
@@ -5857,6 +5860,27 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                  lHealth.lastTxSetStatus,
                  lHealth.lastTxIrqImmediate);
 #endif
+
+        const auto &lExchange = mController.exchangeDiagnostics();
+        logInfoP("Exchange diagnostics: timeout=%u authenticated-unconfirmed=%u",
+                 static_cast<unsigned>(lExchange.timeoutCount),
+                 static_cast<unsigned>(lExchange.unconfirmedCount));
+        if (lExchange.lastUnconfirmed.valid)
+        {
+            const auto &lSnapshot = lExchange.lastUnconfirmed;
+            logInfoP("Exchange last-unconfirmed: node=0x%06X cmd=0x%02X attempt=%u freq=%lu rxDone=%u crc=%u preamble=%u sync=%u irq=0x%04X len=%u rssi=%d",
+                     lSnapshot.nodeId,
+                     static_cast<unsigned>(static_cast<uint8_t>(lSnapshot.command)),
+                     static_cast<unsigned>(lSnapshot.attempt),
+                     static_cast<unsigned long>(lSnapshot.frequencyHz),
+                     lSnapshot.rxDone ? 1U : 0U,
+                     lSnapshot.crcError ? 1U : 0U,
+                     lSnapshot.preambleDetected ? 1U : 0U,
+                     lSnapshot.syncDetected ? 1U : 0U,
+                     lSnapshot.lastIrq,
+                     static_cast<unsigned>(lSnapshot.lastLength),
+                     lSnapshot.rssi);
+        }
 
         if (iDebugKo)
             openknx.console.writeDiagnoseKo("R %d %d %d %d %d",

@@ -9575,6 +9575,121 @@ TEST(controller_default_2w_pairing_confirms_discovery_before_key_init)
     IoHomeFrame lKeyInitFrame;
     ASSERT_TRUE(transmitQueuedControllerFrame(lController, lKeyInitFrame));
     ASSERT_EQ(lKeyInitFrame.commandId, IoHomeCommand::KeyInitTransfer);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+}
+
+TEST(controller_velux_ssl_pairing_caps_directed_start_preambles_to_discovery)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    const uint8_t lChallenge[6] = {1, 2, 3, 4, 5, 6};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, 0, lKey);
+    lController.setSystemKey(lKey);
+
+    TwoWayDiscoverySettings lSettings;
+    lSettings.destination = TwoWayDiscoveryDestinationMode::DiscoverAlt;
+    lSettings.ack = TwoWayDiscoveryFlagMode::On;
+    lSettings.lowPower = TwoWayDiscoveryFlagMode::Off;
+    lSettings.preamble = TwoWayDiscoveryPreambleMode::Normal;
+    lChannel.setConfigured2WDiscoverySettings(lSettings);
+
+    ASSERT_TRUE(lController.startPairing(0, lDeviceNodeId));
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::DiscoverRequest);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x00003FU);
+    ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_ACK) != 0);
+    ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+
+    IoHomeFrame lDiscoverResponse;
+    buildDiscoverResponseFrame(lDiscoverResponse, lRemoteNodeId, lDeviceNodeId,
+                               false, IOHC_POWER_SAVE_LOW_POWER);
+    ASSERT_TRUE(queueControllerResponse(lController, lDiscoverResponse));
+    ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::Confirmation);
+    ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+
+    IoHomeFrame lConfirmAck;
+    buildDiscoveryConfirmationAckFrame(lConfirmAck, lRemoteNodeId, lDeviceNodeId);
+    ASSERT_TRUE(queueControllerResponse(lController, lConfirmAck));
+    ioHomeTestAdvanceMillis(IOHC_PAIR_KEY_INIT_DELAY_DEFAULT_MS);
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::KeyInitTransfer);
+    ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+
+    // Every 0x31 retry keeps the successful discovery cap.
+    ioHomeTestAdvanceMillis(5001);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::PairSendKeyInit);
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::KeyInitTransfer);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+
+    IoHomeFrame lChallengeRequest;
+    buildPairChallengeRequestFrame(lChallengeRequest, lRemoteNodeId, lDeviceNodeId, lChallenge);
+    ASSERT_TRUE(queueControllerResponse(lController, lChallengeRequest));
+    ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::KeyTransfer);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
+
+    IoHomeFrame lSetConfig;
+    ASSERT_TRUE(queueKeyTransferConfirmationAndCaptureSetConfig1(
+        lController, lRemoteNodeId, lDeviceNodeId, lSetConfig));
+    ASSERT_EQ(lSetConfig.commandId, IoHomeCommand::SetConfig1);
+    ASSERT_TRUE((lSetConfig.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lController.pairingTelemetry().outcome,
+              IoHomeController::PairingOutcome::Success);
+    ASSERT_EQ(lController.pairingTelemetry().diagnostic,
+              IoHomeController::PairingOutcome::None);
+
+    // After the transaction, the cap disappears and normal low-power commands
+    // return to the long wake-up preamble.
+    IoHomeFrame lConfigError;
+    buildErrorResponseFrame(lConfigError, lRemoteNodeId, lDeviceNodeId, 0x05);
+    ASSERT_TRUE(queueControllerResponse(lController, lConfigError));
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::Idle);
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 50));
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+}
+
+TEST(controller_pairing_runtime_short_discovery_override_caps_directed_starts)
+{
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  0x831F2A, 0, lKey);
+    lController.setSystemKey(lKey);
+    TwoWayDiscoverySettings lRuntime;
+    lRuntime.preamble = TwoWayDiscoveryPreambleMode::Short;
+    lController.setDiagnosticDiscoverySettings(lRuntime);
+
+    ASSERT_TRUE(lController.startPairing(0, 0x7E9E6E));
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
+    IoHomeFrame lDiscoverResponse;
+    buildDiscoverResponseFrame(lDiscoverResponse, 0x831F2A, 0x7E9E6E,
+                               false, IOHC_POWER_SAVE_LOW_POWER);
+    ASSERT_TRUE(queueControllerResponse(lController, lDiscoverResponse));
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
+    ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+    ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
 }
 
 TEST(controller_pairing_discovery_learns_always_alive)
@@ -9799,6 +9914,12 @@ TEST(controller_2w_pairing_succeeds_when_setconfig1_times_out)
     lController.loop();
 
     ASSERT_EQ(lController.state(), ControllerState::PairComplete);
+    ASSERT_EQ(lController.pairingTelemetry().outcome,
+              IoHomeController::PairingOutcome::Success);
+    ASSERT_EQ(lController.pairingTelemetry().diagnostic,
+              IoHomeController::PairingOutcome::None);
+    ASSERT_EQ(lController.pairingTelemetry().optionalConfig,
+              IoHomeController::PairingOptionalConfigResult::NoReply);
 }
 
 TEST(controller_2w_pairing_accepts_direct_key_confirmation_without_challenge)
@@ -10122,6 +10243,90 @@ TEST(controller_2w_pairing_succeeds_when_setconfig1_returns_error_response)
 
     ASSERT_TRUE(lController.state() == ControllerState::PairComplete ||
                 lController.state() == ControllerState::Idle);
+    ASSERT_EQ(lController.pairingTelemetry().outcome,
+              IoHomeController::PairingOutcome::Success);
+    ASSERT_EQ(lController.pairingTelemetry().diagnostic,
+              IoHomeController::PairingOutcome::None);
+    ASSERT_EQ(lController.pairingTelemetry().optionalConfig,
+              IoHomeController::PairingOptionalConfigResult::Rejected);
+}
+
+TEST(controller_successful_pairing_clears_stale_invalid_frame_diagnostic)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    const uint8_t lChallenge[6] = {1, 2, 3, 4, 5, 6};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, 0, lKey);
+    lController.setSystemKey(lKey);
+
+    ASSERT_TRUE(lController.startPairing(0, lDeviceNodeId));
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    IoHomeFrame lForeign;
+    buildDiscoverResponseFrame(lForeign, lRemoteNodeId, 0x123456);
+    ASSERT_TRUE(queueControllerResponse(lController, lForeign));
+    ASSERT_EQ(lController.pairingTelemetry().diagnostic,
+              IoHomeController::PairingOutcome::InvalidResponse);
+
+    IoHomeFrame lDiscovery;
+    buildDiscoverResponseFrame(lDiscovery, lRemoteNodeId, lDeviceNodeId);
+    ASSERT_TRUE(queueControllerResponse(lController, lDiscovery));
+    IoHomeFrame lAck;
+    buildDiscoveryConfirmationAckFrame(lAck, lRemoteNodeId, lDeviceNodeId);
+    ASSERT_TRUE(queueControllerResponse(lController, lAck));
+    ioHomeTestAdvanceMillis(IOHC_PAIR_KEY_INIT_DELAY_DEFAULT_MS);
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    IoHomeFrame lChallengeFrame;
+    buildPairChallengeRequestFrame(lChallengeFrame, lRemoteNodeId, lDeviceNodeId, lChallenge);
+    ASSERT_TRUE(queueControllerResponse(lController, lChallengeFrame));
+    IoHomeFrame lSetConfig;
+    ASSERT_TRUE(queueKeyTransferConfirmationAndCaptureSetConfig1(
+        lController, lRemoteNodeId, lDeviceNodeId, lSetConfig));
+
+    ASSERT_EQ(lController.pairingTelemetry().outcome,
+              IoHomeController::PairingOutcome::Success);
+    ASSERT_EQ(lController.pairingTelemetry().diagnostic,
+              IoHomeController::PairingOutcome::None);
+}
+
+TEST(controller_2w_pairing_reports_optional_setconfig_acceptance)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, 0, lKey);
+    lController.setSystemKey(lKey);
+    ASSERT_TRUE(advancePairingToWaitKeyTransferConfirmation(
+        lController, lRemoteNodeId, lDeviceNodeId));
+    IoHomeFrame lSetConfig;
+    ASSERT_TRUE(queueKeyTransferConfirmationAndCaptureSetConfig1(
+        lController, lRemoteNodeId, lDeviceNodeId, lSetConfig));
+
+    IoHomeFrame lAccepted;
+    lAccepted.init();
+    lAccepted.ctrlByte0 = IOHC_CTRL0_END;
+    lAccepted.setSrcNode(lDeviceNodeId);
+    lAccepted.setDestNode(lRemoteNodeId);
+    lAccepted.commandId = IoHomeCommand::SetConfig1Response;
+    lAccepted.data[0] = 0x05;
+    lAccepted.dataLen = 1;
+    ASSERT_TRUE(queueControllerResponse(lController, lAccepted));
+
+    ASSERT_EQ(lController.pairingTelemetry().outcome,
+              IoHomeController::PairingOutcome::Success);
+    ASSERT_EQ(lController.pairingTelemetry().diagnostic,
+              IoHomeController::PairingOutcome::None);
+    ASSERT_EQ(lController.pairingTelemetry().optionalConfig,
+              IoHomeController::PairingOptionalConfigResult::Accepted);
 }
 
 TEST(controller_2w_pairing_loopback_accepts_ack_and_dropped_confirm_replies)
@@ -10212,6 +10417,12 @@ TEST(controller_2w_pairing_succeeds_when_setconfig1_send_or_setup_fails)
         ASSERT_TRUE(lController.radio().testLastTransmittedPacket().empty());
         ASSERT_EQ(lChannel.getNodeId(), lDeviceNodeId);
         ASSERT_EQ(lController.state(), ControllerState::PairComplete);
+        ASSERT_EQ(lController.pairingTelemetry().outcome,
+                  IoHomeController::PairingOutcome::Success);
+        ASSERT_EQ(lController.pairingTelemetry().diagnostic,
+                  IoHomeController::PairingOutcome::None);
+        ASSERT_EQ(lController.pairingTelemetry().optionalConfig,
+                  IoHomeController::PairingOptionalConfigResult::TxFailure);
     }
 
     {
@@ -10233,6 +10444,12 @@ TEST(controller_2w_pairing_succeeds_when_setconfig1_send_or_setup_fails)
         ASSERT_TRUE(lController.radio().testLastTransmittedPacket().empty());
         ASSERT_EQ(lChannel.getNodeId(), lDeviceNodeId);
         ASSERT_EQ(lController.state(), ControllerState::PairComplete);
+        ASSERT_EQ(lController.pairingTelemetry().outcome,
+                  IoHomeController::PairingOutcome::Success);
+        ASSERT_EQ(lController.pairingTelemetry().diagnostic,
+                  IoHomeController::PairingOutcome::None);
+        ASSERT_EQ(lController.pairingTelemetry().optionalConfig,
+                  IoHomeController::PairingOptionalConfigResult::TxFailure);
     }
 }
 
@@ -12012,6 +12229,13 @@ TEST(controller_2w_exchange_uses_three_total_attempts_without_trailing_gap)
     ASSERT_EQ(lController.state(), ControllerState::Idle);
     ASSERT_EQ(lController.radio().testTransmitCount(),
               static_cast<size_t>(IOHC_EXCHANGE_MAX_ATTEMPTS));
+    ASSERT_EQ(lController.exchangeDiagnostics().timeoutCount, 1U);
+    ASSERT_EQ(lController.exchangeDiagnostics().unconfirmedCount, 0U);
+    ASSERT_EQ(lChannel.exchangeTimeoutCount(), 1U);
+    ASSERT_EQ(lChannel.unconfirmedExchangeCount(), 0U);
+    ASSERT_TRUE(lChannel.testHasCommandExchangeResult());
+    ASSERT_EQ(lChannel.testLastCommandExchangeResult(),
+              IoHomeCommandExchangeResult::FailedBeforeAuthentication);
 }
 
 TEST(controller_2w_exchange_budget_prevents_late_retry)
@@ -12305,6 +12529,9 @@ TEST(controller_2w_final_response_wait_and_sx1262_dwell)
     ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
     ASSERT_EQ(lController.radio().rxStartCount(), lRxStartsBeforeDwell + 1);
 
+    lController.radio().testInjectRxDiagnostics(true, true, true, 0x0242, 7, -83);
+    lController.radio().testInjectRxDiagnostics(false, false, false, 0x0242, 7, -83);
+
     ioHomeTestAdvanceMillis(IOHC_AUTH_DWELL_MS_SX1262 - 1);
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
@@ -12325,6 +12552,78 @@ TEST(controller_2w_final_response_wait_and_sx1262_dwell)
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::Idle);
     ASSERT_EQ(lController.radio().testTransmitCount(), 2U);
+    ASSERT_EQ(lController.exchangeDiagnostics().timeoutCount, 0U);
+    ASSERT_EQ(lController.exchangeDiagnostics().unconfirmedCount, 1U);
+    ASSERT_EQ(lChannel.exchangeTimeoutCount(), 0U);
+    ASSERT_EQ(lChannel.unconfirmedExchangeCount(), 1U);
+    ASSERT_TRUE(lChannel.testHasCommandExchangeResult());
+    ASSERT_EQ(lChannel.testLastCommandExchangeResult(),
+              IoHomeCommandExchangeResult::AuthenticatedUnconfirmed);
+    const auto &lSnapshot = lController.exchangeDiagnostics().lastUnconfirmed;
+    ASSERT_TRUE(lSnapshot.valid);
+    ASSERT_EQ(lSnapshot.nodeId, lDeviceNodeId);
+    ASSERT_EQ(lSnapshot.command, IoHomeCommand::Execute);
+    ASSERT_TRUE(lSnapshot.sawChallenge);
+    ASSERT_TRUE(lSnapshot.rxDone);
+    ASSERT_TRUE(lSnapshot.crcError);
+    ASSERT_TRUE(lSnapshot.preambleDetected);
+    ASSERT_TRUE(lSnapshot.syncDetected);
+    ASSERT_EQ(lSnapshot.lastIrq, 0x0242U);
+    ASSERT_EQ(lSnapshot.lastLength, 7U);
+    ASSERT_EQ(lSnapshot.rssi, -83);
+}
+
+TEST(controller_stop_tx_failure_notifies_channel_for_state_rollback)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey,
+                                        IoHomeCommand::Execute, 0xD2));
+    lController.radio().testSetNextTransmitError(RadioError::HardwareError);
+    lController.loop();
+    lController.loop();
+
+    ASSERT_EQ(lController.state(), ControllerState::Idle);
+    ASSERT_TRUE(lChannel.testHasCommandExchangeResult());
+    ASSERT_EQ(lChannel.testLastCommandExchangeCommand(), IoHomeCommand::Execute);
+    ASSERT_EQ(lChannel.testLastCommandExchangeParam(), 0xD2U);
+    ASSERT_EQ(lChannel.testLastCommandExchangeResult(),
+              IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+}
+
+TEST(controller_successful_exchange_does_not_increment_failure_diagnostics)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey,
+                                        IoHomeCommand::Execute, 0xD2));
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    IoHomeFrame lResponse;
+    buildErrorResponseFrame(lResponse, lRemoteNodeId, lDeviceNodeId, 0x00);
+    lResponse.commandId = IoHomeCommand::PrivateResponse;
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+
+    ASSERT_EQ(lController.exchangeDiagnostics().timeoutCount, 0U);
+    ASSERT_EQ(lController.exchangeDiagnostics().unconfirmedCount, 0U);
+    ASSERT_EQ(lChannel.exchangeTimeoutCount(), 0U);
+    ASSERT_EQ(lChannel.unconfirmedExchangeCount(), 0U);
+    ASSERT_EQ(lChannel.testLastCommandExchangeResult(),
+              IoHomeCommandExchangeResult::Completed);
 }
 
 TEST(controller_default_1w_execute_uses_standard_vent_layout)

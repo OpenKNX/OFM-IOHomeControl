@@ -2485,6 +2485,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mPairDiscoverConfirmAttempts = 0;
     mPairDiscoverConfirmMode = PairingDiscoverConfirmMode::Send;
     mPairKeyInitDelayMs = IOHC_PAIR_KEY_INIT_DELAY_DEFAULT_MS;
+    resetPairingPreambleState();
     mTx1WRepeatRemaining = 0;
     mTx1WRepeatTimer = 0;
     mPairing1WAddDestinationIndex = 0;
@@ -2575,7 +2576,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
                  static_cast<unsigned>(iChannelIndex + 1),
                  mDiscoveredNodeId == 0 ? "broadcast-only " : "",
                  mDiscoveredNodeId);
-        logInfoP("Pairing: 1W class type=%u dst=0x%06X; it must match the actuator class or enrollment and commands will not be accepted",
+        logInfoP("Pairing: 1W dst-class type=%u dst=0x%06X; this is the telegram destination class, not proof of the physical actuator type",
                  static_cast<unsigned>(mPairing1WBroadcastType),
                  static_cast<unsigned>(oneWayBroadcastTarget(mPairing1WBroadcastType)));
         logInfoP("Pairing: 1W profile=%s manufacturer=0x%02X addDestinations=%u classMask=0x%02X configuredFinalizer=%s resolvedFinalizer=%s",
@@ -2705,6 +2706,7 @@ void IoHomeController::cancelPairing()
         mState <= ControllerState::PairFailed)
     {
         completePairingTelemetry(PairingOutcome::Cancelled);
+        resetPairingPreambleState();
         mState = ControllerState::Idle;
         startReceive();
         tracePairDiagnosticStateChange();
@@ -2732,6 +2734,11 @@ const char *IoHomeController::pairingOutcomeName(PairingOutcome iOutcome)
 const IoHomeController::PairingTelemetry &IoHomeController::pairingTelemetry() const
 {
     return mPairingTelemetry;
+}
+
+const IoHomeController::ExchangeDiagnostics &IoHomeController::exchangeDiagnostics() const
+{
+    return mExchangeDiagnostics;
 }
 
 const IoHomeController::OneWayEnrollmentTraceEntry *IoHomeController::oneWayEnrollmentTrace() const
@@ -2915,16 +2922,110 @@ void IoHomeController::completePairingTelemetry(PairingOutcome iOutcome)
     mPairingTelemetry.outcome = iOutcome;
     mPairingTelemetry.peerNodeId = mDiscoveredNodeId ? mDiscoveredNodeId : mPairingKnownNodeId;
     mPairingTelemetry.keyExchangeAttempts = mPairKeyExchangeAttempts;
-    if (iOutcome != PairingOutcome::Success && iOutcome != PairingOutcome::OneWayEnrollmentTransmitted)
+    if (iOutcome == PairingOutcome::Success || iOutcome == PairingOutcome::OneWayEnrollmentTransmitted)
+        mPairingTelemetry.diagnostic = PairingOutcome::None;
+    else
         mPairingTelemetry.diagnostic = iOutcome;
-    logInfoP("Pairing outcome: %s channel=%u peer=0x%06X retries=%u rejected=%u discoverConfirm=%u attempts=%u",
+    logInfoP("Pairing outcome: %s channel=%u peer=0x%06X retries=%u rejected=%u discoverConfirm=%u attempts=%u optionalConfig=%u",
              pairingOutcomeName(iOutcome),
              static_cast<unsigned>(mPairingTelemetry.channel + 1),
              mPairingTelemetry.peerNodeId,
              static_cast<unsigned>(mPairingTelemetry.keyExchangeAttempts),
              static_cast<unsigned>(mPairingTelemetry.rejectedFrames),
              static_cast<unsigned>(mPairingTelemetry.discoverConfirmResult),
-             static_cast<unsigned>(mPairingTelemetry.discoverConfirmAttempts));
+             static_cast<unsigned>(mPairingTelemetry.discoverConfirmAttempts),
+             static_cast<unsigned>(mPairingTelemetry.optionalConfig));
+}
+
+void IoHomeController::setPairingOptionalConfigResult(PairingOptionalConfigResult iResult)
+{
+    mPairingTelemetry.optionalConfig = iResult;
+    logInfoP("Pairing optional SetConfig1: result=%u peer=0x%06X",
+             static_cast<unsigned>(iResult), mDiscoveredNodeId);
+}
+
+uint16_t IoHomeController::pairingStartPreamble(const IoHomeFrame &iFrame) const
+{
+    const uint16_t lNormal = preambleFor2WRequest(iFrame);
+    if (mPairAcceptedDiscoveryPreamble == 0)
+        return lNormal;
+    return lNormal < mPairAcceptedDiscoveryPreamble ? lNormal : mPairAcceptedDiscoveryPreamble;
+}
+
+void IoHomeController::resetPairingPreambleState()
+{
+    mPairDiscoveryTxPreamble = 0;
+    mPairAcceptedDiscoveryPreamble = 0;
+}
+
+void IoHomeController::beginExchangeDiagnosticsWindow()
+{
+    const IoHomeRadioHealth lHealth = radioHealth();
+    mExchangeStartRxDoneCount = lHealth.rxDoneCount;
+    mExchangeStartCrcErrorCount = lHealth.crcErrorCount;
+    mExchangeStartPreambleCount = lHealth.preambleIrqCount;
+    mExchangeStartSyncCount = lHealth.syncWordIrqCount;
+}
+
+void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntry,
+                                                   IoHomeCommandExchangeResult iResult)
+{
+    IoHomecontrolChannel *lChannel = channelForQueueEntry(iEntry);
+    if (lChannel)
+        lChannel->onCommandExchangeResult(iEntry.command, iEntry.param, iResult);
+}
+
+void IoHomeController::recordExchangeFailure(const IoHomeQueueEntry &iEntry,
+                                             bool iAuthenticatedUnconfirmed)
+{
+    IoHomecontrolChannel *lChannel = channelForQueueEntry(iEntry);
+    if (lChannel)
+        lChannel->onExchangeTimeout(iAuthenticatedUnconfirmed);
+
+    if (iAuthenticatedUnconfirmed)
+    {
+        if (mExchangeDiagnostics.unconfirmedCount != UINT16_MAX)
+            ++mExchangeDiagnostics.unconfirmedCount;
+
+        const IoHomeRadioHealth lHealth = radioHealth();
+        ExchangeRadioSnapshot &lSnapshot = mExchangeDiagnostics.lastUnconfirmed;
+        lSnapshot.valid = true;
+        lSnapshot.nodeId = iEntry.destNodeId;
+        lSnapshot.command = iEntry.command;
+        lSnapshot.attempt = static_cast<uint8_t>(iEntry.retries + 1U);
+        lSnapshot.sawChallenge = true;
+        lSnapshot.frequencyHz = mCurrentFreqIdx < IOHC_NUM_FREQUENCIES
+                                    ? IOHC_FREQUENCIES[mCurrentFreqIdx]
+                                    : 0;
+        lSnapshot.rxDone = lHealth.rxDoneCount > mExchangeStartRxDoneCount;
+        lSnapshot.crcError = lHealth.crcErrorCount > mExchangeStartCrcErrorCount;
+        lSnapshot.preambleDetected = lHealth.preambleIrqCount > mExchangeStartPreambleCount ||
+                                     lHealth.preambleDetected;
+        lSnapshot.syncDetected = lHealth.syncWordIrqCount > mExchangeStartSyncCount ||
+                                 mRadio.isSyncDetected();
+        lSnapshot.lastIrq = lHealth.lastIrqStatus;
+        lSnapshot.lastLength = lHealth.lastRxLen;
+        lSnapshot.rssi = lHealth.lastRssi;
+
+        logInfoP("Exchange unconfirmed: node=0x%06X cmd=0x%02X attempt=%u sawChallenge=1 freq=%lu rxDone=%u crcError=%u lastIrq=0x%04X lastLen=%u rssi=%d preambleDetected=%u syncDetected=%u",
+                 lSnapshot.nodeId,
+                 static_cast<unsigned>(static_cast<uint8_t>(lSnapshot.command)),
+                 static_cast<unsigned>(lSnapshot.attempt),
+                 static_cast<unsigned long>(lSnapshot.frequencyHz),
+                 lSnapshot.rxDone ? 1U : 0U,
+                 lSnapshot.crcError ? 1U : 0U,
+                 lSnapshot.lastIrq,
+                 static_cast<unsigned>(lSnapshot.lastLength),
+                 lSnapshot.rssi,
+                 lSnapshot.preambleDetected ? 1U : 0U,
+                 lSnapshot.syncDetected ? 1U : 0U);
+        notifyCommandExchangeResult(iEntry, IoHomeCommandExchangeResult::AuthenticatedUnconfirmed);
+        return;
+    }
+
+    if (mExchangeDiagnostics.timeoutCount != UINT16_MAX)
+        ++mExchangeDiagnostics.timeoutCount;
+    notifyCommandExchangeResult(iEntry, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
 }
 
 void IoHomeController::startDiscovery(bool iEncrypted)
@@ -4034,9 +4135,10 @@ void IoHomeController::logPairDiagnosticStatus() const
              mDiscoverySPE ? 1 : 0,
              mPassiveMode ? 1 : 0,
              mRxScanEnabled ? 1 : 0);
-    logInfoP("PairDiag: outcome=%s diagnostic=%s telemetryPeer=0x%06X lastRx=0x%02X rejected=%u keyAttempts=%u",
+    logInfoP("PairDiag: outcome=%s diagnostic=%s optionalConfig=%u telemetryPeer=0x%06X lastRx=0x%02X rejected=%u keyAttempts=%u",
              pairingOutcomeName(mPairingTelemetry.outcome),
              pairingOutcomeName(mPairingTelemetry.diagnostic),
+             static_cast<unsigned>(mPairingTelemetry.optionalConfig),
              mPairingTelemetry.peerNodeId,
              static_cast<unsigned>(mPairingTelemetry.lastReceivedCommand),
              static_cast<unsigned>(mPairingTelemetry.rejectedFrames),
@@ -4233,6 +4335,17 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
     lHealth.lastOpStatusAfter = mRadio.lastOpStatusAfter();
     lHealth.lastTxSetStatus = mRadio.lastTxSetStatus();
     lHealth.lastTxIrqImmediate = mRadio.lastTxIrqImmediate();
+#elif defined(TEST_NATIVE)
+    lHealth.txStartCount = mRadio.txStartCount();
+    lHealth.txDoneCount = mRadio.txDoneCount();
+    lHealth.rxStartCount = mRadio.rxStartCount();
+    lHealth.irqCount = mRadio.irqCount();
+    lHealth.preambleIrqCount = mRadio.preambleIrqCount();
+    lHealth.syncWordIrqCount = mRadio.syncWordIrqCount();
+    lHealth.rxDoneCount = mRadio.rxDoneCount();
+    lHealth.crcErrorCount = mRadio.crcErrorCount();
+    lHealth.lastIrqStatus = mRadio.lastIrqStatus();
+    lHealth.lastRxLen = mRadio.testLastRxLen();
 #elif defined(RADIO_SX1276)
     lHealth.txStartCount = mRadio.txStartCount();
     lHealth.txDoneCount = mRadio.txDoneCount();
@@ -4373,6 +4486,9 @@ void IoHomeController::loop()
                         (mPairingKnownNodeId == 0 || lSource == mPairingKnownNodeId))
                     {
                         mDiscoveredNodeId = mRxFrame.getSrcNodeId();
+                        // Cap subsequent directed START preambles to the exact
+                        // discovery request that produced this correlated 0x29.
+                        mPairAcceptedDiscoveryPreamble = mPairDiscoveryTxPreamble;
                         if (mModule)
                             learnPowerClassFromDiscovery(mModule->getChannel(mPairingChannel),
                                                          mRxFrame, "pairing discovery");
@@ -4776,6 +4892,7 @@ void IoHomeController::loop()
                                                ? "Check the selected peer and controller identity; unrelated frames were ignored."
                                                : "Check power, RF range, frequency, and that the actuator is in learn mode."));
         }
+        resetPairingPreambleState();
         mState = ControllerState::Idle;
         startReceive();
         break;
@@ -4788,6 +4905,7 @@ void IoHomeController::loop()
                                          ? PairingOutcome::OneWayEnrollmentTransmitted
                                          : PairingOutcome::Success);
         }
+        resetPairingPreambleState();
         mState = ControllerState::Idle;
         startReceive();
         break;
@@ -4856,10 +4974,14 @@ void IoHomeController::processIdle()
         {
             mCurrentCmd = lEntry;
             mExchangeStartMs = millis();
+            beginExchangeDiagnosticsWindow();
             if (buildTxFrame(mCurrentCmd))
                 mState = ControllerState::TxPending;
             else
+            {
+                notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
                 mCurrentCmd.active = false;
+            }
         }
     }
 }
@@ -4900,6 +5022,8 @@ void IoHomeController::processTxPending()
     mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen == 0)
     {
+        notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+        mCurrentCmd.active = false;
         mState = ControllerState::Idle;
         return;
     }
@@ -4939,6 +5063,8 @@ void IoHomeController::processTxPending()
         return;
     if (lPrepErr != RadioError::None)
     {
+        notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+        mCurrentCmd.active = false;
         mState = ControllerState::Idle;
         return;
     }
@@ -4958,6 +5084,8 @@ void IoHomeController::processTxPending()
     }
     else
     {
+        notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+        mCurrentCmd.active = false;
         mState = ControllerState::Idle;
     }
 }
@@ -4971,6 +5099,8 @@ void IoHomeController::processTxInProgress()
             return;
         if (lRxErr != RadioError::None)
         {
+            notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+            mCurrentCmd.active = false;
             mState = ControllerState::Idle;
             return;
         }
@@ -4998,6 +5128,7 @@ void IoHomeController::processTxInProgress()
             }
             else
             {
+                notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::Completed);
                 mCurrentCmd.active = false;
                 mState = ControllerState::Idle;
             }
@@ -5010,6 +5141,8 @@ void IoHomeController::processTxInProgress()
                 return;
             if (lRxErr != RadioError::None)
             {
+                notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+                mCurrentCmd.active = false;
                 mState = ControllerState::Idle;
                 return;
             }
@@ -5023,6 +5156,8 @@ void IoHomeController::processTxInProgress()
         // TX timeout. Use a dynamic timeout because long io-homecontrol
         // preambles can exceed the generic 500 ms guard on SX1276.
         mRadio.standby();
+        notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+        mCurrentCmd.active = false;
         mState = ControllerState::Idle;
     }
 }
@@ -5051,6 +5186,7 @@ void IoHomeController::processTx1WRepeat()
     mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen == 0)
     {
+        notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
         mCurrentCmd.active = false;
         mState = ControllerState::Idle;
         return;
@@ -5077,6 +5213,7 @@ void IoHomeController::processTx1WRepeat()
     }
     else
     {
+        notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
         mCurrentCmd.active = false;
         mState = ControllerState::Idle;
     }
@@ -5104,6 +5241,7 @@ void IoHomeController::processWaitResponse()
         const auto failExchange = [this]() {
             const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
             const bool lAfterChallenge = mSawChallenge;
+            recordExchangeFailure(lFailedCmd, lAfterChallenge && mWaitingFinalResponse);
             mCurrentCmd.active = false;
             mWaitingFinalResponse = false;
             mSawChallenge = false;
@@ -5120,6 +5258,7 @@ void IoHomeController::processWaitResponse()
             mSawChallenge && mWaitingFinalResponse)
         {
             logInfoP("Command: Execute to 0x%06X accepted without final response", mCurrentCmd.destNodeId);
+            recordExchangeFailure(mCurrentCmd, true);
             mCurrentCmd.active = false;
             mWaitingFinalResponse = false;
             mSawChallenge = false;
@@ -5172,6 +5311,7 @@ void IoHomeController::processWaitResponse()
                 mState = ControllerState::TxPending;
             else
             {
+                recordExchangeFailure(lFailedCmd, lAfterChallenge);
                 mCurrentCmd.active = false;
                 mWaitingFinalResponse = false;
                 mSawChallenge = false;
@@ -5218,6 +5358,7 @@ void IoHomeController::processResponse()
                                       mTxFrame, lChallenge, mCurrentCmd.encKey))
         {
             const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
+            notifyCommandExchangeResult(lFailedCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
             mCurrentCmd.active = false;
             mState = ControllerState::Idle;
             notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
@@ -5237,6 +5378,7 @@ void IoHomeController::processResponse()
             if (lPrepErr != RadioError::None)
             {
                 const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
+                notifyCommandExchangeResult(lFailedCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
                 mCurrentCmd.active = false;
                 mState = ControllerState::Idle;
                 notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
@@ -5261,6 +5403,7 @@ void IoHomeController::processResponse()
             else
             {
                 const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
+                notifyCommandExchangeResult(lFailedCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
                 mCurrentCmd.active = false;
                 mState = ControllerState::Idle;
                 notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
@@ -5269,6 +5412,7 @@ void IoHomeController::processResponse()
         else
         {
             const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
+            notifyCommandExchangeResult(lFailedCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
             mCurrentCmd.active = false;
             mState = ControllerState::Idle;
             notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
@@ -5276,7 +5420,13 @@ void IoHomeController::processResponse()
         return;
     }
 
+    const IoHomeQueueEntry lCompletedCmd = mCurrentCmd;
+    const bool lExplicitFailure = mRxFrame.commandId == IoHomeCommand::ErrorResponse;
     dispatchRxFrame();
+    notifyCommandExchangeResult(lCompletedCmd,
+                                lExplicitFailure
+                                    ? IoHomeCommandExchangeResult::FailedBeforeAuthentication
+                                    : IoHomeCommandExchangeResult::Completed);
     mCurrentCmd.active = false;
     mWaitingFinalResponse = false;
     mSawChallenge = false;
@@ -5345,6 +5495,7 @@ void IoHomeController::processPairSendDiscovery()
 #endif
         if (lErr == RadioError::None)
         {
+            mPairDiscoveryTxPreamble = lDiscoveryOptions.preamble;
             mStateTimer = millis();
             mState = ControllerState::PairWaitDiscoveryResponse;
         }
@@ -5400,7 +5551,7 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
     }
 
     const uint32_t lConfirmationFreq = kNormal2WTxFreqHz;
-    const uint16_t lPreamble = lLowPower ? IOHC_PREAMBLE_LONG : IOHC_PREAMBLE_NORMAL_START;
+    const uint16_t lPreamble = pairingStartPreamble(mTxFrame);
 #if defined(RADIO_SX1262)
     const RadioError lFreqErr = mRadio.setFrequencyBlocking(lConfirmationFreq);
     if (lFreqErr != RadioError::None)
@@ -6484,7 +6635,7 @@ void IoHomeController::processPairSendKeyInit()
     }
 
     mTxFrame.setLowPower(pairingLowPower2W());
-    const uint16_t lPreamble = preambleFor2WRequest(mTxFrame);
+    const uint16_t lPreamble = pairingStartPreamble(mTxFrame);
 
     const RadioError lPrepErr = configureNormal2WTxRadio(lPreamble);
     if (lPrepErr == RadioError::Busy)
@@ -6558,6 +6709,9 @@ void IoHomeController::finalize2WPairingKey()
             openknx.flash.save(true);
         }
     }
+    // A valid 0x33 is the definitive pairing success. SetConfig1 is only an
+    // optional request for automatic status feedback and cannot undo it.
+    completePairingTelemetry(PairingOutcome::Success);
     mState = ControllerState::PairSendSetConfig1;
 }
 
@@ -6696,8 +6850,7 @@ void IoHomeController::processPairSendSetConfig1()
     if (!build2WSetConfig1(mTxFrame, mOwnNodeId, mDiscoveredNodeId))
     {
         logDebugP("Pairing: failed to build SetConfig1 for 0x%06X", mDiscoveredNodeId);
-        recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
-                                "The key was stored; status feedback could not be configured. Verify it with a normal command.");
+        setPairingOptionalConfigResult(PairingOptionalConfigResult::TxFailure);
         mState = ControllerState::PairComplete;
         return;
     }
@@ -6716,21 +6869,19 @@ void IoHomeController::processPairSendSetConfig1()
     if (mTxLen == 0)
     {
         logDebugP("Pairing: failed to serialize SetConfig1 for 0x%06X", mDiscoveredNodeId);
-        recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
-                                "The key was stored; status feedback could not be configured. Verify it with a normal command.");
+        setPairingOptionalConfigResult(PairingOptionalConfigResult::TxFailure);
         mState = ControllerState::PairComplete;
         return;
     }
 
-    const uint16_t lPreamble = preambleFor2WRequest(mPairSetConfigRequest);
+    const uint16_t lPreamble = pairingStartPreamble(mPairSetConfigRequest);
     const RadioError lPrepErr = configureNormal2WTxRadio(lPreamble);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
     {
         logDebugP("Pairing: failed to send SetConfig1 to 0x%06X", mDiscoveredNodeId);
-        recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
-                                "The key was stored; status feedback could not be configured. Verify RF and retry if needed.");
+        setPairingOptionalConfigResult(PairingOptionalConfigResult::TxFailure);
         mState = ControllerState::PairComplete;
         return;
     }
@@ -6749,8 +6900,7 @@ void IoHomeController::processPairSendSetConfig1()
     else
     {
         logDebugP("Pairing: failed to send SetConfig1 to 0x%06X", mDiscoveredNodeId);
-        recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
-                                "The key was stored; status feedback could not be configured. Verify RF and retry if needed.");
+        setPairingOptionalConfigResult(PairingOptionalConfigResult::TxFailure);
         mState = ControllerState::PairComplete;
     }
 }
@@ -6762,8 +6912,7 @@ void IoHomeController::processPairWaitSetConfig1Response()
         return;
     if (lRxErr != RadioError::None)
     {
-        recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
-                                "The key was stored; no configuration response was received. Verify status feedback manually.");
+        setPairingOptionalConfigResult(PairingOptionalConfigResult::NoReply);
         mState = ControllerState::PairComplete;
         return;
     }
@@ -6771,8 +6920,7 @@ void IoHomeController::processPairWaitSetConfig1Response()
     if (millis() - mStateTimer > 2000)
     {
         logDebugP("Pairing: SetConfig1 timed out for 0x%06X", mDiscoveredNodeId);
-        recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
-                                "The key was stored; no configuration response was received. Verify status feedback manually.");
+        setPairingOptionalConfigResult(PairingOptionalConfigResult::NoReply);
         mState = ControllerState::PairComplete;
     }
 }
@@ -6781,6 +6929,7 @@ void IoHomeController::interpretSetConfig1Result(bool iFinalResponse)
 {
     if (mRxFrame.commandId == IoHomeCommand::SetConfig1Response)
     {
+        setPairingOptionalConfigResult(PairingOptionalConfigResult::Accepted);
         if (mRxFrame.dataLen >= 1 && mRxFrame.data[0] == 0x05)
             logInfoP("Pairing: automatic status feedback enabled for 0x%06X", mDiscoveredNodeId);
         else
@@ -6793,16 +6942,14 @@ void IoHomeController::interpretSetConfig1Result(bool iFinalResponse)
                                 : "Pairing: device 0x%06X does not support automatic status feedback: 0x%02X (%s): %s",
                  mDiscoveredNodeId, static_cast<unsigned>(lCode), ioHomeCommandResultName(lCode),
                  ioHomeCommandResultDescription(lCode));
-        recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
-                                "The key was stored, but the actuator rejected optional automatic status feedback.");
+        setPairingOptionalConfigResult(PairingOptionalConfigResult::Rejected);
     }
     else
     {
         logDebugP(iFinalResponse ? "Pairing: unexpected final SetConfig1 response 0x%02X from 0x%06X"
                                  : "Pairing: unexpected SetConfig1 response 0x%02X from 0x%06X",
                   static_cast<uint8_t>(mRxFrame.commandId), mDiscoveredNodeId);
-        recordPairingDiagnostic(PairingOutcome::ConfigurationFailure,
-                                "The key was stored, but the configuration response format was not accepted.");
+        setPairingOptionalConfigResult(PairingOptionalConfigResult::Rejected);
     }
 
     mState = ControllerState::PairComplete;
@@ -6826,6 +6973,7 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
                                   mPairSetConfigRequest, mPairSetConfigChallenge, mSystemKey))
     {
         logDebugP("Pairing: failed to build SetConfig1 challenge response for 0x%06X", mDiscoveredNodeId);
+        setPairingOptionalConfigResult(PairingOptionalConfigResult::TxFailure);
         mState = ControllerState::PairComplete;
         return;
     }
@@ -6840,6 +6988,7 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
     if (lPrepErr != RadioError::None)
     {
         logDebugP("Pairing: failed to send SetConfig1 challenge response to 0x%06X", mDiscoveredNodeId);
+        setPairingOptionalConfigResult(PairingOptionalConfigResult::TxFailure);
         mState = ControllerState::PairComplete;
         return;
     }
@@ -6861,12 +7010,14 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
         else
         {
             logDebugP("Pairing: failed to send SetConfig1 challenge response to 0x%06X", mDiscoveredNodeId);
+            setPairingOptionalConfigResult(PairingOptionalConfigResult::TxFailure);
             mState = ControllerState::PairComplete;
         }
     }
     else
     {
         logDebugP("Pairing: failed to send SetConfig1 challenge response to 0x%06X", mDiscoveredNodeId);
+        setPairingOptionalConfigResult(PairingOptionalConfigResult::TxFailure);
         mState = ControllerState::PairComplete;
     }
 }
@@ -6878,6 +7029,7 @@ void IoHomeController::processPairWaitSetConfig1FinalResponse()
         return;
     if (lRxErr != RadioError::None)
     {
+        setPairingOptionalConfigResult(PairingOptionalConfigResult::NoReply);
         mState = ControllerState::PairComplete;
         return;
     }
@@ -6885,6 +7037,7 @@ void IoHomeController::processPairWaitSetConfig1FinalResponse()
     if (millis() - mStateTimer > 2000)
     {
         logDebugP("Pairing: final SetConfig1 response timed out for 0x%06X", mDiscoveredNodeId);
+        setPairingOptionalConfigResult(PairingOptionalConfigResult::NoReply);
         mState = ControllerState::PairComplete;
     }
 }

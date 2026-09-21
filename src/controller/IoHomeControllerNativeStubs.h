@@ -261,6 +261,22 @@ public:
     else
       mDirectPollFailureCount++;
   }
+  void onCommandExchangeResult(IoHomeCommand iCommand, uint8_t iParam,
+                               IoHomeCommandExchangeResult iResult)
+  {
+    mHasCommandExchangeResult = true;
+    mLastCommandExchangeCommand = iCommand;
+    mLastCommandExchangeParam = iParam;
+    mLastCommandExchangeResult = iResult;
+  }
+  void onExchangeTimeout(bool iAuthenticatedUnconfirmed)
+  {
+    uint16_t &lCounter = iAuthenticatedUnconfirmed
+                             ? mUnconfirmedExchangeCount
+                             : mExchangeTimeoutCount;
+    if (lCounter != UINT16_MAX)
+      ++lCounter;
+  }
   void scheduleStatusPoll(uint32_t iDelayMs)
   {
     mHasScheduledStatusPoll = true;
@@ -291,6 +307,12 @@ public:
   bool testHasScheduledStatusPoll() const { return mHasScheduledStatusPoll; }
   uint8_t testScheduledStatusPollCount() const { return mScheduledStatusPollCount; }
   uint32_t testLastScheduledStatusPollMs() const { return mLastScheduledStatusPollMs; }
+  bool testHasCommandExchangeResult() const { return mHasCommandExchangeResult; }
+  IoHomeCommand testLastCommandExchangeCommand() const { return mLastCommandExchangeCommand; }
+  uint8_t testLastCommandExchangeParam() const { return mLastCommandExchangeParam; }
+  IoHomeCommandExchangeResult testLastCommandExchangeResult() const { return mLastCommandExchangeResult; }
+  uint16_t exchangeTimeoutCount() const { return mExchangeTimeoutCount; }
+  uint16_t unconfirmedExchangeCount() const { return mUnconfirmedExchangeCount; }
 
 private:
   uint32_t mNodeId = 0;
@@ -344,6 +366,12 @@ private:
   bool mHasScheduledStatusPoll = false;
   uint8_t mScheduledStatusPollCount = 0;
   uint32_t mLastScheduledStatusPollMs = 0;
+  bool mHasCommandExchangeResult = false;
+  IoHomeCommand mLastCommandExchangeCommand = IoHomeCommand::Execute;
+  uint8_t mLastCommandExchangeParam = 0;
+  IoHomeCommandExchangeResult mLastCommandExchangeResult = IoHomeCommandExchangeResult::Completed;
+  uint16_t mExchangeTimeoutCount = 0;
+  uint16_t mUnconfirmedExchangeCount = 0;
 };
 
 class IoHomecontrol

@@ -39,6 +39,9 @@ public:
   void onEstimate(uint8_t iSeconds);
   void onStatusExpected();
   void onStatusPollFailed(bool iAfterChallenge);
+  void onCommandExchangeResult(IoHomeCommand iCommand, uint8_t iParam,
+                               IoHomeCommandExchangeResult iResult);
+  void onExchangeTimeout(bool iAuthenticatedUnconfirmed);
   void onRssiUpdate(uint8_t iScaledPercent);
   void logStatusSummary(float iCurrentPositionPercent, bool iHasCurrentPosition,
                         float iTargetPositionPercent, bool iHasTargetPosition,
@@ -46,6 +49,8 @@ public:
 
   // Get estimated current position during travel (linear interpolation)
   float estimateCurrentPosition() const;
+  uint16_t exchangeTimeoutCount() const;
+  uint16_t unconfirmedExchangeCount() const;
 
   // Pairing data
   bool isPaired() const;
@@ -179,6 +184,19 @@ private:
   uint32_t mTravelDurationMs = 0;
   float mTravelStartPosition = 0.0f;
 
+  struct StopTravelSnapshot
+  {
+    bool valid = false;
+    bool moving = false;
+    float targetPosition = 0.0f;
+    float travelStartPosition = 0.0f;
+    uint32_t travelStartTime = 0;
+    uint32_t travelDurationMs = 0;
+  } mStopTravelSnapshot;
+
+  uint16_t mExchangeTimeoutCount = 0;
+  uint16_t mUnconfirmedExchangeCount = 0;
+
   uint32_t mStatusPollTimer = 0;
   uint32_t mNextStatusPollMs = 0;
   uint32_t mPollTrackingDeadlineMs = 0;
@@ -210,6 +228,8 @@ private:
   bool isStatusPollTrackingActive(uint32_t iNowMs) const;
   void startTravelEstimation(float iTargetPositionPercent);
   void stopTravelEstimation(bool iPublishPosition);
+  void clearStopTravelSnapshot();
+  void restoreStopTravelSnapshot();
   void updateEstimatedPosition();
   float configuredOpeningTimeSeconds() const;
   float configuredClosingTimeSeconds() const;

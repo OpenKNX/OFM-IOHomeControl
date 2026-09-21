@@ -118,8 +118,8 @@ public:
 
   bool isTxDoneBlocking() { return isTxDone(); }
   bool isPacketAvailable() { return !mReceiveQueue.empty(); }
-  bool isPreambleDetected() const { return false; }
-  bool isSyncDetected() const { return false; }
+  bool isPreambleDetected() const { return mTestPreambleDetected; }
+  bool isSyncDetected() const { return mTestSyncDetected; }
 
   uint8_t readPacket(uint8_t *oBuffer, uint8_t iMaxLen)
   {
@@ -153,10 +153,10 @@ public:
   uint32_t txDoneCount() const { return mTxDoneCount; }
   uint32_t rxStartCount() const { return mRxStartCount; }
   uint32_t irqCount() const { return mIrqCount; }
-  uint32_t preambleIrqCount() const { return 0; }
-  uint32_t syncWordIrqCount() const { return 0; }
+  uint32_t preambleIrqCount() const { return mPreambleIrqCount; }
+  uint32_t syncWordIrqCount() const { return mSyncWordIrqCount; }
   uint32_t rxDoneCount() const { return mRxDoneCount; }
-  uint32_t crcErrorCount() const { return 0; }
+  uint32_t crcErrorCount() const { return mCrcErrorCount; }
   uint32_t timeoutCount() const { return 0; }
   uint32_t irqPollHitCount() const { return 0; }
   uint32_t preambleOnlyIrqCount() const { return 0; }
@@ -165,7 +165,7 @@ public:
   uint32_t txBusyHighTotalUs() const { return 0; }
   uint32_t txBusyHighMaxUs() const { return 0; }
   RadioSX1262TxBusyTrace txBusyTrace() const { return {}; }
-  uint16_t lastIrqStatus() const { return 0; }
+  uint16_t lastIrqStatus() const { return mLastIrqStatus; }
   uint8_t lastOpStatusBefore() const { return 0; }
   uint8_t lastOpStatusAfter() const { return 0; }
   uint8_t lastTxSetStatus() const { return 0; }
@@ -199,6 +199,22 @@ public:
   void testSetNextFrequencyError(RadioError iError) { mNextFrequencyError = iError; }
   void testSetNextPreambleError(RadioError iError) { mNextPreambleError = iError; }
   void testSetNextTransmitError(RadioError iError) { mNextTransmitError = iError; }
+  void testInjectRxDiagnostics(bool iPreamble, bool iSync, bool iCrcError,
+                               uint16_t iLastIrq, uint8_t iLastLen, int16_t iRssi)
+  {
+    mTestPreambleDetected = iPreamble;
+    mTestSyncDetected = iSync;
+    if (iPreamble)
+      ++mPreambleIrqCount;
+    if (iSync)
+      ++mSyncWordIrqCount;
+    if (iCrcError)
+      ++mCrcErrorCount;
+    mLastIrqStatus = iLastIrq;
+    mTestLastRxLen = iLastLen;
+    mLastRssi = iRssi;
+  }
+  uint8_t testLastRxLen() const { return mTestLastRxLen; }
   uint32_t testTransmitCount() const { return mTxStartCount; }
   uint16_t testLastPreambleLength() const { return mLastPreambleLength; }
   uint32_t testCurrentFrequency() const { return mCurrentFreq; }
@@ -221,6 +237,13 @@ private:
   uint32_t mRxStartCount = 0;
   uint32_t mIrqCount = 0;
   uint32_t mRxDoneCount = 0;
+  uint32_t mPreambleIrqCount = 0;
+  uint32_t mSyncWordIrqCount = 0;
+  uint32_t mCrcErrorCount = 0;
+  bool mTestPreambleDetected = false;
+  bool mTestSyncDetected = false;
+  uint16_t mLastIrqStatus = 0;
+  uint8_t mTestLastRxLen = 0;
   uint16_t mLastPreambleLength = 0;
   RadioError mNextFrequencyError = RadioError::None;
   RadioError mNextPreambleError = RadioError::None;

@@ -130,6 +130,16 @@ enum class IoHomeCommand : uint8_t
     ErrorResponse = 0xFE
 };
 
+// Result of a queued 2W command exchange as observed by the controller.  This
+// is intentionally separate from protocol response codes: channels use it to
+// decide whether optimistic local state may be committed or must be restored.
+enum class IoHomeCommandExchangeResult : uint8_t
+{
+    Completed = 0,
+    FailedBeforeAuthentication = 1,
+    AuthenticatedUnconfirmed = 2,
+};
+
 // Discovery-family wire policy.  These settings deliberately keep command,
 // destination, CTRL1 flags and preamble independent: hardware captures show
 // different CTRL1 combinations for 0x28, 0x2E and 0x2A, while the wake-up
