@@ -185,6 +185,8 @@ Zusätzlich gibt es auf der globalen Seite **Allgemein** eine **Pairing-Übersic
 
 > Alle ETS-Pairing-Aktionen erfordern eine aktive ETS-Onlineverbindung zum Gerät. Nach dem Entfernen des Pairings ist das Gerät über diesen Kanal nicht mehr steuerbar, bis ein erneutes Pairing durchgeführt wurde.
 
+> Pro Pairing-Versuch nur eine PROG-/Registrierungsgeste auslösen. Solange das dadurch geöffnete Anlernfenster noch aktiv ist, PROG nicht unmittelbar erneut drücken; bei bereits registrierten Fernbedienungen kann eine zweite Geste das Fenster wieder schließen oder die Add/Remove-Funktion umschalten.
+
 ### **Pairing über Konsolenbefehle**
 
 Alternativ kann das Pairing über Konsolenbefehle durchgeführt werden – sowohl über das zentrale Diagnose-Objekt als auch über die serielle Konsole.
@@ -222,6 +224,12 @@ Beim normalen Direkt-Pairing verwendet das Modul die tolerante Folge
 Die Bestätigung `0x2D` ist optional: Nach drei Versuchen wird der Schlüsselaustausch auch bei
 Funkstille oder einer expliziten Ablehnung fortgesetzt. `0x38` bleibt ein separater
 Diagnosepfad und wird nach `0x2D` nicht automatisch gesendet.
+
+Für einen auf realer Hardware bestätigten VELUX-SSL-Solaraktor gelten folgende Discovery-Werte: Befehl `0x28`, Ziel `0x00003F`, ACK ein, LOW_POWER im Discovery aus, Präambel 32 und Discovery-Bestätigung **Senden**. Antwortet der Aktor mit einem korrelierten `0x29`, verwendet das Modul die tatsächlich erfolgreiche Discovery-Präambel als Obergrenze für die gerichteten START-Telegramme `0x2C`, `0x31` und das optionale `0x6F`. Das vom Gerät gemeldete LOW_POWER-Bit bleibt erhalten; die Fortsetzungstelegramme `0x32` und `0x3D` behalten ihre kurze Präambel. Die Begrenzung gilt nur für den laufenden Pairing-Vorgang.
+
+Der Empfang von `0x33` schließt den Schlüsselaustausch erfolgreich ab und speichert Node-ID sowie Schlüssel. Das anschließende `0x6F SetConfig1` ist nur eine optionale Konfiguration automatischer Statusmeldungen. Ablehnung, Timeout oder Sendefehler dieses Schritts werden separat als Warnung geführt und ändern das Pairing-Ergebnis nicht mehr auf Fehler.
+
+Die Diagnose unterscheidet vollständige Antwort-Timeouts von einem authentifizierten, aber nicht abschließend bestätigten Austausch (`0x3C` empfangen und `0x3D` gesendet). `iohcNN status` zeigt beide Zähler getrennt; `iohc radio` ergänzt für den letzten unbestätigten Austausch einen Funk-Snapshot mit Frequenz, RSSI, RX-/CRC-/IRQ-, Präambel- und Sync-Informationen. Bei einem STOP wird ein eindeutiger Fehler vor erfolgreicher Authentifizierung lokal zurückgerollt. Fehlt nach Authentifizierung nur die Schlussantwort, erfolgt kein blindes Rollback und kein erneutes Senden; eine Statusmeldung oder ein neuer Fahrbefehl löst den offenen Zustand auf.
 
 #### **2W Befehlsprofil**
 

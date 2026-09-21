@@ -58,6 +58,24 @@ The per-channel 2W expert settings also expose the post-discovery handshake:
 - **2W Pause vor Schlüsselaustausch** defaults to 300 ms and accepts 0–10000 ms.
   It is a nonblocking wait after the confirmation step and is omitted in Skip mode.
 
+For the hardware-confirmed VELUX SSL solar profile, use discovery command `0x28`,
+destination `0x00003F`, ACK on, discovery LOW_POWER off, preamble 32, and
+**2W Discovery-Bestätigung = Senden**. Once the correlated `0x29` is accepted,
+the exact successful discovery preamble caps the directed `0x2C`, `0x31`, and
+optional `0x6F` START frames for that pairing transaction. The target's learned
+LOW_POWER flag is retained; `0x32` and `0x3D` remain short continuation frames.
+
+`0x33` completes and persists the pairing. The later `0x6F SetConfig1` request is
+optional and only enables automatic status feedback when supported. Its rejection,
+timeout, or TX failure is shown as an optional configuration warning, not as a
+failed pairing. Trigger only one PROG/registration gesture per pairing attempt and
+do not press PROG again while the current registration window is active.
+
+For field diagnosis, `iohcNN status` separates full response timeouts from
+authenticated-but-unconfirmed exchanges. `iohc radio` also prints the last such
+exchange's node, command, attempt, frequency, RSSI, RX/CRC/IRQ, preamble, and sync
+snapshot.
+
 ## Compatibility and verification
 
 Existing parameter offsets and communication-object numbers remain stable. The

@@ -62,6 +62,8 @@ The protocol implementation covers manufacturers such as Velux, Somfy, Atlantic,
 - **Flash persistence** of 2W identity/pairing data and complete per-channel 1W controller profiles
 - **Per-channel 2W Execute profile** with the captured Somfy default ACEI `0x67` and selectable KIG300 alternative `0x63`
 - **Tolerant 2W discovery confirmation**: normal pairing sends directed `0x2C` after `0x29`, accepts optional `0x2D`, retries three times and continues to `0x31` after ACK, refusal, or silence
+- **Pairing preamble continuity**: the preamble of the accepted discovery request caps directed `0x2C`, `0x31`, and optional `0x6F` START frames for that transaction, while `0x32`/`0x3D` remain short and the learned power-class bits stay unchanged
+- **Separated 2W diagnostics** for complete reply timeouts versus authenticated exchanges without a closing response, including a frozen radio snapshot in `iohc radio` and per-channel counters in `iohcNN status`
 - **Byte-exact protocol self-tests** for serializer boundaries, 1W/2W crypto vectors and key-transfer transcripts
 
 For 2W, the module uses one global controller node ID and system key. For 1W, each channel uses a Cyril-style virtual remote profile containing its own controller address, key, sequence counter, reserved sequence watermark, type and manufacturer. Channels that should control the same 1W group can explicitly share one profile. Normal 1W commands reserve sequence numbers ahead in flash instead of saving after every frame; pairing/add/remove still force an immediate persistence update. New/imported profiles use sequence `1` for their first frame.
@@ -83,6 +85,7 @@ The 1W path follows the reference remote model more closely than older gateway-d
 ### VELUX KUX/KLI commissioning and troubleshooting
 
 1. Put the owned actuator or window product into its physical PROG/association window before starting module enrollment. A KUX 110 is the 24 V power supply, not the io-homecontrol actuator; for example, the radio product can be an SML electric roller shutter powered by the KUX 110. Follow the relevant product manual.
+   Trigger only one PROG/registration gesture per pairing attempt. Do not press PROG again while that registration window is still active, because a second gesture can close or toggle it.
 2. Configure the effective 1W controller manufacturer as **VELUX** (`0x01`). Automatic finalization depends on this profile value.
 3. Leave the 1W command ACEI at the VELUX remote value `0x61` unless a capture of the original remote proves another value.
 4. For exterior products use the automatic enrollment classes (`roller_shutter`, `awning`, `dual_shutter`). For KLI 312 interior blinds, select **Interior blinds KLI 312**, which sends ADD to `blind` and `venetian_blind`. The classes visible in an original remote's `0x2E` frames are the classes the ADD sweep must contain.
@@ -93,6 +96,12 @@ The 1W path follows the reference remote model more closely than older gateway-d
 9. After the target confirms pairing, test OPEN, STOP, and CLOSE, then reboot the module and repeat a command to verify that the persistent controller key and reserved sequence remain accepted.
 
 Because 1W devices do not acknowledge these frames, a successful local TX trace alone is not proof of physical enrollment. A second receiver capture and the target's confirmation movement are the definitive checks.
+
+### Hardware-confirmed VELUX SSL 2W profile
+
+A VELUX SSL solar roller shutter was paired successfully with an SX1262 by using `0x28`, destination `0x00003F`, ACK enabled, discovery `LOW_POWER` disabled, a 32-symbol discovery preamble, and discovery confirmation set to **Send**. Its `0x29` identifies the target as low power, but the accepted 32-symbol discovery preamble is retained as the upper limit for the directed `0x2C`, `0x31`, and optional `0x6F` START frames. The low-power flag remains set where required; `0x32` and `0x3D` still use their short continuation preambles.
+
+Receipt of `0x33` is the definitive successful key exchange. The following `0x6F SetConfig1` only requests automatic status feedback: rejection, silence, or a local TX error is reported as an optional configuration result and does not turn the pairing into a failure.
 
 ## Hardware Requirements
 
