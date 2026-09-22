@@ -227,6 +227,15 @@ class ChannelUiTest(unittest.TestCase):
         button = commissioning.find("k:Button[@EventHandler='IOHC_startKeyExtract']", NS)
         self.assertIsNotNone(button)
         self.assertIn("channelCount", button.get("EventHandlerParameters", ""))
+        self.assertEqual(
+            button.get("Text"), "2W-Extraktion starten / Ergebnis übernehmen"
+        )
+        information = commissioning.find(
+            "k:ParameterSeparator[@UIHint='Information']", NS
+        )
+        self.assertIsNotNone(information)
+        self.assertIn("Dieselbe Schaltfläche erneut drücken", information.get("Text", ""))
+        self.assertIn("Ergebnis zu übernehmen", information.get("Text", ""))
 
         result_names = {
             parameter.get("Name")
