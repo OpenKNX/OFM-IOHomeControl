@@ -541,6 +541,13 @@ void IoHomecontrolChannel::onTargetPositionFeedback(float iTargetPositionPercent
 
 void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
 {
+    const uint32_t lNow = millis();
+    mHas2WHeardEvidence = true;
+    mLast2WHeardMs = lNow;
+    mHas2WMovingEvidence = iIsMoving;
+    if (iIsMoving)
+        mLast2WMovingEvidenceMs = lNow;
+
     mStatusPollTimer = delayTimerInit();
     mStatusPollFailures = 0;
     mAuthPollFailures = 0;
@@ -1357,12 +1364,27 @@ void IoHomecontrolChannel::restoreStopTravelSnapshot()
 void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8_t iParam,
                                                     IoHomeCommandExchangeResult iResult)
 {
+    if (iResult == IoHomeCommandExchangeResult::Completed ||
+        iResult == IoHomeCommandExchangeResult::AuthenticatedUnconfirmed)
+    {
+        mHas2WHeardEvidence = true;
+        mLast2WHeardMs = millis();
+    }
+
+    if (iCommand == IoHomeCommand::Execute && iParam != 0xD2 && iParam != 0xD8 &&
+        iResult == IoHomeCommandExchangeResult::Completed)
+    {
+        mHas2WMovingEvidence = true;
+        mLast2WMovingEvidenceMs = millis();
+    }
+
     if (iCommand != IoHomeCommand::Execute || iParam != 0xD2)
         return;
 
     switch (iResult)
     {
     case IoHomeCommandExchangeResult::Completed:
+        mHas2WMovingEvidence = false;
         clearStopTravelSnapshot();
         break;
     case IoHomeCommandExchangeResult::FailedBeforeAuthentication:
@@ -1373,6 +1395,13 @@ void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8
         // Keep the snapshot until a status update or a new movement resolves it.
         break;
     }
+}
+
+TwoWayWakeBelief IoHomecontrolChannel::twoWayWakeBeliefAt(uint32_t iNowMs, bool iStopCommand) const
+{
+    return ::twoWayWakeBelief(mHas2WMovingEvidence, mLast2WMovingEvidenceMs,
+                              mHas2WHeardEvidence, mLast2WHeardMs,
+                              iNowMs, iStopCommand);
 }
 
 void IoHomecontrolChannel::onExchangeTimeout(bool iAuthenticatedUnconfirmed)

@@ -4944,7 +4944,13 @@ TEST(golden_rf_corpus_frames_decode_to_declared_metadata)
         ASSERT_TRUE(lFixture.wireLen >= IOHC_FRAME_MIN_SIZE);
 
         IoHomeFrame lFrame;
-        ASSERT_TRUE(deserializeFrameForTest(lFrame, lFixture.bytes, lFixture.wireLen));
+        if (!deserializeFrameForTest(lFrame, lFixture.bytes, lFixture.wireLen))
+        {
+            std::printf("failed fixture: %s (wireLen=%u declaredLen=%u)\n",
+                        lFixture.id, static_cast<unsigned>(lFixture.wireLen),
+                        static_cast<unsigned>((lFixture.bytes[0] & IOHC_CTRL0_LEN_MASK) + 1U));
+            ASSERT_TRUE(false);
+        }
         ASSERT_EQ(lFrame.commandId, lFixture.command);
         ASSERT_EQ(lFrame.getSrcNodeId(), lFixture.source);
         ASSERT_EQ(lFrame.getDestNodeId(), lFixture.destination);
@@ -4954,6 +4960,34 @@ TEST(golden_rf_corpus_frames_decode_to_declared_metadata)
         ASSERT_EQ((lFixture.bytes[0] & IOHC_CTRL0_LEN_MASK) + 1,
                   lFixture.hasTrailerMac ? 29 : lFixture.wireLen);
     }
+}
+
+TEST(two_way_wake_belief_boundaries_and_retry_plan)
+{
+    const uint32_t lNow = 500000;
+    ASSERT_EQ(twoWayWakeBelief(true, lNow - IOHC_2W_MOVING_EVIDENCE_MS,
+                               false, 0, lNow), TwoWayWakeBelief::Awake);
+    ASSERT_EQ(twoWayWakeBelief(true, lNow - IOHC_2W_MOVING_EVIDENCE_MS - 1,
+                               true, lNow - IOHC_2W_RECENTLY_HEARD_MS,
+                               lNow), TwoWayWakeBelief::MaybeAwake);
+    ASSERT_EQ(twoWayWakeBelief(false, 0, true,
+                               lNow - IOHC_2W_RECENTLY_HEARD_MS - 1,
+                               lNow), TwoWayWakeBelief::Asleep);
+    ASSERT_EQ(twoWayWakeBelief(false, 0, false, 0, lNow, true),
+              TwoWayWakeBelief::Awake);
+
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Awake, 0), 32);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Awake, 1), 1024);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Awake, 2), 32);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::MaybeAwake, 0), 32);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::MaybeAwake, 1), 1024);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::MaybeAwake, 2), 1024);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Asleep, 0), 1024);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Asleep, 2), 1024);
+
+    // Unsigned elapsed-time arithmetic remains valid across millis() wrap.
+    ASSERT_EQ(twoWayWakeBelief(false, 0, true, UINT32_MAX - 9U, 10U),
+              TwoWayWakeBelief::MaybeAwake);
 }
 
 TEST(golden_rf_corpus_public_trailer_mac_verifies)
@@ -8904,6 +8938,37 @@ TEST(controller_runtime_2w_diagnostic_override_decouples_power_and_preamble)
     lController.setDiagnostic2WStartPreamble(0);
     ASSERT_EQ(lController.diagnostic2WPowerClass(), TwoWayPowerClass::Automatic);
     ASSERT_EQ(lController.diagnostic2WStartPreamble(), 0);
+}
+
+TEST(controller_runtime_2w_wake_belief_uses_confirmed_channel_evidence)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.init();
+    lChannel.setNodeId(lDeviceNodeId);
+    lChannel.setEncryptionKey(lKey);
+    lChannel.setIs1W(false);
+    lController.setDiagnostic2WPowerClass(TwoWayPowerClass::LowPower);
+    lController.setDiagnostic2WWakeBelief(true);
+
+    ioHomeTestSetMillis(1000);
+    lChannel.onStatusUpdate(true); // actual RX evidence, not optimistic queue state
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, 50));
+    lController.loop();
+    lController.loop();
+
+    ASSERT_TRUE(lController.diagnostic2WWakeBelief());
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
 }
 
 TEST(controller_send_identify_builds_authenticated_payload)

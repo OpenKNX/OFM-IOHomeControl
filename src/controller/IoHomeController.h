@@ -573,6 +573,8 @@ public:
   TwoWayPowerClass diagnostic2WPowerClass() const;
   void setDiagnostic2WStartPreamble(uint16_t iPreambleSymbols);
   uint16_t diagnostic2WStartPreamble() const;
+  void setDiagnostic2WWakeBelief(bool iEnabled);
+  bool diagnostic2WWakeBelief() const;
   void setDiagnosticDiscoverySettings(const TwoWayDiscoverySettings &iSettings);
   const TwoWayDiscoverySettings &diagnosticDiscoverySettings() const;
   static const char *stateName(ControllerState iState);
@@ -1028,6 +1030,7 @@ private:
   uint8_t mLastResponseFreqIdx; // frequency index where last response was received
   TwoWayPowerClass mDiagnostic2WPowerClass = TwoWayPowerClass::Automatic;
   uint16_t mDiagnostic2WStartPreamble = 0; // 0 = derive from effective power class
+  bool mDiagnostic2WWakeBelief = false;
   TwoWayDiscoverySettings mDiagnosticDiscoverySettings{};
   bool mPairDiagnosticTraceEnabled;
   ControllerState mLastPairDiagnosticTraceState;
@@ -1226,6 +1229,8 @@ private:
   bool resolveLowPower2W(uint32_t iNodeId) const;
   bool pairingLowPower2W() const;
   uint16_t preambleFor2WRequest(const IoHomeFrame &iFrame) const;
+  uint16_t preambleForQueued2WAttempt(const IoHomeFrame &iFrame,
+                                      const IoHomeQueueEntry &iEntry) const;
   TwoWayDiscoverySettings pairingDiscoverySettings() const;
   bool learnPowerClassFromDiscovery(IoHomecontrolChannel *iChannel,
                                     const IoHomeFrame &iFrame,

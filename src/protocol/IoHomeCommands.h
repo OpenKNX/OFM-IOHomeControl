@@ -140,6 +140,53 @@ enum class IoHomeCommandExchangeResult : uint8_t
     AuthenticatedUnconfirmed = 2,
 };
 
+// Experimental low-power wake estimate.  It is intentionally a runtime-only
+// diagnostic until a 2W actuator confirms the policy on real hardware.
+enum class TwoWayWakeBelief : uint8_t
+{
+    Asleep = 0,
+    MaybeAwake = 1,
+    Awake = 2,
+};
+
+constexpr uint32_t IOHC_2W_MOVING_EVIDENCE_MS = 120000UL;
+constexpr uint32_t IOHC_2W_RECENTLY_HEARD_MS = 30000UL;
+
+inline TwoWayWakeBelief twoWayWakeBelief(bool iHasMovingEvidence,
+                                         uint32_t iLastMovingEvidenceMs,
+                                         bool iHasHeardEvidence,
+                                         uint32_t iLastHeardMs,
+                                         uint32_t iNowMs,
+                                         bool iStopCommand = false)
+{
+    if (iStopCommand ||
+        (iHasMovingEvidence && static_cast<uint32_t>(iNowMs - iLastMovingEvidenceMs) <= IOHC_2W_MOVING_EVIDENCE_MS))
+        return TwoWayWakeBelief::Awake;
+    if (iHasHeardEvidence && static_cast<uint32_t>(iNowMs - iLastHeardMs) <= IOHC_2W_RECENTLY_HEARD_MS)
+        return TwoWayWakeBelief::MaybeAwake;
+    return TwoWayWakeBelief::Asleep;
+}
+
+inline uint16_t twoWayWakePreamble(TwoWayWakeBelief iBelief, uint8_t iAttemptIndex)
+{
+    const uint8_t lAttempt = iAttemptIndex > 2 ? 2 : iAttemptIndex;
+    if (iBelief == TwoWayWakeBelief::Awake)
+        return lAttempt == 1 ? 1024 : 32; // short, long, short
+    if (iBelief == TwoWayWakeBelief::MaybeAwake)
+        return lAttempt == 0 ? 32 : 1024; // short, long, long
+    return 1024;                          // asleep: always wake first
+}
+
+inline const char *twoWayWakeBeliefName(TwoWayWakeBelief iBelief)
+{
+    switch (iBelief)
+    {
+    case TwoWayWakeBelief::Awake: return "awake";
+    case TwoWayWakeBelief::MaybeAwake: return "maybe-awake";
+    default: return "asleep";
+    }
+}
+
 // Discovery-family wire policy.  These settings deliberately keep command,
 // destination, CTRL1 flags and preamble independent: hardware captures show
 // different CTRL1 combinations for 0x28, 0x2E and 0x2A, while the wake-up

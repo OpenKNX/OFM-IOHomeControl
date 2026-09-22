@@ -2812,6 +2812,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc pairdiag on|off|status", "Verbose pairing/discovery diagnostics");
     openknx.console.printHelpLine("iohc 2wdiag power auto|always|low", "Runtime-only 2W power-class override");
     openknx.console.printHelpLine("iohc 2wdiag preamble auto|N", "Runtime-only directed 2W START preamble override");
+    openknx.console.printHelpLine("iohc 2wdiag wake on|off", "Experimental per-attempt low-power wake preamble belief");
     openknx.console.printHelpLine("iohc 2wdiag discovery FIELD VALUE", "Override discovery command/dest/ACK/LOW_POWER/preamble independently");
     openknx.console.printHelpLine("iohc 2wdiag status|reset", "Show or clear runtime-only 2W overrides");
     openknx.console.printHelpLine("iohcNN unpair", "Remove pairing for channel NN");
@@ -2998,6 +2999,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         {
             mController.setDiagnostic2WPowerClass(TwoWayPowerClass::Automatic);
             mController.setDiagnostic2WStartPreamble(0);
+            mController.setDiagnostic2WWakeBelief(false);
             mController.setDiagnosticDiscoverySettings(TwoWayDiscoverySettings{});
         }
         else if (lArg.rfind("discovery ", 0) == 0)
@@ -3093,20 +3095,35 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 mController.setDiagnostic2WStartPreamble(static_cast<uint16_t>(lSymbols));
             }
         }
+        else if (lArg.rfind("wake ", 0) == 0)
+        {
+            const std::string lWake = trimSpaces(lArg.substr(5));
+            if (lWake == "on" || lWake == "1")
+                mController.setDiagnostic2WWakeBelief(true);
+            else if (lWake == "off" || lWake == "0")
+                mController.setDiagnostic2WWakeBelief(false);
+            else
+            {
+                logInfoP("Usage: iohc 2wdiag wake on|off");
+                return true;
+            }
+        }
         else if (!lArg.empty() && lArg != "status")
         {
-            logInfoP("Usage: iohc 2wdiag power ... | preamble ... | discovery FIELD VALUE | status | reset");
+            logInfoP("Usage: iohc 2wdiag power ... | preamble ... | wake on|off | discovery FIELD VALUE | status | reset");
             return true;
         }
 
         const uint16_t lPreamble = mController.diagnostic2WStartPreamble();
         if (lPreamble == 0)
-            logInfoP("2WDiag: power=%s startPreamble=automatic runtime-only (continuations stay short)",
-                     IoHomecontrolChannel::twoWayPowerClassName(mController.diagnostic2WPowerClass()));
-        else
-            logInfoP("2WDiag: power=%s startPreamble=%u runtime-only (continuations stay short)",
+            logInfoP("2WDiag: power=%s startPreamble=automatic wakeBelief=%s runtime-only (continuations stay short)",
                      IoHomecontrolChannel::twoWayPowerClassName(mController.diagnostic2WPowerClass()),
-                     static_cast<unsigned>(lPreamble));
+                     mController.diagnostic2WWakeBelief() ? "on" : "off");
+        else
+            logInfoP("2WDiag: power=%s startPreamble=%u wakeBelief=%s runtime-only (continuations stay short)",
+                     IoHomecontrolChannel::twoWayPowerClassName(mController.diagnostic2WPowerClass()),
+                     static_cast<unsigned>(lPreamble),
+                     mController.diagnostic2WWakeBelief() ? "on" : "off");
         const TwoWayDiscoverySettings &lDiscovery = mController.diagnosticDiscoverySettings();
         logInfoP("2WDiag discovery: cmd=%s dest=%s ack=%s lp=%s preamble=%s runtime-only",
                  discoveryCommandName(lDiscovery.command),

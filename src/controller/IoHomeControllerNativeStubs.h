@@ -232,6 +232,11 @@ public:
   {
     mHasStatusUpdate = true;
     mStatusMoving = iMoving;
+    mHas2WHeardEvidence = true;
+    mLast2WHeardMs = ioHomeTestMillis();
+    mHas2WMovingEvidence = iMoving;
+    if (iMoving)
+      mLast2WMovingEvidenceMs = ioHomeTestMillis();
   }
   void onSlatFeedback(float iPercent)
   {
@@ -268,6 +273,27 @@ public:
     mLastCommandExchangeCommand = iCommand;
     mLastCommandExchangeParam = iParam;
     mLastCommandExchangeResult = iResult;
+    if (iResult == IoHomeCommandExchangeResult::Completed ||
+        iResult == IoHomeCommandExchangeResult::AuthenticatedUnconfirmed)
+    {
+      mHas2WHeardEvidence = true;
+      mLast2WHeardMs = ioHomeTestMillis();
+    }
+    if (iCommand == IoHomeCommand::Execute && iParam != 0xD2 && iParam != 0xD8 &&
+        iResult == IoHomeCommandExchangeResult::Completed)
+    {
+      mHas2WMovingEvidence = true;
+      mLast2WMovingEvidenceMs = ioHomeTestMillis();
+    }
+    if (iCommand == IoHomeCommand::Execute && iParam == 0xD2 &&
+        iResult == IoHomeCommandExchangeResult::Completed)
+      mHas2WMovingEvidence = false;
+  }
+  TwoWayWakeBelief twoWayWakeBeliefAt(uint32_t iNowMs, bool iStopCommand = false) const
+  {
+    return ::twoWayWakeBelief(mHas2WMovingEvidence, mLast2WMovingEvidenceMs,
+                              mHas2WHeardEvidence, mLast2WHeardMs,
+                              iNowMs, iStopCommand);
   }
   void onExchangeTimeout(bool iAuthenticatedUnconfirmed)
   {
@@ -351,6 +377,10 @@ private:
   float mTargetPositionFeedback = 0.0f;
   bool mHasStatusUpdate = false;
   bool mStatusMoving = false;
+  bool mHas2WHeardEvidence = false;
+  bool mHas2WMovingEvidence = false;
+  uint32_t mLast2WHeardMs = 0;
+  uint32_t mLast2WMovingEvidenceMs = 0;
   bool mHasSlatFeedback = false;
   float mSlatFeedback = 0.0f;
   bool mHasBatteryLevel = false;

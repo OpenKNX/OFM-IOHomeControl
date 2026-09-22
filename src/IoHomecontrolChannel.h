@@ -41,6 +41,7 @@ public:
   void onStatusPollFailed(bool iAfterChallenge);
   void onCommandExchangeResult(IoHomeCommand iCommand, uint8_t iParam,
                                IoHomeCommandExchangeResult iResult);
+  TwoWayWakeBelief twoWayWakeBeliefAt(uint32_t iNowMs, bool iStopCommand = false) const;
   void onExchangeTimeout(bool iAuthenticatedUnconfirmed);
   void onRssiUpdate(uint8_t iScaledPercent);
   void logStatusSummary(float iCurrentPositionPercent, bool iHasCurrentPosition,
@@ -172,6 +173,10 @@ private:
   float mCurrentPosition = 0.0f;
   float mCurrentSlat = 0.0f;
   bool mIsMoving = false;
+  bool mHas2WHeardEvidence = false;
+  bool mHas2WMovingEvidence = false;
+  uint32_t mLast2WHeardMs = 0;
+  uint32_t mLast2WMovingEvidenceMs = 0;
   bool mStatusExpected = false; // device will auto-send StatusUpdate while tracking
   uint8_t mBatteryLevel = 0xFF; // 0xFF = unknown, 0-100 = percent
   bool mLocked = false;         // P2: channel lock

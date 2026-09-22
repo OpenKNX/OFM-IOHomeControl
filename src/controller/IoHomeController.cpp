@@ -2307,6 +2307,28 @@ uint16_t IoHomeController::preambleFor2WRequest(const IoHomeFrame &iFrame) const
                : IOHC_PREAMBLE_NORMAL_START;
 }
 
+uint16_t IoHomeController::preambleForQueued2WAttempt(const IoHomeFrame &iFrame,
+                                                       const IoHomeQueueEntry &iEntry) const
+{
+    const uint16_t lNormal = preambleFor2WRequest(iFrame);
+    if (!mDiagnostic2WWakeBelief || mDiagnostic2WStartPreamble != 0 ||
+        (iFrame.ctrlByte0 & IOHC_CTRL0_START) == 0 ||
+        (iFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0)
+        return lNormal;
+
+    IoHomecontrolChannel *lChannel = channelForQueueEntry(iEntry);
+    if (!lChannel)
+        return lNormal;
+
+    const bool lStop = iEntry.command == IoHomeCommand::Execute && iEntry.param == 0xD2;
+    const TwoWayWakeBelief lBelief = lChannel->twoWayWakeBeliefAt(millis(), lStop);
+    const uint16_t lPreamble = twoWayWakePreamble(lBelief, iEntry.retries);
+    logInfoP("2WWake: node=0x%06X belief=%s attempt=%u preamble=%u",
+             iEntry.destNodeId, twoWayWakeBeliefName(lBelief),
+             static_cast<unsigned>(iEntry.retries + 1U), static_cast<unsigned>(lPreamble));
+    return lPreamble;
+}
+
 bool IoHomeController::learnPowerClassFromDiscovery(IoHomecontrolChannel *iChannel,
                                                      const IoHomeFrame &iFrame,
                                                      const char *iSource)
@@ -3433,6 +3455,16 @@ void IoHomeController::setDiagnostic2WStartPreamble(uint16_t iPreambleSymbols)
 uint16_t IoHomeController::diagnostic2WStartPreamble() const
 {
     return mDiagnostic2WStartPreamble;
+}
+
+void IoHomeController::setDiagnostic2WWakeBelief(bool iEnabled)
+{
+    mDiagnostic2WWakeBelief = iEnabled;
+}
+
+bool IoHomeController::diagnostic2WWakeBelief() const
+{
+    return mDiagnostic2WWakeBelief;
 }
 
 void IoHomeController::setDiagnosticDiscoverySettings(const TwoWayDiscoverySettings &iSettings)
@@ -5049,7 +5081,7 @@ void IoHomeController::processTxPending()
     // Normal 2W controller-originated TX is always sent on CH2; RX scanning remains separate.
     bool lIsStartFrame = (mTxFrame.ctrlByte0 & IOHC_CTRL0_START);
     const uint16_t lPreamble = lIs1WFrame ? lOneWayFirstShape.preamble
-                                          : preambleFor2WRequest(mTxFrame);
+                                          : preambleForQueued2WAttempt(mTxFrame, mCurrentCmd);
     if (!lIs1WFrame)
     {
         mWaitingFinalResponse = false;
