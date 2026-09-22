@@ -222,6 +222,45 @@ static const uint8_t kExtractionAddressResponse[] = {
     0xA1, 0xB2, 0xC3, 0x00, 0x00, 0x01,
 };
 
+// Public TaHoma/KLI SSL transcript from laberning/home_io_control Issue #112.
+// Frames containing a system key or challenge are intentionally omitted.
+static const uint8_t kIssue112DiscoverResponse[] = {
+    0xD1, 0x00, 0xD6, 0x33, 0x32, 0xFB, 0x7B, 0x08, 0x29,
+    0x00, 0x80, 0x00, 0x00, 0x00, 0x01, 0x1D, 0xFF, 0xFF,
+};
+static const uint8_t kIssue112Confirmation[] = {
+    0x48, 0x20, 0xFB, 0x7B, 0x08, 0xD6, 0x33, 0x32, 0x2C,
+};
+static const uint8_t kIssue112DiscoverRequest[] = {
+    0xC8, 0x00, 0x00, 0x00, 0x3B, 0xD6, 0x33, 0x32, 0x28,
+};
+static const uint8_t kIssue112GetGeneralInfo1[] = {
+    0x48, 0x20, 0xFB, 0x7B, 0x08, 0xD6, 0x33, 0x32, 0x54,
+};
+static const uint8_t kIssue112GeneralInfo2Response[] = {
+    0x98, 0x00, 0xD6, 0x33, 0x32, 0xFB, 0x7B, 0x08, 0x57,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x02, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00,
+};
+static const uint8_t kIssue112NameResponse[] = {
+    0x98, 0x00, 0xD6, 0x33, 0x32, 0xFB, 0x7B, 0x08, 0x51,
+    0x00, 0x53, 0x68, 0x75, 0x74, 0x74, 0x65, 0x72, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+static const uint8_t kIssue112PrivateResponse[] = {
+    0x96, 0x00, 0xD6, 0x33, 0x32, 0xFB, 0x7B, 0x08, 0x04,
+    0x05, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x2B, 0x00, 0x00, 0x00,
+};
+
+// Real VELUX MSU one-way STOP from Issue #95. No key material is present;
+// the observed HMAC is useful for pinning the exact declared 1W wire shape.
+static const uint8_t kIssue95VeluxOneWayStop[] = {
+    0xF6, 0x00, 0x00, 0x00, 0x3F, 0x3A, 0xFC, 0x22, 0x00,
+    0x01, 0x61, 0xD2, 0x00, 0x00, 0x00, 0x04, 0xD5,
+    0xB3, 0xB4, 0xB9, 0xD8, 0xBC, 0x28,
+};
+
 // Sanitized KLR300 controller-role pairing/search sequence captured on
 // 2026-09-12.  Node IDs are the published capture shape; challenge/HMAC/key
 // bytes below are synthetic public placeholders.  The stable regression
@@ -291,6 +330,38 @@ static const uint8_t kKlr300AddressRequest[] = {
 };
 
 static const Frame kFrames[] = {
+    {"issue112_discover_response", "tahoma_kli_ssl_issue112",
+     "public TaHoma/KLI SSL capture from laberning/home_io_control Issue #112", RadioPath::ProtocolOnly,
+     kIssue112DiscoverResponse, sizeof(kIssue112DiscoverResponse), IoHomeCommand::DiscoverResponse,
+     0xFB7B08, 0xD63332, false, false, false, CryptoExpectation::NoCrypto},
+    {"issue112_confirmation", "tahoma_kli_ssl_issue112",
+     "public TaHoma/KLI SSL capture from laberning/home_io_control Issue #112", RadioPath::ProtocolOnly,
+     kIssue112Confirmation, sizeof(kIssue112Confirmation), IoHomeCommand::Confirmation,
+     0xD63332, 0xFB7B08, false, false, false, CryptoExpectation::NoCrypto},
+    {"issue112_discover_request", "tahoma_kli_ssl_issue112",
+     "public TaHoma/KLI SSL capture from laberning/home_io_control Issue #112", RadioPath::ProtocolOnly,
+     kIssue112DiscoverRequest, sizeof(kIssue112DiscoverRequest), IoHomeCommand::DiscoverRequest,
+     0xD63332, 0x00003B, false, false, false, CryptoExpectation::NoCrypto},
+    {"issue112_get_general_info1", "tahoma_kli_ssl_issue112",
+     "public TaHoma/KLI SSL capture from laberning/home_io_control Issue #112", RadioPath::ProtocolOnly,
+     kIssue112GetGeneralInfo1, sizeof(kIssue112GetGeneralInfo1), IoHomeCommand::GetGeneralInfo1,
+     0xD63332, 0xFB7B08, false, false, false, CryptoExpectation::NoCrypto},
+    {"issue112_general_info2_response", "tahoma_kli_ssl_issue112",
+     "public TaHoma/KLI SSL capture from laberning/home_io_control Issue #112", RadioPath::ProtocolOnly,
+     kIssue112GeneralInfo2Response, sizeof(kIssue112GeneralInfo2Response), IoHomeCommand::GetGeneralInfo2Response,
+     0xFB7B08, 0xD63332, false, false, false, CryptoExpectation::NoCrypto},
+    {"issue112_name_response", "tahoma_kli_ssl_issue112",
+     "public TaHoma/KLI SSL capture from laberning/home_io_control Issue #112", RadioPath::ProtocolOnly,
+     kIssue112NameResponse, sizeof(kIssue112NameResponse), IoHomeCommand::GetNameResponse,
+     0xFB7B08, 0xD63332, false, false, false, CryptoExpectation::NoCrypto},
+    {"issue112_private_response", "tahoma_kli_ssl_issue112",
+     "public TaHoma/KLI SSL capture from laberning/home_io_control Issue #112", RadioPath::ProtocolOnly,
+     kIssue112PrivateResponse, sizeof(kIssue112PrivateResponse), IoHomeCommand::PrivateResponse,
+     0xFB7B08, 0xD63332, false, false, false, CryptoExpectation::NoCrypto},
+    {"issue95_velux_1w_stop", "velux_msu_stop_issue95",
+     "public VELUX MSU capture from laberning/home_io_control Issue #95", RadioPath::SX1262,
+     kIssue95VeluxOneWayStop, sizeof(kIssue95VeluxOneWayStop), IoHomeCommand::Execute,
+     0x3AFC22, 0x00003F, true, true, false, CryptoExpectation::HmacPresentKeyRedacted},
     {"klr300_discover_28_ack", "klr300_pairing_search_2026_09_12",
      "sanitized KLR300 capture; ACK bit and header preserved", RadioPath::ProtocolOnly,
      kKlr300Discover28Ack, sizeof(kKlr300Discover28Ack), IoHomeCommand::DiscoverRequest,
