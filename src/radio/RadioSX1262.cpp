@@ -102,6 +102,7 @@ RadioSX1262::RadioSX1262()
       mRfSwitchRxPin(IOHC_RADIO_RX_EN), mRfSwitchTxPin(IOHC_RADIO_TX_EN), mUseDio2RfSwitch(IOHC_RADIO_DIO2_RF_SW != 0),
       mInitialized(false), mInitError(RadioSX1262InitError::None), mInitStatusByte(0), mInitDeviceErrors(0), mLastDeviceErrors(0), mTcxoStartupDelayUs(0), mTcxoStartupAttempts(0), mBusyTimedOut(false), mReceiveRestartPending(false), mState(RadioState::Idle),
       mLastRssi(0), mCurrentFreq(0), mStandbyMode(SX1262_STDBY_RC), mPreambleLength(8),
+      mRxBandwidth(RadioSX1262RxBandwidth::Khz58_6),
       mSyncWord{}, mSyncWordBits(0), mPacketPayloadLen(SX1262_IOHOME_RX_FIXED_LEN), mSoftwarePhyMode(false), mEms2Mode(false),
       mTxToRxSettlePending(false), mSoftwarePhySyncAtUs(0), mEarlyRxFrame{}, mEarlyRxFrameLen(0),
 #ifdef ESP32
@@ -1235,10 +1236,26 @@ bool RadioSX1262::applyStandardModulationParams(bool iBlocking)
     const uint8_t lModParams[8] = {
         0x00, 0x68, 0x2B,
         0x0B,
-        0x0C,
+        static_cast<uint8_t>(mRxBandwidth),
         0x00, 0x4E, 0xA5,
     };
     return sendCommand(SX1262_CMD_SET_MODULATION_PARAMS, lModParams, sizeof(lModParams), iBlocking);
+}
+
+RadioError RadioSX1262::setRxBandwidth(RadioSX1262RxBandwidth iBandwidth)
+{
+    if (!isValidRadioSX1262RxBandwidth(iBandwidth))
+        return RadioError::InvalidParam;
+    if (!mInitialized)
+        return RadioError::NotInitialized;
+    mRxBandwidth = iBandwidth;
+    standby();
+    return applyStandardModulationParams() ? RadioError::None : RadioError::HardwareError;
+}
+
+RadioSX1262RxBandwidth RadioSX1262::rxBandwidth() const
+{
+    return mRxBandwidth;
 }
 
 bool RadioSX1262::applyPacketParams(bool iBlocking)

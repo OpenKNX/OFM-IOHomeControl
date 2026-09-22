@@ -2815,6 +2815,9 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc 2wdiag wake on|off", "Experimental per-attempt low-power wake preamble belief");
     openknx.console.printHelpLine("iohc 2wdiag discovery FIELD VALUE", "Override discovery command/dest/ACK/LOW_POWER/preamble independently");
     openknx.console.printHelpLine("iohc 2wdiag status|reset", "Show or clear runtime-only 2W overrides");
+#if defined(RADIO_SX1262)
+    openknx.console.printHelpLine("iohc radio rxbw KHZ", "Runtime SX1262 RX bandwidth: 39.0..187.2; default 58.6");
+#endif
     openknx.console.printHelpLine("iohcNN unpair", "Remove pairing for channel NN");
     openknx.console.printHelpLine("iohc discover", "Broadcast discovery, list devices");
     openknx.console.printHelpLine("iohc discover spe", "Encrypted SPE/sub-device discovery");
@@ -2986,6 +2989,41 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         }
         return true;
     }
+
+#if defined(RADIO_SX1262)
+    if (lSub.rfind("radio rxbw", 0) == 0)
+    {
+        const std::string lArg = trimSpaces(lSub.substr(strlen("radio rxbw")));
+        RadioSX1262RxBandwidth lBandwidth = RadioSX1262RxBandwidth::Khz58_6;
+        bool lValid = true;
+        if (lArg == "39.0" || lArg == "39") lBandwidth = RadioSX1262RxBandwidth::Khz39_0;
+        else if (lArg == "46.9") lBandwidth = RadioSX1262RxBandwidth::Khz46_9;
+        else if (lArg == "58.6" || lArg == "default" || lArg == "auto") lBandwidth = RadioSX1262RxBandwidth::Khz58_6;
+        else if (lArg == "78.2") lBandwidth = RadioSX1262RxBandwidth::Khz78_2;
+        else if (lArg == "117.3") lBandwidth = RadioSX1262RxBandwidth::Khz117_3;
+        else if (lArg == "156.2") lBandwidth = RadioSX1262RxBandwidth::Khz156_2;
+        else if (lArg == "187.2") lBandwidth = RadioSX1262RxBandwidth::Khz187_2;
+        else lValid = false;
+
+        if (!lValid)
+        {
+            logInfoP("Usage: iohc radio rxbw 39.0|46.9|58.6|78.2|117.3|156.2|187.2");
+            return true;
+        }
+
+        const RadioError lErr = mController.radio().setRxBandwidth(lBandwidth);
+        if (lErr == RadioError::None)
+        {
+            logInfoP("Radio: SX1262 RX bandwidth=%s kHz runtime-only",
+                     radioSX1262RxBandwidthName(lBandwidth));
+            if (mController.startReceive() != RadioError::None)
+                logInfoP("Radio: startReceive failed after RX bandwidth change");
+        }
+        else
+            logInfoP("Radio: setRxBandwidth err=%d", static_cast<int>(lErr));
+        return true;
+    }
+#endif
 
     if (!knx.configured())
     {

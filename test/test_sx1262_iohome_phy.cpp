@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "radio/SX1262IoHomePhy.h"
+#include "radio/SX1262RxBandwidth.h"
 
 static int sTestsPassed = 0;
 static int sTestsFailed = 0;
@@ -60,6 +61,19 @@ TEST(resolve_sync_remaps_iohome_pattern)
   ASSERT_TRUE(lConfig.softwarePhyEnabled);
   ASSERT_EQ(lConfig.syncWordBits, 24u);
   ASSERT_MEM_EQ(lConfig.syncWord, lExpected, sizeof(lExpected));
+}
+
+TEST(rx_bandwidth_command_codes_match_sx1262_table)
+{
+  ASSERT_EQ(static_cast<uint8_t>(RadioSX1262RxBandwidth::Khz39_0), 0x1C);
+  ASSERT_EQ(static_cast<uint8_t>(RadioSX1262RxBandwidth::Khz46_9), 0x14);
+  ASSERT_EQ(static_cast<uint8_t>(RadioSX1262RxBandwidth::Khz58_6), 0x0C);
+  ASSERT_EQ(static_cast<uint8_t>(RadioSX1262RxBandwidth::Khz78_2), 0x1B);
+  ASSERT_EQ(static_cast<uint8_t>(RadioSX1262RxBandwidth::Khz117_3), 0x0B);
+  ASSERT_EQ(static_cast<uint8_t>(RadioSX1262RxBandwidth::Khz156_2), 0x1A);
+  ASSERT_EQ(static_cast<uint8_t>(RadioSX1262RxBandwidth::Khz187_2), 0x12);
+  ASSERT_TRUE(isValidRadioSX1262RxBandwidth(RadioSX1262RxBandwidth::Khz156_2));
+  ASSERT_TRUE(!isValidRadioSX1262RxBandwidth(static_cast<RadioSX1262RxBandwidth>(0xFF)));
 }
 
 TEST(resolve_sync_keeps_non_iohome_pattern)
@@ -220,6 +234,7 @@ TEST(encode_pads_partial_uart_byte_high)
 int main()
 {
   printf("SX1262 io-home PHY tests\n");
+  RUN(rx_bandwidth_command_codes_match_sx1262_table);
   RUN(resolve_sync_remaps_iohome_pattern);
   RUN(resolve_sync_keeps_non_iohome_pattern);
   RUN(encode_and_find_round_trip_frame);

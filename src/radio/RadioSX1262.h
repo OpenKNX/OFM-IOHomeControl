@@ -1,5 +1,6 @@
 #pragma once
 #include "RadioTypes.h"
+#include "SX1262RxBandwidth.h"
 #include "../protocol/IoHomeFrame.h"
 #include <stdint.h>
 
@@ -76,6 +77,8 @@ public:
   RadioError setOutputPower(uint8_t iPower);
   RadioError setPreambleLength(uint16_t iSymbols);
   RadioError setPreambleLengthBlocking(uint16_t iSymbols);
+  RadioError setRxBandwidth(RadioSX1262RxBandwidth iBandwidth);
+  RadioSX1262RxBandwidth rxBandwidth() const;
   RadioError startTransmit(const uint8_t *iData, uint8_t iLen);
   RadioError startTransmitBlocking(const uint8_t *iData, uint8_t iLen);
   RadioError startReceive();
@@ -178,6 +181,7 @@ private:
   uint32_t mCurrentFreq;
   uint8_t mStandbyMode;
   uint16_t mPreambleLength; // cached for SetPacketParams (SX1262 sets all params at once)
+  RadioSX1262RxBandwidth mRxBandwidth;
   uint8_t mSyncWord[8];
   uint8_t mSyncWordBits;
   uint8_t mPacketPayloadLen;
