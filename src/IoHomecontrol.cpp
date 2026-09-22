@@ -2366,6 +2366,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         openknx.flash.save(true);
         resultData[0] = 0x00;
         resultLength = 1;
+        resetKeyImportWorkflow();
         return true;
     }
     case 0x20: // Test: send position command

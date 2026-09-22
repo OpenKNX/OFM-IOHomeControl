@@ -70,14 +70,6 @@ function IOHC_appendNodeId(data, nodeId) {
     data.push(normalizedNodeId & 0xFF);
 }
 
-function IOHC_waitMilliseconds(milliseconds) {
-    var deadline = new Date().getTime() + milliseconds;
-    while (new Date().getTime() < deadline) {
-        // ETS event handlers are synchronous. Keep the polling rate bounded so
-        // the KNX connection is not flooded while the radio workflow runs.
-    }
-}
-
 function IOHC_etsDeviceType(protocolType) {
     switch (protocolType) {
     case 0x01: // Venetian blind
@@ -598,65 +590,49 @@ function IOHC_startKeyExtract(device, online, progress, context) {
     progress.setProgress(5);
     online.connect();
     try {
-        var resp = IOHC_invokeFunctionProperty(online, [0x17]);
-        if (!resp || resp.length < 1) {
-            throw new Error("io-homecontrol: Keine Antwort beim Start der 2W-Schlüsselextraktion");
+        var status = IOHC_invokeFunctionProperty(online, [0x18]);
+        if (!status || status.length < 11 || status[0] != 0) {
+            throw new Error("io-homecontrol: Ungültige Statusantwort während der 2W-Übernahme");
         }
-        if (resp[0] == 0) {
+
+        var phase = status[1] || 0;
+        if (phase == 0 || phase == 5 || phase == 6) {
+            var resp = IOHC_invokeFunctionProperty(online, [0x17]);
+            if (!resp || resp.length < 1) {
+                throw new Error("io-homecontrol: Keine Antwort beim Start der 2W-Schlüsselextraktion");
+            }
+            if (resp[0] != 0) {
+                throw new Error("io-homecontrol: 2W-Schlüsselextraktion ist gerade blockiert");
+            }
+
             IOHC_setExtractionResult(device, "Extraktion läuft", []);
-            progress.setText("2W-Schlüsselextraktion aktiv. Jetzt am Fremd-Gateway 'Gerät hinzufügen' starten.");
-            progress.setProgress(15);
-        } else {
-            throw new Error("io-homecontrol: 2W-Schlüsselextraktion ist gerade blockiert");
+            progress.setText("2W-Schlüsselextraktion aktiv. Jetzt am Fremd-Gateway 'Gerät hinzufügen' starten und diese Schaltfläche danach erneut drücken.");
+            progress.setProgress(100);
+            return;
         }
 
-        var startedAt = new Date().getTime();
-        var workflowTimeoutMs = 12 * 60 * 1000;
-        var lastPhase = -1;
-        var status = null;
-        while (new Date().getTime() - startedAt < workflowTimeoutMs) {
-            status = IOHC_invokeFunctionProperty(online, [0x18]);
-            if (!status || status.length < 11 || status[0] != 0) {
-                throw new Error("io-homecontrol: Ungültige Statusantwort während der 2W-Übernahme");
-            }
-
-            var phase = status[1] || 0;
-            if (phase != lastPhase) {
-                if (phase == 1) {
-                    progress.setText("Schlüsselextraktion läuft. Am Fremd-Gateway 'Gerät hinzufügen' starten.");
-                    progress.setProgress(20);
-                } else if (phase == 2) {
-                    var hubNode = IOHC_readNodeId(status, 2);
-                    var controllerNode = IOHC_readNodeId(status, 5);
-                    progress.setText("2W-Schlüssel erfolgreich extrahiert (Gateway " +
-                                     IOHC_formatNodeId(hubNode) + ", neue Controller-ID " +
-                                     IOHC_formatNodeId(controllerNode) + "). Automatische Gerätesuche folgt ...");
-                    progress.setProgress(55);
-                    IOHC_setExtractionResult(device, "Schlüssel extrahiert; Scan folgt", []);
-                } else if (phase == 3) {
-                    progress.setText("2W-Schlüssel erfolgreich extrahiert. Geräte werden automatisch gesucht ...");
-                    progress.setProgress(70);
-                }
-                lastPhase = phase;
-            }
-
-            if (phase == 4) {
-                break;
-            }
-            if (phase == 5) {
-                IOHC_setExtractionResult(device, "Zeitüberschreitung", []);
-                throw new Error("io-homecontrol: Zeitüberschreitung – kein 2W-Schlüssel wurde empfangen");
-            }
-            if (phase == 6) {
-                IOHC_setExtractionResult(device, "Übernahme fehlgeschlagen", []);
-                throw new Error("io-homecontrol: Schlüssel wurde extrahiert, die automatische Gerätesuche konnte aber nicht gestartet werden");
-            }
-            IOHC_waitMilliseconds(750);
+        if (phase == 1) {
+            progress.setText("Schlüsselextraktion läuft. Am Fremd-Gateway 'Gerät hinzufügen' starten und diese Schaltfläche danach erneut drücken.");
+            progress.setProgress(100);
+            return;
         }
-
-        if (!status || status[1] != 4) {
-            IOHC_setExtractionResult(device, "Zeitüberschreitung", []);
-            throw new Error("io-homecontrol: Zeitüberschreitung während der 2W-Schlüsselübernahme");
+        if (phase == 2) {
+            var hubNode = IOHC_readNodeId(status, 2);
+            var controllerNode = IOHC_readNodeId(status, 5);
+            IOHC_setExtractionResult(device, "Schlüssel extrahiert; Scan folgt", []);
+            progress.setText("2W-Schlüssel erfolgreich extrahiert (Gateway " +
+                             IOHC_formatNodeId(hubNode) + ", neue Controller-ID " +
+                             IOHC_formatNodeId(controllerNode) + "). Automatische Gerätesuche läuft; diese Schaltfläche danach erneut drücken.");
+            progress.setProgress(100);
+            return;
+        }
+        if (phase == 3) {
+            progress.setText("2W-Schlüssel erfolgreich extrahiert. Geräte werden automatisch gesucht; diese Schaltfläche danach erneut drücken.");
+            progress.setProgress(100);
+            return;
+        }
+        if (phase != 4) {
+            throw new Error("io-homecontrol: Unbekannter Status der 2W-Schlüsselübernahme");
         }
 
         var resultCount = status[8] || 0;
@@ -743,11 +719,9 @@ function IOHC_startKeyExtract(device, online, progress, context) {
             progress.setProgress(80 + Math.floor(((d + 1) * 15) / Math.max(1, discoveries.length)));
         }
 
-        if (configuredChannels > 0) {
-            var saveResp = IOHC_invokeFunctionProperty(online, [0x1B]);
-            if (!saveResp || saveResp.length < 1 || saveResp[0] != 0) {
-                throw new Error("io-homecontrol: Importierte Geräte konnten nicht dauerhaft gespeichert werden");
-            }
+        var saveResp = IOHC_invokeFunctionProperty(online, [0x1B]);
+        if (!saveResp || saveResp.length < 1 || saveResp[0] != 0) {
+            throw new Error("io-homecontrol: Schlüsselübernahme konnte nicht abgeschlossen werden");
         }
 
         var nodeText = nodeIds.length ? nodeIds.map(IOHC_formatNodeId).join(", ") : "keine";

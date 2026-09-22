@@ -18,8 +18,11 @@ and protocol diagnostics. Other application modules are unaffected.
 
 ## 2W key extraction and automatic import
 
-The **2W-Schlüssel extrahieren** ETS action keeps its online dialog open for the
-complete workflow:
+The **2W-Schlüssel extrahieren** ETS action is deliberately non-blocking because
+ETS executes online event handlers synchronously. The first press starts the
+workflow and returns immediately. After triggering **Gerät hinzufügen** on the
+owned gateway, press the same action again to read the current state. Repeat once
+the scan is complete to import the results:
 
 1. The firmware enrolls as a temporary device at the existing, owned gateway
    and extracts the network key.

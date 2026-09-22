@@ -255,6 +255,10 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn('prefix + "DeviceType", etsType', script)
         self.assertIn("function IOHC_syncChannelSelection", script)
         self.assertIn("neu programmiert werden", workflow)
+        self.assertLess(workflow.index("[0x18]"), workflow.index("[0x17]"))
+        self.assertNotIn("IOHC_waitMilliseconds", workflow)
+        self.assertNotIn("workflowTimeoutMs", workflow)
+        self.assertIn("diese Schaltfläche danach erneut drücken", workflow)
 
     def test_one_way_enrollment_finalizer_is_labeled_stop_runter(self) -> None:
         finalizer = self.share.find(
