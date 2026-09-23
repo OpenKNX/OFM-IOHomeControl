@@ -11193,14 +11193,24 @@ TEST(controller_key_extract_broadcasts_reply_with_ch2_last)
     IoHomeFrame lResponse;
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
     ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+    ASSERT_EQ(IOHC_KEY_EXTRACT_COLD_REPLY_PREAMBLE, 80);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_KEY_EXTRACT_COLD_REPLY_PREAMBLE);
+    ASSERT_EQ(IOHC_FREQUENCIES[0], IOHC_FREQ_2);
+    ASSERT_EQ(IOHC_FREQUENCIES[1], IOHC_FREQ_3);
+    ASSERT_EQ(IOHC_FREQUENCIES[2], IOHC_FREQ_1);
+    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_1);
 
-    // Finish the CH1, CH3, then CH2 reply sequence. The final radio channel
-    // must be CH2 so a hub reacting to it finds us back in receive mode.
-    for (uint8_t i = 0; i < 4; i++)
-        lController.loop();
+    // Finish the exact CH1, CH3, then CH2 reply sequence. The final radio
+    // channel must be CH2 so a hub reacting to it finds us back in receive.
+    lController.loop();
+    ASSERT_EQ(lController.radio().testTransmitCount(), 2U);
+    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_3);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_KEY_EXTRACT_COLD_REPLY_PREAMBLE);
+    lController.loop();
     ASSERT_EQ(lController.radio().testTransmitCount(), 3U);
     ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_KEY_EXTRACT_COLD_REPLY_PREAMBLE);
+    lController.loop();
 }
 
 TEST(controller_key_extract_reuses_stored_challenge_on_key_init_retry)

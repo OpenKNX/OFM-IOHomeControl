@@ -8850,9 +8850,10 @@ void IoHomeController::processKeyExtractFrame()
                                                  kExtractManufacturer);
         if (mTxLen == 0)
             return;
-        // Discovery is the only cold reply: the hub may still be hopping, so
-        // use the long wake-up preamble. All in-exchange replies stay short.
-        if (!queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_PREAMBLE_LONG))
+        // Discovery is the only cold reply. Keep enough preamble for a hub
+        // which is still hopping, without occupying all three channels for
+        // the 3 * 1024-symbol low-power wake-up duration.
+        if (!queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_KEY_EXTRACT_COLD_REPLY_PREAMBLE))
             return;
         mKeyExtractState = ControllerState::ExtractSentDiscoverResp;
         return;
@@ -9016,7 +9017,7 @@ bool IoHomeController::queueKeyExtractReply(const uint8_t *iBuffer, uint8_t iLen
 
 void IoHomeController::serviceKeyExtractReply()
 {
-    static constexpr uint8_t kReplyFrequencyOrder[] = {1, 2, 0}; // CH1, CH3, CH2 last
+    static constexpr uint8_t kReplyFrequencyOrder[] = {2, 1, 0}; // CH1, CH3, CH2 last
 
     if (mKeyExtractReplyLen == 0)
         return;
