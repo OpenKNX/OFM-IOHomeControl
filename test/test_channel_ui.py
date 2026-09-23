@@ -404,7 +404,7 @@ class ChannelUiTest(unittest.TestCase):
         self.assertEqual(mode.get("BitOffset"), "6")
         self.assertEqual(delay.get("Value"), "300")
         self.assertEqual(delay.get("Offset"), "63")
-        self.assertEqual(self.template.find(".//k:Union", NS).get("SizeInBit"), "520")
+        self.assertEqual(self.template.find(".//k:Union", NS).get("SizeInBit"), "528")
 
         expert = self.template.find(".//k:ParameterBlock[@Name='ExpertSettings']", NS)
         two_way = expert.find("k:choose/k:when[@test='0']", NS)
