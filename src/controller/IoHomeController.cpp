@@ -1348,6 +1348,7 @@ IoHomeController::IoHomeController()
       mPassiveKeySniffStartedAt(0),
       mPassiveKeySniffTimeoutMs(0),
       mKeyExtractArmed(false), mKeyExtractThrowawayId(0),
+      mKeyExtractCandidateHubNodeId(0),
       mKeyExtractHubNodeId(0),
       mKeyExtractState(ControllerState::ExtractIdle),
       mKeyExtractArmedAt(0), mKeyExtractTimeoutMs(0),
@@ -3290,6 +3291,7 @@ bool IoHomeController::startKeyExtraction(uint32_t iTimeoutMs)
     mKeyExtractThrowawayId = generateKeyExtractNodeId();
     memset(mKeyExtractChallenge, 0, sizeof(mKeyExtractChallenge));
     memset(mKeyExtractKey, 0, sizeof(mKeyExtractKey));
+    mKeyExtractCandidateHubNodeId = 0;
     mKeyExtractHubNodeId = 0;
     mKeyExtractState = ControllerState::ExtractIdle;
     mKeyExtractArmedAt = millis();
@@ -8879,14 +8881,26 @@ void IoHomeController::processKeyExtractFrame()
     switch (mRxFrame.commandId)
     {
     case IoHomeCommand::DiscoverRequest:
+    {
+        const bool lFreshAttemptAfterExtract =
+            (mKeyExtractState == ControllerState::Extracted ||
+             mKeyExtractState == ControllerState::ExtractSentAddressResp) &&
+            mKeyExtractHubNodeId != 0 && lSrcNode == mKeyExtractHubNodeId;
         if (mKeyExtractState != ControllerState::ExtractIdle &&
-            mKeyExtractState != ControllerState::ExtractSentDiscoverResp)
+            mKeyExtractState != ControllerState::ExtractSentDiscoverResp &&
+            !lFreshAttemptAfterExtract)
         {
             dispatchRxFrame();
             return;
         }
 
-        mKeyExtractHubNodeId = lSrcNode;
+        if (lFreshAttemptAfterExtract)
+        {
+            memset(mKeyExtractChallenge, 0, sizeof(mKeyExtractChallenge));
+            memset(mKeyExtractKey, 0, sizeof(mKeyExtractKey));
+            mKeyExtractGraceDeadlineMs = 0;
+        }
+        mKeyExtractCandidateHubNodeId = lSrcNode;
         mTxLen = buildExtractDiscoverAnswerFrame(mTxBuffer, sizeof(mTxBuffer),
                                                  mKeyExtractThrowawayId, lSrcNode,
                                                  kExtractDeviceType, kExtractDeviceSubtype,
@@ -8901,9 +8915,12 @@ void IoHomeController::processKeyExtractFrame()
         mKeyExtractState = ControllerState::ExtractSentDiscoverResp;
         holdKeyExtractChannel(kKeyExtractMidAttemptHoldMs);
         return;
+    }
 
     case IoHomeCommand::Confirmation:
         if (lDstNode != mKeyExtractThrowawayId ||
+            (mKeyExtractHubNodeId == 0 && mKeyExtractCandidateHubNodeId != 0 &&
+             lSrcNode != mKeyExtractCandidateHubNodeId) ||
             (mKeyExtractState != ControllerState::ExtractSentDiscoverResp &&
              mKeyExtractState != ControllerState::ExtractSentConfirmAck))
         {
@@ -8931,6 +8948,7 @@ void IoHomeController::processKeyExtractFrame()
         {
             IoHomeCrypto::generateChallenge(mKeyExtractChallenge);
             mKeyExtractHubNodeId = lSrcNode;
+            mKeyExtractCandidateHubNodeId = lSrcNode;
             mKeyExtractState = ControllerState::ExtractSentChallenge;
         }
         else if (mKeyExtractState != ControllerState::ExtractSentChallenge)
@@ -9139,6 +9157,7 @@ void IoHomeController::resetKeyExtractSessionState()
 {
     mKeyExtractState = ControllerState::ExtractIdle;
     mKeyExtractThrowawayId = 0;
+    mKeyExtractCandidateHubNodeId = 0;
     mKeyExtractHubNodeId = 0;
     mKeyExtractGraceDeadlineMs = 0;
     mKeyExtractHoldDeadlineMs = 0;

@@ -985,6 +985,7 @@ private:
   bool mKeyExtractArmed;
   uint32_t mKeyExtractThrowawayId;
   uint8_t mKeyExtractChallenge[6];
+  uint32_t mKeyExtractCandidateHubNodeId;
   uint32_t mKeyExtractHubNodeId;
   uint8_t mKeyExtractKey[16];
   ControllerState mKeyExtractState;

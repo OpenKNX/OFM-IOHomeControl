@@ -11592,6 +11592,91 @@ TEST(controller_key_extract_disarms_after_success)
     ASSERT_EQ(lController.keyExtractStatus(), IoHomeController::KeyExtractStatus::Captured);
 }
 
+TEST(controller_key_extract_locks_hub_at_key_init_not_first_discovery)
+{
+    const uint32_t lOwnNodeId = 0x112233;
+    const uint32_t lUnrelatedHubNodeId = 0x123456;
+    const uint32_t lRealHubNodeId = 0x445566;
+
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    initKeyExtractControllerForTest(lController, lModule, lOwnNodeId);
+    ASSERT_TRUE(lController.startKeyExtraction());
+
+    IoHomeFrame lRequest;
+    IoHomeFrame lResponse;
+    buildGatewayDiscoverRequest(lRequest, lUnrelatedHubNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    const uint32_t lThrowawayNodeId = lResponse.getSrcNodeId();
+
+    // A later discovery replaces the early candidate; neither broadcast is
+    // authoritative until a correctly addressed KeyInitTransfer arrives.
+    buildGatewayDiscoverRequest(lRequest, lRealHubNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lResponse.getSrcNodeId(), lThrowawayNodeId);
+    ASSERT_EQ(lResponse.getDestNodeId(), lRealHubNodeId);
+
+    buildKeyExtractKeyInit(lRequest, lRealHubNodeId, lThrowawayNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeRequest);
+    ASSERT_EQ(lResponse.getDestNodeId(), lRealHubNodeId);
+
+    // Once 0x31 locked the real hub, the earlier candidate cannot retry it.
+    buildKeyExtractKeyInit(lRequest, lUnrelatedHubNodeId, lThrowawayNodeId);
+    ASSERT_TRUE(!queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+}
+
+TEST(controller_key_extract_allows_same_hub_second_attempt_during_grace)
+{
+    const uint32_t lOwnNodeId = 0x112233;
+    const uint32_t lHubNodeId = 0x445566;
+    const uint32_t lOtherHubNodeId = 0x123456;
+    const uint8_t lFirstKey[16] = {
+        0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE,
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
+    const uint8_t lSecondKey[16] = {
+        0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01,
+        0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10};
+
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    initKeyExtractControllerForTest(lController, lModule, lOwnNodeId);
+    ASSERT_TRUE(lController.startKeyExtraction());
+
+    IoHomeFrame lRequest;
+    IoHomeFrame lResponse;
+    buildGatewayDiscoverRequest(lRequest, lHubNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    const uint32_t lThrowawayNodeId = lResponse.getSrcNodeId();
+    buildKeyExtractKeyInit(lRequest, lHubNodeId, lThrowawayNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    buildKeyExtractKeyTransfer(lRequest, lHubNodeId, lThrowawayNodeId,
+                               lResponse.data, lFirstKey);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lModule.testPassiveCaptureCount(), 1);
+
+    buildGatewayDiscoverRequest(lRequest, lOtherHubNodeId);
+    ASSERT_TRUE(!queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+
+    buildGatewayDiscoverRequest(lRequest, lHubNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lResponse.commandId, IoHomeCommand::DiscoverResponse);
+    ASSERT_EQ(lResponse.getSrcNodeId(), lThrowawayNodeId);
+    buildKeyExtractKeyInit(lRequest, lHubNodeId, lThrowawayNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    buildKeyExtractKeyTransfer(lRequest, lHubNodeId, lThrowawayNodeId,
+                               lResponse.data, lSecondKey);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lModule.testPassiveCaptureCount(), 2);
+    ASSERT_MEM_EQ(lController.keyExtractResult().key, lSecondKey, sizeof(lSecondKey));
+}
+
 TEST(controller_passive_key_sniff_captures_result_and_callback)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -14390,6 +14475,8 @@ int main()
     RUN(controller_key_extract_completes_hub_address_verification);
     RUN(controller_key_extract_ignores_frames_addressed_to_real_node_id);
     RUN(controller_key_extract_disarms_after_success);
+    RUN(controller_key_extract_locks_hub_at_key_init_not_first_discovery);
+    RUN(controller_key_extract_allows_same_hub_second_attempt_during_grace);
     RUN(controller_1w_pairing_modes_command_sequences);
     RUN(controller_1w_announce_only_does_not_send_sendkey_after_repeats);
     RUN(controller_default_1w_pairing_uses_type0_all);
