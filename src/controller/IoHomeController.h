@@ -553,6 +553,7 @@ public:
   };
 
   static constexpr uint32_t kKeyExtractDefaultTimeoutMs = 600000UL;
+  static constexpr uint32_t kKeyExtractMidAttemptHoldMs = 5000UL;
   static constexpr uint32_t kKeyExtractPostExtractGraceMs = 60000UL;
 
   bool startKeyExtraction(uint32_t iTimeoutMs = kKeyExtractDefaultTimeoutMs);
@@ -561,6 +562,7 @@ public:
   KeyExtractStatus keyExtractStatus() const;
   const PassiveKeyResult &keyExtractResult() const;
   bool isKeyExtractionActive() const;
+  bool keyExtractAwaitingReply() const;
   uint32_t keyExtractControllerNodeId() const;
 
   // 1W key copy/clone: listen for an existing remote's over-air SendKey1W
@@ -989,6 +991,7 @@ private:
   uint32_t mKeyExtractArmedAt;
   uint32_t mKeyExtractTimeoutMs;
   uint32_t mKeyExtractGraceDeadlineMs = 0;
+  uint32_t mKeyExtractHoldDeadlineMs = 0;
   KeyExtractStatus mKeyExtractStatus;
   PassiveKeyResult mKeyExtractResult;
   uint8_t mKeyExtractReplyBuffer[IOHC_FRAME_BUFFER_SIZE] = {};
@@ -1180,6 +1183,8 @@ private:
   void processKeyExtractFrame();
   bool queueKeyExtractReply(const uint8_t *iBuffer, uint8_t iLen, uint16_t iPreambleSymbols);
   void serviceKeyExtractReply();
+  void serviceKeyExtractChannelHold();
+  void holdKeyExtractChannel(uint32_t iDurationMs);
   void extendKeyExtractGrace();
   void resetKeyExtractSessionState();
   uint32_t generateKeyExtractNodeId() const;

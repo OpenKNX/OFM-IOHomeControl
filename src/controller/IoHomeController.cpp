@@ -3279,6 +3279,7 @@ bool IoHomeController::startKeyExtraction(uint32_t iTimeoutMs)
     mKeyExtractArmedAt = millis();
     mKeyExtractTimeoutMs = iTimeoutMs;
     mKeyExtractGraceDeadlineMs = 0;
+    mKeyExtractHoldDeadlineMs = 0;
     mKeyExtractReplyLen = 0;
     mKeyExtractReplyPhase = 0;
     mKeyExtractStatus = KeyExtractStatus::Armed;
@@ -3321,6 +3322,14 @@ const IoHomeController::PassiveKeyResult &IoHomeController::keyExtractResult() c
 bool IoHomeController::isKeyExtractionActive() const
 {
     return mKeyExtractArmed;
+}
+
+bool IoHomeController::keyExtractAwaitingReply() const
+{
+    return mKeyExtractArmed &&
+           mKeyExtractState != ControllerState::ExtractIdle &&
+           mKeyExtractHoldDeadlineMs != 0 &&
+           static_cast<int32_t>(mKeyExtractHoldDeadlineMs - millis()) > 0;
 }
 
 uint32_t IoHomeController::keyExtractControllerNodeId() const
@@ -4577,8 +4586,17 @@ void IoHomeController::loop()
 
     // Multi-frequency RX scanning: cycle through frequencies only while listening.
     // TX-side paths explicitly select their protocol channel before transmitting.
-    if (mState == ControllerState::Idle || mState == ControllerState::PassiveListening)
+    if (mState == ControllerState::Idle)
+    {
+        if (keyExtractAwaitingReply())
+            serviceKeyExtractChannelHold();
+        else
+            serviceBackgroundRxScan();
+    }
+    else if (mState == ControllerState::PassiveListening)
+    {
         serviceBackgroundRxScan();
+    }
 
     // Check for incoming packets in any state
     if (mRadio.isPacketAvailable())
@@ -8856,6 +8874,7 @@ void IoHomeController::processKeyExtractFrame()
         if (!queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_KEY_EXTRACT_COLD_REPLY_PREAMBLE))
             return;
         mKeyExtractState = ControllerState::ExtractSentDiscoverResp;
+        holdKeyExtractChannel(kKeyExtractMidAttemptHoldMs);
         return;
 
     case IoHomeCommand::Confirmation:
@@ -8872,6 +8891,7 @@ void IoHomeController::processKeyExtractFrame()
         if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_PREAMBLE_SHORT))
             return;
         mKeyExtractState = ControllerState::ExtractSentConfirmAck;
+        holdKeyExtractChannel(kKeyExtractMidAttemptHoldMs);
         return;
 
     case IoHomeCommand::KeyInitTransfer:
@@ -8901,6 +8921,7 @@ void IoHomeController::processKeyExtractFrame()
             return;
         if (!queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_PREAMBLE_SHORT))
             return;
+        holdKeyExtractChannel(kKeyExtractMidAttemptHoldMs);
         return;
 
     case IoHomeCommand::KeyTransfer:
@@ -8944,6 +8965,7 @@ void IoHomeController::processKeyExtractFrame()
             // alive long enough to finish that round instead of disarming.
             mKeyExtractState = ControllerState::Extracted;
             extendKeyExtractGrace();
+            holdKeyExtractChannel(kKeyExtractPostExtractGraceMs);
             return;
         }
 
@@ -8965,6 +8987,7 @@ void IoHomeController::processKeyExtractFrame()
                 return;
             mKeyExtractState = ControllerState::ExtractSentAddressResp;
             extendKeyExtractGrace();
+            holdKeyExtractChannel(kKeyExtractPostExtractGraceMs);
             return;
         }
 
@@ -8990,6 +9013,7 @@ void IoHomeController::processKeyExtractFrame()
             if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_PREAMBLE_SHORT))
                 return;
             extendKeyExtractGrace();
+            holdKeyExtractChannel(kKeyExtractPostExtractGraceMs);
             return;
         }
 
@@ -9061,12 +9085,32 @@ void IoHomeController::extendKeyExtractGrace()
     mKeyExtractGraceDeadlineMs = millis() + kKeyExtractPostExtractGraceMs;
 }
 
+void IoHomeController::holdKeyExtractChannel(uint32_t iDurationMs)
+{
+    mKeyExtractHoldDeadlineMs = millis() + iDurationMs;
+}
+
+void IoHomeController::serviceKeyExtractChannelHold()
+{
+    const uint8_t lCh2 = frequencyIndexForHz(IOHC_FREQ_2);
+    if (mCurrentFreqIdx == lCh2 ||
+        mRadio.isPreambleDetected() || mRadio.isSyncDetected())
+        return;
+
+    if (mRadio.setFrequency(IOHC_FREQ_2) == RadioError::None)
+    {
+        mCurrentFreqIdx = lCh2;
+        mRadio.startReceive();
+    }
+}
+
 void IoHomeController::resetKeyExtractSessionState()
 {
     mKeyExtractState = ControllerState::ExtractIdle;
     mKeyExtractThrowawayId = 0;
     mKeyExtractHubNodeId = 0;
     mKeyExtractGraceDeadlineMs = 0;
+    mKeyExtractHoldDeadlineMs = 0;
     mKeyExtractReplyLen = 0;
     mKeyExtractReplyPhase = 0;
     memset(mKeyExtractChallenge, 0, sizeof(mKeyExtractChallenge));

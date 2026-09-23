@@ -11247,6 +11247,62 @@ TEST(controller_key_extract_reuses_stored_challenge_on_key_init_retry)
     ASSERT_MEM_EQ(lChallengeResp1.data, lChallengeResp2.data, 6);
 }
 
+TEST(controller_key_extract_holds_ch2_without_resetting_protocol_state)
+{
+    const uint32_t lOwnNodeId = 0x112233;
+    const uint32_t lHubNodeId = 0x445566;
+    const uint8_t lSystemKey[16] = {
+        0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE,
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
+
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    initKeyExtractControllerForTest(lController, lModule, lOwnNodeId);
+    ASSERT_TRUE(lController.startKeyExtraction());
+
+    IoHomeFrame lRequest;
+    IoHomeFrame lResponse;
+    buildGatewayDiscoverRequest(lRequest, lHubNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    const uint32_t lThrowawayNodeId = lResponse.getSrcNodeId();
+    ASSERT_TRUE(lController.keyExtractAwaitingReply());
+
+    // Drain CH1/CH3/CH2 and enable the normal scanner. The extraction hold
+    // must leave the receiver parked on CH2 instead of hopping away.
+    for (uint8_t i = 0; i < 4; i++)
+        lController.loop();
+    lController.setRxScanEnabled(true);
+    ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1U);
+    lController.loop();
+    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
+
+    buildKeyExtractKeyInit(lRequest, lHubNodeId, lThrowawayNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeRequest);
+    ASSERT_TRUE(lController.keyExtractAwaitingReply());
+
+    // The five-second radio hold may expire, but the protocol state and
+    // challenge stay valid so a delayed 0x32 can still complete extraction.
+    ioHomeTestAdvanceMillis(IoHomeController::kKeyExtractMidAttemptHoldMs + 1U);
+    lController.loop();
+    ASSERT_TRUE(!lController.keyExtractAwaitingReply());
+
+    buildKeyExtractKeyTransfer(lRequest, lHubNodeId, lThrowawayNodeId,
+                               lResponse.data, lSystemKey);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lResponse.commandId, IoHomeCommand::KeyTransferConfirmation);
+    ASSERT_EQ(lController.keyExtractStatus(), IoHomeController::KeyExtractStatus::Captured);
+    ASSERT_TRUE(lController.keyExtractAwaitingReply());
+    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_1);
+
+    for (uint8_t i = 0; i < 4; i++)
+        lController.loop();
+    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
+}
+
 TEST(controller_key_extract_acknowledges_discovery_confirmation)
 {
     const uint32_t lOwnNodeId = 0x112233;
@@ -14262,6 +14318,7 @@ int main()
     RUN(controller_key_extract_answers_discovery_with_throwaway_id);
     RUN(controller_key_extract_broadcasts_reply_with_ch2_last);
     RUN(controller_key_extract_reuses_stored_challenge_on_key_init_retry);
+    RUN(controller_key_extract_holds_ch2_without_resetting_protocol_state);
     RUN(controller_key_extract_acknowledges_discovery_confirmation);
     RUN(controller_key_extract_recovers_hub_system_key);
     RUN(controller_key_extract_completes_hub_address_verification);
