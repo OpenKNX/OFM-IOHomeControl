@@ -73,6 +73,17 @@ class ChannelUiTest(unittest.TestCase):
         ]
         self.assertEqual(overrides, [])
 
+    def test_current_flash_layout_is_accepted_by_restore(self) -> None:
+        source = (ROOT / "src" / "IoHomecontrol.cpp").read_text()
+        write_flash = source.split("void IoHomecontrol::writeFlash()", 1)[1].split(
+            "void IoHomecontrol::readFlash", 1
+        )[0]
+        self.assertIn("openknx.flash.writeByte(13)", write_flash)
+
+        read_flash = source.split("void IoHomecontrol::readFlash", 1)[1]
+        current_layout_branch = read_flash.split("else if", 1)[0]
+        self.assertIn("lVersion == 13", current_layout_branch)
+
     def test_selection_table_matches_shared_layout(self) -> None:
         selection = self.share.find(
             ".//k:ParameterBlock[@Text='Kanalauswahl']", NS

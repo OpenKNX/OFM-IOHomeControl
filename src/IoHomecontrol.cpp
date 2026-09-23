@@ -2508,7 +2508,8 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
     uint8_t lVersion = openknx.flash.readByte();
 
-    if (lVersion == 12 || lVersion == 11 || lVersion == 10 || lVersion == 9)
+    if (lVersion == 13 || lVersion == 12 || lVersion == 11 ||
+        lVersion == 10 || lVersion == 9)
     {
         if (iSize < kFlashHeaderV9)
             return;
