@@ -619,15 +619,16 @@ function IOHC_startKeyExtract(device, online, progress, context) {
         if (phase == 2) {
             var hubNode = IOHC_readNodeId(status, 2);
             var controllerNode = IOHC_readNodeId(status, 5);
-            IOHC_setExtractionResult(device, "Schlüssel extrahiert; Scan folgt", []);
+            IOHC_setExtractionResult(device, "Schlüssel extrahiert; Prüfung läuft", []);
             progress.setText("2W-Schlüssel erfolgreich extrahiert (Gateway " +
                              IOHC_formatNodeId(hubNode) + ", neue Controller-ID " +
-                             IOHC_formatNodeId(controllerNode) + "). Automatische Gerätesuche läuft; diese Schaltfläche danach erneut drücken.");
+                             IOHC_formatNodeId(controllerNode) + "). Warte auf die Abschlussprüfung des Fremd-Gateways; diese Schaltfläche danach erneut drücken.");
             progress.setProgress(100);
             return;
         }
         if (phase == 3) {
-            progress.setText("2W-Schlüssel erfolgreich extrahiert. Geräte werden automatisch gesucht; diese Schaltfläche danach erneut drücken.");
+            IOHC_setExtractionResult(device, "Extraktion beendet; Gerätesuche", []);
+            progress.setText("2W-Schlüsselextraktion abgeschlossen. Die authentifizierte Gerätesuche läuft; diese Schaltfläche danach erneut drücken.");
             progress.setProgress(100);
             return;
         }

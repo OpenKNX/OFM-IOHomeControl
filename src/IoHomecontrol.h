@@ -100,7 +100,7 @@ private:
   {
     Idle = 0,
     Extracting = 1,
-    Captured = 2,
+    Verifying = 2,
     Scanning = 3,
     Complete = 4,
     Timeout = 5,

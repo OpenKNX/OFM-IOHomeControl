@@ -686,19 +686,15 @@ void IoHomecontrol::onPassiveKeyCaptured(const IoHomeController::PassiveKeyResul
     {
         mKeyImportKey = iResult;
         mKeyImportControllerNodeId = mController.keyExtractControllerNodeId();
-        mKeyImportPhase = KeyImportPhase::Captured;
+        mKeyImportPhase = KeyImportPhase::Verifying;
         logInfoP("ETS key import: captured network key; hub=0x%06X controller=0x%06X",
                  iResult.nodeId, mKeyImportControllerNodeId);
     }
 
     mRemoteMap.observeAddress(iResult.nodeId);
     openknx.console.writeDiagnoseKo("Key found");
-    logInfoP("Passive sniff result: node=0x%06X freq=%u key=%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
-             iResult.nodeId, static_cast<unsigned>(iResult.freqIdx),
-             iResult.key[0], iResult.key[1], iResult.key[2], iResult.key[3],
-             iResult.key[4], iResult.key[5], iResult.key[6], iResult.key[7],
-             iResult.key[8], iResult.key[9], iResult.key[10], iResult.key[11],
-             iResult.key[12], iResult.key[13], iResult.key[14], iResult.key[15]);
+    logInfoP("Passive sniff result: node=0x%06X freq=%u key captured",
+             iResult.nodeId, static_cast<unsigned>(iResult.freqIdx));
 }
 
 void IoHomecontrol::resetKeyImportWorkflow()
@@ -767,7 +763,7 @@ void IoHomecontrol::processKeyImportWorkflow()
         return;
     }
 
-    if (mKeyImportPhase == KeyImportPhase::Captured && !mController.isKeyExtractionActive())
+    if (mKeyImportPhase == KeyImportPhase::Verifying && !mController.isKeyExtractionActive())
     {
         if (!mKeyImportKey.valid || mKeyImportControllerNodeId == 0 ||
             mController.state() != ControllerState::Idle)
@@ -2320,7 +2316,12 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
     }
     case 0x18: // Query 2W extraction/import workflow status
     {
-        const uint32_t lHubNodeId = mKeyImportKey.valid ? mKeyImportKey.nodeId : 0;
+        const uint32_t lLockedHubNodeId = mController.keyExtractHubNodeId();
+        const uint32_t lHubNodeId = lLockedHubNodeId != 0
+                                        ? lLockedHubNodeId
+                                        : (mKeyImportKey.valid ? mKeyImportKey.nodeId : 0);
+        const uint32_t lCandidateHubNodeId = mController.keyExtractCandidateHubNodeId();
+        const uint32_t lHoldRemainingMs = mController.keyExtractHoldRemainingMs();
         resultData[0] = 0x00;
         resultData[1] = static_cast<uint8_t>(mKeyImportPhase);
         resultData[2] = (lHubNodeId >> 16) & 0xFF;
@@ -2332,7 +2333,19 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         resultData[8] = mKeyImportDeviceCount;
         resultData[9] = static_cast<uint8_t>(mController.state());
         resultData[10] = mKeyImportOverflow ? 0x01 : 0x00;
-        resultLength = 11;
+        resultData[11] = static_cast<uint8_t>(mController.keyExtractState());
+        resultData[12] = (lCandidateHubNodeId >> 16) & 0xFF;
+        resultData[13] = (lCandidateHubNodeId >> 8) & 0xFF;
+        resultData[14] = lCandidateHubNodeId & 0xFF;
+        resultData[15] = (lLockedHubNodeId >> 16) & 0xFF;
+        resultData[16] = (lLockedHubNodeId >> 8) & 0xFF;
+        resultData[17] = lLockedHubNodeId & 0xFF;
+        resultData[18] = lHoldRemainingMs != 0 ? 0x01 : 0x00;
+        resultData[19] = (lHoldRemainingMs >> 24) & 0xFF;
+        resultData[20] = (lHoldRemainingMs >> 16) & 0xFF;
+        resultData[21] = (lHoldRemainingMs >> 8) & 0xFF;
+        resultData[22] = lHoldRemainingMs & 0xFF;
+        resultLength = 23;
         return true;
     }
     case 0x19: // Read one authenticated discovery result
@@ -4739,13 +4752,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             logInfoP("Passive sniff: %s passive=%d", passiveSniffStatusName(lStatus), mController.isPassiveMode() ? 1 : 0);
             if (lResult.valid)
             {
-                logInfoP("  node=0x%06X freq=%u capturedAt=%lu key=%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
+                logInfoP("  node=0x%06X freq=%u capturedAt=%lu key captured",
                          lResult.nodeId, static_cast<unsigned>(lResult.freqIdx),
-                         static_cast<unsigned long>(lResult.capturedAt),
-                         lResult.key[0], lResult.key[1], lResult.key[2], lResult.key[3],
-                         lResult.key[4], lResult.key[5], lResult.key[6], lResult.key[7],
-                         lResult.key[8], lResult.key[9], lResult.key[10], lResult.key[11],
-                         lResult.key[12], lResult.key[13], lResult.key[14], lResult.key[15]);
+                         static_cast<unsigned long>(lResult.capturedAt));
             }
             return true;
         }
@@ -4801,16 +4810,18 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         {
             const auto lStatus = mController.keyExtractStatus();
             const auto &lResult = mController.keyExtractResult();
-            logInfoP("Key extract: %s", keyExtractStatusName(lStatus));
+            logInfoP("Key extract: %s temp=0x%06X candidate=0x%06X hub=0x%06X stage=%s hold=%lums",
+                     keyExtractStatusName(lStatus),
+                     mController.keyExtractControllerNodeId(),
+                     mController.keyExtractCandidateHubNodeId(),
+                     mController.keyExtractHubNodeId(),
+                     IoHomeController::stateName(mController.keyExtractState()),
+                     static_cast<unsigned long>(mController.keyExtractHoldRemainingMs()));
             if (lResult.valid)
             {
-                logInfoP("  node=0x%06X freq=%u capturedAt=%lu key=%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
+                logInfoP("  node=0x%06X freq=%u capturedAt=%lu key captured",
                          lResult.nodeId, static_cast<unsigned>(lResult.freqIdx),
-                         static_cast<unsigned long>(lResult.capturedAt),
-                         lResult.key[0], lResult.key[1], lResult.key[2], lResult.key[3],
-                         lResult.key[4], lResult.key[5], lResult.key[6], lResult.key[7],
-                         lResult.key[8], lResult.key[9], lResult.key[10], lResult.key[11],
-                         lResult.key[12], lResult.key[13], lResult.key[14], lResult.key[15]);
+                         static_cast<unsigned long>(lResult.capturedAt));
             }
             return true;
         }

@@ -3303,6 +3303,8 @@ bool IoHomeController::startKeyExtraction(uint32_t iTimeoutMs)
     mKeyExtractStatus = KeyExtractStatus::Armed;
     mKeyExtractArmed = true;
     startReceive();
+    logInfoP("KeyExtract: armed tempNode=0x%06X timeout=%lums",
+             mKeyExtractThrowawayId, static_cast<unsigned long>(iTimeoutMs));
     return true;
 }
 
@@ -3353,6 +3355,28 @@ bool IoHomeController::keyExtractAwaitingReply() const
 uint32_t IoHomeController::keyExtractControllerNodeId() const
 {
     return mKeyExtractThrowawayId;
+}
+
+uint32_t IoHomeController::keyExtractCandidateHubNodeId() const
+{
+    return mKeyExtractCandidateHubNodeId;
+}
+
+uint32_t IoHomeController::keyExtractHubNodeId() const
+{
+    return mKeyExtractHubNodeId;
+}
+
+ControllerState IoHomeController::keyExtractState() const
+{
+    return mKeyExtractState;
+}
+
+uint32_t IoHomeController::keyExtractHoldRemainingMs() const
+{
+    if (!keyExtractAwaitingReply())
+        return 0;
+    return mKeyExtractHoldDeadlineMs - millis();
 }
 
 bool IoHomeController::startOneWayKeyReceive(uint8_t iChannelIndex, uint32_t iTimeoutMs)
@@ -4577,7 +4601,7 @@ void IoHomeController::loop()
         mKeyExtractTimeoutMs > 0 &&
         millis() - mKeyExtractArmedAt >= mKeyExtractTimeoutMs)
     {
-        logInfoP("Key extract: timeout in %s", stateName(mKeyExtractState));
+        logInfoP("KeyExtract: timeout state=%s", stateName(mKeyExtractState));
         mKeyExtractStatus = KeyExtractStatus::Timeout;
         stopKeyExtraction();
     }
@@ -4585,8 +4609,15 @@ void IoHomeController::loop()
     if (mKeyExtractArmed && mKeyExtractGraceDeadlineMs != 0 &&
         static_cast<int32_t>(millis() - mKeyExtractGraceDeadlineMs) >= 0)
     {
-        logInfoP("Key extract: post-extraction grace elapsed in %s", stateName(mKeyExtractState));
+        logInfoP("KeyExtract: post-extraction grace elapsed state=%s", stateName(mKeyExtractState));
         stopKeyExtraction();
+    }
+
+    if (mKeyExtractArmed && mKeyExtractHoldDeadlineMs != 0 &&
+        static_cast<int32_t>(millis() - mKeyExtractHoldDeadlineMs) >= 0)
+    {
+        logInfoP("KeyExtract: CH2 hold elapsed state=%s", stateName(mKeyExtractState));
+        mKeyExtractHoldDeadlineMs = 0;
     }
 
     if (mKeyExtractArmed && mKeyExtractReplyLen != 0)
@@ -8882,6 +8913,10 @@ void IoHomeController::processKeyExtractFrame()
     {
     case IoHomeCommand::DiscoverRequest:
     {
+        logInfoP("KeyExtract: rx 0x28 hub=0x%06X freq=CH%u rssi=%d",
+                 lSrcNode,
+                 static_cast<unsigned>(iohcChannelNumberForFrequency(IOHC_FREQUENCIES[mCurrentFreqIdx])),
+                 static_cast<int>(mRadio.lastRssi()));
         const bool lFreshAttemptAfterExtract =
             (mKeyExtractState == ControllerState::Extracted ||
              mKeyExtractState == ControllerState::ExtractSentAddressResp) &&
@@ -8912,12 +8947,16 @@ void IoHomeController::processKeyExtractFrame()
         // the 3 * 1024-symbol low-power wake-up duration.
         if (!queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(true)))
             return;
+        logInfoP("KeyExtract: tx 0x29 temp=0x%06X order=CH1,CH3,CH2 preamble=%u",
+                 mKeyExtractThrowawayId,
+                 static_cast<unsigned>(keyExtractReplyPreamble(true)));
         mKeyExtractState = ControllerState::ExtractSentDiscoverResp;
         holdKeyExtractChannel(kKeyExtractMidAttemptHoldMs);
         return;
     }
 
     case IoHomeCommand::Confirmation:
+        logInfoP("KeyExtract: rx 0x2C hub=0x%06X", lSrcNode);
         if (lDstNode != mKeyExtractThrowawayId ||
             (mKeyExtractHubNodeId == 0 && mKeyExtractCandidateHubNodeId != 0 &&
              lSrcNode != mKeyExtractCandidateHubNodeId) ||
@@ -8933,10 +8972,13 @@ void IoHomeController::processKeyExtractFrame()
         if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
             return;
         mKeyExtractState = ControllerState::ExtractSentConfirmAck;
+        logInfoP("KeyExtract: tx 0x2D hub=0x%06X preamble=%u",
+                 lSrcNode, static_cast<unsigned>(keyExtractReplyPreamble(false)));
         holdKeyExtractChannel(kKeyExtractMidAttemptHoldMs);
         return;
 
     case IoHomeCommand::KeyInitTransfer:
+        logInfoP("KeyExtract: rx 0x31 hub=0x%06X", lSrcNode);
         if (lDstNode != mKeyExtractThrowawayId)
         {
             dispatchRxFrame();
@@ -8950,6 +8992,7 @@ void IoHomeController::processKeyExtractFrame()
             mKeyExtractHubNodeId = lSrcNode;
             mKeyExtractCandidateHubNodeId = lSrcNode;
             mKeyExtractState = ControllerState::ExtractSentChallenge;
+            logInfoP("KeyExtract: hub locked to 0x%06X", lSrcNode);
         }
         else if (mKeyExtractState != ControllerState::ExtractSentChallenge)
         {
@@ -8964,10 +9007,14 @@ void IoHomeController::processKeyExtractFrame()
             return;
         if (!queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
             return;
+        logInfoP("KeyExtract: tx 0x3C challenge hub=0x%06X preamble=%u",
+                 lSrcNode, static_cast<unsigned>(keyExtractReplyPreamble(false)));
         holdKeyExtractChannel(kKeyExtractMidAttemptHoldMs);
         return;
 
     case IoHomeCommand::KeyTransfer:
+        logInfoP("KeyExtract: rx 0x32 hub=0x%06X len=%u",
+                 lSrcNode, static_cast<unsigned>(mRxFrame.dataLen));
         if (mKeyExtractState != ControllerState::ExtractSentChallenge ||
             lDstNode != mKeyExtractThrowawayId ||
             mRxFrame.dataLen < 16)
@@ -8991,6 +9038,8 @@ void IoHomeController::processKeyExtractFrame()
                 return;
             if (!queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
                 return;
+            logInfoP("KeyExtract: key captured; tx 0x33 hub=0x%06X preamble=%u",
+                     lSrcNode, static_cast<unsigned>(keyExtractReplyPreamble(false)));
 
             memset(&mKeyExtractResult, 0, sizeof(mKeyExtractResult));
             mKeyExtractResult.valid = true;
@@ -9009,10 +9058,13 @@ void IoHomeController::processKeyExtractFrame()
             mKeyExtractState = ControllerState::Extracted;
             extendKeyExtractGrace();
             holdKeyExtractChannel(kKeyExtractPostExtractGraceMs);
+            logInfoP("KeyExtract: post-extraction grace %lums; holding CH2",
+                     static_cast<unsigned long>(kKeyExtractPostExtractGraceMs));
             return;
         }
 
     case IoHomeCommand::AddressRequest:
+        logInfoP("KeyExtract: rx 0x36 hub=0x%06X", lSrcNode);
         if ((mKeyExtractState != ControllerState::Extracted &&
              mKeyExtractState != ControllerState::ExtractSentAddressResp) ||
             lDstNode != mKeyExtractThrowawayId)
@@ -9029,12 +9081,15 @@ void IoHomeController::processKeyExtractFrame()
             if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
                 return;
             mKeyExtractState = ControllerState::ExtractSentAddressResp;
+            logInfoP("KeyExtract: tx 0x37 hub=0x%06X preamble=%u",
+                     lSrcNode, static_cast<unsigned>(keyExtractReplyPreamble(false)));
             extendKeyExtractGrace();
             holdKeyExtractChannel(kKeyExtractPostExtractGraceMs);
             return;
         }
 
     case IoHomeCommand::ChallengeRequest:
+        logInfoP("KeyExtract: rx address verification 0x3C hub=0x%06X", lSrcNode);
         if (mKeyExtractState != ControllerState::ExtractSentAddressResp ||
             lDstNode != mKeyExtractThrowawayId || mRxFrame.dataLen < IOHC_HMAC_SIZE)
         {
@@ -9055,6 +9110,8 @@ void IoHomeController::processKeyExtractFrame()
             mTxLen = lChallengeResponse.serialize2W(mTxBuffer, sizeof(mTxBuffer));
             if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
                 return;
+            logInfoP("KeyExtract: tx 0x3D hub=0x%06X preamble=%u",
+                     lSrcNode, static_cast<unsigned>(keyExtractReplyPreamble(false)));
             extendKeyExtractGrace();
             holdKeyExtractChannel(kKeyExtractPostExtractGraceMs);
             return;
@@ -9137,6 +9194,8 @@ void IoHomeController::extendKeyExtractGrace()
 void IoHomeController::holdKeyExtractChannel(uint32_t iDurationMs)
 {
     mKeyExtractHoldDeadlineMs = millis() + iDurationMs;
+    logInfoP("KeyExtract: hold CH2 for %lums state=%s",
+             static_cast<unsigned long>(iDurationMs), stateName(mKeyExtractState));
 }
 
 void IoHomeController::serviceKeyExtractChannelHold()

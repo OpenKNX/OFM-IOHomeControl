@@ -236,6 +236,8 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIsNotNone(information)
         self.assertIn("Dieselbe Schaltfläche erneut drücken", information.get("Text", ""))
         self.assertIn("Ergebnis zu übernehmen", information.get("Text", ""))
+        self.assertIn("60 Sekunden", information.get("Text", ""))
+        self.assertIn("Abschlussprüfung", information.get("Text", ""))
 
         result_names = {
             parameter.get("Name")
@@ -268,6 +270,16 @@ class ChannelUiTest(unittest.TestCase):
         self.assertNotIn("IOHC_waitMilliseconds", workflow)
         self.assertNotIn("workflowTimeoutMs", workflow)
         self.assertIn("diese Schaltfläche danach erneut drücken", workflow)
+        self.assertIn("Schlüssel extrahiert; Prüfung läuft", workflow)
+        self.assertIn("Extraktion beendet; Gerätesuche", workflow)
+        self.assertIn("authentifizierte Gerätesuche läuft", workflow)
+
+        controller_source = (ROOT / "src" / "controller" / "IoHomeController.cpp").read_text()
+        module_source = (ROOT / "src" / "IoHomecontrol.cpp").read_text()
+        self.assertIn("KeyExtract: armed", controller_source)
+        self.assertIn("KeyExtract: hub locked", controller_source)
+        self.assertIn("KeyExtract: key captured", controller_source)
+        self.assertNotIn("key=%02X", module_source)
 
     def test_one_way_enrollment_finalizer_is_labeled_stop_runter(self) -> None:
         finalizer = self.share.find(

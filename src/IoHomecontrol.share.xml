@@ -413,7 +413,7 @@
 
               <ParameterBlock Id="%AID%_PB-nnn" Name="CommissioningGlobal" Text="Inbetriebnahme">
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="2W-Schlüsselextraktion" UIHint="Headline" />
-                <ParameterSeparator Id="%AID%_PS-nnn" Text="1. Extraktion starten. 2. Am Fremd-Gateway 'Gerät hinzufügen' auslösen. 3. Dieselbe Schaltfläche erneut drücken, um den Status zu lesen und nach Abschluss das Ergebnis zu übernehmen. Gefundene Geräte werden ausschließlich freien Kanälen zugeordnet." UIHint="Information" />
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="1. Extraktion starten. 2. Am Fremd-Gateway 'Gerät hinzufügen' auslösen. 3. Dieselbe Schaltfläche erneut drücken, um den Status zu lesen und nach Abschluss das Ergebnis zu übernehmen. Nach der Schlüsselextraktion wartet das Gerät bis zu 60 Sekunden auf die Abschlussprüfung des Fremd-Gateways; danach startet die authentifizierte Gerätesuche. Gefundene Geräte werden ausschließlich freien Kanälen zugeordnet." UIHint="Information" />
                 <Button Id="%AID%_B-%TT%00011" Text="2W-Extraktion starten / Ergebnis übernehmen" EventHandler="IOHC_startKeyExtract" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelCount&quot;: %N% }" />
                 <ParameterRefRef RefId="%AID%_P-%TT%00004_R-%TT%0000401" />
                 <ParameterRefRef RefId="%AID%_P-%TT%00005_R-%TT%0000501" />
