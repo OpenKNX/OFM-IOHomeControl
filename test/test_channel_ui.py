@@ -234,9 +234,11 @@ class ChannelUiTest(unittest.TestCase):
             "k:ParameterSeparator[@UIHint='Information']", NS
         )
         self.assertIsNotNone(information)
-        self.assertIn("Dieselbe Schaltfläche erneut drücken", information.get("Text", ""))
-        self.assertIn("Ergebnis zu übernehmen", information.get("Text", ""))
-        self.assertIn("60 Sekunden", information.get("Text", ""))
+        information_text = information.get("Text", "")
+        self.assertLessEqual(len(information_text), 255)
+        self.assertIn("Status wird automatisch aktualisiert", information_text)
+        self.assertIn("Ergebnis übernehmen", information_text)
+        self.assertIn("60 s", information_text)
         self.assertIn("Abschlussprüfung", information.get("Text", ""))
 
         result_names = {
