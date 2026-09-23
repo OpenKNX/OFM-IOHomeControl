@@ -2548,6 +2548,16 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mLastPairStartBlockedState = mState;
     mPairing2WMode = Pairing2WMode::Normal;
 
+    if (mKeyExtractArmed)
+    {
+        mLastPairStartStatus = PairStartStatus::Busy;
+        mPairingTelemetry = {PairingOutcome::StartRejected, PairingOutcome::StartRejected,
+                             iChannelIndex, iKnownNodeId & 0x00FFFFFF, 0xFF, 0, 0};
+        recordPairingDiagnostic(PairingOutcome::StartRejected,
+                                "Stop 2W key extraction before starting pairing.");
+        return false;
+    }
+
     if (mState >= ControllerState::PairSendDiscovery &&
         mState <= ControllerState::PairFailed)
     {
@@ -3151,6 +3161,9 @@ void IoHomeController::recordExchangeFailure(const IoHomeQueueEntry &iEntry,
 
 void IoHomeController::startDiscovery(bool iEncrypted)
 {
+    if (mKeyExtractArmed)
+        return;
+
     if (mNetworkScanActive)
         stopNetworkScan();
     else if (mState == ControllerState::PassiveListening)
@@ -3177,6 +3190,9 @@ void IoHomeController::startDiscovery(bool iEncrypted)
 
 void IoHomeController::startCommandScan(uint32_t iNodeId)
 {
+    if (mKeyExtractArmed)
+        return;
+
     if (mState != ControllerState::Idle)
         return;
 
@@ -3663,6 +3679,9 @@ void IoHomeController::logCommandScanResults() const
 
 void IoHomeController::startNetworkScan()
 {
+    if (mKeyExtractArmed)
+        return;
+
     mNetworkScanActive = true;
     mRxScanEnabled = true;
     setPassiveMode(true);
@@ -5114,6 +5133,12 @@ void IoHomeController::processIdle()
 {
     if (mPassiveMode)
         return; // passive mode: never transmit
+
+    // Extraction replies and their expected follow-up frames have priority
+    // over ordinary queued traffic. Leave commands queued until the bounded
+    // CH2 wait ends instead of letting a status poll seize the radio.
+    if (keyExtractAwaitingReply())
+        return;
 
     const RadioError lRxErr = ensureReceiveAfterTransmit();
     if (lRxErr != RadioError::None)

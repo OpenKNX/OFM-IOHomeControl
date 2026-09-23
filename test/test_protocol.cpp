@@ -11337,6 +11337,58 @@ TEST(controller_key_extract_acknowledges_discovery_confirmation)
     ASSERT_EQ(lRetryAck.commandId, IoHomeCommand::ConfirmationACK);
 }
 
+TEST(controller_key_extract_defers_queue_and_rejects_competing_operations)
+{
+    const uint32_t lOwnNodeId = 0x112233;
+    const uint32_t lHubNodeId = 0x445566;
+    const uint32_t lDeviceNodeId = 0x778899;
+    const uint8_t lDeviceKey[16] = {};
+
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    initKeyExtractControllerForTest(lController, lModule, lOwnNodeId);
+    ASSERT_TRUE(lController.startKeyExtraction());
+
+    // ETS-facing radio operations are rejected for the complete armed
+    // session, so they cannot replace extraction state behind the user's back.
+    ASSERT_TRUE(!lController.startPairing(0));
+    ASSERT_EQ(lController.lastPairStartStatus(), IoHomeController::PairStartStatus::Busy);
+    lController.startDiscovery();
+    lController.startCommandScan(lDeviceNodeId);
+    lController.startNetworkScan();
+    ASSERT_TRUE(!lController.isNetworkScanActive());
+    ASSERT_EQ(lController.radio().testTransmitCount(), 0U);
+
+    IoHomeFrame lRequest;
+    IoHomeFrame lResponse;
+    buildGatewayDiscoverRequest(lRequest, lHubNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    const uint32_t lThrowawayNodeId = lResponse.getSrcNodeId();
+    buildKeyExtractKeyInit(lRequest, lHubNodeId, lThrowawayNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeRequest);
+
+    // Finish the three challenge legs, then enqueue a normal background-style
+    // status query. No fourth transmission may start while the CH2 hold is on.
+    for (uint8_t i = 0; i < 4; i++)
+        lController.loop();
+    const uint32_t lTxCountBeforePoll = lController.radio().testTransmitCount();
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lDeviceKey,
+                                        IoHomeCommand::Private, 0x03));
+    lController.loop();
+    ASSERT_EQ(lController.radio().testTransmitCount(), lTxCountBeforePoll);
+
+    // Once the bounded hold expires, the queued command may proceed normally.
+    ioHomeTestAdvanceMillis(IoHomeController::kKeyExtractMidAttemptHoldMs + 1U);
+    lController.loop();
+    ASSERT_EQ(lController.radio().testTransmitCount(), lTxCountBeforePoll);
+    lController.loop();
+    ASSERT_EQ(lController.radio().testTransmitCount(), lTxCountBeforePoll + 1U);
+}
+
 TEST(controller_key_extract_recovers_hub_system_key)
 {
     const uint32_t lOwnNodeId = 0x112233;
@@ -14320,6 +14372,7 @@ int main()
     RUN(controller_key_extract_reuses_stored_challenge_on_key_init_retry);
     RUN(controller_key_extract_holds_ch2_without_resetting_protocol_state);
     RUN(controller_key_extract_acknowledges_discovery_confirmation);
+    RUN(controller_key_extract_defers_queue_and_rejects_competing_operations);
     RUN(controller_key_extract_recovers_hub_system_key);
     RUN(controller_key_extract_completes_hub_address_verification);
     RUN(controller_key_extract_ignores_frames_addressed_to_real_node_id);
