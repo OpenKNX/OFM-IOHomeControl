@@ -8896,7 +8896,7 @@ void IoHomeController::processKeyExtractFrame()
         // Discovery is the only cold reply. Keep enough preamble for a hub
         // which is still hopping, without occupying all three channels for
         // the 3 * 1024-symbol low-power wake-up duration.
-        if (!queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_KEY_EXTRACT_COLD_REPLY_PREAMBLE))
+        if (!queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(true)))
             return;
         mKeyExtractState = ControllerState::ExtractSentDiscoverResp;
         holdKeyExtractChannel(kKeyExtractMidAttemptHoldMs);
@@ -8913,7 +8913,7 @@ void IoHomeController::processKeyExtractFrame()
 
         mTxLen = buildExtractConfirmationAckFrame(mTxBuffer, sizeof(mTxBuffer),
                                                    mKeyExtractThrowawayId, lSrcNode);
-        if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_PREAMBLE_SHORT))
+        if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
             return;
         mKeyExtractState = ControllerState::ExtractSentConfirmAck;
         holdKeyExtractChannel(kKeyExtractMidAttemptHoldMs);
@@ -8944,7 +8944,7 @@ void IoHomeController::processKeyExtractFrame()
                                                    mKeyExtractChallenge);
         if (mTxLen == 0)
             return;
-        if (!queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_PREAMBLE_SHORT))
+        if (!queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
             return;
         holdKeyExtractChannel(kKeyExtractMidAttemptHoldMs);
         return;
@@ -8971,7 +8971,7 @@ void IoHomeController::processKeyExtractFrame()
                                                  mKeyExtractThrowawayId, lSrcNode);
             if (mTxLen == 0)
                 return;
-            if (!queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_PREAMBLE_SHORT))
+            if (!queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
                 return;
 
             memset(&mKeyExtractResult, 0, sizeof(mKeyExtractResult));
@@ -9008,7 +9008,7 @@ void IoHomeController::processKeyExtractFrame()
             if (!buildExtractAddressResponseFrame(lAddressResponse, mKeyExtractThrowawayId, lSrcNode))
                 return;
             mTxLen = lAddressResponse.serialize2W(mTxBuffer, sizeof(mTxBuffer));
-            if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_PREAMBLE_SHORT))
+            if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
                 return;
             mKeyExtractState = ControllerState::ExtractSentAddressResp;
             extendKeyExtractGrace();
@@ -9035,7 +9035,7 @@ void IoHomeController::processKeyExtractFrame()
             // Device-role closing response: END, no low-power bit.
             lChallengeResponse.ctrlByte0 |= IOHC_CTRL0_END;
             mTxLen = lChallengeResponse.serialize2W(mTxBuffer, sizeof(mTxBuffer));
-            if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, IOHC_PREAMBLE_SHORT))
+            if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
                 return;
             extendKeyExtractGrace();
             holdKeyExtractChannel(kKeyExtractPostExtractGraceMs);
@@ -9047,6 +9047,12 @@ void IoHomeController::processKeyExtractFrame()
     }
 
     dispatchRxFrame();
+}
+
+uint16_t IoHomeController::keyExtractReplyPreamble(bool iColdReply) const
+{
+    return iColdReply ? IOHC_KEY_EXTRACT_COLD_REPLY_PREAMBLE
+                      : mRadio.defaultResponsePreamble();
 }
 
 bool IoHomeController::queueKeyExtractReply(const uint8_t *iBuffer, uint8_t iLen,

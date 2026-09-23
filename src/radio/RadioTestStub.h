@@ -68,6 +68,7 @@ public:
   }
   RadioError setPreambleLengthBlocking(uint16_t iSymbols) { return setPreambleLength(iSymbols); }
   uint16_t defaultStartPreamble() const { return mDefaultStartPreamble; }
+  uint16_t defaultResponsePreamble() const { return mDefaultResponsePreamble; }
 
   RadioError startTransmit(const uint8_t *iData, uint8_t iLen)
   {
@@ -201,6 +202,7 @@ public:
   void testSetNextPreambleError(RadioError iError) { mNextPreambleError = iError; }
   void testSetNextTransmitError(RadioError iError) { mNextTransmitError = iError; }
   void testSetDefaultStartPreamble(uint16_t iPreamble) { mDefaultStartPreamble = iPreamble; }
+  void testSetDefaultResponsePreamble(uint16_t iPreamble) { mDefaultResponsePreamble = iPreamble; }
   void testInjectRxDiagnostics(bool iPreamble, bool iSync, bool iCrcError,
                                uint16_t iLastIrq, uint8_t iLastLen, int16_t iRssi)
   {
@@ -248,6 +250,7 @@ private:
   uint8_t mTestLastRxLen = 0;
   uint16_t mLastPreambleLength = 0;
   uint16_t mDefaultStartPreamble = 48;
+  uint16_t mDefaultResponsePreamble = 8;
   RadioError mNextFrequencyError = RadioError::None;
   RadioError mNextPreambleError = RadioError::None;
   RadioError mNextTransmitError = RadioError::None;

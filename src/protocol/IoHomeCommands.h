@@ -472,6 +472,8 @@ constexpr uint32_t IOHC_FREQUENCIES[IOHC_NUM_FREQUENCIES] = {
 #define IOHC_PREAMBLE_NORMAL_START 32 // symbols (bytes), normal always-alive 2W START
 #define IOHC_PREAMBLE_SHORT 8         // symbols (bytes), for continuation frames
 #define IOHC_KEY_EXTRACT_COLD_REPLY_PREAMBLE 80 // cold 0x29 reply on each discovery channel
+#define IOHC_RESPONSE_PREAMBLE_SX1262 8
+#define IOHC_RESPONSE_PREAMBLE_SX1276 12
 #define IOHC_NAME_MAX_SIZE 16   // max name payload bytes (per nicolas5000: CMD_PARAM_NAME_MAXSIZE/2)
 
 // DiscoverResponse / DiscoverSPEResponse payload layout. Bytes 0-1 contain

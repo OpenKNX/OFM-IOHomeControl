@@ -4996,11 +4996,16 @@ TEST(radio_test_stub_directed_start_default_is_configurable)
 {
     IoHomeController lController;
     ASSERT_EQ(lController.radio().defaultStartPreamble(), 48);
+    ASSERT_EQ(IOHC_RESPONSE_PREAMBLE_SX1262, 8);
+    ASSERT_EQ(IOHC_RESPONSE_PREAMBLE_SX1276, 12);
+    ASSERT_EQ(lController.radio().defaultResponsePreamble(), IOHC_RESPONSE_PREAMBLE_SX1262);
     ASSERT_EQ(lController.normal2WStartPreamble(), 48);
     lController.radio().testSetDefaultStartPreamble(32);
     ASSERT_EQ(lController.normal2WStartPreamble(), 32);
     lController.setDiagnostic2WStartPreamble(64);
     ASSERT_EQ(lController.normal2WStartPreamble(), 64);
+    lController.radio().testSetDefaultResponsePreamble(IOHC_RESPONSE_PREAMBLE_SX1276);
+    ASSERT_EQ(lController.radio().defaultResponsePreamble(), IOHC_RESPONSE_PREAMBLE_SX1276);
 }
 
 TEST(duty_cycle_airtime_includes_preamble_sync_crc_and_uart_framing)
@@ -11314,6 +11319,7 @@ TEST(controller_key_extract_acknowledges_discovery_confirmation)
     IoHomeController lController;
     IoHomecontrol lModule;
     initKeyExtractControllerForTest(lController, lModule, lOwnNodeId);
+    lController.radio().testSetDefaultResponsePreamble(IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_TRUE(lController.startKeyExtraction());
 
     IoHomeFrame lDiscoverReq;
@@ -11327,6 +11333,7 @@ TEST(controller_key_extract_acknowledges_discovery_confirmation)
     IoHomeFrame lConfirmationAck;
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lConfirmation, lConfirmationAck));
     ASSERT_EQ(lConfirmationAck.commandId, IoHomeCommand::ConfirmationACK);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_EQ(lConfirmationAck.getSrcNodeId(), lThrowawayNodeId);
     ASSERT_EQ(lConfirmationAck.getDestNodeId(), lHubNodeId);
 
@@ -11350,6 +11357,7 @@ TEST(controller_key_extract_defers_queue_and_rejects_competing_operations)
     IoHomeController lController;
     IoHomecontrol lModule;
     initKeyExtractControllerForTest(lController, lModule, lOwnNodeId);
+    lController.radio().testSetDefaultResponsePreamble(IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_TRUE(lController.startKeyExtraction());
 
     // ETS-facing radio operations are rejected for the complete armed
@@ -11370,6 +11378,7 @@ TEST(controller_key_extract_defers_queue_and_rejects_competing_operations)
     buildKeyExtractKeyInit(lRequest, lHubNodeId, lThrowawayNodeId);
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeRequest);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
 
     // Finish the three challenge legs, then enqueue a normal background-style
     // status query. No fourth transmission may start while the CH2 hold is on.
@@ -11449,6 +11458,7 @@ TEST(controller_key_extract_completes_hub_address_verification)
     IoHomeController lController;
     IoHomecontrol lModule;
     initKeyExtractControllerForTest(lController, lModule, lOwnNodeId);
+    lController.radio().testSetDefaultResponsePreamble(IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_TRUE(lController.startKeyExtraction());
 
     IoHomeFrame lRequest;
@@ -11464,6 +11474,7 @@ TEST(controller_key_extract_completes_hub_address_verification)
     buildKeyExtractKeyTransfer(lRequest, lHubNodeId, lThrowawayNodeId, lResponse.data, lSystemKey);
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::KeyTransferConfirmation);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_EQ(lController.keyExtractStatus(), IoHomeController::KeyExtractStatus::Captured);
 
     // The advertised throwaway address is public; only the hub that handed us
@@ -11474,6 +11485,7 @@ TEST(controller_key_extract_completes_hub_address_verification)
     buildKeyExtractAddressRequest(lRequest, lHubNodeId, lThrowawayNodeId);
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::AddressResponse);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_EQ(lResponse.dataLen, 3);
     ASSERT_EQ(lResponse.data[0], static_cast<uint8_t>(lThrowawayNodeId >> 16));
     ASSERT_EQ(lResponse.data[1], static_cast<uint8_t>(lThrowawayNodeId >> 8));
@@ -11482,6 +11494,7 @@ TEST(controller_key_extract_completes_hub_address_verification)
     buildPairChallengeRequestFrame(lRequest, lThrowawayNodeId, lHubNodeId, lAddressChallenge);
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_TRUE((lResponse.ctrlByte0 & IOHC_CTRL0_END) != 0);
     ASSERT_TRUE((lResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
 

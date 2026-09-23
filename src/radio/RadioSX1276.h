@@ -43,6 +43,7 @@ public:
   RadioError setOutputPower(uint8_t iPower);
   RadioError setPreambleLength(uint16_t iSymbols);
   uint16_t defaultStartPreamble() const { return 32; }
+  uint16_t defaultResponsePreamble() const { return 12; }
   RadioError startTransmit(const uint8_t *iData, uint8_t iLen);
   RadioError startReceive();
   bool isTxDone();

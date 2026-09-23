@@ -1181,6 +1181,7 @@ private:
 
   // Active key extraction handlers
   void processKeyExtractFrame();
+  uint16_t keyExtractReplyPreamble(bool iColdReply) const;
   bool queueKeyExtractReply(const uint8_t *iBuffer, uint8_t iLen, uint16_t iPreambleSymbols);
   void serviceKeyExtractReply();
   void serviceKeyExtractChannelHold();
