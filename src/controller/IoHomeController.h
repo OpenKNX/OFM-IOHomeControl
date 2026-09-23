@@ -143,6 +143,7 @@ struct IoHomeQueueEntry
   uint8_t retries;
   uint8_t maxAttempts;
   TwoWayPreamblePlan twoWayPreamblePlan;
+  bool background;
   bool active;
   uint8_t nameData[IOHC_NAME_MAX_SIZE]; // SetName payload (zero-padded, Latin-1)
   uint8_t nameLen;                      // actual name length (0 = not a SetName)
@@ -401,6 +402,10 @@ public:
   bool sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
                    IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2, uint8_t iParam3,
                    uint8_t iMaxAttempts);
+  bool sendBackgroundCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                             IoHomeCommand iCmd, uint8_t iParam,
+                             uint16_t iParam2 = 0xFF, uint8_t iParam3 = 0xFF,
+                             uint8_t iMaxAttempts = IOHC_EXCHANGE_MAX_ATTEMPTS);
   uint16_t normal2WStartPreamble() const;
   static uint32_t estimatedTxAirtimeMs(uint8_t iFrameLen, uint16_t iPreambleSymbols);
 
@@ -1266,7 +1271,11 @@ private:
   // Queue helpers
   bool queuePush(const IoHomeQueueEntry &iEntry);
   bool queuePop(IoHomeQueueEntry &oEntry);
+  bool queuePopForeground(IoHomeQueueEntry &oEntry);
   bool queueEmpty() const;
+  bool sendCommandInternal(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                           IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2,
+                           uint8_t iParam3, uint8_t iMaxAttempts, bool iBackground);
   IoHomecontrolChannel *channelForNode(uint32_t iNodeId) const;
   uint8_t channelIndexFor(IoHomecontrolChannel *iChannel) const;
   IoHomecontrolChannel *channelForQueueEntry(const IoHomeQueueEntry &iEntry) const;

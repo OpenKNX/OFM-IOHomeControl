@@ -1714,6 +1714,24 @@ bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                    IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2, uint8_t iParam3,
                                    uint8_t iMaxAttempts)
 {
+    return sendCommandInternal(iDestNodeId, iEncKey, iCmd, iParam, iParam2,
+                               iParam3, iMaxAttempts, false);
+}
+
+bool IoHomeController::sendBackgroundCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                                             IoHomeCommand iCmd, uint8_t iParam,
+                                             uint16_t iParam2, uint8_t iParam3,
+                                             uint8_t iMaxAttempts)
+{
+    return sendCommandInternal(iDestNodeId, iEncKey, iCmd, iParam, iParam2,
+                               iParam3, iMaxAttempts, true);
+}
+
+bool IoHomeController::sendCommandInternal(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                                           IoHomeCommand iCmd, uint8_t iParam,
+                                           uint16_t iParam2, uint8_t iParam3,
+                                           uint8_t iMaxAttempts, bool iBackground)
+{
     if (iCmd == IoHomeCommand::WritePrivate && iParam == 0x03)
     {
         if (iParam2 < IOHC_COZY_TEMP_MIN_TENTHS || iParam2 > IOHC_COZY_TEMP_MAX_TENTHS)
@@ -1781,6 +1799,7 @@ bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
     lEntry.sourceChannelIndex = 0xFF;
     lEntry.retries = 0;
     lEntry.maxAttempts = iMaxAttempts == 0 ? 1 : iMaxAttempts;
+    lEntry.background = iBackground;
     lEntry.active = true;
     return queuePush(lEntry);
 }
@@ -2202,6 +2221,27 @@ bool IoHomeController::queuePop(IoHomeQueueEntry &oEntry)
     if (mQueueTail == mQueueHead)
         return false; // queue empty
     oEntry = mCmdQueue[mQueueTail];
+    mQueueTail = (mQueueTail + 1) % IOHC_CMD_QUEUE_SIZE;
+    return true;
+}
+
+bool IoHomeController::queuePopForeground(IoHomeQueueEntry &oEntry)
+{
+    uint8_t lIndex = mQueueTail;
+    while (lIndex != mQueueHead && mCmdQueue[lIndex].background)
+        lIndex = (lIndex + 1) % IOHC_CMD_QUEUE_SIZE;
+
+    if (lIndex == mQueueHead)
+        return false;
+
+    oEntry = mCmdQueue[lIndex];
+    while (lIndex != mQueueTail)
+    {
+        const uint8_t lPrevious =
+            (lIndex + IOHC_CMD_QUEUE_SIZE - 1) % IOHC_CMD_QUEUE_SIZE;
+        mCmdQueue[lIndex] = mCmdQueue[lPrevious];
+        lIndex = lPrevious;
+    }
     mQueueTail = (mQueueTail + 1) % IOHC_CMD_QUEUE_SIZE;
     return true;
 }
@@ -5167,10 +5207,14 @@ void IoHomeController::processIdle()
     if (mPassiveMode)
         return; // passive mode: never transmit
 
-    // Extraction replies and their expected follow-up frames have priority
-    // over ordinary queued traffic. Leave commands queued until the bounded
-    // CH2 wait ends instead of letting a status poll seize the radio.
-    if (keyExtractAwaitingReply())
+    // Before key capture, extraction replies and their expected follow-up
+    // frames have exclusive use of the radio for the bounded five-second
+    // window. After capture, keep background polls queued during the 60-second
+    // verification hold, but allow explicit KNX/user commands to pass them.
+    const bool lExtractionHold = keyExtractAwaitingReply();
+    const bool lPostCaptureHold =
+        lExtractionHold && mKeyExtractStatus == KeyExtractStatus::Captured;
+    if (lExtractionHold && !lPostCaptureHold)
         return;
 
     const RadioError lRxErr = ensureReceiveAfterTransmit();
@@ -5180,7 +5224,7 @@ void IoHomeController::processIdle()
     if (!queueEmpty())
     {
         IoHomeQueueEntry lEntry;
-        if (queuePop(lEntry))
+        if ((lPostCaptureHold ? queuePopForeground(lEntry) : queuePop(lEntry)))
         {
             mCurrentCmd = lEntry;
             mExchangeStartMs = millis();

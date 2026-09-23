@@ -1116,8 +1116,9 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll)
     const uint8_t lMaxAttempts = IOHC_EXCHANGE_MAX_ATTEMPTS;
     if (!mIs1W && isTiltCapableDeviceType())
     {
-        const bool lQueued = mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private,
-                                                     0x03, 0x20, 0x01, lMaxAttempts);
+        const bool lQueued = mController.sendBackgroundCommand(
+            mNodeId, mEncKey, IoHomeCommand::Private,
+            0x03, 0x20, 0x01, lMaxAttempts);
         if (lQueued)
         {
             mStatusPollTimer = delayTimerInit();
@@ -1127,8 +1128,9 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll)
         return lQueued;
     }
 
-    const bool lQueued = mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private,
-                                                 0x03, 0xFF, 0xFF, lMaxAttempts);
+    const bool lQueued = mController.sendBackgroundCommand(
+        mNodeId, mEncKey, IoHomeCommand::Private,
+        0x03, 0xFF, 0xFF, lMaxAttempts);
     if (lQueued)
     {
         mStatusPollTimer = delayTimerInit();

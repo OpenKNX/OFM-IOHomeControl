@@ -11443,6 +11443,61 @@ TEST(controller_key_extract_recovers_hub_system_key)
     ASSERT_MEM_EQ(lModule.testLastPassiveKeyResult().key, lSystemKey, sizeof(lSystemKey));
 }
 
+TEST(controller_key_extract_allows_foreground_queue_after_capture)
+{
+    const uint32_t lOwnNodeId = 0x112233;
+    const uint32_t lHubNodeId = 0x445566;
+    const uint32_t lDeviceNodeId = 0x778899;
+    const uint8_t lDeviceKey[16] = {};
+    const uint8_t lSystemKey[16] = {
+        0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE,
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
+
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    initKeyExtractControllerForTest(lController, lModule, lOwnNodeId);
+    ASSERT_TRUE(lController.startKeyExtraction());
+
+    IoHomeFrame lRequest;
+    IoHomeFrame lResponse;
+    buildGatewayDiscoverRequest(lRequest, lHubNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    const uint32_t lThrowawayNodeId = lResponse.getSrcNodeId();
+    buildKeyExtractKeyInit(lRequest, lHubNodeId, lThrowawayNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    buildKeyExtractKeyTransfer(lRequest, lHubNodeId, lThrowawayNodeId,
+                               lResponse.data, lSystemKey);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lController.keyExtractStatus(), IoHomeController::KeyExtractStatus::Captured);
+    ASSERT_TRUE(lController.keyExtractAwaitingReply());
+
+    for (uint8_t i = 0; i < 4; i++)
+        lController.loop();
+    lController.radio().testClearTransmittedPacket();
+    const uint32_t lTxCount = lController.radio().testTransmitCount();
+
+    // A background poll queued first must stay pending, while a later explicit
+    // KNX command is allowed to pass during the post-capture grace window.
+    ASSERT_TRUE(lController.sendBackgroundCommand(
+        lDeviceNodeId, lDeviceKey, IoHomeCommand::Private, 0x03));
+    ASSERT_TRUE(lController.sendCommand(
+        lDeviceNodeId, lDeviceKey, IoHomeCommand::Execute, 50));
+    ASSERT_EQ(lController.radioHealth().queueDepth, 2);
+
+    lController.loop();
+    ASSERT_EQ(lController.radioHealth().queueDepth, 1);
+    lController.loop();
+    ASSERT_EQ(lController.radio().testTransmitCount(), lTxCount + 1U);
+
+    IoHomeFrame lTransmitted;
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(lTransmitted.deserialize(lPacket.data(), lPacket.size()));
+    ASSERT_EQ(lTransmitted.commandId, IoHomeCommand::Execute);
+}
+
 TEST(controller_key_extract_completes_hub_address_verification)
 {
     const uint32_t lOwnNodeId = 0x112233;
