@@ -11629,6 +11629,44 @@ TEST(controller_key_extract_locks_hub_at_key_init_not_first_discovery)
     ASSERT_TRUE(!queueGatewayRequestAndLoop(lController, lRequest, lResponse));
 }
 
+TEST(controller_key_extract_accepts_confirmation_from_earlier_candidate)
+{
+    const uint32_t lOwnNodeId = 0x112233;
+    const uint32_t lFirstHubNodeId = 0x445566;
+    const uint32_t lLaterHubNodeId = 0x123456;
+
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    initKeyExtractControllerForTest(lController, lModule, lOwnNodeId);
+    ASSERT_TRUE(lController.startKeyExtraction());
+
+    IoHomeFrame lRequest;
+    IoHomeFrame lResponse;
+    buildGatewayDiscoverRequest(lRequest, lFirstHubNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    const uint32_t lThrowawayNodeId = lResponse.getSrcNodeId();
+
+    // A later 0x28 is diagnostic information only. It must not prevent the
+    // first hub from completing its strict 0x2C -> 0x2D -> 0x31 sequence.
+    buildGatewayDiscoverRequest(lRequest, lLaterHubNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lController.keyExtractCandidateHubNodeId(), lLaterHubNodeId);
+
+    buildKeyExtractConfirmation(lRequest, lFirstHubNodeId, lThrowawayNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lResponse.commandId, IoHomeCommand::ConfirmationACK);
+    ASSERT_EQ(lResponse.getDestNodeId(), lFirstHubNodeId);
+    ASSERT_EQ(lController.keyExtractHubNodeId(), 0U);
+
+    buildKeyExtractKeyInit(lRequest, lFirstHubNodeId, lThrowawayNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeRequest);
+    ASSERT_EQ(lController.keyExtractHubNodeId(), lFirstHubNodeId);
+}
+
 TEST(controller_key_extract_allows_same_hub_second_attempt_during_grace)
 {
     const uint32_t lOwnNodeId = 0x112233;

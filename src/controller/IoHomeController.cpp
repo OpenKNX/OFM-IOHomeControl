@@ -8958,8 +8958,6 @@ void IoHomeController::processKeyExtractFrame()
     case IoHomeCommand::Confirmation:
         logInfoP("KeyExtract: rx 0x2C hub=0x%06X", lSrcNode);
         if (lDstNode != mKeyExtractThrowawayId ||
-            (mKeyExtractHubNodeId == 0 && mKeyExtractCandidateHubNodeId != 0 &&
-             lSrcNode != mKeyExtractCandidateHubNodeId) ||
             (mKeyExtractState != ControllerState::ExtractSentDiscoverResp &&
              mKeyExtractState != ControllerState::ExtractSentConfirmAck))
         {
