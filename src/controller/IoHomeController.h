@@ -573,6 +573,12 @@ public:
   uint32_t keyExtractHubNodeId() const;
   ControllerState keyExtractState() const;
   uint32_t keyExtractHoldRemainingMs() const;
+  void setKeyExtractColdReplyPreamble(uint16_t iPreambleSymbols);
+  void setKeyExtractResponsePreamble(uint16_t iPreambleSymbols);
+  uint16_t keyExtractColdReplyPreambleOverride() const;
+  uint16_t keyExtractResponsePreambleOverride() const;
+  uint16_t keyExtractColdReplyPreamble() const;
+  uint16_t keyExtractResponsePreamble() const;
 
   // 1W key copy/clone: listen for an existing remote's over-air SendKey1W
   // (0x30) "copy remote" frame, decrypt its key with the well-known transfer
@@ -1008,6 +1014,8 @@ private:
   uint8_t mKeyExtractReplyLen = 0;
   uint8_t mKeyExtractReplyPhase = 0;
   uint16_t mKeyExtractReplyPreamble = IOHC_PREAMBLE_SHORT;
+  uint16_t mKeyExtractColdReplyPreambleOverride = 0;
+  uint16_t mKeyExtractResponsePreambleOverride = 0;
 
   // 1W key copy/clone receive state
   bool mOneWayKeyReceiveActive = false;

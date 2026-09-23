@@ -2848,6 +2848,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc discover", "Broadcast discovery, list devices");
     openknx.console.printHelpLine("iohc discover spe", "Encrypted SPE/sub-device discovery");
     openknx.console.printHelpLine("iohc autospe on|off|status", "Runtime post-pair SPE discovery");
+    openknx.console.printHelpLine("iohc extract preamble cold|response auto|N", "Runtime-only key-extraction preamble override");
     openknx.console.printHelpLine("iohcNN identify", "Ask paired 2W device NN to identify itself");
     openknx.console.printHelpLine("iohcNN probe TYPE [HH]", "2W probes: private-fn/private-sub/status-ext/status-ext-fn6/status-ext-fn9/info1/info2");
     openknx.console.printHelpLine("iohcNN send PP", "Send position PP% to channel NN");
@@ -4806,6 +4807,51 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if (lSub.length() > 8)
             lExtractCmd = trimSpaces(lSub.substr(8));
 
+        if (lExtractCmd.rfind("preamble", 0) == 0)
+        {
+            std::string lArgs = trimSpaces(lExtractCmd.substr(strlen("preamble")));
+            if (lArgs == "reset")
+            {
+                mController.setKeyExtractColdReplyPreamble(0);
+                mController.setKeyExtractResponsePreamble(0);
+            }
+            else
+            {
+                std::string lKind;
+                std::string lValue;
+                if (!takeToken(lArgs, lKind) || !takeToken(lArgs, lValue) || !lArgs.empty() ||
+                    (lKind != "cold" && lKind != "response"))
+                {
+                    logInfoP("Usage: iohc extract preamble cold|response auto|1..65535 | reset");
+                    return true;
+                }
+
+                uint16_t lSymbols = 0;
+                if (lValue != "auto" && lValue != "automatic")
+                {
+                    uint32_t lParsed = 0;
+                    if (!parseUnsignedDecimal(lValue, lParsed) || lParsed == 0 || lParsed > 65535UL)
+                    {
+                        logInfoP("Usage: iohc extract preamble cold|response auto|1..65535 | reset");
+                        return true;
+                    }
+                    lSymbols = static_cast<uint16_t>(lParsed);
+                }
+
+                if (lKind == "cold")
+                    mController.setKeyExtractColdReplyPreamble(lSymbols);
+                else
+                    mController.setKeyExtractResponsePreamble(lSymbols);
+            }
+
+            logInfoP("Key extract preamble: cold=%u%s response=%u%s runtime-only",
+                     static_cast<unsigned>(mController.keyExtractColdReplyPreamble()),
+                     mController.keyExtractColdReplyPreambleOverride() == 0 ? " (auto)" : "",
+                     static_cast<unsigned>(mController.keyExtractResponsePreamble()),
+                     mController.keyExtractResponsePreambleOverride() == 0 ? " (auto)" : "");
+            return true;
+        }
+
         if (lExtractCmd.empty() || lExtractCmd.substr(0, 6) == "status")
         {
             const auto lStatus = mController.keyExtractStatus();
@@ -4817,6 +4863,11 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                      mController.keyExtractHubNodeId(),
                      IoHomeController::stateName(mController.keyExtractState()),
                      static_cast<unsigned long>(mController.keyExtractHoldRemainingMs()));
+            logInfoP("  preamble: cold=%u%s response=%u%s runtime-only",
+                     static_cast<unsigned>(mController.keyExtractColdReplyPreamble()),
+                     mController.keyExtractColdReplyPreambleOverride() == 0 ? " (auto)" : "",
+                     static_cast<unsigned>(mController.keyExtractResponsePreamble()),
+                     mController.keyExtractResponsePreambleOverride() == 0 ? " (auto)" : "");
             if (lResult.valid)
             {
                 logInfoP("  node=0x%06X freq=%u capturedAt=%lu key captured",
@@ -4871,7 +4922,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             return true;
         }
 
-        logInfoP("Usage: iohc extract start [seconds] | stop | status | clear");
+        logInfoP("Usage: iohc extract start [seconds] | stop | status | clear | preamble cold|response auto|N | preamble reset");
         return true;
     }
 

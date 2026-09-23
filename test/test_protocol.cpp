@@ -11344,6 +11344,46 @@ TEST(controller_key_extract_acknowledges_discovery_confirmation)
     ASSERT_EQ(lRetryAck.commandId, IoHomeCommand::ConfirmationACK);
 }
 
+TEST(controller_key_extract_runtime_preamble_overrides)
+{
+    const uint32_t lOwnNodeId = 0x112233;
+    const uint32_t lHubNodeId = 0x445566;
+    constexpr uint16_t lColdPreamble = 96;
+    constexpr uint16_t lResponsePreamble = 24;
+
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    initKeyExtractControllerForTest(lController, lModule, lOwnNodeId);
+    lController.radio().testSetDefaultResponsePreamble(IOHC_RESPONSE_PREAMBLE_SX1276);
+    lController.setKeyExtractColdReplyPreamble(lColdPreamble);
+    lController.setKeyExtractResponsePreamble(lResponsePreamble);
+    ASSERT_EQ(lController.keyExtractColdReplyPreambleOverride(), lColdPreamble);
+    ASSERT_EQ(lController.keyExtractResponsePreambleOverride(), lResponsePreamble);
+    ASSERT_EQ(lController.keyExtractColdReplyPreamble(), lColdPreamble);
+    ASSERT_EQ(lController.keyExtractResponsePreamble(), lResponsePreamble);
+    ASSERT_TRUE(lController.startKeyExtraction());
+
+    IoHomeFrame lRequest;
+    IoHomeFrame lResponse;
+    buildGatewayDiscoverRequest(lRequest, lHubNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    const uint32_t lThrowawayNodeId = lResponse.getSrcNodeId();
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), lColdPreamble);
+
+    buildKeyExtractConfirmation(lRequest, lHubNodeId, lThrowawayNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lResponse.commandId, IoHomeCommand::ConfirmationACK);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), lResponsePreamble);
+
+    lController.setKeyExtractColdReplyPreamble(0);
+    lController.setKeyExtractResponsePreamble(0);
+    ASSERT_EQ(lController.keyExtractColdReplyPreamble(), IOHC_KEY_EXTRACT_COLD_REPLY_PREAMBLE);
+    ASSERT_EQ(lController.keyExtractResponsePreamble(), IOHC_RESPONSE_PREAMBLE_SX1276);
+}
+
 TEST(controller_key_extract_defers_queue_and_rejects_competing_operations)
 {
     const uint32_t lOwnNodeId = 0x112233;

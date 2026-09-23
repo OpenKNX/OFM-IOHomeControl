@@ -3419,6 +3419,36 @@ uint32_t IoHomeController::keyExtractHoldRemainingMs() const
     return mKeyExtractHoldDeadlineMs - millis();
 }
 
+void IoHomeController::setKeyExtractColdReplyPreamble(uint16_t iPreambleSymbols)
+{
+    mKeyExtractColdReplyPreambleOverride = iPreambleSymbols;
+}
+
+void IoHomeController::setKeyExtractResponsePreamble(uint16_t iPreambleSymbols)
+{
+    mKeyExtractResponsePreambleOverride = iPreambleSymbols;
+}
+
+uint16_t IoHomeController::keyExtractColdReplyPreambleOverride() const
+{
+    return mKeyExtractColdReplyPreambleOverride;
+}
+
+uint16_t IoHomeController::keyExtractResponsePreambleOverride() const
+{
+    return mKeyExtractResponsePreambleOverride;
+}
+
+uint16_t IoHomeController::keyExtractColdReplyPreamble() const
+{
+    return keyExtractReplyPreamble(true);
+}
+
+uint16_t IoHomeController::keyExtractResponsePreamble() const
+{
+    return keyExtractReplyPreamble(false);
+}
+
 bool IoHomeController::startOneWayKeyReceive(uint8_t iChannelIndex, uint32_t iTimeoutMs)
 {
     if (mState != ControllerState::Idle && mState != ControllerState::PassiveListening)
@@ -9168,8 +9198,13 @@ void IoHomeController::processKeyExtractFrame()
 
 uint16_t IoHomeController::keyExtractReplyPreamble(bool iColdReply) const
 {
-    return iColdReply ? IOHC_KEY_EXTRACT_COLD_REPLY_PREAMBLE
-                      : mRadio.defaultResponsePreamble();
+    if (iColdReply)
+        return mKeyExtractColdReplyPreambleOverride != 0
+                   ? mKeyExtractColdReplyPreambleOverride
+                   : IOHC_KEY_EXTRACT_COLD_REPLY_PREAMBLE;
+    return mKeyExtractResponsePreambleOverride != 0
+               ? mKeyExtractResponsePreambleOverride
+               : mRadio.defaultResponsePreamble();
 }
 
 bool IoHomeController::queueKeyExtractReply(const uint8_t *iBuffer, uint8_t iLen,
