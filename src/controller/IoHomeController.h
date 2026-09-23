@@ -402,6 +402,7 @@ public:
                    IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2, uint8_t iParam3,
                    uint8_t iMaxAttempts);
   uint16_t normal2WStartPreamble() const;
+  static uint32_t estimatedTxAirtimeMs(uint8_t iFrameLen, uint16_t iPreambleSymbols);
 
   // Queue a command for a concrete 1W channel profile. This path does not
   // require a bound actuator node ID; targetNode=0 is a valid broadcast-only

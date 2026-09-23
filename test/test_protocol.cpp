@@ -5003,6 +5003,14 @@ TEST(radio_test_stub_directed_start_default_is_configurable)
     ASSERT_EQ(lController.normal2WStartPreamble(), 64);
 }
 
+TEST(duty_cycle_airtime_includes_preamble_sync_crc_and_uart_framing)
+{
+    ASSERT_EQ(IoHomeController::estimatedTxAirtimeMs(10, 48), 14U);
+    ASSERT_EQ(IoHomeController::estimatedTxAirtimeMs(10, 1024), 218U);
+    ASSERT_TRUE(IoHomeController::estimatedTxAirtimeMs(10, 1024) >
+                IoHomeController::estimatedTxAirtimeMs(10, 48));
+}
+
 TEST(accepted_movement_and_stop_update_wake_evidence)
 {
     IoHomecontrolChannel lChannel;

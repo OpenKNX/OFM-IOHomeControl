@@ -2340,6 +2340,21 @@ uint16_t IoHomeController::normal2WStartPreamble() const
                : mRadio.defaultStartPreamble();
 }
 
+uint32_t IoHomeController::estimatedTxAirtimeMs(uint8_t iFrameLen,
+                                                uint16_t iPreambleSymbols)
+{
+    // io-homecontrol transmits one eight-bit preamble symbol per configured
+    // preamble byte, followed by the three-byte sync word. The frame and its
+    // two transport-CRC bytes use 8N1 UART cells (10 bits each); SX1276 does
+    // this in IoHomeOn hardware and SX1262 in the software PHY encoder.
+    const uint32_t lPreambleAndSyncBits =
+        (static_cast<uint32_t>(iPreambleSymbols) + IOHC_SYNC_WORD_SIZE) * 8UL;
+    const uint32_t lBodyBits =
+        (static_cast<uint32_t>(iFrameLen) + IOHC_CRC_SIZE) * 10UL;
+    const uint32_t lTotalBits = lPreambleAndSyncBits + lBodyBits;
+    return (lTotalBits * 1000UL + IOHC_BITRATE - 1UL) / IOHC_BITRATE;
+}
+
 void IoHomeController::resolveTwoWayPreamblePlan(const IoHomeFrame &iFrame,
                                                   IoHomeQueueEntry &ioEntry) const
 {
@@ -5236,8 +5251,7 @@ void IoHomeController::processTxInProgress()
 
     if (mRadio.isTxDone())
     {
-        // Track TX time for duty cycle (approx: bytes * 8 / bitrate * 1000)
-        uint32_t lTxTimeMs = ((uint32_t)mTxLen * 8 * 1000) / IOHC_BITRATE;
+        const uint32_t lTxTimeMs = estimatedTxAirtimeMs(mTxLen, mCurrentTxPreambleSymbols);
         mTxTimeAccum[mCurrentFreqIdx] += lTxTimeMs;
 
         if (mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W)
@@ -6640,7 +6654,7 @@ bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
 #endif
     if (lTxDone)
     {
-        uint32_t lTxTimeMs = ((uint32_t)mTxLen * 8 * 1000) / IOHC_BITRATE;
+        const uint32_t lTxTimeMs = estimatedTxAirtimeMs(mTxLen, mCurrentTxPreambleSymbols);
         mTxTimeAccum[mCurrentFreqIdx] += lTxTimeMs;
 
         if (mTx1WRepeatRemaining > 0)
@@ -7666,7 +7680,7 @@ RadioError IoHomeController::startTransmitWithPreamble(const uint8_t *iBuffer, u
 
     const RadioError lTxErr = startRadioTransmit(iBuffer, iLen, iLbtContext);
     if (lTxErr == RadioError::None && iTrackDutyCycle)
-        mTxTimeAccum[mCurrentFreqIdx] += ((uint32_t)iLen * 8 * 1000) / IOHC_BITRATE;
+        mTxTimeAccum[mCurrentFreqIdx] += estimatedTxAirtimeMs(iLen, iPreambleSymbols);
 
     return lTxErr;
 }
@@ -8555,7 +8569,7 @@ void IoHomeController::processStatusAckTxWait()
 
     if (mRadio.isTxDone())
     {
-        uint32_t lTxTimeMs = ((uint32_t)mTxLen * 8 * 1000) / IOHC_BITRATE;
+        const uint32_t lTxTimeMs = estimatedTxAirtimeMs(mTxLen, mCurrentTxPreambleSymbols);
         mTxTimeAccum[mCurrentFreqIdx] += lTxTimeMs;
         mStatusAckFreqIdx++;
         mState = ControllerState::StatusAckSend;

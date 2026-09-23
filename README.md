@@ -52,7 +52,7 @@ The protocol implementation covers manufacturers such as Velux, Somfy, Atlantic,
 - **Power-on behavior** configurable per channel (nothing, request status, restore last feedback position)
 - **Optional brightness control for dimmable lights**, plus dedicated binary command/status handling for lights, switches and locks
 - **3-channel frequency hopping** across the 868 MHz ISM band
-- **EU duty cycle compliance** with per-sub-band tracking (1-hour window)
+- **EU duty cycle compliance** with per-sub-band tracking (1-hour window); airtime includes the configured preamble, sync word, transport CRC, and io-homecontrol UART framing
 - **Command queue** with automatic retries (up to 3 attempts, cycling frequencies)
 - **Remote observation** — track io-homecontrol remotes on the bus, link devices to remotes
 - **Explicit passive key sniff workflow** for diagnostics (listen-only session with separate start/stop/status/clear controls)
