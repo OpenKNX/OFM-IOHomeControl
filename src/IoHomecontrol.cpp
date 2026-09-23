@@ -75,6 +75,18 @@ namespace
         {
         case TwoWayDiscoveryDestinationMode::DiscoverAll: return "0x00003B";
         case TwoWayDiscoveryDestinationMode::DiscoverAlt: return "0x00003F";
+        case TwoWayDiscoveryDestinationMode::LightingDiscoverAll: return "0x0001BB";
+        case TwoWayDiscoveryDestinationMode::LightingDiscoverAlt: return "0x0001BF";
+        default: return "auto";
+        }
+    }
+
+    const char *discoveryListenName(TwoWayDiscoveryListenChannels iMode)
+    {
+        switch (iMode)
+        {
+        case TwoWayDiscoveryListenChannels::All: return "all";
+        case TwoWayDiscoveryListenChannels::SkipRequest: return "skip_request";
         default: return "auto";
         }
     }
@@ -3038,7 +3050,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         {
             mController.setDiagnostic2WPowerClass(TwoWayPowerClass::Automatic);
             mController.setDiagnostic2WStartPreamble(0);
-            mController.setDiagnostic2WWakeBelief(false);
+            mController.setDiagnostic2WWakeBelief(true);
             mController.setDiagnosticDiscoverySettings(TwoWayDiscoverySettings{});
         }
         else if (lArg.rfind("discovery ", 0) == 0)
@@ -3048,7 +3060,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             std::string lValue;
             if (!takeToken(lDiscoveryArgs, lField) || !takeToken(lDiscoveryArgs, lValue) || !lDiscoveryArgs.empty())
             {
-                logInfoP("Usage: iohc 2wdiag discovery command|destination|ack|lowpower|preamble VALUE");
+                logInfoP("Usage: iohc 2wdiag discovery command|destination|ack|lowpower|preamble|listen VALUE");
                 return true;
             }
 
@@ -3067,6 +3079,8 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 if (lValue == "auto") lSettings.destination = TwoWayDiscoveryDestinationMode::Automatic;
                 else if (lValue == "3b" || lValue == "0x00003b") lSettings.destination = TwoWayDiscoveryDestinationMode::DiscoverAll;
                 else if (lValue == "3f" || lValue == "0x00003f") lSettings.destination = TwoWayDiscoveryDestinationMode::DiscoverAlt;
+                else if (lValue == "1bb" || lValue == "0x0001bb") lSettings.destination = TwoWayDiscoveryDestinationMode::LightingDiscoverAll;
+                else if (lValue == "1bf" || lValue == "0x0001bf") lSettings.destination = TwoWayDiscoveryDestinationMode::LightingDiscoverAlt;
                 else lValid = false;
             }
             else if (lField == "ack" || lField == "lowpower" || lField == "lp")
@@ -3089,6 +3103,13 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 else if (lValue == "8" || lValue == "short") lSettings.preamble = TwoWayDiscoveryPreambleMode::Short;
                 else lValid = false;
             }
+            else if (lField == "listen")
+            {
+                if (lValue == "auto") lSettings.listenChannels = TwoWayDiscoveryListenChannels::Automatic;
+                else if (lValue == "skip" || lValue == "skip_request") lSettings.listenChannels = TwoWayDiscoveryListenChannels::SkipRequest;
+                else if (lValue == "all") lSettings.listenChannels = TwoWayDiscoveryListenChannels::All;
+                else lValid = false;
+            }
             else
             {
                 lValid = false;
@@ -3096,7 +3117,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 
             if (!lValid)
             {
-                logInfoP("Usage: discovery command auto|28|2e|spe; destination auto|3b|3f; ack/lowpower auto|off|on; preamble auto|1024|32|8");
+                logInfoP("Usage: discovery command auto|28|2e|spe; destination auto|3b|3f|1bb|1bf; ack/lowpower auto|off|on; preamble auto|1024|32|8; listen auto|skip|all");
                 return true;
             }
             mController.setDiagnosticDiscoverySettings(lSettings);
@@ -3164,12 +3185,13 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                      static_cast<unsigned>(lPreamble),
                      mController.diagnostic2WWakeBelief() ? "on" : "off");
         const TwoWayDiscoverySettings &lDiscovery = mController.diagnosticDiscoverySettings();
-        logInfoP("2WDiag discovery: cmd=%s dest=%s ack=%s lp=%s preamble=%s runtime-only",
+        logInfoP("2WDiag discovery: cmd=%s dest=%s ack=%s lp=%s preamble=%s listen=%s runtime-only",
                  discoveryCommandName(lDiscovery.command),
                  discoveryDestinationName(lDiscovery.destination),
                  discoveryFlagName(lDiscovery.ack),
                  discoveryFlagName(lDiscovery.lowPower),
-                 discoveryPreambleName(lDiscovery.preamble));
+                 discoveryPreambleName(lDiscovery.preamble),
+                 discoveryListenName(lDiscovery.listenChannels));
         return true;
     }
     if (lSub.substr(0, 6) == "status")
@@ -3209,7 +3231,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 else
                 {
                     const bool lEffectiveLowPower = lCh->effectiveLowPower2W();
-                    logInfoP("  2W device: node=0x%06X key=%s configured=%s learned=%s effective=%s startPreamble=%u",
+                    logInfoP("  2W device: node=0x%06X key=%s configured=%s learned=%s effective=%s startPreamble=%u wakeBelief=%s",
                              lCh->getNodeId(),
                              keyStateText(lCh->getEncryptionKey()),
                              IoHomecontrolChannel::twoWayPowerClassName(lCh->getConfigured2WPowerClass()),
@@ -3218,18 +3240,20 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                                  : "unknown",
                              lEffectiveLowPower ? "low-power" : "always-alive",
                              static_cast<unsigned>(lEffectiveLowPower ? IOHC_PREAMBLE_LONG
-                                                                      : IOHC_PREAMBLE_NORMAL_START));
+                                                                      : mController.normal2WStartPreamble()),
+                             mController.diagnostic2WWakeBelief() ? "on" : "off");
                     const TwoWayDiscoverySettings &lDiscovery = lCh->getConfigured2WDiscoverySettings();
                     const TwoWayDiscoveryFrameOptions lResolvedDiscovery =
                         IoHomeController::resolveTwoWayDiscoveryOptions(IoHomeCommand::DiscoverRequest, lDiscovery);
-                    logInfoP("  2W discovery: configured cmd=%s dest=%s ack=%s lp=%s preamble=%s; effective cmd=0x%02X dst=0x%06X ack=%u lp=%u preamble=%u",
+                    logInfoP("  2W discovery: configured cmd=%s dest=%s ack=%s lp=%s preamble=%s listen=%s; effective cmd=0x%02X dst=0x%06X ack=%u lp=%u preamble=%u listen=%s",
                              discoveryCommandName(lDiscovery.command), discoveryDestinationName(lDiscovery.destination),
                              discoveryFlagName(lDiscovery.ack), discoveryFlagName(lDiscovery.lowPower),
-                             discoveryPreambleName(lDiscovery.preamble),
+                             discoveryPreambleName(lDiscovery.preamble), discoveryListenName(lDiscovery.listenChannels),
                              static_cast<unsigned>(static_cast<uint8_t>(lResolvedDiscovery.command)),
                              lResolvedDiscovery.destination, lResolvedDiscovery.ackCapable ? 1U : 0U,
                              lResolvedDiscovery.lowPower ? 1U : 0U,
-                             static_cast<unsigned>(lResolvedDiscovery.preamble));
+                             static_cast<unsigned>(lResolvedDiscovery.preamble),
+                             discoveryListenName(lResolvedDiscovery.listenChannels));
                 }
                 logInfoP("  exchanges: timeout=%u authenticated-unconfirmed=%u",
                          static_cast<unsigned>(lCh->exchangeTimeoutCount()),
@@ -5924,10 +5948,16 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if (lExchange.lastUnconfirmed.valid)
         {
             const auto &lSnapshot = lExchange.lastUnconfirmed;
-            logInfoP("Exchange last-unconfirmed: node=0x%06X cmd=0x%02X attempt=%u freq=%lu rxDone=%u crc=%u preamble=%u sync=%u irq=0x%04X len=%u rssi=%d",
+            const std::string lAge = lSnapshot.hasLastHeard
+                                         ? std::to_string(lSnapshot.lastHeardAgeMs)
+                                         : std::string("n/a");
+            logInfoP("Exchange last-unconfirmed: node=0x%06X cmd=0x%02X attempt=%u last_preamble=%u belief=%s age_ms=%s freq=%lu rxDone=%u crc=%u rxPreamble=%u sync=%u irq=0x%04X len=%u rssi=%d",
                      lSnapshot.nodeId,
                      static_cast<unsigned>(static_cast<uint8_t>(lSnapshot.command)),
                      static_cast<unsigned>(lSnapshot.attempt),
+                     static_cast<unsigned>(lSnapshot.preamble),
+                     twoWayWakeBeliefName(lSnapshot.wakeBelief),
+                     lAge.c_str(),
                      static_cast<unsigned long>(lSnapshot.frequencyHz),
                      lSnapshot.rxDone ? 1U : 0U,
                      lSnapshot.crcError ? 1U : 0U,

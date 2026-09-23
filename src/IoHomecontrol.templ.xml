@@ -70,6 +70,7 @@
                 <Parameter Id="%AID%_UP-%TT%%CC%097" Name="c%C%TwoWayAcei" ParameterType="%AID%_PT-IOHCTwoWayCommandProfile" Offset="62" BitOffset="0" Text="2W Befehlsprofil" Value="103" />
                 <Parameter Id="%AID%_UP-%TT%%CC%098" Name="c%C%TwoWayDiscoverConfirmMode" ParameterType="%AID%_PT-IOHCTwoWayDiscoverConfirmMode" Offset="53" BitOffset="6" Text="2W Discovery-Bestätigung" Value="1" />
                 <Parameter Id="%AID%_UP-%TT%%CC%099" Name="c%C%TwoWayKeyInitDelay" ParameterType="%AID%_PT-IOHCTwoWayKeyInitDelay" Offset="63" BitOffset="0" Text="2W Pause vor Schlüsselaustausch (ms)" Value="300" />
+                <Parameter Id="%AID%_UP-%TT%%CC%100" Name="c%C%TwoWayDiscoveryListenChannels" ParameterType="%AID%_PT-IOHCTwoWayDiscoveryListenChannels" Offset="65" BitOffset="0" Text="2W Discovery-Antwortkanäle" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%020" Name="c%C%SceneCount" ParameterType="%AID%_PT-IOHCSceneCount" Offset="13" BitOffset="0" Text="Anzahl Szenen" Value="0" />
                 <!-- Scene slot parameters 1..10 are generated from IoHomecontrol.scene.part.xml. -->
                 <op:usePart name="IOHCScene" xpath="//Parameters/*" />
@@ -118,6 +119,7 @@
               <ParameterRef Id="%AID%_UP-%TT%%CC%097_R-%TT%%CC%09701" RefId="%AID%_UP-%TT%%CC%097" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%098_R-%TT%%CC%09801" RefId="%AID%_UP-%TT%%CC%098" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%099_R-%TT%%CC%09901" RefId="%AID%_UP-%TT%%CC%099" />
+              <ParameterRef Id="%AID%_UP-%TT%%CC%100_R-%TT%%CC%10001" RefId="%AID%_UP-%TT%%CC%100" />
               <ParameterRef Id="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_UP-%TT%%CC%020" />
               <!-- Scene slot ParameterRefs 1..10 are generated from IoHomecontrol.scene.part.xml. -->
               <op:usePart name="IOHCScene" xpath="//ParameterRefs/*" />
@@ -391,6 +393,7 @@
                                 <ParameterRefRef RefId="%AID%_UP-%TT%%CC%088_R-%TT%%CC%08801" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
                                 <ParameterRefRef RefId="%AID%_UP-%TT%%CC%089_R-%TT%%CC%08901" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
                                 <ParameterRefRef RefId="%AID%_UP-%TT%%CC%090_R-%TT%%CC%09001" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%100_R-%TT%%CC%10001" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
                                 <ParameterRefRef RefId="%AID%_UP-%TT%%CC%098_R-%TT%%CC%09801" IndentLevel="1" HelpContext="IOHC-2W-Discovery-Bestaetigung" />
                                 <ParameterRefRef RefId="%AID%_UP-%TT%%CC%099_R-%TT%%CC%09901" IndentLevel="1" HelpContext="IOHC-2W-KeyInit-Verzoegerung" />
                               </when>

@@ -68,6 +68,26 @@ enum class OneWayDestinationMode : uint8_t
   Exact = 3
 };
 
+enum class TwoWayWakeBeliefUse : uint8_t
+{
+  NotLowPower = 0,
+  ExplicitOverride,
+  Disabled,
+  NoChannel,
+  Applied,
+};
+
+struct TwoWayPreamblePlan
+{
+  bool valid = false;
+  TwoWayWakeBeliefUse use = TwoWayWakeBeliefUse::NotLowPower;
+  TwoWayWakeBelief belief = TwoWayWakeBelief::Asleep;
+  uint16_t normalPreamble = IOHC_PREAMBLE_NORMAL_START;
+  uint16_t fixedPreamble = IOHC_PREAMBLE_SHORT;
+  bool hasLastHeard = false;
+  uint32_t lastHeardAgeMs = 0;
+};
+
 struct OneWayCopyShape
 {
   uint16_t preamble;
@@ -121,6 +141,8 @@ struct IoHomeQueueEntry
   bool twoWayTilt;                             // true: 2W tilt-only Execute payload
   uint8_t twoWayTiltPercent;
   uint8_t retries;
+  uint8_t maxAttempts;
+  TwoWayPreamblePlan twoWayPreamblePlan;
   bool active;
   uint8_t nameData[IOHC_NAME_MAX_SIZE]; // SetName payload (zero-padded, Latin-1)
   uint8_t nameLen;                      // actual name length (0 = not a SetName)
@@ -303,6 +325,11 @@ public:
     uint16_t lastIrq = 0;
     uint8_t lastLength = 0;
     int16_t rssi = 0;
+    uint16_t preamble = 0;
+    TwoWayWakeBeliefUse wakeBeliefUse = TwoWayWakeBeliefUse::NotLowPower;
+    TwoWayWakeBelief wakeBelief = TwoWayWakeBelief::Asleep;
+    bool hasLastHeard = false;
+    uint32_t lastHeardAgeMs = 0;
   };
 
   struct ExchangeDiagnostics
@@ -371,6 +398,10 @@ public:
                    IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2);
   bool sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
                    IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2, uint8_t iParam3);
+  bool sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                   IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2, uint8_t iParam3,
+                   uint8_t iMaxAttempts);
+  uint16_t normal2WStartPreamble() const;
 
   // Queue a command for a concrete 1W channel profile. This path does not
   // require a bound actuator node ID; targetNode=0 is a valid broadcast-only
@@ -1030,7 +1061,7 @@ private:
   uint8_t mLastResponseFreqIdx; // frequency index where last response was received
   TwoWayPowerClass mDiagnostic2WPowerClass = TwoWayPowerClass::Automatic;
   uint16_t mDiagnostic2WStartPreamble = 0; // 0 = derive from effective power class
-  bool mDiagnostic2WWakeBelief = false;
+  bool mDiagnostic2WWakeBelief = true;
   TwoWayDiscoverySettings mDiagnosticDiscoverySettings{};
   bool mPairDiagnosticTraceEnabled;
   ControllerState mLastPairDiagnosticTraceState;
@@ -1193,7 +1224,8 @@ private:
   // replies rotate off the broadcast request channel; unicast replies hold
   // the channel that carried their request.
   void serviceBackgroundRxScan();
-  void serviceBroadcastResponseScan(uint8_t iRequestFrequencyIndex);
+  void serviceBroadcastResponseScan(uint8_t iRequestFrequencyIndex,
+                                    TwoWayDiscoveryListenChannels iListenChannels = TwoWayDiscoveryListenChannels::SkipRequest);
   bool waitForLbtClear(LbtContext iContext);
   RadioError startRadioTransmit(const uint8_t *iBuffer, uint8_t iLen, LbtContext iLbtContext);
   RadioError startTransmitWithPreamble(const uint8_t *iBuffer, uint8_t iLen,
@@ -1229,6 +1261,7 @@ private:
   bool resolveLowPower2W(uint32_t iNodeId) const;
   bool pairingLowPower2W() const;
   uint16_t preambleFor2WRequest(const IoHomeFrame &iFrame) const;
+  void resolveTwoWayPreamblePlan(const IoHomeFrame &iFrame, IoHomeQueueEntry &ioEntry) const;
   uint16_t preambleForQueued2WAttempt(const IoHomeFrame &iFrame,
                                       const IoHomeQueueEntry &iEntry) const;
   TwoWayDiscoverySettings pairingDiscoverySettings() const;

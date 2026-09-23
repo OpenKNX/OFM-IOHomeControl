@@ -206,10 +206,18 @@
                 </TypeRestriction>
               </ParameterType>
               <ParameterType Id="%AID%_PT-IOHCTwoWayDiscoveryDestination" Name="IOHCTwoWayDiscoveryDestination">
-                <TypeRestriction Base="Value" SizeInBit="2">
+                <TypeRestriction Base="Value" SizeInBit="3">
                   <Enumeration Text="Automatisch nach Befehl" Value="0" Id="%ENID%" />
                   <Enumeration Text="0x00003B" Value="1" Id="%ENID%" />
                   <Enumeration Text="0x00003F" Value="2" Id="%ENID%" />
+                  <Enumeration Text="Licht 0x0001BB" Value="3" Id="%ENID%" />
+                  <Enumeration Text="Licht 0x0001BF" Value="4" Id="%ENID%" />
+                </TypeRestriction>
+              </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCTwoWayDiscoveryListenChannels" Name="IOHCTwoWayDiscoveryListenChannels">
+                <TypeRestriction Base="Value" SizeInBit="1">
+                  <Enumeration Text="Anfragekanal überspringen" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Alle drei Kanäle" Value="1" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
               <ParameterType Id="%AID%_PT-IOHCTwoWayDiscoveryFlag" Name="IOHCTwoWayDiscoveryFlag">

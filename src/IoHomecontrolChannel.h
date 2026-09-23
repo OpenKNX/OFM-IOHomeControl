@@ -42,6 +42,8 @@ public:
   void onCommandExchangeResult(IoHomeCommand iCommand, uint8_t iParam,
                                IoHomeCommandExchangeResult iResult);
   TwoWayWakeBelief twoWayWakeBeliefAt(uint32_t iNowMs, bool iStopCommand = false) const;
+  bool twoWayLastHeardAgeAt(uint32_t iNowMs, uint32_t &oAgeMs) const;
+  bool hasStopSettlePollPending() const;
   void onExchangeTimeout(bool iAuthenticatedUnconfirmed);
   void onRssiUpdate(uint8_t iScaledPercent);
   void logStatusSummary(float iCurrentPositionPercent, bool iHasCurrentPosition,
@@ -177,6 +179,7 @@ private:
   bool mHas2WMovingEvidence = false;
   uint32_t mLast2WHeardMs = 0;
   uint32_t mLast2WMovingEvidenceMs = 0;
+  bool mStopSettlePollPending = false;
   bool mStatusExpected = false; // device will auto-send StatusUpdate while tracking
   uint8_t mBatteryLevel = 0xFF; // 0xFF = unknown, 0-100 = percent
   bool mLocked = false;         // P2: channel lock
@@ -225,6 +228,7 @@ private:
   void sendSlatCommand(float iPercent);
   void sendVentilationPosition();
   void requestStatusPrivate();
+  bool requestStatus(bool iTrackedPoll);
   void publishPositionFeedback(float iPositionPercent, bool iLogMessage);
   void startStatusPollTracking(uint32_t iDelayMs);
   void clearStatusPollTracking();

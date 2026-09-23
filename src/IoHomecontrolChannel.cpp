@@ -42,6 +42,9 @@
 #ifndef ParamIOHC_cTwoWayDiscoveryPreamble
 #define ParamIOHC_cTwoWayDiscoveryPreamble 0
 #endif
+#ifndef ParamIOHC_cTwoWayDiscoveryListenChannels
+#define ParamIOHC_cTwoWayDiscoveryListenChannels 0
+#endif
 #ifndef ParamIOHC_cOneWayExecuteDestination
 #define ParamIOHC_cOneWayExecuteDestination 0
 #endif
@@ -224,6 +227,7 @@ void IoHomecontrolChannel::setup()
     const uint8_t lTwoWayDiscoveryAck = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryAck);
     const uint8_t lTwoWayDiscoveryLowPower = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryLowPower);
     const uint8_t lTwoWayDiscoveryPreamble = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryPreamble);
+    const uint8_t lTwoWayDiscoveryListenChannels = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryListenChannels);
     const uint8_t lTwoWayAcei = static_cast<uint8_t>(ParamIOHC_cTwoWayAcei);
     const bool lSilentOperation = ParamIOHC_cSilentOperation != 0;
 
@@ -275,7 +279,7 @@ void IoHomecontrolChannel::setup()
     TwoWayDiscoverySettings lDiscoverySettings;
     if (lTwoWayDiscoveryCommand <= static_cast<uint8_t>(TwoWayDiscoveryCommandMode::DiscoverSPE))
         lDiscoverySettings.command = static_cast<TwoWayDiscoveryCommandMode>(lTwoWayDiscoveryCommand);
-    if (lTwoWayDiscoveryDestination <= static_cast<uint8_t>(TwoWayDiscoveryDestinationMode::DiscoverAlt))
+    if (lTwoWayDiscoveryDestination <= static_cast<uint8_t>(TwoWayDiscoveryDestinationMode::LightingDiscoverAlt))
         lDiscoverySettings.destination = static_cast<TwoWayDiscoveryDestinationMode>(lTwoWayDiscoveryDestination);
     if (lTwoWayDiscoveryAck <= static_cast<uint8_t>(TwoWayDiscoveryFlagMode::On))
         lDiscoverySettings.ack = static_cast<TwoWayDiscoveryFlagMode>(lTwoWayDiscoveryAck);
@@ -283,6 +287,9 @@ void IoHomecontrolChannel::setup()
         lDiscoverySettings.lowPower = static_cast<TwoWayDiscoveryFlagMode>(lTwoWayDiscoveryLowPower);
     if (lTwoWayDiscoveryPreamble <= static_cast<uint8_t>(TwoWayDiscoveryPreambleMode::Short))
         lDiscoverySettings.preamble = static_cast<TwoWayDiscoveryPreambleMode>(lTwoWayDiscoveryPreamble);
+    lDiscoverySettings.listenChannels = lTwoWayDiscoveryListenChannels == 1
+                                            ? TwoWayDiscoveryListenChannels::All
+                                            : TwoWayDiscoveryListenChannels::SkipRequest;
     setConfigured2WDiscoverySettings(lDiscoverySettings);
     setConfigured1WTargetNodeId(lOneWayTargetNodeId);
     setConfigured1WBroadcastType(resolveOneWayBroadcastType(
@@ -363,7 +370,7 @@ void IoHomecontrolChannel::loop()
 
     if (mNextStatusPollMs != 0 && timeReached(lNow, mNextStatusPollMs))
     {
-        if (requestStatus())
+        if (requestStatus(true))
         {
             mNextStatusPollMs = 0;
             mSingleFollowUpPollPending = false;
@@ -1094,6 +1101,11 @@ void IoHomecontrolChannel::sendSlatCommand(float iPercent)
 
 bool IoHomecontrolChannel::requestStatus()
 {
+    return requestStatus(false);
+}
+
+bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll)
+{
     // 1W is one-way: the device cannot answer a 2W status request, so never
     // emit one (it would only trigger an endless failed-poll/retry loop).
     if (mIs1W)
@@ -1101,17 +1113,28 @@ bool IoHomecontrolChannel::requestStatus()
 
     logDebugP("Request status");
 
+    const uint8_t lMaxAttempts = IOHC_EXCHANGE_MAX_ATTEMPTS;
     if (!mIs1W && isTiltCapableDeviceType())
     {
-        const bool lQueued = mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private, 0x03, 0x20, 0x01);
+        const bool lQueued = mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private,
+                                                     0x03, 0x20, 0x01, lMaxAttempts);
         if (lQueued)
+        {
             mStatusPollTimer = delayTimerInit();
+            if (iTrackedPoll)
+                mStopSettlePollPending = false;
+        }
         return lQueued;
     }
 
-    const bool lQueued = mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private, 0x03);
+    const bool lQueued = mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private,
+                                                 0x03, 0xFF, 0xFF, lMaxAttempts);
     if (lQueued)
+    {
         mStatusPollTimer = delayTimerInit();
+        if (iTrackedPoll)
+            mStopSettlePollPending = false;
+    }
     return lQueued;
 }
 
@@ -1144,6 +1167,7 @@ void IoHomecontrolChannel::requestStatusPrivate()
 
 void IoHomecontrolChannel::startStatusPollTracking(uint32_t iDelayMs)
 {
+    mStopSettlePollPending = false;
     const uint32_t lNow = millis();
     const uint32_t lTrackingWindowMs = (mTravelDurationMs > 0)
                                            ? (mTravelDurationMs + kTrackedStatusEstimateBiasMs)
@@ -1159,6 +1183,7 @@ void IoHomecontrolChannel::startStatusPollTracking(uint32_t iDelayMs)
 
 void IoHomecontrolChannel::clearStatusPollTracking()
 {
+    mStopSettlePollPending = false;
     mNextStatusPollMs = 0;
     mPollTrackingDeadlineMs = 0;
     mSingleFollowUpPollPending = false;
@@ -1371,8 +1396,9 @@ void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8
         mLast2WHeardMs = millis();
     }
 
-    if (iCommand == IoHomeCommand::Execute && iParam != 0xD2 && iParam != 0xD8 &&
-        iResult == IoHomeCommandExchangeResult::Completed)
+    const bool lAccepted = iResult == IoHomeCommandExchangeResult::Completed ||
+                           iResult == IoHomeCommandExchangeResult::AuthenticatedUnconfirmed;
+    if (iCommand == IoHomeCommand::Execute && iParam != 0xD2 && iParam != 0xD8 && lAccepted)
     {
         mHas2WMovingEvidence = true;
         mLast2WMovingEvidenceMs = millis();
@@ -1385,6 +1411,7 @@ void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8
     {
     case IoHomeCommandExchangeResult::Completed:
         mHas2WMovingEvidence = false;
+        mStopSettlePollPending = true;
         clearStopTravelSnapshot();
         break;
     case IoHomeCommandExchangeResult::FailedBeforeAuthentication:
@@ -1393,6 +1420,8 @@ void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8
     case IoHomeCommandExchangeResult::AuthenticatedUnconfirmed:
         // The actuator authenticated the STOP, so replay/rollback is unsafe.
         // Keep the snapshot until a status update or a new movement resolves it.
+        mHas2WMovingEvidence = false;
+        mStopSettlePollPending = true;
         break;
     }
 }
@@ -1402,6 +1431,19 @@ TwoWayWakeBelief IoHomecontrolChannel::twoWayWakeBeliefAt(uint32_t iNowMs, bool 
     return ::twoWayWakeBelief(mHas2WMovingEvidence, mLast2WMovingEvidenceMs,
                               mHas2WHeardEvidence, mLast2WHeardMs,
                               iNowMs, iStopCommand);
+}
+
+bool IoHomecontrolChannel::twoWayLastHeardAgeAt(uint32_t iNowMs, uint32_t &oAgeMs) const
+{
+    if (!mHas2WHeardEvidence)
+        return false;
+    oAgeMs = static_cast<uint32_t>(iNowMs - mLast2WHeardMs);
+    return true;
+}
+
+bool IoHomecontrolChannel::hasStopSettlePollPending() const
+{
+    return mStopSettlePollPending;
 }
 
 void IoHomecontrolChannel::onExchangeTimeout(bool iAuthenticatedUnconfirmed)

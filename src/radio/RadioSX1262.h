@@ -77,6 +77,7 @@ public:
   RadioError setOutputPower(uint8_t iPower);
   RadioError setPreambleLength(uint16_t iSymbols);
   RadioError setPreambleLengthBlocking(uint16_t iSymbols);
+  uint16_t defaultStartPreamble() const { return 48; }
   RadioError setRxBandwidth(RadioSX1262RxBandwidth iBandwidth);
   RadioSX1262RxBandwidth rxBandwidth() const;
   RadioError startTransmit(const uint8_t *iData, uint8_t iLen);

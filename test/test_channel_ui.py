@@ -328,7 +328,11 @@ class ChannelUiTest(unittest.TestCase):
                 "3": "Authentifiziert SPE 0x2A"
             },
             "IOHCTwoWayDiscoveryDestination": {
-                "0": "Automatisch nach Befehl", "1": "0x00003B", "2": "0x00003F"
+                "0": "Automatisch nach Befehl", "1": "0x00003B", "2": "0x00003F",
+                "3": "Licht 0x0001BB", "4": "Licht 0x0001BF"
+            },
+            "IOHCTwoWayDiscoveryListenChannels": {
+                "0": "Anfragekanal überspringen", "1": "Alle drei Kanäle"
             },
             "IOHCTwoWayDiscoveryFlag": {
                 "0": "Automatisch nach Befehl", "1": "Aus", "2": "Ein"
@@ -358,6 +362,7 @@ class ChannelUiTest(unittest.TestCase):
             "c%C%TwoWayDiscoveryAck": "56",
             "c%C%TwoWayDiscoveryLowPower": "57",
             "c%C%TwoWayDiscoveryPreamble": "58",
+            "c%C%TwoWayDiscoveryListenChannels": "65",
         }.items():
             self.assertIn(name, parameters)
             self.assertEqual(parameters[name].get("Value"), "0")
@@ -369,7 +374,7 @@ class ChannelUiTest(unittest.TestCase):
         expert = self.template.find(".//k:ParameterBlock[@Name='ExpertSettings']", NS)
         two_way = expert.find("k:choose/k:when[@test='0']", NS)
         shown = {ref.get("RefId") for ref in two_way.findall("k:ParameterRefRef", NS)}
-        for suffix in ("086", "087", "088", "089", "090"):
+        for suffix in ("086", "087", "088", "089", "090", "100"):
             self.assertIn(f"%AID%_UP-%TT%%CC%{suffix}_R-%TT%%CC%{suffix}01", shown)
 
     def test_two_way_discovery_confirmation_policy_and_delay(self) -> None:

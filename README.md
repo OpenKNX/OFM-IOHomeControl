@@ -101,6 +101,8 @@ Because 1W devices do not acknowledge these frames, a successful local TX trace 
 
 A VELUX SSL solar roller shutter was paired successfully with an SX1262 by using `0x28`, destination `0x00003F`, ACK enabled, discovery `LOW_POWER` disabled, a 32-symbol discovery preamble, and discovery confirmation set to **Send**. Its `0x29` identifies the target as low power, but the accepted 32-symbol discovery preamble is retained as the upper limit for the directed `0x2C`, `0x31`, and optional `0x6F` START frames. The low-power flag remains set where required; `0x32` and `0x3D` still use their short continuation preambles.
 
+Measured behavior on that SSL matters for normal commands too: when resting, its low-power receiver needs the long 1024-symbol wake preamble; while the motor is moving it can ignore that long preamble but accept the normal directed START preamble. The controller therefore snapshots a wake belief at the start of each exchange and orders retries accordingly. This observation is specific to the tested VELUX SSL and is not assumed for every VELUX product.
+
 Receipt of `0x33` is the definitive successful key exchange. The following `0x6F SetConfig1` only requests automatic status feedback: rejection, silence, or a local TX error is reported as an optional configuration result and does not turn the pairing into a failure.
 
 ## Hardware Requirements
@@ -206,7 +208,8 @@ Useful diagnostic entry points include:
 - `iohcNN send1w-type open|close|stop|vent|force [TYPE|dst=typed|dst=all|dst=exact ADDR]` — test typed/all/exact 1W destinations.
 - `iohcNN 1wctrl reuse2w [MFG]` — diagnostic-only command to intentionally reuse the 2W identity for a 1W profile.
 - `iohc pairdiag on|off|status` — show compact pairing, TX, crypto, key, repeat and sequence diagnostics.
-- `iohc 2wdiag power auto|always|low` / `preamble auto|N` / `wake on|off` / `status` / `reset` — independently override the 2W power bit and directed START preamble in RAM for Issue #87-style hardware bisection. `wake on` is an experimental, runtime-only retry plan for low-power START frames (`awake`: short/long/short, `maybe-awake`: short/long/long, `asleep`: long/long/long); it is off by default, explicit preamble overrides win, and continuation/pairing frames are unchanged.
+- `iohc 2wdiag power auto|always|low` / `preamble auto|N` / `wake on|off` / `status` / `reset` — independently override the 2W power bit and directed START preamble in RAM. Wake-belief ordering is on by default for low-power START frames (`awake`: normal/long/normal, `maybe-awake`: normal/long/long, `asleep`: long/long/long); `wake off` restores long/long/long for troubleshooting. The normal value comes from the radio (SX1276: 32, SX1262: 48), explicit overrides win, and continuation, pairing, authentication-response, discovery, and 1W frames remain independent.
+- `iohc 2wdiag discovery destination auto|3b|3f|1bb|1bf` / `listen auto|skip|all` — exposes the generic and lighting-class discovery destinations and the discovery response-channel policy. `skip` remains the default.
 - `iohc radio rxbw 39.0|46.9|58.6|78.2|117.3|156.2|187.2` — SX1262-only runtime RX-bandwidth selection for reception A/B tests. The validated 58.6 kHz setting remains the startup default; Issue #119's 156.2 kHz result is useful but device-specific.
 - `iohc proto selftest` — run byte-exact protocol self-tests on-device.
 

@@ -68,6 +68,18 @@ the exact successful discovery preamble caps the directed `0x2C`, `0x31`, and
 optional `0x6F` START frames for that pairing transaction. The target's learned
 LOW_POWER flag is retained; `0x32` and `0x3D` remain short continuation frames.
 
+The discovery destination also offers the diagnostic lighting-class targets
+`0x0001BB` and `0x0001BF`. **2W Discovery-Antwortkanäle** defaults to skipping
+the request channel; choose **Alle drei Kanäle** only when testing a peer which
+answers on the request channel.
+
+For ordinary directed 2W START frames, the normal preamble is radio-specific:
+32 symbols on SX1276 and 48 on SX1262. Low-power wake-belief ordering is enabled
+by default and is resolved once per exchange. On the tested VELUX SSL, a resting
+receiver needed 1024 symbols, while the moving receiver accepted the normal
+shorter START and could ignore 1024. This is measured SSL behavior, not a claim
+about all VELUX products.
+
 `0x33` completes and persists the pairing. The later `0x6F SetConfig1` request is
 optional and only enables automatic status feedback when supported. Its rejection,
 timeout, or TX failure is shown as an optional configuration warning, not as a
@@ -82,8 +94,8 @@ snapshot.
 ## Compatibility and verification
 
 Existing parameter offsets and communication-object numbers remain stable. The
-per-channel memory union grows by two bytes for the key-init delay; the confirmation
-mode uses previously free bits. The display selectors remain ETS-only parameters
+per-channel memory union grows by three bytes for the key-init delay and discovery
+listen policy; the confirmation mode uses previously free bits. The display selectors remain ETS-only parameters
 outside device memory. Battery and RSSI objects remain enabled by default for
 existing installations; disabling them is an explicit project configuration change.
 

@@ -167,13 +167,14 @@ inline TwoWayWakeBelief twoWayWakeBelief(bool iHasMovingEvidence,
     return TwoWayWakeBelief::Asleep;
 }
 
-inline uint16_t twoWayWakePreamble(TwoWayWakeBelief iBelief, uint8_t iAttemptIndex)
+inline uint16_t twoWayWakePreamble(TwoWayWakeBelief iBelief, uint8_t iAttemptIndex,
+                                   uint16_t iNormalStartPreamble)
 {
     const uint8_t lAttempt = iAttemptIndex > 2 ? 2 : iAttemptIndex;
     if (iBelief == TwoWayWakeBelief::Awake)
-        return lAttempt == 1 ? 1024 : 32; // short, long, short
+        return lAttempt == 1 ? 1024 : iNormalStartPreamble; // normal, long, normal
     if (iBelief == TwoWayWakeBelief::MaybeAwake)
-        return lAttempt == 0 ? 32 : 1024; // short, long, long
+        return lAttempt == 0 ? iNormalStartPreamble : 1024; // normal, long, long
     return 1024;                          // asleep: always wake first
 }
 
@@ -204,6 +205,15 @@ enum class TwoWayDiscoveryDestinationMode : uint8_t
     Automatic = 0,
     DiscoverAll = 1, // 0x00003B
     DiscoverAlt = 2, // 0x00003F
+    LightingDiscoverAll = 3, // 0x0001BB
+    LightingDiscoverAlt = 4, // 0x0001BF
+};
+
+enum class TwoWayDiscoveryListenChannels : uint8_t
+{
+    Automatic = 0,
+    SkipRequest = 1,
+    All = 2,
 };
 
 enum class TwoWayDiscoveryFlagMode : uint8_t
@@ -237,6 +247,7 @@ struct TwoWayDiscoverySettings
     TwoWayDiscoveryFlagMode ack = TwoWayDiscoveryFlagMode::Automatic;
     TwoWayDiscoveryFlagMode lowPower = TwoWayDiscoveryFlagMode::Automatic;
     TwoWayDiscoveryPreambleMode preamble = TwoWayDiscoveryPreambleMode::Automatic;
+    TwoWayDiscoveryListenChannels listenChannels = TwoWayDiscoveryListenChannels::Automatic;
 };
 
 struct TwoWayDiscoveryFrameOptions
@@ -246,6 +257,7 @@ struct TwoWayDiscoveryFrameOptions
     bool lowPower = false;
     bool ackCapable = false;
     uint16_t preamble = 1024;
+    TwoWayDiscoveryListenChannels listenChannels = TwoWayDiscoveryListenChannels::SkipRequest;
 };
 
 // Configured 1W enrollment completion policy. Automatic stays conservative:

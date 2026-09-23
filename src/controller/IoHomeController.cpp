@@ -1186,6 +1186,8 @@ TwoWayDiscoverySettings IoHomeController::mergeTwoWayDiscoverySettings(
         lMerged.lowPower = iOverride.lowPower;
     if (iOverride.preamble != TwoWayDiscoveryPreambleMode::Automatic)
         lMerged.preamble = iOverride.preamble;
+    if (iOverride.listenChannels != TwoWayDiscoveryListenChannels::Automatic)
+        lMerged.listenChannels = iOverride.listenChannels;
     return lMerged;
 }
 
@@ -1219,6 +1221,12 @@ TwoWayDiscoveryFrameOptions IoHomeController::resolveTwoWayDiscoveryOptions(
     case TwoWayDiscoveryDestinationMode::DiscoverAlt:
         lOptions.destination = 0x00003F;
         break;
+    case TwoWayDiscoveryDestinationMode::LightingDiscoverAll:
+        lOptions.destination = 0x0001BB;
+        break;
+    case TwoWayDiscoveryDestinationMode::LightingDiscoverAlt:
+        lOptions.destination = 0x0001BF;
+        break;
     default:
         break;
     }
@@ -1240,6 +1248,9 @@ TwoWayDiscoveryFrameOptions IoHomeController::resolveTwoWayDiscoveryOptions(
     default:
         break;
     }
+    lOptions.listenChannels = iSettings.listenChannels == TwoWayDiscoveryListenChannels::All
+                                  ? TwoWayDiscoveryListenChannels::All
+                                  : TwoWayDiscoveryListenChannels::SkipRequest;
     return lOptions;
 }
 
@@ -1418,6 +1429,10 @@ void IoHomeController::init()
     mRetryAtMs = 0;
     mExchangeStartMs = 0;
     mDutyCycleWindowStart = millis();
+    logInfoP("2W wake belief: %s; normal directed START preamble: %s=%u",
+             mDiagnostic2WWakeBelief ? "on" : "off",
+             mDiagnostic2WStartPreamble == 0 ? "auto" : "override",
+             static_cast<unsigned>(normal2WStartPreamble()));
 }
 
 void IoHomeController::setModule(IoHomecontrol *iModule)
@@ -1690,6 +1705,14 @@ bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
 bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                    IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2, uint8_t iParam3)
 {
+    return sendCommand(iDestNodeId, iEncKey, iCmd, iParam, iParam2, iParam3,
+                       IOHC_EXCHANGE_MAX_ATTEMPTS);
+}
+
+bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                                   IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2, uint8_t iParam3,
+                                   uint8_t iMaxAttempts)
+{
     if (iCmd == IoHomeCommand::WritePrivate && iParam == 0x03)
     {
         if (iParam2 < IOHC_COZY_TEMP_MIN_TENTHS || iParam2 > IOHC_COZY_TEMP_MAX_TENTHS)
@@ -1756,6 +1779,7 @@ bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
     lEntry.oneWayExactDestination = 0;
     lEntry.sourceChannelIndex = 0xFF;
     lEntry.retries = 0;
+    lEntry.maxAttempts = iMaxAttempts == 0 ? 1 : iMaxAttempts;
     lEntry.active = true;
     return queuePush(lEntry);
 }
@@ -2166,6 +2190,8 @@ bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
     if (lNext == mQueueTail)
         return false; // queue full
     mCmdQueue[mQueueHead] = iEntry;
+    if (mCmdQueue[mQueueHead].maxAttempts == 0)
+        mCmdQueue[mQueueHead].maxAttempts = IOHC_EXCHANGE_MAX_ATTEMPTS;
     mQueueHead = lNext;
     return true;
 }
@@ -2304,28 +2330,79 @@ uint16_t IoHomeController::preambleFor2WRequest(const IoHomeFrame &iFrame) const
 
     return (iFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0
                ? IOHC_PREAMBLE_LONG
-               : IOHC_PREAMBLE_NORMAL_START;
+               : normal2WStartPreamble();
 }
 
-uint16_t IoHomeController::preambleForQueued2WAttempt(const IoHomeFrame &iFrame,
+uint16_t IoHomeController::normal2WStartPreamble() const
+{
+    return mDiagnostic2WStartPreamble != 0
+               ? mDiagnostic2WStartPreamble
+               : mRadio.defaultStartPreamble();
+}
+
+void IoHomeController::resolveTwoWayPreamblePlan(const IoHomeFrame &iFrame,
+                                                  IoHomeQueueEntry &ioEntry) const
+{
+    TwoWayPreamblePlan &lPlan = ioEntry.twoWayPreamblePlan;
+    lPlan = TwoWayPreamblePlan{};
+    lPlan.valid = true;
+    lPlan.normalPreamble = mRadio.defaultStartPreamble();
+    lPlan.fixedPreamble = preambleFor2WRequest(iFrame);
+
+    if ((iFrame.ctrlByte0 & IOHC_CTRL0_START) == 0 ||
+        (iFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0)
+    {
+        lPlan.use = TwoWayWakeBeliefUse::NotLowPower;
+        return;
+    }
+    if (mDiagnostic2WStartPreamble != 0)
+    {
+        lPlan.use = TwoWayWakeBeliefUse::ExplicitOverride;
+        lPlan.fixedPreamble = mDiagnostic2WStartPreamble;
+        return;
+    }
+    if (!mDiagnostic2WWakeBelief)
+    {
+        lPlan.use = TwoWayWakeBeliefUse::Disabled;
+        lPlan.fixedPreamble = IOHC_PREAMBLE_LONG;
+        return;
+    }
+
+    IoHomecontrolChannel *lChannel = channelForQueueEntry(ioEntry);
+    if (!lChannel)
+    {
+        lPlan.use = TwoWayWakeBeliefUse::NoChannel;
+        lPlan.fixedPreamble = IOHC_PREAMBLE_LONG;
+        return;
+    }
+
+    const uint32_t lNow = millis();
+    const bool lStop = ioEntry.command == IoHomeCommand::Execute && ioEntry.param == 0xD2;
+    lPlan.use = TwoWayWakeBeliefUse::Applied;
+    lPlan.belief = lChannel->twoWayWakeBeliefAt(lNow, lStop);
+    lPlan.hasLastHeard = lChannel->twoWayLastHeardAgeAt(lNow, lPlan.lastHeardAgeMs);
+}
+
+uint16_t IoHomeController::preambleForQueued2WAttempt(const IoHomeFrame &,
                                                        const IoHomeQueueEntry &iEntry) const
 {
-    const uint16_t lNormal = preambleFor2WRequest(iFrame);
-    if (!mDiagnostic2WWakeBelief || mDiagnostic2WStartPreamble != 0 ||
-        (iFrame.ctrlByte0 & IOHC_CTRL0_START) == 0 ||
-        (iFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0)
-        return lNormal;
-
-    IoHomecontrolChannel *lChannel = channelForQueueEntry(iEntry);
-    if (!lChannel)
-        return lNormal;
-
-    const bool lStop = iEntry.command == IoHomeCommand::Execute && iEntry.param == 0xD2;
-    const TwoWayWakeBelief lBelief = lChannel->twoWayWakeBeliefAt(millis(), lStop);
-    const uint16_t lPreamble = twoWayWakePreamble(lBelief, iEntry.retries);
-    logInfoP("2WWake: node=0x%06X belief=%s attempt=%u preamble=%u",
-             iEntry.destNodeId, twoWayWakeBeliefName(lBelief),
-             static_cast<unsigned>(iEntry.retries + 1U), static_cast<unsigned>(lPreamble));
+    const TwoWayPreamblePlan &lPlan = iEntry.twoWayPreamblePlan;
+    const uint16_t lPreamble = lPlan.use == TwoWayWakeBeliefUse::Applied
+                                   ? twoWayWakePreamble(lPlan.belief, iEntry.retries,
+                                                       lPlan.normalPreamble)
+                                   : lPlan.fixedPreamble;
+    static const char *const kUseNames[] = {"not_low_power", "override", "off", "no_channel", "applied"};
+    if (lPlan.hasLastHeard)
+        logInfoP("2W try=%u cmd=0x%02X preamble=%u belief=%s use=%s age_ms=%lu",
+                 static_cast<unsigned>(iEntry.retries + 1U), static_cast<unsigned>(iEntry.command),
+                 static_cast<unsigned>(lPreamble), twoWayWakeBeliefName(lPlan.belief),
+                 kUseNames[static_cast<uint8_t>(lPlan.use)],
+                 static_cast<unsigned long>(lPlan.lastHeardAgeMs));
+    else
+        logInfoP("2W try=%u cmd=0x%02X preamble=%u belief=%s use=%s age_ms=n/a",
+                 static_cast<unsigned>(iEntry.retries + 1U), static_cast<unsigned>(iEntry.command),
+                 static_cast<unsigned>(lPreamble), twoWayWakeBeliefName(lPlan.belief),
+                 kUseNames[static_cast<uint8_t>(lPlan.use)]);
     return lPreamble;
 }
 
@@ -3028,11 +3105,18 @@ void IoHomeController::recordExchangeFailure(const IoHomeQueueEntry &iEntry,
         lSnapshot.lastIrq = lHealth.lastIrqStatus;
         lSnapshot.lastLength = lHealth.lastRxLen;
         lSnapshot.rssi = lHealth.lastRssi;
+        lSnapshot.preamble = preambleForQueued2WAttempt(mTxFrame, iEntry);
+        lSnapshot.wakeBeliefUse = iEntry.twoWayPreamblePlan.use;
+        lSnapshot.wakeBelief = iEntry.twoWayPreamblePlan.belief;
+        lSnapshot.hasLastHeard = iEntry.twoWayPreamblePlan.hasLastHeard;
+        lSnapshot.lastHeardAgeMs = iEntry.twoWayPreamblePlan.lastHeardAgeMs;
 
-        logInfoP("Exchange unconfirmed: node=0x%06X cmd=0x%02X attempt=%u sawChallenge=1 freq=%lu rxDone=%u crcError=%u lastIrq=0x%04X lastLen=%u rssi=%d preambleDetected=%u syncDetected=%u",
+        logInfoP("Exchange unconfirmed: node=0x%06X cmd=0x%02X attempt=%u last_preamble=%u belief=%s freq=%lu rxDone=%u crcError=%u lastIrq=0x%04X lastLen=%u rssi=%d preambleDetected=%u syncDetected=%u",
                  lSnapshot.nodeId,
                  static_cast<unsigned>(static_cast<uint8_t>(lSnapshot.command)),
                  static_cast<unsigned>(lSnapshot.attempt),
+                 static_cast<unsigned>(lSnapshot.preamble),
+                 twoWayWakeBeliefName(lSnapshot.wakeBelief),
                  static_cast<unsigned long>(lSnapshot.frequencyHz),
                  lSnapshot.rxDone ? 1U : 0U,
                  lSnapshot.crcError ? 1U : 0U,
@@ -4113,15 +4197,17 @@ void IoHomeController::serviceBackgroundRxScan()
     }
 }
 
-void IoHomeController::serviceBroadcastResponseScan(uint8_t iRequestFrequencyIndex)
+void IoHomeController::serviceBroadcastResponseScan(uint8_t iRequestFrequencyIndex,
+                                                     TwoWayDiscoveryListenChannels iListenChannels)
 {
     if (!mRxScanEnabled || mRadio.state() != RadioState::Receiving ||
         iRequestFrequencyIndex >= IOHC_NUM_FREQUENCIES)
         return;
 
     const uint32_t lNow = micros();
-    const bool lOnRequestChannel = mCurrentFreqIdx == iRequestFrequencyIndex;
-    if (!lOnRequestChannel && lNow - mRxScanLastSwitch < mRxScanIntervalUs)
+    const bool lOnSkippedRequestChannel = iListenChannels != TwoWayDiscoveryListenChannels::All &&
+                                          mCurrentFreqIdx == iRequestFrequencyIndex;
+    if (!lOnSkippedRequestChannel && lNow - mRxScanLastSwitch < mRxScanIntervalUs)
         return;
 
     // Never retune while a frame is being demodulated. A broadcast response
@@ -4135,7 +4221,8 @@ void IoHomeController::serviceBroadcastResponseScan(uint8_t iRequestFrequencyInd
     do
     {
         lNextFreqIdx = (lNextFreqIdx + 1) % IOHC_NUM_FREQUENCIES;
-    } while (lNextFreqIdx == iRequestFrequencyIndex);
+    } while (iListenChannels != TwoWayDiscoveryListenChannels::All &&
+             lNextFreqIdx == iRequestFrequencyIndex);
 
     if (mRadio.setFrequency(IOHC_FREQUENCIES[lNextFreqIdx]) == RadioError::None)
     {
@@ -5008,7 +5095,11 @@ void IoHomeController::processIdle()
             mExchangeStartMs = millis();
             beginExchangeDiagnosticsWindow();
             if (buildTxFrame(mCurrentCmd))
+            {
+                if ((mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) == 0)
+                    resolveTwoWayPreamblePlan(mTxFrame, mCurrentCmd);
                 mState = ControllerState::TxPending;
+            }
             else
             {
                 notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
@@ -5303,7 +5394,10 @@ void IoHomeController::processWaitResponse()
 
         // EXCHANGE_MAX_ATTEMPTS counts the initial transmission. Do not add a
         // trailing retry gap when the last permitted attempt has timed out.
-        if (!mCurrentCmd.active || mCurrentCmd.retries >= IOHC_MAX_RETRIES ||
+        const uint8_t lMaxRetries = mCurrentCmd.maxAttempts > 0
+                                        ? static_cast<uint8_t>(mCurrentCmd.maxAttempts - 1U)
+                                        : 0U;
+        if (!mCurrentCmd.active || mCurrentCmd.retries >= lMaxRetries ||
             millis() - mExchangeStartMs >= IOHC_EXCHANGE_TOTAL_BUDGET_MS)
         {
             failExchange();
@@ -5331,7 +5425,7 @@ void IoHomeController::processWaitResponse()
 
         // No response — retry the controller-originated 2W command on CH2.
         // RX may scan/hop while waiting, but TX must not be moved to CH1/CH3.
-        if (mCurrentCmd.active && mCurrentCmd.retries < IOHC_MAX_RETRIES)
+        if (mCurrentCmd.active && mCurrentCmd.retries < lMaxRetries)
         {
             const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
             const bool lAfterChallenge = mSawChallenge;
@@ -5557,7 +5651,9 @@ void IoHomeController::processPairWaitDiscoveryResponse()
         return;
     }
 
-    serviceBroadcastResponseScan(frequencyIndexForHz(kNormal2WTxFreqHz));
+    const TwoWayDiscoveryFrameOptions lOptions =
+        resolveTwoWayDiscoveryOptions(IoHomeCommand::DiscoverRequest, pairingDiscoverySettings());
+    serviceBroadcastResponseScan(frequencyIndexForHz(kNormal2WTxFreqHz), lOptions.listenChannels);
 
     if (millis() - mStateTimer > 2000) // retry cadence; TX stays on CH2
     {
@@ -7250,7 +7346,12 @@ void IoHomeController::processDiscovery()
             if (mDiscoverySweep == 0)
                 serviceBackgroundRxScan();
             else
-                serviceBroadcastResponseScan(lRequestFreqIdx);
+            {
+                const TwoWayDiscoveryFrameOptions lOptions =
+                    resolveTwoWayDiscoveryOptions(IoHomeCommand::DiscoverSPERequest,
+                                                  mDiagnosticDiscoverySettings);
+                serviceBroadcastResponseScan(lRequestFreqIdx, lOptions.listenChannels);
+            }
         }
 
         const unsigned long lListenElapsedMs = static_cast<unsigned long>(millis() - mStateTimer);

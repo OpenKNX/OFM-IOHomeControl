@@ -237,6 +237,8 @@ public:
     mHas2WMovingEvidence = iMoving;
     if (iMoving)
       mLast2WMovingEvidenceMs = ioHomeTestMillis();
+    else
+      mStopSettlePollPending = false;
   }
   void onSlatFeedback(float iPercent)
   {
@@ -279,15 +281,18 @@ public:
       mHas2WHeardEvidence = true;
       mLast2WHeardMs = ioHomeTestMillis();
     }
-    if (iCommand == IoHomeCommand::Execute && iParam != 0xD2 && iParam != 0xD8 &&
-        iResult == IoHomeCommandExchangeResult::Completed)
+    const bool lAccepted = iResult == IoHomeCommandExchangeResult::Completed ||
+                           iResult == IoHomeCommandExchangeResult::AuthenticatedUnconfirmed;
+    if (iCommand == IoHomeCommand::Execute && iParam != 0xD2 && iParam != 0xD8 && lAccepted)
     {
       mHas2WMovingEvidence = true;
       mLast2WMovingEvidenceMs = ioHomeTestMillis();
     }
-    if (iCommand == IoHomeCommand::Execute && iParam == 0xD2 &&
-        iResult == IoHomeCommandExchangeResult::Completed)
+    if (iCommand == IoHomeCommand::Execute && iParam == 0xD2 && lAccepted)
+    {
       mHas2WMovingEvidence = false;
+      mStopSettlePollPending = true;
+    }
   }
   TwoWayWakeBelief twoWayWakeBeliefAt(uint32_t iNowMs, bool iStopCommand = false) const
   {
@@ -295,6 +300,14 @@ public:
                               mHas2WHeardEvidence, mLast2WHeardMs,
                               iNowMs, iStopCommand);
   }
+  bool twoWayLastHeardAgeAt(uint32_t iNowMs, uint32_t &oAgeMs) const
+  {
+    if (!mHas2WHeardEvidence)
+      return false;
+    oAgeMs = static_cast<uint32_t>(iNowMs - mLast2WHeardMs);
+    return true;
+  }
+  bool hasStopSettlePollPending() const { return mStopSettlePollPending; }
   void onExchangeTimeout(bool iAuthenticatedUnconfirmed)
   {
     uint16_t &lCounter = iAuthenticatedUnconfirmed
@@ -381,6 +394,7 @@ private:
   bool mHas2WMovingEvidence = false;
   uint32_t mLast2WHeardMs = 0;
   uint32_t mLast2WMovingEvidenceMs = 0;
+  bool mStopSettlePollPending = false;
   bool mHasSlatFeedback = false;
   float mSlatFeedback = 0.0f;
   bool mHasBatteryLevel = false;

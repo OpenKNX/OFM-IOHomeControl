@@ -4976,18 +4976,55 @@ TEST(two_way_wake_belief_boundaries_and_retry_plan)
     ASSERT_EQ(twoWayWakeBelief(false, 0, false, 0, lNow, true),
               TwoWayWakeBelief::Awake);
 
-    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Awake, 0), 32);
-    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Awake, 1), 1024);
-    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Awake, 2), 32);
-    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::MaybeAwake, 0), 32);
-    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::MaybeAwake, 1), 1024);
-    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::MaybeAwake, 2), 1024);
-    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Asleep, 0), 1024);
-    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Asleep, 2), 1024);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Awake, 0, 32), 32);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Awake, 1, 32), 1024);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Awake, 2, 32), 32);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::MaybeAwake, 0, 32), 32);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::MaybeAwake, 1, 32), 1024);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::MaybeAwake, 2, 32), 1024);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Asleep, 0, 32), 1024);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Asleep, 2, 32), 1024);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Awake, 0, 48), 48);
+    ASSERT_EQ(twoWayWakePreamble(TwoWayWakeBelief::Awake, 2, 48), 48);
 
     // Unsigned elapsed-time arithmetic remains valid across millis() wrap.
     ASSERT_EQ(twoWayWakeBelief(false, 0, true, UINT32_MAX - 9U, 10U),
               TwoWayWakeBelief::MaybeAwake);
+}
+
+TEST(radio_test_stub_directed_start_default_is_configurable)
+{
+    IoHomeController lController;
+    ASSERT_EQ(lController.radio().defaultStartPreamble(), 48);
+    ASSERT_EQ(lController.normal2WStartPreamble(), 48);
+    lController.radio().testSetDefaultStartPreamble(32);
+    ASSERT_EQ(lController.normal2WStartPreamble(), 32);
+    lController.setDiagnostic2WStartPreamble(64);
+    ASSERT_EQ(lController.normal2WStartPreamble(), 64);
+}
+
+TEST(accepted_movement_and_stop_update_wake_evidence)
+{
+    IoHomecontrolChannel lChannel;
+    ioHomeTestSetMillis(1000);
+    lChannel.onCommandExchangeResult(IoHomeCommand::Execute, 50,
+                                     IoHomeCommandExchangeResult::AuthenticatedUnconfirmed);
+    ASSERT_EQ(lChannel.twoWayWakeBeliefAt(1000), TwoWayWakeBelief::Awake);
+
+    ioHomeTestSetMillis(2000);
+    lChannel.onCommandExchangeResult(IoHomeCommand::Execute, 0xD2,
+                                     IoHomeCommandExchangeResult::AuthenticatedUnconfirmed);
+    ASSERT_TRUE(lChannel.hasStopSettlePollPending());
+    ASSERT_EQ(lChannel.twoWayWakeBeliefAt(2000), TwoWayWakeBelief::MaybeAwake);
+
+    lChannel.onStatusUpdate(false);
+    ASSERT_TRUE(!lChannel.hasStopSettlePollPending());
+    ASSERT_EQ(lChannel.twoWayWakeBeliefAt(2000), TwoWayWakeBelief::MaybeAwake);
+
+    IoHomecontrolChannel lFailed;
+    lFailed.onCommandExchangeResult(IoHomeCommand::Execute, 50,
+                                    IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+    ASSERT_EQ(lFailed.twoWayWakeBeliefAt(2000), TwoWayWakeBelief::Asleep);
 }
 
 TEST(golden_rf_corpus_public_trailer_mac_verifies)
@@ -8438,6 +8475,40 @@ TEST(discovery_ack_and_low_power_are_independent_of_start)
     ASSERT_EQ(lFrame.ctrlByte1, 0x00);
 }
 
+TEST(discovery_destination_and_listen_options_resolve_independently)
+{
+    struct Vector
+    {
+        TwoWayDiscoveryDestinationMode mode;
+        uint32_t destination;
+    };
+    const Vector kVectors[] = {
+        {TwoWayDiscoveryDestinationMode::DiscoverAll, 0x00003B},
+        {TwoWayDiscoveryDestinationMode::DiscoverAlt, 0x00003F},
+        {TwoWayDiscoveryDestinationMode::LightingDiscoverAll, 0x0001BB},
+        {TwoWayDiscoveryDestinationMode::LightingDiscoverAlt, 0x0001BF},
+    };
+    for (const Vector &lVector : kVectors)
+    {
+        TwoWayDiscoverySettings lSettings;
+        lSettings.destination = lVector.mode;
+        lSettings.ack = TwoWayDiscoveryFlagMode::On;
+        lSettings.lowPower = TwoWayDiscoveryFlagMode::Off;
+        const TwoWayDiscoveryFrameOptions lOptions =
+            IoHomeController::resolveTwoWayDiscoveryOptions(IoHomeCommand::DiscoverRequest, lSettings);
+        ASSERT_EQ(lOptions.destination, lVector.destination);
+        ASSERT_TRUE(lOptions.ackCapable);
+        ASSERT_TRUE(!lOptions.lowPower);
+        ASSERT_EQ(lOptions.listenChannels, TwoWayDiscoveryListenChannels::SkipRequest);
+    }
+
+    TwoWayDiscoverySettings lAll;
+    lAll.listenChannels = TwoWayDiscoveryListenChannels::All;
+    ASSERT_EQ(IoHomeController::resolveTwoWayDiscoveryOptions(
+                  IoHomeCommand::DiscoverRequest, lAll).listenChannels,
+              TwoWayDiscoveryListenChannels::All);
+}
+
 TEST(discovery_confirmation_builder_matches_power_and_ack_policy)
 {
     IoHomeFrame lFrame;
@@ -8546,7 +8617,7 @@ TEST(controller_command_scan_uses_target_power_class_preamble)
         ASSERT_TRUE(!lPacket.empty());
         ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
         ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
-        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), 48);
     }
 }
 
@@ -8797,7 +8868,7 @@ TEST(controller_2w_command_defaults_to_always_alive)
     ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
     ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), 48);
 }
 
 TEST(controller_2w_command_can_clear_low_power_for_mains_device)
@@ -8832,7 +8903,7 @@ TEST(controller_2w_command_can_clear_low_power_for_mains_device)
     ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
     ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), 48);
 }
 
 TEST(controller_ets_always_alive_overrides_learned_low_power)
@@ -8863,7 +8934,7 @@ TEST(controller_ets_always_alive_overrides_learned_low_power)
     ASSERT_TRUE(!lPacket.empty());
     ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), 48);
 }
 
 TEST(controller_ets_low_power_overrides_learned_always_alive)
@@ -8968,7 +9039,7 @@ TEST(controller_runtime_2w_wake_belief_uses_confirmed_channel_evidence)
     lController.loop();
 
     ASSERT_TRUE(lController.diagnostic2WWakeBelief());
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), 48);
 }
 
 TEST(controller_send_identify_builds_authenticated_payload)
@@ -9004,7 +9075,7 @@ TEST(controller_send_identify_builds_authenticated_payload)
     ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
     ASSERT_EQ(lFrame.getDestNodeId(), lDeviceNodeId);
     ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), 48);
     ASSERT_EQ(lFrame.dataLen, 2);
     ASSERT_EQ(lFrame.data[0], IOHC_ORIGINATOR_USER);
     ASSERT_EQ(lFrame.data[1], 0xFF);
@@ -9157,7 +9228,7 @@ static bool retryKeepsStartForQueued2WCommand(IoHomeCommand iCommand, uint8_t iP
         return false;
     if ((lFirstFrame.ctrlByte0 & IOHC_CTRL0_START) == 0)
         return false;
-    if (lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_NORMAL_START)
+    if (lController.radio().testLastPreambleLength() != lController.normal2WStartPreamble())
         return false;
 
     lController.loop(); // TxInProgress -> WaitResponse
@@ -9174,7 +9245,7 @@ static bool retryKeepsStartForQueued2WCommand(IoHomeCommand iCommand, uint8_t iP
     const auto &lRetryPacket = lController.radio().testLastTransmittedPacket();
     if (lRetryPacket.empty())
         return false;
-    if (lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_NORMAL_START)
+    if (lController.radio().testLastPreambleLength() != lController.normal2WStartPreamble())
         return false;
 
     IoHomeFrame lRetryFrame;
@@ -9212,7 +9283,7 @@ static bool retryKeepsStartForQueued2WSetName()
         return false;
     if (lFirstFrame.commandId != IoHomeCommand::SetName ||
         (lFirstFrame.ctrlByte0 & IOHC_CTRL0_START) == 0 ||
-        lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_NORMAL_START)
+        lController.radio().testLastPreambleLength() != lController.normal2WStartPreamble())
         return false;
 
     lController.loop(); // TxInProgress -> WaitResponse
@@ -9227,7 +9298,7 @@ static bool retryKeepsStartForQueued2WSetName()
     lController.loop(); // TxPending -> TxInProgress, retry TX
 
     const auto &lRetryPacket = lController.radio().testLastTransmittedPacket();
-    if (lRetryPacket.empty() || lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_NORMAL_START)
+    if (lRetryPacket.empty() || lController.radio().testLastPreambleLength() != lController.normal2WStartPreamble())
         return false;
 
     IoHomeFrame lRetryFrame;
@@ -9798,7 +9869,7 @@ TEST(controller_pairing_discovery_learns_always_alive)
     ASSERT_TRUE(deserializeFrameForTest(lConfirmFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lConfirmFrame.commandId, IoHomeCommand::Confirmation);
     ASSERT_TRUE((lConfirmFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), 48);
 
     IoHomeFrame lAck;
     buildDiscoveryConfirmationAckFrame(lAck, lRemoteNodeId, lDeviceNodeId);
@@ -9840,6 +9911,34 @@ TEST(pairing_broadcast_scan_skips_request_channel_and_unicast_wait_holds_it)
         ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
         lController.loop();
         ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_3);
+    }
+
+    // The optional all-channel policy rotates through CH3, CH1 and back to
+    // the CH2 request channel.
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, 0, lKey);
+        TwoWayDiscoverySettings lSettings;
+        lSettings.listenChannels = TwoWayDiscoveryListenChannels::All;
+        lChannel.setConfigured2WDiscoverySettings(lSettings);
+        ASSERT_TRUE(lController.startPairing(0));
+        lController.loop();
+        ASSERT_EQ(lController.state(), ControllerState::PairWaitDiscoveryResponse);
+        lController.loop(); // enter RX; All observes the normal dwell on CH2
+        ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
+
+        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+        lController.loop();
+        ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_3);
+        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+        lController.loop();
+        ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_1);
+        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+        lController.loop();
+        ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
     }
 
     // Key-init is unicast on CH2. Even with the global scan enabled, its
@@ -9904,7 +10003,7 @@ TEST(controller_experimental_2w_pairing_can_use_discovery_confirmation)
     ASSERT_EQ(lConfirmationFrame.getDestNodeId(), lDeviceNodeId);
     ASSERT_EQ(lConfirmationFrame.dataLen, 0);
     ASSERT_TRUE((lConfirmationFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), 48);
 }
 
 TEST(controller_experimental_launch_key_transfer_uses_learned_low_power)
@@ -9973,7 +10072,7 @@ TEST(controller_2w_pairing_succeeds_when_setconfig1_times_out)
     ASSERT_EQ(lChannel.getNodeId(), lDeviceNodeId);
     ASSERT_EQ(lController.state(), ControllerState::PairWaitSetConfig1Response);
     ASSERT_TRUE((lSetConfig1.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), 48);
 
     ioHomeTestAdvanceMillis(2001);
     lController.loop();
@@ -12303,6 +12402,62 @@ TEST(controller_2w_exchange_uses_three_total_attempts_without_trailing_gap)
               IoHomeCommandExchangeResult::FailedBeforeAuthentication);
 }
 
+TEST(controller_exchange_uses_per_request_attempt_budget)
+{
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  0x831F2A, 0x7E9E6E, lKey);
+    ASSERT_TRUE(lController.sendCommand(0x7E9E6E, lKey, IoHomeCommand::Private,
+                                        0x03, 0xFF, 0xFF, 1));
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    lController.loop();
+    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::Idle);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
+}
+
+TEST(controller_wake_belief_is_snapshotted_for_all_retries)
+{
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  0x831F2A, 0x7E9E6E, lKey);
+    lChannel.setConfigured2WPowerClass(TwoWayPowerClass::LowPower);
+    ioHomeTestSetMillis(1000);
+    lChannel.onStatusUpdate(true);
+    ioHomeTestSetMillis(120900); // moving evidence is still 100 ms inside the 120 s window
+
+    ASSERT_TRUE(lController.sendCommand(0x7E9E6E, lKey, IoHomeCommand::Private, 0x03));
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), 48);
+    lController.loop();
+
+    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    lController.loop();
+    ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
+    lController.loop();
+    lController.loop();
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+    lController.loop();
+
+    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    lController.loop();
+    ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
+    lController.loop();
+    lController.loop();
+    // Awake was resolved at exchange start, so attempt three returns to the
+    // radio-specific normal preamble even though the live evidence is stale.
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), 48);
+}
+
 TEST(controller_2w_exchange_budget_prevents_late_retry)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -12392,7 +12547,7 @@ TEST(byte_vector_controller_2w_execute_payloads_and_retry_start)
         ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFirstFrame));
         ASSERT_EQ(lFirstFrame.commandId, IoHomeCommand::Execute);
         ASSERT_TRUE((lFirstFrame.ctrlByte0 & IOHC_CTRL0_START) != 0);
-        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), 48);
         ASSERT_EQ(lFirstFrame.dataLen, v.expectedLen);
         ASSERT_MEM_EQ(lFirstFrame.data, v.expectedPayload, v.expectedLen);
 
@@ -12408,7 +12563,7 @@ TEST(byte_vector_controller_2w_execute_payloads_and_retry_start)
 
         const auto &lRetryPacket = lController.radio().testLastTransmittedPacket();
         ASSERT_TRUE(!lRetryPacket.empty());
-        ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+        ASSERT_EQ(lController.radio().testLastPreambleLength(), 48);
 
         IoHomeFrame lRetryFrame;
         ASSERT_TRUE(deserializeFrameForTest(lRetryFrame, lRetryPacket.data(), static_cast<uint8_t>(lRetryPacket.size())));
