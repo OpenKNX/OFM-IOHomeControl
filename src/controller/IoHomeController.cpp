@@ -76,7 +76,7 @@ namespace
     constexpr uint8_t kGatewayInfoManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
     constexpr uint16_t kPositionRawTolerance = 100;
     constexpr uint16_t kExtractDeviceType = static_cast<uint16_t>(IoHomeDeviceType::RollerShutter);
-    constexpr uint8_t kExtractDeviceSubtype = 0x01;
+    constexpr uint8_t kExtractDeviceSubtype = 0x00;
     constexpr uint8_t kExtractManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
 #if defined(RADIO_SX1262) || defined(TEST_NATIVE)
     constexpr bool kIsSX1262Radio = true;
@@ -715,9 +715,9 @@ namespace
         lFrame.data[3] = static_cast<uint8_t>((iExtractNodeId >> 8) & 0xFF);
         lFrame.data[4] = static_cast<uint8_t>(iExtractNodeId & 0xFF);
         lFrame.data[5] = iManufacturer;
-        lFrame.data[6] = 0x00;
+        lFrame.data[6] = 0xDD;
         lFrame.data[7] = 0x00;
-        lFrame.data[8] = 0x00;
+        lFrame.data[8] = 0x0E;
         lFrame.dataLen = 9;
         return lFrame.serialize2W(oBuffer, iBufferLen);
     }
@@ -965,10 +965,17 @@ namespace
             IoHomeCrypto::generateChallenge(lChallenge);
         memcpy(oFrame.data, lChallenge, sizeof(lChallenge));
 
+        const uint8_t lTranscript[] = {static_cast<uint8_t>(IoHomeCommand::DiscoverSPERequest)};
         uint8_t lHmac[IOHC_HMAC_SIZE];
-        if (!IoHomeCrypto::createHmac2W(lChallenge, sizeof(lChallenge),
+        if (!IoHomeCrypto::createHmac2W(lTranscript, sizeof(lTranscript),
                                         lChallenge, iSystemKey, lHmac))
             return false;
+
+        logDebugP("2W discovery 0x2A: challenge=%02X%02X%02X%02X%02X%02X hmac=%02X%02X%02X%02X%02X%02X",
+                  lChallenge[0], lChallenge[1], lChallenge[2],
+                  lChallenge[3], lChallenge[4], lChallenge[5],
+                  lHmac[0], lHmac[1], lHmac[2],
+                  lHmac[3], lHmac[4], lHmac[5]);
 
         memcpy(oFrame.data + sizeof(lChallenge), lHmac, sizeof(lHmac));
         oFrame.dataLen = sizeof(lChallenge) + sizeof(lHmac);
@@ -1193,7 +1200,7 @@ TwoWayDiscoverySettings IoHomeController::mergeTwoWayDiscoverySettings(
 
 TwoWayDiscoveryFrameOptions IoHomeController::resolveTwoWayDiscoveryOptions(
     IoHomeCommand iRequestedCommand,
-    const TwoWayDiscoverySettings &iSettings)
+    const TwoWayDiscoverySettings &iSettings) const
 {
     IoHomeCommand lCommand = iRequestedCommand;
     switch (iSettings.command)
@@ -1240,7 +1247,7 @@ TwoWayDiscoveryFrameOptions IoHomeController::resolveTwoWayDiscoveryOptions(
         lOptions.preamble = IOHC_PREAMBLE_LONG;
         break;
     case TwoWayDiscoveryPreambleMode::Normal:
-        lOptions.preamble = IOHC_PREAMBLE_NORMAL_START;
+        lOptions.preamble = normal2WStartPreamble();
         break;
     case TwoWayDiscoveryPreambleMode::Short:
         lOptions.preamble = IOHC_PREAMBLE_SHORT;
@@ -3334,8 +3341,8 @@ bool IoHomeController::startKeyExtraction(uint32_t iTimeoutMs)
     mKeyExtractCandidateHubNodeId = 0;
     mKeyExtractHubNodeId = 0;
     mKeyExtractKeyCaptured = false;
-    mKeyExtractVerificationRequested = false;
-    mKeyExtractVerificationCompleted = false;
+    mKeyExtractNodeVerificationSeen = false;
+    mKeyExtractNodeVerificationAuthDone = false;
     mKeyExtractState = ControllerState::ExtractIdle;
     mKeyExtractArmedAt = millis();
     mKeyExtractTimeoutMs = iTimeoutMs;
@@ -3415,14 +3422,14 @@ bool IoHomeController::keyExtractKeyCaptured() const
     return mKeyExtractKeyCaptured;
 }
 
-bool IoHomeController::keyExtractVerificationRequested() const
+bool IoHomeController::keyExtractNodeVerificationSeen() const
 {
-    return mKeyExtractVerificationRequested;
+    return mKeyExtractNodeVerificationSeen;
 }
 
-bool IoHomeController::keyExtractVerificationCompleted() const
+bool IoHomeController::keyExtractNodeVerificationAuthDone() const
 {
-    return mKeyExtractVerificationCompleted;
+    return mKeyExtractNodeVerificationAuthDone;
 }
 
 ControllerState IoHomeController::keyExtractState() const
@@ -7371,7 +7378,7 @@ void IoHomeController::processDiscovery()
         {
             lEffectiveOptions.lowPower = false;
             lEffectiveOptions.ackCapable = false;
-            lEffectiveOptions.preamble = IOHC_PREAMBLE_NORMAL_START;
+            lEffectiveOptions.preamble = normal2WStartPreamble();
         }
         if (!buildTwoWayDiscoveryFrame(mTxFrame, mOwnNodeId, lEffectiveOptions, mSystemKey))
         {
@@ -9074,8 +9081,8 @@ void IoHomeController::processKeyExtractFrame()
         {
             memset(mKeyExtractChallenge, 0, sizeof(mKeyExtractChallenge));
             memset(mKeyExtractKey, 0, sizeof(mKeyExtractKey));
-            mKeyExtractVerificationRequested = false;
-            mKeyExtractVerificationCompleted = false;
+            mKeyExtractNodeVerificationSeen = false;
+            mKeyExtractNodeVerificationAuthDone = false;
             mKeyExtractGraceDeadlineMs = 0;
         }
         mKeyExtractCandidateHubNodeId = lSrcNode;
@@ -9215,13 +9222,13 @@ void IoHomeController::processKeyExtractFrame()
         }
 
         {
-            mKeyExtractVerificationRequested = true;
             IoHomeFrame lNodeVerifyResponse;
             if (!buildExtractNodeVerifyResponseFrame(lNodeVerifyResponse, mKeyExtractThrowawayId, lSrcNode))
                 return;
             mTxLen = lNodeVerifyResponse.serialize2W(mTxBuffer, sizeof(mTxBuffer));
             if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
                 return;
+            mKeyExtractNodeVerificationSeen = true;
             mKeyExtractState = ControllerState::ExtractSentNodeVerifyResp;
             logInfoP("KeyExtract: tx node verification response 0x37 hub=0x%06X preamble=%u",
                      lSrcNode, static_cast<unsigned>(keyExtractReplyPreamble(false)));
@@ -9251,7 +9258,7 @@ void IoHomeController::processKeyExtractFrame()
             mTxLen = lChallengeResponse.serialize2W(mTxBuffer, sizeof(mTxBuffer));
             if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
                 return;
-            mKeyExtractVerificationCompleted = true;
+            mKeyExtractNodeVerificationAuthDone = true;
             logInfoP("KeyExtract: tx 0x3D hub=0x%06X preamble=%u",
                      lSrcNode, static_cast<unsigned>(keyExtractReplyPreamble(false)));
             extendKeyExtractGrace();

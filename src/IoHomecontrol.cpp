@@ -2350,8 +2350,8 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         resultData[21] = (lHoldRemainingMs >> 8) & 0xFF;
         resultData[22] = lHoldRemainingMs & 0xFF;
         resultData[23] = mController.keyExtractKeyCaptured() ? 0x01 : 0x00;
-        resultData[24] = mController.keyExtractVerificationRequested() ? 0x01 : 0x00;
-        resultData[25] = mController.keyExtractVerificationCompleted() ? 0x01 : 0x00;
+        resultData[24] = mController.keyExtractNodeVerificationSeen() ? 0x01 : 0x00;
+        resultData[25] = mController.keyExtractNodeVerificationAuthDone() ? 0x01 : 0x00;
         resultLength = 26;
         return true;
     }
@@ -3266,7 +3266,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                              mController.diagnostic2WWakeBelief() ? "on" : "off");
                     const TwoWayDiscoverySettings &lDiscovery = lCh->getConfigured2WDiscoverySettings();
                     const TwoWayDiscoveryFrameOptions lResolvedDiscovery =
-                        IoHomeController::resolveTwoWayDiscoveryOptions(IoHomeCommand::DiscoverRequest, lDiscovery);
+                        mController.resolveTwoWayDiscoveryOptions(IoHomeCommand::DiscoverRequest, lDiscovery);
                     logInfoP("  2W discovery: configured cmd=%s dest=%s ack=%s lp=%s preamble=%s listen=%s; effective cmd=0x%02X dst=0x%06X ack=%u lp=%u preamble=%u listen=%s",
                              discoveryCommandName(lDiscovery.command), discoveryDestinationName(lDiscovery.destination),
                              discoveryFlagName(lDiscovery.ack), discoveryFlagName(lDiscovery.lowPower),
@@ -3330,9 +3330,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                                  : "unknown",
                              lEffectiveLowPower ? "low-power" : "always-alive",
                              static_cast<unsigned>(lEffectiveLowPower ? IOHC_PREAMBLE_LONG
-                                                                      : IOHC_PREAMBLE_NORMAL_START));
+                                                                      : mController.normal2WStartPreamble()));
                     const TwoWayDiscoveryFrameOptions lDiscovery =
-                        IoHomeController::resolveTwoWayDiscoveryOptions(
+                        mController.resolveTwoWayDiscoveryOptions(
                             IoHomeCommand::DiscoverRequest, lCh->getConfigured2WDiscoverySettings());
                     logInfoP("       discovery cmd=0x%02X dst=0x%06X ack=%u lp=%u preamble=%u",
                              static_cast<unsigned>(static_cast<uint8_t>(lDiscovery.command)),

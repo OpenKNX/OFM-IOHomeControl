@@ -7,8 +7,9 @@ its current working directory.
 
 Every frame records its scenario, radio path, sanitized provenance, expected
 decoded header fields, and crypto expectation. The test suite verifies that the
-wire bytes still decode exactly as declared; the public `0x30` trailer-MAC
-vector is additionally verified cryptographically.
+wire bytes still decode exactly as declared; the public `0x30` trailer-MAC and
+`0x2A` authenticated-discovery vectors are additionally verified
+cryptographically.
 
 The initial scenarios cover the August regression families:
 
@@ -21,6 +22,7 @@ The initial scenarios cover the August regression families:
 | Pairing interference | One unrelated frame is assigned to each pairing wait state with its required outcome |
 | VELUX KLI-compatible enrollment | Public source-derived `0x30` shape with source, wrapped key and sequence masked; four ADD destinations plus STOP/DOWN timing metadata |
 | KLR300 2W pairing/search (2026-09-12) | Sanitized 0x28/0x2E/0x2C/0x31/0x32/0x2A/0x3D/0x36 sequence; CTRL1 and payload lengths preserved, secrets replaced |
+| Authenticated 2W discovery | Public re-keyed `0x2A` known-answer vector pins the one-byte command transcript, separate six-byte challenge and six-byte HMAC |
 | VELUX KLI310/KLI313 open-registration sweeps | Captured 1W `0x2E` class destinations and rolling-sequence progression for BF/FF/37F; MAC material retained only as public/redacted fixture bytes |
 | TaHoma/KLI SSL (Issue #112) | Public `0x28`, `0x29`, `0x2C`, `0x51`, `0x54`, `0x57` and `0x04` frames; masked key/challenge frames deliberately excluded |
 | VELUX MSU mid-travel STOP (Issue #95) | Public authenticated 1W STOP pins exact destination, payload and declared-length/HMAC shape; no controller key is retained |

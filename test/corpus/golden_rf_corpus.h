@@ -26,6 +26,7 @@ enum class CryptoExpectation : uint8_t
     NoCrypto,
     HmacPresentKeyRedacted,
     VerifyPublicOneWayTrailer,
+    VerifyPublicSpeRequest,
     PairingCorrelationMustReject,
 };
 
@@ -203,6 +204,19 @@ static const OneWayEnrollmentReference kKli310EnrollmentReference = {
 static const uint8_t kPublicTrailerVectorKey[16] = {
     0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
     0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE,
+};
+
+// Public 2W DiscoverSPERequest KAT. The command byte is the authenticated
+// transcript; the six payload bytes are the separate 2W challenge.
+static const uint8_t kPublicSpeVectorKey[16] = {
+    0xDE, 0xCA, 0xFC, 0x0F, 0xFE, 0xE0, 0xFF, 0x1C,
+    0xEB, 0xAD, 0xBE, 0xEF, 0xF0, 0x0D, 0xBA, 0x11,
+};
+
+static const uint8_t kPublicSpeRequest[] = {
+    0xD4, 0x30, 0x00, 0x00, 0x3B, 0x43, 0x8D, 0x43, 0x2A,
+    0x4A, 0x15, 0xC2, 0x1F, 0x97, 0x33,
+    0xF4, 0x97, 0xFD, 0x5A, 0xC2, 0x6E,
 };
 
 // Sanitized shapes from the 2W retry/extraction paths. They contain no key
@@ -410,6 +424,10 @@ static const Frame kFrames[] = {
      "sanitized KLR300 capture; challenge and HMAC replaced", RadioPath::ProtocolOnly,
      kKlr300DiscoverSpe, sizeof(kKlr300DiscoverSpe), IoHomeCommand::DiscoverSPERequest,
      0xE2D1FF, 0x00003B, false, false, false, CryptoExpectation::NoCrypto},
+    {"public_spe_request_hmac", "discover_spe_known_answer",
+     "public re-keyed DiscoverSPERequest known-answer vector", RadioPath::ProtocolOnly,
+     kPublicSpeRequest, sizeof(kPublicSpeRequest), IoHomeCommand::DiscoverSPERequest,
+     0x438D43, 0x00003B, false, false, false, CryptoExpectation::VerifyPublicSpeRequest},
     {"klr300_discover_2e_directed", "klr300_pairing_search_2026_09_12",
      "sanitized KLR300 capture; peer address substituted", RadioPath::ProtocolOnly,
      kKlr300Discover2EDirected, sizeof(kKlr300Discover2EDirected), IoHomeCommand::Discover2ERequest,

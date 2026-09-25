@@ -5098,6 +5098,59 @@ TEST(golden_rf_corpus_public_trailer_mac_verifies)
                                            lFrame.trailerMac, kPublicTrailerVectorKey));
 }
 
+TEST(golden_rf_corpus_public_spe_request_hmac_verifies)
+{
+    using namespace IoHomeGoldenRfCorpus;
+
+    const Frame *lFixture = findFrame("public_spe_request_hmac");
+    ASSERT_TRUE(lFixture != nullptr);
+    ASSERT_EQ(lFixture->crypto, CryptoExpectation::VerifyPublicSpeRequest);
+
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(deserializeFrameForTest(lFrame, lFixture->bytes, lFixture->wireLen));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::DiscoverSPERequest);
+    ASSERT_EQ(lFrame.dataLen, 12);
+    const uint8_t lExpectedChallenge[6] = {0x4A, 0x15, 0xC2, 0x1F, 0x97, 0x33};
+    const uint8_t lExpectedHmac[6] = {0xF4, 0x97, 0xFD, 0x5A, 0xC2, 0x6E};
+    ASSERT_MEM_EQ(lFrame.data, lExpectedChallenge, sizeof(lExpectedChallenge));
+    ASSERT_MEM_EQ(lFrame.data + sizeof(lExpectedChallenge), lExpectedHmac, sizeof(lExpectedHmac));
+
+    const uint8_t lTranscript[] = {static_cast<uint8_t>(IoHomeCommand::DiscoverSPERequest)};
+    ASSERT_TRUE(IoHomeCrypto::verifyHmac(lTranscript, sizeof(lTranscript), lExpectedHmac,
+                                         lExpectedChallenge, kPublicSpeVectorKey));
+    ASSERT_TRUE(!IoHomeCrypto::verifyHmac(lExpectedChallenge, sizeof(lExpectedChallenge), lExpectedHmac,
+                                          lExpectedChallenge, kPublicSpeVectorKey));
+    const uint8_t lCombinedTranscript[] = {
+        static_cast<uint8_t>(IoHomeCommand::DiscoverSPERequest),
+        0x4A, 0x15, 0xC2, 0x1F, 0x97, 0x33,
+    };
+    ASSERT_TRUE(!IoHomeCrypto::verifyHmac(lCombinedTranscript, sizeof(lCombinedTranscript), lExpectedHmac,
+                                          lExpectedChallenge, kPublicSpeVectorKey));
+
+    TwoWayDiscoveryFrameOptions lOptions =
+        IoHomeController::klr300TwoWayDiscoveryOptions(IoHomeCommand::DiscoverSPERequest);
+    IoHomeFrame lBuilt;
+    ASSERT_TRUE(IoHomeController::buildTwoWayDiscoveryFrame(
+        lBuilt, 0x438D43, lOptions, kPublicSpeVectorKey, lExpectedChallenge));
+    ASSERT_EQ(lBuilt.dataLen, 12);
+    ASSERT_EQ(lBuilt.ctrlByte1, 0x30);
+    ASSERT_MEM_EQ(lBuilt.data, lExpectedChallenge, sizeof(lExpectedChallenge));
+    ASSERT_MEM_EQ(lBuilt.data + sizeof(lExpectedChallenge), lExpectedHmac, sizeof(lExpectedHmac));
+    uint8_t lWire[IOHC_FRAME_BUFFER_SIZE] = {};
+    const uint8_t lWireLen = lBuilt.serialize2W(lWire, sizeof(lWire));
+    ASSERT_EQ(lWireLen, sizeof(kPublicSpeRequest));
+    ASSERT_MEM_EQ(lWire, kPublicSpeRequest, sizeof(kPublicSpeRequest));
+
+    lOptions.lowPower = false;
+    lOptions.ackCapable = false;
+    ASSERT_TRUE(IoHomeController::buildTwoWayDiscoveryFrame(
+        lBuilt, 0x438D43, lOptions, kPublicSpeVectorKey, lExpectedChallenge));
+    ASSERT_EQ(lBuilt.ctrlByte1, 0x00);
+    ASSERT_EQ(lBuilt.dataLen, 12);
+    ASSERT_MEM_EQ(lBuilt.data, lExpectedChallenge, sizeof(lExpectedChallenge));
+    ASSERT_MEM_EQ(lBuilt.data + sizeof(lExpectedChallenge), lExpectedHmac, sizeof(lExpectedHmac));
+}
+
 TEST(golden_rf_corpus_covers_every_pairing_wait_injection)
 {
     using namespace IoHomeGoldenRfCorpus;
@@ -8439,7 +8492,8 @@ TEST(controller_spe_discovery_scans_both_power_classes_on_all_channels)
         ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
         ASSERT_EQ(lController.radio().testCurrentFrequency(), lExpected[i]);
         ASSERT_EQ(lFrame.ctrlByte1, i < 3 ? static_cast<uint8_t>(IOHC_CTRL1_ACK | IOHC_CTRL1_LOW_POWER) : 0);
-        ASSERT_EQ(lController.radio().testLastPreambleLength(), i < 3 ? IOHC_PREAMBLE_LONG : IOHC_PREAMBLE_NORMAL_START);
+        ASSERT_EQ(lController.radio().testLastPreambleLength(),
+                  i < 3 ? IOHC_PREAMBLE_LONG : lController.normal2WStartPreamble());
         if (i + 1 < 6)
         {
             ioHomeTestAdvanceMillis(IOHC_DISCOVERY_LISTEN_MS + 1);
@@ -8450,7 +8504,7 @@ TEST(controller_spe_discovery_scans_both_power_classes_on_all_channels)
     }
 }
 
-TEST(controller_spe_discovery_preamble_override_keeps_klr300_ab_test_available)
+TEST(controller_spe_discovery_normal_preamble_uses_radio_start_default)
 {
     const uint8_t lKey[16] = {1};
     IoHomeController lController;
@@ -8459,6 +8513,7 @@ TEST(controller_spe_discovery_preamble_override_keeps_klr300_ab_test_available)
     lController.setOwnNodeId(0x9F0071);
     lController.setSystemKey(lKey);
     lController.init();
+    lController.radio().testSetDefaultStartPreamble(64);
 
     TwoWayDiscoverySettings lSettings;
     lSettings.preamble = TwoWayDiscoveryPreambleMode::Normal;
@@ -8467,7 +8522,7 @@ TEST(controller_spe_discovery_preamble_override_keeps_klr300_ab_test_available)
     lController.loop();
 
     ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), 64);
 }
 
 TEST(discovery_klr300_reference_profiles_are_byte_exact)
@@ -8534,6 +8589,7 @@ TEST(discovery_ack_and_low_power_are_independent_of_start)
 
 TEST(discovery_destination_and_listen_options_resolve_independently)
 {
+    IoHomeController lController;
     struct Vector
     {
         TwoWayDiscoveryDestinationMode mode;
@@ -8552,7 +8608,7 @@ TEST(discovery_destination_and_listen_options_resolve_independently)
         lSettings.ack = TwoWayDiscoveryFlagMode::On;
         lSettings.lowPower = TwoWayDiscoveryFlagMode::Off;
         const TwoWayDiscoveryFrameOptions lOptions =
-            IoHomeController::resolveTwoWayDiscoveryOptions(IoHomeCommand::DiscoverRequest, lSettings);
+            lController.resolveTwoWayDiscoveryOptions(IoHomeCommand::DiscoverRequest, lSettings);
         ASSERT_EQ(lOptions.destination, lVector.destination);
         ASSERT_TRUE(lOptions.ackCapable);
         ASSERT_TRUE(!lOptions.lowPower);
@@ -8561,7 +8617,7 @@ TEST(discovery_destination_and_listen_options_resolve_independently)
 
     TwoWayDiscoverySettings lAll;
     lAll.listenChannels = TwoWayDiscoveryListenChannels::All;
-    ASSERT_EQ(IoHomeController::resolveTwoWayDiscoveryOptions(
+    ASSERT_EQ(lController.resolveTwoWayDiscoveryOptions(
                   IoHomeCommand::DiscoverRequest, lAll).listenChannels,
               TwoWayDiscoveryListenChannels::All);
 }
@@ -9801,7 +9857,7 @@ TEST(controller_velux_ssl_pairing_caps_directed_start_preambles_to_discovery)
     ASSERT_EQ(lFrame.getDestNodeId(), 0x00003FU);
     ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_ACK) != 0);
     ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), lController.normal2WStartPreamble());
 
     IoHomeFrame lDiscoverResponse;
     buildDiscoverResponseFrame(lDiscoverResponse, lRemoteNodeId, lDeviceNodeId,
@@ -9810,7 +9866,7 @@ TEST(controller_velux_ssl_pairing_caps_directed_start_preambles_to_discovery)
     ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::Confirmation);
     ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), lController.normal2WStartPreamble());
 
     IoHomeFrame lConfirmAck;
     buildDiscoveryConfirmationAckFrame(lConfirmAck, lRemoteNodeId, lDeviceNodeId);
@@ -9819,7 +9875,7 @@ TEST(controller_velux_ssl_pairing_caps_directed_start_preambles_to_discovery)
     ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::KeyInitTransfer);
     ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), lController.normal2WStartPreamble());
 
     // Every 0x31 retry keeps the successful discovery cap.
     ioHomeTestAdvanceMillis(5001);
@@ -9827,7 +9883,7 @@ TEST(controller_velux_ssl_pairing_caps_directed_start_preambles_to_discovery)
     ASSERT_EQ(lController.state(), ControllerState::PairSendKeyInit);
     ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::KeyInitTransfer);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), lController.normal2WStartPreamble());
 
     IoHomeFrame lChallengeRequest;
     buildPairChallengeRequestFrame(lChallengeRequest, lRemoteNodeId, lDeviceNodeId, lChallenge);
@@ -9841,7 +9897,7 @@ TEST(controller_velux_ssl_pairing_caps_directed_start_preambles_to_discovery)
         lController, lRemoteNodeId, lDeviceNodeId, lSetConfig));
     ASSERT_EQ(lSetConfig.commandId, IoHomeCommand::SetConfig1);
     ASSERT_TRUE((lSetConfig.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_NORMAL_START);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), lController.normal2WStartPreamble());
     ASSERT_EQ(lController.pairingTelemetry().outcome,
               IoHomeController::PairingOutcome::Success);
     ASSERT_EQ(lController.pairingTelemetry().diagnostic,
@@ -11219,9 +11275,15 @@ TEST(controller_key_extract_answers_discovery_with_throwaway_id)
     ASSERT_EQ(lResponse.getDestNodeId(), lHubNodeId);
     ASSERT_NE(lResponse.getSrcNodeId(), 0U);
     ASSERT_NE(lResponse.getSrcNodeId(), lOwnNodeId);
-    ASSERT_EQ(lResponse.data[2], static_cast<uint8_t>((lResponse.getSrcNodeId() >> 16) & 0xFF));
-    ASSERT_EQ(lResponse.data[3], static_cast<uint8_t>((lResponse.getSrcNodeId() >> 8) & 0xFF));
-    ASSERT_EQ(lResponse.data[4], static_cast<uint8_t>(lResponse.getSrcNodeId() & 0xFF));
+    ASSERT_EQ(lResponse.dataLen, 9);
+    const uint8_t lExpectedPayload[] = {
+        0x02, 0x00,
+        static_cast<uint8_t>((lResponse.getSrcNodeId() >> 16) & 0xFF),
+        static_cast<uint8_t>((lResponse.getSrcNodeId() >> 8) & 0xFF),
+        static_cast<uint8_t>(lResponse.getSrcNodeId() & 0xFF),
+        0x02, 0xDD, 0x00, 0x0E,
+    };
+    ASSERT_MEM_EQ(lResponse.data, lExpectedPayload, sizeof(lExpectedPayload));
 }
 
 TEST(controller_key_extract_broadcasts_reply_with_ch2_last)
@@ -11366,8 +11428,8 @@ TEST(controller_key_extract_acknowledges_discovery_confirmation)
     lController.radio().testSetDefaultResponsePreamble(IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_TRUE(lController.startKeyExtraction());
     ASSERT_TRUE(!lController.keyExtractKeyCaptured());
-    ASSERT_TRUE(!lController.keyExtractVerificationRequested());
-    ASSERT_TRUE(!lController.keyExtractVerificationCompleted());
+    ASSERT_TRUE(!lController.keyExtractNodeVerificationSeen());
+    ASSERT_TRUE(!lController.keyExtractNodeVerificationAuthDone());
 
     IoHomeFrame lDiscoverReq;
     buildGatewayDiscoverRequest(lDiscoverReq, lHubNodeId);
@@ -11619,25 +11681,25 @@ TEST(controller_key_extract_completes_hub_node_verification)
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_EQ(lController.keyExtractStatus(), IoHomeController::KeyExtractStatus::Captured);
     ASSERT_TRUE(lController.keyExtractKeyCaptured());
-    ASSERT_TRUE(!lController.keyExtractVerificationRequested());
-    ASSERT_TRUE(!lController.keyExtractVerificationCompleted());
+    ASSERT_TRUE(!lController.keyExtractNodeVerificationSeen());
+    ASSERT_TRUE(!lController.keyExtractNodeVerificationAuthDone());
 
     // The advertised throwaway address is public; only the hub that handed us
     // the key may drive the post-extraction verification round.
     buildKeyExtractNodeVerifyRequest(lRequest, 0x123456, lThrowawayNodeId);
     ASSERT_TRUE(!queueGatewayRequestAndLoop(lController, lRequest, lResponse));
-    ASSERT_TRUE(!lController.keyExtractVerificationRequested());
+    ASSERT_TRUE(!lController.keyExtractNodeVerificationSeen());
 
     // A verification challenge is meaningful only after the locked hub's
     // accepted 0x36 request established the deterministic 0x37 transcript.
     buildPairChallengeRequestFrame(lRequest, lThrowawayNodeId, lHubNodeId, lAddressChallenge);
     ASSERT_TRUE(!queueGatewayRequestAndLoop(lController, lRequest, lResponse));
-    ASSERT_TRUE(!lController.keyExtractVerificationCompleted());
+    ASSERT_TRUE(!lController.keyExtractNodeVerificationAuthDone());
 
     buildKeyExtractNodeVerifyRequest(lRequest, lHubNodeId, lThrowawayNodeId);
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
-    ASSERT_TRUE(lController.keyExtractVerificationRequested());
-    ASSERT_TRUE(!lController.keyExtractVerificationCompleted());
+    ASSERT_TRUE(lController.keyExtractNodeVerificationSeen());
+    ASSERT_TRUE(!lController.keyExtractNodeVerificationAuthDone());
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::NodeVerifyResponse);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_EQ(lResponse.dataLen, 3);
@@ -11647,7 +11709,7 @@ TEST(controller_key_extract_completes_hub_node_verification)
 
     buildPairChallengeRequestFrame(lRequest, lThrowawayNodeId, lHubNodeId, lAddressChallenge);
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
-    ASSERT_TRUE(lController.keyExtractVerificationCompleted());
+    ASSERT_TRUE(lController.keyExtractNodeVerificationAuthDone());
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_TRUE((lResponse.ctrlByte0 & IOHC_CTRL0_END) != 0);
@@ -11702,7 +11764,7 @@ TEST(controller_key_extract_ignored_verification_does_not_extend_grace)
     ioHomeTestAdvanceMillis(IoHomeController::kKeyExtractPostExtractGraceMs - 1000U);
     buildKeyExtractNodeVerifyRequest(lRequest, lHubNodeId, lOwnNodeId);
     ASSERT_TRUE(!queueGatewayRequestAndLoop(lController, lRequest, lResponse));
-    ASSERT_TRUE(!lController.keyExtractVerificationRequested());
+    ASSERT_TRUE(!lController.keyExtractNodeVerificationSeen());
 
     ioHomeTestAdvanceMillis(1001U);
     lController.loop();
@@ -14633,6 +14695,7 @@ int main()
     printf("\nGolden RF corpus:\n");
     RUN(golden_rf_corpus_frames_decode_to_declared_metadata);
     RUN(golden_rf_corpus_public_trailer_mac_verifies);
+    RUN(golden_rf_corpus_public_spe_request_hmac_verifies);
     RUN(golden_rf_corpus_covers_every_pairing_wait_injection);
 
     printf("\nAddress classes:\n");
@@ -14797,7 +14860,7 @@ int main()
     RUN(controller_velux_1w_finalizer_down_failure_marks_operation_failed);
     RUN(controller_discovery_sends_standard_28_then_alt_2e_broadcast);
     RUN(controller_spe_discovery_sends_single_2a_broadcast);
-    RUN(controller_spe_discovery_preamble_override_keeps_klr300_ab_test_available);
+    RUN(controller_spe_discovery_normal_preamble_uses_radio_start_default);
     RUN(controller_command_scan_uses_target_power_class_preamble);
     RUN(controller_1w_pairing_allows_add_without_target_node);
     RUN(controller_1w_profile_can_append_sendkey_trailer_mac);

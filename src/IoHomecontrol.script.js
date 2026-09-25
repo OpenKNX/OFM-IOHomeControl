@@ -619,33 +619,43 @@ function IOHC_startKeyExtract(device, online, progress, context) {
         if (phase == 2) {
             var hubNode = IOHC_readNodeId(status, 2);
             var extractionNode = IOHC_readNodeId(status, 5);
-            var verificationCompleted = (status[25] || 0) != 0;
+            var nodeVerificationSeen = (status[24] || 0) != 0;
+            var nodeVerificationAuthDone = (status[25] || 0) != 0;
             IOHC_setExtractionResult(device,
-                                     verificationCompleted
-                                         ? "Schlüssel extrahiert; Gateway-Prüfung erfolgreich"
+                                     nodeVerificationAuthDone
+                                         ? "Schlüssel extrahiert; Node-Verifikation authentifiziert"
+                                         : nodeVerificationSeen
+                                         ? "Schlüssel extrahiert; Node-Verifikation beantwortet"
                                          : "Schlüssel extrahiert; Prüfung läuft",
                                      []);
             progress.setText("2W-Schlüssel erfolgreich extrahiert (Gateway-/System-Node-ID " +
                              IOHC_formatNodeId(hubNode) + ", temporäre Extraction-Device-ID " +
                              IOHC_formatNodeId(extractionNode) + "). " +
-                             (verificationCompleted
-                                  ? "Die Gateway-Prüfung wurde erfolgreich beantwortet. "
+                             (nodeVerificationAuthDone
+                                  ? "Die Node-Verifikation wurde authentifiziert. "
+                                  : nodeVerificationSeen
+                                  ? "Die Node-Verifikation wurde beantwortet. "
                                   : "Warte auf die Abschlussprüfung des Fremd-Gateways. ") +
                              "Diese Schaltfläche danach erneut drücken.");
             progress.setProgress(100);
             return;
         }
         if (phase == 3) {
-            var gatewayVerificationCompleted = (status[25] || 0) != 0;
+            var nodeVerificationSeen = (status[24] || 0) != 0;
+            var nodeVerificationAuthDone = (status[25] || 0) != 0;
             IOHC_setExtractionResult(device,
-                                     gatewayVerificationCompleted
-                                         ? "Schlüssel extrahiert; Gateway-Prüfung erfolgreich"
-                                         : "Schlüssel extrahiert; Gateway-Prüfung nicht vollständig beobachtet",
+                                     nodeVerificationAuthDone
+                                         ? "Schlüssel extrahiert; Node-Verifikation authentifiziert"
+                                         : nodeVerificationSeen
+                                         ? "Schlüssel extrahiert; Node-Verifikation beantwortet"
+                                         : "Schlüssel extrahiert; Node-Verifikation nicht beobachtet",
                                      []);
             progress.setText("2W-Schlüsselextraktion abgeschlossen. " +
-                             (gatewayVerificationCompleted
-                                  ? "Die Gateway-Prüfung wurde erfolgreich beantwortet. "
-                                  : "Die Gateway-Prüfung wurde nicht vollständig beobachtet. ") +
+                             (nodeVerificationAuthDone
+                                  ? "Die Node-Verifikation wurde authentifiziert. "
+                                  : nodeVerificationSeen
+                                  ? "Die Node-Verifikation wurde beantwortet; eine zusätzliche Authentifizierungsrunde war optional. "
+                                  : "Es wurde keine Node-Verifikation beobachtet; der Schlüssel wurde dennoch erfolgreich extrahiert. ") +
                              "Die authentifizierte Gerätesuche läuft; diese Schaltfläche danach erneut drücken.");
             progress.setProgress(100);
             return;

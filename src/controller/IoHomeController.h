@@ -504,9 +504,9 @@ public:
   static TwoWayDiscoverySettings mergeTwoWayDiscoverySettings(
       const TwoWayDiscoverySettings &iBase,
       const TwoWayDiscoverySettings &iOverride);
-  static TwoWayDiscoveryFrameOptions resolveTwoWayDiscoveryOptions(
+  TwoWayDiscoveryFrameOptions resolveTwoWayDiscoveryOptions(
       IoHomeCommand iRequestedCommand,
-      const TwoWayDiscoverySettings &iSettings);
+      const TwoWayDiscoverySettings &iSettings) const;
   static bool buildTwoWayDiscoveryFrame(IoHomeFrame &oFrame,
                                         uint32_t iSrcNodeId,
                                         const TwoWayDiscoveryFrameOptions &iOptions,
@@ -572,8 +572,8 @@ public:
   uint32_t keyExtractCandidateHubNodeId() const;
   uint32_t keyExtractHubNodeId() const;
   bool keyExtractKeyCaptured() const;
-  bool keyExtractVerificationRequested() const;
-  bool keyExtractVerificationCompleted() const;
+  bool keyExtractNodeVerificationSeen() const;
+  bool keyExtractNodeVerificationAuthDone() const;
   ControllerState keyExtractState() const;
   uint32_t keyExtractHoldRemainingMs() const;
   void setKeyExtractColdReplyPreamble(uint16_t iPreambleSymbols);
@@ -1007,8 +1007,8 @@ private:
   uint32_t mKeyExtractHubNodeId;
   uint8_t mKeyExtractKey[16];
   bool mKeyExtractKeyCaptured = false;
-  bool mKeyExtractVerificationRequested = false;
-  bool mKeyExtractVerificationCompleted = false;
+  bool mKeyExtractNodeVerificationSeen = false;
+  bool mKeyExtractNodeVerificationAuthDone = false;
   ControllerState mKeyExtractState;
   uint32_t mKeyExtractArmedAt;
   uint32_t mKeyExtractTimeoutMs;
