@@ -778,16 +778,16 @@ namespace
         return lFrame.serialize2W(oBuffer, iBufferLen);
     }
 
-    bool buildExtractAddressResponseFrame(IoHomeFrame &oFrame,
-                                          uint32_t iExtractNodeId,
-                                          uint32_t iHubNodeId)
+    bool buildExtractNodeVerifyResponseFrame(IoHomeFrame &oFrame,
+                                             uint32_t iExtractNodeId,
+                                             uint32_t iHubNodeId)
     {
         oFrame.init();
         oFrame.ctrlByte0 = 0;
         oFrame.ctrlByte1 = 0x00;
         oFrame.setSrcNode(iExtractNodeId);
         oFrame.setDestNode(iHubNodeId);
-        oFrame.commandId = IoHomeCommand::AddressResponse;
+        oFrame.commandId = IoHomeCommand::NodeVerifyResponse;
         oFrame.data[0] = static_cast<uint8_t>((iExtractNodeId >> 16) & 0xFF);
         oFrame.data[1] = static_cast<uint8_t>((iExtractNodeId >> 8) & 0xFF);
         oFrame.data[2] = static_cast<uint8_t>(iExtractNodeId & 0xFF);
@@ -3909,10 +3909,10 @@ const char *IoHomeController::commandName(IoHomeCommand iCmd)
         return "Private2";
     case IoHomeCommand::Private2Response:
         return "Private2Response";
-    case IoHomeCommand::SetSensor:
-        return "SetSensor";
-    case IoHomeCommand::SetSensorAck:
-        return "SetSensorAck";
+    case IoHomeCommand::PriorityLevelRequest:
+        return "PriorityLevelRequest";
+    case IoHomeCommand::PriorityLevelResponse:
+        return "PriorityLevelResponse";
     case IoHomeCommand::WritePrivate:
         return "WritePrivate";
     case IoHomeCommand::WritePrivateResponse:
@@ -3943,10 +3943,10 @@ const char *IoHomeController::commandName(IoHomeCommand iCmd)
         return "KeyTransfer";
     case IoHomeCommand::KeyTransferConfirmation:
         return "KeyTransferConfirmation";
-    case IoHomeCommand::AddressRequest:
-        return "AddressRequest";
-    case IoHomeCommand::AddressResponse:
-        return "AddressResponse";
+    case IoHomeCommand::NodeVerifyRequest:
+        return "NodeVerifyRequest";
+    case IoHomeCommand::NodeVerifyResponse:
+        return "NodeVerifyResponse";
     case IoHomeCommand::LaunchKeyTransfer:
         return "LaunchKeyTransfer";
     case IoHomeCommand::RemoveController:
@@ -4132,8 +4132,8 @@ const char *IoHomeController::stateName(ControllerState iState)
         return "ExtractSentChallenge";
     case ControllerState::Extracted:
         return "Extracted";
-    case ControllerState::ExtractSentAddressResp:
-        return "ExtractSentAddressResp";
+    case ControllerState::ExtractSentNodeVerifyResp:
+        return "ExtractSentNodeVerifyResp";
     default:
         return "Unknown";
     }
@@ -8315,8 +8315,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         break;
     }
 
-    case IoHomeCommand::AddressRequest:
-        // Address request: empty payload, no HMAC
+    case IoHomeCommand::NodeVerifyRequest:
+        // Node/system verification request: empty payload, no HMAC.
         mTxFrame.dataLen = 0;
         mTxFrame.hasHmac = false;
         break;
@@ -8631,7 +8631,7 @@ void IoHomeController::dispatchRxFrame()
             }
             // --- Unused commands (documented for protocol completeness) ---
             case IoHomeCommand::Private2Response:        // 0x0D — response to alternate private command (not used)
-            case IoHomeCommand::SetSensorAck:             // 0x1A — capture-only
+            case IoHomeCommand::PriorityLevelResponse:    // 0x1A — capture-only
             case IoHomeCommand::ConfirmationACK:         // 0x2D — device ACKs discovery confirmation (consumed implicitly)
             case IoHomeCommand::Discover2EResponse:      // 0x2F — handled passively above
             case IoHomeCommand::KeyTransferConfirmation: // 0x33 — device confirms key storage (not parsed in reference)
@@ -8716,7 +8716,8 @@ void IoHomeController::processStatusAckSend()
     }
 
     const uint32_t lAckFrequency = IOHC_FREQUENCIES[mStatusAckFreqIdx];
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_SHORT, &lAckFrequency);
+    const uint16_t lAckPreamble = mRadio.defaultResponsePreamble();
+    const RadioError lPrepErr = configureTxRadio(lAckPreamble, &lAckFrequency);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -8782,7 +8783,9 @@ void IoHomeController::processAuthSendChallenge()
     uint8_t lLen = lFrame.serialize2W(lBuf, sizeof(lBuf));
     if (lLen > 0)
     {
-        const RadioError lErr = startShortPreambleTransmit(lBuf, lLen);
+        const uint16_t lPreamble = mRadio.defaultResponsePreamble();
+        const RadioError lErr = startTransmitWithPreamble(
+            lBuf, lLen, lPreamble, true, LbtContext::Normal);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -9011,28 +9014,28 @@ void IoHomeController::processKeyExtractFrame()
                  lSrcNode);
     }
 
-    if (mRxFrame.commandId == IoHomeCommand::AddressRequest)
+    if (mRxFrame.commandId == IoHomeCommand::NodeVerifyRequest)
     {
         const bool lAccepted =
             lSrcNode == mKeyExtractHubNodeId &&
             lDstNode == mKeyExtractThrowawayId &&
             (mKeyExtractState == ControllerState::Extracted ||
-             mKeyExtractState == ControllerState::ExtractSentAddressResp);
-        logInfoP("KeyExtract: rx 0x36 src=0x%06X dst=0x%06X temp=0x%06X %s",
+             mKeyExtractState == ControllerState::ExtractSentNodeVerifyResp);
+        logInfoP("KeyExtract: rx node verification 0x36 src=0x%06X dst=0x%06X temp=0x%06X %s",
                  lSrcNode, lDstNode, mKeyExtractThrowawayId,
                  lAccepted ? "accepted" : "ignored");
         (void)lAccepted;
     }
     else if (mRxFrame.commandId == IoHomeCommand::ChallengeRequest &&
              (mKeyExtractState == ControllerState::Extracted ||
-              mKeyExtractState == ControllerState::ExtractSentAddressResp))
+              mKeyExtractState == ControllerState::ExtractSentNodeVerifyResp))
     {
         const bool lAccepted =
             lSrcNode == mKeyExtractHubNodeId &&
             lDstNode == mKeyExtractThrowawayId &&
-            mKeyExtractState == ControllerState::ExtractSentAddressResp &&
+            mKeyExtractState == ControllerState::ExtractSentNodeVerifyResp &&
             mRxFrame.dataLen >= IOHC_HMAC_SIZE;
-        logInfoP("KeyExtract: rx 0x3C src=0x%06X dst=0x%06X temp=0x%06X %s",
+        logInfoP("KeyExtract: rx node verification challenge 0x3C src=0x%06X dst=0x%06X temp=0x%06X %s",
                  lSrcNode, lDstNode, mKeyExtractThrowawayId,
                  lAccepted ? "accepted" : "ignored");
         (void)lAccepted;
@@ -9057,7 +9060,7 @@ void IoHomeController::processKeyExtractFrame()
                  static_cast<int>(mRadio.lastRssi()));
         const bool lFreshAttemptAfterExtract =
             (mKeyExtractState == ControllerState::Extracted ||
-             mKeyExtractState == ControllerState::ExtractSentAddressResp) &&
+             mKeyExtractState == ControllerState::ExtractSentNodeVerifyResp) &&
             mKeyExtractHubNodeId != 0 && lSrcNode == mKeyExtractHubNodeId;
         if (mKeyExtractState != ControllerState::ExtractIdle &&
             mKeyExtractState != ControllerState::ExtractSentDiscoverResp &&
@@ -9202,9 +9205,9 @@ void IoHomeController::processKeyExtractFrame()
             return;
         }
 
-    case IoHomeCommand::AddressRequest:
+    case IoHomeCommand::NodeVerifyRequest:
         if ((mKeyExtractState != ControllerState::Extracted &&
-             mKeyExtractState != ControllerState::ExtractSentAddressResp) ||
+             mKeyExtractState != ControllerState::ExtractSentNodeVerifyResp) ||
             lDstNode != mKeyExtractThrowawayId)
         {
             dispatchRxFrame();
@@ -9213,14 +9216,14 @@ void IoHomeController::processKeyExtractFrame()
 
         {
             mKeyExtractVerificationRequested = true;
-            IoHomeFrame lAddressResponse;
-            if (!buildExtractAddressResponseFrame(lAddressResponse, mKeyExtractThrowawayId, lSrcNode))
+            IoHomeFrame lNodeVerifyResponse;
+            if (!buildExtractNodeVerifyResponseFrame(lNodeVerifyResponse, mKeyExtractThrowawayId, lSrcNode))
                 return;
-            mTxLen = lAddressResponse.serialize2W(mTxBuffer, sizeof(mTxBuffer));
+            mTxLen = lNodeVerifyResponse.serialize2W(mTxBuffer, sizeof(mTxBuffer));
             if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
                 return;
-            mKeyExtractState = ControllerState::ExtractSentAddressResp;
-            logInfoP("KeyExtract: tx 0x37 hub=0x%06X preamble=%u",
+            mKeyExtractState = ControllerState::ExtractSentNodeVerifyResp;
+            logInfoP("KeyExtract: tx node verification response 0x37 hub=0x%06X preamble=%u",
                      lSrcNode, static_cast<unsigned>(keyExtractReplyPreamble(false)));
             extendKeyExtractGrace();
             holdKeyExtractChannel(kKeyExtractPostExtractGraceMs);
@@ -9228,7 +9231,7 @@ void IoHomeController::processKeyExtractFrame()
         }
 
     case IoHomeCommand::ChallengeRequest:
-        if (mKeyExtractState != ControllerState::ExtractSentAddressResp ||
+        if (mKeyExtractState != ControllerState::ExtractSentNodeVerifyResp ||
             lDstNode != mKeyExtractThrowawayId || mRxFrame.dataLen < IOHC_HMAC_SIZE)
         {
             dispatchRxFrame();
@@ -9236,11 +9239,11 @@ void IoHomeController::processKeyExtractFrame()
         }
 
         {
-            IoHomeFrame lAddressResponse;
+            IoHomeFrame lNodeVerifyResponse;
             IoHomeFrame lChallengeResponse;
-            if (!buildExtractAddressResponseFrame(lAddressResponse, mKeyExtractThrowawayId, lSrcNode) ||
+            if (!buildExtractNodeVerifyResponseFrame(lNodeVerifyResponse, mKeyExtractThrowawayId, lSrcNode) ||
                 !build2WChallengeResponse(lChallengeResponse, mKeyExtractThrowawayId, lSrcNode,
-                                          TwoWaySenderRole::Device, lAddressResponse,
+                                          TwoWaySenderRole::Device, lNodeVerifyResponse,
                                           mRxFrame.data, mKeyExtractKey))
                 return;
             // Device-role closing response: END, no low-power bit.

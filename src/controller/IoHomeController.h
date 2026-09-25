@@ -230,7 +230,7 @@ enum class ControllerState : uint8_t
   ExtractSentConfirmAck,
   ExtractSentChallenge,
   Extracted,
-  ExtractSentAddressResp,
+  ExtractSentNodeVerifyResp,
 
   // Fake gateway mode (respond to device-initiated pairing)
   GatewayIdle,

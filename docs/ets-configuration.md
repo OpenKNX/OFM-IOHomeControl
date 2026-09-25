@@ -26,9 +26,10 @@ the scan is complete to import the results:
 
 1. The firmware enrolls as a temporary device at the existing, owned gateway
    and extracts the network key.
-2. After the gateway address-verification window closes, it adopts the newly
-   enrolled controller ID and automatically starts authenticated SPE discovery
-   with the long wake-up preamble.
+2. After the gateway node-verification window closes, it combines the recovered
+   gateway/system node ID with the extracted key and automatically starts
+   authenticated SPE discovery with the long wake-up preamble. The temporary
+   extraction-device ID is not adopted as the regular controller identity.
 3. ETS displays all discovered Node IDs. Devices that are not already assigned
    are added only to unused channels without a stored device identity. Occupied
    channels are never overwritten.

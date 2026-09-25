@@ -20,7 +20,7 @@ network key.
 3. Confirm that `iohc extract status` reports a temporary extraction-device
    ID, then a locked hub only after `0x31`.
 4. Confirm successful `0x32` capture and, where the gateway uses it, the
-   `0x36 -> 0x37 -> 0x3C -> 0x3D` address-verification sequence.
+   `0x36 -> 0x37 -> 0x3C -> 0x3D` node-verification sequence.
 5. During the 60-second verification window, send a normal KNX movement
    command. It must execute without waiting for the window to expire.
 6. Confirm that periodic status polling and discovery/scan operations do not
@@ -64,7 +64,7 @@ For every gateway/radio combination record:
 - cold and response preambles;
 - recovered gateway/system node ID before and after both reboots;
 - temporary extraction-device ID used only during extraction;
-- whether address verification completed;
+- whether node verification completed;
 - whether a KNX command executed during the 60-second window;
 - whether authenticated discovery and an actuator command succeeded after
   each reboot.

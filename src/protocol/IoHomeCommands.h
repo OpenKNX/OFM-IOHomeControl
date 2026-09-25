@@ -20,8 +20,10 @@ enum class IoHomeCommand : uint8_t
                              // Unknown0E = 0x0E,  // not used — observed in rspaargaren scan list only
                              // Unknown14 = 0x14,  // not used — observed in rspaargaren scan list only
                              // Unknown16 = 0x16,  // not used — observed in rspaargaren scan list only
-    SetSensor = 0x19,         // capture-only; no active handler
-    SetSensorAck = 0x1A,
+    // Capture-derived priority/lock arbitration levels; semantics remain
+    // unconfirmed and no 0x1A reply has been captured. No active handler.
+    PriorityLevelRequest = 0x19,
+    PriorityLevelResponse = 0x1A,
     Identify = 0x1E,         // Authenticated - make device identify itself
 
     // Cozy/Atlantic thermostat control
@@ -53,9 +55,10 @@ enum class IoHomeCommand : uint8_t
     KeyTransferConfirmation = 0x33, // Device confirms key storage
                                     // Unknown34 = 0x34,  // not used — observed in rspaargaren scan list only
 
-    // Address assignment
-    AddressRequest = 0x36,  // Request address from device
-    AddressResponse = 0x37, // Device responds with address
+    // Node/system verification. The 0x37 response becomes the authenticated
+    // transcript for the following 0x3C -> 0x3D challenge exchange.
+    NodeVerifyRequest = 0x36,
+    NodeVerifyResponse = 0x37,
 
     // 2W key exchange initiation
     LaunchKeyTransfer = 0x38, // Initiate key transfer with 6-byte challenge

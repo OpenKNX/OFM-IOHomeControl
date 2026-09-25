@@ -296,15 +296,15 @@ static void buildKeyExtractConfirmation(IoHomeFrame &oFrame,
     oFrame.hasHmac = false;
 }
 
-static void buildKeyExtractAddressRequest(IoHomeFrame &oFrame,
-                                          uint32_t iHubNodeId,
-                                          uint32_t iExtractNodeId)
+static void buildKeyExtractNodeVerifyRequest(IoHomeFrame &oFrame,
+                                             uint32_t iHubNodeId,
+                                             uint32_t iExtractNodeId)
 {
     oFrame.init();
     oFrame.setStart2W();
     oFrame.setSrcNode(iHubNodeId);
     oFrame.setDestNode(iExtractNodeId);
-    oFrame.commandId = IoHomeCommand::AddressRequest;
+    oFrame.commandId = IoHomeCommand::NodeVerifyRequest;
     oFrame.dataLen = 0;
     oFrame.hasHmac = false;
 }
@@ -4497,10 +4497,46 @@ TEST(send_key_1w_enum_value)
     ASSERT_EQ(static_cast<uint8_t>(IoHomeCommand::SendKey1W), 0x30);
 }
 
-TEST(address_request_enum)
+TEST(node_verify_command_enum_values)
 {
-    ASSERT_EQ(static_cast<uint8_t>(IoHomeCommand::AddressRequest), 0x36);
-    ASSERT_EQ(static_cast<uint8_t>(IoHomeCommand::AddressResponse), 0x37);
+    ASSERT_EQ(static_cast<uint8_t>(IoHomeCommand::NodeVerifyRequest), 0x36);
+    ASSERT_EQ(static_cast<uint8_t>(IoHomeCommand::NodeVerifyResponse), 0x37);
+}
+
+TEST(priority_level_command_enum_values)
+{
+    ASSERT_EQ(static_cast<uint8_t>(IoHomeCommand::PriorityLevelRequest), 0x19);
+    ASSERT_EQ(static_cast<uint8_t>(IoHomeCommand::PriorityLevelResponse), 0x1A);
+}
+
+TEST(renamed_commands_roundtrip_without_wire_changes)
+{
+    const IoHomeCommand lCommands[] = {
+        IoHomeCommand::PriorityLevelRequest,
+        IoHomeCommand::PriorityLevelResponse,
+        IoHomeCommand::NodeVerifyRequest,
+        IoHomeCommand::NodeVerifyResponse,
+    };
+    const uint8_t lExpected[] = {0x19, 0x1A, 0x36, 0x37};
+
+    for (size_t i = 0; i < sizeof(lCommands) / sizeof(lCommands[0]); ++i)
+    {
+        IoHomeFrame lFrame;
+        lFrame.init();
+        lFrame.setSrcNode(0x112233);
+        lFrame.setDestNode(0x445566);
+        lFrame.commandId = lCommands[i];
+        lFrame.dataLen = 0;
+
+        uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE] = {};
+        const uint8_t lLength = lFrame.serialize2W(lBuffer, sizeof(lBuffer));
+        ASSERT_TRUE(lLength > 0);
+        ASSERT_EQ(lBuffer[8], lExpected[i]);
+
+        IoHomeFrame lDecoded;
+        ASSERT_TRUE(lDecoded.deserialize(lBuffer, lLength));
+        ASSERT_EQ(lDecoded.commandId, lCommands[i]);
+    }
 }
 
 TEST(launch_key_transfer_enum)
@@ -6193,6 +6229,14 @@ TEST(command_name_enum_coverage)
     ASSERT_EQ((uint8_t)IoHomeCommand::DiscoverRequest, 0x28);
 #ifdef TEST_NATIVE
     ASSERT_TRUE(strcmp(IoHomeController::commandName(IoHomeCommand::Identify), "Identify") == 0);
+    ASSERT_TRUE(strcmp(IoHomeController::commandName(IoHomeCommand::PriorityLevelRequest),
+                       "PriorityLevelRequest") == 0);
+    ASSERT_TRUE(strcmp(IoHomeController::commandName(IoHomeCommand::PriorityLevelResponse),
+                       "PriorityLevelResponse") == 0);
+    ASSERT_TRUE(strcmp(IoHomeController::commandName(IoHomeCommand::NodeVerifyRequest),
+                       "NodeVerifyRequest") == 0);
+    ASSERT_TRUE(strcmp(IoHomeController::commandName(IoHomeCommand::NodeVerifyResponse),
+                       "NodeVerifyResponse") == 0);
 #endif
 }
 
@@ -11541,7 +11585,7 @@ TEST(controller_key_extract_allows_foreground_queue_after_capture)
     ASSERT_EQ(lTransmitted.commandId, IoHomeCommand::Execute);
 }
 
-TEST(controller_key_extract_completes_hub_address_verification)
+TEST(controller_key_extract_completes_hub_node_verification)
 {
     const uint32_t lOwnNodeId = 0x112233;
     const uint32_t lHubNodeId = 0x445566;
@@ -11580,7 +11624,7 @@ TEST(controller_key_extract_completes_hub_address_verification)
 
     // The advertised throwaway address is public; only the hub that handed us
     // the key may drive the post-extraction verification round.
-    buildKeyExtractAddressRequest(lRequest, 0x123456, lThrowawayNodeId);
+    buildKeyExtractNodeVerifyRequest(lRequest, 0x123456, lThrowawayNodeId);
     ASSERT_TRUE(!queueGatewayRequestAndLoop(lController, lRequest, lResponse));
     ASSERT_TRUE(!lController.keyExtractVerificationRequested());
 
@@ -11590,11 +11634,11 @@ TEST(controller_key_extract_completes_hub_address_verification)
     ASSERT_TRUE(!queueGatewayRequestAndLoop(lController, lRequest, lResponse));
     ASSERT_TRUE(!lController.keyExtractVerificationCompleted());
 
-    buildKeyExtractAddressRequest(lRequest, lHubNodeId, lThrowawayNodeId);
+    buildKeyExtractNodeVerifyRequest(lRequest, lHubNodeId, lThrowawayNodeId);
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
     ASSERT_TRUE(lController.keyExtractVerificationRequested());
     ASSERT_TRUE(!lController.keyExtractVerificationCompleted());
-    ASSERT_EQ(lResponse.commandId, IoHomeCommand::AddressResponse);
+    ASSERT_EQ(lResponse.commandId, IoHomeCommand::NodeVerifyResponse);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_EQ(lResponse.dataLen, 3);
     ASSERT_EQ(lResponse.data[0], static_cast<uint8_t>(lThrowawayNodeId >> 16));
@@ -11609,19 +11653,19 @@ TEST(controller_key_extract_completes_hub_address_verification)
     ASSERT_TRUE((lResponse.ctrlByte0 & IOHC_CTRL0_END) != 0);
     ASSERT_TRUE((lResponse.ctrlByte1 & IOHC_CTRL1_LOW_POWER) == 0);
 
-    IoHomeFrame lAddressResponse;
-    lAddressResponse.init();
-    lAddressResponse.ctrlByte0 = 0;
-    lAddressResponse.ctrlByte1 = 0;
-    lAddressResponse.setSrcNode(lThrowawayNodeId);
-    lAddressResponse.setDestNode(lHubNodeId);
-    lAddressResponse.commandId = IoHomeCommand::AddressResponse;
-    lAddressResponse.data[0] = static_cast<uint8_t>(lThrowawayNodeId >> 16);
-    lAddressResponse.data[1] = static_cast<uint8_t>(lThrowawayNodeId >> 8);
-    lAddressResponse.data[2] = static_cast<uint8_t>(lThrowawayNodeId);
-    lAddressResponse.dataLen = 3;
-    uint8_t lTranscript[4] = {static_cast<uint8_t>(IoHomeCommand::AddressResponse),
-                              lAddressResponse.data[0], lAddressResponse.data[1], lAddressResponse.data[2]};
+    IoHomeFrame lNodeVerifyResponse;
+    lNodeVerifyResponse.init();
+    lNodeVerifyResponse.ctrlByte0 = 0;
+    lNodeVerifyResponse.ctrlByte1 = 0;
+    lNodeVerifyResponse.setSrcNode(lThrowawayNodeId);
+    lNodeVerifyResponse.setDestNode(lHubNodeId);
+    lNodeVerifyResponse.commandId = IoHomeCommand::NodeVerifyResponse;
+    lNodeVerifyResponse.data[0] = static_cast<uint8_t>(lThrowawayNodeId >> 16);
+    lNodeVerifyResponse.data[1] = static_cast<uint8_t>(lThrowawayNodeId >> 8);
+    lNodeVerifyResponse.data[2] = static_cast<uint8_t>(lThrowawayNodeId);
+    lNodeVerifyResponse.dataLen = 3;
+    uint8_t lTranscript[4] = {static_cast<uint8_t>(IoHomeCommand::NodeVerifyResponse),
+                              lNodeVerifyResponse.data[0], lNodeVerifyResponse.data[1], lNodeVerifyResponse.data[2]};
     uint8_t lExpectedHmac[IOHC_HMAC_SIZE] = {};
     ASSERT_TRUE(IoHomeCrypto::createHmac2W(lTranscript, sizeof(lTranscript),
                                            lAddressChallenge, lSystemKey, lExpectedHmac));
@@ -11656,7 +11700,7 @@ TEST(controller_key_extract_ignored_verification_does_not_extend_grace)
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
 
     ioHomeTestAdvanceMillis(IoHomeController::kKeyExtractPostExtractGraceMs - 1000U);
-    buildKeyExtractAddressRequest(lRequest, lHubNodeId, lOwnNodeId);
+    buildKeyExtractNodeVerifyRequest(lRequest, lHubNodeId, lOwnNodeId);
     ASSERT_TRUE(!queueGatewayRequestAndLoop(lController, lRequest, lResponse));
     ASSERT_TRUE(!lController.keyExtractVerificationRequested());
 
@@ -12467,6 +12511,7 @@ TEST(controller_status_update_receive_auth_uses_saved_command_data)
     IoHomecontrolChannel lChannel;
     initPaired2WControllerForTest(lController, lModule, lChannel,
                                   lRemoteNodeId, lDeviceNodeId, lKey);
+    lController.radio().testSetDefaultResponsePreamble(IOHC_RESPONSE_PREAMBLE_SX1276);
 
     IoHomeFrame lStatusFrame;
     buildStatusUpdateFrame(lStatusFrame, lRemoteNodeId, lDeviceNodeId,
@@ -12486,6 +12531,8 @@ TEST(controller_status_update_receive_auth_uses_saved_command_data)
     ASSERT_TRUE(deserializeFrameForTest(lChallengeRequest, lChallengePacket.data(), static_cast<uint8_t>(lChallengePacket.size())));
     ASSERT_EQ(lChallengeRequest.commandId, IoHomeCommand::ChallengeRequest);
     ASSERT_EQ(lChallengeRequest.dataLen, 6);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
+    ASSERT_TRUE(lController.radio().testLastPreambleLength() != IOHC_PREAMBLE_SHORT);
     ASSERT_TRUE(!lChannel.testHasStatusUpdate());
     ASSERT_TRUE(!lChannel.testHasPositionFeedback());
 
@@ -12498,6 +12545,7 @@ TEST(controller_status_update_receive_auth_uses_saved_command_data)
     ASSERT_TRUE(lChallengeResponseLen > 0);
 
     lController.radio().testClearTransmittedPacket();
+    lController.radio().testClearTransmitHistory();
     lController.radio().testQueueReceivedPacket(lChallengeResponseBuffer, lChallengeResponseLen);
     lController.loop();
 
@@ -12523,6 +12571,77 @@ TEST(controller_status_update_receive_auth_uses_saved_command_data)
     for (int i = 0; i < 8; i++)
         lController.loop();
     ASSERT_EQ(lController.radio().testTransmitCount(), 4U);
+
+    const auto &lAckPackets = lController.radio().testTransmittedPackets();
+    const auto &lAckPreambles = lController.radio().testTransmitPreambles();
+    const auto &lAckFrequencies = lController.radio().testTransmitFrequencies();
+    ASSERT_EQ(lAckPackets.size(), 3U);
+    ASSERT_EQ(lAckPreambles.size(), 3U);
+    ASSERT_EQ(lAckFrequencies.size(), 3U);
+    for (size_t i = 0; i < 3; ++i)
+    {
+        IoHomeFrame lBroadcastAck;
+        ASSERT_TRUE(deserializeFrameForTest(
+            lBroadcastAck, lAckPackets[i].data(), static_cast<uint8_t>(lAckPackets[i].size())));
+        ASSERT_EQ(lBroadcastAck.commandId, IoHomeCommand::StatusUpdateResponse);
+        ASSERT_EQ(lAckPreambles[i], IOHC_RESPONSE_PREAMBLE_SX1276);
+        ASSERT_EQ(lAckFrequencies[i], IOHC_FREQUENCIES[i]);
+    }
+}
+
+TEST(controller_inbound_auth_challenge_keeps_default_8_response_preamble)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    const uint8_t lStatusData[11] = {1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+    lController.radio().testSetDefaultResponsePreamble(IOHC_RESPONSE_PREAMBLE_SX1262);
+
+    IoHomeFrame lStatusFrame;
+    buildStatusUpdateFrame(lStatusFrame, lRemoteNodeId, lDeviceNodeId,
+                           lStatusData, sizeof(lStatusData));
+    uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE] = {};
+    const uint8_t lLength = serializeFrameForTest(lStatusFrame, lBuffer, sizeof(lBuffer));
+    ASSERT_TRUE(lLength > 0);
+    lController.radio().testQueueReceivedPacket(lBuffer, lLength);
+    lController.loop();
+
+    IoHomeFrame lChallengeRequest;
+    ASSERT_TRUE(lastTransmittedFrameForTest(lController, lChallengeRequest));
+    ASSERT_EQ(lChallengeRequest.commandId, IoHomeCommand::ChallengeRequest);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1262);
+}
+
+TEST(controller_broadcast_status_update_does_not_send_addressed_ack)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    const uint8_t lStatusData[11] = {1};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+
+    IoHomeFrame lStatusFrame;
+    buildStatusUpdateFrame(lStatusFrame, 0x00003B, lDeviceNodeId,
+                           lStatusData, sizeof(lStatusData));
+    uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE] = {};
+    const uint8_t lLength = serializeFrameForTest(lStatusFrame, lBuffer, sizeof(lBuffer));
+    ASSERT_TRUE(lLength > 0);
+    lController.radio().testQueueReceivedPacket(lBuffer, lLength);
+    lController.loop();
+
+    ASSERT_EQ(lController.radio().testTransmitCount(), 0U);
+    ASSERT_TRUE(lController.radio().testTransmittedPackets().empty());
 }
 
 static void buildGeneralInfo2ResponseFrame(IoHomeFrame &oFrame,
@@ -14489,7 +14608,9 @@ int main()
     RUN(write_private_enum_value);
     RUN(identify_enum_value);
     RUN(send_key_1w_enum_value);
-    RUN(address_request_enum);
+    RUN(node_verify_command_enum_values);
+    RUN(priority_level_command_enum_values);
+    RUN(renamed_commands_roundtrip_without_wire_changes);
     RUN(launch_key_transfer_enum);
     RUN(remove_controller_enum);
 
@@ -14658,7 +14779,7 @@ int main()
     RUN(controller_key_extract_acknowledges_discovery_confirmation);
     RUN(controller_key_extract_defers_queue_and_rejects_competing_operations);
     RUN(controller_key_extract_recovers_hub_system_key);
-    RUN(controller_key_extract_completes_hub_address_verification);
+    RUN(controller_key_extract_completes_hub_node_verification);
     RUN(controller_key_extract_ignores_frames_addressed_to_real_node_id);
     RUN(controller_key_extract_disarms_after_success);
     RUN(controller_key_extract_locks_hub_at_key_init_not_first_discovery);
@@ -14726,6 +14847,8 @@ int main()
     RUN(controller_2w_challenge_response_matches_klr300_continuation_flags_for_low_power_device);
     RUN(controller_2w_challenge_response_matches_klr300_continuation_flags_for_always_alive_device);
     RUN(controller_status_update_receive_auth_uses_saved_command_data);
+    RUN(controller_inbound_auth_challenge_keeps_default_8_response_preamble);
+    RUN(controller_broadcast_status_update_does_not_send_addressed_ack);
     RUN(controller_2w_initial_response_wait_uses_retry_gap);
     RUN(controller_2w_exchange_uses_three_total_attempts_without_trailing_gap);
     RUN(controller_2w_exchange_budget_prevents_late_retry);

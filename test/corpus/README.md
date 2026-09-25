@@ -17,7 +17,7 @@ The initial scenarios cover the August regression families:
 | Smoove remove-add on SX1276 | Authenticated `0x39`, then 29-byte `0x30` without trailer |
 | Dimmer pairing on SX1276/SX1262/LR1121 | 35-byte `0x30` whose out-of-length trailer verifies; the same protocol fixture is attributed to each radio path |
 | RS100 on SX1262 | Foreign challenge is rejected by pairing correlation; valid retry confirmation decodes |
-| Key extraction | KIG300/KLR200-style address-response shape pins address verification parsing |
+| Key extraction | KIG300/KLR200-style node-verification response pins node/system verification parsing |
 | Pairing interference | One unrelated frame is assigned to each pairing wait state with its required outcome |
 | VELUX KLI-compatible enrollment | Public source-derived `0x30` shape with source, wrapped key and sequence masked; four ADD destinations plus STOP/DOWN timing metadata |
 | KLR300 2W pairing/search (2026-09-12) | Sanitized 0x28/0x2E/0x2C/0x31/0x32/0x2A/0x3D/0x36 sequence; CTRL1 and payload lengths preserved, secrets replaced |

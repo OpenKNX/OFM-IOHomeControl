@@ -217,7 +217,7 @@ static const uint8_t kRs100KeyTransferConfirmation[] = {
     0x08, 0x00, 0xA1, 0xB2, 0xC3, 0x65, 0x43, 0x21, 0x33,
 };
 
-static const uint8_t kExtractionAddressResponse[] = {
+static const uint8_t kExtractionNodeVerifyResponse[] = {
     0x0E, 0x00, 0xA1, 0xB2, 0xC3, 0x65, 0x43, 0x21, 0x37,
     0xA1, 0xB2, 0xC3, 0x00, 0x00, 0x01,
 };
@@ -325,7 +325,7 @@ static const uint8_t kKlr300ChallengeResponse[] = {
     0x10, 0x20, 0x30, 0x40, 0x50, 0x60,
 };
 
-static const uint8_t kKlr300AddressRequest[] = {
+static const uint8_t kKlr300NodeVerifyRequest[] = {
     0x48, 0x24, 0x7E, 0x9E, 0x6E, 0xE2, 0xD1, 0xFF, 0x36,
 };
 
@@ -418,9 +418,9 @@ static const Frame kFrames[] = {
      "sanitized KLR300 capture; HMAC replaced", RadioPath::ProtocolOnly,
      kKlr300ChallengeResponse, sizeof(kKlr300ChallengeResponse), IoHomeCommand::ChallengeResponse,
      0xE2D1FF, 0x7E9E6E, false, false, false, CryptoExpectation::NoCrypto},
-    {"klr300_address_request", "klr300_pairing_search_2026_09_12",
+    {"klr300_node_verify_request", "klr300_pairing_search_2026_09_12",
      "sanitized KLR300 capture; unknown CTRL1 bit 0x04 preserved without semantics", RadioPath::ProtocolOnly,
-     kKlr300AddressRequest, sizeof(kKlr300AddressRequest), IoHomeCommand::AddressRequest,
+     kKlr300NodeVerifyRequest, sizeof(kKlr300NodeVerifyRequest), IoHomeCommand::NodeVerifyRequest,
      0xE2D1FF, 0x7E9E6E, false, false, false, CryptoExpectation::NoCrypto},
     {"smoove_remove_controller", "smoove_remove_add_sx1276",
      "sanitized/re-keyed August Smoove remove-add shape", RadioPath::SX1276,
@@ -442,9 +442,9 @@ static const Frame kFrames[] = {
      "sanitized August RS100 retry-confirmation shape", RadioPath::SX1262,
      kRs100KeyTransferConfirmation, sizeof(kRs100KeyTransferConfirmation), IoHomeCommand::KeyTransferConfirmation,
      0x654321, 0xA1B2C3, false, false, false, CryptoExpectation::NoCrypto},
-    {"kig300_klr200_address_response", "key_extraction_address_verification",
-     "sanitized KIG300/KLR200 responder address-verification shape", RadioPath::ProtocolOnly,
-     kExtractionAddressResponse, sizeof(kExtractionAddressResponse), IoHomeCommand::AddressResponse,
+    {"kig300_klr200_node_verify_response", "key_extraction_node_verification",
+     "sanitized KIG300/KLR200 responder node-verification shape", RadioPath::ProtocolOnly,
+     kExtractionNodeVerifyResponse, sizeof(kExtractionNodeVerifyResponse), IoHomeCommand::NodeVerifyResponse,
      0x654321, 0xA1B2C3, false, false, false, CryptoExpectation::NoCrypto},
 };
 
@@ -476,10 +476,10 @@ static const Scenario kScenarios[] = {
      "protocol frame is decoded with the recorded radio attribution"},
     {"dimmer_pairing_lr1121", "dimmer_sendkey_with_mac", RadioPath::LR1121,
      "protocol fixture retained; hardware replay awaits an OFM LR1121 driver"},
-    {"kig300_key_extraction_address_verification", "kig300_klr200_address_response", RadioPath::ProtocolOnly,
-     "address response is available for responder address verification"},
-    {"klr200_key_extraction_address_verification", "kig300_klr200_address_response", RadioPath::ProtocolOnly,
-     "address response is available for responder address verification"},
+    {"kig300_key_extraction_node_verification", "kig300_klr200_node_verify_response", RadioPath::ProtocolOnly,
+     "node verification response is available for responder system verification"},
+    {"klr200_key_extraction_node_verification", "kig300_klr200_node_verify_response", RadioPath::ProtocolOnly,
+     "node verification response is available for responder system verification"},
 };
 
 static const char *const kKlr300PairingSearchSequence[] = {
@@ -491,7 +491,7 @@ static const char *const kKlr300PairingSearchSequence[] = {
     "klr300_discover_spe",
     "klr300_discover_2e_directed",
     "klr300_challenge_response",
-    "klr300_address_request",
+    "klr300_node_verify_request",
 };
 
 static constexpr uint8_t frameCount = sizeof(kFrames) / sizeof(kFrames[0]);

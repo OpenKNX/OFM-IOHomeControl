@@ -84,6 +84,9 @@ public:
     }
 
     mLastTransmittedPacket.assign(iData, iData + iLen);
+    mTransmittedPackets.push_back(mLastTransmittedPacket);
+    mTransmitPreambles.push_back(mLastPreambleLength);
+    mTransmitFrequencies.push_back(mCurrentFreq);
     mState = RadioState::Transmitting;
     mTxDonePending = true;
     mTxStartCount++;
@@ -198,6 +201,12 @@ public:
 
   void testClearReceivedPackets() { mReceiveQueue.clear(); }
   void testClearTransmittedPacket() { mLastTransmittedPacket.clear(); }
+  void testClearTransmitHistory()
+  {
+    mTransmittedPackets.clear();
+    mTransmitPreambles.clear();
+    mTransmitFrequencies.clear();
+  }
   void testSetNextFrequencyError(RadioError iError) { mNextFrequencyError = iError; }
   void testSetNextPreambleError(RadioError iError) { mNextPreambleError = iError; }
   void testSetNextTransmitError(RadioError iError) { mNextTransmitError = iError; }
@@ -223,6 +232,9 @@ public:
   uint16_t testLastPreambleLength() const { return mLastPreambleLength; }
   uint32_t testCurrentFrequency() const { return mCurrentFreq; }
   const std::vector<uint8_t> &testLastTransmittedPacket() const { return mLastTransmittedPacket; }
+  const std::vector<std::vector<uint8_t>> &testTransmittedPackets() const { return mTransmittedPackets; }
+  const std::vector<uint16_t> &testTransmitPreambles() const { return mTransmitPreambles; }
+  const std::vector<uint32_t> &testTransmitFrequencies() const { return mTransmitFrequencies; }
 
 private:
   struct QueuedPacket
@@ -256,4 +268,7 @@ private:
   RadioError mNextTransmitError = RadioError::None;
   std::deque<QueuedPacket> mReceiveQueue;
   std::vector<uint8_t> mLastTransmittedPacket;
+  std::vector<std::vector<uint8_t>> mTransmittedPackets;
+  std::vector<uint16_t> mTransmitPreambles;
+  std::vector<uint32_t> mTransmitFrequencies;
 };
