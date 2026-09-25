@@ -270,11 +270,11 @@ class ChannelUiTest(unittest.TestCase):
 
         script = (ROOT / "src" / "IoHomecontrol.script.js").read_text()
         workflow = script.split("function IOHC_startKeyExtract", 1)[1]
-        for command in ("[0x17]", "[0x18]", "[0x19, resultIndex]", "[0x1A, discoveries[d].index, targetChannel]", "[0x1B]"):
+        for command in ("[0x17]", "[0x18]", "[0x19, resultIndex]", "[0x1C, channelCount]", "[0x1B]"):
             self.assertIn(command, workflow)
         self.assertIn('Number(activeParameter.value) == 1', workflow)
-        self.assertIn('[0x12, channelIndex]', workflow)
-        self.assertIn('IOHC_readNodeId(channelStatus, 1) == 0', workflow)
+        self.assertNotIn('[0x12, channelIndex]', workflow)
+        self.assertNotIn('[0x1A, discoveries[d].index, targetChannel]', workflow)
         self.assertIn('prefix + "Active", 1', script)
         self.assertIn('prefix + "DeviceType", etsType', script)
         self.assertIn("function IOHC_syncChannelSelection", script)
@@ -300,6 +300,7 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn("KeyImport scan tx:", controller_source)
         self.assertIn("mController.setOwnNodeId(mKeyImportHubNodeId)", module_source)
         self.assertNotIn("mController.setOwnNodeId(mKeyImportExtractionNodeId)", module_source)
+        self.assertIn("case 0x1C: // Batch-assign", module_source)
         self.assertNotIn("key=%02X", module_source)
 
     def test_one_way_enrollment_finalizer_is_labeled_stop_runter(self) -> None:

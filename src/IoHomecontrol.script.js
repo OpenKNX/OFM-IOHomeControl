@@ -687,63 +687,42 @@ function IOHC_startKeyExtract(device, online, progress, context) {
 
         var channelCount = context && context.channelCount ? context.channelCount : 16;
         var channelActive = [];
-        var freeChannels = [];
+        var assignmentRequest = [0x1C, channelCount];
         for (var channelIndex = 0; channelIndex < channelCount; channelIndex++) {
             var activeParameter = IOHC_getParameter(device, "IOHC_c" + (channelIndex + 1) + "Active");
             var isActive = activeParameter && Number(activeParameter.value) == 1;
             channelActive[channelIndex] = isActive;
-            var channelStatus = IOHC_invokeFunctionProperty(online, [0x12, channelIndex]);
-            if (!channelStatus || channelStatus.length < 4) {
-                throw new Error("io-homecontrol: Kanalstatus " + (channelIndex + 1) + " konnte nicht gelesen werden");
-            }
-            var runtimeUnused = (channelStatus[0] || 0) == 0 && IOHC_readNodeId(channelStatus, 1) == 0;
-            if (runtimeUnused) {
-                freeChannels.push(channelIndex);
-            }
+            assignmentRequest.push(channelIndex);
         }
 
         var configuredChannels = 0;
         var alreadyConfigured = 0;
         var unassigned = 0;
-        var unusableChannels = {};
+        var assignmentResponse = IOHC_invokeFunctionProperty(online, assignmentRequest);
+        if (!assignmentResponse || assignmentResponse.length < 2 || assignmentResponse[0] != 0 ||
+            assignmentResponse[1] != discoveries.length ||
+            assignmentResponse.length < 2 + (discoveries.length * 2)) {
+            throw new Error("io-homecontrol: Geräte konnten nicht gesammelt zugeordnet werden");
+        }
         for (var d = 0; d < discoveries.length; d++) {
-            var assigned = false;
-            while (freeChannels.length > 0 && !assigned) {
-                var targetChannel = freeChannels.shift();
-                if (unusableChannels[targetChannel]) {
-                    continue;
-                }
-                var assignedResp = IOHC_invokeFunctionProperty(online, [0x1A, discoveries[d].index, targetChannel]);
-                if (!assignedResp || assignedResp.length < 2) {
-                    throw new Error("io-homecontrol: Keine Antwort beim Zuordnen von " + IOHC_formatNodeId(discoveries[d].nodeId));
-                }
-                if (assignedResp[0] == 0) {
-                    IOHC_configureImportedChannel(device, targetChannel + 1, discoveries[d]);
-                    channelActive[targetChannel] = true;
+            var assignmentStatus = assignmentResponse[2 + (d * 2)];
+            var assignedChannel = assignmentResponse[3 + (d * 2)];
+            if (assignmentStatus == 0) {
+                IOHC_configureImportedChannel(device, assignedChannel + 1, discoveries[d]);
+                channelActive[assignedChannel] = true;
+                configuredChannels++;
+            } else if (assignmentStatus == 1) {
+                if (assignedChannel < channelCount && !channelActive[assignedChannel]) {
+                    IOHC_configureImportedChannel(device, assignedChannel + 1, discoveries[d]);
+                    channelActive[assignedChannel] = true;
                     configuredChannels++;
-                    assigned = true;
-                } else if (assignedResp[0] == 1) {
-                    var existingChannel = assignedResp[1];
-                    if (existingChannel < channelCount && !channelActive[existingChannel]) {
-                        IOHC_configureImportedChannel(device, existingChannel + 1, discoveries[d]);
-                        channelActive[existingChannel] = true;
-                        unusableChannels[existingChannel] = true;
-                        configuredChannels++;
-                    } else {
-                        alreadyConfigured++;
-                    }
-                    // The proposed target was untouched because the node was
-                    // already stored elsewhere, so it remains available.
-                    freeChannels.push(targetChannel);
-                    assigned = true;
-                } else if (assignedResp[0] == 2) {
-                    unusableChannels[targetChannel] = true;
                 } else {
-                    throw new Error("io-homecontrol: Scan-Ergebnis " + (d + 1) + " ist nicht mehr verfügbar");
+                    alreadyConfigured++;
                 }
-            }
-            if (!assigned) {
+            } else if (assignmentStatus == 2) {
                 unassigned++;
+            } else {
+                throw new Error("io-homecontrol: Scan-Ergebnis " + (d + 1) + " ist nicht mehr verfügbar");
             }
             progress.setProgress(80 + Math.floor(((d + 1) * 15) / Math.max(1, discoveries.length)));
         }

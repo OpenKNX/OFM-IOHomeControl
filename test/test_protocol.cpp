@@ -2150,8 +2150,8 @@ TEST(error_response_semantics_are_human_readable)
 TEST(general_info1_response_decode)
 {
     // GetGeneralInfo1Response (0x55) layout:
-    //   data[0]: device type low byte (bits 0-7)
-    //   data[1]: (device type bits 8-9) | (subtype bits 0-5 << 2)
+    //   data[0]: device type bits 9-2
+    //   data[1]: device type bits 1-0 followed by subtype bits 5-0
     //   data[2]: manufacturer code
     // Device type = 10 bits, subtype = 6 bits
     IoHomeFrame frame;
@@ -2165,8 +2165,7 @@ TEST(general_info1_response_decode)
     uint16_t devType = 0x0002;
     uint8_t subType = 0x01;
     uint8_t manufacturer = 0x02;
-    frame.data[0] = devType & 0xFF;
-    frame.data[1] = ((devType >> 8) & 0x03) | ((subType & 0x3F) << 2);
+    encodePackedDeviceType(devType, subType, frame.data[0], frame.data[1]);
     frame.data[2] = manufacturer;
     frame.dataLen = 3;
     frame.hasHmac = false;
@@ -2178,13 +2177,12 @@ TEST(general_info1_response_decode)
     ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x55);
 
-    // Decode per our controller logic
-    uint16_t parsedType = (parsed.data[0] | ((uint16_t)parsed.data[1] << 8)) & 0x3FF;
-    uint8_t parsedSubtype = parsed.data[1] & 0x3F;
+    const IoHomeDiscoveryMetadata lMetadata =
+        decodeDiscoveryMetadata(parsed.data, IOHC_DISCOVERY_METADATA_SIZE);
     uint8_t parsedMfg = parsed.data[2];
 
-    ASSERT_EQ(parsedType, 0x0002);
-    ASSERT_EQ(parsedSubtype, ((subType << 2) & 0x3F)); // matches our decode
+    ASSERT_EQ(lMetadata.deviceType, 0x0002);
+    ASSERT_EQ(lMetadata.subtype, subType);
     ASSERT_EQ(parsedMfg, 0x02);
 }
 
@@ -2193,12 +2191,14 @@ TEST(general_info1_all_device_types)
     // Verify device type encoding supports full 10-bit range
     for (uint16_t devType = 0; devType <= 0x03FF; devType += 0x80)
     {
-        uint8_t byte0 = devType & 0xFF;
-        uint8_t byte1 = (devType >> 8) & 0x03;
-        uint16_t decoded = (byte0 | ((uint16_t)byte1 << 8)) & 0x3FF;
-        if (decoded != devType)
+        uint8_t lPacked[2] = {};
+        encodePackedDeviceType(devType, 0x2A, lPacked[0], lPacked[1]);
+        const IoHomeDiscoveryMetadata lDecoded =
+            decodeDiscoveryMetadata(lPacked, sizeof(lPacked));
+        if (lDecoded.deviceType != devType || lDecoded.subtype != 0x2A)
         {
-            printf("[FAIL] device type 0x%03X roundtrip failed: got 0x%03X\n", devType, decoded);
+            printf("[FAIL] device type 0x%03X roundtrip failed: got 0x%03X subtype=0x%02X\n",
+                   devType, lDecoded.deviceType, lDecoded.subtype);
             sTestsFailed++;
             return;
         }
@@ -2279,8 +2279,8 @@ TEST(discovery_response_frame)
     frame.setDestNode(0x1A380B); // our node
     frame.commandId = IoHomeCommand::DiscoverResponse;
     // The first two payload bytes contain packed device type/subtype metadata.
-    frame.data[0] = 0x02; // device type: roller shutter
-    frame.data[1] = 0x00;
+    frame.data[0] = 0x00; // packed roller shutter type/subtype 0
+    frame.data[1] = 0x80;
     frame.dataLen = 2;
     frame.hasHmac = false;
 
@@ -2307,6 +2307,9 @@ TEST(discovery_response_metadata_uses_full_layout_offsets)
         decodeDiscoveryMetadata(lData, sizeof(lData));
 
     ASSERT_TRUE(lMetadata.valid);
+    ASSERT_EQ(lMetadata.deviceType,
+              static_cast<uint16_t>(IoHomeDeviceType::RollerShutter));
+    ASSERT_EQ(lMetadata.subtype, 0);
     ASSERT_EQ(lMetadata.manufacturer,
               static_cast<uint8_t>(IoHomeManufacturer::Velux));
     ASSERT_TRUE(lMetadata.hasPowerClass);
@@ -2317,6 +2320,41 @@ TEST(discovery_response_metadata_uses_full_layout_offsets)
     ASSERT_TRUE(lTypeOnly.valid);
     ASSERT_EQ(lTypeOnly.manufacturer, 0);
     ASSERT_TRUE(!lTypeOnly.hasPowerClass);
+}
+
+TEST(packed_device_metadata_known_answers_and_roundtrips)
+{
+    const uint8_t lRollerShutter[] = {0x00, 0x80};
+    const IoHomeDiscoveryMetadata lRoller =
+        decodeDiscoveryMetadata(lRollerShutter, sizeof(lRollerShutter));
+    ASSERT_TRUE(lRoller.valid);
+    ASSERT_EQ(lRoller.deviceType, 0x02);
+    ASSERT_EQ(lRoller.subtype, 0);
+
+    const uint8_t lHorizontalAwning[] = {0x04, 0x00};
+    const IoHomeDiscoveryMetadata lHorizontal =
+        decodeDiscoveryMetadata(lHorizontalAwning, sizeof(lHorizontalAwning));
+    ASSERT_TRUE(lHorizontal.valid);
+    ASSERT_EQ(lHorizontal.deviceType, 0x10);
+    ASSERT_EQ(lHorizontal.subtype, 0);
+
+    const uint16_t lTypes[] = {
+        0x01, 0x02, 0x03, 0x04, 0x06, 0x0D, 0x10, 0x11, 0x18,
+    };
+    const uint8_t lSubtypes[] = {0x00, 0x01, 0x2A, 0x3F};
+    for (uint16_t lType : lTypes)
+    {
+        for (uint8_t lSubtype : lSubtypes)
+        {
+            uint8_t lPacked[2] = {};
+            encodePackedDeviceType(lType, lSubtype, lPacked[0], lPacked[1]);
+            const IoHomeDiscoveryMetadata lDecoded =
+                decodeDiscoveryMetadata(lPacked, sizeof(lPacked));
+            ASSERT_TRUE(lDecoded.valid);
+            ASSERT_EQ(lDecoded.deviceType, lType);
+            ASSERT_EQ(lDecoded.subtype, lSubtype);
+        }
+    }
 }
 
 TEST(discovery_spe_response_frame)
@@ -3999,17 +4037,17 @@ TEST(integration_device_info_query)
     info1Resp.setDestNode(gwNode);
     info1Resp.commandId = IoHomeCommand::GetGeneralInfo1Response;
     // Device type 0x01 (venetian blind), subtype 0x00, mfg 0x02 (Somfy)
-    info1Resp.data[0] = 0x01;
-    info1Resp.data[1] = 0x00;
+    encodePackedDeviceType(0x01, 0x00, info1Resp.data[0], info1Resp.data[1]);
     info1Resp.data[2] = 0x02;
     info1Resp.dataLen = 3;
     info1Resp.hasHmac = false;
     len = serializeFrameForTest(info1Resp, buf, sizeof(buf));
 
     ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
-    uint16_t devType = (parsed.data[0] | ((uint16_t)parsed.data[1] << 8)) & 0x3FF;
+    const IoHomeDiscoveryMetadata lInfoMetadata =
+        decodeDiscoveryMetadata(parsed.data, IOHC_DISCOVERY_METADATA_SIZE);
     uint8_t mfg = parsed.data[2];
-    ASSERT_EQ(devType, 0x01); // venetian blind
+    ASSERT_EQ(lInfoMetadata.deviceType, 0x01); // venetian blind
     ASSERT_EQ(mfg, 0x02);     // Somfy
 
     // --- GetGeneralInfo3 request ---
@@ -9262,6 +9300,83 @@ static bool queueControllerResponse(IoHomeController &iController,
     return true;
 }
 
+static void buildPairChallengeRequestFrame(IoHomeFrame &oFrame,
+                                           uint32_t iRemoteNodeId,
+                                           uint32_t iDeviceNodeId,
+                                           const uint8_t iChallenge[6]);
+
+static void buildDirectedDiscoveryResponse(IoHomeFrame &oFrame,
+                                           uint32_t iRemoteNodeId,
+                                           uint32_t iDeviceNodeId,
+                                           uint8_t iSelector = 0x02)
+{
+    oFrame.init();
+    oFrame.ctrlByte0 = IOHC_CTRL0_END;
+    oFrame.ctrlByte1 = 0x00;
+    oFrame.setSrcNode(iDeviceNodeId);
+    oFrame.setDestNode(iRemoteNodeId);
+    oFrame.commandId = IoHomeCommand::Discover2EResponse;
+    oFrame.data[0] = iSelector;
+    oFrame.dataLen = 1;
+    oFrame.hasHmac = false;
+}
+
+TEST(controller_directed_discovery_requires_challenge_before_accepting_response)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0xE50470;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    const uint8_t lChallenge[6] = {0x10, 0x20, 0x30, 0x40, 0x50, 0x60};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, 0, lKey);
+
+    ASSERT_TRUE(lController.sendBackgroundCommand(
+        lDeviceNodeId, lKey, IoHomeCommand::Discover2ERequest, 0x02));
+    IoHomeFrame lRequest;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lRequest));
+    ASSERT_EQ(lRequest.commandId, IoHomeCommand::Discover2ERequest);
+    ASSERT_EQ(lRequest.getSrcNodeId(), lRemoteNodeId);
+    ASSERT_EQ(lRequest.getDestNodeId(), lDeviceNodeId);
+    ASSERT_TRUE((lRequest.ctrlByte0 & IOHC_CTRL0_START) != 0);
+    ASSERT_TRUE((lRequest.ctrlByte0 & IOHC_CTRL0_END) == 0);
+    ASSERT_TRUE((lRequest.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+    ASSERT_EQ(lRequest.dataLen, 1);
+    ASSERT_EQ(lRequest.data[0], 0x02);
+
+    // A matching 0x2F without the intervening 0x3C/0x3D authentication must
+    // complete the transport exchange without promoting the passive node.
+    IoHomeFrame lResponse;
+    buildDirectedDiscoveryResponse(lResponse, lRemoteNodeId, lDeviceNodeId);
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    ASSERT_EQ(lModule.testAuthenticatedDirectedCount(), 0);
+
+    ASSERT_TRUE(lController.sendBackgroundCommand(
+        lDeviceNodeId, lKey, IoHomeCommand::Discover2ERequest, 0x02));
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lRequest));
+
+    IoHomeFrame lChallengeRequest;
+    buildPairChallengeRequestFrame(lChallengeRequest, lRemoteNodeId,
+                                   lDeviceNodeId, lChallenge);
+    ASSERT_TRUE(queueControllerResponse(lController, lChallengeRequest));
+    const auto &lAuthPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lAuthPacket.empty());
+    IoHomeFrame lAuthResponse;
+    ASSERT_TRUE(deserializeFrameForTest(
+        lAuthResponse, lAuthPacket.data(), static_cast<uint8_t>(lAuthPacket.size())));
+    ASSERT_EQ(lAuthResponse.commandId, IoHomeCommand::ChallengeResponse);
+
+    buildDirectedDiscoveryResponse(lResponse, lRemoteNodeId, lDeviceNodeId);
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    ASSERT_EQ(lModule.testAuthenticatedDirectedCount(), 1);
+    ASSERT_EQ(lModule.testLastAuthenticatedDirectedNode(), lDeviceNodeId);
+}
+
 TEST(controller_cozy_temperature_preserves_le16_queue_value)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -11277,7 +11392,7 @@ TEST(controller_key_extract_answers_discovery_with_throwaway_id)
     ASSERT_NE(lResponse.getSrcNodeId(), lOwnNodeId);
     ASSERT_EQ(lResponse.dataLen, 9);
     const uint8_t lExpectedPayload[] = {
-        0x02, 0x00,
+        0x00, 0x80,
         static_cast<uint8_t>((lResponse.getSrcNodeId() >> 16) & 0xFF),
         static_cast<uint8_t>((lResponse.getSrcNodeId() >> 8) & 0xFF),
         static_cast<uint8_t>(lResponse.getSrcNodeId() & 0xFF),
@@ -11683,6 +11798,15 @@ TEST(controller_key_extract_completes_hub_node_verification)
     ASSERT_TRUE(lController.keyExtractKeyCaptured());
     ASSERT_TRUE(!lController.keyExtractNodeVerificationSeen());
     ASSERT_TRUE(!lController.keyExtractNodeVerificationAuthDone());
+
+    // Traffic between the locked hub and another unicast node is only a
+    // candidate hint. The import workflow authenticates it later with the
+    // directed 0x2E exchange before accepting it.
+    const uint32_t lPassiveCandidate = 0xE50470;
+    buildKeyExtractNodeVerifyRequest(lRequest, lHubNodeId, lPassiveCandidate);
+    ASSERT_TRUE(!queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_EQ(lModule.testKeyImportCandidateCount(), 1);
+    ASSERT_EQ(lModule.testLastKeyImportCandidate(), lPassiveCandidate);
 
     // The advertised throwaway address is public; only the hub that handed us
     // the key may drive the post-extraction verification round.

@@ -709,6 +709,79 @@ void IoHomecontrol::resetKeyImportWorkflow()
     memset(mKeyImportDevices, 0, sizeof(mKeyImportDevices));
     mKeyImportDeviceCount = 0;
     mKeyImportOverflow = false;
+    memset(mKeyImportCandidates, 0, sizeof(mKeyImportCandidates));
+    mKeyImportCandidateCount = 0;
+    mKeyImportDirectedCandidateIndex = 0;
+    mKeyImportDirectedNodeId = 0;
+    mKeyImportBroadcastComplete = false;
+    mKeyImportDirectedAwaiting = false;
+}
+
+IoHomecontrol::KeyImportDevice *IoHomecontrol::findKeyImportDevice(uint32_t iNodeId)
+{
+    for (uint8_t i = 0; i < mKeyImportDeviceCount; i++)
+    {
+        if (mKeyImportDevices[i].valid && mKeyImportDevices[i].nodeId == iNodeId)
+            return &mKeyImportDevices[i];
+    }
+    return nullptr;
+}
+
+IoHomecontrol::KeyImportDevice *IoHomecontrol::addKeyImportDevice(uint32_t iNodeId)
+{
+    KeyImportDevice *lExisting = findKeyImportDevice(iNodeId);
+    if (lExisting)
+        return lExisting;
+    if (mKeyImportDeviceCount >= kMaxKeyImportDevices)
+    {
+        mKeyImportOverflow = true;
+        return nullptr;
+    }
+
+    KeyImportDevice *lDevice = &mKeyImportDevices[mKeyImportDeviceCount++];
+    *lDevice = KeyImportDevice{};
+    lDevice->valid = true;
+    lDevice->nodeId = iNodeId;
+    return lDevice;
+}
+
+void IoHomecontrol::onKeyImportCandidateObserved(uint32_t iNodeId)
+{
+    iNodeId &= 0x00FFFFFF;
+    if ((mKeyImportPhase != KeyImportPhase::Extracting &&
+         mKeyImportPhase != KeyImportPhase::Verifying) ||
+        iNodeId == 0 || iNodeId == mKeyImportHubNodeId ||
+        iNodeId == mKeyImportExtractionNodeId ||
+        getAddressClass(iNodeId) != IoHomeAddressClass::Unicast)
+        return;
+
+    for (uint8_t i = 0; i < mKeyImportCandidateCount; i++)
+    {
+        if (mKeyImportCandidates[i] == iNodeId)
+            return;
+    }
+    if (mKeyImportCandidateCount >= kMaxKeyImportDevices)
+    {
+        mKeyImportOverflow = true;
+        return;
+    }
+
+    mKeyImportCandidates[mKeyImportCandidateCount++] = iNodeId;
+    logInfoP("ETS key import: observed passive candidate 0x%06X",
+             iNodeId);
+}
+
+void IoHomecontrol::onAuthenticatedDirectedDiscovery(uint32_t iNodeId)
+{
+    iNodeId &= 0x00FFFFFF;
+    if (mKeyImportPhase != KeyImportPhase::Scanning ||
+        !mKeyImportDirectedAwaiting ||
+        iNodeId != mKeyImportDirectedNodeId)
+        return;
+
+    if (addKeyImportDevice(iNodeId))
+        logInfoP("ETS key import: authenticated passive candidate 0x%06X via directed 0x2E/0x2F",
+                 iNodeId);
 }
 
 void IoHomecontrol::onDiscoveryResponse(const IoHomeFrame &iFrame)
@@ -724,27 +797,9 @@ void IoHomecontrol::onDiscoveryResponse(const IoHomeFrame &iFrame)
         iFrame.getDestNodeId() != mController.getOwnNodeId())
         return;
 
-    KeyImportDevice *lDevice = nullptr;
-    for (uint8_t i = 0; i < mKeyImportDeviceCount; i++)
-    {
-        if (mKeyImportDevices[i].nodeId == lNodeId)
-        {
-            lDevice = &mKeyImportDevices[i];
-            break;
-        }
-    }
-
-    if (lDevice == nullptr)
-    {
-        if (mKeyImportDeviceCount >= kMaxKeyImportDevices)
-        {
-            mKeyImportOverflow = true;
-            return;
-        }
-        lDevice = &mKeyImportDevices[mKeyImportDeviceCount++];
-        lDevice->valid = true;
-        lDevice->nodeId = lNodeId;
-    }
+    KeyImportDevice *lDevice = addKeyImportDevice(lNodeId);
+    if (!lDevice)
+        return;
 
     const IoHomeDiscoveryMetadata lMetadata = decodeDiscoveryMetadata(iFrame.data, iFrame.dataLen);
     if (lMetadata.valid)
@@ -785,6 +840,10 @@ void IoHomecontrol::processKeyImportWorkflow()
         openknx.flash.save(true);
 
         mKeyImportPhase = KeyImportPhase::Scanning;
+        mKeyImportBroadcastComplete = false;
+        mKeyImportDirectedCandidateIndex = 0;
+        mKeyImportDirectedNodeId = 0;
+        mKeyImportDirectedAwaiting = false;
         logInfoP("ETS key import: starting authenticated discovery as 0x%06X",
                  mKeyImportHubNodeId);
         mController.startDiscovery(true);
@@ -800,6 +859,47 @@ void IoHomecontrol::processKeyImportWorkflow()
     if (mKeyImportPhase == KeyImportPhase::Scanning &&
         mController.state() == ControllerState::Idle)
     {
+        if (!mKeyImportBroadcastComplete)
+        {
+            mKeyImportBroadcastComplete = true;
+            logInfoP("ETS key import: broadcast discovery complete, %u device(s); checking %u passive candidate(s)",
+                     static_cast<unsigned>(mKeyImportDeviceCount),
+                     static_cast<unsigned>(mKeyImportCandidateCount));
+        }
+        else if (mKeyImportDirectedAwaiting)
+        {
+            mKeyImportDirectedAwaiting = false;
+            mKeyImportDirectedNodeId = 0;
+            if (mKeyImportDirectedCandidateIndex < mKeyImportCandidateCount)
+                ++mKeyImportDirectedCandidateIndex;
+        }
+
+        while (mKeyImportDirectedCandidateIndex < mKeyImportCandidateCount &&
+               findKeyImportDevice(mKeyImportCandidates[mKeyImportDirectedCandidateIndex]))
+            ++mKeyImportDirectedCandidateIndex;
+
+        if (mKeyImportDirectedCandidateIndex < mKeyImportCandidateCount)
+        {
+            const uint32_t lCandidate =
+                mKeyImportCandidates[mKeyImportDirectedCandidateIndex];
+            if (mController.sendBackgroundCommand(
+                    lCandidate, mKeyImportKey.key,
+                    IoHomeCommand::Discover2ERequest, 0x02,
+                    0xFF, 0xFF, IOHC_EXCHANGE_MAX_ATTEMPTS))
+            {
+                mKeyImportDirectedNodeId = lCandidate;
+                mKeyImportDirectedAwaiting = true;
+                logInfoP("ETS key import: directed authenticated discovery candidate=0x%06X",
+                         lCandidate);
+                return;
+            }
+
+            logInfoP("ETS key import: could not queue directed discovery for 0x%06X",
+                     lCandidate);
+            ++mKeyImportDirectedCandidateIndex;
+            return;
+        }
+
         mKeyImportPhase = KeyImportPhase::Complete;
         logInfoP("ETS key import: discovery complete, %u device(s) found%s",
                  static_cast<unsigned>(mKeyImportDeviceCount),
@@ -832,22 +932,36 @@ uint8_t IoHomecontrol::assignKeyImportDevice(uint8_t iResultIndex,
         mChannels[iChannelIndex]->isOperational())
         return 0x02;
 
+    if (!applyKeyImportDeviceToChannel(lDevice, iChannelIndex))
+        return 0x02;
+
+    openknx.flash.save();
+    return 0x00;
+}
+
+bool IoHomecontrol::applyKeyImportDeviceToChannel(const KeyImportDevice &iDevice,
+                                                  uint8_t iChannelIndex)
+{
+    if (iChannelIndex >= mNumChannels || mChannels[iChannelIndex] == nullptr ||
+        mChannels[iChannelIndex]->getNodeId() != 0 ||
+        mChannels[iChannelIndex]->isOperational())
+        return false;
+
     IoHomecontrolChannel *lChannel = mChannels[iChannelIndex];
     lChannel->setIs1W(false);
-    lChannel->setNodeId(lDevice.nodeId);
+    lChannel->setNodeId(iDevice.nodeId);
     lChannel->setEncryptionKey(mKeyImportKey.key);
     lChannel->setOneWayEnrolled(false);
-    if (lDevice.powerClass == 2)
+    if (iDevice.powerClass == 2)
         lChannel->setLowPower2W(true);
-    else if (lDevice.powerClass == 1)
+    else if (iDevice.powerClass == 1)
         lChannel->setLowPower2W(false);
     else
         lChannel->clearLearnedLowPower2W();
-    lChannel->onDeviceInfo(lDevice.deviceType, lDevice.subtype, lDevice.manufacturer);
-    openknx.flash.save();
+    lChannel->onDeviceInfo(iDevice.deviceType, iDevice.subtype, iDevice.manufacturer);
     logInfoP("ETS key import: assigned 0x%06X to channel %u",
-             lDevice.nodeId, static_cast<unsigned>(iChannelIndex + 1));
-    return 0x00;
+             iDevice.nodeId, static_cast<unsigned>(iChannelIndex + 1));
+    return true;
 }
 
 IoHomecontrolChannel *IoHomecontrol::getChannel(uint8_t iIndex)
@@ -2389,6 +2503,57 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         resultData[0] = assignKeyImportDevice(data[1], data[2], lExistingChannel);
         resultData[1] = lExistingChannel;
         resultLength = 2;
+        return true;
+    }
+    case 0x1C: // Batch-assign all discovery results to candidate channels
+    {
+        if (length < 2 || mKeyImportPhase != KeyImportPhase::Complete)
+            break;
+        const uint8_t lCandidateCount = data[1];
+        if (lCandidateCount > mNumChannels || length < static_cast<uint8_t>(2 + lCandidateCount))
+            break;
+
+        resultData[0] = 0x00;
+        resultData[1] = mKeyImportDeviceCount;
+        resultLength = static_cast<uint8_t>(2 + (mKeyImportDeviceCount * 2));
+
+        for (uint8_t lResultIndex = 0; lResultIndex < mKeyImportDeviceCount; lResultIndex++)
+        {
+            const KeyImportDevice &lDevice = mKeyImportDevices[lResultIndex];
+            uint8_t lStatus = 0x03;
+            uint8_t lChannelIndex = 0xFF;
+
+            if (lDevice.valid)
+            {
+                for (uint8_t i = 0; i < mNumChannels; i++)
+                {
+                    if (mChannels[i] != nullptr && mChannels[i]->getNodeId() == lDevice.nodeId)
+                    {
+                        lStatus = 0x01;
+                        lChannelIndex = i;
+                        break;
+                    }
+                }
+
+                if (lStatus != 0x01)
+                {
+                    lStatus = 0x02;
+                    for (uint8_t i = 0; i < lCandidateCount; i++)
+                    {
+                        const uint8_t lCandidateChannel = data[2 + i];
+                        if (applyKeyImportDeviceToChannel(lDevice, lCandidateChannel))
+                        {
+                            lStatus = 0x00;
+                            lChannelIndex = lCandidateChannel;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            resultData[2 + (lResultIndex * 2)] = lStatus;
+            resultData[3 + (lResultIndex * 2)] = lChannelIndex;
+        }
         return true;
     }
     case 0x1B: // Persist all imported assignments

@@ -971,7 +971,7 @@ namespace
                                         lChallenge, iSystemKey, lHmac))
             return false;
 
-        logDebug("", "2W discovery 0x2A: challenge=%02X%02X%02X%02X%02X%02X hmac=%02X%02X%02X%02X%02X%02X",
+        logDebugP("2W discovery 0x2A: challenge=%02X%02X%02X%02X%02X%02X hmac=%02X%02X%02X%02X%02X%02X",
                   lChallenge[0], lChallenge[1], lChallenge[2],
                   lChallenge[3], lChallenge[4], lChallenge[5],
                   lHmac[0], lHmac[1], lHmac[2],
@@ -5736,8 +5736,17 @@ void IoHomeController::processResponse()
     }
 
     const IoHomeQueueEntry lCompletedCmd = mCurrentCmd;
+    const bool lAuthenticatedDirectedDiscovery =
+        mCurrentCmd.command == IoHomeCommand::Discover2ERequest &&
+        mRxFrame.commandId == IoHomeCommand::Discover2EResponse &&
+        mRxFrame.dataLen == 1 && mRxFrame.data[0] == mCurrentCmd.param &&
+        (mRxFrame.ctrlByte0 & IOHC_CTRL0_END) != 0 &&
+        (mRxFrame.ctrlByte0 & IOHC_CTRL0_START) == 0 &&
+        mSawChallenge && mWaitingFinalResponse;
     const bool lExplicitFailure = mRxFrame.commandId == IoHomeCommand::ErrorResponse;
     dispatchRxFrame();
+    if (lAuthenticatedDirectedDiscovery && mModule)
+        mModule->onAuthenticatedDirectedDiscovery(lCompletedCmd.destNodeId);
     notifyCommandExchangeResult(lCompletedCmd,
                                 lExplicitFailure
                                     ? IoHomeCommandExchangeResult::FailedBeforeAuthentication
@@ -8104,6 +8113,17 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         }
         break;
     }
+    case IoHomeCommand::Discover2ERequest:
+        // A directed 0x2E probes a node already observed on the extracted
+        // network. Real KLR/KIG controllers use payload 0x02 and complete the
+        // normal 0x3C/0x3D authentication exchange before accepting 0x2F.
+        mTxFrame.setLowPower(true);
+        mTxFrame.data[0] = iEntry.param;
+        mTxFrame.dataLen = 1;
+        mTxFrame.hasHmac = false;
+        mAuthResponseSent = false;
+        break;
+
     case IoHomeCommand::Private:
         // Private reference templates and legacy variants are centralized in
         // build2WPrivatePayload(). Known reference forms:
@@ -8594,10 +8614,10 @@ void IoHomeController::dispatchRxFrame()
             {
                 if (mRxFrame.dataLen >= 3)
                 {
-                    uint16_t lType = (mRxFrame.data[0] | ((uint16_t)mRxFrame.data[1] << 8)) & 0x3FF;
-                    uint8_t lSubtype = mRxFrame.data[1] & 0x3F;
+                    const IoHomeDiscoveryMetadata lMetadata =
+                        decodeDiscoveryMetadata(mRxFrame.data, IOHC_DISCOVERY_METADATA_SIZE);
                     uint8_t lMfg = mRxFrame.data[2];
-                    lCh->onDeviceInfo(lType, lSubtype, lMfg);
+                    lCh->onDeviceInfo(lMetadata.deviceType, lMetadata.subtype, lMfg);
                 }
                 break;
             }
@@ -9006,6 +9026,20 @@ void IoHomeController::processKeyExtractFrame()
 
     if (mModule)
         mModule->remoteMap().observeAddress(lSrcNode);
+
+    if (mModule && mKeyExtractHubNodeId != 0)
+    {
+        uint32_t lNetworkCandidate = 0;
+        if (lSrcNode == mKeyExtractHubNodeId)
+            lNetworkCandidate = lDstNode;
+        else if (lDstNode == mKeyExtractHubNodeId)
+            lNetworkCandidate = lSrcNode;
+
+        if (lNetworkCandidate != 0 &&
+            lNetworkCandidate != mKeyExtractThrowawayId &&
+            getAddressClass(lNetworkCandidate) == IoHomeAddressClass::Unicast)
+            mModule->onKeyImportCandidateObserved(lNetworkCandidate);
+    }
 
     if (mNetworkScanActive)
     {

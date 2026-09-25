@@ -452,10 +452,10 @@ inline IoHomeAddressClass getAddressClass(uint32_t iNodeId)
 }
 
 inline void encodePackedDeviceType(uint16_t iType, uint8_t iSubtype,
-                                   uint8_t &oTypeLsb, uint8_t &oTypeSub)
+                                   uint8_t &oTypeMsb, uint8_t &oTypeSub)
 {
-    oTypeLsb = static_cast<uint8_t>(iType & 0xFF);
-    oTypeSub = static_cast<uint8_t>(((iType >> 8) & 0x03) | ((iSubtype & 0x3F) << 2));
+    oTypeMsb = static_cast<uint8_t>((iType >> 2) & 0xFF);
+    oTypeSub = static_cast<uint8_t>(((iType & 0x03) << 6) | (iSubtype & 0x3F));
 }
 
 // io-homecontrol frequencies (Hz)
@@ -508,9 +508,9 @@ inline IoHomeDiscoveryMetadata decodeDiscoveryMetadata(const uint8_t *iData, uin
     IoHomeDiscoveryMetadata lResult;
     if (!iData || iDataLen < IOHC_DISCOVERY_METADATA_SIZE) return lResult;
     lResult.valid = true;
-    lResult.deviceType = static_cast<uint16_t>(iData[0]) |
-                         (static_cast<uint16_t>(iData[1] & 0x03) << 8);
-    lResult.subtype = static_cast<uint8_t>((iData[1] >> 2) & 0x3F);
+    lResult.deviceType = (static_cast<uint16_t>(iData[0]) << 2) |
+                         (static_cast<uint16_t>(iData[1]) >> 6);
+    lResult.subtype = static_cast<uint8_t>(iData[1] & 0x3F);
     if (iDataLen > IOHC_DISCOVERY_MANUFACTURER_OFFSET)
         lResult.manufacturer = iData[IOHC_DISCOVERY_MANUFACTURER_OFFSET];
     if (iDataLen > IOHC_DISCOVERY_FLAGS_OFFSET)

@@ -450,12 +450,32 @@ public:
 
   void onDiscoveryResponse(const IoHomeFrame &) {}
 
+  void onKeyImportCandidateObserved(uint32_t iNodeId)
+  {
+    mLastKeyImportCandidate = iNodeId;
+    mKeyImportCandidateCount++;
+  }
+
+  void onAuthenticatedDirectedDiscovery(uint32_t iNodeId)
+  {
+    mLastAuthenticatedDirectedNode = iNodeId;
+    mAuthenticatedDirectedCount++;
+  }
+
   uint8_t testPassiveCaptureCount() const { return mPassiveCaptureCount; }
   const IoHomeController::PassiveKeyResult &testLastPassiveKeyResult() const { return mLastPassiveKeyResult; }
+  uint8_t testKeyImportCandidateCount() const { return mKeyImportCandidateCount; }
+  uint32_t testLastKeyImportCandidate() const { return mLastKeyImportCandidate; }
+  uint8_t testAuthenticatedDirectedCount() const { return mAuthenticatedDirectedCount; }
+  uint32_t testLastAuthenticatedDirectedNode() const { return mLastAuthenticatedDirectedNode; }
 
 private:
   IoHomecontrolChannel *mChannels[IOHC_ChannelCount] = {};
   IoHomeRemoteMap mRemoteMap;
   uint8_t mPassiveCaptureCount = 0;
   IoHomeController::PassiveKeyResult mLastPassiveKeyResult = {};
+  uint8_t mKeyImportCandidateCount = 0;
+  uint32_t mLastKeyImportCandidate = 0;
+  uint8_t mAuthenticatedDirectedCount = 0;
+  uint32_t mLastAuthenticatedDirectedNode = 0;
 };

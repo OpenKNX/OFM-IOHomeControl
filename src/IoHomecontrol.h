@@ -57,6 +57,8 @@ public:
   IoHomeRemoteMap &remoteMap();
   void onPassiveKeyCaptured(const IoHomeController::PassiveKeyResult &iResult);
   void onDiscoveryResponse(const IoHomeFrame &iFrame);
+  void onKeyImportCandidateObserved(uint32_t iNodeId);
+  void onAuthenticatedDirectedDiscovery(uint32_t iNodeId);
 
 private:
   struct FlashChannelState
@@ -125,9 +127,19 @@ private:
   KeyImportDevice mKeyImportDevices[kMaxKeyImportDevices] = {};
   uint8_t mKeyImportDeviceCount = 0;
   bool mKeyImportOverflow = false;
+  uint32_t mKeyImportCandidates[kMaxKeyImportDevices] = {};
+  uint8_t mKeyImportCandidateCount = 0;
+  uint8_t mKeyImportDirectedCandidateIndex = 0;
+  uint32_t mKeyImportDirectedNodeId = 0;
+  bool mKeyImportBroadcastComplete = false;
+  bool mKeyImportDirectedAwaiting = false;
 
   void resetKeyImportWorkflow();
   void processKeyImportWorkflow();
+  KeyImportDevice *findKeyImportDevice(uint32_t iNodeId);
+  KeyImportDevice *addKeyImportDevice(uint32_t iNodeId);
+  bool applyKeyImportDeviceToChannel(const KeyImportDevice &iDevice,
+                                     uint8_t iChannelIndex);
   uint8_t assignKeyImportDevice(uint8_t iResultIndex, uint8_t iChannelIndex,
                                 uint8_t &oExistingChannel);
 
