@@ -971,7 +971,7 @@ namespace
                                         lChallenge, iSystemKey, lHmac))
             return false;
 
-        logDebugP("2W discovery 0x2A: challenge=%02X%02X%02X%02X%02X%02X hmac=%02X%02X%02X%02X%02X%02X",
+        logDebug("", "2W discovery 0x2A: challenge=%02X%02X%02X%02X%02X%02X hmac=%02X%02X%02X%02X%02X%02X",
                   lChallenge[0], lChallenge[1], lChallenge[2],
                   lChallenge[3], lChallenge[4], lChallenge[5],
                   lHmac[0], lHmac[1], lHmac[2],
