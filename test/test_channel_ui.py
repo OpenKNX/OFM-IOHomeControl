@@ -284,7 +284,11 @@ class ChannelUiTest(unittest.TestCase):
         self.assertNotIn("workflowTimeoutMs", workflow)
         self.assertIn("diese Schaltfläche danach erneut drücken", workflow)
         self.assertIn("Schlüssel extrahiert; Prüfung läuft", workflow)
-        self.assertIn("Extraktion beendet; Gerätesuche", workflow)
+        self.assertIn("Gateway-Prüfung erfolgreich", workflow)
+        self.assertIn("Gateway-Prüfung nicht vollständig beobachtet", workflow)
+        self.assertIn("Gateway-/System-Node-ID", workflow)
+        self.assertIn("temporäre Extraction-Device-ID", workflow)
+        self.assertIn("Schlüssel extrahiert; keine Geräte gefunden", workflow)
         self.assertIn("authentifizierte Gerätesuche läuft", workflow)
 
         controller_source = (ROOT / "src" / "controller" / "IoHomeController.cpp").read_text()
@@ -292,6 +296,9 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn("KeyExtract: armed", controller_source)
         self.assertIn("KeyExtract: hub locked", controller_source)
         self.assertIn("KeyExtract: key captured", controller_source)
+        self.assertIn("KeyImport scan tx:", controller_source)
+        self.assertIn("mController.setOwnNodeId(mKeyImportHubNodeId)", module_source)
+        self.assertNotIn("mController.setOwnNodeId(mKeyImportExtractionNodeId)", module_source)
         self.assertNotIn("key=%02X", module_source)
 
     def test_one_way_enrollment_finalizer_is_labeled_stop_runter(self) -> None:

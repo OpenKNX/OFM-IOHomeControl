@@ -11321,6 +11321,9 @@ TEST(controller_key_extract_acknowledges_discovery_confirmation)
     initKeyExtractControllerForTest(lController, lModule, lOwnNodeId);
     lController.radio().testSetDefaultResponsePreamble(IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_TRUE(lController.startKeyExtraction());
+    ASSERT_TRUE(!lController.keyExtractKeyCaptured());
+    ASSERT_TRUE(!lController.keyExtractVerificationRequested());
+    ASSERT_TRUE(!lController.keyExtractVerificationCompleted());
 
     IoHomeFrame lDiscoverReq;
     buildGatewayDiscoverRequest(lDiscoverReq, lHubNodeId);
@@ -11571,14 +11574,26 @@ TEST(controller_key_extract_completes_hub_address_verification)
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::KeyTransferConfirmation);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_EQ(lController.keyExtractStatus(), IoHomeController::KeyExtractStatus::Captured);
+    ASSERT_TRUE(lController.keyExtractKeyCaptured());
+    ASSERT_TRUE(!lController.keyExtractVerificationRequested());
+    ASSERT_TRUE(!lController.keyExtractVerificationCompleted());
 
     // The advertised throwaway address is public; only the hub that handed us
     // the key may drive the post-extraction verification round.
     buildKeyExtractAddressRequest(lRequest, 0x123456, lThrowawayNodeId);
     ASSERT_TRUE(!queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_TRUE(!lController.keyExtractVerificationRequested());
+
+    // A verification challenge is meaningful only after the locked hub's
+    // accepted 0x36 request established the deterministic 0x37 transcript.
+    buildPairChallengeRequestFrame(lRequest, lThrowawayNodeId, lHubNodeId, lAddressChallenge);
+    ASSERT_TRUE(!queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_TRUE(!lController.keyExtractVerificationCompleted());
 
     buildKeyExtractAddressRequest(lRequest, lHubNodeId, lThrowawayNodeId);
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_TRUE(lController.keyExtractVerificationRequested());
+    ASSERT_TRUE(!lController.keyExtractVerificationCompleted());
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::AddressResponse);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_EQ(lResponse.dataLen, 3);
@@ -11588,6 +11603,7 @@ TEST(controller_key_extract_completes_hub_address_verification)
 
     buildPairChallengeRequestFrame(lRequest, lThrowawayNodeId, lHubNodeId, lAddressChallenge);
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_TRUE(lController.keyExtractVerificationCompleted());
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_TRUE((lResponse.ctrlByte0 & IOHC_CTRL0_END) != 0);
@@ -11610,6 +11626,43 @@ TEST(controller_key_extract_completes_hub_address_verification)
     ASSERT_TRUE(IoHomeCrypto::createHmac2W(lTranscript, sizeof(lTranscript),
                                            lAddressChallenge, lSystemKey, lExpectedHmac));
     ASSERT_MEM_EQ(lResponse.data, lExpectedHmac, IOHC_HMAC_SIZE);
+}
+
+TEST(controller_key_extract_ignored_verification_does_not_extend_grace)
+{
+    const uint32_t lOwnNodeId = 0x112233;
+    const uint32_t lHubNodeId = 0x445566;
+    const uint8_t lSystemKey[16] = {
+        0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE,
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
+
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    initKeyExtractControllerForTest(lController, lModule, lOwnNodeId);
+    ASSERT_TRUE(lController.startKeyExtraction());
+
+    IoHomeFrame lRequest;
+    IoHomeFrame lResponse;
+    buildGatewayDiscoverRequest(lRequest, lHubNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    const uint32_t lThrowawayNodeId = lResponse.getSrcNodeId();
+    buildKeyExtractKeyInit(lRequest, lHubNodeId, lThrowawayNodeId);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    buildKeyExtractKeyTransfer(lRequest, lHubNodeId, lThrowawayNodeId,
+                               lResponse.data, lSystemKey);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+
+    ioHomeTestAdvanceMillis(IoHomeController::kKeyExtractPostExtractGraceMs - 1000U);
+    buildKeyExtractAddressRequest(lRequest, lHubNodeId, lOwnNodeId);
+    ASSERT_TRUE(!queueGatewayRequestAndLoop(lController, lRequest, lResponse));
+    ASSERT_TRUE(!lController.keyExtractVerificationRequested());
+
+    ioHomeTestAdvanceMillis(1001U);
+    lController.loop();
+    ASSERT_TRUE(!lController.isKeyExtractionActive());
 }
 
 TEST(controller_key_extract_ignores_frames_addressed_to_real_node_id)

@@ -618,17 +618,35 @@ function IOHC_startKeyExtract(device, online, progress, context) {
         }
         if (phase == 2) {
             var hubNode = IOHC_readNodeId(status, 2);
-            var controllerNode = IOHC_readNodeId(status, 5);
-            IOHC_setExtractionResult(device, "Schlüssel extrahiert; Prüfung läuft", []);
-            progress.setText("2W-Schlüssel erfolgreich extrahiert (Gateway " +
-                             IOHC_formatNodeId(hubNode) + ", neue Controller-ID " +
-                             IOHC_formatNodeId(controllerNode) + "). Warte auf die Abschlussprüfung des Fremd-Gateways; diese Schaltfläche danach erneut drücken.");
+            var extractionNode = IOHC_readNodeId(status, 5);
+            var verificationCompleted = (status[25] || 0) != 0;
+            IOHC_setExtractionResult(device,
+                                     verificationCompleted
+                                         ? "Schlüssel extrahiert; Gateway-Prüfung erfolgreich"
+                                         : "Schlüssel extrahiert; Prüfung läuft",
+                                     []);
+            progress.setText("2W-Schlüssel erfolgreich extrahiert (Gateway-/System-Node-ID " +
+                             IOHC_formatNodeId(hubNode) + ", temporäre Extraction-Device-ID " +
+                             IOHC_formatNodeId(extractionNode) + "). " +
+                             (verificationCompleted
+                                  ? "Die Gateway-Prüfung wurde erfolgreich beantwortet. "
+                                  : "Warte auf die Abschlussprüfung des Fremd-Gateways. ") +
+                             "Diese Schaltfläche danach erneut drücken.");
             progress.setProgress(100);
             return;
         }
         if (phase == 3) {
-            IOHC_setExtractionResult(device, "Extraktion beendet; Gerätesuche", []);
-            progress.setText("2W-Schlüsselextraktion abgeschlossen. Die authentifizierte Gerätesuche läuft; diese Schaltfläche danach erneut drücken.");
+            var gatewayVerificationCompleted = (status[25] || 0) != 0;
+            IOHC_setExtractionResult(device,
+                                     gatewayVerificationCompleted
+                                         ? "Schlüssel extrahiert; Gateway-Prüfung erfolgreich"
+                                         : "Schlüssel extrahiert; Gateway-Prüfung nicht vollständig beobachtet",
+                                     []);
+            progress.setText("2W-Schlüsselextraktion abgeschlossen. " +
+                             (gatewayVerificationCompleted
+                                  ? "Die Gateway-Prüfung wurde erfolgreich beantwortet. "
+                                  : "Die Gateway-Prüfung wurde nicht vollständig beobachtet. ") +
+                             "Die authentifizierte Gerätesuche läuft; diese Schaltfläche danach erneut drücken.");
             progress.setProgress(100);
             return;
         }
@@ -733,16 +751,21 @@ function IOHC_startKeyExtract(device, online, progress, context) {
         if (overflow) {
             summary += ", weitere Ergebnisse verworfen";
         }
-        IOHC_setExtractionResult(device,
-                                 configuredChannels > 0 ? "Erfolgreich; Programmierung nötig" : "Erfolgreich; keine Änderung",
-                                 nodeIds);
+        var resultStatus = resultCount == 0
+                               ? "Schlüssel extrahiert; keine Geräte gefunden"
+                               : (configuredChannels > 0
+                                      ? "Erfolgreich; Programmierung nötig"
+                                      : "Erfolgreich; keine Änderung");
+        IOHC_setExtractionResult(device, resultStatus, nodeIds);
 
-        if (configuredChannels > 0) {
+        if (resultCount == 0) {
+            progress.setText("2W-Schlüssel erfolgreich extrahiert, aber die anschließende authentifizierte Gerätesuche hat keine Geräte gefunden.");
+        } else if (configuredChannels > 0) {
             progress.setText("2W-Schlüssel erfolgreich extrahiert. Gefundene Node-IDs: " + nodeText +
                              ". " + summary + ". Das KNX-Gerät muss jetzt in ETS neu programmiert werden, bevor die Geräte gesteuert werden können.");
         } else {
-            progress.setText("2W-Schlüssel erfolgreich extrahiert. Gefundene Node-IDs: " + nodeText +
-                             ". " + summary + ". Es wurden keine ETS-Kanäle geändert.");
+            progress.setText("2W-Schlüssel erfolgreich extrahiert. Geräte wurden gefunden, es waren jedoch keine ETS-Änderungen notwendig. Gefundene Node-IDs: " +
+                             nodeText + ". " + summary + ".");
         }
         progress.setProgress(100);
     } finally {

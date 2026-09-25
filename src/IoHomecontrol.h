@@ -120,7 +120,8 @@ private:
   static constexpr uint8_t kMaxKeyImportDevices = IOHC_ChannelCount;
   KeyImportPhase mKeyImportPhase = KeyImportPhase::Idle;
   IoHomeController::PassiveKeyResult mKeyImportKey = {};
-  uint32_t mKeyImportControllerNodeId = 0;
+  uint32_t mKeyImportHubNodeId = 0;
+  uint32_t mKeyImportExtractionNodeId = 0;
   KeyImportDevice mKeyImportDevices[kMaxKeyImportDevices] = {};
   uint8_t mKeyImportDeviceCount = 0;
   bool mKeyImportOverflow = false;

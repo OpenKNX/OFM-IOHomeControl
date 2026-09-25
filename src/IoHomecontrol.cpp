@@ -685,10 +685,13 @@ void IoHomecontrol::onPassiveKeyCaptured(const IoHomeController::PassiveKeyResul
     if (mKeyImportPhase == KeyImportPhase::Extracting)
     {
         mKeyImportKey = iResult;
-        mKeyImportControllerNodeId = mController.keyExtractControllerNodeId();
+        mKeyImportHubNodeId = mController.keyExtractHubNodeId();
+        if (mKeyImportHubNodeId == 0)
+            mKeyImportHubNodeId = iResult.nodeId;
+        mKeyImportExtractionNodeId = mController.keyExtractControllerNodeId();
         mKeyImportPhase = KeyImportPhase::Verifying;
-        logInfoP("ETS key import: captured network key; hub=0x%06X controller=0x%06X",
-                 iResult.nodeId, mKeyImportControllerNodeId);
+        logInfoP("ETS key import: captured network key; hub=0x%06X extractionDevice=0x%06X",
+                 mKeyImportHubNodeId, mKeyImportExtractionNodeId);
     }
 
     mRemoteMap.observeAddress(iResult.nodeId);
@@ -701,7 +704,8 @@ void IoHomecontrol::resetKeyImportWorkflow()
 {
     mKeyImportPhase = KeyImportPhase::Idle;
     memset(&mKeyImportKey, 0, sizeof(mKeyImportKey));
-    mKeyImportControllerNodeId = 0;
+    mKeyImportHubNodeId = 0;
+    mKeyImportExtractionNodeId = 0;
     memset(mKeyImportDevices, 0, sizeof(mKeyImportDevices));
     mKeyImportDeviceCount = 0;
     mKeyImportOverflow = false;
@@ -765,7 +769,7 @@ void IoHomecontrol::processKeyImportWorkflow()
 
     if (mKeyImportPhase == KeyImportPhase::Verifying && !mController.isKeyExtractionActive())
     {
-        if (!mKeyImportKey.valid || mKeyImportControllerNodeId == 0 ||
+        if (!mKeyImportKey.valid || mKeyImportHubNodeId == 0 ||
             mController.state() != ControllerState::Idle)
         {
             mKeyImportPhase = KeyImportPhase::Failed;
@@ -773,16 +777,16 @@ void IoHomecontrol::processKeyImportWorkflow()
             return;
         }
 
-        // Continue as the controller identity that the owned gateway just
-        // enrolled. Reusing the hub's own address would cause an address
-        // collision while the original gateway is still online.
-        mController.setOwnNodeId(mKeyImportControllerNodeId);
+        // The extraction throwaway ID represents the temporary emulated
+        // device. For authenticated network access, use the recovered
+        // hub/controller node ID together with the recovered system key.
+        mController.setOwnNodeId(mKeyImportHubNodeId);
         mController.setSystemKey(mKeyImportKey.key);
         openknx.flash.save(true);
 
         mKeyImportPhase = KeyImportPhase::Scanning;
         logInfoP("ETS key import: starting authenticated discovery as 0x%06X",
-                 mKeyImportControllerNodeId);
+                 mKeyImportHubNodeId);
         mController.startDiscovery(true);
         if (mController.state() != ControllerState::DiscoverySending &&
             mController.state() != ControllerState::DiscoveryListening)
@@ -2327,9 +2331,9 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         resultData[2] = (lHubNodeId >> 16) & 0xFF;
         resultData[3] = (lHubNodeId >> 8) & 0xFF;
         resultData[4] = lHubNodeId & 0xFF;
-        resultData[5] = (mKeyImportControllerNodeId >> 16) & 0xFF;
-        resultData[6] = (mKeyImportControllerNodeId >> 8) & 0xFF;
-        resultData[7] = mKeyImportControllerNodeId & 0xFF;
+        resultData[5] = (mKeyImportExtractionNodeId >> 16) & 0xFF;
+        resultData[6] = (mKeyImportExtractionNodeId >> 8) & 0xFF;
+        resultData[7] = mKeyImportExtractionNodeId & 0xFF;
         resultData[8] = mKeyImportDeviceCount;
         resultData[9] = static_cast<uint8_t>(mController.state());
         resultData[10] = mKeyImportOverflow ? 0x01 : 0x00;
@@ -2345,7 +2349,10 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         resultData[20] = (lHoldRemainingMs >> 16) & 0xFF;
         resultData[21] = (lHoldRemainingMs >> 8) & 0xFF;
         resultData[22] = lHoldRemainingMs & 0xFF;
-        resultLength = 23;
+        resultData[23] = mController.keyExtractKeyCaptured() ? 0x01 : 0x00;
+        resultData[24] = mController.keyExtractVerificationRequested() ? 0x01 : 0x00;
+        resultData[25] = mController.keyExtractVerificationCompleted() ? 0x01 : 0x00;
+        resultLength = 26;
         return true;
     }
     case 0x19: // Read one authenticated discovery result

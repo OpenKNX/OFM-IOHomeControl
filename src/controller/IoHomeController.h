@@ -571,6 +571,9 @@ public:
   uint32_t keyExtractControllerNodeId() const;
   uint32_t keyExtractCandidateHubNodeId() const;
   uint32_t keyExtractHubNodeId() const;
+  bool keyExtractKeyCaptured() const;
+  bool keyExtractVerificationRequested() const;
+  bool keyExtractVerificationCompleted() const;
   ControllerState keyExtractState() const;
   uint32_t keyExtractHoldRemainingMs() const;
   void setKeyExtractColdReplyPreamble(uint16_t iPreambleSymbols);
@@ -1003,6 +1006,9 @@ private:
   uint32_t mKeyExtractCandidateHubNodeId;
   uint32_t mKeyExtractHubNodeId;
   uint8_t mKeyExtractKey[16];
+  bool mKeyExtractKeyCaptured = false;
+  bool mKeyExtractVerificationRequested = false;
+  bool mKeyExtractVerificationCompleted = false;
   ControllerState mKeyExtractState;
   uint32_t mKeyExtractArmedAt;
   uint32_t mKeyExtractTimeoutMs;

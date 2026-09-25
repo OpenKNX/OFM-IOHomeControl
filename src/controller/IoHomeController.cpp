@@ -3333,6 +3333,9 @@ bool IoHomeController::startKeyExtraction(uint32_t iTimeoutMs)
     memset(mKeyExtractKey, 0, sizeof(mKeyExtractKey));
     mKeyExtractCandidateHubNodeId = 0;
     mKeyExtractHubNodeId = 0;
+    mKeyExtractKeyCaptured = false;
+    mKeyExtractVerificationRequested = false;
+    mKeyExtractVerificationCompleted = false;
     mKeyExtractState = ControllerState::ExtractIdle;
     mKeyExtractArmedAt = millis();
     mKeyExtractTimeoutMs = iTimeoutMs;
@@ -3405,6 +3408,21 @@ uint32_t IoHomeController::keyExtractCandidateHubNodeId() const
 uint32_t IoHomeController::keyExtractHubNodeId() const
 {
     return mKeyExtractHubNodeId;
+}
+
+bool IoHomeController::keyExtractKeyCaptured() const
+{
+    return mKeyExtractKeyCaptured;
+}
+
+bool IoHomeController::keyExtractVerificationRequested() const
+{
+    return mKeyExtractVerificationRequested;
+}
+
+bool IoHomeController::keyExtractVerificationCompleted() const
+{
+    return mKeyExtractVerificationCompleted;
 }
 
 ControllerState IoHomeController::keyExtractState() const
@@ -7420,6 +7438,17 @@ void IoHomeController::processDiscovery()
 #endif
             if (lErr == RadioError::None)
             {
+                if (mDiscoverySPE)
+                {
+                    logInfoP("KeyImport scan tx: cmd=0x%02X src=0x%06X dst=0x%06X ctrl1=0x%02X freq=%lu preamble=%u sweep=%u pass=%s",
+                             static_cast<unsigned>(static_cast<uint8_t>(mTxFrame.commandId)),
+                             mTxFrame.getSrcNodeId(), mTxFrame.getDestNodeId(),
+                             static_cast<unsigned>(mTxFrame.ctrlByte1),
+                             static_cast<unsigned long>(lDiscoveryFreq),
+                             static_cast<unsigned>(lDiscoveryPreamble),
+                             static_cast<unsigned>(mDiscoverySweep + 1U),
+                             mDiscoverySweep == 0 ? "low-power" : "always-alive");
+                }
                 mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
                 // Standard discovery sends the classic 0x28 frame first and then,
                 // like a TaHoma box, the alternative 0x2E frame on the same
@@ -8974,6 +9003,41 @@ void IoHomeController::processKeyExtractFrame()
         updateNodeStats(lSrcNode, mRadio.lastRssi(), mRxFrame.commandId);
     }
 
+    if (mRxFrame.commandId == IoHomeCommand::Discover2EResponse &&
+        lSrcNode != 0 && lSrcNode != mKeyExtractHubNodeId &&
+        (lDstNode == mKeyExtractHubNodeId || lDstNode == mKeyExtractCandidateHubNodeId))
+    {
+        logInfoP("KeyImport: observed existing network device 0x%06X via foreign hub traffic",
+                 lSrcNode);
+    }
+
+    if (mRxFrame.commandId == IoHomeCommand::AddressRequest)
+    {
+        const bool lAccepted =
+            lSrcNode == mKeyExtractHubNodeId &&
+            lDstNode == mKeyExtractThrowawayId &&
+            (mKeyExtractState == ControllerState::Extracted ||
+             mKeyExtractState == ControllerState::ExtractSentAddressResp);
+        logInfoP("KeyExtract: rx 0x36 src=0x%06X dst=0x%06X temp=0x%06X %s",
+                 lSrcNode, lDstNode, mKeyExtractThrowawayId,
+                 lAccepted ? "accepted" : "ignored");
+        (void)lAccepted;
+    }
+    else if (mRxFrame.commandId == IoHomeCommand::ChallengeRequest &&
+             (mKeyExtractState == ControllerState::Extracted ||
+              mKeyExtractState == ControllerState::ExtractSentAddressResp))
+    {
+        const bool lAccepted =
+            lSrcNode == mKeyExtractHubNodeId &&
+            lDstNode == mKeyExtractThrowawayId &&
+            mKeyExtractState == ControllerState::ExtractSentAddressResp &&
+            mRxFrame.dataLen >= IOHC_HMAC_SIZE;
+        logInfoP("KeyExtract: rx 0x3C src=0x%06X dst=0x%06X temp=0x%06X %s",
+                 lSrcNode, lDstNode, mKeyExtractThrowawayId,
+                 lAccepted ? "accepted" : "ignored");
+        (void)lAccepted;
+    }
+
     // Once a hub has started this transaction, every subsequent response is
     // tied to it. The throwaway node ID is visible on air and must not let a
     // second nearby controller drive or prolong this recovery session.
@@ -9007,6 +9071,8 @@ void IoHomeController::processKeyExtractFrame()
         {
             memset(mKeyExtractChallenge, 0, sizeof(mKeyExtractChallenge));
             memset(mKeyExtractKey, 0, sizeof(mKeyExtractKey));
+            mKeyExtractVerificationRequested = false;
+            mKeyExtractVerificationCompleted = false;
             mKeyExtractGraceDeadlineMs = 0;
         }
         mKeyExtractCandidateHubNodeId = lSrcNode;
@@ -9120,6 +9186,7 @@ void IoHomeController::processKeyExtractFrame()
             mKeyExtractResult.capturedAt = millis();
             mKeyExtractResult.freqIdx = mLastResponseFreqIdx;
             mKeyExtractStatus = KeyExtractStatus::Captured;
+            mKeyExtractKeyCaptured = true;
 
             if (mModule)
                 mModule->onPassiveKeyCaptured(mKeyExtractResult);
@@ -9136,7 +9203,6 @@ void IoHomeController::processKeyExtractFrame()
         }
 
     case IoHomeCommand::AddressRequest:
-        logInfoP("KeyExtract: rx 0x36 hub=0x%06X", lSrcNode);
         if ((mKeyExtractState != ControllerState::Extracted &&
              mKeyExtractState != ControllerState::ExtractSentAddressResp) ||
             lDstNode != mKeyExtractThrowawayId)
@@ -9146,6 +9212,7 @@ void IoHomeController::processKeyExtractFrame()
         }
 
         {
+            mKeyExtractVerificationRequested = true;
             IoHomeFrame lAddressResponse;
             if (!buildExtractAddressResponseFrame(lAddressResponse, mKeyExtractThrowawayId, lSrcNode))
                 return;
@@ -9161,7 +9228,6 @@ void IoHomeController::processKeyExtractFrame()
         }
 
     case IoHomeCommand::ChallengeRequest:
-        logInfoP("KeyExtract: rx address verification 0x3C hub=0x%06X", lSrcNode);
         if (mKeyExtractState != ControllerState::ExtractSentAddressResp ||
             lDstNode != mKeyExtractThrowawayId || mRxFrame.dataLen < IOHC_HMAC_SIZE)
         {
@@ -9182,6 +9248,7 @@ void IoHomeController::processKeyExtractFrame()
             mTxLen = lChallengeResponse.serialize2W(mTxBuffer, sizeof(mTxBuffer));
             if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
                 return;
+            mKeyExtractVerificationCompleted = true;
             logInfoP("KeyExtract: tx 0x3D hub=0x%06X preamble=%u",
                      lSrcNode, static_cast<unsigned>(keyExtractReplyPreamble(false)));
             extendKeyExtractGrace();

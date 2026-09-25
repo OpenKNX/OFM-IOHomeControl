@@ -17,8 +17,8 @@ network key.
 
 1. Start **2W-Schlüsselextraktion** in ETS.
 2. Start **Gerät hinzufügen** on the gateway.
-3. Confirm that `iohc extract status` reports a temporary controller ID, then
-   a locked hub only after `0x31`.
+3. Confirm that `iohc extract status` reports a temporary extraction-device
+   ID, then a locked hub only after `0x31`.
 4. Confirm successful `0x32` capture and, where the gateway uses it, the
    `0x36 -> 0x37 -> 0x3C -> 0x3D` address-verification sequence.
 5. During the 60-second verification window, send a normal KNX movement
@@ -29,10 +29,12 @@ network key.
 
 ## Persistence
 
-1. Record the newly enrolled controller ID shown after extraction.
+1. Record the recovered gateway/system node ID and the separate temporary
+   extraction-device ID shown after extraction.
 2. Power-cycle the OpenKNX device.
-3. Confirm that the same controller ID is restored; it must not generate a new
-   ID or fall back to the identity used before extraction.
+3. Confirm that the recovered gateway/system node ID is restored. The
+   temporary extraction-device ID must not be persisted as the regular
+   controller identity.
 4. Run authenticated discovery and send a command to an imported actuator.
    Both must work without enrolling the OpenKNX device again.
 5. Power-cycle once more and repeat the command to exclude a one-boot-only
@@ -60,7 +62,8 @@ For every gateway/radio combination record:
 - gateway model and firmware;
 - SX1262 or SX1276 and antenna setup;
 - cold and response preambles;
-- enrolled controller ID before and after both reboots;
+- recovered gateway/system node ID before and after both reboots;
+- temporary extraction-device ID used only during extraction;
 - whether address verification completed;
 - whether a KNX command executed during the 60-second window;
 - whether authenticated discovery and an actuator command succeeded after
