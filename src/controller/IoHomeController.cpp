@@ -498,7 +498,7 @@ namespace
                                    lMoving);
     }
 
-    void applyPrivateBatteryInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData, uint8_t iDataLen)
+    void applyPrivatePowerClassInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData, uint8_t iDataLen)
     {
         if (!iChannel || !iData || iDataLen < 2)
             return;
@@ -510,11 +510,6 @@ namespace
             iChannel->setLowPower2W(true);
         else if (iData[1] == 0x00)
             iChannel->setLowPower2W(false);
-
-        if (iDataLen >= 3 && iData[2] <= 100)
-            iChannel->onBatteryLevel(iData[2]);
-        else if (iDataLen >= 4 && iData[3] <= 100)
-            iChannel->onBatteryLevel(iData[3]);
     }
 
     void applyPrivateTiltInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData, uint8_t iDataLen)
@@ -1808,15 +1803,13 @@ bool IoHomeController::sendCommandInternal(uint32_t iDestNodeId, const uint8_t *
     lEntry.sourceChannelIndex = 0xFF;
     lEntry.retries = 0;
     lEntry.maxAttempts = iMaxAttempts == 0 ? 1 : iMaxAttempts;
-    // A 2W Execute can already have changed the physical device even when its
-    // reply is lost. Never send three blind copies; favourite is not safe to
-    // repeat at all because a second "My" can undo the first action.
-    if (iCmd == IoHomeCommand::Execute)
-    {
-        const uint8_t lSafeExecuteAttempts = iParam == 0xD8 ? 1U : 2U;
-        if (lEntry.maxAttempts > lSafeExecuteAttempts)
-            lEntry.maxAttempts = lSafeExecuteAttempts;
-    }
+    // A favourite/special Execute is not repeatable: a second "My" can undo
+    // the first action. Repeatable movement and STOP commands keep the normal
+    // three-attempt budget while there has been no response at all. Once a
+    // challenge proves reception, the timeout state machine applies the much
+    // stricter authenticated-but-unconfirmed resend policy below.
+    if (iCmd == IoHomeCommand::Execute && iParam == 0xD8)
+        lEntry.maxAttempts = 1;
     lEntry.retryReason = TwoWayRetryReason::Initial;
     lEntry.background = iBackground;
     lEntry.active = true;
@@ -2219,7 +2212,7 @@ bool IoHomeController::sendTiltCommand(uint32_t iDestNodeId, const uint8_t *iEnc
     lEntry.twoWayTilt = true;
     lEntry.twoWayTiltPercent = iTiltPercent;
     lEntry.retries = 0;
-    lEntry.maxAttempts = 2;
+    lEntry.maxAttempts = IOHC_EXCHANGE_MAX_ATTEMPTS;
     lEntry.retryReason = TwoWayRetryReason::Initial;
     lEntry.active = true;
     return queuePush(lEntry);
@@ -6204,7 +6197,8 @@ void IoHomeController::processPairSendPullKeyChallenge()
     uint8_t lLen = lFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (lLen > 0)
     {
-        const RadioError lPrepErr = configureNormal2WTxRadio(IOHC_PREAMBLE_SHORT);
+        const uint16_t lPreamble = mRadio.defaultResponsePreamble();
+        const RadioError lPrepErr = configureNormal2WTxRadio(lPreamble);
         if (lPrepErr == RadioError::Busy)
             return;
         if (lPrepErr != RadioError::None)
@@ -6213,7 +6207,7 @@ void IoHomeController::processPairSendPullKeyChallenge()
             mState = ControllerState::PairSendKeyInit;
             return;
         }
-        tracePairDiagnosticTx2W(lFrame, IOHC_PREAMBLE_SHORT);
+        tracePairDiagnosticTx2W(lFrame, lPreamble);
         const RadioError lErr = mRadio.startTransmit(mTxBuffer, lLen);
         if (lErr == RadioError::None)
         {
@@ -7180,7 +7174,8 @@ void IoHomeController::processPairSendKeyTransfer()
     mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lPrepErr = configureNormal2WTxRadio(IOHC_PREAMBLE_SHORT);
+        const uint16_t lPreamble = mRadio.defaultResponsePreamble();
+        const RadioError lPrepErr = configureNormal2WTxRadio(lPreamble);
         if (lPrepErr == RadioError::Busy)
             return;
         if (lPrepErr != RadioError::None)
@@ -7188,7 +7183,7 @@ void IoHomeController::processPairSendKeyTransfer()
             mState = ControllerState::PairFailed;
             return;
         }
-        tracePairDiagnosticTx2W(mTxFrame, IOHC_PREAMBLE_SHORT);
+        tracePairDiagnosticTx2W(mTxFrame, lPreamble);
         const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
@@ -7214,7 +7209,7 @@ void IoHomeController::processPairSendKeyTransferAuthResponse()
 {
     IoHomeFrame lFrame;
     // 2W ChallengeResponse (0x3D) is an authenticated continuation response.
-    // Apply controller-role flags and retain the continuation short preamble.
+    // Apply controller-role flags and use the radio driver's response preamble.
     if (!build2WChallengeResponse(lFrame, mOwnNodeId, mDiscoveredNodeId,
                                   TwoWaySenderRole::Controller,
                                   mTxFrame, mPairKeyTransferChallenge, mSystemKey))
@@ -7229,7 +7224,8 @@ void IoHomeController::processPairSendKeyTransferAuthResponse()
     mTxLen = lFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        const RadioError lPrepErr = configureNormal2WTxRadio(IOHC_PREAMBLE_SHORT);
+        const uint16_t lPreamble = authResponsePreamble();
+        const RadioError lPrepErr = configureNormal2WTxRadio(lPreamble);
         if (lPrepErr == RadioError::Busy)
             return;
         if (lPrepErr != RadioError::None)
@@ -7237,7 +7233,7 @@ void IoHomeController::processPairSendKeyTransferAuthResponse()
             mState = ControllerState::PairFailed;
             return;
         }
-        tracePairDiagnosticTx2W(lFrame, IOHC_PREAMBLE_SHORT);
+        tracePairDiagnosticTx2W(lFrame, lPreamble);
         const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
@@ -7413,8 +7409,9 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
     lFrame.dataLen = IOHC_HMAC_SIZE;
     lFrame.hasHmac = false;
 
+    const uint16_t lPreamble = authResponsePreamble();
     const uint32_t lSetConfigFreq = IOHC_FREQ_2;
-    const RadioError lPrepErr = configureTxRadio(IOHC_PREAMBLE_SHORT, &lSetConfigFreq);
+    const RadioError lPrepErr = configureTxRadio(lPreamble, &lSetConfigFreq);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -7428,7 +7425,7 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
     mTxLen = lFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen > 0)
     {
-        tracePairDiagnosticTx2W(lFrame, IOHC_PREAMBLE_SHORT);
+        tracePairDiagnosticTx2W(lFrame, lPreamble);
         const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
@@ -7963,11 +7960,7 @@ OneWayCopyShape IoHomeController::pairingOneWayCopyShape(uint8_t iCopyIndex) con
 
 uint16_t IoHomeController::authResponsePreamble() const
 {
-#if defined(RADIO_SX1262) || defined(TEST_NATIVE)
-    return 64;
-#else
-    return IOHC_PREAMBLE_SHORT;
-#endif
+    return mRadio.defaultResponsePreamble();
 }
 
 RadioError IoHomeController::startTransmitWithPreamble(const uint8_t *iBuffer, uint8_t iLen,
@@ -8687,7 +8680,10 @@ void IoHomeController::dispatchRxFrame()
                 }
                 const bool lHadPowerClass = lCh->hasLearnedLowPower2W();
                 const bool lWasLowPower = lCh->isLowPower2W();
-                applyPrivateBatteryInfo(lCh, mRxFrame.data, mRxFrame.dataLen);
+                // Normal PrivateResponse payload bytes are position/status
+                // fields, not a generic battery percentage. Keep battery
+                // unknown until a request/response layout is capture-backed.
+                applyPrivatePowerClassInfo(lCh, mRxFrame.data, mRxFrame.dataLen);
                 if ((!lHadPowerClass && lCh->hasLearnedLowPower2W()) ||
                     lWasLowPower != lCh->isLowPower2W())
                 {

@@ -41,7 +41,7 @@ The protocol implementation covers manufacturers such as Velux, Somfy, Atlantic,
 - **Device pairing/unpairing** via ETS workflows, function properties, or service console
 - **Automatic status polling** with configurable intervals (30s – 30min); after pairing, the module also tries to enable device-driven status updates when the device supports them
 - **Position estimation** during travel using configurable opening/closing times and linear interpolation
-- **Battery level detection** for solar-powered devices (e.g., Velux solar)
+- **Battery level object** for solar-powered devices; it deliberately remains unknown until a capture-backed private battery response layout is available
 - **Signal strength (RSSI)** per channel for radio coverage verification
 - **Favorite & ventilation positions** — dedicated KOs for device-stored presets
 - **Channel lock/unlock** for child safety or maintenance

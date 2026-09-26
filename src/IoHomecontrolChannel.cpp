@@ -105,6 +105,7 @@ namespace
 {
     constexpr uint32_t kTrackedStatusPollDefaultMs = 2000UL;
     constexpr uint32_t kTrackedStatusEstimateBiasMs = 1000UL;
+    constexpr uint32_t kTrackedStatusPollWindowMs = 10UL * 60UL * 1000UL;
 
     uint8_t resolveOneWayBroadcastType(uint8_t iConfiguredType, uint8_t iDeviceType)
     {
@@ -579,7 +580,7 @@ void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
         const uint32_t lDelayMs = defaultTrackedStatusPollDelayMs();
         const uint32_t lNow = millis();
         if (mPollTrackingDeadlineMs == 0)
-            mPollTrackingDeadlineMs = lNow + lDelayMs;
+            mPollTrackingDeadlineMs = lNow + kTrackedStatusPollWindowMs;
         if (mNextStatusPollMs == 0 && (mSingleFollowUpPollPending || mStatusExpected))
             mNextStatusPollMs = lNow + lDelayMs;
     }
@@ -724,8 +725,10 @@ void IoHomecontrolChannel::onEstimate(uint8_t iSeconds)
         mSingleFollowUpPollPending = true;
         mStatusPollFailures = 0;
         mAuthPollFailures = 0;
-        mNextStatusPollMs = millis() + lDelayMs;
-        mPollTrackingDeadlineMs = millis() + lDelayMs;
+        const uint32_t lNow = millis();
+        mNextStatusPollMs = lNow + lDelayMs;
+        if (mPollTrackingDeadlineMs == 0)
+            mPollTrackingDeadlineMs = lNow + kTrackedStatusPollWindowMs;
 
         // Restart travel-time position estimation with the device-provided remaining time.
         mCurrentPosition = clampPercent(estimateCurrentPosition());
@@ -748,7 +751,7 @@ void IoHomecontrolChannel::onStatusExpected()
 {
     const uint32_t lDelayMs = defaultTrackedStatusPollDelayMs();
     if (mPollTrackingDeadlineMs == 0)
-        mPollTrackingDeadlineMs = millis() + lDelayMs;
+        mPollTrackingDeadlineMs = millis() + kTrackedStatusPollWindowMs;
     if (mNextStatusPollMs == 0)
         mNextStatusPollMs = millis() + lDelayMs;
 
@@ -780,14 +783,29 @@ void IoHomecontrolChannel::onStatusPollFailed(bool iAfterChallenge)
     }
 
     mStatusExpected = false;
-    mSingleFollowUpPollPending = true;
-    mNextStatusPollMs = lNow + (lBaseDelayMs * lBackoffFactor);
-    if (mPollTrackingDeadlineMs == 0 || timeReached(mNextStatusPollMs, mPollTrackingDeadlineMs))
-        mPollTrackingDeadlineMs = mNextStatusPollMs;
+    if (mPollTrackingDeadlineMs == 0)
+        mPollTrackingDeadlineMs = lNow + kTrackedStatusPollWindowMs;
 
-    logDebugP("Status poll failed%s, retry in %lu ms",
-              iAfterChallenge ? " after challenge" : "",
-              static_cast<unsigned long>(lBaseDelayMs * lBackoffFactor));
+    const uint32_t lRetryDelayMs = lBaseDelayMs * lBackoffFactor;
+    const uint32_t lRetryAtMs = lNow + lRetryDelayMs;
+    if (timeReached(lRetryAtMs, mPollTrackingDeadlineMs))
+    {
+        // The bounded movement/remote-activity tracking window is over. Do
+        // not keep extending it after every failed poll; normal ETS periodic
+        // polling resumes once the original deadline is reached.
+        mSingleFollowUpPollPending = false;
+        mNextStatusPollMs = 0;
+        logDebugP("Status poll failed%s, tracking window exhausted",
+                  iAfterChallenge ? " after challenge" : "");
+    }
+    else
+    {
+        mSingleFollowUpPollPending = true;
+        mNextStatusPollMs = lRetryAtMs;
+        logDebugP("Status poll failed%s, retry in %lu ms",
+                  iAfterChallenge ? " after challenge" : "",
+                  static_cast<unsigned long>(lRetryDelayMs));
+    }
 }
 
 // --- Pairing data ---
@@ -1113,7 +1131,12 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll)
 
     logDebugP("Request status");
 
-    const uint8_t lMaxAttempts = IOHC_EXCHANGE_MAX_ATTEMPTS;
+    // Scheduler-owned status polls normally get one in-exchange attempt and
+    // spread retries across the channel backoff policy. A STOP-settle check is
+    // deliberately allowed the full exchange budget because it resolves an
+    // ambiguous safety-relevant command outcome.
+    const bool lStopSettlePoll = iTrackedPoll && mStopSettlePollPending;
+    const uint8_t lMaxAttempts = lStopSettlePoll ? IOHC_EXCHANGE_MAX_ATTEMPTS : 1U;
     if (!mIs1W && isTiltCapableDeviceType())
     {
         const bool lQueued = mController.sendBackgroundCommand(
@@ -1157,8 +1180,8 @@ void IoHomecontrolChannel::scheduleStatusPoll(uint32_t iDelayMs)
     if (mNextStatusPollMs == 0 || static_cast<int32_t>(lRequestedPollMs - mNextStatusPollMs) < 0)
         mNextStatusPollMs = lRequestedPollMs;
 
-    if (mPollTrackingDeadlineMs == 0 || timeReached(lRequestedPollMs, mPollTrackingDeadlineMs))
-        mPollTrackingDeadlineMs = lRequestedPollMs;
+    if (mPollTrackingDeadlineMs == 0)
+        mPollTrackingDeadlineMs = lNow + kTrackedStatusPollWindowMs;
 }
 
 void IoHomecontrolChannel::requestStatusPrivate()
@@ -1171,9 +1194,9 @@ void IoHomecontrolChannel::startStatusPollTracking(uint32_t iDelayMs)
 {
     mStopSettlePollPending = false;
     const uint32_t lNow = millis();
-    const uint32_t lTrackingWindowMs = (mTravelDurationMs > 0)
-                                           ? (mTravelDurationMs + kTrackedStatusEstimateBiasMs)
-                                           : iDelayMs;
+    const uint32_t lTrackingWindowMs = iDelayMs > kTrackedStatusPollWindowMs
+                                           ? iDelayMs
+                                           : kTrackedStatusPollWindowMs;
 
     mSingleFollowUpPollPending = true;
     mStatusExpected = false;

@@ -83,7 +83,7 @@ Statusüberwachung
 
 * Automatische Status-Abfrage mit konfigurierbarem Intervall
 * Positionsrückmeldung vom Gerät
-* Batterielevel für solarbetriebene Geräte (z.B. Velux Solar)
+* Batterielevel-KO für solarbetriebene Geräte; bis zur gerätespezifisch verifizierten Antwortdekodierung bleibt der Wert unbekannt
 * Signalstärke (RSSI) pro Kanal
 * Fehlerstatus (Kommunikationsfehler, Duty-Cycle, Pairing verloren, Funkstörung)
 * Bewegungsstatus (fährt / steht)
@@ -214,7 +214,7 @@ Im bidirektionalen Modus sendet das Modul einen Befehl und erwartet eine Bestät
 
 * Zuverlässige Befehlsausführung mit Bestätigung
 * Positionsrückmeldung direkt vom Gerät
-* Batterielevel und Signalstärke
+* Batterielevel-KO (derzeit ohne heuristische Auswertung unbekannter Statusfelder) und Signalstärke
 * AES-128 verschlüsselte Kommunikation
 
 Dieser Modus ist für alle Geräte zu bevorzugen, die 2W unterstützen.
@@ -763,7 +763,7 @@ Sichtbar beim Gerätetyp Schloss.
 
 | Offset | Name | DPT | Richtung | Beschreibung |
 |--------|------|-----|----------|-------------|
-| Kn+12 | Batterielevel | 5.001 | Lesen | 0-100% (für Solar-/Batteriegeräte) |
+| Kn+12 | Batterielevel | 5.001 | Lesen | 0-100% für verifizierte Geräteantworten; sonst unbekannt |
 | Kn+13 | Signalstärke | 5.001 | Lesen | RSSI 0-100% |
 | Kn+14 | Sperren | 1.003 | Schreiben | 1 = Kanal sperren, 0 = entsperren |
 | Kn+15 | Fehlerstatus | — (1 Byte) | Lesen | 0=OK, 1=Kommunikationsfehler, 2=Duty-Cycle, 3=Pairing verloren, 4=Funkstörung |

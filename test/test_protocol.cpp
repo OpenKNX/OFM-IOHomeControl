@@ -9832,6 +9832,7 @@ TEST(controller_2w_pairing_continuations_match_klr300_ctrl1)
     initPaired2WControllerForTest(lController, lModule, lChannel,
                                   lRemoteNodeId, 0, lKey);
     lController.setSystemKey(lKey);
+    lController.radio().testSetDefaultResponsePreamble(IOHC_RESPONSE_PREAMBLE_SX1276);
 
     ASSERT_TRUE(advancePairingToWaitKeyTransferConfirmation(lController,
                                                             lRemoteNodeId,
@@ -9843,7 +9844,7 @@ TEST(controller_2w_pairing_continuations_match_klr300_ctrl1)
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::KeyTransfer);
     ASSERT_TRUE((lFrame.ctrlByte0 & (IOHC_CTRL0_START | IOHC_CTRL0_END)) == 0);
     ASSERT_EQ(lFrame.ctrlByte1, 0x00);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
 
     IoHomeFrame lChallengeRequest;
     buildPairChallengeRequestFrame(lChallengeRequest, lRemoteNodeId,
@@ -9858,7 +9859,7 @@ TEST(controller_2w_pairing_continuations_match_klr300_ctrl1)
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_TRUE((lFrame.ctrlByte0 & (IOHC_CTRL0_START | IOHC_CTRL0_END)) == 0);
     ASSERT_EQ(lFrame.ctrlByte1, 0x00);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_SHORT);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_EQ(lController.state(), ControllerState::PairWaitKeyTransferConfirmation);
 
     IoHomeFrame lKeyConfirmation;
@@ -9901,6 +9902,7 @@ TEST(controller_default_2w_pairing_confirms_discovery_before_key_init)
     initPaired2WControllerForTest(lController, lModule, lChannel,
                                   lRemoteNodeId, 0, lKey);
     lController.setSystemKey(lKey);
+    lController.radio().testSetDefaultResponsePreamble(IOHC_RESPONSE_PREAMBLE_SX1276);
 
     ASSERT_TRUE(lController.startPairing(0));
 
@@ -10865,6 +10867,7 @@ TEST(controller_2w_pairing_setconfig1_auth_challenge_completes_on_final_reject)
     initPaired2WControllerForTest(lController, lModule, lChannel,
                                   lRemoteNodeId, 0, lKey);
     lController.setSystemKey(lKey);
+    lController.radio().testSetDefaultResponsePreamble(IOHC_RESPONSE_PREAMBLE_SX1276);
 
     ASSERT_TRUE(advancePairingToWaitKeyTransferConfirmation(lController, lRemoteNodeId, lDeviceNodeId));
 
@@ -10885,6 +10888,7 @@ TEST(controller_2w_pairing_setconfig1_auth_challenge_completes_on_final_reject)
     ASSERT_EQ(lAuthResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_TRUE((lAuthResponse.ctrlByte0 & (IOHC_CTRL0_START | IOHC_CTRL0_END)) == 0);
     ASSERT_EQ(lAuthResponse.ctrlByte1, 0x00);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_EQ(lController.state(), ControllerState::PairWaitSetConfig1FinalResponse);
 
     IoHomeFrame lErrorResponse;
@@ -11092,7 +11096,7 @@ TEST(controller_2w_execute_uses_configured_channel_acei)
     }
 }
 
-TEST(controller_private_response_decodes_battery_lowpower_and_tilt)
+TEST(controller_private_response_learns_power_class_without_guessing_battery_and_decodes_tilt)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -11120,8 +11124,11 @@ TEST(controller_private_response_decodes_battery_lowpower_and_tilt)
         ASSERT_TRUE(lChannel.isLowPower2W());
         ASSERT_TRUE(lChannel.hasLearnedLowPower2W());
         ASSERT_EQ(openknx.flash.saveCount, lFlashSavesBeforeResponse + 1);
-        ASSERT_TRUE(lChannel.testHasBatteryLevel());
-        ASSERT_EQ(lChannel.testBatteryLevel(), 87);
+        // Function 0x06 is only a candidate battery query. Its response layout
+        // has not been verified, so a plausible payload byte must not be
+        // published as a battery percentage.
+        ASSERT_TRUE(!lChannel.testHasBatteryLevel());
+        ASSERT_EQ(lChannel.testBatteryLevel(), 0xFF);
     }
 
     {
@@ -11162,6 +11169,36 @@ TEST(controller_private_response_decodes_battery_lowpower_and_tilt)
         ASSERT_TRUE(lChannel.testHasSlatFeedback());
         ASSERT_FLOAT_EQ(lChannel.testTargetPositionFeedback(), 50.0f, 0.01f);
         ASSERT_FLOAT_EQ(lChannel.testSlatFeedback(), 25.0f, 0.01f);
+    }
+}
+
+TEST(controller_normal_private_response_never_guesses_battery_percentage)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+
+    for (const uint8_t lPlausiblePercent : {static_cast<uint8_t>(0x00),
+                                            static_cast<uint8_t>(0x14),
+                                            static_cast<uint8_t>(0x2F)})
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, lDeviceNodeId, lKey);
+        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey,
+                                            IoHomeCommand::Private, 0x03));
+        IoHomeFrame lRequest;
+        ASSERT_TRUE(transmitQueuedControllerFrame(lController, lRequest));
+
+        uint8_t lData[4] = {0x00, 0x00, lPlausiblePercent, 0x00};
+        IoHomeFrame lResponse;
+        buildPrivateResponseFrame(lResponse, lRemoteNodeId, lDeviceNodeId,
+                                  lData, sizeof(lData));
+        ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+        ASSERT_TRUE(!lChannel.testHasBatteryLevel());
+        ASSERT_EQ(lChannel.testBatteryLevel(), 0xFF);
     }
 }
 
@@ -12640,13 +12677,14 @@ TEST(controller_2w_challenge_response_matches_klr300_continuation_flags_for_low_
     lChannel.setEncryptionKey(lKey);
     lChannel.setIs1W(false);
     lChannel.setLowPower2W(true);
+    lController.radio().testSetDefaultResponsePreamble(IOHC_RESPONSE_PREAMBLE_SX1276);
 
     IoHomeFrame lResponse;
     ASSERT_TRUE(sendExecuteAndAnswerChallenge(lController, lRemoteNodeId,
                                               lDeviceNodeId, lKey, lResponse));
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_EQ(lResponse.dataLen, IOHC_HMAC_SIZE);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), 64);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1276);
     ASSERT_EQ(lResponse.ctrlByte1, 0x00);
 }
 
@@ -12669,12 +12707,14 @@ TEST(controller_2w_challenge_response_matches_klr300_continuation_flags_for_alwa
     lChannel.setEncryptionKey(lKey);
     lChannel.setIs1W(false);
     lChannel.setLowPower2W(false);
+    lController.radio().testSetDefaultResponsePreamble(IOHC_RESPONSE_PREAMBLE_SX1262);
 
     IoHomeFrame lResponse;
     ASSERT_TRUE(sendExecuteAndAnswerChallenge(lController, lRemoteNodeId,
                                               lDeviceNodeId, lKey, lResponse));
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
     ASSERT_EQ(lResponse.dataLen, IOHC_HMAC_SIZE);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_RESPONSE_PREAMBLE_SX1262);
     ASSERT_EQ(lResponse.ctrlByte1, 0x00);
 }
 
@@ -13520,7 +13560,7 @@ TEST(controller_2w_final_response_wait_and_sx1262_dwell)
     ASSERT_EQ(lSnapshot.rssi, -83);
 }
 
-TEST(controller_execute_without_response_is_capped_at_two_and_unknown)
+TEST(controller_execute_without_response_uses_three_attempts_and_remains_unknown)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -13547,8 +13587,87 @@ TEST(controller_execute_without_response_is_capped_at_two_and_unknown)
 
     ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
     lController.loop();
+    ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::TxPending);
+    lController.loop();
+    lController.loop();
+
+    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::Idle);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 2U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 3U);
+    ASSERT_EQ(lChannel.testLastCommandExchangeResult(),
+              IoHomeCommandExchangeResult::Unknown);
+}
+
+TEST(controller_execute_can_complete_on_third_fully_silent_attempt)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    static const uint8_t kChallenge[6] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey,
+                                        IoHomeCommand::Execute, 50));
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    lController.loop();
+
+    for (uint8_t lSilentAttempt = 0; lSilentAttempt < 2; ++lSilentAttempt)
+    {
+        ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+        lController.loop();
+        ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
+        lController.loop();
+        ASSERT_EQ(lController.state(), ControllerState::TxPending);
+        lController.loop();
+        if (lSilentAttempt == 0)
+            lController.loop();
+    }
+    ASSERT_EQ(lController.radio().testTransmitCount(), 3U);
+
+    IoHomeFrame lChallenge;
+    buildPairChallengeRequestFrame(lChallenge, lRemoteNodeId, lDeviceNodeId, kChallenge);
+    ASSERT_TRUE(queueControllerResponse(lController, lChallenge));
+
+    uint8_t lData[8] = {};
+    lData[0] = 0x01;
+    IoHomeFrame lResponse;
+    buildPrivateResponseFrame(lResponse, lRemoteNodeId, lDeviceNodeId,
+                              lData, sizeof(lData));
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    ASSERT_EQ(lController.state(), ControllerState::Idle);
+    ASSERT_EQ(lChannel.testLastCommandExchangeResult(),
+              IoHomeCommandExchangeResult::Completed);
+}
+
+TEST(controller_favorite_execute_is_never_replayed_after_silence)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey,
+                                        IoHomeCommand::Execute, 0xD8, 0x03));
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    lController.loop();
+    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    lController.loop();
+
+    ASSERT_EQ(lController.state(), ControllerState::Idle);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
     ASSERT_EQ(lChannel.testLastCommandExchangeResult(),
               IoHomeCommandExchangeResult::Unknown);
 }
@@ -15175,7 +15294,8 @@ int main()
     RUN(controller_send_identify_rejects_1w_channel);
     RUN(controller_private_query_payload_variants);
     RUN(controller_2w_tilt_execute_payload);
-    RUN(controller_private_response_decodes_battery_lowpower_and_tilt);
+    RUN(controller_private_response_learns_power_class_without_guessing_battery_and_decodes_tilt);
+    RUN(controller_normal_private_response_never_guesses_battery_percentage);
     RUN(controller_private_response_decodes_tilt_with_15_byte_payload);
     RUN(controller_private_response_stopped_marker_uses_target_position);
     RUN(controller_passive_key_sniff_start_stop_clear);
@@ -15202,7 +15322,9 @@ int main()
     RUN(byte_vector_controller_1w_sendkey_no_hmac_and_20_byte_payload);
     RUN(byte_vector_controller_velux_1w_repeat_plan_long_then_three_short_40ms);
     RUN(controller_2w_final_response_wait_and_sx1262_dwell);
-    RUN(controller_execute_without_response_is_capped_at_two_and_unknown);
+    RUN(controller_execute_without_response_uses_three_attempts_and_remains_unknown);
+    RUN(controller_execute_can_complete_on_third_fully_silent_attempt);
+    RUN(controller_favorite_execute_is_never_replayed_after_silence);
     RUN(controller_known_execute_confirmer_gets_one_delayed_authenticated_retry);
     RUN(controller_immediate_execute_response_does_not_apply_stale_position);
     RUN(controller_explicit_execute_error_is_rejected_not_unknown);

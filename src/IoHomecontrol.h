@@ -119,7 +119,10 @@ private:
     uint8_t powerClass = 0; // 0=unknown, 1=always alive, 2=low power
   };
 
-  static constexpr uint8_t kMaxKeyImportDevices = IOHC_ChannelCount;
+  // Discovery is a network inventory, not a configured-channel list. Keep
+  // enough results to report unassigned devices even when ETS exposes fewer
+  // simultaneously configured channels.
+  static constexpr uint8_t kMaxKeyImportDevices = 24;
   KeyImportPhase mKeyImportPhase = KeyImportPhase::Idle;
   IoHomeController::PassiveKeyResult mKeyImportKey = {};
   uint32_t mKeyImportHubNodeId = 0;

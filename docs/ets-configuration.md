@@ -99,6 +99,9 @@ per-channel memory union grows by three bytes for the key-init delay and discove
 listen policy; the confirmation mode uses previously free bits. The display selectors remain ETS-only parameters
 outside device memory. Battery and RSSI objects remain enabled by default for
 existing installations; disabling them is an explicit project configuration change.
+The battery object remains unknown until a device-specific, capture-verified
+private battery response layout is implemented; normal status responses are
+never interpreted heuristically as percentages.
 
 Run the ETS/UI regression checks and the full OAM producer before release.
 ETS import, navigation and project-upgrade behavior still require verification
