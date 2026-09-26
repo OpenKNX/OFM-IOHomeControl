@@ -3023,6 +3023,8 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc autospe on|off|status", "Runtime post-pair SPE discovery");
     openknx.console.printHelpLine("iohc extract preamble cold|response auto|N", "Runtime-only key-extraction preamble override");
     openknx.console.printHelpLine("iohcNN identify", "Ask paired 2W device NN to identify itself");
+    openknx.console.printHelpLine("iohc execute ADDR short HH HH HH HH HH HH", "Send exact 6-byte diagnostic 2W Execute payload");
+    openknx.console.printHelpLine("iohc execute ADDR extended HH HH HH HH HH HH HH HH", "Send exact 8-byte diagnostic 2W Execute payload");
     openknx.console.printHelpLine("iohcNN probe TYPE [HH]", "2W probes: private-fn/private-sub/status-ext/status-ext-fn6/status-ext-fn9/info1/info2");
     openknx.console.printHelpLine("iohcNN send PP", "Send position PP% to channel NN");
     openknx.console.printHelpLine("iohcNN send1wbtn up|down|stop|my|prog|release|stop2", "Send 1W remote button command");
@@ -3230,6 +3232,128 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         openknx.console.printHelpLine("iohc", "Device is not configured. Likely causes: application not downloaded from ETS, firmware/knxprod version mismatch, or missing ETS configuration. Re-download the application and power cycle the device.");
         return true;
     }
+
+    if (lSub == "execute" || lSub.rfind("execute ", 0) == 0)
+    {
+        std::string lArgs = lSub.length() > strlen("execute")
+                                ? trimSpaces(lSub.substr(strlen("execute")))
+                                : std::string();
+        std::string lDeviceText;
+        std::string lFormat;
+        if (!takeToken(lArgs, lDeviceText) || !takeToken(lArgs, lFormat))
+        {
+            logInfoP("Usage: iohc execute <device_id> short <6 bytes> | extended <8 bytes>");
+            return true;
+        }
+
+        uint32_t lDeviceId = 0;
+        if (!parseHex24(lDeviceText, lDeviceId) || lDeviceId == 0)
+        {
+            logInfoP("Execute: malformed device ID: %s", lDeviceText.c_str());
+            return true;
+        }
+
+        uint8_t lExpectedLen = 0;
+        if (lFormat == "short")
+            lExpectedLen = IOHC_2W_RAW_EXEC_SHORT_LEN;
+        else if (lFormat == "extended")
+            lExpectedLen = IOHC_2W_RAW_EXEC_EXTENDED_LEN;
+        else
+        {
+            logInfoP("Execute: format must be short or extended");
+            return true;
+        }
+
+        uint8_t lPayload[IOHC_2W_RAW_EXEC_MAX_DATA] = {};
+        bool lPayloadValid = true;
+        for (uint8_t i = 0; i < lExpectedLen; ++i)
+        {
+            std::string lByteText;
+            if (!takeToken(lArgs, lByteText))
+            {
+                lPayloadValid = false;
+                break;
+            }
+
+            size_t lHexStart = 0;
+            if (lByteText.length() == 4 && lByteText[0] == '0' &&
+                (lByteText[1] == 'x' || lByteText[1] == 'X'))
+                lHexStart = 2;
+            if (lByteText.length() - lHexStart != 2 ||
+                !isHexDigit(lByteText[lHexStart]) ||
+                !isHexDigit(lByteText[lHexStart + 1]))
+            {
+                logInfoP("Execute: invalid hex payload byte: %s", lByteText.c_str());
+                return true;
+            }
+            lPayload[i] = static_cast<uint8_t>((hexDigitValue(lByteText[lHexStart]) << 4) |
+                                               hexDigitValue(lByteText[lHexStart + 1]));
+        }
+        if (!lPayloadValid || !lArgs.empty())
+        {
+            logInfoP("Execute: %s form requires exactly %u payload bytes",
+                     lFormat.c_str(), static_cast<unsigned>(lExpectedLen));
+            return true;
+        }
+
+        IoHomecontrolChannel *lChannel = nullptr;
+        for (uint8_t i = 0; i < mNumChannels; ++i)
+        {
+            IoHomecontrolChannel *lCandidate = mChannels[i];
+            if (lCandidate && lCandidate->isPaired() && !lCandidate->is1W() &&
+                lCandidate->getNodeId() == lDeviceId)
+            {
+                lChannel = lCandidate;
+                break;
+            }
+        }
+        if (!lChannel)
+        {
+            logInfoP("Execute: unknown registered 2W device: %06X",
+                     static_cast<unsigned>(lDeviceId));
+            return true;
+        }
+
+        char lPayloadText[(IOHC_2W_RAW_EXEC_MAX_DATA * 3) + 1] = {};
+        size_t lPayloadTextLen = 0;
+        for (uint8_t i = 0; i < lExpectedLen; ++i)
+        {
+            const int lWritten = snprintf(lPayloadText + lPayloadTextLen,
+                                          sizeof(lPayloadText) - lPayloadTextLen,
+                                          i == 0 ? "%02X" : " %02X",
+                                          static_cast<unsigned>(lPayload[i]));
+            if (lWritten > 0)
+                lPayloadTextLen += static_cast<size_t>(lWritten);
+        }
+
+        logInfoP("Manual EXECUTE");
+        logInfoP("  dst=%06X", static_cast<unsigned>(lDeviceId));
+        logInfoP("  format=%s", lFormat.c_str());
+        logInfoP("  payload_len=%u", static_cast<unsigned>(lExpectedLen));
+        logInfoP("  payload=%s", lPayloadText);
+        logInfoP("  decoded: originator=0x%02X ACEI=0x%02X main=0x%02X modifier=0x%02X",
+                 static_cast<unsigned>(lPayload[0]), static_cast<unsigned>(lPayload[1]),
+                 static_cast<unsigned>(lPayload[2]), static_cast<unsigned>(lPayload[3]));
+        if (lExpectedLen == IOHC_2W_RAW_EXEC_EXTENDED_LEN)
+        {
+            logInfoP("  decoded: ext_flag=0x%02X selector=0x%02X profile=0x%02X final=0x%02X",
+                     static_cast<unsigned>(lPayload[4]), static_cast<unsigned>(lPayload[5]),
+                     static_cast<unsigned>(lPayload[6]), static_cast<unsigned>(lPayload[7]));
+        }
+        if (lPayload[2] <= 0xC8)
+        {
+            logInfoP("  decoded/inferred position=%u.%u%% (main/2)",
+                     static_cast<unsigned>(lPayload[2] / 2U),
+                     static_cast<unsigned>((lPayload[2] & 1U) ? 5U : 0U));
+        }
+
+        if (mController.sendRawTwoWayExecute(lChannel, lPayload, lExpectedLen))
+            logInfoP("Manual EXECUTE queued for %06X", static_cast<unsigned>(lDeviceId));
+        else
+            logInfoP("Manual EXECUTE could not be queued for %06X", static_cast<unsigned>(lDeviceId));
+        return true;
+    }
+
     if (lSub.rfind("2wdiag", 0) == 0)
     {
         const std::string lArg = lSub.length() > 6 ? trimSpaces(lSub.substr(6)) : std::string();

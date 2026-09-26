@@ -2019,6 +2019,62 @@ bool IoHomeController::sendOneWayChannelRawExecute(IoHomecontrolChannel *iChanne
     return queuePush(lEntry);
 }
 
+bool IoHomeController::sendRawTwoWayExecute(IoHomecontrolChannel *iChannel,
+                                            const uint8_t *iPayload, uint8_t iPayloadLen)
+{
+    if (!iChannel || iChannel->is1W() || !iChannel->isPaired() ||
+        iPayload == nullptr ||
+        (iPayloadLen != IOHC_2W_RAW_EXEC_SHORT_LEN &&
+         iPayloadLen != IOHC_2W_RAW_EXEC_EXTENDED_LEN))
+        return false;
+
+    IoHomeQueueEntry lEntry;
+    memset(&lEntry, 0, sizeof(lEntry));
+    lEntry.destNodeId = iChannel->getNodeId();
+    lEntry.encKey = iChannel->getEncryptionKey();
+    lEntry.command = IoHomeCommand::Execute;
+    // Preserve the main byte for the existing STOP/favourite result and retry
+    // policies. The raw payload itself is stored independently and never
+    // rebuilt from these decoded fields.
+    lEntry.param = iPayload[2];
+    lEntry.param2 = iPayload[3];
+    lEntry.param3 = 0xFF;
+    lEntry.twoWayRawExecute = true;
+    lEntry.twoWayRawLen = iPayloadLen;
+    memcpy(lEntry.twoWayRawData, iPayload, iPayloadLen);
+    lEntry.sourceChannelIndex = channelIndexFor(iChannel);
+    lEntry.retries = 0;
+    lEntry.maxAttempts = (iPayload[2] == 0xD8) ? 1 : IOHC_EXCHANGE_MAX_ATTEMPTS;
+    lEntry.retryReason = TwoWayRetryReason::Initial;
+    lEntry.background = false;
+    lEntry.active = true;
+    return queuePush(lEntry);
+}
+
+bool IoHomeController::buildRawTwoWayExecuteFrame(IoHomeFrame &oFrame,
+                                                  uint32_t iSrcNodeId,
+                                                  uint32_t iDestNodeId,
+                                                  bool iLowPower,
+                                                  const uint8_t *iPayload,
+                                                  uint8_t iPayloadLen)
+{
+    if (iPayload == nullptr ||
+        (iPayloadLen != IOHC_2W_RAW_EXEC_SHORT_LEN &&
+         iPayloadLen != IOHC_2W_RAW_EXEC_EXTENDED_LEN))
+        return false;
+
+    oFrame.init();
+    oFrame.setStart2W();
+    oFrame.setSrcNode(iSrcNodeId);
+    oFrame.setDestNode(iDestNodeId);
+    oFrame.setLowPower(iLowPower);
+    oFrame.commandId = IoHomeCommand::Execute;
+    memcpy(oFrame.data, iPayload, iPayloadLen);
+    oFrame.dataLen = iPayloadLen;
+    oFrame.hasHmac = false;
+    return true;
+}
+
 bool IoHomeController::sendOneWayExecuteWithType(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                                  uint16_t iMain, uint8_t iFp1, uint8_t iFp2,
                                                  uint8_t iBroadcastType)
@@ -8183,7 +8239,22 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                                              : IOHC_ACEI_DEFAULT;
             // 2W Execute: challenge-response authentication. Keep the
             // payload bytes in the central reference-template builders above.
-            if (iEntry.twoWayTilt)
+            if (iEntry.twoWayRawExecute)
+            {
+                // Diagnostic path: only the payload is supplied raw. Rebuild
+                // the complete request so the ordinary queue/exchange engine
+                // still controls addressing, low-power flags, preambles,
+                // frequency handling, challenge-response, retries and result
+                // processing.
+                if (!buildRawTwoWayExecuteFrame(mTxFrame,
+                                                mOwnNodeId,
+                                                iEntry.destNodeId,
+                                                resolveLowPower2W(iEntry.destNodeId),
+                                                iEntry.twoWayRawData,
+                                                iEntry.twoWayRawLen))
+                    return false;
+            }
+            else if (iEntry.twoWayTilt)
             {
                 if (!build2WExecuteTiltPayload(iEntry.twoWayTiltPercent, mTxFrame.data, mTxFrame.dataLen))
                     return false;

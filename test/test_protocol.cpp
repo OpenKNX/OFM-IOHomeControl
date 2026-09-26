@@ -9646,6 +9646,159 @@ static void buildErrorResponseFrame(IoHomeFrame &oFrame,
     oFrame.hasHmac = false;
 }
 
+TEST(controller_raw_two_way_execute_builder_accepts_only_exact_wire_forms)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x155D81;
+    static const uint8_t kShort[] = {0x01, 0x63, 0xC8, 0x00, 0x00, 0x00};
+    static const uint8_t kExtendedNormal[] = {0x01, 0x63, 0xC8, 0x00, 0x80, 0xD8, 0x06, 0x00};
+    static const uint8_t kExtendedSilent[] = {0x01, 0x63, 0xC8, 0x00, 0x80, 0xD8, 0x05, 0x00};
+    const struct
+    {
+        const uint8_t *payload;
+        uint8_t length;
+    } lCases[] = {
+        {kShort, sizeof(kShort)},
+        {kExtendedNormal, sizeof(kExtendedNormal)},
+        {kExtendedSilent, sizeof(kExtendedSilent)},
+    };
+
+    for (const auto &lCase : lCases)
+    {
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(IoHomeController::buildRawTwoWayExecuteFrame(
+            lFrame, lRemoteNodeId, lDeviceNodeId, true,
+            lCase.payload, lCase.length));
+        ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
+        ASSERT_EQ(lFrame.getSrcNodeId(), lRemoteNodeId);
+        ASSERT_EQ(lFrame.getDestNodeId(), lDeviceNodeId);
+        ASSERT_TRUE((lFrame.ctrlByte0 & IOHC_CTRL0_START) != 0);
+        ASSERT_TRUE((lFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) == 0);
+        ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+        ASSERT_EQ(lFrame.dataLen, lCase.length);
+        ASSERT_MEM_EQ(lFrame.data, lCase.payload, lCase.length);
+        ASSERT_TRUE(!lFrame.hasHmac);
+    }
+
+    uint8_t lInvalid[7] = {};
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(!IoHomeController::buildRawTwoWayExecuteFrame(
+        lFrame, lRemoteNodeId, lDeviceNodeId, false,
+        lInvalid, sizeof(lInvalid)));
+    ASSERT_TRUE(!IoHomeController::buildRawTwoWayExecuteFrame(
+        lFrame, lRemoteNodeId, lDeviceNodeId, false,
+        nullptr, IOHC_2W_RAW_EXEC_SHORT_LEN));
+}
+
+TEST(controller_raw_two_way_execute_queue_preserves_each_payload)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x155D81;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    static const uint8_t kShort[] = {0x01, 0x63, 0xC8, 0x00, 0x00, 0x00};
+    static const uint8_t kExtendedNormal[] = {0x01, 0x63, 0xC8, 0x00, 0x80, 0xD8, 0x06, 0x00};
+    static const uint8_t kExtendedSilent[] = {0x01, 0x63, 0xC8, 0x00, 0x80, 0xD8, 0x05, 0x00};
+    const struct
+    {
+        const uint8_t *payload;
+        uint8_t length;
+    } lCases[] = {
+        {kShort, sizeof(kShort)},
+        {kExtendedNormal, sizeof(kExtendedNormal)},
+        {kExtendedSilent, sizeof(kExtendedSilent)},
+    };
+
+    for (const auto &lCase : lCases)
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, lDeviceNodeId, lKey);
+        lChannel.setLowPower2W(true);
+
+        ASSERT_TRUE(lController.sendRawTwoWayExecute(&lChannel,
+                                                     lCase.payload, lCase.length));
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+        ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
+        ASSERT_EQ(lFrame.dataLen, lCase.length);
+        ASSERT_MEM_EQ(lFrame.data, lCase.payload, lCase.length);
+        ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+    }
+}
+
+TEST(controller_raw_two_way_execute_uses_normal_challenge_response_exchange)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x155D81;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    static const uint8_t kPayload[] = {0x01, 0x63, 0x4A, 0x00, 0x00, 0x00};
+    static const uint8_t kChallenge[] = {0x10, 0x20, 0x30, 0x40, 0x50, 0x60};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+    ASSERT_TRUE(lController.sendRawTwoWayExecute(&lChannel,
+                                                 kPayload, sizeof(kPayload)));
+    IoHomeFrame lRequest;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lRequest));
+    ASSERT_MEM_EQ(lRequest.data, kPayload, sizeof(kPayload));
+
+    IoHomeFrame lChallenge;
+    buildPairChallengeRequestFrame(lChallenge, lRemoteNodeId,
+                                   lDeviceNodeId, kChallenge);
+    ASSERT_TRUE(queueControllerResponse(lController, lChallenge));
+    const auto &lAuthPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lAuthPacket.empty());
+    IoHomeFrame lAuthResponse;
+    ASSERT_TRUE(deserializeFrameForTest(
+        lAuthResponse, lAuthPacket.data(), static_cast<uint8_t>(lAuthPacket.size())));
+    ASSERT_EQ(lAuthResponse.commandId, IoHomeCommand::ChallengeResponse);
+    ASSERT_EQ(lAuthResponse.getSrcNodeId(), lRemoteNodeId);
+    ASSERT_EQ(lAuthResponse.getDestNodeId(), lDeviceNodeId);
+
+    uint8_t lData[8] = {};
+    lData[0] = 0x01;
+    IoHomeFrame lResponse;
+    buildPrivateResponseFrame(lResponse, lRemoteNodeId, lDeviceNodeId,
+                              lData, sizeof(lData));
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    ASSERT_EQ(lController.state(), ControllerState::Idle);
+    ASSERT_EQ(lChannel.testLastCommandExchangeResult(),
+              IoHomeCommandExchangeResult::Completed);
+}
+
+TEST(controller_raw_two_way_execute_rejects_non_registered_or_wrong_length)
+{
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.init();
+    static const uint8_t kShort[] = {0x01, 0x63, 0xC8, 0x00, 0x00, 0x00};
+    uint8_t lInvalid[7] = {};
+
+    ASSERT_TRUE(!lController.sendRawTwoWayExecute(&lChannel,
+                                                  kShort, sizeof(kShort)));
+    lChannel.setNodeId(0x155D81);
+    lChannel.setIs1W(true);
+    ASSERT_TRUE(!lController.sendRawTwoWayExecute(&lChannel,
+                                                  kShort, sizeof(kShort)));
+    lChannel.setIs1W(false);
+    ASSERT_TRUE(!lController.sendRawTwoWayExecute(&lChannel,
+                                                  lInvalid, sizeof(lInvalid)));
+    ASSERT_TRUE(!lController.sendRawTwoWayExecute(&lChannel,
+                                                  nullptr, sizeof(kShort)));
+}
+
 static bool advancePairingToWaitDeviceChallenge(IoHomeController &iController,
                                                 uint32_t iRemoteNodeId,
                                                 uint32_t iDeviceNodeId)

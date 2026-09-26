@@ -54,6 +54,9 @@
 // Normal 1W authenticated frames include 6-byte HMAC in CTRL0 length, so keep
 // 9(header) + raw + 2(seq) + 6(hmac) <= IOHC_FRAME_BUFFER_SIZE.
 #define IOHC_1W_RAW_EXEC_MAX_DATA (IOHC_FRAME_BUFFER_SIZE - 9 - 2 - IOHC_HMAC_SIZE)
+#define IOHC_2W_RAW_EXEC_SHORT_LEN 6
+#define IOHC_2W_RAW_EXEC_EXTENDED_LEN 8
+#define IOHC_2W_RAW_EXEC_MAX_DATA IOHC_2W_RAW_EXEC_EXTENDED_LEN
 
 class IoHomecontrolChannel;
 
@@ -132,6 +135,9 @@ struct IoHomeQueueEntry
   bool oneWayRawExecute;     // true: send exact raw Execute payload bytes before sequence/HMAC
   uint8_t oneWayRawData[IOHC_1W_RAW_EXEC_MAX_DATA];
   uint8_t oneWayRawLen;
+  bool twoWayRawExecute;     // true: send exact 6/8-byte 2W Execute payload
+  uint8_t twoWayRawData[IOHC_2W_RAW_EXEC_MAX_DATA];
+  uint8_t twoWayRawLen;
   bool privateProbe;
   PrivateProbeShape privateProbeShape;
   uint8_t privateProbeFunction;
@@ -448,6 +454,19 @@ public:
                             const uint8_t *iPayload, uint8_t iPayloadLen);
   bool sendOneWayChannelRawExecute(IoHomecontrolChannel *iChannel,
                                    const uint8_t *iPayload, uint8_t iPayloadLen);
+
+  // Queue an exact diagnostic 2W Execute payload through the normal exchange
+  // engine. Only the payload is raw; addressing, power class, preamble,
+  // retries, challenge-response authentication, and result handling remain
+  // the same as for ordinary registered-device commands.
+  bool sendRawTwoWayExecute(IoHomecontrolChannel *iChannel,
+                            const uint8_t *iPayload, uint8_t iPayloadLen);
+  static bool buildRawTwoWayExecuteFrame(IoHomeFrame &oFrame,
+                                         uint32_t iSrcNodeId,
+                                         uint32_t iDestNodeId,
+                                         bool iLowPower,
+                                         const uint8_t *iPayload,
+                                         uint8_t iPayloadLen);
 
   // Queue a standard 1W Execute command with an explicit broadcast type:
   // payload = 01 43 main[2] fp1 fp2, then sequence + HMAC are appended.
