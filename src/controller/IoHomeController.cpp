@@ -971,11 +971,13 @@ namespace
                                         lChallenge, iSystemKey, lHmac))
             return false;
 
-        logDebugP("2W discovery 0x2A: challenge=%02X%02X%02X%02X%02X%02X hmac=%02X%02X%02X%02X%02X%02X",
+#ifndef TEST_NATIVE
+        logDebug("", "2W discovery 0x2A: challenge=%02X%02X%02X%02X%02X%02X hmac=%02X%02X%02X%02X%02X%02X",
                   lChallenge[0], lChallenge[1], lChallenge[2],
                   lChallenge[3], lChallenge[4], lChallenge[5],
                   lHmac[0], lHmac[1], lHmac[2],
                   lHmac[3], lHmac[4], lHmac[5]);
+#endif
 
         memcpy(oFrame.data + sizeof(lChallenge), lHmac, sizeof(lHmac));
         oFrame.dataLen = sizeof(lChallenge) + sizeof(lHmac);
@@ -1806,6 +1808,16 @@ bool IoHomeController::sendCommandInternal(uint32_t iDestNodeId, const uint8_t *
     lEntry.sourceChannelIndex = 0xFF;
     lEntry.retries = 0;
     lEntry.maxAttempts = iMaxAttempts == 0 ? 1 : iMaxAttempts;
+    // A 2W Execute can already have changed the physical device even when its
+    // reply is lost. Never send three blind copies; favourite is not safe to
+    // repeat at all because a second "My" can undo the first action.
+    if (iCmd == IoHomeCommand::Execute)
+    {
+        const uint8_t lSafeExecuteAttempts = iParam == 0xD8 ? 1U : 2U;
+        if (lEntry.maxAttempts > lSafeExecuteAttempts)
+            lEntry.maxAttempts = lSafeExecuteAttempts;
+    }
+    lEntry.retryReason = TwoWayRetryReason::Initial;
     lEntry.background = iBackground;
     lEntry.active = true;
     return queuePush(lEntry);
@@ -2207,6 +2219,8 @@ bool IoHomeController::sendTiltCommand(uint32_t iDestNodeId, const uint8_t *iEnc
     lEntry.twoWayTilt = true;
     lEntry.twoWayTiltPercent = iTiltPercent;
     lEntry.retries = 0;
+    lEntry.maxAttempts = 2;
+    lEntry.retryReason = TwoWayRetryReason::Initial;
     lEntry.active = true;
     return queuePush(lEntry);
 }
@@ -2455,15 +2469,34 @@ uint16_t IoHomeController::preambleForQueued2WAttempt(const IoHomeFrame &,
                                                        lPlan.normalPreamble)
                                    : lPlan.fixedPreamble;
     static const char *const kUseNames[] = {"not_low_power", "override", "off", "no_channel", "applied"};
+    static const char *const kRetryReasons[] = {"initial", "no_response", "no_closing_reply"};
+    static const char *const kPreviousResults[] = {"none", "no_response", "authenticated_unconfirmed"};
+    const uint8_t lReasonIndex = static_cast<uint8_t>(iEntry.retryReason);
+    const char *const lReason = lReasonIndex < (sizeof(kRetryReasons) / sizeof(kRetryReasons[0]))
+                                    ? kRetryReasons[lReasonIndex]
+                                    : "unknown";
+    const char *const lPreviousResult = lReasonIndex < (sizeof(kPreviousResults) / sizeof(kPreviousResults[0]))
+                                            ? kPreviousResults[lReasonIndex]
+                                            : "unknown";
     if (lPlan.hasLastHeard)
-        logInfoP("2W try=%u cmd=0x%02X preamble=%u belief=%s use=%s age_ms=%lu",
+        logInfoP("2W try=%u cmd=0x%02X reason=%s previous=%s challenge=%s challenge_response=%s final_response=%s status=%s preamble=%u belief=%s use=%s age_ms=%lu",
                  static_cast<unsigned>(iEntry.retries + 1U), static_cast<unsigned>(iEntry.command),
+                 lReason, lPreviousResult,
+                 iEntry.previousChallengeSeen ? "yes" : "no",
+                 iEntry.previousChallengeResponseSent ? "yes" : "no",
+                 iEntry.previousFinalResponseSeen ? "yes" : "no",
+                 iEntry.previousStatusSeen ? "yes" : "no",
                  static_cast<unsigned>(lPreamble), twoWayWakeBeliefName(lPlan.belief),
                  kUseNames[static_cast<uint8_t>(lPlan.use)],
                  static_cast<unsigned long>(lPlan.lastHeardAgeMs));
     else
-        logInfoP("2W try=%u cmd=0x%02X preamble=%u belief=%s use=%s age_ms=n/a",
+        logInfoP("2W try=%u cmd=0x%02X reason=%s previous=%s challenge=%s challenge_response=%s final_response=%s status=%s preamble=%u belief=%s use=%s age_ms=n/a",
                  static_cast<unsigned>(iEntry.retries + 1U), static_cast<unsigned>(iEntry.command),
+                 lReason, lPreviousResult,
+                 iEntry.previousChallengeSeen ? "yes" : "no",
+                 iEntry.previousChallengeResponseSent ? "yes" : "no",
+                 iEntry.previousFinalResponseSeen ? "yes" : "no",
+                 iEntry.previousStatusSeen ? "yes" : "no",
                  static_cast<unsigned>(lPreamble), twoWayWakeBeliefName(lPlan.belief),
                  kUseNames[static_cast<uint8_t>(lPlan.use)]);
     return lPreamble;
@@ -3142,6 +3175,13 @@ void IoHomeController::beginExchangeDiagnosticsWindow()
 void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntry,
                                                    IoHomeCommandExchangeResult iResult)
 {
+    if (iResult == IoHomeCommandExchangeResult::FailedBeforeAuthentication &&
+        iEntry.hadAuthenticatedAccept)
+    {
+        // A later local failure cannot erase evidence that an earlier copy was
+        // authenticated by the actuator.
+        iResult = IoHomeCommandExchangeResult::AuthenticatedUnconfirmed;
+    }
     IoHomecontrolChannel *lChannel = channelForQueueEntry(iEntry);
     if (lChannel)
         lChannel->onCommandExchangeResult(iEntry.command, iEntry.param, iResult);
@@ -3150,11 +3190,12 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
 void IoHomeController::recordExchangeFailure(const IoHomeQueueEntry &iEntry,
                                              bool iAuthenticatedUnconfirmed)
 {
+    const bool lAuthenticatedUnconfirmed = iAuthenticatedUnconfirmed || iEntry.hadAuthenticatedAccept;
     IoHomecontrolChannel *lChannel = channelForQueueEntry(iEntry);
     if (lChannel)
-        lChannel->onExchangeTimeout(iAuthenticatedUnconfirmed);
+        lChannel->onExchangeTimeout(lAuthenticatedUnconfirmed);
 
-    if (iAuthenticatedUnconfirmed)
+    if (lAuthenticatedUnconfirmed)
     {
         if (mExchangeDiagnostics.unconfirmedCount != UINT16_MAX)
             ++mExchangeDiagnostics.unconfirmedCount;
@@ -3204,7 +3245,7 @@ void IoHomeController::recordExchangeFailure(const IoHomeQueueEntry &iEntry,
 
     if (mExchangeDiagnostics.timeoutCount != UINT16_MAX)
         ++mExchangeDiagnostics.timeoutCount;
-    notifyCommandExchangeResult(iEntry, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+    notifyCommandExchangeResult(iEntry, IoHomeCommandExchangeResult::Unknown);
 }
 
 void IoHomeController::startDiscovery(bool iEncrypted)
@@ -5282,6 +5323,10 @@ void IoHomeController::processIdle()
         if ((lPostCaptureHold ? queuePopForeground(lEntry) : queuePop(lEntry)))
         {
             mCurrentCmd = lEntry;
+            mAuthResponseSent = false;
+            mWaitingFinalResponse = false;
+            mSawChallenge = false;
+            mRetryAtMs = 0;
             mExchangeStartMs = millis();
             beginExchangeDiagnosticsWindow();
             if (buildTxFrame(mCurrentCmd))
@@ -5552,40 +5597,82 @@ void IoHomeController::processWaitResponse()
     {
         const auto failExchange = [this]() {
             const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
-            const bool lAfterChallenge = mSawChallenge;
-            recordExchangeFailure(lFailedCmd, lAfterChallenge && mWaitingFinalResponse);
+            const bool lAfterChallenge = mSawChallenge && mWaitingFinalResponse;
+            recordExchangeFailure(lFailedCmd, lAfterChallenge);
             mCurrentCmd.active = false;
             mWaitingFinalResponse = false;
             mSawChallenge = false;
-            mRetryAtMs = 0;
-            mExchangeStartMs = 0;
-            mState = ControllerState::Idle;
-            notifyTrackedStatusPollFailure(mModule, lFailedCmd, lAfterChallenge);
-        };
-
-        // Execute changes the physical device state. Once it has challenged
-        // and accepted our authentication, a missing final response is not a
-        // safe reason to replay the movement command.
-        if (mCurrentCmd.active && mCurrentCmd.command == IoHomeCommand::Execute &&
-            mSawChallenge && mWaitingFinalResponse)
-        {
-            logInfoP("Command: Execute to 0x%06X accepted without final response", mCurrentCmd.destNodeId);
-            recordExchangeFailure(mCurrentCmd, true);
-            mCurrentCmd.active = false;
-            mWaitingFinalResponse = false;
-            mSawChallenge = false;
+            mAuthResponseSent = false;
             mRetryAtMs = 0;
             mExchangeStartMs = 0;
             mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
             mState = ControllerState::Idle;
+            notifyTrackedStatusPollFailure(mModule, lFailedCmd,
+                                           lAfterChallenge || lFailedCmd.hadAuthenticatedAccept);
+        };
+
+        const uint8_t lMaxRetries = mCurrentCmd.maxAttempts > 0
+                                        ? static_cast<uint8_t>(mCurrentCmd.maxAttempts - 1U)
+                                        : 0U;
+
+        // An authenticated Execute may already be acting. Mirror the reference
+        // policy: only a peer that has previously closed an Execute exchange,
+        // only a repeatable absolute command, and only one resend after a
+        // longer settle gap. Devices that normally stay silent are accepted as
+        // unconfirmed without replaying the movement.
+        if (mCurrentCmd.active && mCurrentCmd.command == IoHomeCommand::Execute &&
+            mSawChallenge && mWaitingFinalResponse)
+        {
+            if (mRetryAtMs == 0)
+            {
+                mCurrentCmd.hadAuthenticatedAccept = true;
+                if (mCurrentCmd.authenticatedUnconfirmedTries != UINT8_MAX)
+                    ++mCurrentCmd.authenticatedUnconfirmedTries;
+
+                IoHomecontrolChannel *lChannel = channelForQueueEntry(mCurrentCmd);
+                const bool lRepeatable = mCurrentCmd.param != 0xD8;
+                const bool lKnownConfirmer = lChannel && lChannel->confirmsExecute();
+                const bool lRetrySafe = lKnownConfirmer && lRepeatable &&
+                                        mCurrentCmd.authenticatedUnconfirmedTries <= 1U &&
+                                        mCurrentCmd.retries < lMaxRetries &&
+                                        millis() - mExchangeStartMs + IOHC_UNCONFIRMED_EXECUTE_RETRY_GAP_MS <
+                                            IOHC_EXCHANGE_TOTAL_BUDGET_MS;
+                if (!lRetrySafe)
+                {
+                    logInfoP("Command: Execute to 0x%06X accepted without final response; no resend (confirms=%s repeatable=%s)",
+                             mCurrentCmd.destNodeId,
+                             lKnownConfirmer ? "yes" : "no",
+                             lRepeatable ? "yes" : "no");
+                    failExchange();
+                    return;
+                }
+
+                mCurrentCmd.retryReason = TwoWayRetryReason::NoClosingReply;
+                mCurrentCmd.previousChallengeSeen = true;
+                mCurrentCmd.previousChallengeResponseSent = mAuthResponseSent;
+                mCurrentCmd.previousFinalResponseSeen = false;
+                mCurrentCmd.previousStatusSeen = false;
+                mRetryAtMs = millis() + IOHC_UNCONFIRMED_EXECUTE_RETRY_GAP_MS;
+                logInfoP("Command: Execute to 0x%06X accepted without final response; one targeted resend in %u ms",
+                         mCurrentCmd.destNodeId,
+                         static_cast<unsigned>(IOHC_UNCONFIRMED_EXECUTE_RETRY_GAP_MS));
+                return;
+            }
+
+            if (millis() < mRetryAtMs)
+                return;
+        }
+
+        // Once any try was authenticated, a later silent retry must retain the
+        // accepted-unconfirmed outcome and must never trigger a third copy.
+        if (mCurrentCmd.hadAuthenticatedAccept && !mSawChallenge && mRetryAtMs == 0)
+        {
+            failExchange();
             return;
         }
 
         // EXCHANGE_MAX_ATTEMPTS counts the initial transmission. Do not add a
         // trailing retry gap when the last permitted attempt has timed out.
-        const uint8_t lMaxRetries = mCurrentCmd.maxAttempts > 0
-                                        ? static_cast<uint8_t>(mCurrentCmd.maxAttempts - 1U)
-                                        : 0U;
         if (!mCurrentCmd.active || mCurrentCmd.retries >= lMaxRetries ||
             millis() - mExchangeStartMs >= IOHC_EXCHANGE_TOTAL_BUDGET_MS)
         {
@@ -5595,6 +5682,11 @@ void IoHomeController::processWaitResponse()
 
         if (mRetryAtMs == 0)
         {
+            mCurrentCmd.retryReason = TwoWayRetryReason::NoResponse;
+            mCurrentCmd.previousChallengeSeen = mSawChallenge;
+            mCurrentCmd.previousChallengeResponseSent = mAuthResponseSent;
+            mCurrentCmd.previousFinalResponseSeen = false;
+            mCurrentCmd.previousStatusSeen = false;
             mRetryAtMs = millis() + IOHC_RETRY_GAP_MS;
             return;
         }
@@ -5621,6 +5713,7 @@ void IoHomeController::processWaitResponse()
             mCurrentCmd.retries++;
             mWaitingFinalResponse = false;
             mSawChallenge = false;
+            mAuthResponseSent = false;
             mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
             if (buildTxFrame(mCurrentCmd))
                 mState = ControllerState::TxPending;
@@ -5744,16 +5837,29 @@ void IoHomeController::processResponse()
         (mRxFrame.ctrlByte0 & IOHC_CTRL0_START) == 0 &&
         mSawChallenge && mWaitingFinalResponse;
     const bool lExplicitFailure = mRxFrame.commandId == IoHomeCommand::ErrorResponse;
+    const bool lPreviousTrustRxPosition = mTrustRxPosition;
+    if (lCompletedCmd.command == IoHomeCommand::Execute)
+        mTrustRxPosition = false;
     dispatchRxFrame();
+    mTrustRxPosition = lPreviousTrustRxPosition;
     if (lAuthenticatedDirectedDiscovery && mModule)
         mModule->onAuthenticatedDirectedDiscovery(lCompletedCmd.destNodeId);
+    const bool lStatusSeen = mRxFrame.commandId == IoHomeCommand::StatusUpdate ||
+                             mRxFrame.commandId == IoHomeCommand::PrivateResponse;
+    logInfoP("2W result cmd=0x%02X result=%s challenge=%s challenge_response=%s final_response=yes status=%s",
+             static_cast<unsigned>(lCompletedCmd.command),
+             lExplicitFailure ? "explicit_rejection" : "completed",
+             mSawChallenge ? "yes" : "no",
+             mAuthResponseSent ? "yes" : "no",
+             lStatusSeen ? "yes" : "no");
     notifyCommandExchangeResult(lCompletedCmd,
                                 lExplicitFailure
-                                    ? IoHomeCommandExchangeResult::FailedBeforeAuthentication
+                                    ? IoHomeCommandExchangeResult::ExplicitlyRejected
                                     : IoHomeCommandExchangeResult::Completed);
     mCurrentCmd.active = false;
     mWaitingFinalResponse = false;
     mSawChallenge = false;
+    mAuthResponseSent = false;
     mRetryAtMs = 0;
     mExchangeStartMs = 0;
     mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
@@ -8524,21 +8630,14 @@ void IoHomeController::dispatchRxFrame()
                 //   data[14]:   command originator when this optional field is present
                 //   Position encoding: raw * 100 / IOHC_POSITION_MAX (0xC800)
                 //   Minimum 11 bytes for full status
-                if (mRxFrame.dataLen >= 11)
+                if (mTrustRxPosition && mRxFrame.dataLen >= 11)
                 {
                     const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
                     dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 5, 7);
                 }
                 // Status-expected flag: device will auto-send StatusUpdate
-                if (mRxFrame.dataLen >= 2 && (mRxFrame.data[1] & 0x80))
+                if (mTrustRxPosition && mRxFrame.dataLen >= 2 && (mRxFrame.data[1] & 0x80))
                     lCh->onStatusExpected();
-                // Battery level in byte 3 (if present)
-                if (mRxFrame.dataLen >= 4)
-                {
-                    uint8_t lBattery = mRxFrame.data[3];
-                    if (lBattery <= 100)
-                        lCh->onBatteryLevel(lBattery);
-                }
                 uint8_t lOriginator = 0;
                 if (decodeStatusUpdateOriginator(mRxFrame, lOriginator))
                     logDebugP("StatusUpdate: originator=0x%02X (%s)",
@@ -8555,16 +8654,16 @@ void IoHomeController::dispatchRxFrame()
             }
             case IoHomeCommand::Execute: // response to execute
             {
-                // Execute response uses same layout as StatusUpdate
-                if (mRxFrame.dataLen >= 11)
-                {
-                    const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
-                    dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 5, 7);
-                }
+                // Immediate Execute replies can contain the pre-command
+                // position and target. They close/authenticate the exchange,
+                // but the optimistic target remains in place until the next
+                // independent StatusUpdate or PrivateResponse verifies state.
                 break;
             }
             case IoHomeCommand::PrivateResponse:
             {
+                if (!mTrustRxPosition)
+                    break;
                 // PrivateResponse (0x04) layout per reference:
                 //   data[0]:    flags (bit 0 = stopped)
                 //   data[1]:    flags (bit 7 = status-expected)
@@ -8572,7 +8671,7 @@ void IoHomeController::dispatchRxFrame()
                 //   data[4:5]:  current position (16-bit BE)
                 //   data[7]:    estimate (travel time in seconds; 0xFF/0x00 = unknown)
                 //   Minimum 8 bytes for full position+estimate payload
-                if (mRxFrame.dataLen >= 8)
+                if (mTrustRxPosition && mRxFrame.dataLen >= 8)
                 {
                     const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
                     dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 2, 4);
@@ -8581,7 +8680,7 @@ void IoHomeController::dispatchRxFrame()
                 if (mRxFrame.dataLen >= 2 && (mRxFrame.data[1] & 0x80))
                     lCh->onStatusExpected();
                 // Estimate byte: travel time remaining in seconds
-                if (mRxFrame.dataLen >= 8)
+                if (mTrustRxPosition && mRxFrame.dataLen >= 8)
                 {
                     uint8_t lEstimate = mRxFrame.data[7];
                     lCh->onEstimate(lEstimate);

@@ -1385,14 +1385,22 @@ void IoHomecontrolChannel::restoreStopTravelSnapshot()
     mTravelDurationMs = lSnapshot.travelDurationMs;
     if (!isBinaryDeviceType())
         getKo(IOHC_KoCHMovementStatus).value(mIsMoving, Dpt(1, 11));
-    logInfoP("STOP exchange failed before authentication; restored travel target %.1f%%", mTargetPosition);
+    logInfoP("STOP command was rejected or failed locally; restored travel target %.1f%%", mTargetPosition);
 }
 
 void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8_t iParam,
                                                     IoHomeCommandExchangeResult iResult)
 {
+    if (iCommand == IoHomeCommand::Execute &&
+        (iResult == IoHomeCommandExchangeResult::Completed ||
+         iResult == IoHomeCommandExchangeResult::ExplicitlyRejected))
+    {
+        mConfirmsExecute = true;
+    }
+
     if (iResult == IoHomeCommandExchangeResult::Completed ||
-        iResult == IoHomeCommandExchangeResult::AuthenticatedUnconfirmed)
+        iResult == IoHomeCommandExchangeResult::AuthenticatedUnconfirmed ||
+        iResult == IoHomeCommandExchangeResult::ExplicitlyRejected)
     {
         mHas2WHeardEvidence = true;
         mLast2WHeardMs = millis();
@@ -1424,8 +1432,27 @@ void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8
         // Keep the snapshot until a status update or a new movement resolves it.
         mHas2WMovingEvidence = false;
         mStopSettlePollPending = true;
+        scheduleStatusPoll(defaultTrackedStatusPollDelayMs());
+        logInfoP("STOP exchange authenticated but unconfirmed; waiting for status verification");
+        break;
+    case IoHomeCommandExchangeResult::Unknown:
+        // Silence is not proof that the motor missed STOP. Preserve the
+        // pre-STOP trajectory only as a snapshot until a real status resolves
+        // whether it stopped or kept moving.
+        mHas2WMovingEvidence = false;
+        mStopSettlePollPending = true;
+        scheduleStatusPoll(defaultTrackedStatusPollDelayMs());
+        logInfoP("STOP exchange not confirmed; waiting for status verification");
+        break;
+    case IoHomeCommandExchangeResult::ExplicitlyRejected:
+        restoreStopTravelSnapshot();
         break;
     }
+}
+
+bool IoHomecontrolChannel::confirmsExecute() const
+{
+    return mConfirmsExecute;
 }
 
 TwoWayWakeBelief IoHomecontrolChannel::twoWayWakeBeliefAt(uint32_t iNowMs, bool iStopCommand) const

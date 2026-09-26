@@ -41,6 +41,7 @@ public:
   void onStatusPollFailed(bool iAfterChallenge);
   void onCommandExchangeResult(IoHomeCommand iCommand, uint8_t iParam,
                                IoHomeCommandExchangeResult iResult);
+  bool confirmsExecute() const;
   TwoWayWakeBelief twoWayWakeBeliefAt(uint32_t iNowMs, bool iStopCommand = false) const;
   bool twoWayLastHeardAgeAt(uint32_t iNowMs, uint32_t &oAgeMs) const;
   bool hasStopSettlePollPending() const;
@@ -177,6 +178,7 @@ private:
   bool mIsMoving = false;
   bool mHas2WHeardEvidence = false;
   bool mHas2WMovingEvidence = false;
+  bool mConfirmsExecute = false; // runtime evidence: peer has closed an Execute exchange
   uint32_t mLast2WHeardMs = 0;
   uint32_t mLast2WMovingEvidenceMs = 0;
   bool mStopSettlePollPending = false;

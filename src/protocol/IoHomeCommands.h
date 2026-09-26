@@ -139,8 +139,12 @@ enum class IoHomeCommand : uint8_t
 enum class IoHomeCommandExchangeResult : uint8_t
 {
     Completed = 0,
+    // Reserved for a local build/radio failure. A peer timeout is Unknown,
+    // because silence does not prove that a physical command was ignored.
     FailedBeforeAuthentication = 1,
     AuthenticatedUnconfirmed = 2,
+    Unknown = 3,
+    ExplicitlyRejected = 4,
 };
 
 // Experimental low-power wake estimate.  It is intentionally a runtime-only

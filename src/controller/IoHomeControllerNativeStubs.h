@@ -275,8 +275,13 @@ public:
     mLastCommandExchangeCommand = iCommand;
     mLastCommandExchangeParam = iParam;
     mLastCommandExchangeResult = iResult;
+    if (iCommand == IoHomeCommand::Execute &&
+        (iResult == IoHomeCommandExchangeResult::Completed ||
+         iResult == IoHomeCommandExchangeResult::ExplicitlyRejected))
+      mConfirmsExecute = true;
     if (iResult == IoHomeCommandExchangeResult::Completed ||
-        iResult == IoHomeCommandExchangeResult::AuthenticatedUnconfirmed)
+        iResult == IoHomeCommandExchangeResult::AuthenticatedUnconfirmed ||
+        iResult == IoHomeCommandExchangeResult::ExplicitlyRejected)
     {
       mHas2WHeardEvidence = true;
       mLast2WHeardMs = ioHomeTestMillis();
@@ -288,12 +293,14 @@ public:
       mHas2WMovingEvidence = true;
       mLast2WMovingEvidenceMs = ioHomeTestMillis();
     }
-    if (iCommand == IoHomeCommand::Execute && iParam == 0xD2 && lAccepted)
+    if (iCommand == IoHomeCommand::Execute && iParam == 0xD2 &&
+        (lAccepted || iResult == IoHomeCommandExchangeResult::Unknown))
     {
       mHas2WMovingEvidence = false;
       mStopSettlePollPending = true;
     }
   }
+  bool confirmsExecute() const { return mConfirmsExecute; }
   TwoWayWakeBelief twoWayWakeBeliefAt(uint32_t iNowMs, bool iStopCommand = false) const
   {
     return ::twoWayWakeBelief(mHas2WMovingEvidence, mLast2WMovingEvidenceMs,
@@ -392,6 +399,7 @@ private:
   bool mStatusMoving = false;
   bool mHas2WHeardEvidence = false;
   bool mHas2WMovingEvidence = false;
+  bool mConfirmsExecute = false;
   uint32_t mLast2WHeardMs = 0;
   uint32_t mLast2WMovingEvidenceMs = 0;
   bool mStopSettlePollPending = false;

@@ -13,6 +13,7 @@
 #define IOHC_RX_TIMEOUT_MS 400
 #define IOHC_RX_FINAL_TIMEOUT_MS 500
 #define IOHC_RETRY_GAP_MS 250
+#define IOHC_UNCONFIRMED_EXECUTE_RETRY_GAP_MS 750
 #define IOHC_EXCHANGE_TOTAL_BUDGET_MS 2500
 #ifndef IOHC_PAIR_KEY_EXCHANGE_MAX_ATTEMPTS
 #define IOHC_PAIR_KEY_EXCHANGE_MAX_ATTEMPTS 3
@@ -110,6 +111,13 @@ enum class Pairing1WMode : uint8_t
   RemoveAdd = 4
 };
 
+enum class TwoWayRetryReason : uint8_t
+{
+  Initial = 0,
+  NoResponse = 1,
+  NoClosingReply = 2,
+};
+
 // Queued command entry
 struct IoHomeQueueEntry
 {
@@ -142,6 +150,13 @@ struct IoHomeQueueEntry
   uint8_t twoWayTiltPercent;
   uint8_t retries;
   uint8_t maxAttempts;
+  uint8_t authenticatedUnconfirmedTries;
+  bool hadAuthenticatedAccept;
+  TwoWayRetryReason retryReason;
+  bool previousChallengeSeen;
+  bool previousChallengeResponseSent;
+  bool previousFinalResponseSeen;
+  bool previousStatusSeen;
   TwoWayPreamblePlan twoWayPreamblePlan;
   bool background;
   bool active;
@@ -916,6 +931,7 @@ private:
   uint32_t mExchangeStartCrcErrorCount = 0;
   uint32_t mExchangeStartPreambleCount = 0;
   uint32_t mExchangeStartSyncCount = 0;
+  bool mTrustRxPosition = true; // false while dispatching an immediate Execute reply
 
   // Passive UNKNOWN_86 (0x86) observation. No semantics are assumed; only the
   // raw frame and any traffic between the same node pair are logged.
