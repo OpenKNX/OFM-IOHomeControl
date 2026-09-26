@@ -2,7 +2,7 @@
 
 OpenKNX firmware module for the direct integration of **Velux, Somfy and other io-homecontrol devices** into KNX. The module uses an ESP32 together with an SX1276 or SX1262 868 MHz radio and does not require an external manufacturer gateway.
 
-This implementation combines protocol research and practical implementation work from several community projects. The main protocol documentation and 2W reference implementation is [Velocet/iown-homecontrol](https://github.com/Velocet/iown-homecontrol). The 1W remote-profile behavior is cross-checked against [rspaargaren/iohomecontrol](https://github.com/rspaargaren/iohomecontrol) and RF captures. Additional implementation references are listed in [Related protocol sources](#related-protocol-sources).
+This implementation combines protocol research and practical implementation work from several community projects. The main protocol sources for this implementation are [Velocet/iown-homecontrol](https://github.com/Velocet/iown-homecontrol) for protocol documentation and its 2W reference implementation, and the ESPHome project [laberning/home_io_control](https://github.com/laberning/home_io_control) for actively developed 1W/2W protocol behavior and implementation work. The 1W remote-profile behavior is also cross-checked against [rspaargaren/iohomecontrol](https://github.com/rspaargaren/iohomecontrol) and RF captures. Additional implementation references are listed in [Related protocol sources](#related-protocol-sources).
 
 ## Supported Devices
 
@@ -345,6 +345,7 @@ IoHomecontrol (OpenKNX::Module)
 The io-homecontrol protocol support in this module consolidates findings from several open-source projects. These projects cover different parts of the protocol and hardware landscape, including protocol documentation, 1W and 2W communication, ESP32 targets, SX1276-based radios and later SX1262 support.
 
 - [Velocet/iown-homecontrol](https://github.com/Velocet/iown-homecontrol) — main protocol documentation and reference source for this implementation.
+- [laberning/home_io_control](https://github.com/laberning/home_io_control) — main ESPHome implementation and protocol behavior reference for this implementation.
 - [cridp/iown-homecontrol-esp32sx1276](https://github.com/cridp/iown-homecontrol-esp32sx1276) — ESP32/SX1276 implementation reference.
 - [psolyca/iown-homecontrol](https://github.com/psolyca/iown-homecontrol) — 1W/2W implementation reference with detailed command and crypto handling.
 - [CyrilOpenSource/iown-homecontrol-esp32sx1276](https://github.com/CyrilOpenSource/iown-homecontrol-esp32sx1276) — ESP32/SX1276 1W/2W implementation reference.
