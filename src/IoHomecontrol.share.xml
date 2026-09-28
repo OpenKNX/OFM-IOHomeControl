@@ -55,6 +55,8 @@
                   <Enumeration Text="Vorhangschiene" Value="10" Id="%ENID%" />
                   <Enumeration Text="Lüftung" Value="11" Id="%ENID%" />
                   <Enumeration Text="Schalter" Value="12" Id="%ENID%" />
+                  <Enumeration Text="Heizung Stellwert" Value="13" Id="%ENID%" />
+                  <Enumeration Text="Heizung Ein/Aus" Value="14" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
               <!-- ETS channel selector: 0 disables, other values map to IOHCDeviceType + 1. -->
@@ -69,7 +71,7 @@
                   <Enumeration Text="Fenster" Value="3" Id="%ENID%" />
                   <Enumeration Text="Markise" Value="4" Id="%ENID%" />
                   <Enumeration Text="Garagentor" Value="5" Id="%ENID%" />
-                  <Enumeration Text="Thermostat" Value="6" Id="%ENID%" />
+                  <Enumeration Text="Cozy-Thermostat" Value="6" Id="%ENID%" />
                   <Enumeration Text="Licht" Value="7" Id="%ENID%" />
                   <Enumeration Text="Tor" Value="8" Id="%ENID%" />
                   <Enumeration Text="Schloss" Value="9" Id="%ENID%" />
@@ -77,6 +79,8 @@
                   <Enumeration Text="Vorhangschiene" Value="11" Id="%ENID%" />
                   <Enumeration Text="Lüftung" Value="12" Id="%ENID%" />
                   <Enumeration Text="Schalter" Value="13" Id="%ENID%" />
+                  <Enumeration Text="Heizung Stellwert" Value="14" Id="%ENID%" />
+                  <Enumeration Text="Heizung Ein/Aus" Value="15" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
               <!-- Status poll interval -->

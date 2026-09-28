@@ -66,15 +66,13 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn("getEffectiveProfileDescriptor()", channel)
         self.assertIn("getEffectiveProfileDescriptor()", controller)
         self.assertIn("mProtocolIdentity = lIdentity", channel)
-        auto_object_sets = [
-            {ref.get("RefId") for ref in when.findall("k:ComObjectRefRef", NS)}
-            for when in self.template.findall(".//k:when[@test='1']", NS)
-        ]
-        self.assertTrue(any({
-            "%AID%_O-%TT%%CC%000_R-%TT%%CC%00001",  # position
-            "%AID%_O-%TT%%CC%003_R-%TT%%CC%00301",  # on/off
-            "%AID%_O-%TT%%CC%008_R-%TT%%CC%00801",  # orientation
-        } <= refs for refs in auto_object_sets))
+        selection_ref = "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"
+        ko_choice = next(
+            choice for choice in self.template.findall(
+                f".//k:choose[@ParamRefId='{selection_ref}']", NS
+            ) if choice.find("k:when[@test='15']", NS) is not None
+        )
+        self.assertIsNone(ko_choice.find("k:when[@test='1']", NS))
 
     def test_all_channels_are_selected_by_device_type(self) -> None:
         visible = self.share.find(".//k:Parameter[@Name='VisibleChannels']", NS)
@@ -117,7 +115,7 @@ class ChannelUiTest(unittest.TestCase):
         self.assertEqual((choices[0].get("Text"), choices[0].get("Value")), ("Deaktiviert", "0"))
         self.assertEqual(
             {choice.get("Value") for choice in choices},
-            {str(value) for value in range(14)},
+            {str(value) for value in range(16)},
         )
 
         overrides = [
@@ -378,7 +376,7 @@ class ChannelUiTest(unittest.TestCase):
             choice
             for choice in selector_choices
             if {when.get("test") for when in choice.findall("k:when", NS)}
-            == {str(value) for value in range(1, 14)}
+            == {str(value) for value in range(2, 16)}
         )
 
         roller = ko_choice.find("k:when[@test='2']", NS)
@@ -391,11 +389,16 @@ class ChannelUiTest(unittest.TestCase):
                 "%AID%_O-%TT%%CC%002_R-%TT%%CC%00201",
                 "%AID%_O-%TT%%CC%004_R-%TT%%CC%00401",
                 "%AID%_O-%TT%%CC%005_R-%TT%%CC%00501",
-                "%AID%_O-%TT%%CC%008_R-%TT%%CC%00801",
-                "%AID%_O-%TT%%CC%009_R-%TT%%CC%00901",
                 "%AID%_O-%TT%%CC%010_R-%TT%%CC%01001",
                 "%AID%_O-%TT%%CC%019_R-%TT%%CC%01901",
             },
+        )
+        orientation = roller.find(
+            "k:choose[@ParamRefId='%AID%_P-%TT%%CC%102_R-%TT%%CC%10201']", NS
+        )
+        self.assertEqual(
+            {ref.get("RefId") for ref in orientation.findall("k:when[@test='1']/k:ComObjectRefRef", NS)},
+            {"%AID%_O-%TT%%CC%008_R-%TT%%CC%00801", "%AID%_O-%TT%%CC%009_R-%TT%%CC%00901"},
         )
 
         light = ko_choice.find("k:when[@test='7']", NS)
@@ -407,6 +410,25 @@ class ChannelUiTest(unittest.TestCase):
                 "%AID%_O-%TT%%CC%003_R-%TT%%CC%00301",
                 "%AID%_O-%TT%%CC%006_R-%TT%%CC%00601",
             },
+        )
+        self.assertNotIn("%AID%_O-%TT%%CC%001_R-%TT%%CC%00101", {
+            ref.get("RefId") for ref in dimmable.findall("k:when[@test='1']/k:ComObjectRefRef", NS)
+        })
+        self.assertEqual(
+            {ref.get("RefId") for ref in ko_choice.findall("k:when[@test='9']/k:ComObjectRefRef", NS)},
+            {"%AID%_O-%TT%%CC%003_R-%TT%%CC%00301", "%AID%_O-%TT%%CC%007_R-%TT%%CC%00701"},
+        )
+        self.assertEqual(
+            {ref.get("RefId") for ref in ko_choice.findall("k:when[@test='12']/k:ComObjectRefRef", NS)},
+            {"%AID%_O-%TT%%CC%000_R-%TT%%CC%00001"},
+        )
+        self.assertEqual(
+            {ref.get("RefId") for ref in ko_choice.findall("k:when[@test='14']/k:ComObjectRefRef", NS)},
+            {"%AID%_O-%TT%%CC%000_R-%TT%%CC%00001"},
+        )
+        self.assertEqual(
+            {ref.get("RefId") for ref in ko_choice.findall("k:when[@test='15']/k:ComObjectRefRef", NS)},
+            {"%AID%_O-%TT%%CC%003_R-%TT%%CC%00301"},
         )
 
     def test_suspension_uses_shared_radio_type_and_header_order(self) -> None:
@@ -791,8 +813,9 @@ class ChannelUiTest(unittest.TestCase):
     def test_main_page_keeps_suspend_and_groups_configuration(self) -> None:
         page = self.template.find(".//k:ParameterBlock[@Name='IOHCChannel%C%Page']", NS)
         self.assertIsNotNone(page.find("k:ParameterRefRef[@RefId='%AID%_UP-%TT%%CC%008_R-%TT%%CC%00801']", NS))
-        for name in ('Functions', 'Scenes', 'Commissioning'):
+        for name in ('Functions', 'Commissioning'):
             self.assertIsNotNone(page.find(f"k:ParameterBlock[@Name='{name}']", NS))
+        self.assertIsNotNone(page.find(".//k:ParameterBlock[@Name='Scenes']", NS))
         functions = page.find("k:ParameterBlock[@Name='Functions']", NS)
         self.assertIsNotNone(functions.find("k:choose/k:when[@test='0']/k:ParameterRefRef[@RefId='%AID%_UP-%TT%%CC%003_R-%TT%%CC%00301']", NS))
 
@@ -801,12 +824,31 @@ class ChannelUiTest(unittest.TestCase):
         texts = {block.get('Text') for block in channel.findall('k:ParameterBlock', NS)}
         self.assertTrue({'Übersicht', 'Kanalauswahl', 'Inbetriebnahme', 'Diagnose und Funkmonitor'} <= texts)
 
-    def test_diagnostic_objects_remain_enabled_by_default(self) -> None:
+    def test_unpublished_feedback_objects_are_not_offered(self) -> None:
         param = self.template.find(".//k:Parameter[@Name='c%C%DiagnosticObjects']", NS)
-        self.assertEqual(param.get('Value'), '1')
-        gate = self.template.find(".//k:choose[@ParamRefId='%AID%_P-%TT%%CC%095_R-%TT%%CC%09501']", NS)
-        refs = {r.get('RefId') for r in gate.findall('k:when/k:ComObjectRefRef', NS)}
-        self.assertEqual(refs, {'%AID%_O-%TT%%CC%012_R-%TT%%CC%01201', '%AID%_O-%TT%%CC%013_R-%TT%%CC%01301'})
+        self.assertEqual(param.get('Value'), '0')
+        dynamic_refs = {r.get('RefId') for r in self.template.findall('.//k:Dynamic//k:ComObjectRefRef', NS)}
+        for number in (12, 13, 21):
+            self.assertFalse(any(f"%CC%{number:03d}_R-" in ref for ref in dynamic_refs))
+
+    def test_import_uses_exact_profile_and_subprofile_for_ets_presentation(self) -> None:
+        script = (ROOT / "src" / "IoHomecontrol.script.js").read_text()
+        self.assertIn("switch ((protocolType << 6) | subProfile)", script)
+        self.assertIn("case 0x0540:", script)
+        self.assertIn("case 0x057A:", script)
+        self.assertIn('prefix + "OrientationObjects"', script)
+        self.assertIn('prefix + "Dimmable"', script)
+        self.assertIn('prefix + "ImportedProfile"', script)
+        self.assertIn('prefix + "ImportedManufacturer"', script)
+        registry = (ROOT / "src" / "protocol" / "IoHomeProfileRegistry.cpp").read_text()
+        registry_rows = registry.split("constexpr IoHomeProfileDescriptor kProfiles[] = {", 1)[1].split("};", 1)[0]
+        registry_ids = {int(value, 16) for value in re.findall(r"profile\(0x([0-9A-Fa-f]{4})", registry_rows)}
+        import_cases = script.split("function IOHC_etsDeviceType", 1)[1].split(
+            "function IOHC_hasOrientationObjects", 1
+        )[0]
+        imported_ids = {int(value, 16) for value in re.findall(r"case 0x([0-9A-Fa-f]{4}):", import_cases)}
+        self.assertTrue(registry_ids <= imported_ids)
+        self.assertIn(0x0380, imported_ids)  # Legacy Atlantic Cozy presentation.
 
     def test_application_help_uses_relative_ko_references_only(self) -> None:
         documentation = (ROOT / "doc" / "Applikationsbeschreibung-IoHomecontrol.md").read_text()

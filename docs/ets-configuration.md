@@ -7,9 +7,10 @@ and protocol diagnostics. Other application modules are unaffected.
 - Channel selection retains activation and suspension semantics.
 - Each enabled channel exposes name, device type, Suspend, communication mode,
   profile selection, power class and startup behavior on its main page.
-- Functions and feedback groups travel-time estimation, direction, supported
-  feedback settings, silent operation and optional diagnostic objects.
-- Scenes remain opt-in with their existing default and object assignments.
+- Functions and feedback groups travel-time estimation, direction, and
+  profile-confirmed orientation objects. RS100 silent operation is expert-only.
+- Scenes remain opt-in for supported actuator categories, with their existing
+  object numbers. Auto/unknown and heating presentations do not offer scenes.
 - Expert view exposes the existing protocol overrides without resetting them
   when the view is closed. Hidden overrides remain effective.
 - Commissioning groups the existing online actions and last-read results.
@@ -40,6 +41,16 @@ the scan is complete to import the results:
 The last result and up to 16 discovered Node IDs remain visible on the
 commissioning page. If too few unused channels are available, the remaining
 devices stay unassigned and the final message reports that condition.
+The per-channel commissioning page also shows the profile/subprofile,
+manufacturer ID and power class from the ETS key-import snapshot. These fields
+are not live metadata and are not populated by ordinary pairing-status refresh.
+
+Import classification uses the exact packed profile/subprofile. Confirmed
+orientation profiles automatically expose slat KOs; `0x0180` light enables the
+dimming KO. Exterior heating (`0x0540`) and heating on/off (`0x057A`) have
+separate ETS categories instead of inheriting Atlantic Cozy thermostat KOs.
+Unknown combinations remain in Auto presentation without actuator KOs until a
+device-specific ETS category is deliberately selected.
 
 ## Configuration ownership
 
@@ -97,11 +108,12 @@ snapshot.
 Existing parameter offsets and communication-object numbers remain stable. The
 per-channel memory union grows by three bytes for the key-init delay and discovery
 listen policy; the confirmation mode uses previously free bits. The display selectors remain ETS-only parameters
-outside device memory. Battery and RSSI objects remain enabled by default for
-existing installations; disabling them is an explicit project configuration change.
-The battery object remains unknown until a device-specific, capture-verified
-private battery response layout is implemented; normal status responses are
-never interpreted heuristically as percentages.
+outside device memory. Battery, RSSI and Cozy temperature-feedback KOs remain
+declared at their stable numbers but are hidden because firmware has no
+production publisher for them. The battery value remains unknown until a
+device-specific, capture-verified response layout is implemented; normal status
+responses are never interpreted heuristically as percentages. Existing group
+links to newly hidden objects should be reviewed during ETS project upgrade.
 
 Run the ETS/UI regression checks and the full OAM producer before release.
 ETS import, navigation and project-upgrade behavior still require verification

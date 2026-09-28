@@ -48,7 +48,7 @@
 
         <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
           <!-- Position scenes without lamella -->
-          <when test="0 2 3 4 7 10 11">
+          <when test="0 2 3 4 7 9 10 11">
             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%ID+10%_R-%TT%%CC%%ID+10%01" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
             <choose ParamRefId="%AID%_UP-%TT%%CC%%ID+10%_R-%TT%%CC%%ID+10%01">
               <when test="0">
@@ -58,12 +58,14 @@
           </when>
 
           <!-- Position scenes with lamella -->
-          <when test="1 9">
+          <when test="1">
             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%ID+10%_R-%TT%%CC%%ID+10%01" IndentLevel="2" HelpContext="IOHC-Szenenaktion" />
             <choose ParamRefId="%AID%_UP-%TT%%CC%%ID+10%_R-%TT%%CC%%ID+10%01">
               <when test="0">
                 <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%ID%_R-%TT%%CC%%ID%01" IndentLevel="2" HelpContext="IOHC-Szenenposition" />
-                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%ID+20%_R-%TT%%CC%%ID+20%01" IndentLevel="2" HelpContext="IOHC-Szenenlamelle" />
+                <choose ParamRefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201"><when test="1">
+                  <ParameterRefRef RefId="%AID%_UP-%TT%%CC%%ID+20%_R-%TT%%CC%%ID+20%01" IndentLevel="2" HelpContext="IOHC-Szenenlamelle" />
+                </when></choose>
               </when>
             </choose>
           </when>

@@ -25,13 +25,20 @@
               <Parameter Id="%AID%_P-%TT%%CC%013" Name="c%C%PairedNodeIdDisplay" ParameterType="%AID%_PT-IOHCText40Byte" Text="Node-ID (zuletzt gelesen)" Value="unbekannt" Access="Read" />
               <Parameter Id="%AID%_P-%TT%%CC%014" Name="c%C%OneWaySummary" ParameterType="%AID%_PT-IOHCText40Byte" Text="Protokoll / Ziel" Value="Noch nicht gelesen" Access="Read" />
               <Parameter Id="%AID%_P-%TT%%CC%015" Name="c%C%PairingDiag" ParameterType="%AID%_PT-IOHCText40Byte" Text="Letzte Pairing-Diagnose" Value="Noch keine Diagnose" Access="Read" />
+              <!-- ETS-only snapshot from the authenticated key-import result. Normal pairing
+                   does not currently expose these values through the online status API. -->
+              <Parameter Id="%AID%_P-%TT%%CC%103" Name="c%C%ImportedProfile" ParameterType="%AID%_PT-IOHCText40Byte" Text="Importiertes Profil / Subprofil" Value="nicht aus ETS-Import gelesen" Access="Read" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%104" Name="c%C%ImportedManufacturer" ParameterType="%AID%_PT-IOHCText40Byte" Text="Importierter Hersteller / Energiemodus" Value="nicht aus ETS-Import gelesen" Access="Read" op:configTransfer="never" />
               <!-- ETS-only combined selector. A calculation keeps the historic
                    cActive and cDeviceType memory fields update-compatible. -->
               <Parameter Id="%AID%_P-%TT%%CC%096" Name="c%C%ChannelSelection" ParameterType="%AID%_PT-IOHCChannelSelection" Text="Gerätetyp" Value="0" />
 
               <!-- ETS-only visibility: no device memory and no configuration reset. -->
               <Parameter Id="%AID%_P-%TT%%CC%094" Name="c%C%ExpertView" ParameterType="%AID%_PT-IOHCCheckBox" Text="Experteneinstellungen anzeigen" Value="0" op:configTransfer="never" />
-              <Parameter Id="%AID%_P-%TT%%CC%095" Name="c%C%DiagnosticObjects" ParameterType="%AID%_PT-IOHCCheckBox" Text="Batterie- und Signalstärkeobjekte verwenden" Value="1" />
+              <!-- Retained only for ETS project compatibility; battery and RSSI have no
+                   validated production publisher and must not appear as live KOs. -->
+              <Parameter Id="%AID%_P-%TT%%CC%095" Name="c%C%DiagnosticObjects" ParameterType="%AID%_PT-IOHCCheckBox" Text="Reservierte Diagnoseobjekte" Value="0" />
+              <Parameter Id="%AID%_P-%TT%%CC%102" Name="c%C%OrientationObjects" ParameterType="%AID%_PT-IOHCCheckBox" Text="Lamellen-/Orientierungsobjekte verwenden" Value="0" />
 
               <!-- Main configuration Union including 10 ETS-backed scene slots -->
               <Union SizeInBit="544">
@@ -81,6 +88,9 @@
             <ParameterRefs>
               <ParameterRef Id="%AID%_P-%TT%%CC%094_R-%TT%%CC%09401" RefId="%AID%_P-%TT%%CC%094" />
               <ParameterRef Id="%AID%_P-%TT%%CC%095_R-%TT%%CC%09501" RefId="%AID%_P-%TT%%CC%095" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201" RefId="%AID%_P-%TT%%CC%102" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%103_R-%TT%%CC%10301" RefId="%AID%_P-%TT%%CC%103" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%104_R-%TT%%CC%10401" RefId="%AID%_P-%TT%%CC%104" />
               <ParameterRef Id="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" RefId="%AID%_P-%TT%%CC%000" />
               <ParameterRef Id="%AID%_P-%TT%%CC%999_R-%TT%%CC%99901" RefId="%AID%_P-%TT%%CC%999" />
               <ParameterRef Id="%AID%_P-%TT%%CC%010_R-%TT%%CC%01001" RefId="%AID%_P-%TT%%CC%010" />
@@ -153,7 +163,7 @@
             <ComObjectTable>
               <!-- === Per-channel Communication Objects === -->
               <!-- K0: Position command (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%000" Name="CH%C%Position" Text="Kanal %C% Position" FunctionText="Position setzen" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K0%" />
+              <ComObject Id="%AID%_O-%TT%%CC%000" Name="CH%C%Position" Text="Kanal %C% Position / Stellwert" FunctionText="Position / Stellwert setzen" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K0%" />
 
               <!-- K1: Position feedback (read) -->
               <ComObject Id="%AID%_O-%TT%%CC%001" Name="CH%C%PositionFeedback" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K1%" />
@@ -162,7 +172,7 @@
               <ComObject Id="%AID%_O-%TT%%CC%002" Name="CH%C%UpDown" Text="Kanal %C% Auf/Ab" FunctionText="Auf/Ab Befehl" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-8" Number="%K2%" />
 
               <!-- K3: On/Off command (write) - Licht/Schalter -->
-              <ComObject Id="%AID%_O-%TT%%CC%003" Name="CH%C%OnOff" Text="Kanal %C% Ein/Aus" FunctionText="Ein/Aus Befehl" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K3%" />
+              <ComObject Id="%AID%_O-%TT%%CC%003" Name="CH%C%OnOff" Text="Kanal %C% Ein/Aus / Verriegeln" FunctionText="Schaltbefehl" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K3%" />
 
               <!-- K4: Stop command trigger (write) -->
               <ComObject Id="%AID%_O-%TT%%CC%004" Name="CH%C%Stop" Text="Kanal %C% Stopp" FunctionText="Stopp Befehl" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-17" Number="%K4%" />
@@ -233,10 +243,10 @@
 
             <ComObjectRefs>
               <!-- Per-channel KO refs. Device-type visibility is handled in Dynamic. -->
-              <ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" RefId="%AID%_O-%TT%%CC%000" FunctionText="Position setzen" Text="Kanal %C% Position" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" RefId="%AID%_O-%TT%%CC%000" FunctionText="Position / Stellwert setzen" Text="Kanal %C% Position / Stellwert" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" RefId="%AID%_O-%TT%%CC%001" FunctionText="Position Rückmeldung" Text="Kanal %C% Position Rückmeldung" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" RefId="%AID%_O-%TT%%CC%002" FunctionText="Auf/Ab Befehl" Text="Kanal %C% Auf/Ab" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
-              <ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" RefId="%AID%_O-%TT%%CC%003" FunctionText="Ein/Aus Befehl" Text="Kanal %C% Ein/Aus" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
+              <ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" RefId="%AID%_O-%TT%%CC%003" FunctionText="Schaltbefehl" Text="Kanal %C% Ein/Aus / Verriegeln" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" RefId="%AID%_O-%TT%%CC%004" FunctionText="Stopp Befehl" Text="Kanal %C% Stopp" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" RefId="%AID%_O-%TT%%CC%005" FunctionText="Bewegungsstatus" Text="Kanal %C% Bewegt" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
               <ComObjectRef Id="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" RefId="%AID%_O-%TT%%CC%006" FunctionText="Status" Text="Kanal %C% Status" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" />
@@ -332,17 +342,21 @@
                           <ParameterSeparator Id="%AID%_PS-nnn" Text="Automatisch: gelernte Energieklasse, sonst immer erreichbar. Solar-/Batteriegeräte bei unbekannter Klasse ausdrücklich auf Low Power einstellen." UIHint="Information" />
                         </when>
                       </choose>
-                      <ParameterRefRef RefId="%AID%_UP-%TT%%CC%007_R-%TT%%CC%00701" IndentLevel="1" HelpContext="IOHC-Verhalten-nach-Neustart" />
+                      <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"><when test="2 3 4 5 6 7 8 9 10 11 12 13">
+                        <ParameterRefRef RefId="%AID%_UP-%TT%%CC%007_R-%TT%%CC%00701" IndentLevel="1" HelpContext="IOHC-Verhalten-nach-Neustart" />
+                      </when></choose>
                       <ParameterBlock Id="%AID%_PB-nnn" Name="Functions" Text="Funktionen und Rückmeldung">
-                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%095_R-%TT%%CC%09501" />
-                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur bei verfügbaren Messwerten verwenden. Das Abschalten entfernt diese Objekte aus der ETS-Objektansicht; bestehende Verknüpfungen vorher prüfen." UIHint="Information" />
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Batterie, RSSI und Cozy-Temperaturrückmeldung sind derzeit nicht als KNX-Rückmeldungen verfügbar." UIHint="Information" />
+                        <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"><when test="1">
+                          <ParameterSeparator Id="%AID%_PS-nnn" Text="Automatisch erkennt das Funkprofil im Gerät. Für passende KNX-Objekte nach dem Pairing einen Gerätetyp wählen; ein ETS-Schlüsselimport wählt ihn automatisch." UIHint="Information" />
+                        </when></choose>
                         <choose ParamRefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901">
                           <when test="0">
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%003_R-%TT%%CC%00301" IndentLevel="1" HelpContext="IOHC-Status-Abfrageintervall" />
                           </when>
                         </choose>
                         <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601">
-                          <when test="1 2 3 4 5 8 10 11 12">
+                          <when test="2 3 4 5 8 10 11">
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
@@ -352,17 +366,17 @@
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%081_R-%TT%%CC%08101" IndentLevel="1" HelpContext="IOHC-Dimmbar" />
                           </when>
                         </choose>
-                        <choose ParamRefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901">
-                          <when test="0">
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%083_R-%TT%%CC%08301" IndentLevel="1" HelpContext="IOHC-Silentbetrieb" />
-                            <ParameterSeparator Id="%AID%_PS-nnn" Text="Leiser Betrieb ist nur für unterstützte Somfy-RS100-Aktoren vorgesehen." UIHint="Information" />
-                          </when>
-                        </choose>
+                        <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"><when test="2">
+                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201" IndentLevel="1" />
+                          <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur bei bestätigtem Lamellen-/Orientierungsparameter aktivieren. Der ETS-Schlüsselimport setzt dies aus Profil und Subprofil." UIHint="Information" />
+                        </when></choose>
                       </ParameterBlock>
+                      <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"><when test="2 3 4 5 6 7 8 9 10 11 12 13">
                       <ParameterBlock Id="%AID%_PB-nnn" Name="Scenes" Text="Szenen">
-                        <!-- Scene support: available for all device types.
+                        <!-- Scene support: available for the selected actuator categories.
                              The complete per-scene UI selection is generated from IoHomecontrol.scene.part.xml. -->
                         <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenenlernen ist nur für Positionsszenen vorgesehen. Bei Cozy, Licht, Schloss und Schalter kann das Szenensteuerungsobjekt Szenen abrufen, aber nicht speichern." UIHint="Information" />
                         <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
                           <when test="&gt;=1">
                             <op:usePart name="IOHCScene" xpath="//Dynamic/*" />
@@ -371,6 +385,7 @@
 
 
                       </ParameterBlock>
+                      </when></choose>
                       <ParameterRefRef RefId="%AID%_P-%TT%%CC%094_R-%TT%%CC%09401" />
                       <choose ParamRefId="%AID%_P-%TT%%CC%094_R-%TT%%CC%09401"><when test="1">
                           <ParameterBlock Id="%AID%_PB-nnn" Name="ExpertSettings" Text="Experten: Protokoll und Discovery">
@@ -391,6 +406,8 @@
                                 </choose>
                               </when>
                               <when test="0">
+                                <ParameterRefRef RefId="%AID%_UP-%TT%%CC%083_R-%TT%%CC%08301" IndentLevel="1" HelpContext="IOHC-Silentbetrieb" />
+                                <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur für einen bestätigten Somfy-RS100-Aktor aktivieren; der Schlüsselimport kann dies nicht sicher erkennen. Bei anderen Geräten deaktiviert lassen, auch nach einem Gerätetypwechsel." UIHint="Information" />
                                 <ParameterRefRef RefId="%AID%_UP-%TT%%CC%086_R-%TT%%CC%08601" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
                                 <ParameterRefRef RefId="%AID%_UP-%TT%%CC%087_R-%TT%%CC%08701" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
                                 <ParameterRefRef RefId="%AID%_UP-%TT%%CC%088_R-%TT%%CC%08801" IndentLevel="1" HelpContext="IOHC-2W-Discovery" />
@@ -406,56 +423,51 @@
 
                         <!-- === Device-type-specific KOs === -->
                         <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601">
-                          <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" /></when>
-                          <when test="2"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" /></when>
+                          <!-- Without an ETS-visible profile choice, auto mode cannot safely
+                               promise any particular actuator KO. The runtime profile stays automatic. -->
+                          <when test="2">
+                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" />
+                            <choose ParamRefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /></when></choose>
+                          </when>
                           <when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" /></when>
                           <when test="4"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
                           <when test="5"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
-                          <when test="6"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%021_R-%TT%%CC%02101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%023_R-%TT%%CC%02301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%024_R-%TT%%CC%02401" /></when>
+                          <when test="6"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%023_R-%TT%%CC%02301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%024_R-%TT%%CC%02401" /></when>
                           <when test="7">
                             <choose ParamRefId="%AID%_UP-%TT%%CC%081_R-%TT%%CC%08101">
-                              <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
+                              <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
                               <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
                             </choose>
                           </when>
                           <when test="8"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
-                          <when test="9"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
-                          <when test="10"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
+                          <when test="9"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
+                          <when test="10"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
                           <when test="11"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
-                          <when test="12"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" /></when>
+                          <when test="12"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /></when>
                           <when test="13"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
+                          <when test="14"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /></when>
+                          <when test="15"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /></when>
                         </choose>
 
-                        <!-- === Always-visible channel diagnostics/control KOs === -->
-                        <choose ParamRefId="%AID%_P-%TT%%CC%095_R-%TT%%CC%09501">
-                          <when test="1">
-                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%012_R-%TT%%CC%01201" />
-                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%013_R-%TT%%CC%01301" />
-                          </when>
-                        </choose>
+                        <!-- Battery and RSSI objects remain declared at their stable KO numbers,
+                             but are not presented until production status publishers exist. -->
                         <ComObjectRefRef RefId="%AID%_O-%TT%%CC%014_R-%TT%%CC%01401" />
                         <ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" />
 
                         <!-- === Wind/Rain KO: visible for position-capable types === -->
                         <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601">
-                          <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
                           <when test="2"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
                           <when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
                           <when test="4"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-                          <when test="5"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-                          <when test="8"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-                          <when test="10"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-                          <when test="11"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-                          <when test="12"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
                         </choose>
 
-                        <!-- Scene KOs: visible when SceneCount >= 1, independent of device type and scene number. -->
-                        <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
-                          <when test="&gt;=1">
+                        <!-- Scene KOs: only for supported ETS scene categories with SceneCount >= 1. -->
+                        <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"><when test="2 3 4 5 6 7 8 9 10 11 12 13">
+                          <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001"><when test="&gt;=1">
                             <ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" />
                             <ComObjectRefRef RefId="%AID%_O-%TT%%CC%017_R-%TT%%CC%01701" />
-                          </when>
-                        </choose>
+                          </when></choose>
+                        </when></choose>
                       <ParameterBlock Id="%AID%_PB-nnn" Name="Commissioning" Text="Inbetriebnahme">
                         <ParameterSeparator Id="%AID%_PS-nnn" Text="Die angezeigten Werte sind der zuletzt online gelesene Stand. ETS-Einstellungen und im Gerät gespeicherte Zuordnungen können davon abweichen." UIHint="Information" />
                         <choose ParamRefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901">
@@ -511,6 +523,8 @@
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%013_R-%TT%%CC%01301" IndentLevel="1" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%014_R-%TT%%CC%01401" IndentLevel="1" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%015_R-%TT%%CC%01501" IndentLevel="1" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%103_R-%TT%%CC%10301" IndentLevel="1" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%104_R-%TT%%CC%10401" IndentLevel="1" />
                         <choose ParamRefId="%AID%_P-%TT%%CC%010_R-%TT%%CC%01001">
                           <when test="1">
                             <ParameterSeparator Id="%AID%_PS-nnn" Text="Das Gerät muss nach dem Entfernen erneut angelernt werden." UIHint="Error" />

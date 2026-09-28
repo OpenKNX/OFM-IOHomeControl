@@ -83,8 +83,7 @@ Statusüberwachung
 
 * Automatische Status-Abfrage mit konfigurierbarem Intervall
 * Positionsrückmeldung vom Gerät
-* Batterielevel-KO für solarbetriebene Geräte; bis zur gerätespezifisch verifizierten Antwortdekodierung bleibt der Wert unbekannt
-* Signalstärke (RSSI) pro Kanal
+* Batterielevel und Signalstärke (RSSI) werden derzeit nicht als Kanal-KOs angeboten, weil ein verifizierter Produktionspfad für die Rückmeldung fehlt
 * Fehlerstatus (Kommunikationsfehler, Duty-Cycle, Pairing verloren, Funkstörung)
 * Bewegungsstatus (fährt / steht)
 
@@ -134,21 +133,23 @@ Das io-homecontrol-Modul unterstützt verschiedene Gerätetypen. Der Gerätetyp 
 
 | Gerätetyp | Beschreibung | Besondere KOs |
 |-----------|-------------|---------------|
-| Generisch | Beliebiges io-homecontrol-Gerät | Position, Auf/Ab, Stopp |
-| Jalousie / Rollladen | Rollläden, Raffstores, Außenjalousien | Lamellenposition, Langzeitbetrieb |
+| Automatisch (Discovery) | Funkprofil automatisch auswerten; ETS-Gerätetyp danach wählen | keine Aktor-KOs bis zur ETS-Typwahl |
+| Jalousie / Rollladen | Rollläden, Raffstores, Außenjalousien | Langzeitbetrieb; Lamellenposition nur bei bestätigtem Orientierungsprofil |
 | Fenster | Dachfenster, Fensteröffner | Lüftungsposition |
 | Markise | Horizontale und vertikale Markisen | Position, Auf/Ab, Stopp |
 | Garagentor | Garagentorantriebe | Position, Auf/Ab, Stopp |
-| Thermostat | Atlantic Cozy io | Temperatur, Betriebsmodus, Anwesenheit, Fensterkontakt |
+| Cozy-Thermostat | Atlantic Cozy io | Temperatur-Sollwert, Betriebsmodus, Anwesenheit, Fensterkontakt |
 | Licht | io-homecontrol Lichtaktoren, Schalter und Dimmer | Ein/Aus, optional zusätzlich Helligkeit 0-100 % |
 | Tor | Schiebetore, Drehtorantriebe | Position, Auf/Ab, Stopp |
-| Schloss | io-homecontrol Türschlösser | Status, Kanal sperren |
-| Sonnenschutz horizontal | Horizontale Sonnenschutzsysteme | Lamellenposition |
+| Schloss | io-homecontrol Türschlösser | Verriegeln/Entriegeln, Status, Kanal sperren |
+| Sonnenschutz horizontal | Horizontale Sonnenschutzsysteme | Position, Auf/Ab, Stopp |
 | Vorhangschiene | Somfy Glydea io | Position, Auf/Ab, Stopp |
-| Lüftung | io-homecontrol Lüftungseinheiten | Position, Auf/Ab, Stopp |
+| Lüftung | io-homecontrol Lüftungseinheiten | Stellwert |
 | Schalter | io-homecontrol Schalter | Ein/Aus (statt Auf/Ab) |
+| Heizung Stellwert | Heizprofile mit Energiebereitstellung | Stellwert 0–100 % |
+| Heizung Ein/Aus | Binäre Heizprofile | Ein/Aus |
 
-> Bei den Gerätetypen Licht und Schalter ersetzen eigene Schalt-KOs die Antriebs-KOs: Statt "Auf/Ab" (DPT 1.008) erscheint "Ein/Aus" (DPT 1.001) und statt "Bewegt" (DPT 1.011) das KO "Status" (DPT 1.001). Für den Gerätetyp Licht kann zusätzlich die Eigenschaft **Dimmbar** aktiviert werden; dann bleiben die Schalt-KOs erhalten und die Positions-KOs werden zusätzlich als Helligkeitswert 0-100 % genutzt. Beim Gerätetyp Schloss sind das KO "Status" (DPT 1.011) sowie das generische KO "Sperren" sichtbar.
+> Bei Licht und Schalter ersetzen Schalt-KOs die Antriebs-KOs. Bei dimmbarem Licht kommt der Stellwert Kn+0 hinzu; eine Helligkeitsrückmeldung wird noch nicht veröffentlicht. Beim Schloss sind Kn+3 für den Schaltbefehl, Kn+7 für den Schlossstatus und Kn+14 für die **Kanalsperre** sichtbar. Kanalsperre und Schlossbefehl sind verschiedene Funktionen.
 
 
 
@@ -214,7 +215,7 @@ Im bidirektionalen Modus sendet das Modul einen Befehl und erwartet eine Bestät
 
 * Zuverlässige Befehlsausführung mit Bestätigung
 * Positionsrückmeldung direkt vom Gerät
-* Batterielevel-KO (derzeit ohne heuristische Auswertung unbekannter Statusfelder) und Signalstärke
+* Batterie- und RSSI-Werte bleiben bis zu einer verifizierten Rückmeldung in ETS ausgeblendet
 * AES-128 verschlüsselte Kommunikation
 
 Dieser Modus ist für alle Geräte zu bevorzugen, die 2W unterstützen.
@@ -300,12 +301,12 @@ Während einer Fahrt schätzt das Modul die Position linear basierend auf den ko
 
 ### **Lamellensteuerung**
 
-Für Jalousien und horizontale Sonnenschutzsysteme steht zusätzlich eine Lamellenposition (DPT 5.001) zur Verfügung. Diese ist nur bei den Gerätetypen "Jalousie / Rollladen" und "Sonnenschutz horizontal" sichtbar.
+Für Jalousien mit bestätigtem Orientierungsparameter steht zusätzlich eine Lamellenposition (DPT 5.001) zur Verfügung. Beim ETS-Schlüsselimport wird diese Eigenschaft aus Profil und Subprofil gesetzt; bei manueller Einrichtung muss sie ausdrücklich aktiviert werden.
 
 ### **Spezielle Positionen**
 
 * **Favorit-Position** (KO Kn+10): Löst die im Gerät gespeicherte Vorzugsposition aus.
-* **Lüftungsposition** (KO Kn+11): Fährt ein Fenster oder einen Lüftungskanal in die Lüftungsstellung.
+* **Lüftungsposition** (KO Kn+11): Fährt einen dafür bestätigten Fensteröffner in die gesicherte Lüftungsstellung. Dieses KO ist kein allgemeines Lüftungsgeräte-KO.
 
 
 
@@ -394,12 +395,12 @@ Wird direkt auf der Seite **Kanalauswahl** eingestellt. **Deaktiviert** ist der 
 
 Mögliche Werte:
 * Deaktiviert — Standard
-* Generisch
+* Automatisch (Discovery; ohne Aktor-KOs bis zur ETS-Typwahl)
 * Jalousie / Rollladen
 * Fenster
 * Markise
 * Garagentor
-* Thermostat
+* Cozy-Thermostat
 * Licht
 * Tor
 * Schloss
@@ -407,8 +408,10 @@ Mögliche Werte:
 * Vorhangschiene
 * Lüftung
 * Schalter
+* Heizung Stellwert
+* Heizung Ein/Aus
 
-> Bei Gerätetypen mit Positionssteuerung werden zusätzlich die Parameter Öffnungszeit, Schließzeit und Richtung invertieren angezeigt. Beim Gerätetyp Thermostat erscheinen die Thermostat-spezifischen KOs.
+> Bei Gerätetypen mit Positionssteuerung werden zusätzlich Öffnungszeit, Schließzeit und Richtung invertieren angezeigt. Beim Cozy-Thermostat erscheinen nur dessen Privatbefehls-KOs. Heizung Stellwert und Heizung Ein/Aus sind davon getrennte Profilkategorien.
 
 #### **Suspendiert**
 
@@ -439,7 +442,7 @@ Mögliche Werte:
 <!-- DOC HelpContext="IOHC-Fahrzeit" -->
 ### **Fahrzeit**
 
-Erscheint nur für Gerätetypen mit Positionssteuerung (Generisch, Jalousie, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung).
+Erscheint nur für Gerätetypen mit Positionssteuerung (Jalousie, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene).
 
 #### **Öffnungszeit (Sekunden)**
 
@@ -581,22 +584,24 @@ Unterhalb der Schaltflächen zeigt die ETS vier read-only Felder an:
 * **Aktuell gepaarte Node-ID**
 * **Protokoll / Ziel**
 * **Letzte Pairing-Diagnose**
+* **Importiertes Profil / Subprofil** und **Hersteller / Energiemodus** — ETS-Snapshots aus dem Schlüsselimport, keine Live-Abfrage beim normalen Pairing
 
 > Das Pairing erfordert eine aktive ETS-Onlineverbindung zum Gerät. Das io-homecontrol-Gerät muss sich dabei im Pairing-Modus befinden.
 
 ### **Thermostat (Cozy)**
 
-Erscheint nur bei Gerätetyp "Thermostat" (5).
+Erscheint nur bei Gerätetyp "Cozy-Thermostat" (ETS-Auswahl 6, interner Gerätetyp 5).
 
 Für Atlantic Cozy io Thermostate stehen zusätzliche Kommunikationsobjekte zur Verfügung:
 
 Temperatursollwerte von 7,0 bis 28,0 °C werden als vorzeichenloser 16-Bit-Wert in Zehntelgrad und Little-Endian-Reihenfolge übertragen. Beispielsweise wird 28,0 °C als `18 01` codiert; Werte oberhalb von 25,5 °C werden dadurch nicht auf ein Byte abgeschnitten.
 
 * **Temperatur Sollwert** (KO Kn+20, DPT 9.001): Setzt die Zieltemperatur
-* **Temperatur Rückmeldung** (KO Kn+21, DPT 9.001): Aktuelle Temperatur vom Gerät
 * **Betriebsmodus** (KO Kn+22, DPT 20.102): HVAC-Betriebsmodus
 * **Anwesenheit** (KO Kn+23, DPT 1.018): Anwesenheitsstatus
 * **Fensterkontakt** (KO Kn+24, DPT 1.019): Fenster offen/geschlossen
+
+Kn+21 bleibt reserviert, wird aber mangels Firmware-Rückmeldung nicht in ETS angezeigt.
 
 ----
 
@@ -725,7 +730,7 @@ Welche dieser Objekte sichtbar sind, hängt vom Gerätetyp ab. Die folgenden Tab
 
 #### **Antriebs- und Positions-KOs**
 
-Sichtbar bei Gerätetypen mit Positionssteuerung (Generisch, Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene, Lüftung).
+Sichtbar bei Gerätetypen mit Positionssteuerung (Jalousie / Rollladen, Fenster, Markise, Garagentor, Tor, Sonnenschutz horizontal, Vorhangschiene). Für Lüftung und Heizung Stellwert wird nur Kn+0 als skalarer Stellwert angeboten.
 
 | Offset | Name | DPT | Richtung | Beschreibung |
 |--------|------|-----|----------|-------------|
@@ -734,10 +739,10 @@ Sichtbar bei Gerätetypen mit Positionssteuerung (Generisch, Jalousie / Rolllade
 | Kn+2 | Auf/Ab | 1.008 | Schreiben | 0 = Auf, 1 = Ab |
 | Kn+4 | Stopp | 1.017 | Schreiben | Laufende Fahrt stoppen |
 | Kn+5 | Bewegt | 1.011 | Lesen | 1 = fährt, 0 = steht |
-| Kn+8 | Lamellenposition | 5.001 | Schreiben | Lamellenwinkel (nur Jalousie / Sonnenschutz horizontal) |
-| Kn+9 | Lamelle Rückmeldung | 5.001 | Lesen | Aktuelle Lamellenposition (nur Jalousie / Sonnenschutz horizontal) |
+| Kn+8 | Lamellenposition | 5.001 | Schreiben | Lamellenwinkel (nur Jalousie mit bestätigtem Orientierungsprofil) |
+| Kn+9 | Lamelle Rückmeldung | 5.001 | Lesen | Aktuelle Lamellenposition (nur Jalousie mit bestätigtem Orientierungsprofil) |
 | Kn+10 | Favorit-Position | 1.017 | Schreiben | Im Gerät gespeicherte Vorzugsposition anfahren |
-| Kn+11 | Lüftungsposition | 1.017 | Schreiben | Lüftungsstellung anfahren (nur Fenster / Lüftung) |
+| Kn+11 | Lüftungsposition | 1.017 | Schreiben | Gesicherte Lüftungsstellung (nur bestätigter Fensteröffner) |
 | Kn+19 | Langzeitbetrieb | 1.008 | Schreiben | Step-Stop (nur Jalousie / Rollladen) |
 
 #### **Licht-/Schalter-KOs**
@@ -749,7 +754,7 @@ Sichtbar bei den Gerätetypen Licht und Schalter. Diese Objekte ersetzen die Ant
 | Kn+3 | Ein/Aus | 1.001 | Schreiben | 1 = Ein, 0 = Aus |
 | Kn+6 | Status | 1.001 | Lesen | 1 = Ein, 0 = Aus |
 
-Für den Gerätetyp Licht mit aktivierter Eigenschaft **Dimmbar** werden zusätzlich die Positionsobjekte Kn+0 und Kn+1 eingeblendet. Sie übertragen die Helligkeit als DPT 5.001 im Bereich 0-100 %; die Schaltobjekte Kn+3 und Kn+6 bleiben parallel sichtbar.
+Für den Gerätetyp Licht mit aktivierter Eigenschaft **Dimmbar** wird zusätzlich Kn+0 als Helligkeits-Stellwert (DPT 5.001, 0–100 %) eingeblendet. Eine Helligkeitsrückmeldung auf Kn+1 wird derzeit nicht veröffentlicht. Die Schaltobjekte Kn+3 und Kn+6 bleiben parallel sichtbar.
 
 #### **Schloss-KO**
 
@@ -757,22 +762,22 @@ Sichtbar beim Gerätetyp Schloss.
 
 | Offset | Name | DPT | Richtung | Beschreibung |
 |--------|------|-----|----------|-------------|
+| Kn+3 | Verriegeln/Entriegeln | 1.001 | Schreiben | Schaltbefehl für das Schloss; nicht mit der Kanalsperre verwechseln |
 | Kn+7 | Status | 1.011 | Lesen | 1 = verriegelt, 0 = entriegelt |
 
 #### **Allgemeine KOs (alle Gerätetypen)**
 
 | Offset | Name | DPT | Richtung | Beschreibung |
 |--------|------|-----|----------|-------------|
-| Kn+12 | Batterielevel | 5.001 | Lesen | 0-100% für verifizierte Geräteantworten; sonst unbekannt |
-| Kn+13 | Signalstärke | 5.001 | Lesen | RSSI 0-100% |
 | Kn+14 | Sperren | 1.003 | Schreiben | 1 = Kanal sperren, 0 = entsperren |
 | Kn+15 | Fehlerstatus | — (1 Byte) | Lesen | 0=OK, 1=Kommunikationsfehler, 2=Duty-Cycle, 3=Pairing verloren, 4=Funkstörung |
 
 > Das Fehlerstatus-KO (Kn+15) ist ein proprietäres 1-Byte-Objekt ohne standardisierten DPT.
+> Kn+12 (Batterie) und Kn+13 (RSSI) behalten ihre reservierten Nummern, sind aber bis zu einer verifizierten Firmware-Rückmeldung in ETS ausgeblendet.
 
 #### **Wind-/Regenalarm-KO**
 
-Sichtbar bei Gerätetypen mit Positionssteuerung.
+Sichtbar nur bei Jalousie / Rollladen, Fenster und Markise. Die Aktion muss zum tatsächlichen Gerät passen.
 
 | Offset | Name | DPT | Richtung | Beschreibung |
 |--------|------|-----|----------|-------------|
@@ -780,21 +785,22 @@ Sichtbar bei Gerätetypen mit Positionssteuerung.
 
 #### **Szenen-KOs**
 
-Sichtbar, sobald für den Kanal mindestens eine Szene konfiguriert ist (alle Gerätetypen).
+Sichtbar, sobald für einen unterstützten Aktor-Gerätetyp mindestens eine Szene konfiguriert ist. Auto/Unbekannt und Heizung bieten derzeit keine ETS-Szenen an.
 
 | Offset | Name | DPT | Richtung | Beschreibung |
 |--------|------|-----|----------|-------------|
 | Kn+16 | Szene | 17.001 | Schreiben | Szene aufrufen (1-10) |
 | Kn+17 | Szenensteuerung | 18.001 | Schreiben | Szene lernen / abrufen |
 
+> Das Speichern über Kn+17 ist nur für Positionsszenen unterstützt. Cozy-, Licht-, Schloss- und Schalter-Szenen können darüber abgerufen, aber nicht gelernt werden.
+
 #### **Thermostat-KOs (nur Gerätetyp Thermostat)**
 
 | Offset | Name | DPT | Richtung | Beschreibung |
 |--------|------|-----|----------|-------------|
 | Kn+20 | Temperatur Sollwert | 9.001 | Schreiben | Zieltemperatur |
-| Kn+21 | Temperatur Rückmeldung | 9.001 | Lesen | Aktuelle Temperatur |
 | Kn+22 | Betriebsmodus | 20.102 | Schreiben | HVAC-Modus |
 | Kn+23 | Anwesenheit | 1.018 | Schreiben | Anwesenheitsstatus |
 | Kn+24 | Fensterkontakt | 1.019 | Schreiben | Fenster offen/geschlossen |
 
-> Für die Gerätetypen Licht und Schalter stellt die Firmware eigene KOs mit semantisch korrektem DPT bereit ("Ein/Aus" und "Status", jeweils DPT 1.001). Sie ersetzen die Antriebs-KOs "Auf/Ab" (DPT 1.008) und "Bewegt" (DPT 1.011), sodass eine direkt am KO erstellte Gruppenadresse den passenden Datentyp erhält. Beim Gerätetyp Schloss sind das KO "Status" (DPT 1.011) sowie das generische KO "Sperren" sichtbar.
+> Kn+21 (Cozy-Temperaturrückmeldung) bleibt an seiner reservierten Nummer, ist aber ohne Firmware-Publisher in ETS ausgeblendet. Kn+14 sperrt den KNX-Kanal; es ist kein Schlossbefehl.

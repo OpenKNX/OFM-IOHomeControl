@@ -70,41 +70,67 @@ function IOHC_appendNodeId(data, nodeId) {
     data.push(normalizedNodeId & 0xFF);
 }
 
-function IOHC_etsDeviceType(protocolType) {
-    switch (protocolType) {
-    case 0x01: // Venetian blind
-    case 0x02: // Roller shutter
-    case 0x0A: // Blind
-    case 0x0D: // Dual shutter
-    case 0x11: // External Venetian blind
-    case 0x12: // Louvre blind
-    case 0x18: // Swinging shutter
+function IOHC_etsDeviceType(protocolType, subProfile) {
+    // Match complete Appendix-2 identifiers; an unknown subprofile is not a
+    // wildcard match for another product's ETS control presentation.
+    switch ((protocolType << 6) | subProfile) {
+    case 0x0040: // Interior Venetian blind
+    case 0x0080: // Roller shutter
+    case 0x0081: // Adjustable-slats roller shutter
+    case 0x0082: // Roller shutter with projection
+    case 0x0280: // Vertical interior blind
+    case 0x0340: // Dual roller shutter
+    case 0x0440: // Exterior Venetian blind
+    case 0x0480: // Louvre blind
+    case 0x0600: // Swinging shutter
+    case 0x0601: // Independent-leaf swinging shutter
         return 1;
-    case 0x04:
+    case 0x0100:
+    case 0x0101:
         return 2;
-    case 0x03:
+    case 0x00C0:
         return 3;
-    case 0x05:
-    case 0x08:
+    case 0x0140:
+    case 0x017A:
         return 4;
-    case 0x0E:
-    case 0x15:
-    case 0x16:
+    case 0x0380: // Legacy Atlantic Cozy; distinct from energy-demand heating
         return 5;
-    case 0x06:
+    case 0x0180:
+    case 0x01BA:
         return 6;
-    case 0x07:
+    case 0x01C0:
+    case 0x01FA:
         return 7;
-    case 0x09:
+    case 0x0240:
+    case 0x0241:
         return 8;
-    case 0x10:
+    case 0x0400:
         return 9;
-    case 0x13:
+    case 0x04C0:
         return 10;
-    case 0x14:
+    case 0x0500:
+    case 0x0501:
+    case 0x0502:
+    case 0x0503:
         return 11;
-    case 0x0F:
+    case 0x03C0:
         return 12;
+    case 0x0540:
+        return 13;
+    case 0x057A:
+        return 14;
+    default:
+        return 0;
+    }
+}
+
+function IOHC_hasOrientationObjects(protocolType, subProfile) {
+    switch ((protocolType << 6) | subProfile) {
+    case 0x0040:
+    case 0x0081:
+    case 0x0440:
+    case 0x0480:
+        return 1;
     default:
         return 0;
     }
@@ -116,7 +142,7 @@ function IOHC_importDeviceLabel(etsType) {
     case 2: return "Fenster";
     case 3: return "Markise";
     case 4: return "Garagentor";
-    case 5: return "Thermostat";
+    case 5: return "Cozy-Thermostat";
     case 6: return "Licht";
     case 7: return "Tor";
     case 8: return "Schloss";
@@ -124,6 +150,8 @@ function IOHC_importDeviceLabel(etsType) {
     case 10: return "Vorhangschiene";
     case 11: return "Lüftung";
     case 12: return "Schalter";
+    case 13: return "Heizung Stellwert";
+    case 14: return "Heizung Ein/Aus";
     default: return "ioHC-Gerät";
     }
 }
@@ -143,11 +171,16 @@ function IOHC_setExtractionResult(device, statusText, nodeIds) {
 
 function IOHC_configureImportedChannel(device, channelNumber, discovery) {
     var prefix = "IOHC_c" + channelNumber;
-    var etsType = IOHC_etsDeviceType(discovery.protocolType);
+    var etsType = IOHC_etsDeviceType(discovery.protocolType, discovery.subtype);
     IOHC_setParameterValue(device, prefix + "Name",
                            IOHC_importDeviceLabel(etsType) + " " + IOHC_formatNodeId(discovery.nodeId));
     IOHC_setParameterValue(device, prefix + "ProtocolMode", 0);
     IOHC_setParameterValue(device, prefix + "DeviceType", etsType);
+    IOHC_setParameterValue(device, prefix + "ChannelSelection", etsType + 1);
+    IOHC_setParameterValue(device, prefix + "OrientationObjects",
+                           IOHC_hasOrientationObjects(discovery.protocolType, discovery.subtype));
+    IOHC_setParameterValue(device, prefix + "Dimmable",
+                           discovery.protocolType == 0x06 && discovery.subtype == 0 ? 1 : 0);
     IOHC_setParameterValue(device, prefix + "ProfileOverride", 0);
     IOHC_setParameterValue(device, prefix + "TwoWayPowerClass", discovery.powerClass);
     IOHC_setParameterValue(device, prefix + "Suspend", 0);
@@ -155,6 +188,15 @@ function IOHC_configureImportedChannel(device, channelNumber, discovery) {
     IOHC_setParameterValue(device, prefix + "PairedNodeIdDisplay", IOHC_formatNodeId(discovery.nodeId));
     IOHC_setParameterValue(device, prefix + "OneWaySummary", "2W (bidirektional)");
     IOHC_setParameterValue(device, prefix + "PairingDiag", "Programmierung erforderlich");
+    var packedType = (discovery.protocolType << 6) | discovery.subtype;
+    var packedText = packedType.toString(16).toUpperCase();
+    while (packedText.length < 4) packedText = "0" + packedText;
+    IOHC_setParameterValue(device, prefix + "ImportedProfile",
+                           "Profil " + discovery.protocolType + "/" + discovery.subtype +
+                           " (0x" + packedText + ")");
+    IOHC_setParameterValue(device, prefix + "ImportedManufacturer",
+                           "Hersteller " + discovery.manufacturer +
+                           ", Energieklasse " + discovery.powerClass);
     // Activate last so all settings are coherent before the calculated
     // channel selector refreshes the dynamic view.
     IOHC_setParameterValue(device, prefix + "Active", 1);
