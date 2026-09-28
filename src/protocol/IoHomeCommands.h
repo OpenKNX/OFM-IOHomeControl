@@ -588,6 +588,8 @@ struct IoHomeDiscoveryMetadata
     uint8_t turnaroundClass = 0;
     uint8_t turnaroundKlfValue = 0;
     bool turnaroundUnitConfirmed = false;
+    bool hasDiscoveryTimestamp = false;
+    uint16_t discoveryTimestamp = 0;
     // Compatibility view used by the existing 2W wake/preamble policy. It is
     // populated only for the two KLF-defined power modes; reserved values stay
     // unknown and never get coerced to either class.
@@ -658,6 +660,13 @@ inline IoHomeDiscoveryMetadata decodeDiscoveryMetadata(const uint8_t *iData, uin
         lResult.manufacturer = iData[IOHC_DISCOVERY_MANUFACTURER_OFFSET];
     if (iDataLen > IOHC_DISCOVERY_FLAGS_OFFSET)
         decodeDiscoveryMib(lResult, iData[IOHC_DISCOVERY_FLAGS_OFFSET]);
+    if (iDataLen > IOHC_DISCOVERY_TIMESTAMP_OFFSET + 1)
+    {
+        lResult.hasDiscoveryTimestamp = true;
+        lResult.discoveryTimestamp =
+            (static_cast<uint16_t>(iData[IOHC_DISCOVERY_TIMESTAMP_OFFSET]) << 8) |
+            static_cast<uint16_t>(iData[IOHC_DISCOVERY_TIMESTAMP_OFFSET + 1]);
+    }
     return lResult;
 }
 

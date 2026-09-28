@@ -2577,26 +2577,27 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
 }
 
 // --- Flash persistence ---
-// Layout v14: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
+// Layout v15: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
 // default 1W broadcastType(1) + numChannels(1) +
 // per-channel: index(1) + flags(1) + actuatorNodeId(3) + actuatorKey(16) +
 // 1W reservedSeq(2) + 1W controllerNodeId(3) + 1W controllerKey(16) +
 // 1W manufacturer(1) + discoveryFlags(1) + discoveryNodeId(3) +
 // discoveryType(2) + discoverySubtype(1) + backboneId(3) +
-// discoveryManufacturer(1) + rawMib(1) = 55 bytes + remoteMap
+// discoveryManufacturer(1) + rawMib(1) + discoveryTimestamp(2) =
+// 57 bytes + remoteMap
 // flags: bit0=paired, bit1=is1W, bit2=2W low-power,
 //        bit3=2W power class learned, bit4=1W enrolled
 // discoveryFlags: bit0=valid, bit1=full payload, bit2=backbone present,
-//                 bit3=MIB present
+//                 bit3=MIB present, bit4=timestamp present
 
 uint16_t IoHomecontrol::flashSize()
 {
-    return 1 + 16 + 3 + 1 + 1 + (IOHC_ChannelCount * 55) + mRemoteMap.flashSize();
+    return 1 + 16 + 3 + 1 + 1 + (IOHC_ChannelCount * 57) + mRemoteMap.flashSize();
 }
 
 void IoHomecontrol::writeFlash()
 {
-    openknx.flash.writeByte(14); // v13 + persisted discovery metadata and raw MIB
+    openknx.flash.writeByte(15); // v14 + raw discovery timestamp
 
     // Write system key
     const uint8_t *lSysKey = mController.getSystemKey();
@@ -2654,6 +2655,8 @@ void IoHomecontrol::writeFlash()
             lMetadataFlags |= 0x04;
         if (lMetadata.hasMib)
             lMetadataFlags |= 0x08;
+        if (lMetadata.hasDiscoveryTimestamp)
+            lMetadataFlags |= 0x10;
         openknx.flash.writeByte(lMetadataFlags);
         const uint32_t lDiscoveryNodeId = mChannels[i]->getDiscoveryNodeId();
         openknx.flash.writeByte((lDiscoveryNodeId >> 16) & 0xFF);
@@ -2667,6 +2670,8 @@ void IoHomecontrol::writeFlash()
         openknx.flash.writeByte(lMetadata.backboneId & 0xFF);
         openknx.flash.writeByte(lMetadata.manufacturer);
         openknx.flash.writeByte(lMetadata.mib);
+        openknx.flash.writeByte((lMetadata.discoveryTimestamp >> 8) & 0xFF);
+        openknx.flash.writeByte(lMetadata.discoveryTimestamp & 0xFF);
     }
 
     // Write remote map
@@ -2684,6 +2689,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
     constexpr uint16_t kFlashHeaderV9 = 1 + 16 + 3 + 1 + 1;
     constexpr uint16_t kFlashRecordV9 = 43;
     constexpr uint16_t kFlashRecordV14 = 55;
+    constexpr uint16_t kFlashRecordV15 = 57;
     constexpr uint16_t kFlashHeaderV8 = 1 + 16 + 3 + 1 + 1 + 1;
     constexpr uint16_t kFlashHeaderV7 = 1 + 16 + 3 + 1 + 1;
     constexpr uint16_t kFlashHeaderV6 = 1 + 16 + 1;
@@ -2695,7 +2701,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
     uint8_t lVersion = openknx.flash.readByte();
 
-    if (lVersion == 14 || lVersion == 13 || lVersion == 12 || lVersion == 11 ||
+    if (lVersion == 15 || lVersion == 14 || lVersion == 13 || lVersion == 12 || lVersion == 11 ||
         lVersion == 10 || lVersion == 9)
     {
         if (iSize < kFlashHeaderV9)
@@ -2714,7 +2720,9 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
         const uint8_t lCount = openknx.flash.readByte();
         const uint8_t lConfiguredCount = mNumChannels > 0 ? mNumChannels : configuredChannelCount();
-        const uint16_t lRecordSize = lVersion >= 14 ? kFlashRecordV14 : kFlashRecordV9;
+        const uint16_t lRecordSize = lVersion >= 15 ? kFlashRecordV15
+                                     : lVersion >= 14 ? kFlashRecordV14
+                                                      : kFlashRecordV9;
         const uint8_t lReadCount = clampFlashRecordCount(lCount, lConfiguredCount, iSize, kFlashHeaderV9, lRecordSize);
         logInfoP("Flash restore: v%d stored=%u configured=%u active=%u reading=%u",
                  static_cast<unsigned>(lVersion),
@@ -2748,6 +2756,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
             uint32_t lBackboneId = 0;
             uint8_t lDiscoveryManufacturer = 0;
             uint8_t lMib = 0;
+            uint16_t lDiscoveryTimestamp = 0;
             if (lVersion >= 14)
             {
                 lMetadataFlags = openknx.flash.readByte();
@@ -2762,6 +2771,10 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
                               (uint32_t)openknx.flash.readByte();
                 lDiscoveryManufacturer = openknx.flash.readByte();
                 lMib = openknx.flash.readByte();
+                if (lVersion >= 15)
+                    lDiscoveryTimestamp =
+                        ((uint16_t)openknx.flash.readByte() << 8) |
+                        (uint16_t)openknx.flash.readByte();
             }
 
             FlashChannelState lState;
@@ -2799,6 +2812,11 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
                 lState.discoveryMetadata.manufacturer = lDiscoveryManufacturer;
                 if ((lMetadataFlags & 0x08) != 0)
                     decodeDiscoveryMib(lState.discoveryMetadata, lMib);
+                if ((lMetadataFlags & 0x10) != 0)
+                {
+                    lState.discoveryMetadata.hasDiscoveryTimestamp = true;
+                    lState.discoveryMetadata.discoveryTimestamp = lDiscoveryTimestamp;
+                }
             }
             restoreChannelFlashState(lIdx, lState);
         }

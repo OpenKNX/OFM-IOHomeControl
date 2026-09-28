@@ -2609,9 +2609,13 @@ bool IoHomeController::captureDiscoveryMetadata(
     }
 
     bool lPersistedMetadataChanged = false;
+    bool lHadPreviousTimestamp = false;
+    uint16_t lPreviousTimestamp = 0;
     if (iChannel)
     {
         const IoHomeDiscoveryMetadata &lPrevious = iChannel->getDiscoveryMetadata();
+        lHadPreviousTimestamp = lPrevious.hasDiscoveryTimestamp;
+        lPreviousTimestamp = lPrevious.discoveryTimestamp;
         const bool lPowerClassWillChange =
             lMetadata.hasPowerClass &&
             (!iChannel->hasLearnedLowPower2W() ||
@@ -2626,7 +2630,9 @@ bool IoHomeController::captureDiscoveryMetadata(
             lPrevious.backboneId != lMetadata.backboneId ||
             lPrevious.manufacturer != lMetadata.manufacturer ||
             lPrevious.hasMib != lMetadata.hasMib ||
-            lPrevious.mib != lMetadata.mib;
+            lPrevious.mib != lMetadata.mib ||
+            lPrevious.hasDiscoveryTimestamp != lMetadata.hasDiscoveryTimestamp ||
+            lPrevious.discoveryTimestamp != lMetadata.discoveryTimestamp;
         iChannel->onDiscoveryMetadata(iFrame.getSrcNodeId(), lMetadata);
         // The immediately following power-class learner already schedules a
         // save when that compatibility field changes. Coalesce both updates
@@ -2664,6 +2670,19 @@ bool IoHomeController::captureDiscoveryMetadata(
     }
     else
         logInfoP("Discovery metadata: MIB=n/a");
+    if (mPairDiagnosticTraceEnabled && lMetadata.hasDiscoveryTimestamp)
+    {
+        if (lHadPreviousTimestamp)
+            logInfoP("PairDiag: discovery timestamp previous=0x%04X current=0x%04X comparison=%s",
+                     static_cast<unsigned>(lPreviousTimestamp),
+                     static_cast<unsigned>(lMetadata.discoveryTimestamp),
+                     lPreviousTimestamp == lMetadata.discoveryTimestamp ? "same" : "changed");
+        else
+            logInfoP("PairDiag: discovery timestamp previous=n/a current=0x%04X",
+                     static_cast<unsigned>(lMetadata.discoveryTimestamp));
+    }
+    // Native-test logging macros discard their arguments entirely.
+    (void)lPreviousTimestamp;
     return true;
 }
 
@@ -4388,6 +4407,9 @@ void IoHomeController::tracePairDiagnosticDiscoveryInterpretation(const IoHomeFr
                          static_cast<unsigned>(lMetadata.turnaroundClass),
                          static_cast<unsigned>(lMetadata.turnaroundKlfValue),
                          lMetadata.turnaroundUnitConfirmed ? 1U : 0U);
+            if (lMetadata.hasDiscoveryTimestamp)
+                logInfoP("PairDiag: discovery timestamp: 0x%04X",
+                         static_cast<unsigned>(lMetadata.discoveryTimestamp));
         }
         else
         {
@@ -4669,6 +4691,9 @@ void IoHomeController::logPairDiagnosticStatus() const
                      static_cast<unsigned>(mPairDiscoveryMetadata.turnaroundClass),
                      static_cast<unsigned>(mPairDiscoveryMetadata.turnaroundKlfValue),
                      mPairDiscoveryMetadata.turnaroundUnitConfirmed ? 1U : 0U);
+        if (mPairDiscoveryMetadata.hasDiscoveryTimestamp)
+            logInfoP("PairDiag: discovery timestamp: 0x%04X",
+                     static_cast<unsigned>(mPairDiscoveryMetadata.discoveryTimestamp));
     }
     logInfoP("PairDiag: 1W mode=%s profile=%s addDestination=%u/%u finalizer=%s traceEntries=%u",
              pairing1WModeName(mPairing1WMode),

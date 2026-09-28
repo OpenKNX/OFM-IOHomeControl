@@ -2325,6 +2325,8 @@ TEST(discovery_response_metadata_uses_full_layout_offsets)
     ASSERT_EQ(lMetadata.turnaroundClass, 0);
     ASSERT_EQ(lMetadata.turnaroundKlfValue, 5);
     ASSERT_TRUE(!lMetadata.turnaroundUnitConfirmed);
+    ASSERT_TRUE(lMetadata.hasDiscoveryTimestamp);
+    ASSERT_EQ(lMetadata.discoveryTimestamp, 0xFFFF);
     ASSERT_TRUE(lMetadata.hasPowerClass);
     ASSERT_TRUE(lMetadata.lowPower);
     ASSERT_EQ(lMetadata.rawDataLen, sizeof(lData));
@@ -2338,7 +2340,54 @@ TEST(discovery_response_metadata_uses_full_layout_offsets)
     ASSERT_EQ(lTypeOnly.manufacturer, 0);
     ASSERT_TRUE(!lTypeOnly.hasMib);
     ASSERT_EQ(lTypeOnly.powerMode, IoHomePowerMode::Unknown);
+    ASSERT_TRUE(!lTypeOnly.hasDiscoveryTimestamp);
     ASSERT_TRUE(!lTypeOnly.hasPowerClass);
+}
+
+TEST(discovery_timestamp_is_big_endian_raw_and_requires_both_bytes)
+{
+    uint8_t lData[IOHC_DISCOVERY_FULL_SIZE] = {};
+    lData[IOHC_DISCOVERY_TIMESTAMP_OFFSET] = 0x12;
+    lData[IOHC_DISCOVERY_TIMESTAMP_OFFSET + 1] = 0x34;
+
+    const IoHomeDiscoveryMetadata lTruncated =
+        decodeDiscoveryMetadata(lData, IOHC_DISCOVERY_TIMESTAMP_OFFSET + 1);
+    ASSERT_TRUE(lTruncated.valid);
+    ASSERT_TRUE(!lTruncated.hasDiscoveryTimestamp);
+    ASSERT_EQ(lTruncated.discoveryTimestamp, 0);
+
+    const IoHomeDiscoveryMetadata lComplete =
+        decodeDiscoveryMetadata(lData, sizeof(lData));
+    ASSERT_TRUE(lComplete.hasDiscoveryTimestamp);
+    ASSERT_EQ(lComplete.discoveryTimestamp, 0x1234);
+
+    lData[IOHC_DISCOVERY_TIMESTAMP_OFFSET] = 0xFF;
+    lData[IOHC_DISCOVERY_TIMESTAMP_OFFSET + 1] = 0xFF;
+    const IoHomeDiscoveryMetadata lFfff =
+        decodeDiscoveryMetadata(lData, sizeof(lData));
+    ASSERT_TRUE(lFfff.hasDiscoveryTimestamp);
+    ASSERT_EQ(lFfff.discoveryTimestamp, 0xFFFF);
+}
+
+TEST(discovery_timestamp_repeated_values_remain_directly_comparable)
+{
+    uint8_t lFirstData[IOHC_DISCOVERY_FULL_SIZE] = {};
+    uint8_t lSameData[IOHC_DISCOVERY_FULL_SIZE] = {};
+    uint8_t lChangedData[IOHC_DISCOVERY_FULL_SIZE] = {};
+    lFirstData[7] = lSameData[7] = lChangedData[7] = 0x02;
+    lFirstData[8] = lSameData[8] = 0x10;
+    lChangedData[8] = 0x11;
+
+    const IoHomeDiscoveryMetadata lFirst =
+        decodeDiscoveryMetadata(lFirstData, sizeof(lFirstData));
+    const IoHomeDiscoveryMetadata lSame =
+        decodeDiscoveryMetadata(lSameData, sizeof(lSameData));
+    const IoHomeDiscoveryMetadata lChanged =
+        decodeDiscoveryMetadata(lChangedData, sizeof(lChangedData));
+
+    ASSERT_TRUE(lFirst.hasDiscoveryTimestamp);
+    ASSERT_EQ(lFirst.discoveryTimestamp, lSame.discoveryTimestamp);
+    ASSERT_TRUE(lFirst.discoveryTimestamp != lChanged.discoveryTimestamp);
 }
 
 TEST(discovery_manufacturer_mapping_preserves_known_and_unknown_ids)
@@ -10231,6 +10280,8 @@ TEST(controller_pairing_stores_029_metadata_before_key_exchange_and_keeps_source
     ASSERT_TRUE(lMetadata.rfSupport);
     ASSERT_TRUE(!lMetadata.syncControlGroupCandidate);
     ASSERT_EQ(lMetadata.turnaroundClass, 0);
+    ASSERT_TRUE(lMetadata.hasDiscoveryTimestamp);
+    ASSERT_EQ(lMetadata.discoveryTimestamp, 0xFFFF);
     ASSERT_EQ(lMetadata.rawDataLen, sizeof(kCapturedPayload));
     ASSERT_MEM_EQ(lMetadata.rawData, kCapturedPayload, sizeof(kCapturedPayload));
     ASSERT_TRUE(lController.state() == ControllerState::PairSendDiscoveryConfirmation ||
