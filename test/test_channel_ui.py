@@ -120,6 +120,39 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn("iMetadata.fullMetadata", discovery_handler)
         self.assertIn("lDevice->discoveryMetadata = iMetadata", discovery_handler)
 
+    def test_device_info_uses_one_structured_persisted_metadata_object(self) -> None:
+        header = (ROOT / "src" / "IoHomecontrolChannel.h").read_text()
+        channel_source = (ROOT / "src" / "IoHomecontrolChannel.cpp").read_text()
+        controller_source = (ROOT / "src" / "controller" / "IoHomeController.cpp").read_text()
+
+        self.assertIn("onDeviceInfo(const IoHomeDeviceMetadata &iInfo)", header)
+        self.assertIn("getDeviceMetadata() const", header)
+        module_source = (ROOT / "src" / "IoHomecontrol.cpp").read_text()
+        write_flash = module_source.split("void IoHomecontrol::writeFlash()", 1)[1].split(
+            "void IoHomecontrol::readFlash", 1
+        )[0]
+        self.assertIn("getDeviceMetadata()", write_flash)
+        self.assertIn("encodeDiscoveryMetadata(", write_flash)
+        discovery_handler = channel_source.split(
+            "void IoHomecontrolChannel::onDiscoveryMetadata", 1
+        )[1].split("void IoHomecontrolChannel::clearDiscoveryMetadata", 1)[0]
+        self.assertIn("onDeviceInfo(iMetadata)", discovery_handler)
+        self.assertNotIn("mDiscoveryMetadata = iMetadata", discovery_handler)
+
+        dispatch = controller_source.split(
+            "void IoHomeController::dispatchRxFrame()", 1
+        )[1]
+        info1 = dispatch.split(
+            "case IoHomeCommand::GetGeneralInfo1Response", 1
+        )[1].split("case IoHomeCommand::GetGeneralInfo2Response", 1)[0]
+        info2 = dispatch.split(
+            "case IoHomeCommand::GetGeneralInfo2Response", 1
+        )[1].split("case IoHomeCommand::GetGeneralInfo3Response", 1)[0]
+        self.assertIn("IoHomeDeviceMetadata lInfo = lCh->getDeviceMetadata()", info1)
+        self.assertIn("IoHomeDeviceMetadata lInfo = lCh->getDeviceMetadata()", info2)
+        self.assertIn("openknx.flash.save()", info1)
+        self.assertIn("openknx.flash.save()", info2)
+
     def test_selection_table_matches_shared_layout(self) -> None:
         selection = self.share.find(
             ".//k:ParameterBlock[@Text='Kanalauswahl']", NS

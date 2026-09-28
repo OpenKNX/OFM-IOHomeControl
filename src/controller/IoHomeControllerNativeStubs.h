@@ -246,14 +246,29 @@ public:
     mSlatFeedback = iPercent;
   }
   void onDeviceName(const char *, uint8_t) {}
-  void onDeviceInfo(uint16_t, uint8_t, uint8_t) {}
+  void onDeviceInfo(const IoHomeDeviceMetadata &iInfo)
+  {
+    if (iInfo.valid)
+      mDiscoveryMetadata = iInfo;
+  }
+  void onDeviceInfo(uint16_t iType, uint8_t iSubtype, uint8_t iManufacturer)
+  {
+    IoHomeDeviceMetadata lInfo = mDiscoveryMetadata;
+    lInfo.valid = true;
+    lInfo.deviceType = iType;
+    lInfo.subtype = iSubtype;
+    lInfo.nodeTypeSubType = encodeNodeTypeSubType(iType, iSubtype);
+    if (iManufacturer != 0 || !mDiscoveryMetadata.valid)
+      lInfo.manufacturer = iManufacturer;
+    onDeviceInfo(lInfo);
+  }
   void onDiscoveryMetadata(uint32_t iSourceNodeId,
                            const IoHomeDiscoveryMetadata &iMetadata)
   {
     if (!iMetadata.valid)
       return;
     mDiscoveryNodeId = iSourceNodeId & 0x00FFFFFF;
-    mDiscoveryMetadata = iMetadata;
+    onDeviceInfo(iMetadata);
   }
   void clearDiscoveryMetadata()
   {
@@ -262,6 +277,7 @@ public:
   }
   bool hasDiscoveryMetadata() const { return mDiscoveryMetadata.valid; }
   uint32_t getDiscoveryNodeId() const { return mDiscoveryNodeId; }
+  const IoHomeDeviceMetadata &getDeviceMetadata() const { return mDiscoveryMetadata; }
   const IoHomeDiscoveryMetadata &getDiscoveryMetadata() const { return mDiscoveryMetadata; }
   void onBatteryLevel(uint8_t iPercent)
   {

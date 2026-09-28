@@ -693,12 +693,34 @@ void IoHomecontrolChannel::onDeviceName(const char *iName, uint8_t iLen)
     logDebugP("Device name: %s", mDeviceName);
 }
 
-void IoHomecontrolChannel::onDeviceInfo(uint16_t iType, uint8_t iSubtype, uint8_t iManufacturer)
+void IoHomecontrolChannel::onDeviceInfo(const IoHomeDeviceMetadata &iInfo)
 {
-    mDeviceType = iType;
-    mDeviceSubtype = iSubtype;
-    mManufacturer = iManufacturer;
-    logDebugP("Device info: type=0x%04X subtype=0x%02X mfg=0x%02X", iType, iSubtype, iManufacturer);
+    if (!iInfo.valid)
+        return;
+
+    mDiscoveryMetadata = iInfo;
+    mDeviceType = iInfo.deviceType;
+    mDeviceSubtype = iInfo.subtype;
+    mManufacturer = iInfo.manufacturer;
+    logDebugP("Device info: type=0x%04X subtype=0x%02X mfg=0x%02X backbone=%s MIB=%s",
+              iInfo.deviceType, iInfo.subtype, iInfo.manufacturer,
+              iInfo.hasBackboneId ? "present" : "n/a",
+              iInfo.hasMib ? "present" : "n/a");
+}
+
+void IoHomecontrolChannel::onDeviceInfo(uint16_t iType, uint8_t iSubtype,
+                                        uint8_t iManufacturer)
+{
+    IoHomeDeviceMetadata lInfo = mDiscoveryMetadata;
+    lInfo.valid = true;
+    lInfo.deviceType = iType;
+    lInfo.subtype = iSubtype;
+    lInfo.nodeTypeSubType = encodeNodeTypeSubType(iType, iSubtype);
+    // The legacy GeneralInfo2 caller used zero to mean "not supplied". Keep
+    // an already-discovered manufacturer in that compatibility case.
+    if (iManufacturer != 0 || !mDiscoveryMetadata.valid)
+        lInfo.manufacturer = iManufacturer;
+    onDeviceInfo(lInfo);
 }
 
 void IoHomecontrolChannel::onDiscoveryMetadata(
@@ -711,10 +733,7 @@ void IoHomecontrolChannel::onDiscoveryMetadata(
     // offsets 2..4 are a separate backbone reference and may legitimately be
     // zero or equal to another node's reference.
     mDiscoveryNodeId = iSourceNodeId & 0x00FFFFFF;
-    mDiscoveryMetadata = iMetadata;
-    mDeviceType = iMetadata.deviceType;
-    mDeviceSubtype = iMetadata.subtype;
-    mManufacturer = iMetadata.manufacturer;
+    onDeviceInfo(iMetadata);
 }
 
 void IoHomecontrolChannel::clearDiscoveryMetadata()
@@ -734,6 +753,11 @@ uint32_t IoHomecontrolChannel::getDiscoveryNodeId() const
 }
 
 const IoHomeDiscoveryMetadata &IoHomecontrolChannel::getDiscoveryMetadata() const
+{
+    return getDeviceMetadata();
+}
+
+const IoHomeDeviceMetadata &IoHomecontrolChannel::getDeviceMetadata() const
 {
     return mDiscoveryMetadata;
 }

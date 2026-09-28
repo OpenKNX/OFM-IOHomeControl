@@ -2637,7 +2637,7 @@ void IoHomecontrol::writeFlash()
             openknx.flash.writeByte(lControllerKey[k]);
         openknx.flash.writeByte(mChannels[i]->getOneWayControllerManufacturer());
 
-        const IoHomeDiscoveryMetadata &lMetadata = mChannels[i]->getDiscoveryMetadata();
+        const IoHomeDeviceMetadata &lMetadata = mChannels[i]->getDeviceMetadata();
         openknx.flash.writeByte(lMetadata.valid ? 0x01 : 0x00);
         const uint32_t lDiscoveryNodeId = mChannels[i]->getDiscoveryNodeId();
         openknx.flash.writeByte((lDiscoveryNodeId >> 16) & 0xFF);
@@ -3632,7 +3632,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                              static_cast<unsigned>(lEffectiveLowPower ? IOHC_PREAMBLE_LONG
                                                                       : mController.normal2WStartPreamble()),
                              mController.diagnostic2WWakeBelief() ? "on" : "off");
-                    const IoHomeDiscoveryMetadata &lMetadata = lCh->getDiscoveryMetadata();
+                    const IoHomeDeviceMetadata &lMetadata = lCh->getDeviceMetadata();
                     if (lMetadata.valid)
                     {
                         logInfoP("  metadata: source=0x%06X type=%u subtype=%u manufacturer=%s(0x%02X) backbone=%s",
@@ -3722,7 +3722,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                              lEffectiveLowPower ? "low-power" : "always-alive",
                              static_cast<unsigned>(lEffectiveLowPower ? IOHC_PREAMBLE_LONG
                                                                       : mController.normal2WStartPreamble()));
-                    const IoHomeDiscoveryMetadata &lMetadata = lCh->getDiscoveryMetadata();
+                    const IoHomeDeviceMetadata &lMetadata = lCh->getDeviceMetadata();
                     if (lMetadata.valid)
                     {
                         logInfoP("       metadata source=0x%06X type=%u subtype=%u manufacturer=%s(0x%02X) MIB=%s",

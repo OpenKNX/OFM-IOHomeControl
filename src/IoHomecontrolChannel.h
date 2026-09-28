@@ -34,12 +34,16 @@ public:
   void onStatusUpdate(bool iIsMoving);
   void onSlatFeedback(float iSlatPercent);
   void onDeviceName(const char *iName, uint8_t iLen);
+  void onDeviceInfo(const IoHomeDeviceMetadata &iInfo);
+  // Compatibility adapter for integrations still providing only the legacy
+  // GeneralInfo type/subtype/manufacturer tuple.
   void onDeviceInfo(uint16_t iType, uint8_t iSubtype, uint8_t iManufacturer);
   void onDiscoveryMetadata(uint32_t iSourceNodeId,
                            const IoHomeDiscoveryMetadata &iMetadata);
   void clearDiscoveryMetadata();
   bool hasDiscoveryMetadata() const;
   uint32_t getDiscoveryNodeId() const;
+  const IoHomeDeviceMetadata &getDeviceMetadata() const;
   const IoHomeDiscoveryMetadata &getDiscoveryMetadata() const;
   void onBatteryLevel(uint8_t iPercent);
   void onEstimate(uint8_t iSeconds);
@@ -224,7 +228,7 @@ private:
   uint8_t mDeviceSubtype = 0;
   uint8_t mManufacturer = 0;
   uint32_t mDiscoveryNodeId = 0;
-  IoHomeDiscoveryMetadata mDiscoveryMetadata{};
+  IoHomeDeviceMetadata mDiscoveryMetadata{};
 
   // P3: Scene position data (10 ETS-backed scenes x 1 byte, 0xFF = not set)
   uint8_t mScenePositions[kMaxSceneCount] = {};

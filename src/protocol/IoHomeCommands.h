@@ -601,6 +601,11 @@ struct IoHomeDiscoveryMetadata
     uint8_t rawDataLen = 0;
 };
 
+// Discovery is the authoritative source for the device metadata model.  Keep
+// the broader name at API boundaries so later post-pair enrichment can update
+// the same coherent object without adding one callback per field.
+using IoHomeDeviceMetadata = IoHomeDiscoveryMetadata;
+
 inline void decodeDiscoveryMib(IoHomeDiscoveryMetadata &ioMetadata, uint8_t iMib)
 {
     ioMetadata.hasMib = true;

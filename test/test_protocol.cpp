@@ -13418,6 +13418,65 @@ static void buildGeneralInfo2ResponseFrame(IoHomeFrame &oFrame,
     oFrame.hasHmac = false;
 }
 
+TEST(controller_general_info_enriches_one_structured_device_metadata_object)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    static const uint8_t kDiscoveryPayload[IOHC_DISCOVERY_FULL_SIZE] = {
+        0x00, 0x80, 0x12, 0x34, 0x56, 0x01, 0xED, 0xAB, 0xCD};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+    const IoHomeDeviceMetadata lDiscovery =
+        decodeDiscoveryMetadata(kDiscoveryPayload, sizeof(kDiscoveryPayload));
+    lChannel.onDiscoveryMetadata(lDeviceNodeId, lDiscovery);
+
+    // GeneralInfo2 carries type/subtype but no manufacturer. It must enrich
+    // the same object without erasing the complete discovery-only fields.
+    uint8_t lInfo2Data[12] = {};
+    encodePackedDeviceType(5, 7, lInfo2Data[10], lInfo2Data[11]);
+    IoHomeFrame lInfo2;
+    buildGeneralInfo2ResponseFrame(lInfo2, lRemoteNodeId, lDeviceNodeId,
+                                   lInfo2Data, sizeof(lInfo2Data));
+    ASSERT_TRUE(queueControllerResponse(lController, lInfo2));
+
+    const IoHomeDeviceMetadata &lAfterInfo2 = lChannel.getDeviceMetadata();
+    ASSERT_EQ(lAfterInfo2.deviceType, 5U);
+    ASSERT_EQ(lAfterInfo2.subtype, 7U);
+    ASSERT_EQ(lAfterInfo2.manufacturer,
+              static_cast<uint8_t>(IoHomeManufacturer::Velux));
+    ASSERT_EQ(lAfterInfo2.backboneId, 0x123456U);
+    ASSERT_EQ(lAfterInfo2.mib, 0xED);
+    ASSERT_EQ(lAfterInfo2.discoveryTimestamp, 0xABCDU);
+
+    // GeneralInfo1 updates the common identity fields, including manufacturer,
+    // while the discovery extension remains available for diagnostics/flash.
+    IoHomeFrame lInfo1;
+    lInfo1.init();
+    lInfo1.ctrlByte0 = IOHC_CTRL0_END;
+    lInfo1.setSrcNode(lDeviceNodeId);
+    lInfo1.setDestNode(lRemoteNodeId);
+    lInfo1.commandId = IoHomeCommand::GetGeneralInfo1Response;
+    encodePackedDeviceType(6, 9, lInfo1.data[0], lInfo1.data[1]);
+    lInfo1.data[2] = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
+    lInfo1.dataLen = 3;
+    lInfo1.hasHmac = false;
+    ASSERT_TRUE(queueControllerResponse(lController, lInfo1));
+
+    const IoHomeDeviceMetadata &lAfterInfo1 = lChannel.getDeviceMetadata();
+    ASSERT_EQ(lAfterInfo1.deviceType, 6U);
+    ASSERT_EQ(lAfterInfo1.subtype, 9U);
+    ASSERT_EQ(lAfterInfo1.manufacturer,
+              static_cast<uint8_t>(IoHomeManufacturer::Somfy));
+    ASSERT_EQ(lAfterInfo1.backboneId, 0x123456U);
+    ASSERT_EQ(lAfterInfo1.mib, 0xED);
+    ASSERT_EQ(lAfterInfo1.discoveryTimestamp, 0xABCDU);
+}
+
 TEST(controller_status_update_requires_11_bytes_for_position)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;

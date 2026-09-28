@@ -8995,10 +8995,16 @@ void IoHomeController::dispatchRxFrame()
             {
                 if (mRxFrame.dataLen >= 3)
                 {
-                    const IoHomeDiscoveryMetadata lMetadata =
-                        decodeDiscoveryMetadata(mRxFrame.data, IOHC_DISCOVERY_METADATA_SIZE);
-                    uint8_t lMfg = mRxFrame.data[2];
-                    lCh->onDeviceInfo(lMetadata.deviceType, lMetadata.subtype, lMfg);
+                    IoHomeDeviceMetadata lInfo = lCh->getDeviceMetadata();
+                    lInfo.valid = true;
+                    lInfo.deviceType = decodePackedDeviceType(
+                        mRxFrame.data[0], mRxFrame.data[1]);
+                    lInfo.subtype = decodePackedDeviceSubtype(mRxFrame.data[1]);
+                    lInfo.nodeTypeSubType = encodeNodeTypeSubType(
+                        lInfo.deviceType, lInfo.subtype);
+                    lInfo.manufacturer = mRxFrame.data[2];
+                    lCh->onDeviceInfo(lInfo);
+                    openknx.flash.save();
                 }
                 break;
             }
@@ -9008,9 +9014,17 @@ void IoHomeController::dispatchRxFrame()
                 // Type = data[10] << 2 | data[11] >> 6, Subtype = data[11] & 0x3F
                 if (mRxFrame.dataLen >= 12)
                 {
-                    uint16_t lType = ((uint16_t)mRxFrame.data[10] << 2) | (mRxFrame.data[11] >> 6);
-                    uint8_t lSubtype = mRxFrame.data[11] & 0x3F;
-                    lCh->onDeviceInfo(lType, lSubtype, 0);
+                    IoHomeDeviceMetadata lInfo = lCh->getDeviceMetadata();
+                    lInfo.valid = true;
+                    lInfo.deviceType = decodePackedDeviceType(
+                        mRxFrame.data[10], mRxFrame.data[11]);
+                    lInfo.subtype = decodePackedDeviceSubtype(mRxFrame.data[11]);
+                    lInfo.nodeTypeSubType = encodeNodeTypeSubType(
+                        lInfo.deviceType, lInfo.subtype);
+                    // GeneralInfo2 has no manufacturer at this location; the
+                    // structured copy preserves discovery/GeneralInfo1 data.
+                    lCh->onDeviceInfo(lInfo);
+                    openknx.flash.save();
                 }
                 applyGeneralInfo2TiltInfo(lCh, mRxFrame.data, mRxFrame.dataLen);
                 break;
