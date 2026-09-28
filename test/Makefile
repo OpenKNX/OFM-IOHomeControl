@@ -15,7 +15,7 @@ CXX ?= clang++
 PYTHON ?= python3
 CXXFLAGS = -std=c++17 -Wall -Wextra -DTEST_NATIVE -I../src -I.
 BUILD_DIR = build
-PROTOCOL_SRCS = test_protocol.cpp test_suite_main.cpp ../src/controller/IoHomeController.cpp ../src/protocol/IoHomeCrypto.cpp ../src/protocol/IoHomeFrame.cpp ../src/IoHomeRemoteMap.cpp
+PROTOCOL_SRCS = test_protocol.cpp test_suite_main.cpp ../src/controller/IoHomeController.cpp ../src/protocol/IoHomeCrypto.cpp ../src/protocol/IoHomeFrame.cpp ../src/protocol/IoHomeProfileRegistry.cpp ../src/IoHomeRemoteMap.cpp
 SX1262_ERROR_SRCS = test_sx1262_device_errors.cpp ../src/radio/SX1262DeviceErrors.cpp
 SX1262_PHY_SRCS = test_sx1262_iohome_phy.cpp ../src/radio/SX1262IoHomePhy.cpp ../src/protocol/IoHomeCrypto.cpp
 PROTOCOL_TARGET = $(BUILD_DIR)/test_suite

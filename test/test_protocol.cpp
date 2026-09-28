@@ -18,6 +18,7 @@
 #include "protocol/IoHomeCrypto.h"
 #include "protocol/IoHomeFrame.h"
 #include "protocol/IoHomeCommands.h"
+#include "protocol/IoHomeProfileRegistry.h"
 #include "protocol/IoHomeLogRedaction.h"
 #include "IoHomeRemoteMap.h"
 #include "corpus/golden_rf_corpus.h"
@@ -2682,6 +2683,97 @@ TEST(node_class_is_explicit_independent_and_unknown_is_backward_compatible)
     ASSERT_TRUE(!lChannel.allowsActuatorControls());
 
     ASSERT_EQ(decodeIoHomeNodeClass(0xFE), IoHomeNodeClass::Unknown);
+}
+
+TEST(klf_appendix2_profile_registry_maps_mp_and_functional_parameters)
+{
+    using S = ParameterSemantic;
+    struct Expected
+    {
+        uint16_t packedType;
+        S mp;
+        S fp1;
+        S fp2;
+        S fp3;
+    };
+    static constexpr Expected kAppendix2[] = {
+        {0x0040, S::Position, S::SlatOrientation, S::SlatOrientationSpeed, S::LinearSpeed},
+        {0x0080, S::Position, S::LinearSpeed, S::Unsupported, S::Unsupported},
+        {0x0081, S::Position, S::LinearSpeed, S::SlatOrientationSpeed, S::SlatOrientation},
+        {0x0082, S::Position, S::LinearSpeed, S::Unsupported, S::Unsupported},
+        {0x00C0, S::Position, S::LinearSpeed, S::Unsupported, S::Unsupported},
+        {0x0100, S::Position, S::LinearSpeed, S::Unsupported, S::Unsupported},
+        {0x0101, S::Position, S::LinearSpeed, S::Unsupported, S::Unsupported},
+        {0x0140, S::Position, S::LinearSpeed, S::Unsupported, S::Unsupported},
+        {0x017A, S::Position, S::Unsupported, S::Unsupported, S::Unsupported},
+        {0x0180, S::LightIntensity, S::LightIntensityGradient, S::Unsupported, S::Unsupported},
+        {0x01BA, S::LightIntensity, S::Unsupported, S::Unsupported, S::Unsupported},
+        {0x01C0, S::Position, S::LinearSpeed, S::Unsupported, S::Unsupported},
+        {0x01FA, S::Position, S::Unsupported, S::Unsupported, S::Unsupported},
+        {0x0240, S::LockState, S::Unsupported, S::Unsupported, S::Unsupported},
+        {0x0241, S::LockState, S::Unsupported, S::Unsupported, S::Unsupported},
+        {0x0280, S::Position, S::LinearSpeed, S::Unsupported, S::Unsupported},
+        {0x0340, S::Position, S::UpperCurtainPosition, S::LowerCurtainPosition, S::LinearSpeed},
+        {0x03C0, S::SwitchState, S::Unsupported, S::Unsupported, S::Unsupported},
+        {0x0400, S::Position, S::LinearSpeed, S::Unsupported, S::Unsupported},
+        {0x0440, S::Position, S::LinearSpeed, S::SlatOrientationSpeed, S::SlatOrientation},
+        {0x0480, S::CurtainPosition, S::LinearSpeed, S::HangerOrientationSpeed, S::HangerOrientation},
+        {0x04C0, S::CurtainPosition, S::LinearSpeed, S::Unsupported, S::Unsupported},
+        {0x0500, S::AirDemand, S::Unsupported, S::Unsupported, S::Unsupported},
+        {0x0501, S::AirDemand, S::Unsupported, S::Unsupported, S::Unsupported},
+        {0x0502, S::AirDemand, S::Unsupported, S::Unsupported, S::Unsupported},
+        {0x0503, S::AirDemand, S::Unsupported, S::Unsupported, S::Unsupported},
+        {0x0540, S::EnergyDemand, S::EnergyGradient, S::Unsupported, S::Unsupported},
+        {0x057A, S::EnergyDemand, S::Unsupported, S::Unsupported, S::Unsupported},
+        {0x0600, S::ShutterClosure, S::LinearSpeed, S::Unsupported, S::Unsupported},
+        {0x0601, S::ShutterClosure, S::LinearSpeed, S::Unsupported, S::Unsupported},
+    };
+
+    for (const Expected &lExpected : kAppendix2)
+    {
+        const IoHomeProfileDescriptor *lDescriptor = ioHomeProfileDescriptor(
+            lExpected.packedType >> 6, lExpected.packedType & 0x3F);
+        ASSERT_TRUE(lDescriptor != nullptr);
+        ASSERT_EQ(lDescriptor->expectedClass, IoHomeNodeClass::Actuator);
+        ASSERT_TRUE(lDescriptor->label[0] != '\0');
+        ASSERT_EQ(ioHomeParameterSemantic(lDescriptor, 0), lExpected.mp);
+        ASSERT_EQ(ioHomeParameterSemantic(lDescriptor, 1), lExpected.fp1);
+        ASSERT_EQ(ioHomeParameterSemantic(lDescriptor, 2), lExpected.fp2);
+        ASSERT_EQ(ioHomeParameterSemantic(lDescriptor, 3), lExpected.fp3);
+        for (uint8_t lIndex = 4; lIndex <= 16; ++lIndex)
+            ASSERT_EQ(ioHomeParameterSemantic(lDescriptor, lIndex), S::Unsupported);
+    }
+}
+
+TEST(klf_profile_registry_preserves_unknowns_and_reverses_venetian_fp_roles)
+{
+    using S = ParameterSemantic;
+    const IoHomeProfileDescriptor *lInterior = ioHomeProfileDescriptor(1, 0);
+    const IoHomeProfileDescriptor *lExterior = ioHomeProfileDescriptor(17, 0);
+    ASSERT_TRUE(lInterior != nullptr);
+    ASSERT_TRUE(lExterior != nullptr);
+    ASSERT_EQ(ioHomeParameterIndex(lInterior, S::SlatOrientation), 1U);
+    ASSERT_EQ(ioHomeParameterIndex(lInterior, S::LinearSpeed), 3U);
+    ASSERT_EQ(ioHomeParameterIndex(lExterior, S::SlatOrientation), 3U);
+    ASSERT_EQ(ioHomeParameterIndex(lExterior, S::LinearSpeed), 1U);
+    ASSERT_TRUE(!ioHomeSupportsCapturedFp3Orientation(lInterior));
+    ASSERT_TRUE(ioHomeSupportsCapturedFp3Orientation(lExterior));
+    ASSERT_EQ(ioHomeParameterIndex(lInterior, S::LightIntensity), 0xFFU);
+
+    const IoHomeProfileDescriptor *lUnknown = ioHomeProfileDescriptor(1, 1);
+    ASSERT_TRUE(lUnknown == nullptr);
+    ASSERT_EQ(ioHomeParameterSemantic(lUnknown, 0), S::Unknown);
+    ASSERT_EQ(ioHomeParameterSemantic(lUnknown, 3), S::Unknown);
+    ASSERT_EQ(ioHomeParameterIndex(lUnknown, S::LinearSpeed), 0xFFU);
+    ASSERT_TRUE(ioHomeProfileDescriptor(1024, 0) == nullptr);
+    ASSERT_TRUE(ioHomeProfileDescriptor(1, 64) == nullptr);
+
+    IoHomeProtocolIdentity lIdentity;
+    ASSERT_TRUE(ioHomeSupportsCapturedFp3Orientation(lIdentity));
+    lIdentity.valid = true;
+    lIdentity.profile = 1;
+    lIdentity.subProfile = 1;
+    ASSERT_TRUE(!ioHomeSupportsCapturedFp3Orientation(lIdentity));
 }
 
 TEST(discovery_spe_response_frame)
@@ -11810,6 +11902,55 @@ TEST(controller_2w_tilt_execute_payload)
     uint16_t lTiltRaw = ((uint16_t)lPacket[14] << 8) | lPacket[15];
     ASSERT_EQ(lTiltRaw, (uint16_t)((75UL * IOHC_POSITION_MAX) / 100UL));
     ASSERT_EQ(lPacket[16], 0x00);
+}
+
+TEST(controller_uses_profile_registry_for_captured_fp3_tilt_tx_and_rx)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    const uint16_t lTiltRaw = (25UL * IOHC_POSITION_MAX) / 100UL;
+
+    struct ProfileCase
+    {
+        uint16_t profile;
+        uint8_t subProfile;
+        bool fp3Orientation;
+    };
+    const ProfileCase kCases[] = {
+        {1, 0, false},  // Interior Venetian: orientation is FP1.
+        {2, 0, false},  // Roller shutter: no orientation parameter.
+        {2, 1, true},   // Adjustable slats roller shutter: FP3.
+        {17, 0, true},  // Exterior Venetian: FP3.
+        {1, 1, false},  // Unlisted subprofile: no inferred FP semantics.
+    };
+
+    for (const ProfileCase &lCase : kCases)
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemoteNodeId, lDeviceNodeId, lKey);
+        IoHomeProtocolIdentity lIdentity;
+        lIdentity.valid = true;
+        lIdentity.profile = lCase.profile;
+        lIdentity.subProfile = lCase.subProfile;
+        lChannel.onProtocolIdentity(lDeviceNodeId, lIdentity);
+
+        ASSERT_EQ(lController.sendTiltCommand(lDeviceNodeId, lKey, 25),
+                  lCase.fp3Orientation);
+
+        uint8_t lData[15] = {};
+        lData[13] = static_cast<uint8_t>(lTiltRaw >> 8);
+        lData[14] = static_cast<uint8_t>(lTiltRaw & 0xFF);
+        IoHomeFrame lResponse;
+        buildSimpleResponseFrame(lResponse, lRemoteNodeId, lDeviceNodeId,
+                                 IoHomeCommand::PrivateResponse,
+                                 lData, sizeof(lData));
+        ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+        ASSERT_EQ(lChannel.testHasSlatFeedback(), lCase.fp3Orientation);
+    }
 }
 
 TEST(controller_2w_execute_ignores_combined_slat_param)

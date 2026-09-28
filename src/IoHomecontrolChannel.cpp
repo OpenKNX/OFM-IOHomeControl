@@ -2,6 +2,7 @@
 #include "IoHomecontrol.h"
 #include "controller/IoHomeController.h"
 #include "protocol/IoHomeCommands.h"
+#include "protocol/IoHomeProfileRegistry.h"
 #include "knxprod.h"
 #include "OpenKNX.h"
 
@@ -1232,6 +1233,18 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
 {
     if (!allowsActuatorControls())
         return;
+    const IoHomeProfileDescriptor *lDescriptor =
+        ioHomeProfileDescriptor(mProtocolIdentity);
+    if (lDescriptor && ioHomeParameterSemantic(lDescriptor, 0) == ParameterSemantic::Unsupported)
+        return;
+    if (iSlatPercent != 0xFF &&
+        ((mIs1W && lDescriptor) ||
+         !ioHomeSupportsCapturedFp3Orientation(mProtocolIdentity)))
+    {
+        logDebugP("Position+slat command has no validated FP mapping for %s",
+                  lDescriptor ? lDescriptor->label : "unknown profile");
+        return;
+    }
     logDebugP("Send position %.1f%%", iPercent);
     const float lTargetPosition = clampPercent(iPercent);
     uint8_t lParam = (uint8_t)(iPercent + 0.5f);
@@ -1311,6 +1324,31 @@ void IoHomecontrolChannel::sendSlatCommand(float iPercent)
 {
     if (!allowsActuatorControls())
         return;
+    const IoHomeProfileDescriptor *lDescriptor =
+        ioHomeProfileDescriptor(mProtocolIdentity);
+    if (mProtocolIdentity.valid && !lDescriptor)
+        return;
+    // The legacy 1W combined Execute carries a capture-specific FP shape.
+    // Its parameter index cannot be asserted for a discovered profile yet.
+    if (mIs1W && lDescriptor)
+        return;
+    if (lDescriptor &&
+        (lDescriptor->capabilityFlags & IoHomeCapabilityOrientation) == 0)
+    {
+        logDebugP("No orientation parameter for %s", lDescriptor->label);
+        return;
+    }
+    if (lDescriptor && !ioHomeSupportsCapturedFp3Orientation(lDescriptor))
+    {
+        const ParameterSemantic lOrientation =
+            ioHomeParameterIndex(lDescriptor, ParameterSemantic::SlatOrientation) != 0xFF
+                ? ParameterSemantic::SlatOrientation
+                : ParameterSemantic::HangerOrientation;
+        logDebugP("Orientation uses FP%u for %s; serializer supports FP3 only",
+                  static_cast<unsigned>(ioHomeParameterIndex(lDescriptor, lOrientation)),
+                  lDescriptor->label);
+        return;
+    }
     const float lSlatPercent = clampPercent(iPercent);
     logDebugP("Send slat %.1f%% (with current position %.1f%%)", lSlatPercent, mCurrentPosition);
 
@@ -1350,7 +1388,8 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll)
     // ambiguous safety-relevant command outcome.
     const bool lStopSettlePoll = iTrackedPoll && mStopSettlePollPending;
     const uint8_t lMaxAttempts = lStopSettlePoll ? IOHC_EXCHANGE_MAX_ATTEMPTS : 1U;
-    if (!mIs1W && isTiltCapableDeviceType())
+    if (!mIs1W && isTiltCapableDeviceType() &&
+        ioHomeSupportsCapturedFp3Orientation(mProtocolIdentity))
     {
         const bool lQueued = mController.sendBackgroundCommand(
             mNodeId, mEncKey, IoHomeCommand::Private,
@@ -1469,6 +1508,12 @@ bool IoHomecontrolChannel::isLockDeviceType() const
 
 bool IoHomecontrolChannel::isTiltCapableDeviceType() const
 {
+    if (const IoHomeProfileDescriptor *lDescriptor =
+            ioHomeProfileDescriptor(mProtocolIdentity))
+        return (lDescriptor->capabilityFlags & IoHomeCapabilityOrientation) != 0;
+    if (mProtocolIdentity.valid)
+        return false;
+
     uint16_t lProfile = mProfile;
     if (lProfile == 0)
         lProfile = static_cast<uint16_t>(ParamIOHC_cDeviceType);

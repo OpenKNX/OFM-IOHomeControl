@@ -1,5 +1,6 @@
 #include "IoHomeController.h"
 #include "../protocol/IoHomeLogRedaction.h"
+#include "../protocol/IoHomeProfileRegistry.h"
 
 #ifdef TEST_NATIVE
 #include "IoHomeControllerNativeStubs.h"
@@ -460,6 +461,21 @@ namespace
             return;
         }
 
+        const IoHomeProfileDescriptor *lDescriptor =
+            ioHomeProfileDescriptor(iChannel->getProtocolIdentity());
+        const ParameterSemantic lMpSemantic =
+            ioHomeParameterSemantic(lDescriptor, 0);
+        if (lDescriptor && (lMpSemantic == ParameterSemantic::Unsupported ||
+                            lMpSemantic == ParameterSemantic::Unknown))
+            return;
+        // All documented MP values use the same raw 0..0xC800 range. This
+        // identifies the kind of feedback; profile-specific polarity and KO
+        // conversion belong to P1-MP.2/P1-MP.4.
+        logDebugP("Status MP semantic=%s profile=%u/%u",
+                  ioHomeParameterSemanticName(lMpSemantic),
+                  lDescriptor ? static_cast<unsigned>(lDescriptor->profile) : 0U,
+                  lDescriptor ? static_cast<unsigned>(lDescriptor->subProfile) : 0U);
+
         const uint16_t lTargetRaw = readU16BE(iData, iTargetOffset);
         const uint16_t lCurrentRaw = readU16BE(iData, iCurrentOffset);
 
@@ -516,6 +532,9 @@ namespace
     {
         if (!iChannel || !iData || iDataLen < 15)
             return;
+        if (!ioHomeSupportsCapturedFp3Orientation(
+                iChannel->getProtocolIdentity()))
+            return;
 
         const uint16_t lTiltRaw = readU16BE(iData, 13);
         if (lTiltRaw > IOHC_POSITION_MAX)
@@ -532,6 +551,9 @@ namespace
     void applyGeneralInfo2TiltInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData, uint8_t iDataLen)
     {
         if (!iChannel || !iData || iDataLen < 15)
+            return;
+        if (!ioHomeSupportsCapturedFp3Orientation(
+                iChannel->getProtocolIdentity()))
             return;
 
         if (iData[12] == 0x00)
@@ -2248,6 +2270,10 @@ bool IoHomeController::sendTiltCommand(uint32_t iDestNodeId, const uint8_t *iEnc
 {
     IoHomecontrolChannel *lCh = channelForNode(iDestNodeId);
     if (lCh && lCh->is1W())
+        return false;
+    if (lCh && (!lCh->allowsActuatorControls() ||
+                !ioHomeSupportsCapturedFp3Orientation(
+                    lCh->getProtocolIdentity())))
         return false;
 
     if (iTiltPercent > 100)

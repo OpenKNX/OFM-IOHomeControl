@@ -5,6 +5,7 @@
 #include "protocol/IoHomeFrame.h"
 #include "protocol/IoHomeCrypto.h"
 #include "protocol/IoHomeLogRedaction.h"
+#include "protocol/IoHomeProfileRegistry.h"
 #if defined(RADIO_SX1262)
 #include "radio/SX1262DeviceErrors.h"
 #include "radio/sx1262Regs-Fsk.h"
@@ -3686,6 +3687,14 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                                  ioHomeKeyStateKnown(lMetadata)
                                      ? ioHomeMetadataSourceName(lMetadata.keyStateSource)
                                      : "n/a");
+                        const IoHomeProfileDescriptor *lProfile =
+                            ioHomeProfileDescriptor(lMetadata);
+                        logInfoP("  Appendix-2 profile: %s MP=%s FP1=%s FP2=%s FP3=%s",
+                                 lProfile ? lProfile->label : "unknown",
+                                 ioHomeParameterSemanticName(ioHomeParameterSemantic(lProfile, 0)),
+                                 ioHomeParameterSemanticName(ioHomeParameterSemantic(lProfile, 1)),
+                                 ioHomeParameterSemanticName(ioHomeParameterSemantic(lProfile, 2)),
+                                 ioHomeParameterSemanticName(ioHomeParameterSemantic(lProfile, 3)));
                         if (lMetadata.hasIoBackboneAddress)
                             logInfoP("  protocol identity ioBackboneAddress: 0x%06X", lMetadata.ioBackboneAddress);
                         if (lMetadata.hasMib)
@@ -3813,6 +3822,14 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                                      ? ioHomeMetadataSourceName(lMetadata.keyStateSource)
                                      : "n/a",
                                  lMetadata.hasMib ? "present" : "n/a");
+                        const IoHomeProfileDescriptor *lProfile =
+                            ioHomeProfileDescriptor(lMetadata);
+                        logInfoP("       Appendix-2 profile %s MP=%s FP1=%s FP2=%s FP3=%s",
+                                 lProfile ? lProfile->label : "unknown",
+                                 ioHomeParameterSemanticName(ioHomeParameterSemantic(lProfile, 0)),
+                                 ioHomeParameterSemanticName(ioHomeParameterSemantic(lProfile, 1)),
+                                 ioHomeParameterSemanticName(ioHomeParameterSemantic(lProfile, 2)),
+                                 ioHomeParameterSemanticName(ioHomeParameterSemantic(lProfile, 3)));
                         if (lMetadata.hasMib)
                             logInfoP("       MIB=0x%02X powerSaveMode=%s(%u) ioMembershipFlag=%u rfSupportInNode=%u bit4=%u[unknown] bit5=%u[provisional] slaveTimeClass=%u slaveTimeKlfValue=%u unitConfirmed=%u",
                                      static_cast<unsigned>(lMetadata.multiInfoByte),
