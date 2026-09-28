@@ -2822,6 +2822,14 @@ TEST(restored_enrichment_rebuilds_product_identity_without_changing_protocol)
         lStored.generalInfo1, lStored.generalInfo1Len));
 }
 
+TEST(metadata_refresh_uses_longer_low_power_spacing)
+{
+    ASSERT_EQ(ioHomeMetadataRefreshStepIntervalMs(false), 3000U);
+    ASSERT_EQ(ioHomeMetadataRefreshStepIntervalMs(true), 10000U);
+    ASSERT_EQ(ioHomeMetadataRefreshCooldownMs(false), 10000U);
+    ASSERT_EQ(ioHomeMetadataRefreshCooldownMs(true), 60000U);
+}
+
 TEST(node_class_is_explicit_independent_and_unknown_is_backward_compatible)
 {
     IoHomeProtocolIdentity lIdentity;

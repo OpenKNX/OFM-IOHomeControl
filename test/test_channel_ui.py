@@ -29,6 +29,18 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn("Product identification: manufacturerSubType=", module_source)
         self.assertIn("productFamily=%s confidence=%s", module_source)
 
+    def test_manual_metadata_refresh_does_not_repair_or_change_keys(self) -> None:
+        source = (ROOT / "src" / "IoHomecontrol.cpp").read_text()
+        refresh = source.split("void IoHomecontrol::processMetadataRefresh()", 1)[1].split(
+            "bool IoHomecontrol::startRadioDiagnostic", 1
+        )[0]
+        for command in ("GetName", "GetGeneralInfo1", "GetGeneralInfo2"):
+            self.assertIn(command, refresh)
+        self.assertNotIn("setEncryptionKey", refresh)
+        self.assertNotIn("startPairing", refresh)
+        self.assertIn("ioHomeMetadataRefreshStepIntervalMs", refresh)
+        self.assertIn('lSub.rfind("metadata refresh", 0)', source)
+
     def test_profile_auto_and_manual_override_are_exposed(self) -> None:
         selection = self.share.find(
             ".//k:ParameterType[@Name='IOHCChannelSelection']", NS

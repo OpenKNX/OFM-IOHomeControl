@@ -1461,6 +1461,9 @@ void IoHomecontrol::loop()
     if (!mRadioDiagnostic.active)
         processKeyImportWorkflow();
 
+    if (!mRadioDiagnostic.active)
+        processMetadataRefresh();
+
     if (mPendingPostPairSpeDiscovery && !mRadioDiagnostic.active &&
         mController.state() == ControllerState::Idle)
     {
@@ -1507,6 +1510,47 @@ void IoHomecontrol::loop()
     }
 
     updateStatusLed();
+}
+
+void IoHomecontrol::processMetadataRefresh()
+{
+    if (!mMetadataRefreshActive ||
+        mMetadataRefreshChannel >= mNumChannels ||
+        mController.state() != ControllerState::Idle ||
+        static_cast<int32_t>(millis() - mMetadataRefreshNextMs) < 0)
+        return;
+
+    IoHomecontrolChannel *lChannel = mChannels[mMetadataRefreshChannel];
+    if (!lChannel || !lChannel->isPaired() || lChannel->is1W())
+    {
+        mMetadataRefreshActive = false;
+        return;
+    }
+
+    static constexpr IoHomeCommand kRequests[] = {
+        IoHomeCommand::GetName,
+        IoHomeCommand::GetGeneralInfo1,
+        IoHomeCommand::GetGeneralInfo2,
+    };
+    if (mMetadataRefreshStep >= sizeof(kRequests) / sizeof(kRequests[0]))
+    {
+        mMetadataRefreshActive = false;
+        return;
+    }
+    const IoHomeCommand lRequest = kRequests[mMetadataRefreshStep];
+    if (!mController.sendCommand(lChannel->getNodeId(),
+                                 lChannel->getEncryptionKey(), lRequest,
+                                 0, 0xFF, 0xFF, 1))
+        return; // Busy queue: retry later without dropping a refresh step.
+
+    logInfoP("Metadata refresh: queued %s for 0x%06X (%u/3)",
+             IoHomeController::commandName(lRequest), lChannel->getNodeId(),
+             static_cast<unsigned>(mMetadataRefreshStep + 1));
+    ++mMetadataRefreshStep;
+    mMetadataRefreshNextMs = millis() +
+        ioHomeMetadataRefreshStepIntervalMs(lChannel->effectiveLowPower2W());
+    if (mMetadataRefreshStep == sizeof(kRequests) / sizeof(kRequests[0]))
+        mMetadataRefreshActive = false;
 }
 
 bool IoHomecontrol::startRadioDiagnostic(RadioDiagnosticKind iKind, uint8_t iValue)
@@ -3206,6 +3250,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohcNN unpair", "Remove pairing for channel NN");
     openknx.console.printHelpLine("iohc discover", "Broadcast discovery, list devices");
     openknx.console.printHelpLine("iohc discover spe", "Encrypted SPE/sub-device discovery");
+    openknx.console.printHelpLine("iohc metadata refresh NODE", "Refresh name, GI1 and GI2 for a paired 2W node (hex)");
     openknx.console.printHelpLine("iohc autospe on|off|status", "Runtime post-pair SPE discovery");
     openknx.console.printHelpLine("iohc extract preamble cold|response auto|N", "Runtime-only key-extraction preamble override");
     openknx.console.printHelpLine("iohcNN identify", "Ask paired 2W device NN to identify itself");
@@ -3416,6 +3461,59 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     if (!knx.configured())
     {
         openknx.console.printHelpLine("iohc", "Device is not configured. Likely causes: application not downloaded from ETS, firmware/knxprod version mismatch, or missing ETS configuration. Re-download the application and power cycle the device.");
+        return true;
+    }
+
+    if (lSub.rfind("metadata refresh", 0) == 0)
+    {
+        const std::string lNodeText = trimSpaces(lSub.substr(strlen("metadata refresh")));
+        uint32_t lNodeId = 0;
+        if (!parseHex24(lNodeText, lNodeId) || lNodeId == 0)
+        {
+            logInfoP("Usage: iohc metadata refresh <paired-node-hex>");
+            return true;
+        }
+        uint8_t lChannelIndex = 0xFF;
+        for (uint8_t i = 0; i < mNumChannels; ++i)
+        {
+            if (mChannels[i] && mChannels[i]->isPaired() && !mChannels[i]->is1W() &&
+                (mChannels[i]->getNodeId() == lNodeId ||
+                 mChannels[i]->getIoAddress() == lNodeId))
+            {
+                lChannelIndex = i;
+                break;
+            }
+        }
+        if (lChannelIndex == 0xFF)
+        {
+            logInfoP("Metadata refresh: no paired 2W node 0x%06X", lNodeId);
+            return true;
+        }
+        if (mMetadataRefreshActive || mController.state() != ControllerState::Idle ||
+            mRadioDiagnostic.active)
+        {
+            logInfoP("Metadata refresh: busy; try again when pairing/diagnostics finish");
+            return true;
+        }
+        const bool lLowPower = mChannels[lChannelIndex]->effectiveLowPower2W();
+        const uint32_t lNow = millis();
+        if (mMetadataRefreshHasRun[lChannelIndex] &&
+            lNow - mMetadataRefreshLastMs[lChannelIndex] <
+                ioHomeMetadataRefreshCooldownMs(lLowPower))
+        {
+            logInfoP("Metadata refresh: node 0x%06X rate-limited (%lu ms cooldown)",
+                     lNodeId,
+                     static_cast<unsigned long>(ioHomeMetadataRefreshCooldownMs(lLowPower)));
+            return true;
+        }
+        mMetadataRefreshHasRun[lChannelIndex] = true;
+        mMetadataRefreshLastMs[lChannelIndex] = lNow;
+        mMetadataRefreshChannel = lChannelIndex;
+        mMetadataRefreshStep = 0;
+        mMetadataRefreshNextMs = lNow;
+        mMetadataRefreshActive = true;
+        logInfoP("Metadata refresh: scheduled 0x%06X (%s); pairing/key retained",
+                 lNodeId, lLowPower ? "low-power pacing" : "normal pacing");
         return true;
     }
 

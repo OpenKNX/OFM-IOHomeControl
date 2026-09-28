@@ -101,6 +101,13 @@ private:
   uint8_t mLastObservedCount = 0;
   bool mAutoSpeDiscoveryAfterPairing = false;
   bool mPendingPostPairSpeDiscovery = false;
+  bool mMetadataRefreshActive = false;
+  uint8_t mMetadataRefreshChannel = 0xFF;
+  uint8_t mMetadataRefreshStep = 0;
+  uint32_t mMetadataRefreshNextMs = 0;
+  uint32_t mMetadataRefreshLastMs[IOHC_ChannelCount] = {};
+  bool mMetadataRefreshHasRun[IOHC_ChannelCount] = {};
+  void processMetadataRefresh();
 
   enum class KeyImportPhase : uint8_t
   {

@@ -779,6 +779,16 @@ static constexpr uint16_t IOHC_ENRICHED_FLASH_SIZE =
     2 + 3 * (1 + IOHC_DEVICE_INFO_RAW_MAX_SIZE) + 2 +
     IOHC_PRODUCT_FAMILY_LABEL_SIZE + 1;
 
+inline uint32_t ioHomeMetadataRefreshStepIntervalMs(bool iLowPower)
+{
+    return iLowPower ? 10000UL : 3000UL;
+}
+
+inline uint32_t ioHomeMetadataRefreshCooldownMs(bool iLowPower)
+{
+    return iLowPower ? 60000UL : 10000UL;
+}
+
 enum class IoHomeIdentificationConfidence : uint8_t
 {
     Unknown,
