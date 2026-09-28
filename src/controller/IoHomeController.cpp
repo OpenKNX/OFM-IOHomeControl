@@ -418,17 +418,6 @@ namespace
         return lLen;
     }
 
-    bool rawPositionToPercent(uint16_t iRaw, float &oPercent)
-    {
-        if (iRaw > IOHC_POSITION_MAX)
-            return false;
-
-        oPercent = (float)iRaw * 100.0f / IOHC_POSITION_MAX;
-        if (oPercent > 100.0f)
-            oPercent = 100.0f;
-        return true;
-    }
-
     bool rawPositionNear(uint16_t iA, uint16_t iB)
     {
         return (iA > iB) ? ((iA - iB) <= kPositionRawTolerance) : ((iB - iA) <= kPositionRawTolerance);
@@ -468,9 +457,7 @@ namespace
         if (lDescriptor && (lMpSemantic == ParameterSemantic::Unsupported ||
                             lMpSemantic == ParameterSemantic::Unknown))
             return;
-        // All documented MP values use the same raw 0..0xC800 range. This
-        // identifies the kind of feedback; profile-specific polarity and KO
-        // conversion belong to P1-MP.2/P1-MP.4.
+        // MP interpretation and polarity come from the discovered profile.
         logDebugP("Status MP semantic=%s profile=%u/%u",
                   ioHomeParameterSemanticName(lMpSemantic),
                   lDescriptor ? static_cast<unsigned>(lDescriptor->profile) : 0U,
@@ -480,10 +467,13 @@ namespace
         const uint16_t lCurrentRaw = readU16BE(iData, iCurrentOffset);
 
         float lCurrentPercent = 0.0f;
-        bool lHasCurrentPosition = rawPositionToPercent(lCurrentRaw, lCurrentPercent);
+        const ParameterPolarity lPolarity = lDescriptor
+                                                ? lDescriptor->mpPolarity
+                                                : ParameterPolarity::Normal;
+        bool lHasCurrentPosition = ioHomeRawToPercent(lCurrentRaw, lPolarity, lCurrentPercent);
 
         float lTargetPercent = 0.0f;
-        bool lHasTargetPosition = rawPositionToPercent(lTargetRaw, lTargetPercent);
+        bool lHasTargetPosition = ioHomeRawToPercent(lTargetRaw, lPolarity, lTargetPercent);
         if (!lHasTargetPosition && iStopped && lHasCurrentPosition)
         {
             lTargetPercent = lCurrentPercent;

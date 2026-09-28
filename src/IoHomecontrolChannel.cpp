@@ -1247,7 +1247,10 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
     }
     logDebugP("Send position %.1f%%", iPercent);
     const float lTargetPosition = clampPercent(iPercent);
-    uint8_t lParam = (uint8_t)(iPercent + 0.5f);
+    const float lWirePercent = lDescriptor &&
+                                       lDescriptor->mpPolarity == ParameterPolarity::Reversed
+                                   ? 100.0f - lTargetPosition : lTargetPosition;
+    uint8_t lParam = static_cast<uint8_t>(lWirePercent + 0.5f);
     const bool lQueued = mIs1W
                              ? mController.sendChannelCommand(this, IoHomeCommand::Execute, lParam, iSlatPercent)
                              : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lParam,
@@ -1266,18 +1269,7 @@ void IoHomecontrolChannel::sendUpDown(bool iDown)
     if (!allowsActuatorControls())
         return;
     logDebugP("Send %s", iDown ? "DOWN" : "UP");
-    uint8_t lPercent = iDown ? 100 : 0;
-    const bool lQueued = mIs1W
-                             ? mController.sendChannelCommand(this, IoHomeCommand::Execute, lPercent)
-                             : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lPercent,
-                                                       0xFF, mSilentOperation ? IOHC_EXECUTE_PROFILE_SILENT : 0xFF);
-    if (!lQueued)
-        return;
-
-    clearStopTravelSnapshot();
-    startTravelEstimation((float)lPercent);
-    if (!mIs1W || mNodeId != 0)
-        startStatusPollTracking(defaultTrackedStatusPollDelayMs());
+    sendPositionCommand(iDown ? 100.0f : 0.0f);
 }
 
 void IoHomecontrolChannel::sendStop()
@@ -1966,6 +1958,21 @@ bool IoHomecontrolChannel::storeSceneStateToEts(uint8_t iSceneIndex, uint8_t iSc
 
 void IoHomecontrolChannel::sendVentilationPosition()
 {
+    const IoHomeProfileDescriptor *lDescriptor =
+        ioHomeProfileDescriptor(mProtocolIdentity);
+    if (mProtocolIdentity.valid && (!lDescriptor || !lDescriptor->securedVentilation))
+    {
+        logDebugP("Secured ventilation is not defined for this profile");
+        return;
+    }
+    if (lDescriptor && !mIs1W)
+    {
+        const uint8_t lPayload[] = {IOHC_ORIGINATOR_USER, mConfigured2WAcei,
+                                    0xD8, 0x03, 0x00, 0x00};
+        if (mController.sendRawTwoWayExecute(this, lPayload, sizeof(lPayload)))
+            startStatusPollTracking(defaultTrackedStatusPollDelayMs());
+        return;
+    }
     // 2W ventilation has not been validated from a real capture yet.
     // Do not overload normal 2W Execute(0xD8, 0x03), because this may be
     // interpreted as favorite/special execute depending on the device.

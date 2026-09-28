@@ -32,6 +32,12 @@ enum class ParameterSemantic : uint8_t
     Unknown
 };
 
+enum class ParameterPolarity : uint8_t
+{
+    Normal,  // 0x0000 = 0%, 0xC800 = 100%
+    Reversed // 0x0000 = 100%, 0xC800 = 0%
+};
+
 enum IoHomeProfileCapability : uint32_t
 {
     IoHomeCapabilityPosition = 1UL << 0,
@@ -56,6 +62,8 @@ struct IoHomeProfileDescriptor
     ParameterSemantic mp;
     std::array<ParameterSemantic, 16> fp;
     uint32_t capabilityFlags;
+    ParameterPolarity mpPolarity;
+    bool securedVentilation;
 };
 
 // Returns nullptr for a profile absent from Appendix 2. Callers should keep
@@ -71,6 +79,9 @@ ParameterSemantic ioHomeParameterSemantic(const IoHomeProfileDescriptor *iDescri
 uint8_t ioHomeParameterIndex(const IoHomeProfileDescriptor *iDescriptor,
                              ParameterSemantic iSemantic);
 const char *ioHomeParameterSemanticName(ParameterSemantic iSemantic);
+uint16_t ioHomePercentToRaw(float iPercent, ParameterPolarity iPolarity);
+bool ioHomeRawToPercent(uint16_t iRaw, ParameterPolarity iPolarity,
+                        float &oPercent);
 
 inline bool ioHomeIsOrientationSemantic(ParameterSemantic iSemantic)
 {

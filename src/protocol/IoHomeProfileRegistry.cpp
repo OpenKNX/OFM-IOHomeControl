@@ -43,7 +43,9 @@ namespace
         uint16_t iPackedType, const char *iLabel, ParameterSemantic iMp,
         ParameterSemantic iFp1 = ParameterSemantic::Unsupported,
         ParameterSemantic iFp2 = ParameterSemantic::Unsupported,
-        ParameterSemantic iFp3 = ParameterSemantic::Unsupported)
+        ParameterSemantic iFp3 = ParameterSemantic::Unsupported,
+        ParameterPolarity iPolarity = ParameterPolarity::Normal,
+        bool iSecuredVentilation = false)
     {
         return {
             static_cast<uint16_t>(iPackedType >> 6),
@@ -51,7 +53,8 @@ namespace
             IoHomeNodeClass::Actuator, iLabel, iMp,
             {iFp1, iFp2, iFp3},
             capabilityFor(iMp) | capabilityFor(iFp1) |
-                capabilityFor(iFp2) | capabilityFor(iFp3)};
+                capabilityFor(iFp2) | capabilityFor(iFp3),
+            iPolarity, iSecuredVentilation};
     }
 
     using S = ParameterSemantic;
@@ -65,14 +68,18 @@ namespace
                 S::LinearSpeed, S::SlatOrientationSpeed, S::SlatOrientation),
         profile(0x0082, "Roller Shutter with Projection", S::Position, S::LinearSpeed),
         profile(0x00C0, "Vertical Exterior Awning", S::Position, S::LinearSpeed),
-        profile(0x0100, "Window Opener", S::Position, S::LinearSpeed),
-        profile(0x0101, "Window Opener with Rain Sensor", S::Position, S::LinearSpeed),
+        profile(0x0100, "Window Opener", S::Position, S::LinearSpeed,
+                S::Unsupported, S::Unsupported, ParameterPolarity::Reversed, true),
+        profile(0x0101, "Window Opener with Rain Sensor", S::Position, S::LinearSpeed,
+                S::Unsupported, S::Unsupported, ParameterPolarity::Reversed, true),
         // The KLF table calls this speed linear or angular; the generic
         // speed semantic is retained until the physical mode is identified.
         profile(0x0140, "Garage Door Opener", S::Position, S::LinearSpeed),
         profile(0x017A, "Garage Door On/Off", S::Position),
-        profile(0x0180, "Light", S::LightIntensity, S::LightIntensityGradient),
-        profile(0x01BA, "Light On/Off", S::LightIntensity),
+        profile(0x0180, "Light", S::LightIntensity, S::LightIntensityGradient,
+                S::Unsupported, S::Unsupported, ParameterPolarity::Reversed),
+        profile(0x01BA, "Light On/Off", S::LightIntensity,
+                S::Unsupported, S::Unsupported, S::Unsupported, ParameterPolarity::Reversed),
         profile(0x01C0, "Gate Opener", S::Position, S::LinearSpeed),
         profile(0x01FA, "Gate On/Off", S::Position),
         profile(0x0240, "Door Lock", S::LockState),
@@ -80,7 +87,8 @@ namespace
         profile(0x0280, "Vertical Interior Blind", S::Position, S::LinearSpeed),
         profile(0x0340, "Dual Roller Shutter", S::Position,
                 S::UpperCurtainPosition, S::LowerCurtainPosition, S::LinearSpeed),
-        profile(0x03C0, "On/Off Switch", S::SwitchState),
+        profile(0x03C0, "On/Off Switch", S::SwitchState,
+                S::Unsupported, S::Unsupported, S::Unsupported, ParameterPolarity::Reversed),
         profile(0x0400, "Horizontal Awning", S::Position, S::LinearSpeed),
         profile(0x0440, "Exterior Venetian Blind", S::Position,
                 S::LinearSpeed, S::SlatOrientationSpeed, S::SlatOrientation),
@@ -91,8 +99,10 @@ namespace
         profile(0x0501, "Air Inlet", S::AirDemand),
         profile(0x0502, "Air Transfer", S::AirDemand),
         profile(0x0503, "Air Outlet", S::AirDemand),
-        profile(0x0540, "Exterior Heating", S::EnergyDemand, S::EnergyGradient),
-        profile(0x057A, "Exterior Heating On/Off", S::EnergyDemand),
+        profile(0x0540, "Exterior Heating", S::EnergyDemand, S::EnergyGradient,
+                S::Unsupported, S::Unsupported, ParameterPolarity::Reversed),
+        profile(0x057A, "Exterior Heating On/Off", S::EnergyDemand,
+                S::Unsupported, S::Unsupported, S::Unsupported, ParameterPolarity::Reversed),
         profile(0x0600, "Swinging Shutter", S::ShutterClosure, S::LinearSpeed),
         profile(0x0601, "Independent Leaf Swinging Shutter", S::ShutterClosure,
                 S::LinearSpeed),
@@ -170,4 +180,24 @@ const char *ioHomeParameterSemanticName(ParameterSemantic iSemantic)
     case ParameterSemantic::ShutterClosure: return "shutter-closure";
     default: return "unknown";
     }
+}
+
+uint16_t ioHomePercentToRaw(float iPercent, ParameterPolarity iPolarity)
+{
+    if (iPercent < 0.0f) iPercent = 0.0f;
+    if (iPercent > 100.0f) iPercent = 100.0f;
+    if (iPolarity == ParameterPolarity::Reversed)
+        iPercent = 100.0f - iPercent;
+    return static_cast<uint16_t>((iPercent * IOHC_POSITION_MAX / 100.0f) + 0.5f);
+}
+
+bool ioHomeRawToPercent(uint16_t iRaw, ParameterPolarity iPolarity,
+                        float &oPercent)
+{
+    if (iRaw > IOHC_POSITION_MAX)
+        return false;
+    oPercent = static_cast<float>(iRaw) * 100.0f / IOHC_POSITION_MAX;
+    if (iPolarity == ParameterPolarity::Reversed)
+        oPercent = 100.0f - oPercent;
+    return true;
 }

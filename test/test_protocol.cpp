@@ -2776,6 +2776,33 @@ TEST(klf_profile_registry_preserves_unknowns_and_reverses_venetian_fp_roles)
     ASSERT_TRUE(!ioHomeSupportsCapturedFp3Orientation(lIdentity));
 }
 
+TEST(klf_profile_mp_polarity_and_window_ventilation_alias)
+{
+    struct Case { uint16_t packed; ParameterPolarity polarity; };
+    const Case kCases[] = {
+        {0x0080, ParameterPolarity::Normal},
+        {0x0100, ParameterPolarity::Reversed},
+        {0x0180, ParameterPolarity::Reversed},
+        {0x03C0, ParameterPolarity::Reversed},
+        {0x0540, ParameterPolarity::Reversed},
+    };
+    for (const Case &lCase : kCases)
+    {
+        const IoHomeProfileDescriptor *lDescriptor =
+            ioHomeProfileDescriptor(lCase.packed >> 6, lCase.packed & 0x3F);
+        ASSERT_TRUE(lDescriptor != nullptr);
+        ASSERT_EQ(lDescriptor->mpPolarity, lCase.polarity);
+        ASSERT_EQ(ioHomePercentToRaw(0, lCase.polarity),
+                  lCase.polarity == ParameterPolarity::Normal ? 0U : IOHC_POSITION_MAX);
+        float lPercent = -1.0f;
+        ASSERT_TRUE(ioHomeRawToPercent(0, lCase.polarity, lPercent));
+        ASSERT_EQ(lPercent, lCase.polarity == ParameterPolarity::Normal ? 0.0f : 100.0f);
+        ASSERT_TRUE(!ioHomeRawToPercent(0xD200, lCase.polarity, lPercent));
+        ASSERT_EQ(lDescriptor->securedVentilation, lCase.packed == 0x0100);
+    }
+    ASSERT_TRUE(ioHomeProfileDescriptor(4, 1)->securedVentilation);
+}
+
 TEST(discovery_spe_response_frame)
 {
     // DiscoverSPEResponse (0x2B) — encrypted discovery response
