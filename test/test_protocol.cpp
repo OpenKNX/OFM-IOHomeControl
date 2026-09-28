@@ -2865,6 +2865,20 @@ TEST(discovery_power_mode_controls_wake_policy_over_runtime_hint)
     ASSERT_TRUE(lChannel.effectiveLowPower2W());
 }
 
+TEST(authoritative_discovery_record_changes_only_with_payload)
+{
+    uint8_t lData[IOHC_DISCOVERY_FULL_SIZE] = {
+        0x00, 0x80, 0, 0, 0, 1, 0x1D, 0xFF, 0xFF};
+    IoHomeProtocolIdentity lFirst = decodeProtocolIdentity(lData, sizeof(lData));
+    ASSERT_TRUE(ioHomeDiscoveryRecordChanged(nullptr, lFirst));
+    IoHomeProtocolIdentity lRepeat = lFirst;
+    lRepeat.metadataSource = IoHomeMetadataSource::DiscoverSpeResponse;
+    ASSERT_TRUE(!ioHomeDiscoveryRecordChanged(&lFirst, lRepeat));
+    lData[6] = 0x1C;
+    lRepeat = decodeProtocolIdentity(lData, sizeof(lData));
+    ASSERT_TRUE(ioHomeDiscoveryRecordChanged(&lFirst, lRepeat));
+}
+
 TEST(klf_appendix2_profile_registry_maps_mp_and_functional_parameters)
 {
     using S = ParameterSemantic;

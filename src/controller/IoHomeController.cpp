@@ -2691,6 +2691,9 @@ bool IoHomeController::captureProtocolIdentity(
     // Register the complete model against the RF source before pairing can
     // advance into confirmation/key exchange. SPE discovery uses this exact
     // same path, so the inventory never acquires a second parser or schema.
+    const IoHomeProtocolIdentity *lKnown =
+        protocolIdentityForIoAddress(iFrame.getSrcNodeId());
+    const bool lNewDiscovery = ioHomeDiscoveryRecordChanged(lKnown, lMetadata);
     rememberProtocolIdentity(iFrame.getSrcNodeId(), lMetadata);
 
     bool lPersistedMetadataChanged = false;
@@ -2724,38 +2727,34 @@ bool IoHomeController::captureProtocolIdentity(
             openknx.flash.save();
     }
 
-    logInfoP("Discovery identity from %s: ioAddress=%06X profile=%u subProfile=%u combined=0x%04X manufacturerId=%s(0x%02X) source=%s full=%s raw=%s",
-             iSource ? iSource : "discovery", iFrame.getSrcNodeId(),
-             static_cast<unsigned>(lMetadata.profile),
-             static_cast<unsigned>(lMetadata.subProfile),
-             static_cast<unsigned>(lMetadata.nodeTypeSubType),
-             ioHomeManufacturerName(lMetadata.manufacturerId),
-             static_cast<unsigned>(lMetadata.manufacturerId),
-             ioHomeMetadataSourceName(lMetadata.metadataSource),
-             lMetadata.fullMetadata ? "yes" : "no", lRaw.c_str());
-    if (lMetadata.hasIoBackboneAddress)
-        logInfoP("Discovery identity: ioBackboneAddress=%06X", lMetadata.ioBackboneAddress);
-    else
-        logInfoP("Discovery identity: ioBackboneAddress=n/a");
-    if (lMetadata.hasMib)
+    if (lNewDiscovery)
     {
-        logInfoP("Discovery metadata: multiInfoByte=0x%02X powerSaveMode=%s(%u) ioMembershipFlag=%u rfSupportInNode=%u bit4=%u[unknown] bit5=%u[provisional] slaveTimeClass=%u slaveTimeKlfValue=%u unitConfirmed=%u",
-                 static_cast<unsigned>(lMetadata.multiInfoByte),
+        const uint32_t lFreqHz = mLastResponseFreqIdx < IOHC_NUM_FREQUENCIES
+                                     ? IOHC_FREQUENCIES[mLastResponseFreqIdx] : 0;
+        logInfoP("DISCOVERED: ioAddress=%06X class=%s profile=%u subProfile=%u nodeType=0x%04X manufacturer=%s(%u) backbonePresent=%u backbone=%06X mibPresent=%u mib=0x%02X power=%s ioMember=%u rfSupport=%u slaveTimeClass=%u timestampPresent=%u timestamp=%04X freq=%lu rssi=%d source=%s",
+                 iFrame.getSrcNodeId(), ioHomeNodeClassName(lMetadata.nodeClass),
+                 static_cast<unsigned>(lMetadata.profile),
+                 static_cast<unsigned>(lMetadata.subProfile),
+                 static_cast<unsigned>(lMetadata.nodeTypeSubType),
+                 ioHomeManufacturerName(lMetadata.manufacturerId),
+                 static_cast<unsigned>(lMetadata.manufacturerId),
+                 lMetadata.hasIoBackboneAddress ? 1U : 0U, lMetadata.ioBackboneAddress,
+                 lMetadata.hasMib ? 1U : 0U, static_cast<unsigned>(lMetadata.multiInfoByte),
                  ioHomePowerModeName(lMetadata.powerSaveMode),
-                 static_cast<unsigned>(lMetadata.powerSaveModeRaw),
                  lMetadata.ioMembershipFlag ? 1U : 0U,
                  lMetadata.rfSupportInNode ? 1U : 0U,
-                 (lMetadata.multiInfoByte & IOHC_DISCOVERY_UNKNOWN_BIT4_MASK) ? 1U : 0U,
-                 lMetadata.syncControlGroupCandidate ? 1U : 0U,
                  static_cast<unsigned>(lMetadata.slaveTimeClass),
-                 static_cast<unsigned>(lMetadata.slaveTimeKlfValue),
-                 lMetadata.slaveTimeUnitConfirmed ? 1U : 0U);
+                 lMetadata.hasDiscoveryTimestamp ? 1U : 0U,
+                 static_cast<unsigned>(lMetadata.discoveryTimestamp),
+                 static_cast<unsigned long>(lFreqHz), mRadio.lastRssi(),
+                 ioHomeMetadataSourceName(lMetadata.metadataSource));
         if (!lMetadata.rfSupportInNode)
             logInfoP("Discovery metadata warning: ioAddress=%06X reports rfSupportInNode=0 but supplied an RF discovery response; raw MIB retained",
                      iFrame.getSrcNodeId());
     }
-    else
-        logInfoP("Discovery metadata: MIB=n/a");
+    if (mPairDiagnosticTraceEnabled)
+        logInfoP("PairDiag: discovery raw source=%s ioAddress=%06X payload=%s",
+                 iSource ? iSource : "discovery", iFrame.getSrcNodeId(), lRaw.c_str());
     if (mPairDiagnosticTraceEnabled && lMetadata.hasDiscoveryTimestamp)
     {
         if (lHadPreviousTimestamp)

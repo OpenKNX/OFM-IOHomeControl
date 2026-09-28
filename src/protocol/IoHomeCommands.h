@@ -739,6 +739,15 @@ inline bool ioHomeShouldAcceptProtocolIdentity(
            !iCurrent.fullMetadata || iIncoming.fullMetadata;
 }
 
+inline bool ioHomeDiscoveryRecordChanged(
+    const IoHomeProtocolIdentity *iPrevious,
+    const IoHomeProtocolIdentity &iCurrent)
+{
+    return !iPrevious || !iPrevious->valid ||
+           iPrevious->rawDataLen != iCurrent.rawDataLen ||
+           memcmp(iPrevious->rawData, iCurrent.rawData, iCurrent.rawDataLen) != 0;
+}
+
 inline bool ioHomeKeyStateKnown(const IoHomeProtocolIdentity &iIdentity)
 {
     return iIdentity.keyState != IoHomeKeyState::Unknown &&
