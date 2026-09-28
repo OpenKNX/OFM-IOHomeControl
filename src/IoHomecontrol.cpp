@@ -779,12 +779,14 @@ void IoHomecontrol::onDiscoveryResponse(
         return;
 
     KeyImportDevice *lDevice = addKeyImportDevice(lNodeId);
-    if (!lDevice)
+    if (!lDevice || !iMetadata.valid)
         return;
 
     // The controller decodes both 0x29 and layout-compatible 0x2B responses
-    // once and passes the complete authoritative model to every consumer.
-    lDevice->discoveryMetadata = iMetadata;
+    // once and passes the complete authoritative model to every consumer. Do
+    // not let a later partial response discard an already-complete record.
+    if (iMetadata.fullMetadata || !lDevice->discoveryMetadata.fullMetadata)
+        lDevice->discoveryMetadata = iMetadata;
 }
 
 void IoHomecontrol::processKeyImportWorkflow()

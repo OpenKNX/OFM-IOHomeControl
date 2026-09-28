@@ -109,6 +109,16 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn(
             "mModule->onDiscoveryResponse(mRxFrame, lMetadata)", controller_source
         )
+        self.assertIn(
+            "rememberDiscoveryMetadata(iFrame.getSrcNodeId(), lMetadata)",
+            controller_source,
+        )
+
+        discovery_handler = module_source.split(
+            "void IoHomecontrol::onDiscoveryResponse", 1
+        )[1].split("void IoHomecontrol::processKeyImportWorkflow", 1)[0]
+        self.assertIn("iMetadata.fullMetadata", discovery_handler)
+        self.assertIn("lDevice->discoveryMetadata = iMetadata", discovery_handler)
 
     def test_selection_table_matches_shared_layout(self) -> None:
         selection = self.share.find(

@@ -2599,6 +2599,11 @@ bool IoHomeController::captureDiscoveryMetadata(
         return false;
     }
 
+    // Register the complete model against the RF source before pairing can
+    // advance into confirmation/key exchange. SPE discovery uses this exact
+    // same path, so the inventory never acquires a second parser or schema.
+    rememberDiscoveryMetadata(iFrame.getSrcNodeId(), lMetadata);
+
     bool lPersistedMetadataChanged = false;
     bool lHadPreviousTimestamp = false;
     uint16_t lPreviousTimestamp = 0;
@@ -4016,6 +4021,55 @@ const IoHomeController::IoHomeNodeStats *IoHomeController::nodeStats() const
     return mNodeStats;
 }
 
+const IoHomeDiscoveryMetadata *IoHomeController::discoveryMetadataForNode(
+    uint32_t iNodeId) const
+{
+    iNodeId &= 0x00FFFFFF;
+    for (uint8_t i = 0; i < kMaxTrackedNodes; i++)
+    {
+        if (mNodeStats[i].active && mNodeStats[i].nodeId == iNodeId &&
+            mNodeStats[i].discoveryMetadata.valid)
+            return &mNodeStats[i].discoveryMetadata;
+    }
+    return nullptr;
+}
+
+IoHomeController::IoHomeNodeStats *IoHomeController::findOrAddNodeStats(
+    uint32_t iNodeId)
+{
+    iNodeId &= 0x00FFFFFF;
+    if (iNodeId == 0)
+        return nullptr;
+
+    IoHomeNodeStats *lFreeSlot = nullptr;
+    for (uint8_t i = 0; i < kMaxTrackedNodes; i++)
+    {
+        if (mNodeStats[i].active && mNodeStats[i].nodeId == iNodeId)
+            return &mNodeStats[i];
+        if (!mNodeStats[i].active && !lFreeSlot)
+            lFreeSlot = &mNodeStats[i];
+    }
+
+    if (lFreeSlot)
+    {
+        *lFreeSlot = IoHomeNodeStats{};
+        lFreeSlot->active = true;
+        lFreeSlot->nodeId = iNodeId;
+    }
+    return lFreeSlot;
+}
+
+void IoHomeController::rememberDiscoveryMetadata(
+    uint32_t iNodeId, const IoHomeDiscoveryMetadata &iMetadata)
+{
+    if (!iMetadata.valid)
+        return;
+
+    IoHomeNodeStats *lStats = findOrAddNodeStats(iNodeId);
+    if (lStats)
+        lStats->discoveryMetadata = iMetadata;
+}
+
 void IoHomeController::recordScanFrame(const IoHomeFrame &iFrame, const uint8_t *iRaw, uint8_t iRawLen, int16_t iRssi, uint8_t iFreqIdx)
 {
     if (iRawLen > IOHC_FRAME_BUFFER_SIZE)
@@ -4055,27 +4109,13 @@ void IoHomeController::recordScanFrame(const IoHomeFrame &iFrame, const uint8_t 
 
 void IoHomeController::updateNodeStats(uint32_t iNodeId, int16_t iRssi, IoHomeCommand iCmd)
 {
-    // Find existing entry or first empty slot
-    int8_t lFreeSlot = -1;
-    for (uint8_t i = 0; i < kMaxTrackedNodes; i++)
+    IoHomeNodeStats *lStats = findOrAddNodeStats(iNodeId);
+    if (lStats)
     {
-        if (mNodeStats[i].active && mNodeStats[i].nodeId == iNodeId)
-        {
-            mNodeStats[i].packetCount++;
-            mNodeStats[i].lastRssi = iRssi;
-            mNodeStats[i].lastCommand = iCmd;
-            return;
-        }
-        if (!mNodeStats[i].active && lFreeSlot < 0)
-            lFreeSlot = i;
-    }
-    if (lFreeSlot >= 0)
-    {
-        mNodeStats[lFreeSlot].active = true;
-        mNodeStats[lFreeSlot].nodeId = iNodeId;
-        mNodeStats[lFreeSlot].packetCount = 1;
-        mNodeStats[lFreeSlot].lastRssi = iRssi;
-        mNodeStats[lFreeSlot].lastCommand = iCmd;
+        if (lStats->packetCount != UINT16_MAX)
+            ++lStats->packetCount;
+        lStats->lastRssi = iRssi;
+        lStats->lastCommand = iCmd;
     }
     // If full, drop the new entry (graceful degradation)
 }

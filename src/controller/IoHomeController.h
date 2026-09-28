@@ -700,6 +700,9 @@ public:
     uint16_t packetCount;
     int16_t lastRssi;
     IoHomeCommand lastCommand;
+    // Source-keyed discovery inventory. Both normal 0x29 pairing and
+    // layout-compatible 0x2B SPE responses populate this same model.
+    IoHomeDiscoveryMetadata discoveryMetadata;
     bool active;
   };
 
@@ -712,6 +715,7 @@ public:
   const IoHomeScanEntry *scanBuffer() const;
   uint8_t scanBufferHead() const;
   const IoHomeNodeStats *nodeStats() const;
+  const IoHomeDiscoveryMetadata *discoveryMetadataForNode(uint32_t iNodeId) const;
   static const char *commandName(IoHomeCommand iCmd);
 
   struct IoHomeRadioHealth
@@ -1344,6 +1348,9 @@ private:
                                 const IoHomeFrame &iFrame,
                                 const char *iSource,
                                 IoHomeDiscoveryMetadata *oMetadata = nullptr);
+  IoHomeNodeStats *findOrAddNodeStats(uint32_t iNodeId);
+  void rememberDiscoveryMetadata(uint32_t iNodeId,
+                                 const IoHomeDiscoveryMetadata &iMetadata);
   IoHomecontrolChannel *oneWayProfileForNode(uint32_t iNodeId) const;
   uint8_t oneWayBroadcastTypeForNode(uint32_t iNodeId) const;
   uint32_t oneWayDestinationForEntry(const IoHomeQueueEntry &iEntry) const;

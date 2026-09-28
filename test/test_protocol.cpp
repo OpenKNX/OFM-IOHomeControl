@@ -10344,8 +10344,73 @@ TEST(controller_pairing_stores_029_metadata_before_key_exchange_and_keeps_source
     ASSERT_EQ(lMetadata.discoveryTimestamp, 0xFFFF);
     ASSERT_EQ(lMetadata.rawDataLen, sizeof(kCapturedPayload));
     ASSERT_MEM_EQ(lMetadata.rawData, kCapturedPayload, sizeof(kCapturedPayload));
+
+    // The controller registry is populated by RF source before pairing leaves
+    // the discovery-response state; it contains the same complete object that
+    // was propagated to the eventual OAM channel.
+    const IoHomeDiscoveryMetadata *lRegistered =
+        lController.discoveryMetadataForNode(lCapturedDeviceNodeId);
+    ASSERT_TRUE(lRegistered != nullptr);
+    ASSERT_EQ(lRegistered->deviceType, lMetadata.deviceType);
+    ASSERT_EQ(lRegistered->subtype, lMetadata.subtype);
+    ASSERT_EQ(lRegistered->manufacturer, lMetadata.manufacturer);
+    ASSERT_EQ(lRegistered->backboneId, lMetadata.backboneId);
+    ASSERT_EQ(lRegistered->mib, lMetadata.mib);
+    ASSERT_EQ(lRegistered->powerMode, lMetadata.powerMode);
+    ASSERT_EQ(lRegistered->rfSupport, lMetadata.rfSupport);
+    ASSERT_EQ(lRegistered->turnaroundClass, lMetadata.turnaroundClass);
+    ASSERT_EQ(lRegistered->discoveryTimestamp, lMetadata.discoveryTimestamp);
     ASSERT_TRUE(lController.state() == ControllerState::PairSendDiscoveryConfirmation ||
                 lController.state() == ControllerState::PairWaitDiscoveryConfirmationAck);
+}
+
+TEST(controller_spe_discovery_registers_same_complete_metadata_model)
+{
+    const uint32_t lRemoteNodeId = 0x9F0071;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    static const uint8_t kPayload[IOHC_DISCOVERY_FULL_SIZE] = {
+        0x00, 0x81, 0x12, 0x34, 0x56, 0x02, 0xED, 0x12, 0x34};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lRemoteNodeId);
+    lController.setSystemKey(lKey);
+    lController.init();
+    lController.startDiscovery(true);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
+
+    IoHomeFrame lResponse;
+    lResponse.init();
+    lResponse.ctrlByte0 = IOHC_CTRL0_END;
+    lResponse.setSrcNode(lDeviceNodeId);
+    lResponse.setDestNode(lRemoteNodeId);
+    lResponse.commandId = IoHomeCommand::DiscoverSPEResponse;
+    memcpy(lResponse.data, kPayload, sizeof(kPayload));
+    lResponse.dataLen = sizeof(kPayload);
+    lResponse.hasHmac = false;
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+
+    const IoHomeDiscoveryMetadata *lMetadata =
+        lController.discoveryMetadataForNode(lDeviceNodeId);
+    ASSERT_TRUE(lMetadata != nullptr);
+    ASSERT_TRUE(lMetadata->valid);
+    ASSERT_TRUE(lMetadata->fullMetadata);
+    ASSERT_EQ(lMetadata->deviceType, 2U);
+    ASSERT_EQ(lMetadata->subtype, 1U);
+    ASSERT_EQ(lMetadata->backboneId, 0x123456U);
+    ASSERT_EQ(lMetadata->manufacturer,
+              static_cast<uint8_t>(IoHomeManufacturer::Somfy));
+    ASSERT_EQ(lMetadata->mib, 0xED);
+    ASSERT_EQ(lMetadata->powerMode, IoHomePowerMode::LowPower);
+    ASSERT_TRUE(lMetadata->ioMember);
+    ASSERT_TRUE(lMetadata->rfSupport);
+    ASSERT_TRUE(lMetadata->syncControlGroupCandidate);
+    ASSERT_EQ(lMetadata->turnaroundClass, 3U);
+    ASSERT_EQ(lMetadata->discoveryTimestamp, 0x1234U);
+    ASSERT_MEM_EQ(lMetadata->rawData, kPayload, sizeof(kPayload));
 }
 
 TEST(controller_default_2w_pairing_confirms_discovery_before_key_init)
