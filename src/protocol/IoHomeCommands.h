@@ -602,6 +602,17 @@ enum class IoHomeMetadataSource : uint8_t
     Restored = 3
 };
 
+inline uint8_t ioHomeMetadataSourcePriority(IoHomeMetadataSource iSource)
+{
+    switch (iSource)
+    {
+    case IoHomeMetadataSource::DiscoverResponse:
+    case IoHomeMetadataSource::DiscoverSpeResponse: return 2;
+    case IoHomeMetadataSource::Restored: return 1;
+    default: return 0;
+    }
+}
+
 inline const char *ioHomeKeyStateName(IoHomeKeyState iState)
 {
     switch (iState)
@@ -709,6 +720,24 @@ struct IoHomeProtocolIdentity
     uint8_t rawData[IOHC_DISCOVERY_RAW_MAX_SIZE] = {};
     uint8_t rawDataLen = 0;
 };
+
+inline bool ioHomeShouldAcceptProtocolIdentity(
+    const IoHomeProtocolIdentity &iCurrent,
+    const IoHomeProtocolIdentity &iIncoming)
+{
+    if (!iIncoming.valid)
+        return false;
+    if (!iCurrent.valid || iCurrent.ioAddress != iIncoming.ioAddress)
+        return true;
+    const uint8_t lCurrentPriority =
+        ioHomeMetadataSourcePriority(iCurrent.metadataSource);
+    const uint8_t lIncomingPriority =
+        ioHomeMetadataSourcePriority(iIncoming.metadataSource);
+    if (lIncomingPriority < lCurrentPriority)
+        return false;
+    return lIncomingPriority != lCurrentPriority ||
+           !iCurrent.fullMetadata || iIncoming.fullMetadata;
+}
 
 inline bool ioHomeKeyStateKnown(const IoHomeProtocolIdentity &iIdentity)
 {

@@ -923,6 +923,8 @@ void IoHomecontrolChannel::onProtocolIdentity(
     mIoAddress = iIoAddress & 0x00FFFFFF;
     IoHomeProtocolIdentity lIdentity = iIdentity;
     lIdentity.ioAddress = mIoAddress;
+    if (!ioHomeShouldAcceptProtocolIdentity(mProtocolIdentity, lIdentity))
+        return;
     if (lIdentity.nodeClass == IoHomeNodeClass::Unknown &&
         mProtocolIdentity.valid && mProtocolIdentity.ioAddress == mIoAddress)
         lIdentity.nodeClass = mProtocolIdentity.nodeClass;

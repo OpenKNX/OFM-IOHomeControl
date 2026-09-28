@@ -2779,6 +2779,32 @@ TEST(node_class_is_explicit_independent_and_unknown_is_backward_compatible)
     ASSERT_EQ(decodeIoHomeNodeClass(0xFE), IoHomeNodeClass::Unknown);
 }
 
+TEST(discovery_metadata_outranks_restored_metadata_and_partial_refresh)
+{
+    IoHomeProtocolIdentity lDiscovered;
+    lDiscovered.valid = true;
+    lDiscovered.fullMetadata = true;
+    lDiscovered.ioAddress = 0x123456;
+    lDiscovered.profile = 2;
+    lDiscovered.metadataSource = IoHomeMetadataSource::DiscoverResponse;
+    IoHomeProtocolIdentity lRestored = lDiscovered;
+    lRestored.profile = 3;
+    lRestored.metadataSource = IoHomeMetadataSource::Restored;
+    ASSERT_TRUE(!ioHomeShouldAcceptProtocolIdentity(lDiscovered, lRestored));
+    IoHomecontrolChannel lChannel;
+    lChannel.onProtocolIdentity(0x123456, lDiscovered);
+    lChannel.onProtocolIdentity(0x123456, lRestored);
+    ASSERT_EQ(lChannel.getProtocolIdentity().profile, 2U);
+    lRestored.metadataSource = IoHomeMetadataSource::DiscoverSpeResponse;
+    lRestored.fullMetadata = false;
+    ASSERT_TRUE(!ioHomeShouldAcceptProtocolIdentity(lDiscovered, lRestored));
+    lRestored.fullMetadata = true;
+    ASSERT_TRUE(ioHomeShouldAcceptProtocolIdentity(lDiscovered, lRestored));
+    lChannel.onProtocolIdentity(0x123456, lRestored);
+    ASSERT_EQ(lChannel.getProtocolIdentity().profile, 3U);
+    ASSERT_EQ(ioHomeMetadataSourcePriority(IoHomeMetadataSource::Unknown), 0U);
+}
+
 TEST(klf_appendix2_profile_registry_maps_mp_and_functional_parameters)
 {
     using S = ParameterSemantic;

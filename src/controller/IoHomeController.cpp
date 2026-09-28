@@ -4246,10 +4246,13 @@ void IoHomeController::rememberProtocolIdentity(
     IoHomeNodeStats *lStats = findOrAddNodeStats(iNodeId);
     if (lStats)
     {
+        IoHomeProtocolIdentity lIncoming = iMetadata;
+        lIncoming.ioAddress = iNodeId & 0x00FFFFFF;
+        if (!ioHomeShouldAcceptProtocolIdentity(lStats->protocolIdentity, lIncoming))
+            return;
         const IoHomeNodeClass lPreviousClass =
             lStats->protocolIdentity.nodeClass;
-        lStats->protocolIdentity = iMetadata;
-        lStats->protocolIdentity.ioAddress = iNodeId & 0x00FFFFFF;
+        lStats->protocolIdentity = lIncoming;
         if (lStats->protocolIdentity.nodeClass == IoHomeNodeClass::Unknown)
             lStats->protocolIdentity.nodeClass = lPreviousClass;
     }
