@@ -2682,6 +2682,37 @@ TEST(product_signature_wildcards_are_bytewise_and_length_strict)
               IoHomeSignatureMatchQuality::None);
 }
 
+TEST(atlantic_product_signature_comes_from_gi2_without_changing_identity)
+{
+    IoHomeProtocolIdentity lIdentity;
+    lIdentity.valid = true;
+    lIdentity.manufacturerId = 12;
+    lIdentity.profile = 22;
+    lIdentity.subProfile = 1;
+    IoHomeProductIdentityEvidence lEvidence;
+    memcpy(lEvidence.generalInfo1, "GI1SIGN001", 10);
+    memcpy(lEvidence.generalInfo2, "GI2SIGN002", 10);
+    lEvidence.generalInfo1Len = lEvidence.generalInfo2Len = 10;
+    ASSERT_TRUE(ioHomeUsesGeneralInfo2ProductSignature(lIdentity));
+    ASSERT_MEM_EQ(ioHomeProductSignature(lIdentity, lEvidence).bytes,
+                  "GI2SIGN002", 10);
+    lIdentity.profile = 52;
+    ASSERT_MEM_EQ(ioHomeProductSignature(lIdentity, lEvidence).bytes,
+                  "GI2SIGN002", 10);
+    lIdentity.profile = 53;
+    ASSERT_MEM_EQ(ioHomeProductSignature(lIdentity, lEvidence).bytes,
+                  "GI1SIGN001", 10);
+    lIdentity.profile = 22;
+    lIdentity.subProfile = 2;
+    ASSERT_MEM_EQ(ioHomeProductSignature(lIdentity, lEvidence).bytes,
+                  "GI1SIGN001", 10);
+    lIdentity.subProfile = 1;
+    lIdentity.manufacturerId = 2;
+    ASSERT_MEM_EQ(ioHomeProductSignature(lIdentity, lEvidence).bytes,
+                  "GI1SIGN001", 10);
+    ASSERT_EQ(lIdentity.profile, 22U);
+}
+
 TEST(node_class_is_explicit_independent_and_unknown_is_backward_compatible)
 {
     IoHomeProtocolIdentity lIdentity;

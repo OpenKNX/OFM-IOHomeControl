@@ -810,6 +810,28 @@ inline IoHomeProductSignature ioHomeGeneralInfo1ProductSignature(
     return lSignature;
 }
 
+inline bool ioHomeUsesGeneralInfo2ProductSignature(
+    const IoHomeProtocolIdentity &iIdentity)
+{
+    return iIdentity.valid && iIdentity.manufacturerId == 12 &&
+           (iIdentity.profile == 22 || iIdentity.profile == 52) &&
+           iIdentity.subProfile == 1;
+}
+
+inline IoHomeProductSignature ioHomeProductSignature(
+    const IoHomeProtocolIdentity &iIdentity,
+    const IoHomeProductIdentityEvidence &iEvidence)
+{
+    if (!ioHomeUsesGeneralInfo2ProductSignature(iIdentity))
+        return ioHomeGeneralInfo1ProductSignature(iEvidence);
+    IoHomeProductSignature lSignature;
+    lSignature.length = iEvidence.generalInfo2Len < IOHC_PRODUCT_SIGNATURE_SIZE
+                            ? iEvidence.generalInfo2Len : IOHC_PRODUCT_SIGNATURE_SIZE;
+    if (lSignature.length > 0)
+        memcpy(lSignature.bytes, iEvidence.generalInfo2, lSignature.length);
+    return lSignature;
+}
+
 inline std::string ioHomeProductSignatureHex(const IoHomeProductSignature &iSignature)
 {
     static const char kDigits[] = "0123456789ABCDEF";
