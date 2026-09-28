@@ -744,6 +744,8 @@ struct IoHomeProductIdentityEvidence
     // Vendor/commercial classification only; zero means unknown or unmatched.
     // This must never select generic protocol behavior or replace profile.
     uint16_t manufacturerSubType = 0;
+    const char *productFamilyLabel = nullptr;
+    uint16_t productQuirkFlags = 0;
     uint8_t nameResponse[IOHC_DEVICE_INFO_RAW_MAX_SIZE] = {};
     uint8_t nameResponseLen = 0;
     uint8_t generalInfo1[IOHC_DEVICE_INFO_RAW_MAX_SIZE] = {};
@@ -851,6 +853,98 @@ inline std::string ioHomeProductSignaturePrintable(const IoHomeProductSignature 
         lResult.push_back(iSignature.bytes[i] >= 0x20 && iSignature.bytes[i] <= 0x7E
                               ? static_cast<char>(iSignature.bytes[i]) : '.');
     return lResult;
+}
+
+struct IoHomeVendorSignatureEntry
+{
+    IoHomeNodeClass nodeClass;
+    uint16_t profile;
+    uint8_t subProfile;
+    uint8_t manufacturerId;
+    uint8_t signaturePattern[IOHC_PRODUCT_SIGNATURE_SIZE];
+    uint16_t manufacturerSubType;
+    const char *productFamilyLabel;
+    uint16_t optionalQuirkFlags;
+};
+
+struct IoHomeVendorProductMatch
+{
+    IoHomeSignatureMatchQuality quality = IoHomeSignatureMatchQuality::None;
+    uint16_t manufacturerSubType = 0;
+    const char *productFamilyLabel = nullptr;
+    uint16_t optionalQuirkFlags = 0;
+};
+
+inline IoHomeVendorProductMatch ioHomeLookupVendorProduct(
+    const IoHomeProtocolIdentity &iIdentity,
+    const IoHomeProductIdentityEvidence &iEvidence,
+    const IoHomeVendorSignatureEntry *iEntries, size_t iEntryCount)
+{
+    IoHomeVendorProductMatch lBest;
+    if (!iIdentity.valid || !iEntries)
+        return lBest;
+    const IoHomeProductSignature lSignature = ioHomeProductSignature(iIdentity, iEvidence);
+    if (lSignature.length != IOHC_PRODUCT_SIGNATURE_SIZE)
+        return lBest;
+    uint8_t lBestSpecificity = 0;
+    for (size_t i = 0; i < iEntryCount; ++i)
+    {
+        const IoHomeVendorSignatureEntry &lEntry = iEntries[i];
+        if ((lEntry.nodeClass != IoHomeNodeClass::Unknown &&
+             lEntry.nodeClass != iIdentity.nodeClass) ||
+            (lEntry.profile != 0xFFFF && lEntry.profile != iIdentity.profile) ||
+            (lEntry.subProfile != 0xFF && lEntry.subProfile != iIdentity.subProfile) ||
+            lEntry.manufacturerId != iIdentity.manufacturerId ||
+            lEntry.manufacturerSubType == 0 || !lEntry.productFamilyLabel)
+            continue;
+        const IoHomeSignatureMatchQuality lQuality = ioHomeMatchSignaturePattern(
+            lSignature, lEntry.signaturePattern, IOHC_PRODUCT_SIGNATURE_SIZE);
+        if (lQuality == IoHomeSignatureMatchQuality::None)
+            continue;
+        uint8_t lSpecificity = 0;
+        for (uint8_t j = 0; j < IOHC_PRODUCT_SIGNATURE_SIZE; ++j)
+            lSpecificity += lEntry.signaturePattern[j] != 0x3F;
+        if (static_cast<uint8_t>(lQuality) < static_cast<uint8_t>(lBest.quality) ||
+            (lQuality == lBest.quality && lSpecificity <= lBestSpecificity))
+            continue;
+        lBest.quality = lQuality;
+        lBest.manufacturerSubType = lEntry.manufacturerSubType;
+        lBest.productFamilyLabel = lEntry.productFamilyLabel;
+        lBest.optionalQuirkFlags = lEntry.optionalQuirkFlags;
+        lBestSpecificity = lSpecificity;
+    }
+    return lBest;
+}
+
+inline IoHomeVendorProductMatch ioHomeLookupVendorProduct(
+    const IoHomeProtocolIdentity &iIdentity,
+    const IoHomeProductIdentityEvidence &iEvidence)
+{
+    // Provisional local ID 1: "5163340C06" is the Somfy-labelled GI1 sample
+    // in test_protocol.cpp, but that test combines it with an unrelated VELUX
+    // discovery fixture. Its node class, profile/subProfile and commercial
+    // model have NOT been capture-confirmed. Wildcard selectors avoid inventing
+    // those fields; the label explicitly avoids claiming an exact product.
+    // Do not attach quirks or generic protocol behavior to this provisional ID.
+    static const IoHomeVendorSignatureEntry kEntries[] = {
+        {IoHomeNodeClass::Unknown, 0xFFFF, 0xFF,
+         static_cast<uint8_t>(IoHomeManufacturer::Somfy),
+         {'5','1','6','3','3','4','0','C','0','6'},
+         1, "Somfy GI1 5163340C06 (family unverified)", 0},
+    };
+    return ioHomeLookupVendorProduct(iIdentity, iEvidence,
+                                     kEntries, sizeof(kEntries) / sizeof(kEntries[0]));
+}
+
+inline void ioHomeUpdateVendorProductEvidence(
+    const IoHomeProtocolIdentity &iIdentity,
+    IoHomeProductIdentityEvidence &ioEvidence)
+{
+    const IoHomeVendorProductMatch lMatch =
+        ioHomeLookupVendorProduct(iIdentity, ioEvidence);
+    ioEvidence.manufacturerSubType = lMatch.manufacturerSubType;
+    ioEvidence.productFamilyLabel = lMatch.productFamilyLabel;
+    ioEvidence.productQuirkFlags = lMatch.optionalQuirkFlags;
 }
 
 inline void decodeProtocolIdentityMib(IoHomeProtocolIdentity &ioIdentity,

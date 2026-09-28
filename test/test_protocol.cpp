@@ -2713,6 +2713,44 @@ TEST(atlantic_product_signature_comes_from_gi2_without_changing_identity)
     ASSERT_EQ(lIdentity.profile, 22U);
 }
 
+TEST(vendor_database_requires_manufacturer_and_prefers_exact_signature)
+{
+    IoHomeProtocolIdentity lIdentity;
+    lIdentity.valid = true;
+    lIdentity.nodeClass = IoHomeNodeClass::Actuator;
+    lIdentity.profile = 2;
+    lIdentity.subProfile = 0;
+    lIdentity.manufacturerId = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
+    IoHomeProductIdentityEvidence lEvidence;
+    memcpy(lEvidence.generalInfo1, "5163340C06", 10);
+    lEvidence.generalInfo1Len = 10;
+    const IoHomeVendorProductMatch lProduction =
+        ioHomeLookupVendorProduct(lIdentity, lEvidence);
+    ASSERT_EQ(lProduction.quality, IoHomeSignatureMatchQuality::Exact);
+    ASSERT_EQ(lProduction.manufacturerSubType, 1U);
+    ASSERT_EQ(lProduction.optionalQuirkFlags, 0U);
+    ASSERT_EQ(lIdentity.profile, 2U);
+
+    static const IoHomeVendorSignatureEntry kEntries[] = {
+        {IoHomeNodeClass::Actuator, 2, 0, 2,
+         {'5','1','6','3','3','4','0','?','?','?'}, 2, "broad family", 0},
+        {IoHomeNodeClass::Actuator, 2, 0, 2,
+         {'5','1','6','3','3','4','0','C','0','6'}, 3, "exact fixture", 0},
+    };
+    const IoHomeVendorProductMatch lBest = ioHomeLookupVendorProduct(
+        lIdentity, lEvidence, kEntries, 2);
+    ASSERT_EQ(lBest.quality, IoHomeSignatureMatchQuality::Exact);
+    ASSERT_EQ(lBest.manufacturerSubType, 3U);
+    lIdentity.manufacturerId = static_cast<uint8_t>(IoHomeManufacturer::Velux);
+    ASSERT_EQ(ioHomeLookupVendorProduct(lIdentity, lEvidence).manufacturerSubType, 0U);
+    ASSERT_EQ(ioHomeLookupVendorProduct(lIdentity, lEvidence, kEntries, 2).quality,
+              IoHomeSignatureMatchQuality::None);
+    lIdentity.manufacturerId = 2;
+    lEvidence.generalInfo1Len = 9;
+    ASSERT_EQ(ioHomeLookupVendorProduct(lIdentity, lEvidence).quality,
+              IoHomeSignatureMatchQuality::None);
+}
+
 TEST(node_class_is_explicit_independent_and_unknown_is_backward_compatible)
 {
     IoHomeProtocolIdentity lIdentity;

@@ -863,6 +863,7 @@ void IoHomecontrolChannel::onPostPairEnrichmentResponse(
     default:
         break;
     }
+    ioHomeUpdateVendorProductEvidence(mProtocolIdentity, mProductIdentityEvidence);
 }
 
 void IoHomecontrolChannel::onGeneralInfo3Requested()
@@ -929,6 +930,7 @@ void IoHomecontrolChannel::onProtocolIdentity(
     // ETS device-role and command-shape parameters remain separate and never
     // write back into this discovery-derived object.
     mProtocolIdentity = lIdentity;
+    ioHomeUpdateVendorProductEvidence(mProtocolIdentity, mProductIdentityEvidence);
     mProfile = lIdentity.profile;
     mSubProfile = lIdentity.subProfile;
     if (mManualPackedProfile != 0 &&

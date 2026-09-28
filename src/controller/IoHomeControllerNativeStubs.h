@@ -317,6 +317,7 @@ public:
     if (iData && lLen > 0)
       memcpy(lTarget, iData, lLen);
     *lStoredLen = lLen;
+    ioHomeUpdateVendorProductEvidence(mProtocolIdentity, mProductIdentityEvidence);
     if (iResponse == IoHomeCommand::GetNameResponse)
       onDeviceName(
           reinterpret_cast<const char *>(mProductIdentityEvidence.nameResponse),
@@ -385,6 +386,7 @@ public:
         mProtocolIdentity.valid && mProtocolIdentity.ioAddress == mIoAddress)
       lIdentity.nodeClass = mProtocolIdentity.nodeClass;
     mProtocolIdentity = lIdentity;
+    ioHomeUpdateVendorProductEvidence(mProtocolIdentity, mProductIdentityEvidence);
   }
   void clearProtocolIdentity()
   {
