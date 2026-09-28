@@ -3712,6 +3712,12 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                     }
                     const IoHomeProductIdentityEvidence &lEnrichment =
                         lCh->getProductIdentityEvidence();
+                    logInfoP("  product identification: manufacturerSubType=%u family=%s confidence=%s protocolProfile=%u/%u",
+                             static_cast<unsigned>(lEnrichment.manufacturerSubType),
+                             lEnrichment.productFamilyLabel ? lEnrichment.productFamilyLabel : "unmatched",
+                             ioHomeIdentificationConfidenceName(ioHomeIdentificationConfidence(lMetadata, lEnrichment)),
+                             static_cast<unsigned>(lMetadata.profile),
+                             static_cast<unsigned>(lMetadata.subProfile));
                     logInfoP("  enrichment: name=%s GI1=%s ascii=%s GI2=%s GI2Type=%s%u/%u GI3=%s",
                              lCh->getDeviceName()[0] ? lCh->getDeviceName() : "n/a",
                              lEnrichment.generalInfo1Len
@@ -3845,6 +3851,12 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                     }
                     const IoHomeProductIdentityEvidence &lEnrichment =
                         lCh->getProductIdentityEvidence();
+                    logInfoP("       product identification manufacturerSubType=%u family=%s confidence=%s protocolProfile=%u/%u",
+                             static_cast<unsigned>(lEnrichment.manufacturerSubType),
+                             lEnrichment.productFamilyLabel ? lEnrichment.productFamilyLabel : "unmatched",
+                             ioHomeIdentificationConfidenceName(ioHomeIdentificationConfidence(lMetadata, lEnrichment)),
+                             static_cast<unsigned>(lMetadata.profile),
+                             static_cast<unsigned>(lMetadata.subProfile));
                     logInfoP("       enrichment name=%s GI1=%s ascii=%s GI2=%s GI2Type=%s%u/%u GI3=%s",
                              lCh->getDeviceName()[0] ? lCh->getDeviceName() : "n/a",
                              lEnrichment.generalInfo1Len

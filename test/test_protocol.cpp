@@ -2751,6 +2751,34 @@ TEST(vendor_database_requires_manufacturer_and_prefers_exact_signature)
               IoHomeSignatureMatchQuality::None);
 }
 
+TEST(product_identification_confidence_keeps_generic_profile_visible)
+{
+    IoHomeProtocolIdentity lIdentity;
+    IoHomeProductIdentityEvidence lEvidence;
+    ASSERT_EQ(ioHomeIdentificationConfidence(lIdentity, lEvidence),
+              IoHomeIdentificationConfidence::Unknown);
+    lIdentity.valid = true;
+    lIdentity.profile = 2;
+    lIdentity.subProfile = 0;
+    ASSERT_EQ(ioHomeIdentificationConfidence(lIdentity, lEvidence),
+              IoHomeIdentificationConfidence::GenericProfile);
+    IoHomeVendorProductMatch lMatch;
+    lMatch.quality = IoHomeSignatureMatchQuality::Wildcard;
+    ASSERT_EQ(ioHomeIdentificationConfidence(lIdentity, lMatch),
+              IoHomeIdentificationConfidence::VendorFamilyWildcard);
+    lMatch.quality = IoHomeSignatureMatchQuality::Exact;
+    ASSERT_EQ(ioHomeIdentificationConfidence(lIdentity, lMatch),
+              IoHomeIdentificationConfidence::VendorFamilyExact);
+    ASSERT_EQ(lIdentity.profile, 2U);
+    ASSERT_EQ(lIdentity.subProfile, 0U);
+    lIdentity.manufacturerId = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
+    memcpy(lEvidence.generalInfo1, "5163340C06", 10);
+    lEvidence.generalInfo1Len = 10;
+    ASSERT_EQ(ioHomeIdentificationConfidence(lIdentity, lEvidence),
+              IoHomeIdentificationConfidence::VendorFamilyExact);
+    ASSERT_EQ(lIdentity.profile, 2U);
+}
+
 TEST(node_class_is_explicit_independent_and_unknown_is_backward_compatible)
 {
     IoHomeProtocolIdentity lIdentity;

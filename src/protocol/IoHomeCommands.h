@@ -904,6 +904,39 @@ struct IoHomeVendorProductMatch
     uint16_t optionalQuirkFlags = 0;
 };
 
+enum class IoHomeIdentificationConfidence : uint8_t
+{
+    Unknown,
+    GenericProfile,
+    VendorFamilyWildcard,
+    VendorFamilyExact,
+};
+
+inline const char *ioHomeIdentificationConfidenceName(
+    IoHomeIdentificationConfidence iConfidence)
+{
+    switch (iConfidence)
+    {
+    case IoHomeIdentificationConfidence::GenericProfile: return "GenericProfile";
+    case IoHomeIdentificationConfidence::VendorFamilyWildcard: return "VendorFamilyWildcard";
+    case IoHomeIdentificationConfidence::VendorFamilyExact: return "VendorFamilyExact";
+    default: return "Unknown";
+    }
+}
+
+inline IoHomeIdentificationConfidence ioHomeIdentificationConfidence(
+    const IoHomeProtocolIdentity &iIdentity,
+    const IoHomeVendorProductMatch &iMatch)
+{
+    if (!iIdentity.valid)
+        return IoHomeIdentificationConfidence::Unknown;
+    if (iMatch.quality == IoHomeSignatureMatchQuality::Exact)
+        return IoHomeIdentificationConfidence::VendorFamilyExact;
+    if (iMatch.quality == IoHomeSignatureMatchQuality::Wildcard)
+        return IoHomeIdentificationConfidence::VendorFamilyWildcard;
+    return IoHomeIdentificationConfidence::GenericProfile;
+}
+
 inline IoHomeVendorProductMatch ioHomeLookupVendorProduct(
     const IoHomeProtocolIdentity &iIdentity,
     const IoHomeProductIdentityEvidence &iEvidence,
@@ -963,6 +996,14 @@ inline IoHomeVendorProductMatch ioHomeLookupVendorProduct(
     };
     return ioHomeLookupVendorProduct(iIdentity, iEvidence,
                                      kEntries, sizeof(kEntries) / sizeof(kEntries[0]));
+}
+
+inline IoHomeIdentificationConfidence ioHomeIdentificationConfidence(
+    const IoHomeProtocolIdentity &iIdentity,
+    const IoHomeProductIdentityEvidence &iEvidence)
+{
+    return ioHomeIdentificationConfidence(
+        iIdentity, ioHomeLookupVendorProduct(iIdentity, iEvidence));
 }
 
 inline void ioHomeUpdateVendorProductEvidence(

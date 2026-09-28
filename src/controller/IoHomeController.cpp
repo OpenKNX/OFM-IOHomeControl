@@ -5472,6 +5472,14 @@ void IoHomeController::loop()
                                          static_cast<unsigned>(lSignature.length),
                                          ioHomeProductSignatureHex(lSignature).c_str(),
                                          ioHomeProductSignaturePrintable(lSignature).c_str());
+                                logInfoP("PairDiag: product family=%s confidence=%s protocolProfile=%u/%u",
+                                         lChannel->getProductIdentityEvidence().productFamilyLabel
+                                             ? lChannel->getProductIdentityEvidence().productFamilyLabel : "unmatched",
+                                         ioHomeIdentificationConfidenceName(ioHomeIdentificationConfidence(
+                                             lChannel->getProtocolIdentity(),
+                                             lChannel->getProductIdentityEvidence())),
+                                         static_cast<unsigned>(lChannel->getProtocolIdentity().profile),
+                                         static_cast<unsigned>(lChannel->getProtocolIdentity().subProfile));
                             }
                             else if (lChannel && mPairEnrichmentStep == PairEnrichmentStep::GeneralInfo2)
                             {
