@@ -364,6 +364,22 @@ public:
     ExchangeRadioSnapshot lastUnconfirmed{};
   };
 
+  struct ResponseTimingSample
+  {
+    bool valid = false;
+    bool hasFirstResponse = false;
+    bool hasFinalResponse = false;
+    uint32_t ioAddress = 0;
+    IoHomeCommand command = IoHomeCommand::Execute;
+    uint8_t manufacturerId = 0;
+    uint16_t profile = 0;
+    uint8_t subProfile = 0;
+    uint8_t powerSaveModeRaw = 0xFF;
+    uint8_t slaveTimeClass = 0xFF;
+    uint32_t txEndToFirstResponseUs = 0;
+    uint32_t txEndToFinalResponseUs = 0;
+  };
+
   enum class OneWayEnrollPhase : uint8_t
   {
     Remove,
@@ -671,6 +687,7 @@ public:
   static const char *pairingOutcomeName(PairingOutcome iOutcome);
   const PairingTelemetry &pairingTelemetry() const;
   const ExchangeDiagnostics &exchangeDiagnostics() const;
+  const ResponseTimingSample &lastResponseTimingSample() const;
   void logPairDiagnosticStatus() const;
   const OneWayEnrollmentTraceEntry *oneWayEnrollmentTrace() const;
   uint8_t oneWayEnrollmentTraceCount() const;
@@ -706,7 +723,7 @@ public:
     IoHomeCommand lastCommand;
     // Source-keyed discovery inventory. Both normal 0x29 pairing and
     // layout-compatible 0x2B SPE responses populate this same model.
-    IoHomeDiscoveryMetadata discoveryMetadata;
+    IoHomeProtocolIdentity protocolIdentity;
     bool active;
   };
 
@@ -719,7 +736,7 @@ public:
   const IoHomeScanEntry *scanBuffer() const;
   uint8_t scanBufferHead() const;
   const IoHomeNodeStats *nodeStats() const;
-  const IoHomeDiscoveryMetadata *discoveryMetadataForNode(uint32_t iNodeId) const;
+  const IoHomeProtocolIdentity *protocolIdentityForIoAddress(uint32_t iIoAddress) const;
   static const char *commandName(IoHomeCommand iCmd);
 
   struct IoHomeRadioHealth
@@ -958,6 +975,11 @@ private:
   uint32_t mExchangeStartCrcErrorCount = 0;
   uint32_t mExchangeStartPreambleCount = 0;
   uint32_t mExchangeStartSyncCount = 0;
+  uint32_t mExchangeRequestTxEndUs = 0;
+  uint32_t mExchangeAuthTxEndUs = 0;
+  bool mExchangeRequestTxEndValid = false;
+  bool mExchangeAuthTxEndValid = false;
+  ResponseTimingSample mLastResponseTimingSample{};
   bool mTrustRxPosition = true; // false while dispatching an immediate Execute reply
 
   // Passive UNKNOWN_86 (0x86) observation. No semantics are assumed; only the
@@ -978,7 +1000,7 @@ private:
   int8_t mOneWayEnrollmentActiveTrace = -1;
   uint8_t mPairingChallenge[6];
   uint32_t mDiscoveredNodeId;
-  IoHomeDiscoveryMetadata mPairDiscoveryMetadata{};
+  IoHomeProtocolIdentity mPairProtocolIdentity{};
   // Optional 2W target supplied by the caller. Discovery is broadcast, but a
   // response must not bind this pairing transaction to another learn-mode device.
   uint32_t mPairingKnownNodeId;
@@ -1220,6 +1242,9 @@ private:
   uint16_t pairingStartPreamble(const IoHomeFrame &iFrame) const;
   void resetPairingPreambleState();
   void beginExchangeDiagnosticsWindow();
+  void beginResponseTimingAttempt();
+  void markResponseTimingTxEnd();
+  void recordResponseTiming(bool iFinalResponse);
   void recordExchangeFailure(const IoHomeQueueEntry &iEntry, bool iAuthenticatedUnconfirmed);
   void notifyCommandExchangeResult(const IoHomeQueueEntry &iEntry,
                                    IoHomeCommandExchangeResult iResult);
@@ -1359,16 +1384,16 @@ private:
                                       const IoHomeQueueEntry &iEntry) const;
   TwoWayDiscoverySettings pairingDiscoverySettings() const;
   bool learnPowerClassFromDiscovery(IoHomecontrolChannel *iChannel,
-                                    const IoHomeDiscoveryMetadata &iMetadata,
+                                    const IoHomeProtocolIdentity &iMetadata,
                                     uint32_t iSourceNodeId,
                                     const char *iSource);
-  bool captureDiscoveryMetadata(IoHomecontrolChannel *iChannel,
-                                const IoHomeFrame &iFrame,
-                                const char *iSource,
-                                IoHomeDiscoveryMetadata *oMetadata = nullptr);
+  bool captureProtocolIdentity(IoHomecontrolChannel *iChannel,
+                               const IoHomeFrame &iFrame,
+                               const char *iSource,
+                               IoHomeProtocolIdentity *oIdentity = nullptr);
   IoHomeNodeStats *findOrAddNodeStats(uint32_t iNodeId);
-  void rememberDiscoveryMetadata(uint32_t iNodeId,
-                                 const IoHomeDiscoveryMetadata &iMetadata);
+  void rememberProtocolIdentity(uint32_t iIoAddress,
+                                const IoHomeProtocolIdentity &iIdentity);
   IoHomecontrolChannel *oneWayProfileForNode(uint32_t iNodeId) const;
   uint8_t oneWayBroadcastTypeForNode(uint32_t iNodeId) const;
   uint32_t oneWayDestinationForEntry(const IoHomeQueueEntry &iEntry) const;

@@ -687,7 +687,7 @@ namespace
         IoHomeFrame lFrame;
         initGatewayResponseFrame(lFrame, iGatewayNodeId, iDeviceNodeId,
                                  IoHomeCommand::GetGeneralInfo1Response);
-        encodePackedDeviceType(kGatewayInfoDeviceType, kGatewayInfoSubtype,
+        encodePackedProfile(kGatewayInfoDeviceType, kGatewayInfoSubtype,
                                lFrame.data[0], lFrame.data[1]);
         lFrame.data[2] = kGatewayInfoManufacturer;
         lFrame.dataLen = 3;
@@ -705,7 +705,7 @@ namespace
         IoHomeFrame lFrame;
         initGatewayResponseFrame(lFrame, iExtractNodeId, iHubNodeId,
                                  IoHomeCommand::DiscoverResponse);
-        encodePackedDeviceType(iType, iSubtype, lFrame.data[0], lFrame.data[1]);
+        encodePackedProfile(iType, iSubtype, lFrame.data[0], lFrame.data[1]);
         lFrame.data[2] = static_cast<uint8_t>((iExtractNodeId >> 16) & 0xFF);
         lFrame.data[3] = static_cast<uint8_t>((iExtractNodeId >> 8) & 0xFF);
         lFrame.data[4] = static_cast<uint8_t>(iExtractNodeId & 0xFF);
@@ -2552,14 +2552,16 @@ uint16_t IoHomeController::preambleForQueued2WAttempt(const IoHomeFrame &,
 }
 
 bool IoHomeController::learnPowerClassFromDiscovery(IoHomecontrolChannel *iChannel,
-                                                     const IoHomeDiscoveryMetadata &iMetadata,
+                                                     const IoHomeProtocolIdentity &iMetadata,
                                                      uint32_t iSourceNodeId,
                                                      const char *iSource)
 {
-    if (!iChannel || iChannel->is1W() || !iMetadata.hasPowerClass)
+    if (!iChannel || iChannel->is1W() ||
+        iMetadata.powerSaveMode == IoHomePowerMode::Unknown)
         return false;
 
-    const bool lLowPower = iMetadata.lowPower;
+    const bool lLowPower =
+        iMetadata.powerSaveMode == IoHomePowerMode::LowPower;
     const bool lChanged = !iChannel->hasLearnedLowPower2W() ||
                           iChannel->isLowPower2W() != lLowPower;
     iChannel->setLowPower2W(lLowPower);
@@ -2575,16 +2577,21 @@ bool IoHomeController::learnPowerClassFromDiscovery(IoHomecontrolChannel *iChann
     return lChanged;
 }
 
-bool IoHomeController::captureDiscoveryMetadata(
+bool IoHomeController::captureProtocolIdentity(
     IoHomecontrolChannel *iChannel, const IoHomeFrame &iFrame,
-    const char *iSource, IoHomeDiscoveryMetadata *oMetadata)
+    const char *iSource, IoHomeProtocolIdentity *oMetadata)
 {
     if (iFrame.commandId != IoHomeCommand::DiscoverResponse &&
         iFrame.commandId != IoHomeCommand::DiscoverSPEResponse)
         return false;
 
-    const IoHomeDiscoveryMetadata lMetadata =
-        decodeDiscoveryMetadata(iFrame.data, iFrame.dataLen);
+    IoHomeProtocolIdentity lMetadata =
+        decodeProtocolIdentity(iFrame.data, iFrame.dataLen);
+    lMetadata.ioAddress = iFrame.getSrcNodeId();
+    lMetadata.metadataSource =
+        iFrame.commandId == IoHomeCommand::DiscoverSPEResponse
+            ? IoHomeMetadataSource::DiscoverSpeResponse
+            : IoHomeMetadataSource::DiscoverResponse;
     if (oMetadata)
         *oMetadata = lMetadata;
 
@@ -2602,63 +2609,66 @@ bool IoHomeController::captureDiscoveryMetadata(
     // Register the complete model against the RF source before pairing can
     // advance into confirmation/key exchange. SPE discovery uses this exact
     // same path, so the inventory never acquires a second parser or schema.
-    rememberDiscoveryMetadata(iFrame.getSrcNodeId(), lMetadata);
+    rememberProtocolIdentity(iFrame.getSrcNodeId(), lMetadata);
 
     bool lPersistedMetadataChanged = false;
     bool lHadPreviousTimestamp = false;
     uint16_t lPreviousTimestamp = 0;
     if (iChannel)
     {
-        const IoHomeDiscoveryMetadata &lPrevious = iChannel->getDiscoveryMetadata();
+        const IoHomeProtocolIdentity &lPrevious = iChannel->getProtocolIdentity();
         lHadPreviousTimestamp = lPrevious.hasDiscoveryTimestamp;
         lPreviousTimestamp = lPrevious.discoveryTimestamp;
         lPersistedMetadataChanged =
-            iChannel->getDiscoveryNodeId() != iFrame.getSrcNodeId() ||
+            iChannel->getIoAddress() != iFrame.getSrcNodeId() ||
             lPrevious.valid != lMetadata.valid ||
             lPrevious.fullMetadata != lMetadata.fullMetadata ||
-            lPrevious.deviceType != lMetadata.deviceType ||
-            lPrevious.subtype != lMetadata.subtype ||
-            lPrevious.hasBackboneId != lMetadata.hasBackboneId ||
-            lPrevious.backboneId != lMetadata.backboneId ||
-            lPrevious.manufacturer != lMetadata.manufacturer ||
+            lPrevious.profile != lMetadata.profile ||
+            lPrevious.subProfile != lMetadata.subProfile ||
+            lPrevious.hasIoBackboneAddress != lMetadata.hasIoBackboneAddress ||
+            lPrevious.ioBackboneAddress != lMetadata.ioBackboneAddress ||
+            lPrevious.manufacturerId != lMetadata.manufacturerId ||
             lPrevious.hasMib != lMetadata.hasMib ||
-            lPrevious.mib != lMetadata.mib ||
+            lPrevious.multiInfoByte != lMetadata.multiInfoByte ||
             lPrevious.hasDiscoveryTimestamp != lMetadata.hasDiscoveryTimestamp ||
             lPrevious.discoveryTimestamp != lMetadata.discoveryTimestamp;
-        iChannel->onDiscoveryMetadata(iFrame.getSrcNodeId(), lMetadata);
+        iChannel->onProtocolIdentity(iFrame.getSrcNodeId(), lMetadata);
         const bool lPowerClassChanged = learnPowerClassFromDiscovery(
             iChannel, lMetadata, iFrame.getSrcNodeId(), iSource);
-        // The complete discovery model and its compatibility power-class view
-        // are committed together, so one response causes at most one write.
+        // The complete identity and its learned wake policy are committed
+        // together, so one response causes at most one write.
         if (lPersistedMetadataChanged || lPowerClassChanged)
             openknx.flash.save();
     }
 
-    logInfoP("Discovery metadata from %s: Node=%06X type=%u subtype=%u combined=0x%04X manufacturer=%s(0x%02X) full=%s raw=%s",
+    logInfoP("Discovery identity from %s: ioAddress=%06X profile=%u subProfile=%u combined=0x%04X manufacturerId=%s(0x%02X) source=%s full=%s raw=%s",
              iSource ? iSource : "discovery", iFrame.getSrcNodeId(),
-             static_cast<unsigned>(lMetadata.deviceType),
-             static_cast<unsigned>(lMetadata.subtype),
+             static_cast<unsigned>(lMetadata.profile),
+             static_cast<unsigned>(lMetadata.subProfile),
              static_cast<unsigned>(lMetadata.nodeTypeSubType),
-             ioHomeManufacturerName(lMetadata.manufacturer),
-             static_cast<unsigned>(lMetadata.manufacturer),
+             ioHomeManufacturerName(lMetadata.manufacturerId),
+             static_cast<unsigned>(lMetadata.manufacturerId),
+             ioHomeMetadataSourceName(lMetadata.metadataSource),
              lMetadata.fullMetadata ? "yes" : "no", lRaw.c_str());
-    if (lMetadata.hasBackboneId)
-        logInfoP("Discovery metadata: Backbone=%06X", lMetadata.backboneId);
+    if (lMetadata.hasIoBackboneAddress)
+        logInfoP("Discovery identity: ioBackboneAddress=%06X", lMetadata.ioBackboneAddress);
     else
-        logInfoP("Discovery metadata: Backbone=n/a");
+        logInfoP("Discovery identity: ioBackboneAddress=n/a");
     if (lMetadata.hasMib)
     {
-        logInfoP("Discovery metadata: MIB=0x%02X power=%s ioMember=%u rfSupport=%u syncControlCandidate=%u turnaroundClass=%u turnaroundKlfValue=%u unitConfirmed=%u",
-                 static_cast<unsigned>(lMetadata.mib),
-                 ioHomePowerModeName(lMetadata.powerMode),
-                 lMetadata.ioMember ? 1U : 0U,
-                 lMetadata.rfSupport ? 1U : 0U,
+        logInfoP("Discovery metadata: multiInfoByte=0x%02X powerSaveMode=%s(%u) ioMembershipFlag=%u rfSupportInNode=%u bit4=%u[unknown] bit5=%u[provisional] slaveTimeClass=%u slaveTimeKlfValue=%u unitConfirmed=%u",
+                 static_cast<unsigned>(lMetadata.multiInfoByte),
+                 ioHomePowerModeName(lMetadata.powerSaveMode),
+                 static_cast<unsigned>(lMetadata.powerSaveModeRaw),
+                 lMetadata.ioMembershipFlag ? 1U : 0U,
+                 lMetadata.rfSupportInNode ? 1U : 0U,
+                 (lMetadata.multiInfoByte & IOHC_DISCOVERY_UNKNOWN_BIT4_MASK) ? 1U : 0U,
                  lMetadata.syncControlGroupCandidate ? 1U : 0U,
-                 static_cast<unsigned>(lMetadata.turnaroundClass),
-                 static_cast<unsigned>(lMetadata.turnaroundKlfValue),
-                 lMetadata.turnaroundUnitConfirmed ? 1U : 0U);
-        if (!lMetadata.rfSupport)
-            logInfoP("Discovery metadata warning: Node=%06X reports rfSupport=0 but supplied an RF discovery response; raw MIB retained",
+                 static_cast<unsigned>(lMetadata.slaveTimeClass),
+                 static_cast<unsigned>(lMetadata.slaveTimeKlfValue),
+                 lMetadata.slaveTimeUnitConfirmed ? 1U : 0U);
+        if (!lMetadata.rfSupportInNode)
+            logInfoP("Discovery metadata warning: ioAddress=%06X reports rfSupportInNode=0 but supplied an RF discovery response; raw MIB retained",
                      iFrame.getSrcNodeId());
     }
     else
@@ -2828,7 +2838,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mPairPulledKeyFrame.init();
     mDiscoverySPE = false;
     mDiscoveredNodeId = 0;
-    mPairDiscoveryMetadata = IoHomeDiscoveryMetadata{};
+    mPairProtocolIdentity = IoHomeProtocolIdentity{};
     mPairEnrichmentStep = PairEnrichmentStep::Name;
     mPairingKnownNodeId = iKnownNodeId & 0x00FFFFFF;
     mPairKeyExchangeAttempts = 0;
@@ -2848,8 +2858,8 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(iChannelIndex) : nullptr;
     if (lCh)
     {
-        lCh->clearDiscoveryMetadata();
-        lCh->clearPostPairEnrichment();
+        lCh->clearProtocolIdentity();
+        lCh->clearProductIdentityEvidence();
         mPairDiscoverConfirmMode = lCh->getConfigured2WDiscoverConfirmMode();
         mPairKeyInitDelayMs = lCh->getConfigured2WKeyInitDelay();
     }
@@ -3092,6 +3102,95 @@ const IoHomeController::PairingTelemetry &IoHomeController::pairingTelemetry() c
 const IoHomeController::ExchangeDiagnostics &IoHomeController::exchangeDiagnostics() const
 {
     return mExchangeDiagnostics;
+}
+
+const IoHomeController::ResponseTimingSample &IoHomeController::lastResponseTimingSample() const
+{
+    return mLastResponseTimingSample;
+}
+
+void IoHomeController::beginResponseTimingAttempt()
+{
+    mExchangeRequestTxEndUs = 0;
+    mExchangeAuthTxEndUs = 0;
+    mExchangeRequestTxEndValid = false;
+    mExchangeAuthTxEndValid = false;
+    mLastResponseTimingSample = ResponseTimingSample{};
+    mLastResponseTimingSample.ioAddress = mCurrentCmd.destNodeId & 0x00FFFFFF;
+    mLastResponseTimingSample.command = mCurrentCmd.command;
+
+    const IoHomecontrolChannel *lChannel = channelForQueueEntry(mCurrentCmd);
+    const IoHomeProtocolIdentity *lIdentity =
+        lChannel && lChannel->getProtocolIdentity().valid
+            ? &lChannel->getProtocolIdentity()
+            : protocolIdentityForIoAddress(mCurrentCmd.destNodeId);
+    if (lIdentity)
+    {
+        mLastResponseTimingSample.manufacturerId = lIdentity->manufacturerId;
+        mLastResponseTimingSample.profile = lIdentity->profile;
+        mLastResponseTimingSample.subProfile = lIdentity->subProfile;
+        mLastResponseTimingSample.powerSaveModeRaw = lIdentity->powerSaveModeRaw;
+        mLastResponseTimingSample.slaveTimeClass = lIdentity->slaveTimeClass;
+    }
+}
+
+void IoHomeController::markResponseTimingTxEnd()
+{
+    const uint32_t lNowUs = micros();
+    if (mAuthResponseSent && mWaitingFinalResponse)
+    {
+        mExchangeAuthTxEndUs = lNowUs;
+        mExchangeAuthTxEndValid = true;
+    }
+    else
+    {
+        mExchangeRequestTxEndUs = lNowUs;
+        mExchangeRequestTxEndValid = true;
+        mLastResponseTimingSample.valid = true;
+    }
+}
+
+void IoHomeController::recordResponseTiming(bool iFinalResponse)
+{
+    if (!mExchangeRequestTxEndValid)
+        return;
+
+    const uint32_t lNowUs = micros();
+    if (!mLastResponseTimingSample.hasFirstResponse)
+    {
+        mLastResponseTimingSample.hasFirstResponse = true;
+        mLastResponseTimingSample.txEndToFirstResponseUs =
+            lNowUs - mExchangeRequestTxEndUs;
+        if (mPairDiagnosticTraceEnabled)
+            logInfoP("PairDiag: response timing first ioAddress=0x%06X manufacturerId=0x%02X profile=%u subProfile=%u powerSaveMode=%u slaveTimeClass=%u delayUs=%lu",
+                     mLastResponseTimingSample.ioAddress,
+                     static_cast<unsigned>(mLastResponseTimingSample.manufacturerId),
+                     static_cast<unsigned>(mLastResponseTimingSample.profile),
+                     static_cast<unsigned>(mLastResponseTimingSample.subProfile),
+                     static_cast<unsigned>(mLastResponseTimingSample.powerSaveModeRaw),
+                     static_cast<unsigned>(mLastResponseTimingSample.slaveTimeClass),
+                     static_cast<unsigned long>(mLastResponseTimingSample.txEndToFirstResponseUs));
+    }
+
+    if (iFinalResponse)
+    {
+        mLastResponseTimingSample.hasFinalResponse = true;
+        mLastResponseTimingSample.txEndToFinalResponseUs =
+            lNowUs - mExchangeRequestTxEndUs;
+        if (mPairDiagnosticTraceEnabled)
+            logInfoP("PairDiag: response timing final ioAddress=0x%06X manufacturerId=0x%02X profile=%u subProfile=%u powerSaveMode=%u slaveTimeClass=%u requestTxEndDelayUs=%lu authTxEndDelayUs=%s%lu",
+                     mLastResponseTimingSample.ioAddress,
+                     static_cast<unsigned>(mLastResponseTimingSample.manufacturerId),
+                     static_cast<unsigned>(mLastResponseTimingSample.profile),
+                     static_cast<unsigned>(mLastResponseTimingSample.subProfile),
+                     static_cast<unsigned>(mLastResponseTimingSample.powerSaveModeRaw),
+                     static_cast<unsigned>(mLastResponseTimingSample.slaveTimeClass),
+                     static_cast<unsigned long>(mLastResponseTimingSample.txEndToFinalResponseUs),
+                     mExchangeAuthTxEndValid ? "" : "n/a:",
+                     static_cast<unsigned long>(mExchangeAuthTxEndValid
+                                                    ? lNowUs - mExchangeAuthTxEndUs
+                                                    : 0));
+    }
 }
 
 const IoHomeController::OneWayEnrollmentTraceEntry *IoHomeController::oneWayEnrollmentTrace() const
@@ -4023,15 +4122,15 @@ const IoHomeController::IoHomeNodeStats *IoHomeController::nodeStats() const
     return mNodeStats;
 }
 
-const IoHomeDiscoveryMetadata *IoHomeController::discoveryMetadataForNode(
-    uint32_t iNodeId) const
+const IoHomeProtocolIdentity *IoHomeController::protocolIdentityForIoAddress(
+    uint32_t iIoAddress) const
 {
-    iNodeId &= 0x00FFFFFF;
+    iIoAddress &= 0x00FFFFFF;
     for (uint8_t i = 0; i < kMaxTrackedNodes; i++)
     {
-        if (mNodeStats[i].active && mNodeStats[i].nodeId == iNodeId &&
-            mNodeStats[i].discoveryMetadata.valid)
-            return &mNodeStats[i].discoveryMetadata;
+        if (mNodeStats[i].active && mNodeStats[i].nodeId == iIoAddress &&
+            mNodeStats[i].protocolIdentity.valid)
+            return &mNodeStats[i].protocolIdentity;
     }
     return nullptr;
 }
@@ -4061,15 +4160,18 @@ IoHomeController::IoHomeNodeStats *IoHomeController::findOrAddNodeStats(
     return lFreeSlot;
 }
 
-void IoHomeController::rememberDiscoveryMetadata(
-    uint32_t iNodeId, const IoHomeDiscoveryMetadata &iMetadata)
+void IoHomeController::rememberProtocolIdentity(
+    uint32_t iNodeId, const IoHomeProtocolIdentity &iMetadata)
 {
     if (!iMetadata.valid)
         return;
 
     IoHomeNodeStats *lStats = findOrAddNodeStats(iNodeId);
     if (lStats)
-        lStats->discoveryMetadata = iMetadata;
+    {
+        lStats->protocolIdentity = iMetadata;
+        lStats->protocolIdentity.ioAddress = iNodeId & 0x00FFFFFF;
+    }
 }
 
 void IoHomeController::recordScanFrame(const IoHomeFrame &iFrame, const uint8_t *iRaw, uint8_t iRawLen, int16_t iRssi, uint8_t iFreqIdx)
@@ -4415,32 +4517,34 @@ void IoHomeController::tracePairDiagnosticDiscoveryInterpretation(const IoHomeFr
     case IoHomeCommand::DiscoverResponse:
     case IoHomeCommand::DiscoverSPEResponse:
     {
-        const IoHomeDiscoveryMetadata lMetadata =
-            decodeDiscoveryMetadata(iFrame.data, iFrame.dataLen);
+        const IoHomeProtocolIdentity lMetadata =
+            decodeProtocolIdentity(iFrame.data, iFrame.dataLen);
         const std::string lRaw = hexDump(iFrame.data, iFrame.dataLen);
         if (lMetadata.valid)
         {
-            logInfoP("PairDiag: discovery metadata Node: %06X Backbone: %s Type: %u SubType: %u Combined: 0x%04X Manufacturer: %s(0x%02X) Full: %s Raw: %s",
+            logInfoP("PairDiag: discovery ioAddress=%06X ioBackboneAddress=%s profile=%u subProfile=%u combined=0x%04X manufacturerId=%s(0x%02X) full=%s raw=%s",
                      iFrame.getSrcNodeId(),
-                     lMetadata.hasBackboneId ? "present" : "n/a",
-                     static_cast<unsigned>(lMetadata.deviceType),
-                     static_cast<unsigned>(lMetadata.subtype),
+                     lMetadata.hasIoBackboneAddress ? "present" : "n/a",
+                     static_cast<unsigned>(lMetadata.profile),
+                     static_cast<unsigned>(lMetadata.subProfile),
                      static_cast<unsigned>(lMetadata.nodeTypeSubType),
-                     ioHomeManufacturerName(lMetadata.manufacturer),
-                     static_cast<unsigned>(lMetadata.manufacturer),
+                     ioHomeManufacturerName(lMetadata.manufacturerId),
+                     static_cast<unsigned>(lMetadata.manufacturerId),
                      lMetadata.fullMetadata ? "yes" : "no", lRaw.c_str());
-            if (lMetadata.hasBackboneId)
-                logInfoP("PairDiag: discovery Backbone value: %06X", lMetadata.backboneId);
+            if (lMetadata.hasIoBackboneAddress)
+                logInfoP("PairDiag: discovery ioBackboneAddress value=%06X", lMetadata.ioBackboneAddress);
             if (lMetadata.hasMib)
-                logInfoP("PairDiag: discovery MIB: 0x%02X Power: %s ioMember: %u rfSupport: %u syncControlCandidate: %u turnaroundClass: %u turnaroundKlfValue: %u unitConfirmed: %u",
-                         static_cast<unsigned>(lMetadata.mib),
-                         ioHomePowerModeName(lMetadata.powerMode),
-                         lMetadata.ioMember ? 1U : 0U,
-                         lMetadata.rfSupport ? 1U : 0U,
+                logInfoP("PairDiag: discovery multiInfoByte=0x%02X bits[1:0] powerSaveMode=%u(%s) bit2 ioMembershipFlag=%u bit3 rfSupportInNode=%u bit4=%u[unknown/unused] bit5=%u[provisional/no-production-behavior] bits[7:6] slaveTimeClass=%u klfHint=%u unitConfirmed=%u",
+                         static_cast<unsigned>(lMetadata.multiInfoByte),
+                         static_cast<unsigned>(lMetadata.powerSaveModeRaw),
+                         ioHomePowerModeName(lMetadata.powerSaveMode),
+                         lMetadata.ioMembershipFlag ? 1U : 0U,
+                         lMetadata.rfSupportInNode ? 1U : 0U,
+                         (lMetadata.multiInfoByte & IOHC_DISCOVERY_UNKNOWN_BIT4_MASK) ? 1U : 0U,
                          lMetadata.syncControlGroupCandidate ? 1U : 0U,
-                         static_cast<unsigned>(lMetadata.turnaroundClass),
-                         static_cast<unsigned>(lMetadata.turnaroundKlfValue),
-                         lMetadata.turnaroundUnitConfirmed ? 1U : 0U);
+                         static_cast<unsigned>(lMetadata.slaveTimeClass),
+                         static_cast<unsigned>(lMetadata.slaveTimeKlfValue),
+                         lMetadata.slaveTimeUnitConfirmed ? 1U : 0U);
             if (lMetadata.hasDiscoveryTimestamp)
                 logInfoP("PairDiag: discovery timestamp: 0x%04X",
                          static_cast<unsigned>(lMetadata.discoveryTimestamp));
@@ -4699,35 +4803,38 @@ void IoHomeController::logPairDiagnosticStatus() const
              static_cast<unsigned>(mPairingTelemetry.lastReceivedCommand),
              static_cast<unsigned>(mPairingTelemetry.rejectedFrames),
              static_cast<unsigned>(mPairingTelemetry.keyExchangeAttempts));
-    if (mPairDiscoveryMetadata.valid)
+    if (mPairProtocolIdentity.valid)
     {
-        const std::string lRaw = hexDump(mPairDiscoveryMetadata.rawData,
-                                         mPairDiscoveryMetadata.rawDataLen);
-        logInfoP("PairDiag: discovery Node: %06X Backbone: %s Type: %u SubType: %u Combined: 0x%04X Manufacturer: %s(0x%02X) Raw: %s",
+        const std::string lRaw = hexDump(mPairProtocolIdentity.rawData,
+                                         mPairProtocolIdentity.rawDataLen);
+        logInfoP("PairDiag: discovery ioAddress=%06X ioBackboneAddress=%s profile=%u subProfile=%u combined=0x%04X manufacturerId=%s(0x%02X) source=%s raw=%s",
                  mDiscoveredNodeId,
-                 mPairDiscoveryMetadata.hasBackboneId ? "present" : "n/a",
-                 static_cast<unsigned>(mPairDiscoveryMetadata.deviceType),
-                 static_cast<unsigned>(mPairDiscoveryMetadata.subtype),
-                 static_cast<unsigned>(mPairDiscoveryMetadata.nodeTypeSubType),
-                 ioHomeManufacturerName(mPairDiscoveryMetadata.manufacturer),
-                 static_cast<unsigned>(mPairDiscoveryMetadata.manufacturer),
+                 mPairProtocolIdentity.hasIoBackboneAddress ? "present" : "n/a",
+                 static_cast<unsigned>(mPairProtocolIdentity.profile),
+                 static_cast<unsigned>(mPairProtocolIdentity.subProfile),
+                 static_cast<unsigned>(mPairProtocolIdentity.nodeTypeSubType),
+                 ioHomeManufacturerName(mPairProtocolIdentity.manufacturerId),
+                 static_cast<unsigned>(mPairProtocolIdentity.manufacturerId),
+                 ioHomeMetadataSourceName(mPairProtocolIdentity.metadataSource),
                  lRaw.c_str());
-        if (mPairDiscoveryMetadata.hasBackboneId)
-            logInfoP("PairDiag: discovery Backbone value: %06X",
-                     mPairDiscoveryMetadata.backboneId);
-        if (mPairDiscoveryMetadata.hasMib)
-            logInfoP("PairDiag: discovery MIB: 0x%02X Power: %s ioMember: %u rfSupport: %u syncControlCandidate: %u turnaroundClass: %u turnaroundKlfValue: %u unitConfirmed: %u",
-                     static_cast<unsigned>(mPairDiscoveryMetadata.mib),
-                     ioHomePowerModeName(mPairDiscoveryMetadata.powerMode),
-                     mPairDiscoveryMetadata.ioMember ? 1U : 0U,
-                     mPairDiscoveryMetadata.rfSupport ? 1U : 0U,
-                     mPairDiscoveryMetadata.syncControlGroupCandidate ? 1U : 0U,
-                     static_cast<unsigned>(mPairDiscoveryMetadata.turnaroundClass),
-                     static_cast<unsigned>(mPairDiscoveryMetadata.turnaroundKlfValue),
-                     mPairDiscoveryMetadata.turnaroundUnitConfirmed ? 1U : 0U);
-        if (mPairDiscoveryMetadata.hasDiscoveryTimestamp)
+        if (mPairProtocolIdentity.hasIoBackboneAddress)
+            logInfoP("PairDiag: discovery ioBackboneAddress value=%06X",
+                     mPairProtocolIdentity.ioBackboneAddress);
+        if (mPairProtocolIdentity.hasMib)
+            logInfoP("PairDiag: discovery multiInfoByte=0x%02X bits[1:0] powerSaveMode=%u(%s) bit2 ioMembershipFlag=%u bit3 rfSupportInNode=%u bit4=%u[unknown/unused] bit5=%u[provisional/no-production-behavior] bits[7:6] slaveTimeClass=%u klfHint=%u unitConfirmed=%u",
+                     static_cast<unsigned>(mPairProtocolIdentity.multiInfoByte),
+                     static_cast<unsigned>(mPairProtocolIdentity.powerSaveModeRaw),
+                     ioHomePowerModeName(mPairProtocolIdentity.powerSaveMode),
+                     mPairProtocolIdentity.ioMembershipFlag ? 1U : 0U,
+                     mPairProtocolIdentity.rfSupportInNode ? 1U : 0U,
+                     (mPairProtocolIdentity.multiInfoByte & IOHC_DISCOVERY_UNKNOWN_BIT4_MASK) ? 1U : 0U,
+                     mPairProtocolIdentity.syncControlGroupCandidate ? 1U : 0U,
+                     static_cast<unsigned>(mPairProtocolIdentity.slaveTimeClass),
+                     static_cast<unsigned>(mPairProtocolIdentity.slaveTimeKlfValue),
+                     mPairProtocolIdentity.slaveTimeUnitConfirmed ? 1U : 0U);
+        if (mPairProtocolIdentity.hasDiscoveryTimestamp)
             logInfoP("PairDiag: discovery timestamp: 0x%04X",
-                     static_cast<unsigned>(mPairDiscoveryMetadata.discoveryTimestamp));
+                     static_cast<unsigned>(mPairProtocolIdentity.discoveryTimestamp));
     }
     logInfoP("PairDiag: 1W mode=%s profile=%s addDestination=%u/%u finalizer=%s traceEntries=%u",
              pairing1WModeName(mPairing1WMode),
@@ -5093,9 +5200,9 @@ void IoHomeController::loop()
                         // backbone reference, including the valid value zero.
                         IoHomecontrolChannel *lPairChannel =
                             mModule ? mModule->getChannel(mPairingChannel) : nullptr;
-                        captureDiscoveryMetadata(lPairChannel, mRxFrame,
+                        captureProtocolIdentity(lPairChannel, mRxFrame,
                                                  "pairing discovery",
-                                                 &mPairDiscoveryMetadata);
+                                                 &mPairProtocolIdentity);
                         mDiscoveredNodeId = lSource;
                         // Cap subsequent directed START preambles to the exact
                         // discovery request that produced this correlated 0x29.
@@ -5273,12 +5380,12 @@ void IoHomeController::loop()
                                 logInfoP("PairDiag: device name=%s", lChannel->getDeviceName());
                             else if (lChannel && mPairEnrichmentStep == PairEnrichmentStep::GeneralInfo2)
                             {
-                                const IoHomePostPairEnrichment &lEnrichment =
-                                    lChannel->getPostPairEnrichment();
+                                const IoHomeProductIdentityEvidence &lEnrichment =
+                                    lChannel->getProductIdentityEvidence();
                                 if (lEnrichment.generalInfo2TypeValid)
-                                    logInfoP("PairDiag: GI2 type=%u subtype=%u discovery=%s",
-                                             lEnrichment.generalInfo2DeviceType,
-                                             static_cast<unsigned>(lEnrichment.generalInfo2Subtype),
+                                    logInfoP("PairDiag: GI2 profile=%u subProfile=%u discovery=%s",
+                                             lEnrichment.generalInfo2Profile,
+                                             static_cast<unsigned>(lEnrichment.generalInfo2SubProfile),
                                              lEnrichment.generalInfo2MatchesDiscovery ? "match" : "mismatch");
                             }
                         }
@@ -5747,6 +5854,8 @@ void IoHomeController::processTxPending()
     RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
     if (lErr == RadioError::None)
     {
+        if (!lIs1WFrame)
+            beginResponseTimingAttempt();
         mStateTimer = millis();
         mState = ControllerState::TxInProgress;
     }
@@ -5766,6 +5875,8 @@ void IoHomeController::processTxInProgress()
 {
     if (mRadio.state() != RadioState::Transmitting)
     {
+        if ((mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) == 0)
+            markResponseTimingTxEnd();
         const RadioError lRxErr = mRadio.startReceive();
         if (lRxErr == RadioError::Busy)
             return;
@@ -5807,6 +5918,7 @@ void IoHomeController::processTxInProgress()
         else
         {
             // 2W: switch to RX to listen for response
+            markResponseTimingTxEnd();
             const RadioError lRxErr = mRadio.startReceive();
             if (lRxErr == RadioError::Busy)
                 return;
@@ -6062,6 +6174,8 @@ void IoHomeController::processResponse()
             mState = ControllerState::WaitResponse;
         return;
     }
+
+    recordResponseTiming(mRxFrame.commandId != IoHomeCommand::ChallengeRequest);
 
     // Check for challenge-response authentication (0x3C) for authenticated 2W commands
     if (mRxFrame.commandId == IoHomeCommand::ChallengeRequest &&
@@ -8945,8 +9059,8 @@ void IoHomeController::dispatchRxFrame()
          mRxFrame.commandId == IoHomeCommand::DiscoverSPEResponse))
     {
         IoHomecontrolChannel *lChannel = channelForNode(lSrcNode);
-        IoHomeDiscoveryMetadata lMetadata;
-        captureDiscoveryMetadata(lChannel, mRxFrame,
+        IoHomeProtocolIdentity lMetadata;
+        captureProtocolIdentity(lChannel, mRxFrame,
                                  "roll-call discovery", &lMetadata);
         mModule->onDiscoveryResponse(mRxFrame, lMetadata);
         mModule->remoteMap().observeAddress(lSrcNode);
@@ -9170,7 +9284,7 @@ void IoHomeController::dispatchRxFrame()
             }
             case IoHomeCommand::GetGeneralInfo2Response:
             {
-                // GI2 confirms type/subtype at bytes 10..11. The channel keeps
+                // GI2 confirms profile/subProfile at bytes 10..11. The channel keeps
                 // this secondary result beside, never over, the primary 0x29.
                 lCh->onPostPairEnrichmentResponse(
                     mRxFrame.commandId, mRxFrame.data, mRxFrame.dataLen);

@@ -2165,7 +2165,7 @@ TEST(general_info1_response_decode)
     uint16_t devType = 0x0002;
     uint8_t subType = 0x01;
     uint8_t manufacturer = 0x02;
-    encodePackedDeviceType(devType, subType, frame.data[0], frame.data[1]);
+    encodePackedProfile(devType, subType, frame.data[0], frame.data[1]);
     frame.data[2] = manufacturer;
     frame.dataLen = 3;
     frame.hasHmac = false;
@@ -2177,12 +2177,12 @@ TEST(general_info1_response_decode)
     ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
     ASSERT_EQ((uint8_t)parsed.commandId, 0x55);
 
-    const IoHomeDiscoveryMetadata lMetadata =
-        decodeDiscoveryMetadata(parsed.data, IOHC_DISCOVERY_METADATA_SIZE);
+    const IoHomeProtocolIdentity lMetadata =
+        decodeProtocolIdentity(parsed.data, IOHC_DISCOVERY_METADATA_SIZE);
     uint8_t parsedMfg = parsed.data[2];
 
-    ASSERT_EQ(lMetadata.deviceType, 0x0002);
-    ASSERT_EQ(lMetadata.subtype, subType);
+    ASSERT_EQ(lMetadata.profile, 0x0002);
+    ASSERT_EQ(lMetadata.subProfile, subType);
     ASSERT_EQ(parsedMfg, 0x02);
 }
 
@@ -2192,13 +2192,13 @@ TEST(general_info1_all_device_types)
     for (uint16_t devType = 0; devType <= 0x03FF; devType += 0x80)
     {
         uint8_t lPacked[2] = {};
-        encodePackedDeviceType(devType, 0x2A, lPacked[0], lPacked[1]);
-        const IoHomeDiscoveryMetadata lDecoded =
-            decodeDiscoveryMetadata(lPacked, sizeof(lPacked));
-        if (lDecoded.deviceType != devType || lDecoded.subtype != 0x2A)
+        encodePackedProfile(devType, 0x2A, lPacked[0], lPacked[1]);
+        const IoHomeProtocolIdentity lDecoded =
+            decodeProtocolIdentity(lPacked, sizeof(lPacked));
+        if (lDecoded.profile != devType || lDecoded.subProfile != 0x2A)
         {
             printf("[FAIL] device type 0x%03X roundtrip failed: got 0x%03X subtype=0x%02X\n",
-                   devType, lDecoded.deviceType, lDecoded.subtype);
+                   devType, lDecoded.profile, lDecoded.subProfile);
             sTestsFailed++;
             return;
         }
@@ -2303,64 +2303,61 @@ TEST(discovery_response_metadata_uses_full_layout_offsets)
     const uint8_t lData[] = {
         0x00, 0x80, 0x00, 0x00, 0x00, 0x01, 0x1D, 0xFF, 0xFF};
 
-    const IoHomeDiscoveryMetadata lMetadata =
-        decodeDiscoveryMetadata(lData, sizeof(lData));
+    const IoHomeProtocolIdentity lMetadata =
+        decodeProtocolIdentity(lData, sizeof(lData));
 
     ASSERT_TRUE(lMetadata.valid);
     ASSERT_TRUE(lMetadata.fullMetadata);
-    ASSERT_EQ(lMetadata.deviceType,
+    ASSERT_EQ(lMetadata.profile,
               static_cast<uint16_t>(IoHomeDeviceType::RollerShutter));
-    ASSERT_EQ(lMetadata.subtype, 0);
+    ASSERT_EQ(lMetadata.subProfile, 0);
     ASSERT_EQ(lMetadata.nodeTypeSubType, 0x0080);
-    ASSERT_TRUE(lMetadata.hasBackboneId);
-    ASSERT_EQ(lMetadata.backboneId, 0x000000U);
-    ASSERT_EQ(lMetadata.manufacturer,
+    ASSERT_TRUE(lMetadata.hasIoBackboneAddress);
+    ASSERT_EQ(lMetadata.ioBackboneAddress, 0x000000U);
+    ASSERT_EQ(lMetadata.manufacturerId,
               static_cast<uint8_t>(IoHomeManufacturer::Velux));
     ASSERT_TRUE(lMetadata.hasMib);
-    ASSERT_EQ(lMetadata.mib, 0x1D);
-    ASSERT_EQ(lMetadata.powerMode, IoHomePowerMode::LowPower);
-    ASSERT_TRUE(lMetadata.ioMember);
-    ASSERT_TRUE(lMetadata.rfSupport);
+    ASSERT_EQ(lMetadata.multiInfoByte, 0x1D);
+    ASSERT_EQ(lMetadata.powerSaveMode, IoHomePowerMode::LowPower);
+    ASSERT_TRUE(lMetadata.ioMembershipFlag);
+    ASSERT_TRUE(lMetadata.rfSupportInNode);
     ASSERT_TRUE(!lMetadata.syncControlGroupCandidate);
-    ASSERT_EQ(lMetadata.turnaroundClass, 0);
-    ASSERT_EQ(lMetadata.turnaroundKlfValue, 5);
-    ASSERT_TRUE(!lMetadata.turnaroundUnitConfirmed);
+    ASSERT_EQ(lMetadata.slaveTimeClass, 0);
+    ASSERT_EQ(lMetadata.slaveTimeKlfValue, 5);
+    ASSERT_TRUE(!lMetadata.slaveTimeUnitConfirmed);
     ASSERT_TRUE(lMetadata.hasDiscoveryTimestamp);
     ASSERT_EQ(lMetadata.discoveryTimestamp, 0xFFFF);
-    ASSERT_TRUE(lMetadata.hasPowerClass);
-    ASSERT_TRUE(lMetadata.lowPower);
     ASSERT_EQ(lMetadata.rawDataLen, sizeof(lData));
     ASSERT_MEM_EQ(lMetadata.rawData, lData, sizeof(lData));
 
-    const IoHomeDiscoveryMetadata lTypeOnly =
-        decodeDiscoveryMetadata(lData, IOHC_DISCOVERY_METADATA_SIZE);
+    const IoHomeProtocolIdentity lTypeOnly =
+        decodeProtocolIdentity(lData, IOHC_DISCOVERY_METADATA_SIZE);
     ASSERT_TRUE(lTypeOnly.valid);
     ASSERT_TRUE(!lTypeOnly.fullMetadata);
-    ASSERT_TRUE(!lTypeOnly.hasBackboneId);
-    ASSERT_EQ(lTypeOnly.manufacturer, 0);
+    ASSERT_TRUE(!lTypeOnly.hasIoBackboneAddress);
+    ASSERT_EQ(lTypeOnly.manufacturerId, 0);
     ASSERT_TRUE(!lTypeOnly.hasMib);
-    ASSERT_EQ(lTypeOnly.powerMode, IoHomePowerMode::Unknown);
-    ASSERT_EQ(lTypeOnly.turnaroundClass, 0xFF);
-    ASSERT_EQ(lTypeOnly.turnaroundKlfValue, 0);
+    ASSERT_EQ(lTypeOnly.powerSaveMode, IoHomePowerMode::Unknown);
+    ASSERT_EQ(lTypeOnly.slaveTimeClass, 0xFF);
+    ASSERT_EQ(lTypeOnly.slaveTimeKlfValue, 0);
     ASSERT_TRUE(!lTypeOnly.hasDiscoveryTimestamp);
-    ASSERT_TRUE(!lTypeOnly.hasPowerClass);
 }
 
 TEST(discovery_complete_model_roundtrips_and_matches_normal_and_spe_responses)
 {
     const uint8_t lPayload[IOHC_DISCOVERY_FULL_SIZE] = {
         0x04, 0x41, 0x12, 0x34, 0x56, 0x02, 0x6C, 0xAB, 0xCD};
-    const IoHomeDiscoveryMetadata lOriginal =
-        decodeDiscoveryMetadata(lPayload, sizeof(lPayload));
+    const IoHomeProtocolIdentity lOriginal =
+        decodeProtocolIdentity(lPayload, sizeof(lPayload));
     ASSERT_TRUE(lOriginal.valid);
     ASSERT_TRUE(lOriginal.fullMetadata);
 
     uint8_t lEncoded[IOHC_DISCOVERY_FULL_SIZE] = {};
-    ASSERT_EQ(encodeDiscoveryMetadata(lOriginal, lEncoded, sizeof(lEncoded)),
+    ASSERT_EQ(encodeProtocolIdentity(lOriginal, lEncoded, sizeof(lEncoded)),
               IOHC_DISCOVERY_FULL_SIZE);
     ASSERT_MEM_EQ(lEncoded, lPayload, sizeof(lPayload));
 
-    IoHomeDiscoveryMetadata lDecodedByCommand[2];
+    IoHomeProtocolIdentity lDecodedByCommand[2];
     const IoHomeCommand lCommands[] = {
         IoHomeCommand::DiscoverResponse,
         IoHomeCommand::DiscoverSPEResponse,
@@ -2382,21 +2379,21 @@ TEST(discovery_complete_model_roundtrips_and_matches_normal_and_spe_responses)
         IoHomeFrame lParsed;
         ASSERT_TRUE(deserializeFrameForTest(lParsed, lWire, lWireLen));
         lDecodedByCommand[i] =
-            decodeDiscoveryMetadata(lParsed.data, lParsed.dataLen);
+            decodeProtocolIdentity(lParsed.data, lParsed.dataLen);
     }
 
-    ASSERT_EQ(lDecodedByCommand[0].deviceType, lDecodedByCommand[1].deviceType);
-    ASSERT_EQ(lDecodedByCommand[0].subtype, lDecodedByCommand[1].subtype);
-    ASSERT_EQ(lDecodedByCommand[0].backboneId, lDecodedByCommand[1].backboneId);
-    ASSERT_EQ(lDecodedByCommand[0].manufacturer, lDecodedByCommand[1].manufacturer);
-    ASSERT_EQ(lDecodedByCommand[0].mib, lDecodedByCommand[1].mib);
-    ASSERT_EQ(lDecodedByCommand[0].powerMode, lDecodedByCommand[1].powerMode);
-    ASSERT_EQ(lDecodedByCommand[0].ioMember, lDecodedByCommand[1].ioMember);
-    ASSERT_EQ(lDecodedByCommand[0].rfSupport, lDecodedByCommand[1].rfSupport);
+    ASSERT_EQ(lDecodedByCommand[0].profile, lDecodedByCommand[1].profile);
+    ASSERT_EQ(lDecodedByCommand[0].subProfile, lDecodedByCommand[1].subProfile);
+    ASSERT_EQ(lDecodedByCommand[0].ioBackboneAddress, lDecodedByCommand[1].ioBackboneAddress);
+    ASSERT_EQ(lDecodedByCommand[0].manufacturerId, lDecodedByCommand[1].manufacturerId);
+    ASSERT_EQ(lDecodedByCommand[0].multiInfoByte, lDecodedByCommand[1].multiInfoByte);
+    ASSERT_EQ(lDecodedByCommand[0].powerSaveMode, lDecodedByCommand[1].powerSaveMode);
+    ASSERT_EQ(lDecodedByCommand[0].ioMembershipFlag, lDecodedByCommand[1].ioMembershipFlag);
+    ASSERT_EQ(lDecodedByCommand[0].rfSupportInNode, lDecodedByCommand[1].rfSupportInNode);
     ASSERT_EQ(lDecodedByCommand[0].syncControlGroupCandidate,
               lDecodedByCommand[1].syncControlGroupCandidate);
-    ASSERT_EQ(lDecodedByCommand[0].turnaroundClass,
-              lDecodedByCommand[1].turnaroundClass);
+    ASSERT_EQ(lDecodedByCommand[0].slaveTimeClass,
+              lDecodedByCommand[1].slaveTimeClass);
     ASSERT_EQ(lDecodedByCommand[0].discoveryTimestamp,
               lDecodedByCommand[1].discoveryTimestamp);
     ASSERT_MEM_EQ(lDecodedByCommand[0].rawData,
@@ -2410,21 +2407,21 @@ TEST(discovery_timestamp_is_big_endian_raw_and_requires_both_bytes)
     lData[IOHC_DISCOVERY_TIMESTAMP_OFFSET] = 0x12;
     lData[IOHC_DISCOVERY_TIMESTAMP_OFFSET + 1] = 0x34;
 
-    const IoHomeDiscoveryMetadata lTruncated =
-        decodeDiscoveryMetadata(lData, IOHC_DISCOVERY_TIMESTAMP_OFFSET + 1);
+    const IoHomeProtocolIdentity lTruncated =
+        decodeProtocolIdentity(lData, IOHC_DISCOVERY_TIMESTAMP_OFFSET + 1);
     ASSERT_TRUE(lTruncated.valid);
     ASSERT_TRUE(!lTruncated.hasDiscoveryTimestamp);
     ASSERT_EQ(lTruncated.discoveryTimestamp, 0);
 
-    const IoHomeDiscoveryMetadata lComplete =
-        decodeDiscoveryMetadata(lData, sizeof(lData));
+    const IoHomeProtocolIdentity lComplete =
+        decodeProtocolIdentity(lData, sizeof(lData));
     ASSERT_TRUE(lComplete.hasDiscoveryTimestamp);
     ASSERT_EQ(lComplete.discoveryTimestamp, 0x1234);
 
     lData[IOHC_DISCOVERY_TIMESTAMP_OFFSET] = 0xFF;
     lData[IOHC_DISCOVERY_TIMESTAMP_OFFSET + 1] = 0xFF;
-    const IoHomeDiscoveryMetadata lFfff =
-        decodeDiscoveryMetadata(lData, sizeof(lData));
+    const IoHomeProtocolIdentity lFfff =
+        decodeProtocolIdentity(lData, sizeof(lData));
     ASSERT_TRUE(lFfff.hasDiscoveryTimestamp);
     ASSERT_EQ(lFfff.discoveryTimestamp, 0xFFFF);
 }
@@ -2438,12 +2435,12 @@ TEST(discovery_timestamp_repeated_values_remain_directly_comparable)
     lFirstData[8] = lSameData[8] = 0x10;
     lChangedData[8] = 0x11;
 
-    const IoHomeDiscoveryMetadata lFirst =
-        decodeDiscoveryMetadata(lFirstData, sizeof(lFirstData));
-    const IoHomeDiscoveryMetadata lSame =
-        decodeDiscoveryMetadata(lSameData, sizeof(lSameData));
-    const IoHomeDiscoveryMetadata lChanged =
-        decodeDiscoveryMetadata(lChangedData, sizeof(lChangedData));
+    const IoHomeProtocolIdentity lFirst =
+        decodeProtocolIdentity(lFirstData, sizeof(lFirstData));
+    const IoHomeProtocolIdentity lSame =
+        decodeProtocolIdentity(lSameData, sizeof(lSameData));
+    const IoHomeProtocolIdentity lChanged =
+        decodeProtocolIdentity(lChangedData, sizeof(lChangedData));
 
     ASSERT_TRUE(lFirst.hasDiscoveryTimestamp);
     ASSERT_EQ(lFirst.discoveryTimestamp, lSame.discoveryTimestamp);
@@ -2461,25 +2458,26 @@ TEST(discovery_manufacturer_mapping_preserves_known_and_unknown_ids)
         {1, "VELUX"}, {2, "Somfy"}, {3, "Honeywell"}, {4, "Hoermann"},
         {5, "ASSA ABLOY"}, {6, "Niko"}, {7, "WINDOW MASTER"},
         {8, "Renson"}, {9, "CIAT"}, {10, "Secuyou"}, {11, "OVERKIZ"},
-        {12, "Atlantic Group"},
+        {12, "Atlantic Group"}, {13, "Zehnder Group"},
+        {14, "Unresolved"}, {15, "Unresolved"},
     };
 
     for (const ManufacturerCase &lCase : lCases)
     {
         uint8_t lData[IOHC_DISCOVERY_EXTENDED_SIZE] = {};
         lData[IOHC_DISCOVERY_MANUFACTURER_OFFSET] = lCase.id;
-        const IoHomeDiscoveryMetadata lMetadata =
-            decodeDiscoveryMetadata(lData, sizeof(lData));
-        ASSERT_EQ(lMetadata.manufacturer, lCase.id);
-        ASSERT_TRUE(strcmp(ioHomeManufacturerName(lMetadata.manufacturer), lCase.name) == 0);
+        const IoHomeProtocolIdentity lMetadata =
+            decodeProtocolIdentity(lData, sizeof(lData));
+        ASSERT_EQ(lMetadata.manufacturerId, lCase.id);
+        ASSERT_TRUE(strcmp(ioHomeManufacturerName(lMetadata.manufacturerId), lCase.name) == 0);
     }
 
     uint8_t lUnknownData[IOHC_DISCOVERY_EXTENDED_SIZE] = {};
     lUnknownData[IOHC_DISCOVERY_MANUFACTURER_OFFSET] = 0x7E;
-    const IoHomeDiscoveryMetadata lUnknown =
-        decodeDiscoveryMetadata(lUnknownData, sizeof(lUnknownData));
-    ASSERT_EQ(lUnknown.manufacturer, 0x7E);
-    ASSERT_TRUE(strcmp(ioHomeManufacturerName(lUnknown.manufacturer), "Unknown") == 0);
+    const IoHomeProtocolIdentity lUnknown =
+        decodeProtocolIdentity(lUnknownData, sizeof(lUnknownData));
+    ASSERT_EQ(lUnknown.manufacturerId, 0x7E);
+    ASSERT_TRUE(strcmp(ioHomeManufacturerName(lUnknown.manufacturerId), "Unknown") == 0);
 }
 
 TEST(discovery_multi_information_byte_decodes_klf_semantics_without_coercion)
@@ -2488,36 +2486,32 @@ TEST(discovery_multi_information_byte_decodes_klf_semantics_without_coercion)
     {
         uint8_t lData[IOHC_DISCOVERY_EXTENDED_SIZE] = {};
         lData[IOHC_DISCOVERY_FLAGS_OFFSET] =
-            static_cast<uint8_t>((lClass << IOHC_DISCOVERY_TURNAROUND_SHIFT) |
+            static_cast<uint8_t>((lClass << IOHC_DISCOVERY_SLAVE_TIME_CLASS_SHIFT) |
                                  IOHC_DISCOVERY_IO_MEMBER_MASK |
                                  IOHC_DISCOVERY_RF_SUPPORT_MASK);
-        const IoHomeDiscoveryMetadata lMetadata =
-            decodeDiscoveryMetadata(lData, sizeof(lData));
+        const IoHomeProtocolIdentity lMetadata =
+            decodeProtocolIdentity(lData, sizeof(lData));
         ASSERT_TRUE(lMetadata.hasMib);
-        ASSERT_EQ(lMetadata.mib, lData[IOHC_DISCOVERY_FLAGS_OFFSET]);
-        ASSERT_EQ(lMetadata.powerMode, IoHomePowerMode::AlwaysAlive);
-        ASSERT_TRUE(lMetadata.hasPowerClass);
-        ASSERT_TRUE(!lMetadata.lowPower);
-        ASSERT_TRUE(lMetadata.ioMember);
-        ASSERT_TRUE(lMetadata.rfSupport);
+        ASSERT_EQ(lMetadata.multiInfoByte, lData[IOHC_DISCOVERY_FLAGS_OFFSET]);
+        ASSERT_EQ(lMetadata.powerSaveMode, IoHomePowerMode::AlwaysAlive);
+        ASSERT_TRUE(lMetadata.ioMembershipFlag);
+        ASSERT_TRUE(lMetadata.rfSupportInNode);
         ASSERT_TRUE(!lMetadata.syncControlGroupCandidate);
-        ASSERT_EQ(lMetadata.turnaroundClass, lClass);
-        ASSERT_EQ(lMetadata.turnaroundKlfValue,
+        ASSERT_EQ(lMetadata.slaveTimeClass, lClass);
+        ASSERT_EQ(lMetadata.slaveTimeKlfValue,
                   static_cast<uint8_t>(lClass == 0 ? 5 : lClass == 1 ? 10 : lClass == 2 ? 20 : 40));
-        ASSERT_TRUE(!lMetadata.turnaroundUnitConfirmed);
+        ASSERT_TRUE(!lMetadata.slaveTimeUnitConfirmed);
     }
 
     uint8_t lReservedData[IOHC_DISCOVERY_EXTENDED_SIZE] = {};
     lReservedData[IOHC_DISCOVERY_FLAGS_OFFSET] =
         static_cast<uint8_t>(0x02 | IOHC_DISCOVERY_SYNC_CONTROL_GROUP_MASK);
-    const IoHomeDiscoveryMetadata lReserved =
-        decodeDiscoveryMetadata(lReservedData, sizeof(lReservedData));
-    ASSERT_EQ(lReserved.mib, lReservedData[IOHC_DISCOVERY_FLAGS_OFFSET]);
-    ASSERT_EQ(lReserved.powerMode, IoHomePowerMode::Unknown);
-    ASSERT_TRUE(!lReserved.hasPowerClass);
-    ASSERT_TRUE(!lReserved.lowPower);
-    ASSERT_TRUE(!lReserved.ioMember);
-    ASSERT_TRUE(!lReserved.rfSupport);
+    const IoHomeProtocolIdentity lReserved =
+        decodeProtocolIdentity(lReservedData, sizeof(lReservedData));
+    ASSERT_EQ(lReserved.multiInfoByte, lReservedData[IOHC_DISCOVERY_FLAGS_OFFSET]);
+    ASSERT_EQ(lReserved.powerSaveMode, IoHomePowerMode::Unknown);
+    ASSERT_TRUE(!lReserved.ioMembershipFlag);
+    ASSERT_TRUE(!lReserved.rfSupportInNode);
     ASSERT_TRUE(lReserved.syncControlGroupCandidate);
 }
 
@@ -2541,8 +2535,8 @@ TEST(discovery_type_subtype_helpers_cover_klf_profiles_and_reserved_values)
 
     for (const TestCase &lCase : lCases)
     {
-        ASSERT_EQ(decodePackedDeviceType(lCase.packed0, lCase.packed1), lCase.type);
-        ASSERT_EQ(decodePackedDeviceSubtype(lCase.packed1), lCase.subtype);
+        ASSERT_EQ(decodePackedProfile(lCase.packed0, lCase.packed1), lCase.type);
+        ASSERT_EQ(decodePackedSubProfile(lCase.packed1), lCase.subtype);
         ASSERT_EQ(encodeNodeTypeSubType(lCase.type, lCase.subtype), lCase.combined);
 
         uint16_t lDecodedType = 0;
@@ -2553,7 +2547,7 @@ TEST(discovery_type_subtype_helpers_cover_klf_profiles_and_reserved_values)
 
         uint8_t lPacked0 = 0;
         uint8_t lPacked1 = 0;
-        encodePackedDeviceType(lCase.type, lCase.subtype, lPacked0, lPacked1);
+        encodePackedProfile(lCase.type, lCase.subtype, lPacked0, lPacked1);
         ASSERT_EQ(lPacked0, lCase.packed0);
         ASSERT_EQ(lPacked1, lCase.packed1);
     }
@@ -2562,18 +2556,18 @@ TEST(discovery_type_subtype_helpers_cover_klf_profiles_and_reserved_values)
 TEST(packed_device_metadata_known_answers_and_roundtrips)
 {
     const uint8_t lRollerShutter[] = {0x00, 0x80};
-    const IoHomeDiscoveryMetadata lRoller =
-        decodeDiscoveryMetadata(lRollerShutter, sizeof(lRollerShutter));
+    const IoHomeProtocolIdentity lRoller =
+        decodeProtocolIdentity(lRollerShutter, sizeof(lRollerShutter));
     ASSERT_TRUE(lRoller.valid);
-    ASSERT_EQ(lRoller.deviceType, 0x02);
-    ASSERT_EQ(lRoller.subtype, 0);
+    ASSERT_EQ(lRoller.profile, 0x02);
+    ASSERT_EQ(lRoller.subProfile, 0);
 
     const uint8_t lHorizontalAwning[] = {0x04, 0x00};
-    const IoHomeDiscoveryMetadata lHorizontal =
-        decodeDiscoveryMetadata(lHorizontalAwning, sizeof(lHorizontalAwning));
+    const IoHomeProtocolIdentity lHorizontal =
+        decodeProtocolIdentity(lHorizontalAwning, sizeof(lHorizontalAwning));
     ASSERT_TRUE(lHorizontal.valid);
-    ASSERT_EQ(lHorizontal.deviceType, 0x10);
-    ASSERT_EQ(lHorizontal.subtype, 0);
+    ASSERT_EQ(lHorizontal.profile, 0x10);
+    ASSERT_EQ(lHorizontal.subProfile, 0);
 
     const uint16_t lTypes[] = {
         0x01, 0x02, 0x03, 0x04, 0x06, 0x0D, 0x10, 0x11, 0x18,
@@ -2584,14 +2578,82 @@ TEST(packed_device_metadata_known_answers_and_roundtrips)
         for (uint8_t lSubtype : lSubtypes)
         {
             uint8_t lPacked[2] = {};
-            encodePackedDeviceType(lType, lSubtype, lPacked[0], lPacked[1]);
-            const IoHomeDiscoveryMetadata lDecoded =
-                decodeDiscoveryMetadata(lPacked, sizeof(lPacked));
+            encodePackedProfile(lType, lSubtype, lPacked[0], lPacked[1]);
+            const IoHomeProtocolIdentity lDecoded =
+                decodeProtocolIdentity(lPacked, sizeof(lPacked));
             ASSERT_TRUE(lDecoded.valid);
-            ASSERT_EQ(lDecoded.deviceType, lType);
-            ASSERT_EQ(lDecoded.subtype, lSubtype);
+            ASSERT_EQ(lDecoded.profile, lType);
+            ASSERT_EQ(lDecoded.subProfile, lSubtype);
         }
     }
+}
+
+TEST(discovery_extended_profiles_and_somfy_identity_fields_roundtrip)
+{
+    const uint16_t lProfiles[] = {25, 255, 1008, 1023};
+    for (const uint16_t lProfile : lProfiles)
+    {
+        uint8_t lData[IOHC_DISCOVERY_FULL_SIZE] = {};
+        encodePackedProfile(lProfile, 0x3F, lData[0], lData[1]);
+        lData[2] = 0x12;
+        lData[3] = 0x34;
+        lData[4] = 0x56;
+        lData[5] = 0x7E; // unknown manufacturer remains accepted numerically
+        lData[6] = 0xDD; // class=3, bit4 set, power=1, membership+RF set
+        lData[7] = 0xFF;
+        lData[8] = 0xFF;
+
+        IoHomeProtocolIdentity lIdentity =
+            decodeProtocolIdentity(lData, sizeof(lData));
+        lIdentity.ioAddress = 0xFB7B08;
+
+        ASSERT_TRUE(lIdentity.valid);
+        ASSERT_EQ(lIdentity.ioAddress, 0xFB7B08U);
+        ASSERT_EQ(lIdentity.ioBackboneAddress, 0x123456U);
+        ASSERT_TRUE(lIdentity.ioAddress != lIdentity.ioBackboneAddress);
+        ASSERT_EQ(lIdentity.profile, lProfile);
+        ASSERT_EQ(lIdentity.subProfile, 0x3F);
+        ASSERT_EQ(lIdentity.manufacturerId, 0x7E);
+        ASSERT_EQ(lIdentity.multiInfoByte, 0xDD);
+        ASSERT_EQ(lIdentity.powerSaveModeRaw, 1U);
+        ASSERT_EQ(lIdentity.powerSaveMode, IoHomePowerMode::LowPower);
+        ASSERT_TRUE(lIdentity.ioMembershipFlag);
+        ASSERT_TRUE(lIdentity.rfSupportInNode);
+        ASSERT_TRUE((lIdentity.multiInfoByte & IOHC_DISCOVERY_UNKNOWN_BIT4_MASK) != 0);
+        ASSERT_EQ(lIdentity.slaveTimeClass, 3U);
+        ASSERT_EQ(lIdentity.slaveTimeKlfValue, 40U);
+        ASSERT_TRUE(!lIdentity.slaveTimeUnitConfirmed);
+        ASSERT_EQ(lIdentity.keyState, IoHomeKeyState::Unknown);
+        ASSERT_EQ(lIdentity.keyStateSource, IoHomeMetadataSource::Unknown);
+
+        uint8_t lEncoded[IOHC_DISCOVERY_FULL_SIZE] = {};
+        ASSERT_EQ(encodeProtocolIdentity(lIdentity, lEncoded, sizeof(lEncoded)),
+                  sizeof(lEncoded));
+        ASSERT_MEM_EQ(lEncoded, lData, sizeof(lData));
+    }
+
+    uint8_t lZeroBackbone[IOHC_DISCOVERY_FULL_SIZE] = {};
+    encodePackedProfile(29, 2, lZeroBackbone[0], lZeroBackbone[1]);
+    lZeroBackbone[5] = static_cast<uint8_t>(IoHomeManufacturer::ZehnderGroup);
+    const IoHomeProtocolIdentity lZero =
+        decodeProtocolIdentity(lZeroBackbone, sizeof(lZeroBackbone));
+    ASSERT_TRUE(lZero.hasIoBackboneAddress);
+    ASSERT_EQ(lZero.ioBackboneAddress, 0U);
+}
+
+TEST(general_info1_product_signature_is_first_ten_bytes_and_binary_safe)
+{
+    static const uint8_t kBinaryGi1[] = {
+        0x00, 0xFF, 0x10, 0x3F, 0x80, 0x7F, 0x01,
+        0x02, 0x03, 0x04, 0xAA, 0xBB, 0xCC, 0xDD};
+    IoHomeProductIdentityEvidence lEvidence;
+    memcpy(lEvidence.generalInfo1, kBinaryGi1, sizeof(kBinaryGi1));
+    lEvidence.generalInfo1Len = sizeof(kBinaryGi1);
+
+    const IoHomeProductSignature lSignature =
+        ioHomeGeneralInfo1ProductSignature(lEvidence);
+    ASSERT_EQ(lSignature.length, IOHC_PRODUCT_SIGNATURE_SIZE);
+    ASSERT_MEM_EQ(lSignature.bytes, kBinaryGi1, IOHC_PRODUCT_SIGNATURE_SIZE);
 }
 
 TEST(discovery_spe_response_frame)
@@ -4274,17 +4336,17 @@ TEST(integration_device_info_query)
     info1Resp.setDestNode(gwNode);
     info1Resp.commandId = IoHomeCommand::GetGeneralInfo1Response;
     // Device type 0x01 (venetian blind), subtype 0x00, mfg 0x02 (Somfy)
-    encodePackedDeviceType(0x01, 0x00, info1Resp.data[0], info1Resp.data[1]);
+    encodePackedProfile(0x01, 0x00, info1Resp.data[0], info1Resp.data[1]);
     info1Resp.data[2] = 0x02;
     info1Resp.dataLen = 3;
     info1Resp.hasHmac = false;
     len = serializeFrameForTest(info1Resp, buf, sizeof(buf));
 
     ASSERT_TRUE(deserializeFrameForTest(parsed, buf, len));
-    const IoHomeDiscoveryMetadata lInfoMetadata =
-        decodeDiscoveryMetadata(parsed.data, IOHC_DISCOVERY_METADATA_SIZE);
+    const IoHomeProtocolIdentity lInfoMetadata =
+        decodeProtocolIdentity(parsed.data, IOHC_DISCOVERY_METADATA_SIZE);
     uint8_t mfg = parsed.data[2];
-    ASSERT_EQ(lInfoMetadata.deviceType, 0x01); // venetian blind
+    ASSERT_EQ(lInfoMetadata.profile, 0x01); // venetian blind
     ASSERT_EQ(mfg, 0x02);     // Somfy
 
     // --- GetGeneralInfo3 request ---
@@ -10357,9 +10419,9 @@ TEST(controller_post_pair_enrichment_is_ordered_raw_safe_and_optional)
     lController.setSystemKey(lKey);
     ASSERT_TRUE(advancePairingToWaitKeyTransferConfirmation(
         lController, lRemoteNodeId, lDeviceNodeId));
-    lChannel.onDiscoveryMetadata(
+    lChannel.onProtocolIdentity(
         lDeviceNodeId,
-        decodeDiscoveryMetadata(kDiscoveryPayload, sizeof(kDiscoveryPayload)));
+        decodeProtocolIdentity(kDiscoveryPayload, sizeof(kDiscoveryPayload)));
 
     IoHomeFrame lFrame;
     IoHomeFrame lResponse;
@@ -10388,9 +10450,9 @@ TEST(controller_post_pair_enrichment_is_ordered_raw_safe_and_optional)
     ASSERT_TRUE(queueControllerResponse(lController, lResponse));
     ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::GetGeneralInfo2);
-    ASSERT_EQ(lChannel.getDeviceMetadata().deviceType, 2U);
-    ASSERT_EQ(lChannel.getDeviceMetadata().subtype, 0U);
-    ASSERT_EQ(lChannel.getDeviceMetadata().manufacturer,
+    ASSERT_EQ(lChannel.getProtocolIdentity().profile, 2U);
+    ASSERT_EQ(lChannel.getProtocolIdentity().subProfile, 0U);
+    ASSERT_EQ(lChannel.getProtocolIdentity().manufacturerId,
               static_cast<uint8_t>(IoHomeManufacturer::Velux));
 
     buildSimpleResponseFrame(lResponse, lRemoteNodeId, lDeviceNodeId,
@@ -10401,8 +10463,8 @@ TEST(controller_post_pair_enrichment_is_ordered_raw_safe_and_optional)
     ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::GetGeneralInfo3);
 
-    const IoHomePostPairEnrichment &lEnrichment =
-        lChannel.getPostPairEnrichment();
+    const IoHomeProductIdentityEvidence &lEnrichment =
+        lChannel.getProductIdentityEvidence();
     ASSERT_EQ(lEnrichment.nameResponseLen, sizeof(kName));
     ASSERT_MEM_EQ(lEnrichment.nameResponse, kName, sizeof(kName));
     ASSERT_EQ(lEnrichment.generalInfo1Len, sizeof(kSomfyGi1));
@@ -10410,8 +10472,8 @@ TEST(controller_post_pair_enrichment_is_ordered_raw_safe_and_optional)
     ASSERT_EQ(lEnrichment.generalInfo2Len, sizeof(kGi2));
     ASSERT_MEM_EQ(lEnrichment.generalInfo2, kGi2, sizeof(kGi2));
     ASSERT_TRUE(lEnrichment.generalInfo2TypeValid);
-    ASSERT_EQ(lEnrichment.generalInfo2DeviceType, 2U);
-    ASSERT_EQ(lEnrichment.generalInfo2Subtype, 0U);
+    ASSERT_EQ(lEnrichment.generalInfo2Profile, 2U);
+    ASSERT_EQ(lEnrichment.generalInfo2SubProfile, 0U);
     ASSERT_TRUE(lEnrichment.generalInfo2MatchesDiscovery);
 
     // GI3 is optional. Its independent timeout advances to SetConfig1 and
@@ -10469,26 +10531,30 @@ TEST(controller_pairing_stores_029_metadata_before_key_exchange_and_keeps_source
 
     // Metadata is available immediately, before the key exchange has paired
     // the channel or assigned its operational node ID.
-    ASSERT_TRUE(lChannel.hasDiscoveryMetadata());
+    ASSERT_TRUE(lChannel.hasProtocolIdentity());
     ASSERT_EQ(lChannel.getNodeId(), 0U);
-    ASSERT_EQ(lChannel.getDiscoveryNodeId(), lCapturedDeviceNodeId);
-    const IoHomeDiscoveryMetadata &lMetadata = lChannel.getDiscoveryMetadata();
+    ASSERT_EQ(lChannel.getIoAddress(), lCapturedDeviceNodeId);
+    const IoHomeProtocolIdentity &lMetadata = lChannel.getProtocolIdentity();
     ASSERT_TRUE(lMetadata.valid);
     ASSERT_TRUE(lMetadata.fullMetadata);
-    ASSERT_EQ(lMetadata.deviceType, 2U);
-    ASSERT_EQ(lMetadata.subtype, 0U);
+    ASSERT_EQ(lMetadata.ioAddress, lCapturedDeviceNodeId);
+    ASSERT_TRUE(lMetadata.ioAddress != lMetadata.ioBackboneAddress);
+    ASSERT_EQ(lMetadata.metadataSource, IoHomeMetadataSource::DiscoverResponse);
+    ASSERT_EQ(lMetadata.keyState, IoHomeKeyState::Unknown);
+    ASSERT_EQ(lMetadata.profile, 2U);
+    ASSERT_EQ(lMetadata.subProfile, 0U);
     ASSERT_EQ(lMetadata.nodeTypeSubType, 0x0080U);
-    ASSERT_TRUE(lMetadata.hasBackboneId);
-    ASSERT_EQ(lMetadata.backboneId, 0x000000U);
-    ASSERT_EQ(lMetadata.manufacturer,
+    ASSERT_TRUE(lMetadata.hasIoBackboneAddress);
+    ASSERT_EQ(lMetadata.ioBackboneAddress, 0x000000U);
+    ASSERT_EQ(lMetadata.manufacturerId,
               static_cast<uint8_t>(IoHomeManufacturer::Velux));
     ASSERT_TRUE(lMetadata.hasMib);
-    ASSERT_EQ(lMetadata.mib, 0x1D);
-    ASSERT_EQ(lMetadata.powerMode, IoHomePowerMode::LowPower);
-    ASSERT_TRUE(lMetadata.ioMember);
-    ASSERT_TRUE(lMetadata.rfSupport);
+    ASSERT_EQ(lMetadata.multiInfoByte, 0x1D);
+    ASSERT_EQ(lMetadata.powerSaveMode, IoHomePowerMode::LowPower);
+    ASSERT_TRUE(lMetadata.ioMembershipFlag);
+    ASSERT_TRUE(lMetadata.rfSupportInNode);
     ASSERT_TRUE(!lMetadata.syncControlGroupCandidate);
-    ASSERT_EQ(lMetadata.turnaroundClass, 0);
+    ASSERT_EQ(lMetadata.slaveTimeClass, 0);
     ASSERT_TRUE(lMetadata.hasDiscoveryTimestamp);
     ASSERT_EQ(lMetadata.discoveryTimestamp, 0xFFFF);
     ASSERT_EQ(lMetadata.rawDataLen, sizeof(kCapturedPayload));
@@ -10497,17 +10563,17 @@ TEST(controller_pairing_stores_029_metadata_before_key_exchange_and_keeps_source
     // The controller registry is populated by RF source before pairing leaves
     // the discovery-response state; it contains the same complete object that
     // was propagated to the eventual OAM channel.
-    const IoHomeDiscoveryMetadata *lRegistered =
-        lController.discoveryMetadataForNode(lCapturedDeviceNodeId);
+    const IoHomeProtocolIdentity *lRegistered =
+        lController.protocolIdentityForIoAddress(lCapturedDeviceNodeId);
     ASSERT_TRUE(lRegistered != nullptr);
-    ASSERT_EQ(lRegistered->deviceType, lMetadata.deviceType);
-    ASSERT_EQ(lRegistered->subtype, lMetadata.subtype);
-    ASSERT_EQ(lRegistered->manufacturer, lMetadata.manufacturer);
-    ASSERT_EQ(lRegistered->backboneId, lMetadata.backboneId);
-    ASSERT_EQ(lRegistered->mib, lMetadata.mib);
-    ASSERT_EQ(lRegistered->powerMode, lMetadata.powerMode);
-    ASSERT_EQ(lRegistered->rfSupport, lMetadata.rfSupport);
-    ASSERT_EQ(lRegistered->turnaroundClass, lMetadata.turnaroundClass);
+    ASSERT_EQ(lRegistered->profile, lMetadata.profile);
+    ASSERT_EQ(lRegistered->subProfile, lMetadata.subProfile);
+    ASSERT_EQ(lRegistered->manufacturerId, lMetadata.manufacturerId);
+    ASSERT_EQ(lRegistered->ioBackboneAddress, lMetadata.ioBackboneAddress);
+    ASSERT_EQ(lRegistered->multiInfoByte, lMetadata.multiInfoByte);
+    ASSERT_EQ(lRegistered->powerSaveMode, lMetadata.powerSaveMode);
+    ASSERT_EQ(lRegistered->rfSupportInNode, lMetadata.rfSupportInNode);
+    ASSERT_EQ(lRegistered->slaveTimeClass, lMetadata.slaveTimeClass);
     ASSERT_EQ(lRegistered->discoveryTimestamp, lMetadata.discoveryTimestamp);
     ASSERT_TRUE(lController.state() == ControllerState::PairSendDiscoveryConfirmation ||
                 lController.state() == ControllerState::PairWaitDiscoveryConfirmationAck);
@@ -10542,22 +10608,26 @@ TEST(controller_spe_discovery_registers_same_complete_metadata_model)
     lResponse.hasHmac = false;
     ASSERT_TRUE(queueControllerResponse(lController, lResponse));
 
-    const IoHomeDiscoveryMetadata *lMetadata =
-        lController.discoveryMetadataForNode(lDeviceNodeId);
+    const IoHomeProtocolIdentity *lMetadata =
+        lController.protocolIdentityForIoAddress(lDeviceNodeId);
     ASSERT_TRUE(lMetadata != nullptr);
     ASSERT_TRUE(lMetadata->valid);
     ASSERT_TRUE(lMetadata->fullMetadata);
-    ASSERT_EQ(lMetadata->deviceType, 2U);
-    ASSERT_EQ(lMetadata->subtype, 1U);
-    ASSERT_EQ(lMetadata->backboneId, 0x123456U);
-    ASSERT_EQ(lMetadata->manufacturer,
+    ASSERT_EQ(lMetadata->ioAddress, lDeviceNodeId);
+    ASSERT_EQ(lMetadata->metadataSource,
+              IoHomeMetadataSource::DiscoverSpeResponse);
+    ASSERT_EQ(lMetadata->keyState, IoHomeKeyState::Unknown);
+    ASSERT_EQ(lMetadata->profile, 2U);
+    ASSERT_EQ(lMetadata->subProfile, 1U);
+    ASSERT_EQ(lMetadata->ioBackboneAddress, 0x123456U);
+    ASSERT_EQ(lMetadata->manufacturerId,
               static_cast<uint8_t>(IoHomeManufacturer::Somfy));
-    ASSERT_EQ(lMetadata->mib, 0xED);
-    ASSERT_EQ(lMetadata->powerMode, IoHomePowerMode::LowPower);
-    ASSERT_TRUE(lMetadata->ioMember);
-    ASSERT_TRUE(lMetadata->rfSupport);
+    ASSERT_EQ(lMetadata->multiInfoByte, 0xED);
+    ASSERT_EQ(lMetadata->powerSaveMode, IoHomePowerMode::LowPower);
+    ASSERT_TRUE(lMetadata->ioMembershipFlag);
+    ASSERT_TRUE(lMetadata->rfSupportInNode);
     ASSERT_TRUE(lMetadata->syncControlGroupCandidate);
-    ASSERT_EQ(lMetadata->turnaroundClass, 3U);
+    ASSERT_EQ(lMetadata->slaveTimeClass, 3U);
     ASSERT_EQ(lMetadata->discoveryTimestamp, 0x1234U);
     ASSERT_MEM_EQ(lMetadata->rawData, kPayload, sizeof(kPayload));
 }
@@ -13584,32 +13654,32 @@ TEST(controller_gi1_raw_and_gi2_confirmation_never_overwrite_discovery)
     IoHomecontrolChannel lChannel;
     initPaired2WControllerForTest(lController, lModule, lChannel,
                                   lRemoteNodeId, lDeviceNodeId, lKey);
-    const IoHomeDeviceMetadata lDiscovery =
-        decodeDiscoveryMetadata(kDiscoveryPayload, sizeof(kDiscoveryPayload));
-    lChannel.onDiscoveryMetadata(lDeviceNodeId, lDiscovery);
+    const IoHomeProtocolIdentity lDiscovery =
+        decodeProtocolIdentity(kDiscoveryPayload, sizeof(kDiscoveryPayload));
+    lChannel.onProtocolIdentity(lDeviceNodeId, lDiscovery);
 
     // GeneralInfo2 is a secondary confirmation source. A mismatch is retained
     // diagnostically and must not overwrite the primary discovery identity.
     uint8_t lInfo2Data[12] = {};
-    encodePackedDeviceType(5, 7, lInfo2Data[10], lInfo2Data[11]);
+    encodePackedProfile(5, 7, lInfo2Data[10], lInfo2Data[11]);
     IoHomeFrame lInfo2;
     buildGeneralInfo2ResponseFrame(lInfo2, lRemoteNodeId, lDeviceNodeId,
                                    lInfo2Data, sizeof(lInfo2Data));
     ASSERT_TRUE(queueControllerResponse(lController, lInfo2));
 
-    const IoHomeDeviceMetadata &lAfterInfo2 = lChannel.getDeviceMetadata();
-    ASSERT_EQ(lAfterInfo2.deviceType, 2U);
-    ASSERT_EQ(lAfterInfo2.subtype, 0U);
-    ASSERT_EQ(lAfterInfo2.manufacturer,
+    const IoHomeProtocolIdentity &lAfterInfo2 = lChannel.getProtocolIdentity();
+    ASSERT_EQ(lAfterInfo2.profile, 2U);
+    ASSERT_EQ(lAfterInfo2.subProfile, 0U);
+    ASSERT_EQ(lAfterInfo2.manufacturerId,
               static_cast<uint8_t>(IoHomeManufacturer::Velux));
-    ASSERT_EQ(lAfterInfo2.backboneId, 0x123456U);
-    ASSERT_EQ(lAfterInfo2.mib, 0xED);
+    ASSERT_EQ(lAfterInfo2.ioBackboneAddress, 0x123456U);
+    ASSERT_EQ(lAfterInfo2.multiInfoByte, 0xED);
     ASSERT_EQ(lAfterInfo2.discoveryTimestamp, 0xABCDU);
-    const IoHomePostPairEnrichment &lAfterGi2 =
-        lChannel.getPostPairEnrichment();
+    const IoHomeProductIdentityEvidence &lAfterGi2 =
+        lChannel.getProductIdentityEvidence();
     ASSERT_TRUE(lAfterGi2.generalInfo2TypeValid);
-    ASSERT_EQ(lAfterGi2.generalInfo2DeviceType, 5U);
-    ASSERT_EQ(lAfterGi2.generalInfo2Subtype, 7U);
+    ASSERT_EQ(lAfterGi2.generalInfo2Profile, 5U);
+    ASSERT_EQ(lAfterGi2.generalInfo2SubProfile, 7U);
     ASSERT_TRUE(!lAfterGi2.generalInfo2MatchesDiscovery);
     ASSERT_MEM_EQ(lAfterGi2.generalInfo2, lInfo2Data, sizeof(lInfo2Data));
 
@@ -13620,28 +13690,79 @@ TEST(controller_gi1_raw_and_gi2_confirmation_never_overwrite_discovery)
                              IoHomeCommand::GetGeneralInfo1Response,
                              kSomfyGi1, sizeof(kSomfyGi1));
     ASSERT_TRUE(queueControllerResponse(lController, lInfo1));
-    ASSERT_EQ(lChannel.getPostPairEnrichment().generalInfo1Len,
+    ASSERT_EQ(lChannel.getProductIdentityEvidence().generalInfo1Len,
               sizeof(kSomfyGi1));
-    ASSERT_MEM_EQ(lChannel.getPostPairEnrichment().generalInfo1,
+    ASSERT_MEM_EQ(lChannel.getProductIdentityEvidence().generalInfo1,
                   kSomfyGi1, sizeof(kSomfyGi1));
 
     buildSimpleResponseFrame(lInfo1, lRemoteNodeId, lDeviceNodeId,
                              IoHomeCommand::GetGeneralInfo1Response,
                              kVeluxSslGi1, sizeof(kVeluxSslGi1));
     ASSERT_TRUE(queueControllerResponse(lController, lInfo1));
-    ASSERT_EQ(lChannel.getPostPairEnrichment().generalInfo1Len,
+    ASSERT_EQ(lChannel.getProductIdentityEvidence().generalInfo1Len,
               sizeof(kVeluxSslGi1));
-    ASSERT_MEM_EQ(lChannel.getPostPairEnrichment().generalInfo1,
+    ASSERT_MEM_EQ(lChannel.getProductIdentityEvidence().generalInfo1,
                   kVeluxSslGi1, sizeof(kVeluxSslGi1));
+    const IoHomeProductSignature lSignature =
+        lChannel.getGeneralInfo1ProductSignature();
+    ASSERT_EQ(lSignature.length, IOHC_PRODUCT_SIGNATURE_SIZE);
+    ASSERT_MEM_EQ(lSignature.bytes, kVeluxSslGi1,
+                  IOHC_PRODUCT_SIGNATURE_SIZE);
 
-    const IoHomeDeviceMetadata &lAfterInfo1 = lChannel.getDeviceMetadata();
-    ASSERT_EQ(lAfterInfo1.deviceType, 2U);
-    ASSERT_EQ(lAfterInfo1.subtype, 0U);
-    ASSERT_EQ(lAfterInfo1.manufacturer,
+    const IoHomeProtocolIdentity &lAfterInfo1 = lChannel.getProtocolIdentity();
+    ASSERT_EQ(lAfterInfo1.profile, 2U);
+    ASSERT_EQ(lAfterInfo1.subProfile, 0U);
+    ASSERT_EQ(lAfterInfo1.manufacturerId,
               static_cast<uint8_t>(IoHomeManufacturer::Velux));
-    ASSERT_EQ(lAfterInfo1.backboneId, 0x123456U);
-    ASSERT_EQ(lAfterInfo1.mib, 0xED);
+    ASSERT_EQ(lAfterInfo1.ioBackboneAddress, 0x123456U);
+    ASSERT_EQ(lAfterInfo1.multiInfoByte, 0xED);
     ASSERT_EQ(lAfterInfo1.discoveryTimestamp, 0xABCDU);
+}
+
+TEST(controller_response_timing_is_tagged_with_protocol_identity)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    static const uint8_t kDiscoveryPayload[IOHC_DISCOVERY_FULL_SIZE] = {
+        0xFC, 0x11, 0x12, 0x34, 0x56, 0x0D, 0xC5, 0xFF, 0xFF};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+    lChannel.onProtocolIdentity(
+        lDeviceNodeId,
+        decodeProtocolIdentity(kDiscoveryPayload, sizeof(kDiscoveryPayload)));
+
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey,
+                                        IoHomeCommand::Private, 0));
+    IoHomeFrame lRequest;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lRequest));
+    lController.loop(); // record end of the request transmission
+    ioHomeTestAdvanceMicros(1234);
+
+    uint8_t lResponseData[8] = {};
+    IoHomeFrame lResponse;
+    buildPrivateResponseFrame(lResponse, lRemoteNodeId, lDeviceNodeId,
+                              lResponseData, sizeof(lResponseData));
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+
+    const IoHomeController::ResponseTimingSample &lTiming =
+        lController.lastResponseTimingSample();
+    ASSERT_TRUE(lTiming.valid);
+    ASSERT_TRUE(lTiming.hasFirstResponse);
+    ASSERT_TRUE(lTiming.hasFinalResponse);
+    ASSERT_EQ(lTiming.ioAddress, lDeviceNodeId);
+    ASSERT_EQ(lTiming.manufacturerId, 0x0D);
+    ASSERT_EQ(lTiming.profile, 1008U);
+    ASSERT_EQ(lTiming.subProfile, 0x11U);
+    ASSERT_EQ(lTiming.powerSaveModeRaw, 1U);
+    ASSERT_EQ(lTiming.slaveTimeClass, 3U);
+    ASSERT_TRUE(lTiming.txEndToFirstResponseUs >= 1234U);
+    ASSERT_EQ(lTiming.txEndToFirstResponseUs,
+              lTiming.txEndToFinalResponseUs);
 }
 
 TEST(controller_status_update_requires_11_bytes_for_position)

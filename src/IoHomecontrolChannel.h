@@ -34,22 +34,18 @@ public:
   void onStatusUpdate(bool iIsMoving);
   void onSlatFeedback(float iSlatPercent);
   void onDeviceName(const char *iName, uint8_t iLen);
-  void onDeviceInfo(const IoHomeDeviceMetadata &iInfo);
-  // Compatibility adapter for integrations still providing only the legacy
-  // GeneralInfo type/subtype/manufacturer tuple.
-  void onDeviceInfo(uint16_t iType, uint8_t iSubtype, uint8_t iManufacturer);
   void onPostPairEnrichmentResponse(IoHomeCommand iResponse,
                                     const uint8_t *iData, uint8_t iDataLen);
-  void clearPostPairEnrichment();
-  const IoHomePostPairEnrichment &getPostPairEnrichment() const;
+  void clearProductIdentityEvidence();
+  const IoHomeProductIdentityEvidence &getProductIdentityEvidence() const;
+  IoHomeProductSignature getGeneralInfo1ProductSignature() const;
   const char *getDeviceName() const;
-  void onDiscoveryMetadata(uint32_t iSourceNodeId,
-                           const IoHomeDiscoveryMetadata &iMetadata);
-  void clearDiscoveryMetadata();
-  bool hasDiscoveryMetadata() const;
-  uint32_t getDiscoveryNodeId() const;
-  const IoHomeDeviceMetadata &getDeviceMetadata() const;
-  const IoHomeDiscoveryMetadata &getDiscoveryMetadata() const;
+  void onProtocolIdentity(uint32_t iIoAddress,
+                          const IoHomeProtocolIdentity &iIdentity);
+  void clearProtocolIdentity();
+  bool hasProtocolIdentity() const;
+  uint32_t getIoAddress() const;
+  const IoHomeProtocolIdentity &getProtocolIdentity() const;
   void onBatteryLevel(uint8_t iPercent);
   void onEstimate(uint8_t iSeconds);
   void onStatusExpected();
@@ -229,12 +225,11 @@ private:
   uint8_t mStatusPollFailures = 0;
   uint8_t mAuthPollFailures = 0;
   char mDeviceName[21] = {}; // max 20 chars + null terminator
-  uint16_t mDeviceType = 0;
-  uint8_t mDeviceSubtype = 0;
-  uint8_t mManufacturer = 0;
-  uint32_t mDiscoveryNodeId = 0;
-  IoHomeDeviceMetadata mDiscoveryMetadata{};
-  IoHomePostPairEnrichment mPostPairEnrichment{};
+  uint16_t mProfile = 0;
+  uint8_t mSubProfile = 0;
+  uint32_t mIoAddress = 0;
+  IoHomeProtocolIdentity mProtocolIdentity{};
+  IoHomeProductIdentityEvidence mProductIdentityEvidence{};
 
   // P3: Scene position data (10 ETS-backed scenes x 1 byte, 0xFF = not set)
   uint8_t mScenePositions[kMaxSceneCount] = {};

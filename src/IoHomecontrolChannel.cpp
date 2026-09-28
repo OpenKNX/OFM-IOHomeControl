@@ -599,27 +599,27 @@ void IoHomecontrolChannel::logStatusSummary(float iCurrentPositionPercent, bool 
     {
         if (iHasCurrentPosition && iHasTargetPosition)
         {
-            logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Position %.1f / Target %.1f / Moving: %s / Deleted: %s",
+            logDebugP("Received device status for %06X: %s (0x%03X/0x%02X) / Position %.1f / Target %.1f / Moving: %s / Deleted: %s",
                       mNodeId, mDeviceName,
-                      static_cast<unsigned>(mDeviceType & 0xFF),
-                      static_cast<unsigned>(mDeviceSubtype),
+                      static_cast<unsigned>(mProfile),
+                      static_cast<unsigned>(mSubProfile),
                       iCurrentPositionPercent, iTargetPositionPercent,
                       iIsMoving ? "Yes" : "No", mPaired ? "No" : "Yes");
         }
         else if (iHasCurrentPosition)
         {
-            logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Position %.1f / Moving: %s / Deleted: %s",
+            logDebugP("Received device status for %06X: %s (0x%03X/0x%02X) / Position %.1f / Moving: %s / Deleted: %s",
                       mNodeId, mDeviceName,
-                      static_cast<unsigned>(mDeviceType & 0xFF),
-                      static_cast<unsigned>(mDeviceSubtype),
+                      static_cast<unsigned>(mProfile),
+                      static_cast<unsigned>(mSubProfile),
                       iCurrentPositionPercent, iIsMoving ? "Yes" : "No", mPaired ? "No" : "Yes");
         }
         else
         {
-            logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Moving: %s / Deleted: %s",
+            logDebugP("Received device status for %06X: %s (0x%03X/0x%02X) / Moving: %s / Deleted: %s",
                       mNodeId, mDeviceName,
-                      static_cast<unsigned>(mDeviceType & 0xFF),
-                      static_cast<unsigned>(mDeviceSubtype),
+                      static_cast<unsigned>(mProfile),
+                      static_cast<unsigned>(mSubProfile),
                       iIsMoving ? "Yes" : "No", mPaired ? "No" : "Yes");
         }
         return;
@@ -627,27 +627,27 @@ void IoHomecontrolChannel::logStatusSummary(float iCurrentPositionPercent, bool 
 
     if (iHasCurrentPosition && iHasTargetPosition)
     {
-        logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Position %.1f / Target %.1f / Moving: %s / Deleted: %s",
-                  mNodeId, iohcDeviceTypeLabel(mDeviceType),
-                  static_cast<unsigned>(mDeviceType & 0xFF),
-                  static_cast<unsigned>(mDeviceSubtype),
+        logDebugP("Received device status for %06X: %s (0x%03X/0x%02X) / Position %.1f / Target %.1f / Moving: %s / Deleted: %s",
+                  mNodeId, iohcDeviceTypeLabel(mProfile),
+                  static_cast<unsigned>(mProfile),
+                  static_cast<unsigned>(mSubProfile),
                   iCurrentPositionPercent, iTargetPositionPercent,
                   iIsMoving ? "Yes" : "No", mPaired ? "No" : "Yes");
     }
     else if (iHasCurrentPosition)
     {
-        logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Position %.1f / Moving: %s / Deleted: %s",
-                  mNodeId, iohcDeviceTypeLabel(mDeviceType),
-                  static_cast<unsigned>(mDeviceType & 0xFF),
-                  static_cast<unsigned>(mDeviceSubtype),
+        logDebugP("Received device status for %06X: %s (0x%03X/0x%02X) / Position %.1f / Moving: %s / Deleted: %s",
+                  mNodeId, iohcDeviceTypeLabel(mProfile),
+                  static_cast<unsigned>(mProfile),
+                  static_cast<unsigned>(mSubProfile),
                   iCurrentPositionPercent, iIsMoving ? "Yes" : "No", mPaired ? "No" : "Yes");
     }
     else
     {
-        logDebugP("Received device status for %06X: %s (0x%02X/0x%02X) / Moving: %s / Deleted: %s",
-                  mNodeId, iohcDeviceTypeLabel(mDeviceType),
-                  static_cast<unsigned>(mDeviceType & 0xFF),
-                  static_cast<unsigned>(mDeviceSubtype),
+        logDebugP("Received device status for %06X: %s (0x%03X/0x%02X) / Moving: %s / Deleted: %s",
+                  mNodeId, iohcDeviceTypeLabel(mProfile),
+                  static_cast<unsigned>(mProfile),
+                  static_cast<unsigned>(mSubProfile),
                   iIsMoving ? "Yes" : "No", mPaired ? "No" : "Yes");
     }
 }
@@ -691,36 +691,6 @@ void IoHomecontrolChannel::onDeviceName(const char *iName, uint8_t iLen)
     }
     mDeviceName[lOutPos] = '\0';
     logDebugP("Device name: %s", mDeviceName);
-}
-
-void IoHomecontrolChannel::onDeviceInfo(const IoHomeDeviceMetadata &iInfo)
-{
-    if (!iInfo.valid)
-        return;
-
-    mDiscoveryMetadata = iInfo;
-    mDeviceType = iInfo.deviceType;
-    mDeviceSubtype = iInfo.subtype;
-    mManufacturer = iInfo.manufacturer;
-    logDebugP("Device info: type=0x%04X subtype=0x%02X mfg=0x%02X backbone=%s MIB=%s",
-              iInfo.deviceType, iInfo.subtype, iInfo.manufacturer,
-              iInfo.hasBackboneId ? "present" : "n/a",
-              iInfo.hasMib ? "present" : "n/a");
-}
-
-void IoHomecontrolChannel::onDeviceInfo(uint16_t iType, uint8_t iSubtype,
-                                        uint8_t iManufacturer)
-{
-    IoHomeDeviceMetadata lInfo = mDiscoveryMetadata;
-    lInfo.valid = true;
-    lInfo.deviceType = iType;
-    lInfo.subtype = iSubtype;
-    lInfo.nodeTypeSubType = encodeNodeTypeSubType(iType, iSubtype);
-    // The legacy GeneralInfo2 caller used zero to mean "not supplied". Keep
-    // an already-discovered manufacturer in that compatibility case.
-    if (iManufacturer != 0 || !mDiscoveryMetadata.valid)
-        lInfo.manufacturer = iManufacturer;
-    onDeviceInfo(lInfo);
 }
 
 namespace
@@ -768,53 +738,53 @@ void IoHomecontrolChannel::onPostPairEnrichmentResponse(
     switch (iResponse)
     {
     case IoHomeCommand::GetNameResponse:
-        mPostPairEnrichment.nameResponseLen = copyEnrichmentPayload(
-            mPostPairEnrichment.nameResponse, iData, iDataLen);
+        mProductIdentityEvidence.nameResponseLen = copyEnrichmentPayload(
+            mProductIdentityEvidence.nameResponse, iData, iDataLen);
         onDeviceName(
-            reinterpret_cast<const char *>(mPostPairEnrichment.nameResponse),
-            mPostPairEnrichment.nameResponseLen);
+            reinterpret_cast<const char *>(mProductIdentityEvidence.nameResponse),
+            mProductIdentityEvidence.nameResponseLen);
         break;
 
     case IoHomeCommand::GetGeneralInfo1Response:
-        mPostPairEnrichment.generalInfo1Len = copyEnrichmentPayload(
-            mPostPairEnrichment.generalInfo1, iData, iDataLen);
+        mProductIdentityEvidence.generalInfo1Len = copyEnrichmentPayload(
+            mProductIdentityEvidence.generalInfo1, iData, iDataLen);
         logDebugP("GeneralInfo1 raw=%s ascii=%s",
-                  enrichmentHex(mPostPairEnrichment.generalInfo1,
-                                mPostPairEnrichment.generalInfo1Len).c_str(),
-                  enrichmentAscii(mPostPairEnrichment.generalInfo1,
-                                  mPostPairEnrichment.generalInfo1Len).c_str());
+                  enrichmentHex(mProductIdentityEvidence.generalInfo1,
+                                mProductIdentityEvidence.generalInfo1Len).c_str(),
+                  enrichmentAscii(mProductIdentityEvidence.generalInfo1,
+                                  mProductIdentityEvidence.generalInfo1Len).c_str());
         break;
 
     case IoHomeCommand::GetGeneralInfo2Response:
-        mPostPairEnrichment.generalInfo2Len = copyEnrichmentPayload(
-            mPostPairEnrichment.generalInfo2, iData, iDataLen);
-        mPostPairEnrichment.generalInfo2TypeValid = iDataLen >= 12;
-        if (mPostPairEnrichment.generalInfo2TypeValid)
+        mProductIdentityEvidence.generalInfo2Len = copyEnrichmentPayload(
+            mProductIdentityEvidence.generalInfo2, iData, iDataLen);
+        mProductIdentityEvidence.generalInfo2TypeValid = iDataLen >= 12;
+        if (mProductIdentityEvidence.generalInfo2TypeValid)
         {
-            mPostPairEnrichment.generalInfo2DeviceType =
-                decodePackedDeviceType(iData[10], iData[11]);
-            mPostPairEnrichment.generalInfo2Subtype =
-                decodePackedDeviceSubtype(iData[11]);
-            mPostPairEnrichment.generalInfo2MatchesDiscovery =
-                mDiscoveryMetadata.valid &&
-                mPostPairEnrichment.generalInfo2DeviceType == mDiscoveryMetadata.deviceType &&
-                mPostPairEnrichment.generalInfo2Subtype == mDiscoveryMetadata.subtype;
-            if (mDiscoveryMetadata.valid)
+            mProductIdentityEvidence.generalInfo2Profile =
+                decodePackedProfile(iData[10], iData[11]);
+            mProductIdentityEvidence.generalInfo2SubProfile =
+                decodePackedSubProfile(iData[11]);
+            mProductIdentityEvidence.generalInfo2MatchesDiscovery =
+                mProtocolIdentity.valid &&
+                mProductIdentityEvidence.generalInfo2Profile == mProtocolIdentity.profile &&
+                mProductIdentityEvidence.generalInfo2SubProfile == mProtocolIdentity.subProfile;
+            if (mProtocolIdentity.valid)
             {
-                logDebugP(mPostPairEnrichment.generalInfo2MatchesDiscovery
+                logDebugP(mProductIdentityEvidence.generalInfo2MatchesDiscovery
                               ? "Type validation OK: discovery=%u/%u GI2=%u/%u"
                               : "Type mismatch: discovery=%u/%u GI2=%u/%u",
-                          static_cast<unsigned>(mDiscoveryMetadata.deviceType),
-                          static_cast<unsigned>(mDiscoveryMetadata.subtype),
-                          static_cast<unsigned>(mPostPairEnrichment.generalInfo2DeviceType),
-                          static_cast<unsigned>(mPostPairEnrichment.generalInfo2Subtype));
+                          static_cast<unsigned>(mProtocolIdentity.profile),
+                          static_cast<unsigned>(mProtocolIdentity.subProfile),
+                          static_cast<unsigned>(mProductIdentityEvidence.generalInfo2Profile),
+                          static_cast<unsigned>(mProductIdentityEvidence.generalInfo2SubProfile));
             }
         }
         break;
 
     case IoHomeCommand::GetGeneralInfo3Response:
-        mPostPairEnrichment.generalInfo3Len = copyEnrichmentPayload(
-            mPostPairEnrichment.generalInfo3, iData, iDataLen);
+        mProductIdentityEvidence.generalInfo3Len = copyEnrichmentPayload(
+            mProductIdentityEvidence.generalInfo3, iData, iDataLen);
         break;
 
     default:
@@ -822,15 +792,20 @@ void IoHomecontrolChannel::onPostPairEnrichmentResponse(
     }
 }
 
-void IoHomecontrolChannel::clearPostPairEnrichment()
+void IoHomecontrolChannel::clearProductIdentityEvidence()
 {
     memset(mDeviceName, 0, sizeof(mDeviceName));
-    mPostPairEnrichment = IoHomePostPairEnrichment{};
+    mProductIdentityEvidence = IoHomeProductIdentityEvidence{};
 }
 
-const IoHomePostPairEnrichment &IoHomecontrolChannel::getPostPairEnrichment() const
+const IoHomeProductIdentityEvidence &IoHomecontrolChannel::getProductIdentityEvidence() const
 {
-    return mPostPairEnrichment;
+    return mProductIdentityEvidence;
+}
+
+IoHomeProductSignature IoHomecontrolChannel::getGeneralInfo1ProductSignature() const
+{
+    return ioHomeGeneralInfo1ProductSignature(mProductIdentityEvidence);
 }
 
 const char *IoHomecontrolChannel::getDeviceName() const
@@ -838,43 +813,49 @@ const char *IoHomecontrolChannel::getDeviceName() const
     return mDeviceName;
 }
 
-void IoHomecontrolChannel::onDiscoveryMetadata(
-    uint32_t iSourceNodeId, const IoHomeDiscoveryMetadata &iMetadata)
+void IoHomecontrolChannel::onProtocolIdentity(
+    uint32_t iIoAddress, const IoHomeProtocolIdentity &iIdentity)
 {
-    if (!iMetadata.valid)
+    if (!iIdentity.valid)
         return;
 
-    // The RF source is the actuator node identity. The three bytes at payload
-    // offsets 2..4 are a separate backbone reference and may legitimately be
-    // zero or equal to another node's reference.
-    mDiscoveryNodeId = iSourceNodeId & 0x00FFFFFF;
-    onDeviceInfo(iMetadata);
+    // The RF source is ioAddress. Discovery data[2..4] is the independent
+    // ioBackboneAddress and may legitimately be zero.
+    mIoAddress = iIoAddress & 0x00FFFFFF;
+    IoHomeProtocolIdentity lIdentity = iIdentity;
+    lIdentity.ioAddress = mIoAddress;
+    // Hardware protocol identity is immutable with respect to ETS choices.
+    // ETS device-role and command-shape parameters remain separate and never
+    // write back into this discovery-derived object.
+    mProtocolIdentity = lIdentity;
+    mProfile = lIdentity.profile;
+    mSubProfile = lIdentity.subProfile;
+    logDebugP("Protocol identity: ioAddress=0x%06X profile=0x%04X subProfile=0x%02X manufacturerId=0x%02X ioBackboneAddress=%s MIB=%s",
+              lIdentity.ioAddress, lIdentity.profile, lIdentity.subProfile,
+              lIdentity.manufacturerId,
+              lIdentity.hasIoBackboneAddress ? "present" : "n/a",
+              lIdentity.hasMib ? "present" : "n/a");
 }
 
-void IoHomecontrolChannel::clearDiscoveryMetadata()
+void IoHomecontrolChannel::clearProtocolIdentity()
 {
-    mDiscoveryNodeId = 0;
-    mDiscoveryMetadata = IoHomeDiscoveryMetadata{};
+    mIoAddress = 0;
+    mProtocolIdentity = IoHomeProtocolIdentity{};
 }
 
-bool IoHomecontrolChannel::hasDiscoveryMetadata() const
+bool IoHomecontrolChannel::hasProtocolIdentity() const
 {
-    return mDiscoveryMetadata.valid;
+    return mProtocolIdentity.valid;
 }
 
-uint32_t IoHomecontrolChannel::getDiscoveryNodeId() const
+uint32_t IoHomecontrolChannel::getIoAddress() const
 {
-    return mDiscoveryNodeId;
+    return mProtocolIdentity.valid ? mProtocolIdentity.ioAddress : mIoAddress;
 }
 
-const IoHomeDiscoveryMetadata &IoHomecontrolChannel::getDiscoveryMetadata() const
+const IoHomeProtocolIdentity &IoHomecontrolChannel::getProtocolIdentity() const
 {
-    return getDeviceMetadata();
-}
-
-const IoHomeDeviceMetadata &IoHomecontrolChannel::getDeviceMetadata() const
-{
-    return mDiscoveryMetadata;
+    return mProtocolIdentity;
 }
 
 void IoHomecontrolChannel::onBatteryLevel(uint8_t iPercent)
@@ -1432,11 +1413,11 @@ bool IoHomecontrolChannel::isLockDeviceType() const
 
 bool IoHomecontrolChannel::isTiltCapableDeviceType() const
 {
-    uint16_t lType = mDeviceType;
-    if (lType == 0)
-        lType = static_cast<uint16_t>(ParamIOHC_cDeviceType);
+    uint16_t lProfile = mProfile;
+    if (lProfile == 0)
+        lProfile = static_cast<uint16_t>(ParamIOHC_cDeviceType);
 
-    switch (static_cast<IoHomeDeviceType>(lType))
+    switch (static_cast<IoHomeDeviceType>(lProfile))
     {
     case IoHomeDeviceType::VenetianBlind:
     case IoHomeDeviceType::ExternalVenetianBlind:

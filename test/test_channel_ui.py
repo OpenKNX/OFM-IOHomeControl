@@ -79,20 +79,20 @@ class ChannelUiTest(unittest.TestCase):
             "void IoHomecontrol::readFlash", 1
         )[0]
         self.assertIn("openknx.flash.writeByte(16)", write_flash)
-        self.assertIn("encodeDiscoveryMetadata(", write_flash)
+        self.assertIn("encodeProtocolIdentity(", write_flash)
 
         read_flash = source.split("void IoHomecontrol::readFlash", 1)[1]
         current_layout_branch = read_flash.split("else if", 1)[0]
         self.assertIn("lVersion == 16", current_layout_branch)
         self.assertIn("kFlashRecordV16 = 57", current_layout_branch)
-        self.assertIn("decodeDiscoveryMetadata(lDiscoveryRaw, lDecodeLen)", current_layout_branch)
-        self.assertIn("decodeDiscoveryMib(lState.discoveryMetadata, lMib)", read_flash)
-        self.assertIn("lState.discoveryMetadata.discoveryTimestamp = lDiscoveryTimestamp", read_flash)
+        self.assertIn("decodeProtocolIdentity(lDiscoveryRaw, lDecodeLen)", current_layout_branch)
+        self.assertIn("decodeProtocolIdentityMib(lState.protocolIdentity, lMib)", read_flash)
+        self.assertIn("lState.protocolIdentity.discoveryTimestamp = lDiscoveryTimestamp", read_flash)
 
     def test_discovery_consumers_share_complete_metadata_model(self) -> None:
         header = (ROOT / "src" / "IoHomecontrol.h").read_text()
         key_import = header.split("struct KeyImportDevice", 1)[1].split("};", 1)[0]
-        self.assertIn("IoHomeDiscoveryMetadata discoveryMetadata", key_import)
+        self.assertIn("IoHomeProtocolIdentity protocolIdentity", key_import)
         self.assertNotIn("uint16_t deviceType", key_import)
         self.assertNotIn("uint8_t subtype", key_import)
         self.assertNotIn("uint8_t manufacturer", key_import)
@@ -102,15 +102,15 @@ class ChannelUiTest(unittest.TestCase):
         discovery_handler = module_source.split(
             "void IoHomecontrol::onDiscoveryResponse", 1
         )[1].split("void IoHomecontrol::processKeyImportWorkflow", 1)[0]
-        self.assertIn("const IoHomeDiscoveryMetadata &iMetadata", discovery_handler)
-        self.assertNotIn("decodeDiscoveryMetadata(", discovery_handler)
+        self.assertIn("const IoHomeProtocolIdentity &iMetadata", discovery_handler)
+        self.assertNotIn("decodeProtocolIdentity(", discovery_handler)
 
         controller_source = (ROOT / "src" / "controller" / "IoHomeController.cpp").read_text()
         self.assertIn(
             "mModule->onDiscoveryResponse(mRxFrame, lMetadata)", controller_source
         )
         self.assertIn(
-            "rememberDiscoveryMetadata(iFrame.getSrcNodeId(), lMetadata)",
+            "rememberProtocolIdentity(iFrame.getSrcNodeId(), lMetadata)",
             controller_source,
         )
 
@@ -118,26 +118,29 @@ class ChannelUiTest(unittest.TestCase):
             "void IoHomecontrol::onDiscoveryResponse", 1
         )[1].split("void IoHomecontrol::processKeyImportWorkflow", 1)[0]
         self.assertIn("iMetadata.fullMetadata", discovery_handler)
-        self.assertIn("lDevice->discoveryMetadata = iMetadata", discovery_handler)
+        self.assertIn("lDevice->protocolIdentity = iMetadata", discovery_handler)
 
-    def test_device_info_uses_one_structured_persisted_metadata_object(self) -> None:
+    def test_protocol_identity_uses_one_structured_persisted_object(self) -> None:
         header = (ROOT / "src" / "IoHomecontrolChannel.h").read_text()
         channel_source = (ROOT / "src" / "IoHomecontrolChannel.cpp").read_text()
         controller_source = (ROOT / "src" / "controller" / "IoHomeController.cpp").read_text()
 
-        self.assertIn("onDeviceInfo(const IoHomeDeviceMetadata &iInfo)", header)
-        self.assertIn("getDeviceMetadata() const", header)
+        self.assertIn("onProtocolIdentity(uint32_t iIoAddress", header)
+        self.assertIn("getProtocolIdentity() const", header)
+        self.assertNotIn("onDeviceInfo", header)
+        self.assertNotIn("getDeviceMetadata", header)
+        self.assertNotIn("getDiscoveryMetadata", header)
         module_source = (ROOT / "src" / "IoHomecontrol.cpp").read_text()
         write_flash = module_source.split("void IoHomecontrol::writeFlash()", 1)[1].split(
             "void IoHomecontrol::readFlash", 1
         )[0]
-        self.assertIn("getDeviceMetadata()", write_flash)
-        self.assertIn("encodeDiscoveryMetadata(", write_flash)
+        self.assertIn("getProtocolIdentity()", write_flash)
+        self.assertIn("encodeProtocolIdentity(", write_flash)
         discovery_handler = channel_source.split(
-            "void IoHomecontrolChannel::onDiscoveryMetadata", 1
-        )[1].split("void IoHomecontrolChannel::clearDiscoveryMetadata", 1)[0]
-        self.assertIn("onDeviceInfo(iMetadata)", discovery_handler)
-        self.assertNotIn("mDiscoveryMetadata = iMetadata", discovery_handler)
+            "void IoHomecontrolChannel::onProtocolIdentity", 1
+        )[1].split("void IoHomecontrolChannel::clearProtocolIdentity", 1)[0]
+        self.assertIn("mProtocolIdentity = lIdentity", discovery_handler)
+        self.assertIn("lIdentity.ioAddress = mIoAddress", discovery_handler)
 
         dispatch = controller_source.split(
             "void IoHomeController::dispatchRxFrame()", 1
@@ -158,7 +161,7 @@ class ChannelUiTest(unittest.TestCase):
 
         enrichment = channel_source.split(
             "void IoHomecontrolChannel::onPostPairEnrichmentResponse", 1
-        )[1].split("void IoHomecontrolChannel::clearPostPairEnrichment", 1)[0]
+        )[1].split("void IoHomecontrolChannel::clearProductIdentityEvidence", 1)[0]
         self.assertIn("GetGeneralInfo1Response", enrichment)
         self.assertIn("GetGeneralInfo2Response", enrichment)
         self.assertIn("iData[10]", enrichment)
@@ -187,6 +190,50 @@ class ChannelUiTest(unittest.TestCase):
                         sequence.index("IoHomeCommand::GetGeneralInfo2"))
         self.assertLess(sequence.index("IoHomeCommand::GetGeneralInfo2"),
                         sequence.index("IoHomeCommand::GetGeneralInfo3"))
+
+    def test_protocol_identity_uses_canonical_somfy_vocabulary(self) -> None:
+        commands = (ROOT / "src" / "protocol" / "IoHomeCommands.h").read_text()
+        channel_header = (ROOT / "src" / "IoHomecontrolChannel.h").read_text()
+        controller_header = (ROOT / "src" / "controller" / "IoHomeController.h").read_text()
+        controller = (ROOT / "src" / "controller" / "IoHomeController.cpp").read_text()
+
+        for field in (
+            "ioAddress", "ioBackboneAddress", "profile", "subProfile",
+            "manufacturerId", "multiInfoByte", "powerSaveMode",
+            "ioMembershipFlag", "rfSupportInNode", "slaveTimeClass",
+            "keyState",
+        ):
+            self.assertIn(field, commands)
+        self.assertIn("IoHomeKeyState::Unknown", commands)
+        self.assertIn("IOHC_DISCOVERY_UNKNOWN_BIT4_MASK", commands)
+        self.assertIn("bit4=%u[unknown/unused]", controller)
+        self.assertIn("getProtocolIdentity", channel_header)
+        self.assertIn("protocolIdentityForIoAddress", controller_header)
+
+    def test_identity_capabilities_and_product_evidence_are_separate(self) -> None:
+        commands = (ROOT / "src" / "protocol" / "IoHomeCommands.h").read_text()
+        identity = commands.split("struct IoHomeProtocolIdentity", 1)[1].split(
+            "inline bool ioHomeKeyStateKnown", 1
+        )[0]
+        capabilities = commands.split("struct IoHomeGenericCapabilities", 1)[1].split(
+            "static constexpr uint8_t IOHC_DEVICE_INFO_RAW_MAX_SIZE", 1
+        )[0]
+        product = commands.split("struct IoHomeProductIdentityEvidence", 1)[1].split(
+            "static constexpr uint8_t IOHC_PRODUCT_SIGNATURE_SIZE", 1
+        )[0]
+
+        self.assertIn("profile", identity)
+        self.assertNotIn("generalInfo1", identity)
+        self.assertIn("position", capabilities)
+        self.assertNotIn("manufacturerSubType", capabilities)
+        self.assertIn("generalInfo1", product)
+        self.assertNotIn("profile =", product)
+        for legacy_name in (
+            "IoHomeDiscoveryMetadata", "IoHomeDeviceMetadata",
+            "IoHomePostPairEnrichment", "encodePackedDeviceType",
+            "decodePackedDeviceType", "decodePackedDeviceSubtype",
+        ):
+            self.assertNotIn(legacy_name, commands)
 
     def test_selection_table_matches_shared_layout(self) -> None:
         selection = self.share.find(

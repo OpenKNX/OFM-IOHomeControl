@@ -268,22 +268,6 @@ public:
     }
     mDeviceName[lOut] = '\0';
   }
-  void onDeviceInfo(const IoHomeDeviceMetadata &iInfo)
-  {
-    if (iInfo.valid)
-      mDiscoveryMetadata = iInfo;
-  }
-  void onDeviceInfo(uint16_t iType, uint8_t iSubtype, uint8_t iManufacturer)
-  {
-    IoHomeDeviceMetadata lInfo = mDiscoveryMetadata;
-    lInfo.valid = true;
-    lInfo.deviceType = iType;
-    lInfo.subtype = iSubtype;
-    lInfo.nodeTypeSubType = encodeNodeTypeSubType(iType, iSubtype);
-    if (iManufacturer != 0 || !mDiscoveryMetadata.valid)
-      lInfo.manufacturer = iManufacturer;
-    onDeviceInfo(lInfo);
-  }
   void onPostPairEnrichmentResponse(IoHomeCommand iResponse,
                                     const uint8_t *iData, uint8_t iDataLen)
   {
@@ -295,20 +279,20 @@ public:
     switch (iResponse)
     {
     case IoHomeCommand::GetNameResponse:
-      lTarget = mPostPairEnrichment.nameResponse;
-      lStoredLen = &mPostPairEnrichment.nameResponseLen;
+      lTarget = mProductIdentityEvidence.nameResponse;
+      lStoredLen = &mProductIdentityEvidence.nameResponseLen;
       break;
     case IoHomeCommand::GetGeneralInfo1Response:
-      lTarget = mPostPairEnrichment.generalInfo1;
-      lStoredLen = &mPostPairEnrichment.generalInfo1Len;
+      lTarget = mProductIdentityEvidence.generalInfo1;
+      lStoredLen = &mProductIdentityEvidence.generalInfo1Len;
       break;
     case IoHomeCommand::GetGeneralInfo2Response:
-      lTarget = mPostPairEnrichment.generalInfo2;
-      lStoredLen = &mPostPairEnrichment.generalInfo2Len;
+      lTarget = mProductIdentityEvidence.generalInfo2;
+      lStoredLen = &mProductIdentityEvidence.generalInfo2Len;
       break;
     case IoHomeCommand::GetGeneralInfo3Response:
-      lTarget = mPostPairEnrichment.generalInfo3;
-      lStoredLen = &mPostPairEnrichment.generalInfo3Len;
+      lTarget = mProductIdentityEvidence.generalInfo3;
+      lStoredLen = &mProductIdentityEvidence.generalInfo3Len;
       break;
     default:
       return;
@@ -319,45 +303,53 @@ public:
     *lStoredLen = lLen;
     if (iResponse == IoHomeCommand::GetNameResponse)
       onDeviceName(
-          reinterpret_cast<const char *>(mPostPairEnrichment.nameResponse),
-          mPostPairEnrichment.nameResponseLen);
+          reinterpret_cast<const char *>(mProductIdentityEvidence.nameResponse),
+          mProductIdentityEvidence.nameResponseLen);
     else if (iResponse == IoHomeCommand::GetGeneralInfo2Response && iDataLen >= 12)
     {
-      mPostPairEnrichment.generalInfo2TypeValid = true;
-      mPostPairEnrichment.generalInfo2DeviceType =
-          decodePackedDeviceType(iData[10], iData[11]);
-      mPostPairEnrichment.generalInfo2Subtype =
-          decodePackedDeviceSubtype(iData[11]);
-      mPostPairEnrichment.generalInfo2MatchesDiscovery =
-          mDiscoveryMetadata.valid &&
-          mPostPairEnrichment.generalInfo2DeviceType == mDiscoveryMetadata.deviceType &&
-          mPostPairEnrichment.generalInfo2Subtype == mDiscoveryMetadata.subtype;
+      mProductIdentityEvidence.generalInfo2TypeValid = true;
+      mProductIdentityEvidence.generalInfo2Profile =
+          decodePackedProfile(iData[10], iData[11]);
+      mProductIdentityEvidence.generalInfo2SubProfile =
+          decodePackedSubProfile(iData[11]);
+      mProductIdentityEvidence.generalInfo2MatchesDiscovery =
+          mProtocolIdentity.valid &&
+          mProductIdentityEvidence.generalInfo2Profile == mProtocolIdentity.profile &&
+          mProductIdentityEvidence.generalInfo2SubProfile == mProtocolIdentity.subProfile;
     }
   }
-  void clearPostPairEnrichment()
+  void clearProductIdentityEvidence()
   {
     memset(mDeviceName, 0, sizeof(mDeviceName));
-    mPostPairEnrichment = IoHomePostPairEnrichment{};
+    mProductIdentityEvidence = IoHomeProductIdentityEvidence{};
   }
-  const IoHomePostPairEnrichment &getPostPairEnrichment() const { return mPostPairEnrichment; }
+  const IoHomeProductIdentityEvidence &getProductIdentityEvidence() const { return mProductIdentityEvidence; }
+  IoHomeProductSignature getGeneralInfo1ProductSignature() const
+  {
+    return ioHomeGeneralInfo1ProductSignature(mProductIdentityEvidence);
+  }
   const char *getDeviceName() const { return mDeviceName; }
-  void onDiscoveryMetadata(uint32_t iSourceNodeId,
-                           const IoHomeDiscoveryMetadata &iMetadata)
+  void onProtocolIdentity(uint32_t iIoAddress,
+                          const IoHomeProtocolIdentity &iIdentity)
   {
-    if (!iMetadata.valid)
+    if (!iIdentity.valid)
       return;
-    mDiscoveryNodeId = iSourceNodeId & 0x00FFFFFF;
-    onDeviceInfo(iMetadata);
+    mIoAddress = iIoAddress & 0x00FFFFFF;
+    IoHomeProtocolIdentity lIdentity = iIdentity;
+    lIdentity.ioAddress = mIoAddress;
+    mProtocolIdentity = lIdentity;
   }
-  void clearDiscoveryMetadata()
+  void clearProtocolIdentity()
   {
-    mDiscoveryNodeId = 0;
-    mDiscoveryMetadata = IoHomeDiscoveryMetadata{};
+    mIoAddress = 0;
+    mProtocolIdentity = IoHomeProtocolIdentity{};
   }
-  bool hasDiscoveryMetadata() const { return mDiscoveryMetadata.valid; }
-  uint32_t getDiscoveryNodeId() const { return mDiscoveryNodeId; }
-  const IoHomeDeviceMetadata &getDeviceMetadata() const { return mDiscoveryMetadata; }
-  const IoHomeDiscoveryMetadata &getDiscoveryMetadata() const { return mDiscoveryMetadata; }
+  bool hasProtocolIdentity() const { return mProtocolIdentity.valid; }
+  uint32_t getIoAddress() const
+  {
+    return mProtocolIdentity.valid ? mProtocolIdentity.ioAddress : mIoAddress;
+  }
+  const IoHomeProtocolIdentity &getProtocolIdentity() const { return mProtocolIdentity; }
   void onBatteryLevel(uint8_t iPercent)
   {
     mHasBatteryLevel = true;
@@ -497,9 +489,9 @@ private:
   uint8_t mConfigured1WBroadcastType = 0;
   uint8_t mConfigured1WAcei = 0; // mirrors production automatic-by-manufacturer default
   uint8_t mConfigured2WAcei = IOHC_ACEI_DEFAULT;
-  uint32_t mDiscoveryNodeId = 0;
-  IoHomeDiscoveryMetadata mDiscoveryMetadata{};
-  IoHomePostPairEnrichment mPostPairEnrichment{};
+  uint32_t mIoAddress = 0;
+  IoHomeProtocolIdentity mProtocolIdentity{};
+  IoHomeProductIdentityEvidence mProductIdentityEvidence{};
   char mDeviceName[21] = {};
   bool mConfigured1WEnrollmentMac = false;
   OneWayEnrollmentFinalizer mConfigured1WEnrollmentFinalizer = OneWayEnrollmentFinalizer::Automatic;
@@ -572,7 +564,7 @@ public:
   }
 
   void onDiscoveryResponse(const IoHomeFrame &,
-                           const IoHomeDiscoveryMetadata &) {}
+                           const IoHomeProtocolIdentity &) {}
 
   void onKeyImportCandidateObserved(uint32_t iNodeId)
   {

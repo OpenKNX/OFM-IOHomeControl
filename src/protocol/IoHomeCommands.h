@@ -366,7 +366,10 @@ enum class IoHomeManufacturer : uint8_t
     Ciat = 0x09,
     Secuyou = 0x0A,
     Overkiz = 0x0B,
-    AtlanticGroup = 0x0C
+    AtlanticGroup = 0x0C,
+    ZehnderGroup = 0x0D,
+    Unresolved0E = 0x0E,
+    Unresolved0F = 0x0F
 };
 
 inline const char *ioHomeManufacturerName(uint8_t iManufacturer)
@@ -385,6 +388,9 @@ inline const char *ioHomeManufacturerName(uint8_t iManufacturer)
     case IoHomeManufacturer::Secuyou: return "Secuyou";
     case IoHomeManufacturer::Overkiz: return "OVERKIZ";
     case IoHomeManufacturer::AtlanticGroup: return "Atlantic Group";
+    case IoHomeManufacturer::ZehnderGroup: return "Zehnder Group";
+    case IoHomeManufacturer::Unresolved0E: return "Unresolved";
+    case IoHomeManufacturer::Unresolved0F: return "Unresolved";
     default: return "Unknown";
     }
 }
@@ -475,34 +481,34 @@ inline IoHomeAddressClass getAddressClass(uint32_t iNodeId)
     return IoHomeAddressClass::BroadcastDeviceType;
 }
 
-inline void encodePackedDeviceType(uint16_t iType, uint8_t iSubtype,
-                                   uint8_t &oTypeMsb, uint8_t &oTypeSub)
+inline void encodePackedProfile(uint16_t iProfile, uint8_t iSubProfile,
+                                uint8_t &oProfileMsb, uint8_t &oProfileSub)
 {
-    oTypeMsb = static_cast<uint8_t>((iType >> 2) & 0xFF);
-    oTypeSub = static_cast<uint8_t>(((iType & 0x03) << 6) | (iSubtype & 0x3F));
+    oProfileMsb = static_cast<uint8_t>((iProfile >> 2) & 0xFF);
+    oProfileSub = static_cast<uint8_t>(((iProfile & 0x03) << 6) | (iSubProfile & 0x3F));
 }
 
-inline uint16_t decodePackedDeviceType(uint8_t iTypeMsb, uint8_t iTypeSub)
+inline uint16_t decodePackedProfile(uint8_t iProfileMsb, uint8_t iProfileSub)
 {
-    return (static_cast<uint16_t>(iTypeMsb) << 2) |
-           (static_cast<uint16_t>(iTypeSub) >> 6);
+    return (static_cast<uint16_t>(iProfileMsb) << 2) |
+           (static_cast<uint16_t>(iProfileSub) >> 6);
 }
 
-inline uint8_t decodePackedDeviceSubtype(uint8_t iTypeSub)
+inline uint8_t decodePackedSubProfile(uint8_t iProfileSub)
 {
-    return static_cast<uint8_t>(iTypeSub & 0x3F);
+    return static_cast<uint8_t>(iProfileSub & 0x3F);
 }
 
-inline uint16_t encodeNodeTypeSubType(uint16_t iType, uint8_t iSubtype)
+inline uint16_t encodeNodeTypeSubType(uint16_t iProfile, uint8_t iSubProfile)
 {
-    return static_cast<uint16_t>(((iType & 0x03FF) << 6) | (iSubtype & 0x3F));
+    return static_cast<uint16_t>(((iProfile & 0x03FF) << 6) | (iSubProfile & 0x3F));
 }
 
 inline void decodeNodeTypeSubType(uint16_t iNodeTypeSubType,
-                                  uint16_t &oType, uint8_t &oSubtype)
+                                  uint16_t &oProfile, uint8_t &oSubProfile)
 {
-    oType = static_cast<uint16_t>((iNodeTypeSubType >> 6) & 0x03FF);
-    oSubtype = static_cast<uint8_t>(iNodeTypeSubType & 0x3F);
+    oProfile = static_cast<uint16_t>((iNodeTypeSubType >> 6) & 0x03FF);
+    oSubProfile = static_cast<uint8_t>(iNodeTypeSubType & 0x3F);
 }
 
 // io-homecontrol frequencies (Hz)
@@ -526,11 +532,13 @@ constexpr uint32_t IOHC_FREQUENCIES[IOHC_NUM_FREQUENCIES] = {
 #define IOHC_RESPONSE_PREAMBLE_SX1276 12
 #define IOHC_NAME_MAX_SIZE 16   // max name payload bytes (per nicolas5000: CMD_PARAM_NAME_MAXSIZE/2)
 
-// DiscoverResponse / DiscoverSPEResponse payload layout. Bytes 0-1 contain
-// device type/subtype, bytes 2-4 the backbone address, data[5] the
-// manufacturer, data[6] the Multi Information Byte, and data[7-8] a timestamp.
+// DiscoverResponse / DiscoverSPEResponse payload layout. The RF frame source
+// is the node's ioAddress. It is independent from data[2..4], which carries
+// ioBackboneAddress and may validly be 0x000000. Bytes 0..1 contain the packed
+// 10-bit profile + 6-bit subProfile, data[5] manufacturerId, data[6] the raw
+// multiInfoByte, and data[7..8] the discovery timestamp.
 #define IOHC_DISCOVERY_METADATA_SIZE 2
-#define IOHC_DISCOVERY_BACKBONE_OFFSET 2
+#define IOHC_DISCOVERY_IO_BACKBONE_OFFSET 2
 #define IOHC_DISCOVERY_MANUFACTURER_OFFSET 5
 #define IOHC_DISCOVERY_FLAGS_OFFSET 6
 #define IOHC_DISCOVERY_EXTENDED_SIZE (IOHC_DISCOVERY_FLAGS_OFFSET + 1)
@@ -540,9 +548,10 @@ constexpr uint32_t IOHC_FREQUENCIES[IOHC_NUM_FREQUENCIES] = {
 #define IOHC_DISCOVERY_POWER_SAVE_MASK 0x03
 #define IOHC_DISCOVERY_IO_MEMBER_MASK 0x04
 #define IOHC_DISCOVERY_RF_SUPPORT_MASK 0x08
+#define IOHC_DISCOVERY_UNKNOWN_BIT4_MASK 0x10
 #define IOHC_DISCOVERY_SYNC_CONTROL_GROUP_MASK 0x20
-#define IOHC_DISCOVERY_TURNAROUND_MASK 0xC0
-#define IOHC_DISCOVERY_TURNAROUND_SHIFT 6
+#define IOHC_DISCOVERY_SLAVE_TIME_CLASS_MASK 0xC0
+#define IOHC_DISCOVERY_SLAVE_TIME_CLASS_SHIFT 6
 #define IOHC_POWER_SAVE_ALWAYS_ALIVE 0x00
 #define IOHC_POWER_SAVE_LOW_POWER 0x01
 
@@ -552,6 +561,44 @@ enum class IoHomePowerMode : uint8_t
     LowPower = 1,
     Unknown = 0xFF
 };
+
+enum class IoHomeKeyState : uint8_t
+{
+    None = 0,
+    Old = 1,
+    Current = 2,
+    Unknown = 0xFF
+};
+
+enum class IoHomeMetadataSource : uint8_t
+{
+    Unknown = 0,
+    DiscoverResponse = 1,
+    DiscoverSpeResponse = 2,
+    Restored = 3
+};
+
+inline const char *ioHomeKeyStateName(IoHomeKeyState iState)
+{
+    switch (iState)
+    {
+    case IoHomeKeyState::None: return "none";
+    case IoHomeKeyState::Old: return "old";
+    case IoHomeKeyState::Current: return "current";
+    default: return "n/a";
+    }
+}
+
+inline const char *ioHomeMetadataSourceName(IoHomeMetadataSource iSource)
+{
+    switch (iSource)
+    {
+    case IoHomeMetadataSource::DiscoverResponse: return "0x29";
+    case IoHomeMetadataSource::DiscoverSpeResponse: return "0x2B";
+    case IoHomeMetadataSource::Restored: return "flash";
+    default: return "unknown";
+    }
+}
 
 inline const char *ioHomePowerModeName(IoHomePowerMode iMode)
 {
@@ -563,55 +610,75 @@ inline const char *ioHomePowerModeName(IoHomePowerMode iMode)
     }
 }
 
-inline uint8_t ioHomeTurnaroundKlfValue(uint8_t iClass)
+inline uint8_t ioHomeSlaveTimeKlfValue(uint8_t iClass)
 {
     static constexpr uint8_t kValues[] = {5, 10, 20, 40};
     return kValues[iClass & 0x03];
 }
 
-struct IoHomeDiscoveryMetadata
+// Layer 1: RF protocol identity using the canonical Somfy vocabulary.
+struct IoHomeProtocolIdentity
 {
     bool valid = false;
     bool fullMetadata = false;
-    uint16_t deviceType = 0;
-    uint8_t subtype = 0;
+    uint32_t ioAddress = 0;
+    uint16_t profile = 0;
+    uint8_t subProfile = 0;
     uint16_t nodeTypeSubType = 0;
-    bool hasBackboneId = false;
-    uint32_t backboneId = 0;
-    uint8_t manufacturer = 0;
+    bool hasIoBackboneAddress = false;
+    uint32_t ioBackboneAddress = 0;
+    uint8_t manufacturerId = 0;
     bool hasMib = false;
-    uint8_t mib = 0;
-    IoHomePowerMode powerMode = IoHomePowerMode::Unknown;
-    bool ioMember = false;
-    bool rfSupport = false;
+    uint8_t multiInfoByte = 0;
+    uint8_t powerSaveModeRaw = 0xFF;
+    IoHomePowerMode powerSaveMode = IoHomePowerMode::Unknown;
+    bool ioMembershipFlag = false;
+    bool rfSupportInNode = false;
+    // Bit 4 deliberately has no decoded field or behavior. Inspect it only in
+    // multiInfoByte diagnostics until its meaning is confirmed.
     bool syncControlGroupCandidate = false;
-    // 0..3 only when a MIB was present. 0xFF keeps an absent MIB distinct
-    // from the valid KLF turnaround class 0.
-    uint8_t turnaroundClass = 0xFF;
-    uint8_t turnaroundKlfValue = 0;
-    bool turnaroundUnitConfirmed = false;
+    // 0..3 only when a MIB was present. 0xFF keeps an absent MIB distinct from
+    // valid SlaveTimeClass 0. The KLF 5/10/20/40 hint has no confirmed unit and
+    // therefore never controls production RF timeouts.
+    uint8_t slaveTimeClass = 0xFF;
+    uint8_t slaveTimeKlfValue = 0;
+    bool slaveTimeUnitConfirmed = false;
+    IoHomeKeyState keyState = IoHomeKeyState::Unknown;
+    IoHomeMetadataSource metadataSource = IoHomeMetadataSource::Unknown;
+    IoHomeMetadataSource keyStateSource = IoHomeMetadataSource::Unknown;
     bool hasDiscoveryTimestamp = false;
     uint16_t discoveryTimestamp = 0;
-    // Compatibility view used by the existing 2W wake/preamble policy. It is
-    // populated only for the two KLF-defined power modes; reserved values stay
-    // unknown and never get coerced to either class.
-    bool hasPowerClass = false;
-    bool lowPower = false;
     uint8_t rawData[IOHC_DISCOVERY_RAW_MAX_SIZE] = {};
     uint8_t rawDataLen = 0;
 };
 
-// Discovery is the authoritative source for the device metadata model.  Keep
-// the broader name at API boundaries so later post-pair enrichment can update
-// the same coherent object without adding one callback per field.
-using IoHomeDeviceMetadata = IoHomeDiscoveryMetadata;
+inline bool ioHomeKeyStateKnown(const IoHomeProtocolIdentity &iIdentity)
+{
+    return iIdentity.keyState != IoHomeKeyState::Unknown &&
+           iIdentity.keyStateSource != IoHomeMetadataSource::Unknown;
+}
+
+// Layer 2 is deliberately separate from protocol identity. It can evolve from
+// confirmed command/response behavior without changing the hardware identity.
+struct IoHomeGenericCapabilities
+{
+    bool position = false;
+    bool velocity = false;
+    bool tilt = false;
+    bool light = false;
+    bool lock = false;
+    bool ventilation = false;
+    bool heating = false;
+};
 
 // Device-information responses use the normal 2W payload ceiling. Keep this
 // local to the command model because IoHomeFrame.h includes this header before
 // declaring IOHC_FRAME_MAX_DATA.
 static constexpr uint8_t IOHC_DEVICE_INFO_RAW_MAX_SIZE = 23;
 
-struct IoHomePostPairEnrichment
+// Layer 3: optional vendor/commercial identification evidence. Basic control
+// must never depend on these fields or on a successful product match.
+struct IoHomeProductIdentityEvidence
 {
     uint8_t nameResponse[IOHC_DEVICE_INFO_RAW_MAX_SIZE] = {};
     uint8_t nameResponseLen = 0;
@@ -622,50 +689,66 @@ struct IoHomePostPairEnrichment
     uint8_t generalInfo3[IOHC_DEVICE_INFO_RAW_MAX_SIZE] = {};
     uint8_t generalInfo3Len = 0;
     bool generalInfo2TypeValid = false;
-    uint16_t generalInfo2DeviceType = 0;
-    uint8_t generalInfo2Subtype = 0;
+    uint16_t generalInfo2Profile = 0;
+    uint8_t generalInfo2SubProfile = 0;
     bool generalInfo2MatchesDiscovery = false;
 };
 
-inline void decodeDiscoveryMib(IoHomeDiscoveryMetadata &ioMetadata, uint8_t iMib)
+static constexpr uint8_t IOHC_PRODUCT_SIGNATURE_SIZE = 10;
+
+struct IoHomeProductSignature
 {
-    ioMetadata.hasMib = true;
-    ioMetadata.mib = iMib;
+    uint8_t bytes[IOHC_PRODUCT_SIGNATURE_SIZE] = {};
+    uint8_t length = 0;
+};
+
+inline IoHomeProductSignature ioHomeGeneralInfo1ProductSignature(
+    const IoHomeProductIdentityEvidence &iEvidence)
+{
+    IoHomeProductSignature lSignature;
+    lSignature.length = iEvidence.generalInfo1Len < IOHC_PRODUCT_SIGNATURE_SIZE
+                            ? iEvidence.generalInfo1Len
+                            : IOHC_PRODUCT_SIGNATURE_SIZE;
+    if (lSignature.length > 0)
+        memcpy(lSignature.bytes, iEvidence.generalInfo1, lSignature.length);
+    return lSignature;
+}
+
+inline void decodeProtocolIdentityMib(IoHomeProtocolIdentity &ioIdentity,
+                                     uint8_t iMib)
+{
+    ioIdentity.hasMib = true;
+    ioIdentity.multiInfoByte = iMib;
 
     const uint8_t lPowerSave = iMib & IOHC_DISCOVERY_POWER_SAVE_MASK;
+    ioIdentity.powerSaveModeRaw = lPowerSave;
     if (lPowerSave == IOHC_POWER_SAVE_ALWAYS_ALIVE)
     {
-        ioMetadata.powerMode = IoHomePowerMode::AlwaysAlive;
-        ioMetadata.hasPowerClass = true;
-        ioMetadata.lowPower = false;
+        ioIdentity.powerSaveMode = IoHomePowerMode::AlwaysAlive;
     }
     else if (lPowerSave == IOHC_POWER_SAVE_LOW_POWER)
     {
-        ioMetadata.powerMode = IoHomePowerMode::LowPower;
-        ioMetadata.hasPowerClass = true;
-        ioMetadata.lowPower = true;
+        ioIdentity.powerSaveMode = IoHomePowerMode::LowPower;
     }
     else
     {
-        ioMetadata.powerMode = IoHomePowerMode::Unknown;
-        ioMetadata.hasPowerClass = false;
-        ioMetadata.lowPower = false;
+        ioIdentity.powerSaveMode = IoHomePowerMode::Unknown;
     }
 
-    ioMetadata.ioMember = (iMib & IOHC_DISCOVERY_IO_MEMBER_MASK) != 0;
-    ioMetadata.rfSupport = (iMib & IOHC_DISCOVERY_RF_SUPPORT_MASK) != 0;
-    ioMetadata.syncControlGroupCandidate =
+    ioIdentity.ioMembershipFlag = (iMib & IOHC_DISCOVERY_IO_MEMBER_MASK) != 0;
+    ioIdentity.rfSupportInNode = (iMib & IOHC_DISCOVERY_RF_SUPPORT_MASK) != 0;
+    ioIdentity.syncControlGroupCandidate =
         (iMib & IOHC_DISCOVERY_SYNC_CONTROL_GROUP_MASK) != 0;
-    ioMetadata.turnaroundClass = static_cast<uint8_t>(
-        (iMib & IOHC_DISCOVERY_TURNAROUND_MASK) >> IOHC_DISCOVERY_TURNAROUND_SHIFT);
-    ioMetadata.turnaroundKlfValue = ioHomeTurnaroundKlfValue(ioMetadata.turnaroundClass);
+    ioIdentity.slaveTimeClass = static_cast<uint8_t>(
+        (iMib & IOHC_DISCOVERY_SLAVE_TIME_CLASS_MASK) >> IOHC_DISCOVERY_SLAVE_TIME_CLASS_SHIFT);
+    ioIdentity.slaveTimeKlfValue = ioHomeSlaveTimeKlfValue(ioIdentity.slaveTimeClass);
     // The KLF table exposes values 5/10/20/40 without confirming the unit.
-    ioMetadata.turnaroundUnitConfirmed = false;
+    ioIdentity.slaveTimeUnitConfirmed = false;
 }
 
-inline IoHomeDiscoveryMetadata decodeDiscoveryMetadata(const uint8_t *iData, uint8_t iDataLen)
+inline IoHomeProtocolIdentity decodeProtocolIdentity(const uint8_t *iData, uint8_t iDataLen)
 {
-    IoHomeDiscoveryMetadata lResult;
+    IoHomeProtocolIdentity lResult;
     if (!iData) return lResult;
     lResult.rawDataLen = iDataLen < IOHC_DISCOVERY_RAW_MAX_SIZE
                              ? iDataLen
@@ -674,20 +757,20 @@ inline IoHomeDiscoveryMetadata decodeDiscoveryMetadata(const uint8_t *iData, uin
     if (iDataLen < IOHC_DISCOVERY_METADATA_SIZE) return lResult;
     lResult.valid = true;
     lResult.fullMetadata = iDataLen >= IOHC_DISCOVERY_FULL_SIZE;
-    lResult.deviceType = decodePackedDeviceType(iData[0], iData[1]);
-    lResult.subtype = decodePackedDeviceSubtype(iData[1]);
-    lResult.nodeTypeSubType = encodeNodeTypeSubType(lResult.deviceType, lResult.subtype);
-    if (iDataLen > IOHC_DISCOVERY_BACKBONE_OFFSET + 2)
+    lResult.profile = decodePackedProfile(iData[0], iData[1]);
+    lResult.subProfile = decodePackedSubProfile(iData[1]);
+    lResult.nodeTypeSubType = encodeNodeTypeSubType(lResult.profile, lResult.subProfile);
+    if (iDataLen > IOHC_DISCOVERY_IO_BACKBONE_OFFSET + 2)
     {
-        lResult.hasBackboneId = true;
-        lResult.backboneId = (static_cast<uint32_t>(iData[IOHC_DISCOVERY_BACKBONE_OFFSET]) << 16) |
-                             (static_cast<uint32_t>(iData[IOHC_DISCOVERY_BACKBONE_OFFSET + 1]) << 8) |
-                             static_cast<uint32_t>(iData[IOHC_DISCOVERY_BACKBONE_OFFSET + 2]);
+        lResult.hasIoBackboneAddress = true;
+        lResult.ioBackboneAddress = (static_cast<uint32_t>(iData[IOHC_DISCOVERY_IO_BACKBONE_OFFSET]) << 16) |
+                                    (static_cast<uint32_t>(iData[IOHC_DISCOVERY_IO_BACKBONE_OFFSET + 1]) << 8) |
+                                    static_cast<uint32_t>(iData[IOHC_DISCOVERY_IO_BACKBONE_OFFSET + 2]);
     }
     if (iDataLen > IOHC_DISCOVERY_MANUFACTURER_OFFSET)
-        lResult.manufacturer = iData[IOHC_DISCOVERY_MANUFACTURER_OFFSET];
+        lResult.manufacturerId = iData[IOHC_DISCOVERY_MANUFACTURER_OFFSET];
     if (iDataLen > IOHC_DISCOVERY_FLAGS_OFFSET)
-        decodeDiscoveryMib(lResult, iData[IOHC_DISCOVERY_FLAGS_OFFSET]);
+        decodeProtocolIdentityMib(lResult, iData[IOHC_DISCOVERY_FLAGS_OFFSET]);
     if (iDataLen > IOHC_DISCOVERY_TIMESTAMP_OFFSET + 1)
     {
         lResult.hasDiscoveryTimestamp = true;
@@ -698,46 +781,46 @@ inline IoHomeDiscoveryMetadata decodeDiscoveryMetadata(const uint8_t *iData, uin
     return lResult;
 }
 
-inline uint8_t encodeDiscoveryMetadata(const IoHomeDiscoveryMetadata &iMetadata,
-                                       uint8_t *oData, uint8_t iCapacity)
+inline uint8_t encodeProtocolIdentity(const IoHomeProtocolIdentity &iIdentity,
+                                      uint8_t *oData, uint8_t iCapacity)
 {
-    if (!iMetadata.valid || !oData)
+    if (!iIdentity.valid || !oData)
         return 0;
 
     uint8_t lLength = IOHC_DISCOVERY_METADATA_SIZE;
-    if (iMetadata.hasBackboneId)
+    if (iIdentity.hasIoBackboneAddress)
         lLength = IOHC_DISCOVERY_MANUFACTURER_OFFSET;
-    if (iMetadata.manufacturer != 0 || iMetadata.rawDataLen > IOHC_DISCOVERY_MANUFACTURER_OFFSET)
+    if (iIdentity.manufacturerId != 0 || iIdentity.rawDataLen > IOHC_DISCOVERY_MANUFACTURER_OFFSET)
         lLength = IOHC_DISCOVERY_MANUFACTURER_OFFSET + 1;
-    if (iMetadata.hasMib)
+    if (iIdentity.hasMib)
         lLength = IOHC_DISCOVERY_EXTENDED_SIZE;
-    if (iMetadata.hasDiscoveryTimestamp || iMetadata.fullMetadata)
+    if (iIdentity.hasDiscoveryTimestamp || iIdentity.fullMetadata)
         lLength = IOHC_DISCOVERY_FULL_SIZE;
     if (iCapacity < lLength)
         return 0;
 
     memset(oData, 0, lLength);
-    encodePackedDeviceType(iMetadata.deviceType, iMetadata.subtype,
-                           oData[0], oData[1]);
-    if (lLength > IOHC_DISCOVERY_BACKBONE_OFFSET + 2)
+    encodePackedProfile(iIdentity.profile, iIdentity.subProfile,
+                        oData[0], oData[1]);
+    if (lLength > IOHC_DISCOVERY_IO_BACKBONE_OFFSET + 2)
     {
-        oData[IOHC_DISCOVERY_BACKBONE_OFFSET] =
-            static_cast<uint8_t>((iMetadata.backboneId >> 16) & 0xFF);
-        oData[IOHC_DISCOVERY_BACKBONE_OFFSET + 1] =
-            static_cast<uint8_t>((iMetadata.backboneId >> 8) & 0xFF);
-        oData[IOHC_DISCOVERY_BACKBONE_OFFSET + 2] =
-            static_cast<uint8_t>(iMetadata.backboneId & 0xFF);
+        oData[IOHC_DISCOVERY_IO_BACKBONE_OFFSET] =
+            static_cast<uint8_t>((iIdentity.ioBackboneAddress >> 16) & 0xFF);
+        oData[IOHC_DISCOVERY_IO_BACKBONE_OFFSET + 1] =
+            static_cast<uint8_t>((iIdentity.ioBackboneAddress >> 8) & 0xFF);
+        oData[IOHC_DISCOVERY_IO_BACKBONE_OFFSET + 2] =
+            static_cast<uint8_t>(iIdentity.ioBackboneAddress & 0xFF);
     }
     if (lLength > IOHC_DISCOVERY_MANUFACTURER_OFFSET)
-        oData[IOHC_DISCOVERY_MANUFACTURER_OFFSET] = iMetadata.manufacturer;
+        oData[IOHC_DISCOVERY_MANUFACTURER_OFFSET] = iIdentity.manufacturerId;
     if (lLength > IOHC_DISCOVERY_FLAGS_OFFSET)
-        oData[IOHC_DISCOVERY_FLAGS_OFFSET] = iMetadata.mib;
+        oData[IOHC_DISCOVERY_FLAGS_OFFSET] = iIdentity.multiInfoByte;
     if (lLength > IOHC_DISCOVERY_TIMESTAMP_OFFSET + 1)
     {
         oData[IOHC_DISCOVERY_TIMESTAMP_OFFSET] =
-            static_cast<uint8_t>((iMetadata.discoveryTimestamp >> 8) & 0xFF);
+            static_cast<uint8_t>((iIdentity.discoveryTimestamp >> 8) & 0xFF);
         oData[IOHC_DISCOVERY_TIMESTAMP_OFFSET + 1] =
-            static_cast<uint8_t>(iMetadata.discoveryTimestamp & 0xFF);
+            static_cast<uint8_t>(iIdentity.discoveryTimestamp & 0xFF);
     }
     return lLength;
 }

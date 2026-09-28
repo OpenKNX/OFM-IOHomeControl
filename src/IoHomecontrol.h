@@ -57,7 +57,7 @@ public:
   IoHomeRemoteMap &remoteMap();
   void onPassiveKeyCaptured(const IoHomeController::PassiveKeyResult &iResult);
   void onDiscoveryResponse(const IoHomeFrame &iFrame,
-                           const IoHomeDiscoveryMetadata &iMetadata);
+                           const IoHomeProtocolIdentity &iMetadata);
   void onKeyImportCandidateObserved(uint32_t iNodeId);
   void onAuthenticatedDirectedDiscovery(uint32_t iNodeId);
 
@@ -76,8 +76,8 @@ private:
     uint32_t oneWayControllerNodeId = 0;
     uint8_t oneWayControllerKey[16] = {};
     uint8_t oneWayControllerManufacturer = 2;
-    uint32_t discoveryNodeId = 0;
-    IoHomeDiscoveryMetadata discoveryMetadata{};
+    uint32_t ioAddress = 0;
+    IoHomeProtocolIdentity protocolIdentity{};
   };
 
   IoHomecontrolChannel *mChannels[IOHC_ChannelCount] = {};
@@ -116,7 +116,7 @@ private:
   {
     bool valid = false;
     uint32_t nodeId = 0;
-    IoHomeDiscoveryMetadata discoveryMetadata{};
+    IoHomeProtocolIdentity protocolIdentity{};
   };
 
   // Discovery is a network inventory, not a configured-channel list. Keep
