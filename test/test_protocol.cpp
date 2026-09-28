@@ -12098,6 +12098,42 @@ TEST(controller_manual_profile_override_keeps_discovery_identity)
                                    ParameterSemantic::SlatOrientation), 1U);
 }
 
+TEST(controller_interior_venetian_fp1_poll_routes_orientation_feedback)
+{
+    const uint32_t lRemote = 0x831F2A;
+    const uint32_t lDevice = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemote, lDevice, lKey);
+    IoHomeProtocolIdentity lIdentity;
+    lIdentity.valid = true;
+    lIdentity.profile = 1;
+    lChannel.onProtocolIdentity(lDevice, lIdentity);
+    ASSERT_TRUE(lController.sendCommand(lDevice, lKey, IoHomeCommand::Private,
+                                        0x03, 0x80, 0x01));
+    IoHomeFrame lTx;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lTx));
+    ASSERT_EQ(lTx.dataLen, 4U);
+    ASSERT_EQ(lTx.data[0], 0x03U);
+    ASSERT_EQ(lTx.data[1], 0x80U);
+    ASSERT_EQ(lTx.data[2], 0x01U);
+    uint8_t lData[15] = {};
+    const uint16_t lRaw = IOHC_POSITION_MAX / 4;
+    lData[13] = static_cast<uint8_t>(lRaw >> 8);
+    lData[14] = static_cast<uint8_t>(lRaw & 0xFF);
+    IoHomeFrame lResponse;
+    buildSimpleResponseFrame(lResponse, lRemote, lDevice,
+                             IoHomeCommand::PrivateResponse,
+                             lData, sizeof(lData));
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    ASSERT_TRUE(lChannel.testHasSlatFeedback());
+    ASSERT_FLOAT_EQ(lChannel.testSlatFeedback(), 75.0f, 0.01f);
+    ASSERT_TRUE(!lChannel.testHasVelocityFeedback());
+}
+
 TEST(controller_2w_execute_ignores_combined_slat_param)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;

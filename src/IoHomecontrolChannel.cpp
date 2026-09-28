@@ -1468,14 +1468,20 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll)
     // ambiguous safety-relevant command outcome.
     const bool lStopSettlePoll = iTrackedPoll && mStopSettlePollPending;
     const uint8_t lMaxAttempts = lStopSettlePoll ? IOHC_EXCHANGE_MAX_ATTEMPTS : 1U;
-    if (!mIs1W && isTiltCapableDeviceType() &&
-        (getEffectiveProfileDescriptor()
-             ? ioHomeSupportsCapturedFp3Orientation(getEffectiveProfileDescriptor())
-             : !mProtocolIdentity.valid))
+    const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor();
+    const ParameterSemantic lOrientation = lDescriptor &&
+        ioHomeParameterIndex(lDescriptor, ParameterSemantic::SlatOrientation) == 0xFF
+            ? ParameterSemantic::HangerOrientation
+            : ParameterSemantic::SlatOrientation;
+    const uint8_t lOrientationIndex = lDescriptor
+        ? ioHomeParameterIndex(lDescriptor, lOrientation) : 3;
+    if (isTiltCapableDeviceType() && lOrientationIndex >= 1 &&
+        lOrientationIndex <= 3)
     {
         const bool lQueued = mController.sendBackgroundCommand(
             mNodeId, mEncKey, IoHomeCommand::Private,
-            0x03, 0x20, 0x01, lMaxAttempts);
+            0x03, static_cast<uint8_t>(0x80U >> (lOrientationIndex - 1)),
+            0x01, lMaxAttempts);
         if (lQueued)
         {
             mStatusPollTimer = delayTimerInit();

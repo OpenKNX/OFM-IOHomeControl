@@ -574,12 +574,13 @@ namespace
             iChannel->setLowPower2W(false);
     }
 
-    void applyPrivateTiltInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData, uint8_t iDataLen)
+    void applyPrivateFpInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData,
+                            uint8_t iDataLen, uint8_t iFpIndex)
     {
-        if (!iChannel || !iData || iDataLen < 15)
+        if (!iChannel || !iData || iDataLen < 15 || iFpIndex < 1 || iFpIndex > 3)
             return;
         const uint16_t lTiltRaw = readU16BE(iData, 13);
-        dispatchProfileParameterFeedback(iChannel, 3, lTiltRaw);
+        dispatchProfileParameterFeedback(iChannel, iFpIndex, lTiltRaw);
     }
 
     void applyGeneralInfo2TiltInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData, uint8_t iDataLen)
@@ -9373,7 +9374,20 @@ void IoHomeController::dispatchRxFrame()
                              lCh->isLowPower2W() ? "low-power" : "always-alive");
                     openknx.flash.save();
                 }
-                applyPrivateTiltInfo(lCh, mRxFrame.data, mRxFrame.dataLen);
+                uint8_t lPrivateFpIndex = 3;
+                if (mCurrentCmd.command == IoHomeCommand::Private &&
+                    mCurrentCmd.param == 0x03 && mCurrentCmd.param3 == 0x01)
+                {
+                    switch (mCurrentCmd.param2)
+                    {
+                    case 0x80: lPrivateFpIndex = 1; break;
+                    case 0x40: lPrivateFpIndex = 2; break;
+                    case 0x20: lPrivateFpIndex = 3; break;
+                    default: lPrivateFpIndex = 0; break;
+                    }
+                }
+                applyPrivateFpInfo(lCh, mRxFrame.data, mRxFrame.dataLen,
+                                   lPrivateFpIndex);
                 break;
             }
             case IoHomeCommand::GetNameResponse:

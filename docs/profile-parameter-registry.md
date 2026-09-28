@@ -17,10 +17,11 @@ The distinction between interior and exterior Venetian blinds matters:
 | `0x0040` interior | slat orientation | slat orientation speed | blind speed |
 | `0x0440` exterior | blind speed | slat orientation speed | slat orientation |
 
-The two-way Execute path selects FP1, FP2, or FP3 from the registry and builds
-the corresponding activation bit. The captured FP3 status field is interpreted
-as tilt only for profiles that assign FP3 an orientation semantic; for an
-interior Venetian blind, that field reports speed instead. Legacy channels
+The two-way Execute and indexed Private status paths select FP1, FP2, or FP3
+from the registry and build the corresponding activation bit. A returned FP3
+field is interpreted as tilt only for profiles that assign FP3 an orientation
+semantic; for an interior Venetian blind, that field reports speed and the
+orientation poll instead targets FP1. Legacy channels
 without discovery metadata retain their captured FP3 tilt behavior. The
 one-way combined position/slat frame has no confirmed parameter index for a
 discovered profile and remains disabled in that case.
