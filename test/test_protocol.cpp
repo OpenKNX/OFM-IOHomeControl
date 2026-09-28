@@ -2301,7 +2301,7 @@ TEST(discovery_response_metadata_uses_full_layout_offsets)
     // Multi Information Byte, timestamp. The backbone's first byte must not
     // be mistaken for the manufacturer.
     const uint8_t lData[] = {
-        0x00, 0x80, 0x00, 0x00, 0x00, 0x01, 0xDD, 0xFF, 0xFF};
+        0x00, 0x80, 0x00, 0x00, 0x00, 0x01, 0x1D, 0xFF, 0xFF};
 
     const IoHomeDiscoveryMetadata lMetadata =
         decodeDiscoveryMetadata(lData, sizeof(lData));
@@ -2316,6 +2316,15 @@ TEST(discovery_response_metadata_uses_full_layout_offsets)
     ASSERT_EQ(lMetadata.backboneId, 0x000000U);
     ASSERT_EQ(lMetadata.manufacturer,
               static_cast<uint8_t>(IoHomeManufacturer::Velux));
+    ASSERT_TRUE(lMetadata.hasMib);
+    ASSERT_EQ(lMetadata.mib, 0x1D);
+    ASSERT_EQ(lMetadata.powerMode, IoHomePowerMode::LowPower);
+    ASSERT_TRUE(lMetadata.ioMember);
+    ASSERT_TRUE(lMetadata.rfSupport);
+    ASSERT_TRUE(!lMetadata.syncControlGroupCandidate);
+    ASSERT_EQ(lMetadata.turnaroundClass, 0);
+    ASSERT_EQ(lMetadata.turnaroundKlfValue, 5);
+    ASSERT_TRUE(!lMetadata.turnaroundUnitConfirmed);
     ASSERT_TRUE(lMetadata.hasPowerClass);
     ASSERT_TRUE(lMetadata.lowPower);
     ASSERT_EQ(lMetadata.rawDataLen, sizeof(lData));
@@ -2327,7 +2336,80 @@ TEST(discovery_response_metadata_uses_full_layout_offsets)
     ASSERT_TRUE(!lTypeOnly.fullMetadata);
     ASSERT_TRUE(!lTypeOnly.hasBackboneId);
     ASSERT_EQ(lTypeOnly.manufacturer, 0);
+    ASSERT_TRUE(!lTypeOnly.hasMib);
+    ASSERT_EQ(lTypeOnly.powerMode, IoHomePowerMode::Unknown);
     ASSERT_TRUE(!lTypeOnly.hasPowerClass);
+}
+
+TEST(discovery_manufacturer_mapping_preserves_known_and_unknown_ids)
+{
+    struct ManufacturerCase
+    {
+        uint8_t id;
+        const char *name;
+    };
+    const ManufacturerCase lCases[] = {
+        {1, "VELUX"}, {2, "Somfy"}, {3, "Honeywell"}, {4, "Hoermann"},
+        {5, "ASSA ABLOY"}, {6, "Niko"}, {7, "WINDOW MASTER"},
+        {8, "Renson"}, {9, "CIAT"}, {10, "Secuyou"}, {11, "OVERKIZ"},
+        {12, "Atlantic Group"},
+    };
+
+    for (const ManufacturerCase &lCase : lCases)
+    {
+        uint8_t lData[IOHC_DISCOVERY_EXTENDED_SIZE] = {};
+        lData[IOHC_DISCOVERY_MANUFACTURER_OFFSET] = lCase.id;
+        const IoHomeDiscoveryMetadata lMetadata =
+            decodeDiscoveryMetadata(lData, sizeof(lData));
+        ASSERT_EQ(lMetadata.manufacturer, lCase.id);
+        ASSERT_TRUE(strcmp(ioHomeManufacturerName(lMetadata.manufacturer), lCase.name) == 0);
+    }
+
+    uint8_t lUnknownData[IOHC_DISCOVERY_EXTENDED_SIZE] = {};
+    lUnknownData[IOHC_DISCOVERY_MANUFACTURER_OFFSET] = 0x7E;
+    const IoHomeDiscoveryMetadata lUnknown =
+        decodeDiscoveryMetadata(lUnknownData, sizeof(lUnknownData));
+    ASSERT_EQ(lUnknown.manufacturer, 0x7E);
+    ASSERT_TRUE(strcmp(ioHomeManufacturerName(lUnknown.manufacturer), "Unknown") == 0);
+}
+
+TEST(discovery_multi_information_byte_decodes_klf_semantics_without_coercion)
+{
+    for (uint8_t lClass = 0; lClass < 4; ++lClass)
+    {
+        uint8_t lData[IOHC_DISCOVERY_EXTENDED_SIZE] = {};
+        lData[IOHC_DISCOVERY_FLAGS_OFFSET] =
+            static_cast<uint8_t>((lClass << IOHC_DISCOVERY_TURNAROUND_SHIFT) |
+                                 IOHC_DISCOVERY_IO_MEMBER_MASK |
+                                 IOHC_DISCOVERY_RF_SUPPORT_MASK);
+        const IoHomeDiscoveryMetadata lMetadata =
+            decodeDiscoveryMetadata(lData, sizeof(lData));
+        ASSERT_TRUE(lMetadata.hasMib);
+        ASSERT_EQ(lMetadata.mib, lData[IOHC_DISCOVERY_FLAGS_OFFSET]);
+        ASSERT_EQ(lMetadata.powerMode, IoHomePowerMode::AlwaysAlive);
+        ASSERT_TRUE(lMetadata.hasPowerClass);
+        ASSERT_TRUE(!lMetadata.lowPower);
+        ASSERT_TRUE(lMetadata.ioMember);
+        ASSERT_TRUE(lMetadata.rfSupport);
+        ASSERT_TRUE(!lMetadata.syncControlGroupCandidate);
+        ASSERT_EQ(lMetadata.turnaroundClass, lClass);
+        ASSERT_EQ(lMetadata.turnaroundKlfValue,
+                  static_cast<uint8_t>(lClass == 0 ? 5 : lClass == 1 ? 10 : lClass == 2 ? 20 : 40));
+        ASSERT_TRUE(!lMetadata.turnaroundUnitConfirmed);
+    }
+
+    uint8_t lReservedData[IOHC_DISCOVERY_EXTENDED_SIZE] = {};
+    lReservedData[IOHC_DISCOVERY_FLAGS_OFFSET] =
+        static_cast<uint8_t>(0x02 | IOHC_DISCOVERY_SYNC_CONTROL_GROUP_MASK);
+    const IoHomeDiscoveryMetadata lReserved =
+        decodeDiscoveryMetadata(lReservedData, sizeof(lReservedData));
+    ASSERT_EQ(lReserved.mib, lReservedData[IOHC_DISCOVERY_FLAGS_OFFSET]);
+    ASSERT_EQ(lReserved.powerMode, IoHomePowerMode::Unknown);
+    ASSERT_TRUE(!lReserved.hasPowerClass);
+    ASSERT_TRUE(!lReserved.lowPower);
+    ASSERT_TRUE(!lReserved.ioMember);
+    ASSERT_TRUE(!lReserved.rfSupport);
+    ASSERT_TRUE(lReserved.syncControlGroupCandidate);
 }
 
 TEST(discovery_type_subtype_helpers_cover_klf_profiles_and_reserved_values)
@@ -10097,7 +10179,7 @@ TEST(controller_pairing_stores_029_metadata_before_key_exchange_and_keeps_source
     static const uint8_t kCapturedPayload[IOHC_DISCOVERY_FULL_SIZE] = {
         0x00, 0x80, // Roller shutter type 2, subtype 0
         0x00, 0x00, 0x00, // Backbone reference is valid zero, not node ID
-        0x01, 0xDD, 0xFF, 0xFF};
+        0x01, 0x1D, 0xFF, 0xFF};
 
     IoHomeController lController;
     IoHomecontrol lModule;
@@ -10140,6 +10222,15 @@ TEST(controller_pairing_stores_029_metadata_before_key_exchange_and_keeps_source
     ASSERT_EQ(lMetadata.nodeTypeSubType, 0x0080U);
     ASSERT_TRUE(lMetadata.hasBackboneId);
     ASSERT_EQ(lMetadata.backboneId, 0x000000U);
+    ASSERT_EQ(lMetadata.manufacturer,
+              static_cast<uint8_t>(IoHomeManufacturer::Velux));
+    ASSERT_TRUE(lMetadata.hasMib);
+    ASSERT_EQ(lMetadata.mib, 0x1D);
+    ASSERT_EQ(lMetadata.powerMode, IoHomePowerMode::LowPower);
+    ASSERT_TRUE(lMetadata.ioMember);
+    ASSERT_TRUE(lMetadata.rfSupport);
+    ASSERT_TRUE(!lMetadata.syncControlGroupCandidate);
+    ASSERT_EQ(lMetadata.turnaroundClass, 0);
     ASSERT_EQ(lMetadata.rawDataLen, sizeof(kCapturedPayload));
     ASSERT_MEM_EQ(lMetadata.rawData, kCapturedPayload, sizeof(kCapturedPayload));
     ASSERT_TRUE(lController.state() == ControllerState::PairSendDiscoveryConfirmation ||

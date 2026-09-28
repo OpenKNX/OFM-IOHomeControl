@@ -78,11 +78,13 @@ class ChannelUiTest(unittest.TestCase):
         write_flash = source.split("void IoHomecontrol::writeFlash()", 1)[1].split(
             "void IoHomecontrol::readFlash", 1
         )[0]
-        self.assertIn("openknx.flash.writeByte(13)", write_flash)
+        self.assertIn("openknx.flash.writeByte(14)", write_flash)
 
         read_flash = source.split("void IoHomecontrol::readFlash", 1)[1]
         current_layout_branch = read_flash.split("else if", 1)[0]
-        self.assertIn("lVersion == 13", current_layout_branch)
+        self.assertIn("lVersion == 14", current_layout_branch)
+        self.assertIn("kFlashRecordV14 = 55", current_layout_branch)
+        self.assertIn("decodeDiscoveryMib(lState.discoveryMetadata, lMib)", current_layout_branch)
 
     def test_selection_table_matches_shared_layout(self) -> None:
         selection = self.share.find(

@@ -75,6 +75,8 @@ private:
     uint32_t oneWayControllerNodeId = 0;
     uint8_t oneWayControllerKey[16] = {};
     uint8_t oneWayControllerManufacturer = 2;
+    uint32_t discoveryNodeId = 0;
+    IoHomeDiscoveryMetadata discoveryMetadata{};
   };
 
   IoHomecontrolChannel *mChannels[IOHC_ChannelCount] = {};

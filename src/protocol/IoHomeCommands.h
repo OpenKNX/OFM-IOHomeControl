@@ -369,6 +369,26 @@ enum class IoHomeManufacturer : uint8_t
     AtlanticGroup = 0x0C
 };
 
+inline const char *ioHomeManufacturerName(uint8_t iManufacturer)
+{
+    switch (static_cast<IoHomeManufacturer>(iManufacturer))
+    {
+    case IoHomeManufacturer::Velux: return "VELUX";
+    case IoHomeManufacturer::Somfy: return "Somfy";
+    case IoHomeManufacturer::Honeywell: return "Honeywell";
+    case IoHomeManufacturer::Hormann: return "Hoermann";
+    case IoHomeManufacturer::AssaAbloy: return "ASSA ABLOY";
+    case IoHomeManufacturer::Niko: return "Niko";
+    case IoHomeManufacturer::WindowMaster: return "WINDOW MASTER";
+    case IoHomeManufacturer::Renson: return "Renson";
+    case IoHomeManufacturer::Ciat: return "CIAT";
+    case IoHomeManufacturer::Secuyou: return "Secuyou";
+    case IoHomeManufacturer::Overkiz: return "OVERKIZ";
+    case IoHomeManufacturer::AtlanticGroup: return "Atlantic Group";
+    default: return "Unknown";
+    }
+}
+
 // Check if device type only supports open/close (no continuous positioning)
 inline bool isOpenCloseOnly(IoHomeDeviceType iType)
 {
@@ -518,8 +538,36 @@ constexpr uint32_t IOHC_FREQUENCIES[IOHC_NUM_FREQUENCIES] = {
 #define IOHC_DISCOVERY_FULL_SIZE 9
 #define IOHC_DISCOVERY_RAW_MAX_SIZE 23
 #define IOHC_DISCOVERY_POWER_SAVE_MASK 0x03
+#define IOHC_DISCOVERY_IO_MEMBER_MASK 0x04
+#define IOHC_DISCOVERY_RF_SUPPORT_MASK 0x08
+#define IOHC_DISCOVERY_SYNC_CONTROL_GROUP_MASK 0x20
+#define IOHC_DISCOVERY_TURNAROUND_MASK 0xC0
+#define IOHC_DISCOVERY_TURNAROUND_SHIFT 6
 #define IOHC_POWER_SAVE_ALWAYS_ALIVE 0x00
 #define IOHC_POWER_SAVE_LOW_POWER 0x01
+
+enum class IoHomePowerMode : uint8_t
+{
+    AlwaysAlive = 0,
+    LowPower = 1,
+    Unknown = 0xFF
+};
+
+inline const char *ioHomePowerModeName(IoHomePowerMode iMode)
+{
+    switch (iMode)
+    {
+    case IoHomePowerMode::AlwaysAlive: return "always-alive";
+    case IoHomePowerMode::LowPower: return "low-power";
+    default: return "unknown";
+    }
+}
+
+inline uint8_t ioHomeTurnaroundKlfValue(uint8_t iClass)
+{
+    static constexpr uint8_t kValues[] = {5, 10, 20, 40};
+    return kValues[iClass & 0x03];
+}
 
 struct IoHomeDiscoveryMetadata
 {
@@ -531,11 +579,59 @@ struct IoHomeDiscoveryMetadata
     bool hasBackboneId = false;
     uint32_t backboneId = 0;
     uint8_t manufacturer = 0;
+    bool hasMib = false;
+    uint8_t mib = 0;
+    IoHomePowerMode powerMode = IoHomePowerMode::Unknown;
+    bool ioMember = false;
+    bool rfSupport = false;
+    bool syncControlGroupCandidate = false;
+    uint8_t turnaroundClass = 0;
+    uint8_t turnaroundKlfValue = 0;
+    bool turnaroundUnitConfirmed = false;
+    // Compatibility view used by the existing 2W wake/preamble policy. It is
+    // populated only for the two KLF-defined power modes; reserved values stay
+    // unknown and never get coerced to either class.
     bool hasPowerClass = false;
     bool lowPower = false;
     uint8_t rawData[IOHC_DISCOVERY_RAW_MAX_SIZE] = {};
     uint8_t rawDataLen = 0;
 };
+
+inline void decodeDiscoveryMib(IoHomeDiscoveryMetadata &ioMetadata, uint8_t iMib)
+{
+    ioMetadata.hasMib = true;
+    ioMetadata.mib = iMib;
+
+    const uint8_t lPowerSave = iMib & IOHC_DISCOVERY_POWER_SAVE_MASK;
+    if (lPowerSave == IOHC_POWER_SAVE_ALWAYS_ALIVE)
+    {
+        ioMetadata.powerMode = IoHomePowerMode::AlwaysAlive;
+        ioMetadata.hasPowerClass = true;
+        ioMetadata.lowPower = false;
+    }
+    else if (lPowerSave == IOHC_POWER_SAVE_LOW_POWER)
+    {
+        ioMetadata.powerMode = IoHomePowerMode::LowPower;
+        ioMetadata.hasPowerClass = true;
+        ioMetadata.lowPower = true;
+    }
+    else
+    {
+        ioMetadata.powerMode = IoHomePowerMode::Unknown;
+        ioMetadata.hasPowerClass = false;
+        ioMetadata.lowPower = false;
+    }
+
+    ioMetadata.ioMember = (iMib & IOHC_DISCOVERY_IO_MEMBER_MASK) != 0;
+    ioMetadata.rfSupport = (iMib & IOHC_DISCOVERY_RF_SUPPORT_MASK) != 0;
+    ioMetadata.syncControlGroupCandidate =
+        (iMib & IOHC_DISCOVERY_SYNC_CONTROL_GROUP_MASK) != 0;
+    ioMetadata.turnaroundClass = static_cast<uint8_t>(
+        (iMib & IOHC_DISCOVERY_TURNAROUND_MASK) >> IOHC_DISCOVERY_TURNAROUND_SHIFT);
+    ioMetadata.turnaroundKlfValue = ioHomeTurnaroundKlfValue(ioMetadata.turnaroundClass);
+    // The KLF table exposes values 5/10/20/40 without confirming the unit.
+    ioMetadata.turnaroundUnitConfirmed = false;
+}
 
 inline IoHomeDiscoveryMetadata decodeDiscoveryMetadata(const uint8_t *iData, uint8_t iDataLen)
 {
@@ -561,14 +657,7 @@ inline IoHomeDiscoveryMetadata decodeDiscoveryMetadata(const uint8_t *iData, uin
     if (iDataLen > IOHC_DISCOVERY_MANUFACTURER_OFFSET)
         lResult.manufacturer = iData[IOHC_DISCOVERY_MANUFACTURER_OFFSET];
     if (iDataLen > IOHC_DISCOVERY_FLAGS_OFFSET)
-    {
-        const uint8_t lPowerSave = iData[IOHC_DISCOVERY_FLAGS_OFFSET] & IOHC_DISCOVERY_POWER_SAVE_MASK;
-        if (lPowerSave == IOHC_POWER_SAVE_ALWAYS_ALIVE || lPowerSave == IOHC_POWER_SAVE_LOW_POWER)
-        {
-            lResult.hasPowerClass = true;
-            lResult.lowPower = lPowerSave == IOHC_POWER_SAVE_LOW_POWER;
-        }
-    }
+        decodeDiscoveryMib(lResult, iData[IOHC_DISCOVERY_FLAGS_OFFSET]);
     return lResult;
 }
 

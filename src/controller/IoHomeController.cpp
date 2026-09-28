@@ -2608,31 +2608,62 @@ bool IoHomeController::captureDiscoveryMetadata(
         return false;
     }
 
+    bool lPersistedMetadataChanged = false;
     if (iChannel)
-        iChannel->onDiscoveryMetadata(iFrame.getSrcNodeId(), lMetadata);
-
-    if (lMetadata.hasBackboneId)
     {
-        logInfoP("Discovery metadata from %s: Node=%06X Backbone=%06X type=%u subtype=%u combined=0x%04X full=%s raw=%s",
-                 iSource ? iSource : "discovery",
-                 iFrame.getSrcNodeId(), lMetadata.backboneId,
-                 static_cast<unsigned>(lMetadata.deviceType),
-                 static_cast<unsigned>(lMetadata.subtype),
-                 static_cast<unsigned>(lMetadata.nodeTypeSubType),
-                 lMetadata.fullMetadata ? "yes" : "no",
-                 lRaw.c_str());
+        const IoHomeDiscoveryMetadata &lPrevious = iChannel->getDiscoveryMetadata();
+        const bool lPowerClassWillChange =
+            lMetadata.hasPowerClass &&
+            (!iChannel->hasLearnedLowPower2W() ||
+             iChannel->isLowPower2W() != lMetadata.lowPower);
+        lPersistedMetadataChanged =
+            iChannel->getDiscoveryNodeId() != iFrame.getSrcNodeId() ||
+            lPrevious.valid != lMetadata.valid ||
+            lPrevious.fullMetadata != lMetadata.fullMetadata ||
+            lPrevious.deviceType != lMetadata.deviceType ||
+            lPrevious.subtype != lMetadata.subtype ||
+            lPrevious.hasBackboneId != lMetadata.hasBackboneId ||
+            lPrevious.backboneId != lMetadata.backboneId ||
+            lPrevious.manufacturer != lMetadata.manufacturer ||
+            lPrevious.hasMib != lMetadata.hasMib ||
+            lPrevious.mib != lMetadata.mib;
+        iChannel->onDiscoveryMetadata(iFrame.getSrcNodeId(), lMetadata);
+        // The immediately following power-class learner already schedules a
+        // save when that compatibility field changes. Coalesce both updates
+        // into one flash write, while still persisting metadata-only changes.
+        if (lPersistedMetadataChanged && !lPowerClassWillChange)
+            openknx.flash.save();
+    }
+
+    logInfoP("Discovery metadata from %s: Node=%06X type=%u subtype=%u combined=0x%04X manufacturer=%s(0x%02X) full=%s raw=%s",
+             iSource ? iSource : "discovery", iFrame.getSrcNodeId(),
+             static_cast<unsigned>(lMetadata.deviceType),
+             static_cast<unsigned>(lMetadata.subtype),
+             static_cast<unsigned>(lMetadata.nodeTypeSubType),
+             ioHomeManufacturerName(lMetadata.manufacturer),
+             static_cast<unsigned>(lMetadata.manufacturer),
+             lMetadata.fullMetadata ? "yes" : "no", lRaw.c_str());
+    if (lMetadata.hasBackboneId)
+        logInfoP("Discovery metadata: Backbone=%06X", lMetadata.backboneId);
+    else
+        logInfoP("Discovery metadata: Backbone=n/a");
+    if (lMetadata.hasMib)
+    {
+        logInfoP("Discovery metadata: MIB=0x%02X power=%s ioMember=%u rfSupport=%u syncControlCandidate=%u turnaroundClass=%u turnaroundKlfValue=%u unitConfirmed=%u",
+                 static_cast<unsigned>(lMetadata.mib),
+                 ioHomePowerModeName(lMetadata.powerMode),
+                 lMetadata.ioMember ? 1U : 0U,
+                 lMetadata.rfSupport ? 1U : 0U,
+                 lMetadata.syncControlGroupCandidate ? 1U : 0U,
+                 static_cast<unsigned>(lMetadata.turnaroundClass),
+                 static_cast<unsigned>(lMetadata.turnaroundKlfValue),
+                 lMetadata.turnaroundUnitConfirmed ? 1U : 0U);
+        if (!lMetadata.rfSupport)
+            logInfoP("Discovery metadata warning: Node=%06X reports rfSupport=0 but supplied an RF discovery response; raw MIB retained",
+                     iFrame.getSrcNodeId());
     }
     else
-    {
-        logInfoP("Discovery metadata from %s: Node=%06X Backbone=n/a type=%u subtype=%u combined=0x%04X full=%s raw=%s",
-                 iSource ? iSource : "discovery",
-                 iFrame.getSrcNodeId(),
-                 static_cast<unsigned>(lMetadata.deviceType),
-                 static_cast<unsigned>(lMetadata.subtype),
-                 static_cast<unsigned>(lMetadata.nodeTypeSubType),
-                 lMetadata.fullMetadata ? "yes" : "no",
-                 lRaw.c_str());
-    }
+        logInfoP("Discovery metadata: MIB=n/a");
     return true;
 }
 
@@ -4334,23 +4365,29 @@ void IoHomeController::tracePairDiagnosticDiscoveryInterpretation(const IoHomeFr
         const IoHomeDiscoveryMetadata lMetadata =
             decodeDiscoveryMetadata(iFrame.data, iFrame.dataLen);
         const std::string lRaw = hexDump(iFrame.data, iFrame.dataLen);
-        if (lMetadata.valid && lMetadata.hasBackboneId)
+        if (lMetadata.valid)
         {
-            logInfoP("PairDiag: discovery metadata Node: %06X Backbone: %06X Type: %u SubType: %u Combined: 0x%04X Full: %s Raw: %s",
-                     iFrame.getSrcNodeId(), lMetadata.backboneId,
-                     static_cast<unsigned>(lMetadata.deviceType),
-                     static_cast<unsigned>(lMetadata.subtype),
-                     static_cast<unsigned>(lMetadata.nodeTypeSubType),
-                     lMetadata.fullMetadata ? "yes" : "no", lRaw.c_str());
-        }
-        else if (lMetadata.valid)
-        {
-            logInfoP("PairDiag: discovery metadata Node: %06X Backbone: n/a Type: %u SubType: %u Combined: 0x%04X Full: no Raw: %s",
+            logInfoP("PairDiag: discovery metadata Node: %06X Backbone: %s Type: %u SubType: %u Combined: 0x%04X Manufacturer: %s(0x%02X) Full: %s Raw: %s",
                      iFrame.getSrcNodeId(),
+                     lMetadata.hasBackboneId ? "present" : "n/a",
                      static_cast<unsigned>(lMetadata.deviceType),
                      static_cast<unsigned>(lMetadata.subtype),
                      static_cast<unsigned>(lMetadata.nodeTypeSubType),
-                     lRaw.c_str());
+                     ioHomeManufacturerName(lMetadata.manufacturer),
+                     static_cast<unsigned>(lMetadata.manufacturer),
+                     lMetadata.fullMetadata ? "yes" : "no", lRaw.c_str());
+            if (lMetadata.hasBackboneId)
+                logInfoP("PairDiag: discovery Backbone value: %06X", lMetadata.backboneId);
+            if (lMetadata.hasMib)
+                logInfoP("PairDiag: discovery MIB: 0x%02X Power: %s ioMember: %u rfSupport: %u syncControlCandidate: %u turnaroundClass: %u turnaroundKlfValue: %u unitConfirmed: %u",
+                         static_cast<unsigned>(lMetadata.mib),
+                         ioHomePowerModeName(lMetadata.powerMode),
+                         lMetadata.ioMember ? 1U : 0U,
+                         lMetadata.rfSupport ? 1U : 0U,
+                         lMetadata.syncControlGroupCandidate ? 1U : 0U,
+                         static_cast<unsigned>(lMetadata.turnaroundClass),
+                         static_cast<unsigned>(lMetadata.turnaroundKlfValue),
+                         lMetadata.turnaroundUnitConfirmed ? 1U : 0U);
         }
         else
         {
@@ -4610,20 +4647,28 @@ void IoHomeController::logPairDiagnosticStatus() const
     {
         const std::string lRaw = hexDump(mPairDiscoveryMetadata.rawData,
                                          mPairDiscoveryMetadata.rawDataLen);
+        logInfoP("PairDiag: discovery Node: %06X Backbone: %s Type: %u SubType: %u Combined: 0x%04X Manufacturer: %s(0x%02X) Raw: %s",
+                 mDiscoveredNodeId,
+                 mPairDiscoveryMetadata.hasBackboneId ? "present" : "n/a",
+                 static_cast<unsigned>(mPairDiscoveryMetadata.deviceType),
+                 static_cast<unsigned>(mPairDiscoveryMetadata.subtype),
+                 static_cast<unsigned>(mPairDiscoveryMetadata.nodeTypeSubType),
+                 ioHomeManufacturerName(mPairDiscoveryMetadata.manufacturer),
+                 static_cast<unsigned>(mPairDiscoveryMetadata.manufacturer),
+                 lRaw.c_str());
         if (mPairDiscoveryMetadata.hasBackboneId)
-            logInfoP("PairDiag: discovery Node: %06X Backbone: %06X Type: %u SubType: %u Combined: 0x%04X Raw: %s",
-                     mDiscoveredNodeId, mPairDiscoveryMetadata.backboneId,
-                     static_cast<unsigned>(mPairDiscoveryMetadata.deviceType),
-                     static_cast<unsigned>(mPairDiscoveryMetadata.subtype),
-                     static_cast<unsigned>(mPairDiscoveryMetadata.nodeTypeSubType),
-                     lRaw.c_str());
-        else
-            logInfoP("PairDiag: discovery Node: %06X Backbone: n/a Type: %u SubType: %u Combined: 0x%04X Raw: %s",
-                     mDiscoveredNodeId,
-                     static_cast<unsigned>(mPairDiscoveryMetadata.deviceType),
-                     static_cast<unsigned>(mPairDiscoveryMetadata.subtype),
-                     static_cast<unsigned>(mPairDiscoveryMetadata.nodeTypeSubType),
-                     lRaw.c_str());
+            logInfoP("PairDiag: discovery Backbone value: %06X",
+                     mPairDiscoveryMetadata.backboneId);
+        if (mPairDiscoveryMetadata.hasMib)
+            logInfoP("PairDiag: discovery MIB: 0x%02X Power: %s ioMember: %u rfSupport: %u syncControlCandidate: %u turnaroundClass: %u turnaroundKlfValue: %u unitConfirmed: %u",
+                     static_cast<unsigned>(mPairDiscoveryMetadata.mib),
+                     ioHomePowerModeName(mPairDiscoveryMetadata.powerMode),
+                     mPairDiscoveryMetadata.ioMember ? 1U : 0U,
+                     mPairDiscoveryMetadata.rfSupport ? 1U : 0U,
+                     mPairDiscoveryMetadata.syncControlGroupCandidate ? 1U : 0U,
+                     static_cast<unsigned>(mPairDiscoveryMetadata.turnaroundClass),
+                     static_cast<unsigned>(mPairDiscoveryMetadata.turnaroundKlfValue),
+                     mPairDiscoveryMetadata.turnaroundUnitConfirmed ? 1U : 0U);
     }
     logInfoP("PairDiag: 1W mode=%s profile=%s addDestination=%u/%u finalizer=%s traceEntries=%u",
              pairing1WModeName(mPairing1WMode),
