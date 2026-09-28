@@ -5461,6 +5461,15 @@ void IoHomeController::loop()
                                      hexDump(mRxFrame.data, mRxFrame.dataLen).c_str());
                             if (lChannel && mPairEnrichmentStep == PairEnrichmentStep::Name)
                                 logInfoP("PairDiag: device name=%s", lChannel->getDeviceName());
+                            else if (lChannel && mPairEnrichmentStep == PairEnrichmentStep::GeneralInfo1)
+                            {
+                                const IoHomeProductSignature lSignature =
+                                    lChannel->getGeneralInfo1ProductSignature();
+                                logInfoP("PairDiag: GI1 signature length=%u hex=%s printable=%s",
+                                         static_cast<unsigned>(lSignature.length),
+                                         ioHomeProductSignatureHex(lSignature).c_str(),
+                                         ioHomeProductSignaturePrintable(lSignature).c_str());
+                            }
                             else if (lChannel && mPairEnrichmentStep == PairEnrichmentStep::GeneralInfo2)
                             {
                                 const IoHomeProductIdentityEvidence &lEnrichment =

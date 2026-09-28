@@ -2656,6 +2656,10 @@ TEST(general_info1_product_signature_is_first_ten_bytes_and_binary_safe)
         ioHomeGeneralInfo1ProductSignature(lEvidence);
     ASSERT_EQ(lSignature.length, IOHC_PRODUCT_SIGNATURE_SIZE);
     ASSERT_MEM_EQ(lSignature.bytes, kBinaryGi1, IOHC_PRODUCT_SIGNATURE_SIZE);
+    ASSERT_EQ(ioHomeProductSignatureHex(lSignature), "00FF103F807F01020304");
+    ASSERT_EQ(ioHomeProductSignaturePrintable(lSignature), "...?......");
+    lEvidence.generalInfo1Len = 3;
+    ASSERT_EQ(ioHomeGeneralInfo1ProductSignature(lEvidence).length, 3U);
 }
 
 TEST(node_class_is_explicit_independent_and_unknown_is_backward_compatible)

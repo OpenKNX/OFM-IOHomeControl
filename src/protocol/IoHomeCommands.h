@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <string.h>
+#include <string>
 
 // io-homecontrol command IDs
 // Reference: https://github.com/nicolas5000/io-rts-esp32
@@ -778,6 +779,27 @@ inline IoHomeProductSignature ioHomeGeneralInfo1ProductSignature(
     if (lSignature.length > 0)
         memcpy(lSignature.bytes, iEvidence.generalInfo1, lSignature.length);
     return lSignature;
+}
+
+inline std::string ioHomeProductSignatureHex(const IoHomeProductSignature &iSignature)
+{
+    static const char kDigits[] = "0123456789ABCDEF";
+    std::string lResult;
+    for (uint8_t i = 0; i < iSignature.length && i < IOHC_PRODUCT_SIGNATURE_SIZE; ++i)
+    {
+        lResult.push_back(kDigits[iSignature.bytes[i] >> 4]);
+        lResult.push_back(kDigits[iSignature.bytes[i] & 0x0F]);
+    }
+    return lResult;
+}
+
+inline std::string ioHomeProductSignaturePrintable(const IoHomeProductSignature &iSignature)
+{
+    std::string lResult;
+    for (uint8_t i = 0; i < iSignature.length && i < IOHC_PRODUCT_SIGNATURE_SIZE; ++i)
+        lResult.push_back(iSignature.bytes[i] >= 0x20 && iSignature.bytes[i] <= 0x7E
+                              ? static_cast<char>(iSignature.bytes[i]) : '.');
+    return lResult;
 }
 
 inline void decodeProtocolIdentityMib(IoHomeProtocolIdentity &ioIdentity,
