@@ -443,7 +443,7 @@ namespace
             return;
         if (iRaw == IOHC_NO_FEEDBACK_VALUE)
         {
-            logDebug("IOHC", "No feedback value for FP%u (raw=0xF7FF)",
+            logDebug("IoHC-Ctrl", "No feedback value for FP%u (raw=0xF7FF)",
                       static_cast<unsigned>(iIndex));
             return;
         }
@@ -453,13 +453,13 @@ namespace
         if (lDescriptor && (lSemantic == ParameterSemantic::Unsupported ||
                             lSemantic == ParameterSemantic::Unknown))
         {
-            logDebug("IOHC", "Ignoring unsupported profile parameter %u raw=0x%04X",
+            logDebug("IoHC-Ctrl", "Ignoring unsupported profile parameter %u raw=0x%04X",
                       static_cast<unsigned>(iIndex), static_cast<unsigned>(iRaw));
             return;
         }
         if (!lDescriptor && iChannel->getProtocolIdentity().valid)
         {
-            logDebug("IOHC", "Unknown profile parameter %u raw=0x%04X",
+            logDebug("IoHC-Ctrl", "Unknown profile parameter %u raw=0x%04X",
                       static_cast<unsigned>(iIndex), static_cast<unsigned>(iRaw));
             return;
         }
@@ -479,7 +479,7 @@ namespace
         else if (ioHomeIsSpeedSemantic(lEffective))
             iChannel->onVelocityFeedback(lEffective, lPercent);
         else
-            logDebug("IOHC", "Unrouted profile parameter %u semantic=%s raw=0x%04X",
+            logDebug("IoHC-Ctrl", "Unrouted profile parameter %u semantic=%s raw=0x%04X",
                       static_cast<unsigned>(iIndex),
                       ioHomeParameterSemanticName(lEffective),
                       static_cast<unsigned>(iRaw));
@@ -503,7 +503,7 @@ namespace
             iChannel->getEffectiveProfileDescriptor();
         if (iChannel->getProtocolIdentity().valid && !lDescriptor)
         {
-            logDebug("IOHC", "Unknown profile MP target/current raw=0x%04X/0x%04X",
+            logDebug("IoHC-Ctrl", "Unknown profile MP target/current raw=0x%04X/0x%04X",
                       static_cast<unsigned>(readU16BE(iData, iTargetOffset)),
                       static_cast<unsigned>(readU16BE(iData, iCurrentOffset)));
             return;
@@ -514,7 +514,7 @@ namespace
                             lMpSemantic == ParameterSemantic::Unknown))
             return;
         // MP interpretation and polarity come from the discovered profile.
-        logDebug("IOHC", "Status MP semantic=%s profile=%u/%u",
+        logDebug("IoHC-Ctrl", "Status MP semantic=%s profile=%u/%u",
                   ioHomeParameterSemanticName(lMpSemantic),
                   lDescriptor ? static_cast<unsigned>(lDescriptor->profile) : 0U,
                   lDescriptor ? static_cast<unsigned>(lDescriptor->subProfile) : 0U);
@@ -523,7 +523,7 @@ namespace
         const uint16_t lCurrentRaw = readU16BE(iData, iCurrentOffset);
         if (lTargetRaw == IOHC_NO_FEEDBACK_VALUE ||
             lCurrentRaw == IOHC_NO_FEEDBACK_VALUE)
-            logDebug("IOHC", "MP no-feedback target=0x%04X current=0x%04X",
+            logDebug("IoHC-Ctrl", "MP no-feedback target=0x%04X current=0x%04X",
                       static_cast<unsigned>(lTargetRaw),
                       static_cast<unsigned>(lCurrentRaw));
 
