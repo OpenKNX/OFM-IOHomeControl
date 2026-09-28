@@ -111,6 +111,8 @@ namespace
     constexpr uint32_t kTrackedStatusPollDefaultMs = 2000UL;
     constexpr uint32_t kTrackedStatusEstimateBiasMs = 1000UL;
     constexpr uint32_t kTrackedStatusPollWindowMs = 10UL * 60UL * 1000UL;
+    constexpr uint32_t kLowPowerTrackedPollMinMs = 10UL * 1000UL;
+    constexpr uint32_t kLowPowerBackgroundPollMinMs = 60UL * 1000UL;
 
     uint8_t resolveOneWayBroadcastType(uint8_t iConfiguredType, uint8_t iDeviceType)
     {
@@ -394,6 +396,8 @@ void IoHomecontrolChannel::loop()
     if (lPollSec > 0 && !isStatusPollTrackingActive(lNow))
     {
         uint32_t lPollMs = (uint32_t)lPollSec * 1000;
+        if (effectiveLowPower2W() && lPollMs < kLowPowerBackgroundPollMinMs)
+            lPollMs = kLowPowerBackgroundPollMinMs;
         if (delayCheck(mStatusPollTimer, lPollMs))
         {
             requestStatus();
@@ -1031,6 +1035,8 @@ void IoHomecontrolChannel::onEstimate(uint8_t iSeconds)
         const uint32_t lConfiguredPollMs = configuredStatusPollIntervalMs();
         if (lConfiguredPollMs > 0 && lConfiguredPollMs < lDelayMs)
             lDelayMs = lConfiguredPollMs;
+        if (effectiveLowPower2W() && lDelayMs < kLowPowerTrackedPollMinMs)
+            lDelayMs = kLowPowerTrackedPollMinMs;
 
         mSingleFollowUpPollPending = true;
         mStatusPollFailures = 0;
@@ -1219,6 +1225,9 @@ bool IoHomecontrolChannel::effectiveLowPower2W() const
         return false;
     if (mConfigured2WPowerClass == TwoWayPowerClass::LowPower)
         return true;
+    if (mProtocolIdentity.valid &&
+        mProtocolIdentity.powerSaveMode != IoHomePowerMode::Unknown)
+        return mProtocolIdentity.powerSaveMode == IoHomePowerMode::LowPower;
     return mHasLearnedLowPower2W ? mLowPower2W : false;
 }
 
@@ -1520,7 +1529,9 @@ void IoHomecontrolChannel::scheduleStatusPoll(uint32_t iDelayMs)
     if (!mPaired)
         return;
 
-    const uint32_t lDelayMs = (iDelayMs > 0) ? iDelayMs : defaultTrackedStatusPollDelayMs();
+    uint32_t lDelayMs = (iDelayMs > 0) ? iDelayMs : defaultTrackedStatusPollDelayMs();
+    if (effectiveLowPower2W() && lDelayMs < kLowPowerTrackedPollMinMs)
+        lDelayMs = kLowPowerTrackedPollMinMs;
     const uint32_t lNow = millis();
     const uint32_t lRequestedPollMs = lNow + lDelayMs;
 
@@ -1544,6 +1555,8 @@ void IoHomecontrolChannel::requestStatusPrivate()
 
 void IoHomecontrolChannel::startStatusPollTracking(uint32_t iDelayMs)
 {
+    if (effectiveLowPower2W() && iDelayMs < kLowPowerTrackedPollMinMs)
+        iDelayMs = kLowPowerTrackedPollMinMs;
     mStopSettlePollPending = false;
     const uint32_t lNow = millis();
     const uint32_t lTrackingWindowMs = iDelayMs > kTrackedStatusPollWindowMs
@@ -1577,6 +1590,8 @@ uint32_t IoHomecontrolChannel::configuredStatusPollIntervalMs() const
 
 uint32_t IoHomecontrolChannel::defaultTrackedStatusPollDelayMs() const
 {
+    if (effectiveLowPower2W())
+        return kLowPowerTrackedPollMinMs;
     const uint32_t lConfiguredPollMs = configuredStatusPollIntervalMs();
     if (lConfiguredPollMs == 0 || lConfiguredPollMs > kTrackedStatusPollDefaultMs)
         return kTrackedStatusPollDefaultMs;

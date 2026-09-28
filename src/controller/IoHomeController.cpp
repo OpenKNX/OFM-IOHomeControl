@@ -565,6 +565,12 @@ namespace
         if (!iChannel || !iData || iDataLen < 2)
             return;
 
+        // A private/runtime hint is only a fallback when discovery supplied
+        // no static PowerSaveMode. It must not replace the discovery MIB.
+        if (iChannel->getProtocolIdentity().valid &&
+            iChannel->getProtocolIdentity().powerSaveMode != IoHomePowerMode::Unknown)
+            return;
+
         if (iDataLen >= 6 && iData[1] != 0x60)
             return;
 

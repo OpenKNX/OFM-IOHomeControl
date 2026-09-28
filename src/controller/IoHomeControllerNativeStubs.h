@@ -160,6 +160,9 @@ public:
       return false;
     if (mConfigured2WPowerClass == TwoWayPowerClass::LowPower)
       return true;
+    if (mProtocolIdentity.valid &&
+        mProtocolIdentity.powerSaveMode != IoHomePowerMode::Unknown)
+      return mProtocolIdentity.powerSaveMode == IoHomePowerMode::LowPower;
     return mHasLearnedLowPower2W ? mLowPower2W : false;
   }
 

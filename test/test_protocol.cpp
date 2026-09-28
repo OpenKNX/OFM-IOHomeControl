@@ -2843,6 +2843,28 @@ TEST(discovery_metadata_outranks_restored_metadata_and_partial_refresh)
     ASSERT_EQ(ioHomeMetadataSourcePriority(IoHomeMetadataSource::Unknown), 0U);
 }
 
+TEST(discovery_power_mode_controls_wake_policy_over_runtime_hint)
+{
+    IoHomecontrolChannel lChannel;
+    lChannel.setLowPower2W(false);
+    IoHomeProtocolIdentity lIdentity;
+    lIdentity.valid = true;
+    lIdentity.ioAddress = 0x123456;
+    lIdentity.powerSaveMode = IoHomePowerMode::LowPower;
+    lChannel.onProtocolIdentity(lIdentity.ioAddress, lIdentity);
+    ASSERT_TRUE(lChannel.effectiveLowPower2W());
+    lChannel.setLowPower2W(false);
+    ASSERT_TRUE(lChannel.effectiveLowPower2W());
+    lIdentity.powerSaveMode = IoHomePowerMode::AlwaysAlive;
+    lChannel.onProtocolIdentity(lIdentity.ioAddress, lIdentity);
+    ASSERT_TRUE(!lChannel.effectiveLowPower2W());
+    lIdentity.powerSaveMode = IoHomePowerMode::Unknown;
+    lChannel.onProtocolIdentity(lIdentity.ioAddress, lIdentity);
+    ASSERT_TRUE(!lChannel.effectiveLowPower2W());
+    lChannel.setLowPower2W(true);
+    ASSERT_TRUE(lChannel.effectiveLowPower2W());
+}
+
 TEST(klf_appendix2_profile_registry_maps_mp_and_functional_parameters)
 {
     using S = ParameterSemantic;
