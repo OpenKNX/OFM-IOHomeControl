@@ -148,10 +148,45 @@ class ChannelUiTest(unittest.TestCase):
         info2 = dispatch.split(
             "case IoHomeCommand::GetGeneralInfo2Response", 1
         )[1].split("case IoHomeCommand::GetGeneralInfo3Response", 1)[0]
-        self.assertIn("IoHomeDeviceMetadata lInfo = lCh->getDeviceMetadata()", info1)
-        self.assertIn("IoHomeDeviceMetadata lInfo = lCh->getDeviceMetadata()", info2)
-        self.assertIn("openknx.flash.save()", info1)
-        self.assertIn("openknx.flash.save()", info2)
+        self.assertIn("onPostPairEnrichmentResponse", info1)
+        self.assertIn("onPostPairEnrichmentResponse", info2)
+        self.assertIn("applyGeneralInfo2TiltInfo", info2)
+        self.assertNotIn("onDeviceInfo", info1)
+        self.assertNotIn("onDeviceInfo", info2)
+        self.assertNotIn("openknx.flash.save()", info1)
+        self.assertNotIn("openknx.flash.save()", info2)
+
+        enrichment = channel_source.split(
+            "void IoHomecontrolChannel::onPostPairEnrichmentResponse", 1
+        )[1].split("void IoHomecontrolChannel::clearPostPairEnrichment", 1)[0]
+        self.assertIn("GetGeneralInfo1Response", enrichment)
+        self.assertIn("GetGeneralInfo2Response", enrichment)
+        self.assertIn("iData[10]", enrichment)
+        self.assertIn("iData[11]", enrichment)
+        self.assertIn("generalInfo2MatchesDiscovery", enrichment)
+        self.assertNotIn("onDeviceInfo", enrichment)
+
+    def test_post_pair_enrichment_is_optional_and_precedes_setconfig(self) -> None:
+        header = (ROOT / "src" / "controller" / "IoHomeController.h").read_text()
+        controller_source = (ROOT / "src" / "controller" / "IoHomeController.cpp").read_text()
+
+        self.assertIn("PairSendEnrichment", header)
+        self.assertIn("PairWaitEnrichment", header)
+        self.assertIn("kPairEnrichmentStepTimeoutMs", header)
+        finalize = controller_source.split(
+            "void IoHomeController::finalize2WPairingKey()", 1
+        )[1].split("IoHomeCommand IoHomeController::pairEnrichmentRequest", 1)[0]
+        self.assertIn("PairingOutcome::Success", finalize)
+        self.assertIn("ControllerState::PairSendEnrichment", finalize)
+        sequence = controller_source.split(
+            "IoHomeCommand IoHomeController::pairEnrichmentRequest", 1
+        )[1].split("IoHomeCommand IoHomeController::pairEnrichmentResponse", 1)[0]
+        self.assertLess(sequence.index("IoHomeCommand::GetName"),
+                        sequence.index("IoHomeCommand::GetGeneralInfo1"))
+        self.assertLess(sequence.index("IoHomeCommand::GetGeneralInfo1"),
+                        sequence.index("IoHomeCommand::GetGeneralInfo2"))
+        self.assertLess(sequence.index("IoHomeCommand::GetGeneralInfo2"),
+                        sequence.index("IoHomeCommand::GetGeneralInfo3"))
 
     def test_selection_table_matches_shared_layout(self) -> None:
         selection = self.share.find(

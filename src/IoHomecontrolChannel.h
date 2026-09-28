@@ -38,6 +38,11 @@ public:
   // Compatibility adapter for integrations still providing only the legacy
   // GeneralInfo type/subtype/manufacturer tuple.
   void onDeviceInfo(uint16_t iType, uint8_t iSubtype, uint8_t iManufacturer);
+  void onPostPairEnrichmentResponse(IoHomeCommand iResponse,
+                                    const uint8_t *iData, uint8_t iDataLen);
+  void clearPostPairEnrichment();
+  const IoHomePostPairEnrichment &getPostPairEnrichment() const;
+  const char *getDeviceName() const;
   void onDiscoveryMetadata(uint32_t iSourceNodeId,
                            const IoHomeDiscoveryMetadata &iMetadata);
   void clearDiscoveryMetadata();
@@ -229,6 +234,7 @@ private:
   uint8_t mManufacturer = 0;
   uint32_t mDiscoveryNodeId = 0;
   IoHomeDeviceMetadata mDiscoveryMetadata{};
+  IoHomePostPairEnrichment mPostPairEnrichment{};
 
   // P3: Scene position data (10 ETS-backed scenes x 1 byte, 0xFF = not set)
   uint8_t mScenePositions[kMaxSceneCount] = {};

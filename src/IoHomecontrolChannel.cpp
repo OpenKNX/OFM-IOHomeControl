@@ -723,6 +723,121 @@ void IoHomecontrolChannel::onDeviceInfo(uint16_t iType, uint8_t iSubtype,
     onDeviceInfo(lInfo);
 }
 
+namespace
+{
+    uint8_t copyEnrichmentPayload(uint8_t *oTarget, const uint8_t *iData,
+                                  uint8_t iDataLen)
+    {
+        const uint8_t lLength = iDataLen < IOHC_DEVICE_INFO_RAW_MAX_SIZE
+                                    ? iDataLen
+                                    : IOHC_DEVICE_INFO_RAW_MAX_SIZE;
+        memset(oTarget, 0, IOHC_DEVICE_INFO_RAW_MAX_SIZE);
+        if (iData && lLength > 0)
+            memcpy(oTarget, iData, lLength);
+        return lLength;
+    }
+
+    std::string enrichmentHex(const uint8_t *iData, uint8_t iDataLen)
+    {
+        static const char kHex[] = "0123456789ABCDEF";
+        std::string lResult;
+        lResult.reserve(static_cast<size_t>(iDataLen) * 2U);
+        for (uint8_t i = 0; i < iDataLen; i++)
+        {
+            lResult.push_back(kHex[(iData[i] >> 4) & 0x0F]);
+            lResult.push_back(kHex[iData[i] & 0x0F]);
+        }
+        return lResult;
+    }
+
+    std::string enrichmentAscii(const uint8_t *iData, uint8_t iDataLen)
+    {
+        std::string lResult;
+        lResult.reserve(iDataLen);
+        for (uint8_t i = 0; i < iDataLen; i++)
+            lResult.push_back(iData[i] >= 0x20 && iData[i] <= 0x7E
+                                  ? static_cast<char>(iData[i])
+                                  : '.');
+        return lResult;
+    }
+}
+
+void IoHomecontrolChannel::onPostPairEnrichmentResponse(
+    IoHomeCommand iResponse, const uint8_t *iData, uint8_t iDataLen)
+{
+    switch (iResponse)
+    {
+    case IoHomeCommand::GetNameResponse:
+        mPostPairEnrichment.nameResponseLen = copyEnrichmentPayload(
+            mPostPairEnrichment.nameResponse, iData, iDataLen);
+        onDeviceName(
+            reinterpret_cast<const char *>(mPostPairEnrichment.nameResponse),
+            mPostPairEnrichment.nameResponseLen);
+        break;
+
+    case IoHomeCommand::GetGeneralInfo1Response:
+        mPostPairEnrichment.generalInfo1Len = copyEnrichmentPayload(
+            mPostPairEnrichment.generalInfo1, iData, iDataLen);
+        logDebugP("GeneralInfo1 raw=%s ascii=%s",
+                  enrichmentHex(mPostPairEnrichment.generalInfo1,
+                                mPostPairEnrichment.generalInfo1Len).c_str(),
+                  enrichmentAscii(mPostPairEnrichment.generalInfo1,
+                                  mPostPairEnrichment.generalInfo1Len).c_str());
+        break;
+
+    case IoHomeCommand::GetGeneralInfo2Response:
+        mPostPairEnrichment.generalInfo2Len = copyEnrichmentPayload(
+            mPostPairEnrichment.generalInfo2, iData, iDataLen);
+        mPostPairEnrichment.generalInfo2TypeValid = iDataLen >= 12;
+        if (mPostPairEnrichment.generalInfo2TypeValid)
+        {
+            mPostPairEnrichment.generalInfo2DeviceType =
+                decodePackedDeviceType(iData[10], iData[11]);
+            mPostPairEnrichment.generalInfo2Subtype =
+                decodePackedDeviceSubtype(iData[11]);
+            mPostPairEnrichment.generalInfo2MatchesDiscovery =
+                mDiscoveryMetadata.valid &&
+                mPostPairEnrichment.generalInfo2DeviceType == mDiscoveryMetadata.deviceType &&
+                mPostPairEnrichment.generalInfo2Subtype == mDiscoveryMetadata.subtype;
+            if (mDiscoveryMetadata.valid)
+            {
+                logDebugP(mPostPairEnrichment.generalInfo2MatchesDiscovery
+                              ? "Type validation OK: discovery=%u/%u GI2=%u/%u"
+                              : "Type mismatch: discovery=%u/%u GI2=%u/%u",
+                          static_cast<unsigned>(mDiscoveryMetadata.deviceType),
+                          static_cast<unsigned>(mDiscoveryMetadata.subtype),
+                          static_cast<unsigned>(mPostPairEnrichment.generalInfo2DeviceType),
+                          static_cast<unsigned>(mPostPairEnrichment.generalInfo2Subtype));
+            }
+        }
+        break;
+
+    case IoHomeCommand::GetGeneralInfo3Response:
+        mPostPairEnrichment.generalInfo3Len = copyEnrichmentPayload(
+            mPostPairEnrichment.generalInfo3, iData, iDataLen);
+        break;
+
+    default:
+        break;
+    }
+}
+
+void IoHomecontrolChannel::clearPostPairEnrichment()
+{
+    memset(mDeviceName, 0, sizeof(mDeviceName));
+    mPostPairEnrichment = IoHomePostPairEnrichment{};
+}
+
+const IoHomePostPairEnrichment &IoHomecontrolChannel::getPostPairEnrichment() const
+{
+    return mPostPairEnrichment;
+}
+
+const char *IoHomecontrolChannel::getDeviceName() const
+{
+    return mDeviceName;
+}
+
 void IoHomecontrolChannel::onDiscoveryMetadata(
     uint32_t iSourceNodeId, const IoHomeDiscoveryMetadata &iMetadata)
 {

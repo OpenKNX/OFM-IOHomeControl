@@ -58,6 +58,30 @@ namespace
         return keyHasNonZeroByte(iKey) ? "set" : "missing";
     }
 
+    std::string metadataHex(const uint8_t *iData, uint8_t iLen)
+    {
+        static const char kHex[] = "0123456789ABCDEF";
+        std::string lResult;
+        lResult.reserve(static_cast<size_t>(iLen) * 2U);
+        for (uint8_t i = 0; i < iLen; i++)
+        {
+            lResult.push_back(kHex[(iData[i] >> 4) & 0x0F]);
+            lResult.push_back(kHex[iData[i] & 0x0F]);
+        }
+        return lResult;
+    }
+
+    std::string metadataAscii(const uint8_t *iData, uint8_t iLen)
+    {
+        std::string lResult;
+        lResult.reserve(iLen);
+        for (uint8_t i = 0; i < iLen; i++)
+            lResult.push_back(iData[i] >= 0x20 && iData[i] <= 0x7E
+                                  ? static_cast<char>(iData[i])
+                                  : '.');
+        return lResult;
+    }
+
     const char *discoveryCommandName(TwoWayDiscoveryCommandMode iMode)
     {
         switch (iMode)
@@ -3655,6 +3679,27 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                                      static_cast<unsigned>(lMetadata.turnaroundKlfValue),
                                      lMetadata.turnaroundUnitConfirmed ? 1U : 0U);
                     }
+                    const IoHomePostPairEnrichment &lEnrichment =
+                        lCh->getPostPairEnrichment();
+                    logInfoP("  enrichment: name=%s GI1=%s ascii=%s GI2=%s GI2Type=%s%u/%u GI3=%s",
+                             lCh->getDeviceName()[0] ? lCh->getDeviceName() : "n/a",
+                             lEnrichment.generalInfo1Len
+                                 ? metadataHex(lEnrichment.generalInfo1, lEnrichment.generalInfo1Len).c_str()
+                                 : "n/a",
+                             lEnrichment.generalInfo1Len
+                                 ? metadataAscii(lEnrichment.generalInfo1, lEnrichment.generalInfo1Len).c_str()
+                                 : "n/a",
+                             lEnrichment.generalInfo2Len
+                                 ? metadataHex(lEnrichment.generalInfo2, lEnrichment.generalInfo2Len).c_str()
+                                 : "n/a",
+                             lEnrichment.generalInfo2TypeValid
+                                 ? (lEnrichment.generalInfo2MatchesDiscovery ? "match " : "mismatch ")
+                                 : "n/a ",
+                             static_cast<unsigned>(lEnrichment.generalInfo2DeviceType),
+                             static_cast<unsigned>(lEnrichment.generalInfo2Subtype),
+                             lEnrichment.generalInfo3Len
+                                 ? metadataHex(lEnrichment.generalInfo3, lEnrichment.generalInfo3Len).c_str()
+                                 : "n/a");
                     const TwoWayDiscoverySettings &lDiscovery = lCh->getConfigured2WDiscoverySettings();
                     const TwoWayDiscoveryFrameOptions lResolvedDiscovery =
                         mController.resolveTwoWayDiscoveryOptions(IoHomeCommand::DiscoverRequest, lDiscovery);
@@ -3743,6 +3788,27 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                                      static_cast<unsigned>(lMetadata.turnaroundKlfValue),
                                      lMetadata.turnaroundUnitConfirmed ? 1U : 0U);
                     }
+                    const IoHomePostPairEnrichment &lEnrichment =
+                        lCh->getPostPairEnrichment();
+                    logInfoP("       enrichment name=%s GI1=%s ascii=%s GI2=%s GI2Type=%s%u/%u GI3=%s",
+                             lCh->getDeviceName()[0] ? lCh->getDeviceName() : "n/a",
+                             lEnrichment.generalInfo1Len
+                                 ? metadataHex(lEnrichment.generalInfo1, lEnrichment.generalInfo1Len).c_str()
+                                 : "n/a",
+                             lEnrichment.generalInfo1Len
+                                 ? metadataAscii(lEnrichment.generalInfo1, lEnrichment.generalInfo1Len).c_str()
+                                 : "n/a",
+                             lEnrichment.generalInfo2Len
+                                 ? metadataHex(lEnrichment.generalInfo2, lEnrichment.generalInfo2Len).c_str()
+                                 : "n/a",
+                             lEnrichment.generalInfo2TypeValid
+                                 ? (lEnrichment.generalInfo2MatchesDiscovery ? "match " : "mismatch ")
+                                 : "n/a ",
+                             static_cast<unsigned>(lEnrichment.generalInfo2DeviceType),
+                             static_cast<unsigned>(lEnrichment.generalInfo2Subtype),
+                             lEnrichment.generalInfo3Len
+                                 ? metadataHex(lEnrichment.generalInfo3, lEnrichment.generalInfo3Len).c_str()
+                                 : "n/a");
                     const TwoWayDiscoveryFrameOptions lDiscovery =
                         mController.resolveTwoWayDiscoveryOptions(
                             IoHomeCommand::DiscoverRequest, lCh->getConfigured2WDiscoverySettings());

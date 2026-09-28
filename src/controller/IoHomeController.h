@@ -194,6 +194,7 @@ enum class ControllerState : uint8_t
   //   -> ChallengeRequest(0x3C)
   //   -> KeyTransfer(0x32)
   //   -> KeyTransferConfirmation(0x33/0x2D)
+  //   -> optional GetName/GI1/GI2/GI3 enrichment (0x50/0x54/0x56/0x58)
   //   -> optional SetConfig1(0x6F)
   //
   PairSendDiscoveryConfirmation,
@@ -219,6 +220,8 @@ enum class ControllerState : uint8_t
   PairSendKeyTransfer,
   PairSendKeyTransferAuthResponse,
   PairWaitKeyTransferConfirmation,
+  PairSendEnrichment,
+  PairWaitEnrichment,
   PairSendSetConfig1,
   PairWaitSetConfig1Response,
   PairSendSetConfig1AuthResponse,
@@ -576,6 +579,7 @@ public:
   };
 
   static constexpr uint32_t kPassiveKeySniffDefaultTimeoutMs = 60000UL;
+  static constexpr uint32_t kPairEnrichmentStepTimeoutMs = 2000UL;
 
   bool startPassiveKeySniff(uint32_t iTimeoutMs = kPassiveKeySniffDefaultTimeoutMs);
   void stopPassiveKeySniff();
@@ -997,6 +1001,15 @@ private:
   // 0x2E frame for the second transmit within one frequency step.
   bool mDiscoveryAltFrame = false;
   uint8_t mPairSetConfigChallenge[6];
+  enum class PairEnrichmentStep : uint8_t
+  {
+    Name = 0,
+    GeneralInfo1 = 1,
+    GeneralInfo2 = 2,
+    GeneralInfo3 = 3,
+    Complete = 4,
+  };
+  PairEnrichmentStep mPairEnrichmentStep = PairEnrichmentStep::Name;
   uint8_t mPairKeyTransferChallenge[6];
   IoHomeFrame mPairLaunchKeyTransferFrame;
   IoHomeFrame mPairPulledKeyFrame;
@@ -1189,6 +1202,11 @@ private:
   void processPairSendKeyTransferAuthResponse();
   void processPairWaitKeyTransferConfirmation();
   bool retry2WKeyExchange();
+  void processPairSendEnrichment();
+  void processPairWaitEnrichment();
+  void advancePairEnrichment(const char *iResult);
+  IoHomeCommand pairEnrichmentRequest() const;
+  IoHomeCommand pairEnrichmentResponse() const;
   void processPairSendSetConfig1();
   void processPairWaitSetConfig1Response();
   void processPairSendSetConfig1AuthResponse();

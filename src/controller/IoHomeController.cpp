@@ -2829,6 +2829,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mDiscoverySPE = false;
     mDiscoveredNodeId = 0;
     mPairDiscoveryMetadata = IoHomeDiscoveryMetadata{};
+    mPairEnrichmentStep = PairEnrichmentStep::Name;
     mPairingKnownNodeId = iKnownNodeId & 0x00FFFFFF;
     mPairKeyExchangeAttempts = 0;
     mPairKeyExchangeStartTime = 0;
@@ -2848,6 +2849,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     if (lCh)
     {
         lCh->clearDiscoveryMetadata();
+        lCh->clearPostPairEnrichment();
         mPairDiscoverConfirmMode = lCh->getConfigured2WDiscoverConfirmMode();
         mPairKeyInitDelayMs = lCh->getConfigured2WKeyInitDelay();
     }
@@ -4313,6 +4315,10 @@ const char *IoHomeController::stateName(ControllerState iState)
         return "PairSendKeyTransferAuthResponse";
     case ControllerState::PairWaitKeyTransferConfirmation:
         return "PairWaitKeyTransferConfirmation";
+    case ControllerState::PairSendEnrichment:
+        return "PairSendEnrichment";
+    case ControllerState::PairWaitEnrichment:
+        return "PairWaitEnrichment";
     case ControllerState::PairSendSetConfig1:
         return "PairSendSetConfig1";
     case ControllerState::PairWaitSetConfig1Response:
@@ -5244,6 +5250,46 @@ void IoHomeController::loop()
                     finalize2WPairingKey();
                 }
             }
+            else if (mState == ControllerState::PairWaitEnrichment)
+            {
+                if (mRxFrame.getSrcNodeId() == mDiscoveredNodeId &&
+                    mRxFrame.getDestNodeId() == mOwnNodeId)
+                {
+                    if (mRxFrame.commandId == pairEnrichmentResponse())
+                    {
+                        IoHomecontrolChannel *lChannel =
+                            mModule ? mModule->getChannel(mPairingChannel) : nullptr;
+                        if (lChannel)
+                            lChannel->onPostPairEnrichmentResponse(
+                                mRxFrame.commandId, mRxFrame.data, mRxFrame.dataLen);
+                        if (mPairDiagnosticTraceEnabled)
+                        {
+                            logInfoP("PairDiag: enrichment rx cmd=%s(0x%02X) len=%u raw=%s",
+                                     commandName(mRxFrame.commandId),
+                                     static_cast<unsigned>(static_cast<uint8_t>(mRxFrame.commandId)),
+                                     static_cast<unsigned>(mRxFrame.dataLen),
+                                     hexDump(mRxFrame.data, mRxFrame.dataLen).c_str());
+                            if (lChannel && mPairEnrichmentStep == PairEnrichmentStep::Name)
+                                logInfoP("PairDiag: device name=%s", lChannel->getDeviceName());
+                            else if (lChannel && mPairEnrichmentStep == PairEnrichmentStep::GeneralInfo2)
+                            {
+                                const IoHomePostPairEnrichment &lEnrichment =
+                                    lChannel->getPostPairEnrichment();
+                                if (lEnrichment.generalInfo2TypeValid)
+                                    logInfoP("PairDiag: GI2 type=%u subtype=%u discovery=%s",
+                                             lEnrichment.generalInfo2DeviceType,
+                                             static_cast<unsigned>(lEnrichment.generalInfo2Subtype),
+                                             lEnrichment.generalInfo2MatchesDiscovery ? "match" : "mismatch");
+                            }
+                        }
+                        advancePairEnrichment("response");
+                    }
+                    else if (mRxFrame.commandId == IoHomeCommand::ErrorResponse)
+                    {
+                        advancePairEnrichment("unsupported");
+                    }
+                }
+            }
             else if (mState == ControllerState::PairWaitSetConfig1Response)
             {
                 if (mRxFrame.getSrcNodeId() == mDiscoveredNodeId &&
@@ -5448,6 +5494,12 @@ void IoHomeController::loop()
         break;
     case ControllerState::PairWaitKeyTransferConfirmation:
         processPairWaitKeyTransferConfirmation();
+        break;
+    case ControllerState::PairSendEnrichment:
+        processPairSendEnrichment();
+        break;
+    case ControllerState::PairWaitEnrichment:
+        processPairWaitEnrichment();
         break;
     case ControllerState::PairSendSetConfig1:
         processPairSendSetConfig1();
@@ -7404,10 +7456,11 @@ void IoHomeController::finalize2WPairingKey()
             openknx.flash.save(true);
         }
     }
-    // A valid 0x33 is the definitive pairing success. SetConfig1 is only an
-    // optional request for automatic status feedback and cannot undo it.
+    // A valid 0x33 is the definitive pairing success. Metadata enrichment and
+    // SetConfig1 are optional post-key operations and cannot undo it.
     completePairingTelemetry(PairingOutcome::Success);
-    mState = ControllerState::PairSendSetConfig1;
+    mPairEnrichmentStep = PairEnrichmentStep::Name;
+    mState = ControllerState::PairSendEnrichment;
 }
 
 void IoHomeController::processPairWaitDeviceChallenge()
@@ -7540,6 +7593,121 @@ void IoHomeController::processPairWaitKeyTransferConfirmation()
         retry2WKeyExchange();
     }
     // Confirmation response and channel storage handled in main loop RX dispatch
+}
+
+IoHomeCommand IoHomeController::pairEnrichmentRequest() const
+{
+    switch (mPairEnrichmentStep)
+    {
+    case PairEnrichmentStep::Name:
+        return IoHomeCommand::GetName;
+    case PairEnrichmentStep::GeneralInfo1:
+        return IoHomeCommand::GetGeneralInfo1;
+    case PairEnrichmentStep::GeneralInfo2:
+        return IoHomeCommand::GetGeneralInfo2;
+    case PairEnrichmentStep::GeneralInfo3:
+        return IoHomeCommand::GetGeneralInfo3;
+    default:
+        return IoHomeCommand::GetName;
+    }
+}
+
+IoHomeCommand IoHomeController::pairEnrichmentResponse() const
+{
+    switch (mPairEnrichmentStep)
+    {
+    case PairEnrichmentStep::Name:
+        return IoHomeCommand::GetNameResponse;
+    case PairEnrichmentStep::GeneralInfo1:
+        return IoHomeCommand::GetGeneralInfo1Response;
+    case PairEnrichmentStep::GeneralInfo2:
+        return IoHomeCommand::GetGeneralInfo2Response;
+    case PairEnrichmentStep::GeneralInfo3:
+        return IoHomeCommand::GetGeneralInfo3Response;
+    default:
+        return IoHomeCommand::GetNameResponse;
+    }
+}
+
+void IoHomeController::advancePairEnrichment(const char *iResult)
+{
+    logInfoP("Pairing: enrichment %s for %s (0x%02X) from 0x%06X",
+             iResult ? iResult : "complete",
+             commandName(pairEnrichmentRequest()),
+             static_cast<unsigned>(static_cast<uint8_t>(pairEnrichmentRequest())),
+             mDiscoveredNodeId);
+
+    if (mPairEnrichmentStep == PairEnrichmentStep::GeneralInfo3)
+        mPairEnrichmentStep = PairEnrichmentStep::Complete;
+    else
+        mPairEnrichmentStep = static_cast<PairEnrichmentStep>(
+            static_cast<uint8_t>(mPairEnrichmentStep) + 1U);
+
+    mState = mPairEnrichmentStep == PairEnrichmentStep::Complete
+                 ? ControllerState::PairSendSetConfig1
+                 : ControllerState::PairSendEnrichment;
+}
+
+void IoHomeController::processPairSendEnrichment()
+{
+    if (mPairEnrichmentStep == PairEnrichmentStep::Complete)
+    {
+        mState = ControllerState::PairSendSetConfig1;
+        return;
+    }
+
+    IoHomeQueueEntry lEntry{};
+    lEntry.destNodeId = mDiscoveredNodeId;
+    lEntry.command = pairEnrichmentRequest();
+    if (!buildTxFrame(lEntry))
+    {
+        advancePairEnrichment("build-failed");
+        return;
+    }
+
+    mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
+    if (mTxLen == 0)
+    {
+        advancePairEnrichment("serialize-failed");
+        return;
+    }
+
+    const uint16_t lPreamble = pairingStartPreamble(mTxFrame);
+    const RadioError lPrepErr = configureNormal2WTxRadio(lPreamble);
+    if (lPrepErr == RadioError::Busy)
+        return;
+    if (lPrepErr != RadioError::None)
+    {
+        advancePairEnrichment("radio-setup-failed");
+        return;
+    }
+
+    tracePairDiagnosticTx2W(mTxFrame, lPreamble);
+    const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    if (lErr == RadioError::None)
+    {
+        mStateTimer = millis();
+        mState = ControllerState::PairWaitEnrichment;
+    }
+    else if (lErr != RadioError::Busy)
+    {
+        advancePairEnrichment("tx-failed");
+    }
+}
+
+void IoHomeController::processPairWaitEnrichment()
+{
+    const RadioError lRxErr = ensureReceiveAfterTransmit();
+    if (lRxErr == RadioError::Busy)
+        return;
+    if (lRxErr != RadioError::None)
+    {
+        advancePairEnrichment("rx-setup-failed");
+        return;
+    }
+
+    if (millis() - mStateTimer > kPairEnrichmentStepTimeoutMs)
+        advancePairEnrichment("timeout");
 }
 
 void IoHomeController::processPairSendSetConfig1()
@@ -8983,7 +9151,8 @@ void IoHomeController::dispatchRxFrame()
             }
             case IoHomeCommand::GetNameResponse:
             {
-                lCh->onDeviceName((const char *)mRxFrame.data, mRxFrame.dataLen);
+                lCh->onPostPairEnrichmentResponse(
+                    mRxFrame.commandId, mRxFrame.data, mRxFrame.dataLen);
                 break;
             }
             case IoHomeCommand::SetNameResponse:
@@ -8993,44 +9162,25 @@ void IoHomeController::dispatchRxFrame()
             }
             case IoHomeCommand::GetGeneralInfo1Response:
             {
-                if (mRxFrame.dataLen >= 3)
-                {
-                    IoHomeDeviceMetadata lInfo = lCh->getDeviceMetadata();
-                    lInfo.valid = true;
-                    lInfo.deviceType = decodePackedDeviceType(
-                        mRxFrame.data[0], mRxFrame.data[1]);
-                    lInfo.subtype = decodePackedDeviceSubtype(mRxFrame.data[1]);
-                    lInfo.nodeTypeSubType = encodeNodeTypeSubType(
-                        lInfo.deviceType, lInfo.subtype);
-                    lInfo.manufacturer = mRxFrame.data[2];
-                    lCh->onDeviceInfo(lInfo);
-                    openknx.flash.save();
-                }
+                // GI1 is vendor/model information. Captures contain ASCII-like
+                // signatures here, not the discovery type/manufacturer layout.
+                lCh->onPostPairEnrichmentResponse(
+                    mRxFrame.commandId, mRxFrame.data, mRxFrame.dataLen);
                 break;
             }
             case IoHomeCommand::GetGeneralInfo2Response:
             {
-                // GetGeneralInfo2 (0x57) response: device type at data[10:11]
-                // Type = data[10] << 2 | data[11] >> 6, Subtype = data[11] & 0x3F
-                if (mRxFrame.dataLen >= 12)
-                {
-                    IoHomeDeviceMetadata lInfo = lCh->getDeviceMetadata();
-                    lInfo.valid = true;
-                    lInfo.deviceType = decodePackedDeviceType(
-                        mRxFrame.data[10], mRxFrame.data[11]);
-                    lInfo.subtype = decodePackedDeviceSubtype(mRxFrame.data[11]);
-                    lInfo.nodeTypeSubType = encodeNodeTypeSubType(
-                        lInfo.deviceType, lInfo.subtype);
-                    // GeneralInfo2 has no manufacturer at this location; the
-                    // structured copy preserves discovery/GeneralInfo1 data.
-                    lCh->onDeviceInfo(lInfo);
-                    openknx.flash.save();
-                }
+                // GI2 confirms type/subtype at bytes 10..11. The channel keeps
+                // this secondary result beside, never over, the primary 0x29.
+                lCh->onPostPairEnrichmentResponse(
+                    mRxFrame.commandId, mRxFrame.data, mRxFrame.dataLen);
                 applyGeneralInfo2TiltInfo(lCh, mRxFrame.data, mRxFrame.dataLen);
                 break;
             }
             case IoHomeCommand::GetGeneralInfo3Response:
             {
+                lCh->onPostPairEnrichmentResponse(
+                    mRxFrame.commandId, mRxFrame.data, mRxFrame.dataLen);
                 // Position and status from info query
                 float lPercent = 0.0f;
                 bool lHasCurrentPosition = false;

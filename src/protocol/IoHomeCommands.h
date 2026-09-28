@@ -606,6 +606,27 @@ struct IoHomeDiscoveryMetadata
 // the same coherent object without adding one callback per field.
 using IoHomeDeviceMetadata = IoHomeDiscoveryMetadata;
 
+// Device-information responses use the normal 2W payload ceiling. Keep this
+// local to the command model because IoHomeFrame.h includes this header before
+// declaring IOHC_FRAME_MAX_DATA.
+static constexpr uint8_t IOHC_DEVICE_INFO_RAW_MAX_SIZE = 23;
+
+struct IoHomePostPairEnrichment
+{
+    uint8_t nameResponse[IOHC_DEVICE_INFO_RAW_MAX_SIZE] = {};
+    uint8_t nameResponseLen = 0;
+    uint8_t generalInfo1[IOHC_DEVICE_INFO_RAW_MAX_SIZE] = {};
+    uint8_t generalInfo1Len = 0;
+    uint8_t generalInfo2[IOHC_DEVICE_INFO_RAW_MAX_SIZE] = {};
+    uint8_t generalInfo2Len = 0;
+    uint8_t generalInfo3[IOHC_DEVICE_INFO_RAW_MAX_SIZE] = {};
+    uint8_t generalInfo3Len = 0;
+    bool generalInfo2TypeValid = false;
+    uint16_t generalInfo2DeviceType = 0;
+    uint8_t generalInfo2Subtype = 0;
+    bool generalInfo2MatchesDiscovery = false;
+};
+
 inline void decodeDiscoveryMib(IoHomeDiscoveryMetadata &ioMetadata, uint8_t iMib)
 {
     ioMetadata.hasMib = true;

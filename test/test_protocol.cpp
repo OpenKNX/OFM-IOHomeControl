@@ -9800,6 +9800,25 @@ static void buildPrivateResponseFrame(IoHomeFrame &oFrame,
     oFrame.hasHmac = false;
 }
 
+static void buildSimpleResponseFrame(IoHomeFrame &oFrame,
+                                     uint32_t iRemoteNodeId,
+                                     uint32_t iDeviceNodeId,
+                                     IoHomeCommand iCommand,
+                                     const uint8_t *iData,
+                                     uint8_t iDataLen)
+{
+    oFrame.init();
+    oFrame.ctrlByte0 = IOHC_CTRL0_END;
+    oFrame.ctrlByte1 = 0x00;
+    oFrame.setSrcNode(iDeviceNodeId);
+    oFrame.setDestNode(iRemoteNodeId);
+    oFrame.commandId = iCommand;
+    if (iData && iDataLen > 0)
+        memcpy(oFrame.data, iData, iDataLen);
+    oFrame.dataLen = iDataLen;
+    oFrame.hasHmac = false;
+}
+
 static void buildDiscoverResponseFrame(IoHomeFrame &oFrame,
                                        uint32_t iRemoteNodeId,
                                        uint32_t iDeviceNodeId,
@@ -10257,13 +10276,12 @@ TEST(controller_2w_pairing_continuations_match_klr300_ctrl1)
     lController.radio().testClearTransmittedPacket();
     ASSERT_TRUE(queueControllerResponse(lController, lKeyConfirmation));
     ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
-    ASSERT_EQ(lFrame.commandId, IoHomeCommand::SetConfig1);
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::GetName);
 }
 
-static bool queueKeyTransferConfirmationAndCaptureSetConfig1(IoHomeController &iController,
-                                                             uint32_t iRemoteNodeId,
-                                                             uint32_t iDeviceNodeId,
-                                                             IoHomeFrame &oSetConfig1Frame)
+static bool queueKeyTransferConfirmationAndAdvanceToSetConfig1(IoHomeController &iController,
+                                                               uint32_t iRemoteNodeId,
+                                                               uint32_t iDeviceNodeId)
 {
     IoHomeFrame lKeyConfirm;
     buildKeyTransferConfirmationFrame(lKeyConfirm, iRemoteNodeId, iDeviceNodeId);
@@ -10271,11 +10289,142 @@ static bool queueKeyTransferConfirmationAndCaptureSetConfig1(IoHomeController &i
     if (!queueControllerResponse(iController, lKeyConfirm))
         return false;
 
+    static const IoHomeCommand kExpectedEnrichment[] = {
+        IoHomeCommand::GetName,
+        IoHomeCommand::GetGeneralInfo1,
+        IoHomeCommand::GetGeneralInfo2,
+        IoHomeCommand::GetGeneralInfo3,
+    };
+    for (size_t i = 0; i < sizeof(kExpectedEnrichment) / sizeof(kExpectedEnrichment[0]); ++i)
+    {
+        const IoHomeCommand lExpected = kExpectedEnrichment[i];
+        IoHomeFrame lRequest;
+        if (!lastTransmittedFrameForTest(iController, lRequest) ||
+            lRequest.commandId != lExpected)
+            return false;
+
+        ioHomeTestAdvanceMillis(IoHomeController::kPairEnrichmentStepTimeoutMs + 1U);
+        iController.loop(); // independent timeout advances to the next step
+        if (i + 1U < sizeof(kExpectedEnrichment) / sizeof(kExpectedEnrichment[0]))
+        {
+            iController.radio().testClearTransmittedPacket();
+            iController.loop(); // transmit the next enrichment request
+        }
+    }
+
+    return iController.state() == ControllerState::PairSendSetConfig1;
+}
+
+static bool queueKeyTransferConfirmationAndCaptureSetConfig1(IoHomeController &iController,
+                                                             uint32_t iRemoteNodeId,
+                                                             uint32_t iDeviceNodeId,
+                                                             IoHomeFrame &oSetConfig1Frame)
+{
+    if (!queueKeyTransferConfirmationAndAdvanceToSetConfig1(
+            iController, iRemoteNodeId, iDeviceNodeId))
+        return false;
+
+    iController.radio().testClearTransmittedPacket();
+    iController.loop(); // transmit SetConfig1
+
     const auto &lSetConfigPacket = iController.radio().testLastTransmittedPacket();
     if (lSetConfigPacket.empty())
         return false;
 
     return deserializeFrameForTest(oSetConfig1Frame, lSetConfigPacket.data(), static_cast<uint8_t>(lSetConfigPacket.size()));
+}
+
+TEST(controller_post_pair_enrichment_is_ordered_raw_safe_and_optional)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    static const uint8_t kDiscoveryPayload[IOHC_DISCOVERY_FULL_SIZE] = {
+        0x00, 0x80, 0x00, 0x00, 0x00, 0x01, 0x1D, 0xFF, 0xFF};
+    static const uint8_t kName[] = {0x01, 'R', 0xE9, 'n', 'o', ' ', 0x00};
+    static const uint8_t kSomfyGi1[] = {
+        0x35, 0x31, 0x36, 0x33, 0x33, 0x34, 0x30,
+        0x43, 0x30, 0x36, 0x04, 0x00, 0xFF, 0xFF};
+    static const uint8_t kGi2[] = {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x80, 0x03, 0x0B, 0x00, 0x00};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, 0, lKey);
+    lController.setSystemKey(lKey);
+    ASSERT_TRUE(advancePairingToWaitKeyTransferConfirmation(
+        lController, lRemoteNodeId, lDeviceNodeId));
+    lChannel.onDiscoveryMetadata(
+        lDeviceNodeId,
+        decodeDiscoveryMetadata(kDiscoveryPayload, sizeof(kDiscoveryPayload)));
+
+    IoHomeFrame lFrame;
+    IoHomeFrame lResponse;
+    IoHomeFrame lKeyConfirm;
+    buildKeyTransferConfirmationFrame(lKeyConfirm, lRemoteNodeId, lDeviceNodeId);
+    lController.radio().testClearTransmittedPacket();
+    ASSERT_TRUE(queueControllerResponse(lController, lKeyConfirm));
+    ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::GetName);
+    ASSERT_EQ(lController.pairingTelemetry().outcome,
+              IoHomeController::PairingOutcome::Success);
+
+    buildSimpleResponseFrame(lResponse, lRemoteNodeId, lDeviceNodeId,
+                             IoHomeCommand::GetNameResponse,
+                             kName, sizeof(kName));
+    lController.radio().testClearTransmittedPacket();
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    ASSERT_TRUE(strcmp(lChannel.getDeviceName(), "R\xC3\xA9no") == 0);
+    ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::GetGeneralInfo1);
+
+    buildSimpleResponseFrame(lResponse, lRemoteNodeId, lDeviceNodeId,
+                             IoHomeCommand::GetGeneralInfo1Response,
+                             kSomfyGi1, sizeof(kSomfyGi1));
+    lController.radio().testClearTransmittedPacket();
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::GetGeneralInfo2);
+    ASSERT_EQ(lChannel.getDeviceMetadata().deviceType, 2U);
+    ASSERT_EQ(lChannel.getDeviceMetadata().subtype, 0U);
+    ASSERT_EQ(lChannel.getDeviceMetadata().manufacturer,
+              static_cast<uint8_t>(IoHomeManufacturer::Velux));
+
+    buildSimpleResponseFrame(lResponse, lRemoteNodeId, lDeviceNodeId,
+                             IoHomeCommand::GetGeneralInfo2Response,
+                             kGi2, sizeof(kGi2));
+    lController.radio().testClearTransmittedPacket();
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::GetGeneralInfo3);
+
+    const IoHomePostPairEnrichment &lEnrichment =
+        lChannel.getPostPairEnrichment();
+    ASSERT_EQ(lEnrichment.nameResponseLen, sizeof(kName));
+    ASSERT_MEM_EQ(lEnrichment.nameResponse, kName, sizeof(kName));
+    ASSERT_EQ(lEnrichment.generalInfo1Len, sizeof(kSomfyGi1));
+    ASSERT_MEM_EQ(lEnrichment.generalInfo1, kSomfyGi1, sizeof(kSomfyGi1));
+    ASSERT_EQ(lEnrichment.generalInfo2Len, sizeof(kGi2));
+    ASSERT_MEM_EQ(lEnrichment.generalInfo2, kGi2, sizeof(kGi2));
+    ASSERT_TRUE(lEnrichment.generalInfo2TypeValid);
+    ASSERT_EQ(lEnrichment.generalInfo2DeviceType, 2U);
+    ASSERT_EQ(lEnrichment.generalInfo2Subtype, 0U);
+    ASSERT_TRUE(lEnrichment.generalInfo2MatchesDiscovery);
+
+    // GI3 is optional. Its independent timeout advances to SetConfig1 and
+    // cannot revoke the already-completed key exchange.
+    ioHomeTestAdvanceMillis(IoHomeController::kPairEnrichmentStepTimeoutMs + 1U);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::PairSendSetConfig1);
+    lController.radio().testClearTransmittedPacket();
+    lController.loop();
+    ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::SetConfig1);
+    ASSERT_EQ(lController.pairingTelemetry().outcome,
+              IoHomeController::PairingOutcome::Success);
 }
 
 TEST(controller_pairing_stores_029_metadata_before_key_exchange_and_keeps_source_separate)
@@ -11331,12 +11480,11 @@ TEST(controller_2w_pairing_succeeds_when_setconfig1_send_or_setup_fails)
         lController.setSystemKey(lKey);
 
         ASSERT_TRUE(advancePairingToWaitKeyTransferConfirmation(lController, lRemoteNodeId, lDeviceNodeId));
-        lController.radio().testSetNextPreambleError(RadioError::HardwareError);
-
-        IoHomeFrame lKeyConfirm;
-        buildKeyTransferConfirmationFrame(lKeyConfirm, lRemoteNodeId, lDeviceNodeId);
+        ASSERT_TRUE(queueKeyTransferConfirmationAndAdvanceToSetConfig1(
+            lController, lRemoteNodeId, lDeviceNodeId));
         lController.radio().testClearTransmittedPacket();
-        ASSERT_TRUE(queueControllerResponse(lController, lKeyConfirm));
+        lController.radio().testSetNextPreambleError(RadioError::HardwareError);
+        lController.loop();
 
         ASSERT_TRUE(lController.radio().testLastTransmittedPacket().empty());
         ASSERT_EQ(lChannel.getNodeId(), lDeviceNodeId);
@@ -11358,12 +11506,11 @@ TEST(controller_2w_pairing_succeeds_when_setconfig1_send_or_setup_fails)
         lController.setSystemKey(lKey);
 
         ASSERT_TRUE(advancePairingToWaitKeyTransferConfirmation(lController, lRemoteNodeId, lDeviceNodeId));
-        lController.radio().testSetNextTransmitError(RadioError::HardwareError);
-
-        IoHomeFrame lKeyConfirm;
-        buildKeyTransferConfirmationFrame(lKeyConfirm, lRemoteNodeId, lDeviceNodeId);
+        ASSERT_TRUE(queueKeyTransferConfirmationAndAdvanceToSetConfig1(
+            lController, lRemoteNodeId, lDeviceNodeId));
         lController.radio().testClearTransmittedPacket();
-        ASSERT_TRUE(queueControllerResponse(lController, lKeyConfirm));
+        lController.radio().testSetNextTransmitError(RadioError::HardwareError);
+        lController.loop();
 
         ASSERT_TRUE(lController.radio().testLastTransmittedPacket().empty());
         ASSERT_EQ(lChannel.getNodeId(), lDeviceNodeId);
@@ -13418,13 +13565,19 @@ static void buildGeneralInfo2ResponseFrame(IoHomeFrame &oFrame,
     oFrame.hasHmac = false;
 }
 
-TEST(controller_general_info_enriches_one_structured_device_metadata_object)
+TEST(controller_gi1_raw_and_gi2_confirmation_never_overwrite_discovery)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
     const uint8_t lKey[16] = {1};
     static const uint8_t kDiscoveryPayload[IOHC_DISCOVERY_FULL_SIZE] = {
         0x00, 0x80, 0x12, 0x34, 0x56, 0x01, 0xED, 0xAB, 0xCD};
+    static const uint8_t kSomfyGi1[] = {
+        0x35, 0x31, 0x36, 0x33, 0x33, 0x34, 0x30,
+        0x43, 0x30, 0x36, 0x04, 0x00, 0xFF, 0xFF};
+    static const uint8_t kVeluxSslGi1[] = {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x03, 0x00, 0x00, 0x00};
 
     IoHomeController lController;
     IoHomecontrol lModule;
@@ -13435,8 +13588,8 @@ TEST(controller_general_info_enriches_one_structured_device_metadata_object)
         decodeDiscoveryMetadata(kDiscoveryPayload, sizeof(kDiscoveryPayload));
     lChannel.onDiscoveryMetadata(lDeviceNodeId, lDiscovery);
 
-    // GeneralInfo2 carries type/subtype but no manufacturer. It must enrich
-    // the same object without erasing the complete discovery-only fields.
+    // GeneralInfo2 is a secondary confirmation source. A mismatch is retained
+    // diagnostically and must not overwrite the primary discovery identity.
     uint8_t lInfo2Data[12] = {};
     encodePackedDeviceType(5, 7, lInfo2Data[10], lInfo2Data[11]);
     IoHomeFrame lInfo2;
@@ -13445,33 +13598,47 @@ TEST(controller_general_info_enriches_one_structured_device_metadata_object)
     ASSERT_TRUE(queueControllerResponse(lController, lInfo2));
 
     const IoHomeDeviceMetadata &lAfterInfo2 = lChannel.getDeviceMetadata();
-    ASSERT_EQ(lAfterInfo2.deviceType, 5U);
-    ASSERT_EQ(lAfterInfo2.subtype, 7U);
+    ASSERT_EQ(lAfterInfo2.deviceType, 2U);
+    ASSERT_EQ(lAfterInfo2.subtype, 0U);
     ASSERT_EQ(lAfterInfo2.manufacturer,
               static_cast<uint8_t>(IoHomeManufacturer::Velux));
     ASSERT_EQ(lAfterInfo2.backboneId, 0x123456U);
     ASSERT_EQ(lAfterInfo2.mib, 0xED);
     ASSERT_EQ(lAfterInfo2.discoveryTimestamp, 0xABCDU);
+    const IoHomePostPairEnrichment &lAfterGi2 =
+        lChannel.getPostPairEnrichment();
+    ASSERT_TRUE(lAfterGi2.generalInfo2TypeValid);
+    ASSERT_EQ(lAfterGi2.generalInfo2DeviceType, 5U);
+    ASSERT_EQ(lAfterGi2.generalInfo2Subtype, 7U);
+    ASSERT_TRUE(!lAfterGi2.generalInfo2MatchesDiscovery);
+    ASSERT_MEM_EQ(lAfterGi2.generalInfo2, lInfo2Data, sizeof(lInfo2Data));
 
-    // GeneralInfo1 updates the common identity fields, including manufacturer,
-    // while the discovery extension remains available for diagnostics/flash.
+    // Somfy's ASCII-like GI1 signature and the binary VELUX SSL example are
+    // stored byte-exactly and never interpreted as type/manufacturer fields.
     IoHomeFrame lInfo1;
-    lInfo1.init();
-    lInfo1.ctrlByte0 = IOHC_CTRL0_END;
-    lInfo1.setSrcNode(lDeviceNodeId);
-    lInfo1.setDestNode(lRemoteNodeId);
-    lInfo1.commandId = IoHomeCommand::GetGeneralInfo1Response;
-    encodePackedDeviceType(6, 9, lInfo1.data[0], lInfo1.data[1]);
-    lInfo1.data[2] = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
-    lInfo1.dataLen = 3;
-    lInfo1.hasHmac = false;
+    buildSimpleResponseFrame(lInfo1, lRemoteNodeId, lDeviceNodeId,
+                             IoHomeCommand::GetGeneralInfo1Response,
+                             kSomfyGi1, sizeof(kSomfyGi1));
     ASSERT_TRUE(queueControllerResponse(lController, lInfo1));
+    ASSERT_EQ(lChannel.getPostPairEnrichment().generalInfo1Len,
+              sizeof(kSomfyGi1));
+    ASSERT_MEM_EQ(lChannel.getPostPairEnrichment().generalInfo1,
+                  kSomfyGi1, sizeof(kSomfyGi1));
+
+    buildSimpleResponseFrame(lInfo1, lRemoteNodeId, lDeviceNodeId,
+                             IoHomeCommand::GetGeneralInfo1Response,
+                             kVeluxSslGi1, sizeof(kVeluxSslGi1));
+    ASSERT_TRUE(queueControllerResponse(lController, lInfo1));
+    ASSERT_EQ(lChannel.getPostPairEnrichment().generalInfo1Len,
+              sizeof(kVeluxSslGi1));
+    ASSERT_MEM_EQ(lChannel.getPostPairEnrichment().generalInfo1,
+                  kVeluxSslGi1, sizeof(kVeluxSslGi1));
 
     const IoHomeDeviceMetadata &lAfterInfo1 = lChannel.getDeviceMetadata();
-    ASSERT_EQ(lAfterInfo1.deviceType, 6U);
-    ASSERT_EQ(lAfterInfo1.subtype, 9U);
+    ASSERT_EQ(lAfterInfo1.deviceType, 2U);
+    ASSERT_EQ(lAfterInfo1.subtype, 0U);
     ASSERT_EQ(lAfterInfo1.manufacturer,
-              static_cast<uint8_t>(IoHomeManufacturer::Somfy));
+              static_cast<uint8_t>(IoHomeManufacturer::Velux));
     ASSERT_EQ(lAfterInfo1.backboneId, 0x123456U);
     ASSERT_EQ(lAfterInfo1.mib, 0xED);
     ASSERT_EQ(lAfterInfo1.discoveryTimestamp, 0xABCDU);

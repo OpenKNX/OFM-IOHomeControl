@@ -245,7 +245,29 @@ public:
     mHasSlatFeedback = true;
     mSlatFeedback = iPercent;
   }
-  void onDeviceName(const char *, uint8_t) {}
+  void onDeviceName(const char *iName, uint8_t iLen)
+  {
+    uint8_t lStart = 0;
+    while (lStart < iLen && static_cast<uint8_t>(iName[lStart]) <= 0x20)
+      ++lStart;
+    uint8_t lEnd = iLen;
+    while (lEnd > lStart &&
+           (static_cast<uint8_t>(iName[lEnd - 1]) <= 0x20 || iName[lEnd - 1] == '\0'))
+      --lEnd;
+    uint8_t lOut = 0;
+    for (uint8_t i = lStart; i < lEnd && lOut < sizeof(mDeviceName) - 1; ++i)
+    {
+      const uint8_t lByte = static_cast<uint8_t>(iName[i]);
+      if (lByte < 0x80)
+        mDeviceName[lOut++] = static_cast<char>(lByte);
+      else if (lOut + 1 < sizeof(mDeviceName) - 1)
+      {
+        mDeviceName[lOut++] = static_cast<char>(0xC0 | (lByte >> 6));
+        mDeviceName[lOut++] = static_cast<char>(0x80 | (lByte & 0x3F));
+      }
+    }
+    mDeviceName[lOut] = '\0';
+  }
   void onDeviceInfo(const IoHomeDeviceMetadata &iInfo)
   {
     if (iInfo.valid)
@@ -262,6 +284,63 @@ public:
       lInfo.manufacturer = iManufacturer;
     onDeviceInfo(lInfo);
   }
+  void onPostPairEnrichmentResponse(IoHomeCommand iResponse,
+                                    const uint8_t *iData, uint8_t iDataLen)
+  {
+    const uint8_t lLen = iDataLen < IOHC_DEVICE_INFO_RAW_MAX_SIZE
+                             ? iDataLen
+                             : IOHC_DEVICE_INFO_RAW_MAX_SIZE;
+    uint8_t *lTarget = nullptr;
+    uint8_t *lStoredLen = nullptr;
+    switch (iResponse)
+    {
+    case IoHomeCommand::GetNameResponse:
+      lTarget = mPostPairEnrichment.nameResponse;
+      lStoredLen = &mPostPairEnrichment.nameResponseLen;
+      break;
+    case IoHomeCommand::GetGeneralInfo1Response:
+      lTarget = mPostPairEnrichment.generalInfo1;
+      lStoredLen = &mPostPairEnrichment.generalInfo1Len;
+      break;
+    case IoHomeCommand::GetGeneralInfo2Response:
+      lTarget = mPostPairEnrichment.generalInfo2;
+      lStoredLen = &mPostPairEnrichment.generalInfo2Len;
+      break;
+    case IoHomeCommand::GetGeneralInfo3Response:
+      lTarget = mPostPairEnrichment.generalInfo3;
+      lStoredLen = &mPostPairEnrichment.generalInfo3Len;
+      break;
+    default:
+      return;
+    }
+    memset(lTarget, 0, IOHC_DEVICE_INFO_RAW_MAX_SIZE);
+    if (iData && lLen > 0)
+      memcpy(lTarget, iData, lLen);
+    *lStoredLen = lLen;
+    if (iResponse == IoHomeCommand::GetNameResponse)
+      onDeviceName(
+          reinterpret_cast<const char *>(mPostPairEnrichment.nameResponse),
+          mPostPairEnrichment.nameResponseLen);
+    else if (iResponse == IoHomeCommand::GetGeneralInfo2Response && iDataLen >= 12)
+    {
+      mPostPairEnrichment.generalInfo2TypeValid = true;
+      mPostPairEnrichment.generalInfo2DeviceType =
+          decodePackedDeviceType(iData[10], iData[11]);
+      mPostPairEnrichment.generalInfo2Subtype =
+          decodePackedDeviceSubtype(iData[11]);
+      mPostPairEnrichment.generalInfo2MatchesDiscovery =
+          mDiscoveryMetadata.valid &&
+          mPostPairEnrichment.generalInfo2DeviceType == mDiscoveryMetadata.deviceType &&
+          mPostPairEnrichment.generalInfo2Subtype == mDiscoveryMetadata.subtype;
+    }
+  }
+  void clearPostPairEnrichment()
+  {
+    memset(mDeviceName, 0, sizeof(mDeviceName));
+    mPostPairEnrichment = IoHomePostPairEnrichment{};
+  }
+  const IoHomePostPairEnrichment &getPostPairEnrichment() const { return mPostPairEnrichment; }
+  const char *getDeviceName() const { return mDeviceName; }
   void onDiscoveryMetadata(uint32_t iSourceNodeId,
                            const IoHomeDiscoveryMetadata &iMetadata)
   {
@@ -420,6 +499,8 @@ private:
   uint8_t mConfigured2WAcei = IOHC_ACEI_DEFAULT;
   uint32_t mDiscoveryNodeId = 0;
   IoHomeDiscoveryMetadata mDiscoveryMetadata{};
+  IoHomePostPairEnrichment mPostPairEnrichment{};
+  char mDeviceName[21] = {};
   bool mConfigured1WEnrollmentMac = false;
   OneWayEnrollmentFinalizer mConfigured1WEnrollmentFinalizer = OneWayEnrollmentFinalizer::Automatic;
   OneWayExecuteDestinationPolicy mConfigured1WExecuteDestinationPolicy = OneWayExecuteDestinationPolicy::Automatic;
