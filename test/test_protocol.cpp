@@ -14417,6 +14417,18 @@ TEST(controller_gi1_raw_and_gi2_confirmation_never_overwrite_discovery)
     ASSERT_EQ(lAfterGi2.generalInfo2SubProfile, 7U);
     ASSERT_TRUE(!lAfterGi2.generalInfo2MatchesDiscovery);
     ASSERT_MEM_EQ(lAfterGi2.generalInfo2, lInfo2Data, sizeof(lInfo2Data));
+    ASSERT_MEM_EQ(lAfterInfo2.rawData, kDiscoveryPayload, sizeof(kDiscoveryPayload));
+
+    // A subsequent exact GI2 value confirms, but does not become the source
+    // of, the generic profile.
+    encodePackedProfile(2, 0, lInfo2Data[10], lInfo2Data[11]);
+    buildGeneralInfo2ResponseFrame(lInfo2, lRemoteNodeId, lDeviceNodeId,
+                                   lInfo2Data, sizeof(lInfo2Data));
+    ASSERT_TRUE(queueControllerResponse(lController, lInfo2));
+    ASSERT_TRUE(lChannel.getProductIdentityEvidence().generalInfo2MatchesDiscovery);
+    ASSERT_EQ(lChannel.getProtocolIdentity().profile, 2U);
+    ASSERT_EQ(lChannel.getProtocolIdentity().metadataSource,
+              IoHomeMetadataSource::Unknown);
 
     // Somfy's ASCII-like GI1 signature and the binary VELUX SSL example are
     // stored byte-exactly and never interpreted as type/manufacturer fields.

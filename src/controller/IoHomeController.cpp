@@ -5486,10 +5486,14 @@ void IoHomeController::loop()
                                 const IoHomeProductIdentityEvidence &lEnrichment =
                                     lChannel->getProductIdentityEvidence();
                                 if (lEnrichment.generalInfo2TypeValid)
-                                    logInfoP("PairDiag: GI2 profile=%u subProfile=%u discovery=%s",
+                                    logInfoP("PairDiag: GI2 profile=%u subProfile=%u discovery=%s discoveryRaw=%s GI2Raw=%s",
                                              lEnrichment.generalInfo2Profile,
                                              static_cast<unsigned>(lEnrichment.generalInfo2SubProfile),
-                                             lEnrichment.generalInfo2MatchesDiscovery ? "match" : "mismatch");
+                                             lEnrichment.generalInfo2MatchesDiscovery ? "exact-match" : "mismatch",
+                                             hexDump(lChannel->getProtocolIdentity().rawData,
+                                                     lChannel->getProtocolIdentity().rawDataLen).c_str(),
+                                             hexDump(lEnrichment.generalInfo2,
+                                                     lEnrichment.generalInfo2Len).c_str());
                             }
                         }
                         advancePairEnrichment("response");

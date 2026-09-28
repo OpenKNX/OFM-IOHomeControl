@@ -839,13 +839,15 @@ void IoHomecontrolChannel::onPostPairEnrichmentResponse(
                 mProductIdentityEvidence.generalInfo2SubProfile == mProtocolIdentity.subProfile;
             if (mProtocolIdentity.valid)
             {
-                logDebugP(mProductIdentityEvidence.generalInfo2MatchesDiscovery
-                              ? "Type validation OK: discovery=%u/%u GI2=%u/%u"
-                              : "Type mismatch: discovery=%u/%u GI2=%u/%u",
-                          static_cast<unsigned>(mProtocolIdentity.profile),
-                          static_cast<unsigned>(mProtocolIdentity.subProfile),
-                          static_cast<unsigned>(mProductIdentityEvidence.generalInfo2Profile),
-                          static_cast<unsigned>(mProductIdentityEvidence.generalInfo2SubProfile));
+                logInfoP("GI2 profile validation: %s discovery=%u/%u raw=%s GI2=%u/%u raw=%s (discovery retained)",
+                         mProductIdentityEvidence.generalInfo2MatchesDiscovery ? "exact-match" : "mismatch",
+                         static_cast<unsigned>(mProtocolIdentity.profile),
+                         static_cast<unsigned>(mProtocolIdentity.subProfile),
+                         enrichmentHex(mProtocolIdentity.rawData, mProtocolIdentity.rawDataLen).c_str(),
+                         static_cast<unsigned>(mProductIdentityEvidence.generalInfo2Profile),
+                         static_cast<unsigned>(mProductIdentityEvidence.generalInfo2SubProfile),
+                         enrichmentHex(mProductIdentityEvidence.generalInfo2,
+                                       mProductIdentityEvidence.generalInfo2Len).c_str());
             }
         }
         break;
