@@ -89,8 +89,8 @@ inline bool ioHomeIsOrientationSemantic(ParameterSemantic iSemantic)
            iSemantic == ParameterSemantic::HangerOrientation;
 }
 
-// The currently captured 2W tilt frame and status selector address FP3.
-// Other FP slots require the P1-MP.3 command serialization work.
+// The captured status selector addresses FP3; use the general profile index
+// for commands that target another orientation slot.
 inline bool ioHomeSupportsCapturedFp3Orientation(
     const IoHomeProfileDescriptor *iDescriptor)
 {

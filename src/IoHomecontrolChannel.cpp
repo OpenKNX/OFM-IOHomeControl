@@ -1237,9 +1237,7 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
         ioHomeProfileDescriptor(mProtocolIdentity);
     if (lDescriptor && ioHomeParameterSemantic(lDescriptor, 0) == ParameterSemantic::Unsupported)
         return;
-    if (iSlatPercent != 0xFF &&
-        ((mIs1W && lDescriptor) ||
-         !ioHomeSupportsCapturedFp3Orientation(mProtocolIdentity)))
+    if (iSlatPercent != 0xFF && mIs1W && lDescriptor)
     {
         logDebugP("Position+slat command has no validated FP mapping for %s",
                   lDescriptor ? lDescriptor->label : "unknown profile");
@@ -1257,6 +1255,9 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
                                                        0xFF, mSilentOperation ? IOHC_EXECUTE_PROFILE_SILENT : 0xFF);
     if (!lQueued)
         return;
+
+    if (iSlatPercent != 0xFF && !mIs1W && isTiltCapableDeviceType())
+        sendSlatCommand(iSlatPercent);
 
     clearStopTravelSnapshot();
     startTravelEstimation(lTargetPosition);
@@ -1330,23 +1331,18 @@ void IoHomecontrolChannel::sendSlatCommand(float iPercent)
         logDebugP("No orientation parameter for %s", lDescriptor->label);
         return;
     }
-    if (lDescriptor && !ioHomeSupportsCapturedFp3Orientation(lDescriptor))
-    {
-        const ParameterSemantic lOrientation =
-            ioHomeParameterIndex(lDescriptor, ParameterSemantic::SlatOrientation) != 0xFF
-                ? ParameterSemantic::SlatOrientation
-                : ParameterSemantic::HangerOrientation;
-        logDebugP("Orientation uses FP%u for %s; serializer supports FP3 only",
-                  static_cast<unsigned>(ioHomeParameterIndex(lDescriptor, lOrientation)),
-                  lDescriptor->label);
-        return;
-    }
     const float lSlatPercent = clampPercent(iPercent);
     logDebugP("Send slat %.1f%% (with current position %.1f%%)", lSlatPercent, mCurrentPosition);
 
     if (!mIs1W && isTiltCapableDeviceType())
     {
-        if (mController.sendTiltCommand(mNodeId, mEncKey, static_cast<uint8_t>(lSlatPercent + 0.5f)))
+        const ParameterSemantic lOrientation = lDescriptor &&
+            ioHomeParameterIndex(lDescriptor, ParameterSemantic::SlatOrientation) == 0xFF
+                ? ParameterSemantic::HangerOrientation
+                : ParameterSemantic::SlatOrientation;
+        if (mController.sendProfileParameterCommand(
+                mNodeId, mEncKey, lOrientation,
+                static_cast<uint8_t>(lSlatPercent + 0.5f)))
             startStatusPollTracking(defaultTrackedStatusPollDelayMs());
         return;
     }

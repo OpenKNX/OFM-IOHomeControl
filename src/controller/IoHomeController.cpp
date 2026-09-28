@@ -861,22 +861,21 @@ namespace
         return true;
     }
 
-    bool build2WExecuteTiltPayload(uint8_t iTiltPercent, uint8_t *oData, uint8_t &oLen)
+    bool build2WExecuteFpPayload(uint8_t iFpIndex, uint16_t iRaw,
+                                 uint8_t *oData, uint8_t &oLen)
     {
-        if (oData == nullptr || iTiltPercent > 100)
+        if (oData == nullptr || iFpIndex < 1 || iFpIndex > 3 ||
+            iRaw > IOHC_POSITION_MAX)
             return false;
-
-        const uint16_t lTiltRaw = static_cast<uint16_t>(
-            (static_cast<uint32_t>(100U - iTiltPercent) * IOHC_POSITION_MAX) / 100U);
-
-        // Reference template: 01 E7 D4 00 20 <tiltRawHi> <tiltRawLo> 00
+        // The captured FP3 shape uses FPI1=0x20. The same FPI1 byte
+        // selects FP1=0x80 and FP2=0x40 without changing the value slot.
         oData[0] = IOHC_ORIGINATOR_USER;
         oData[1] = 0xE7;
         oData[2] = 0xD4;
         oData[3] = 0x00;
-        oData[4] = 0x20;
-        oData[5] = static_cast<uint8_t>((lTiltRaw >> 8) & 0xFF);
-        oData[6] = static_cast<uint8_t>(lTiltRaw & 0xFF);
+        oData[4] = static_cast<uint8_t>(0x80U >> (iFpIndex - 1));
+        oData[5] = static_cast<uint8_t>((iRaw >> 8) & 0xFF);
+        oData[6] = static_cast<uint8_t>(iRaw & 0xFF);
         oData[7] = 0x00;
         oLen = 8;
         return true;
@@ -1113,7 +1112,7 @@ namespace
             return false;
 
         static constexpr uint8_t kExecuteTilt50[] = {0x01, 0xE7, 0xD4, 0x00, 0x20, 0x64, 0x00, 0x00};
-        if (!build2WExecuteTiltPayload(50, lPayload, lLen) ||
+        if (!build2WExecuteFpPayload(3, IOHC_POSITION_MAX / 2, lPayload, lLen) ||
             !payloadEquals(lPayload, lLen, kExecuteTilt50, sizeof(kExecuteTilt50)))
             return false;
 
@@ -2258,16 +2257,36 @@ bool IoHomeController::sendPrivateProbe(uint32_t iDestNodeId, const uint8_t *iEn
 
 bool IoHomeController::sendTiltCommand(uint32_t iDestNodeId, const uint8_t *iEncKey, uint8_t iTiltPercent)
 {
+    return sendProfileParameterCommand(iDestNodeId, iEncKey,
+                                       ParameterSemantic::SlatOrientation,
+                                       iTiltPercent);
+}
+
+bool IoHomeController::sendProfileParameterCommand(uint32_t iDestNodeId,
+                                                    const uint8_t *iEncKey,
+                                                    ParameterSemantic iSemantic,
+                                                    uint8_t iPercent)
+{
     IoHomecontrolChannel *lCh = channelForNode(iDestNodeId);
     if (lCh && lCh->is1W())
         return false;
-    if (lCh && (!lCh->allowsActuatorControls() ||
-                !ioHomeSupportsCapturedFp3Orientation(
-                    lCh->getProtocolIdentity())))
+    if (lCh && !lCh->allowsActuatorControls())
         return false;
-
-    if (iTiltPercent > 100)
-        iTiltPercent = 100;
+    const IoHomeProfileDescriptor *lDescriptor = lCh
+        ? ioHomeProfileDescriptor(lCh->getProtocolIdentity()) : nullptr;
+    if (lCh && lCh->getProtocolIdentity().valid && !lDescriptor)
+        return false;
+    const uint8_t lIndex = lDescriptor
+        ? ioHomeParameterIndex(lDescriptor, iSemantic)
+        : (iSemantic == ParameterSemantic::SlatOrientation ? 3 : 0xFF);
+    if (lIndex < 1 || lIndex > 3)
+        return false;
+    if (iPercent > 100)
+        iPercent = 100;
+    const bool lReversed = ioHomeIsOrientationSemantic(iSemantic);
+    const uint16_t lRaw = ioHomePercentToRaw(
+        iPercent, lReversed ? ParameterPolarity::Reversed
+                            : ParameterPolarity::Normal);
 
     IoHomeQueueEntry lEntry;
     memset(&lEntry, 0, sizeof(lEntry));
@@ -2281,8 +2300,9 @@ bool IoHomeController::sendTiltCommand(uint32_t iDestNodeId, const uint8_t *iEnc
     lEntry.oneWayBroadcastTypeExplicit = false;
     lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
     lEntry.oneWayExactDestination = 0;
-    lEntry.twoWayTilt = true;
-    lEntry.twoWayTiltPercent = iTiltPercent;
+    lEntry.twoWayFp = true;
+    lEntry.twoWayFpIndex = lIndex;
+    lEntry.twoWayFpRaw = lRaw;
     lEntry.retries = 0;
     lEntry.maxAttempts = IOHC_EXCHANGE_MAX_ATTEMPTS;
     lEntry.retryReason = TwoWayRetryReason::Initial;
@@ -8808,9 +8828,11 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                                                 iEntry.twoWayRawLen))
                     return false;
             }
-            else if (iEntry.twoWayTilt)
+            else if (iEntry.twoWayFp)
             {
-                if (!build2WExecuteTiltPayload(iEntry.twoWayTiltPercent, mTxFrame.data, mTxFrame.dataLen))
+                if (!build2WExecuteFpPayload(iEntry.twoWayFpIndex,
+                                             iEntry.twoWayFpRaw,
+                                             mTxFrame.data, mTxFrame.dataLen))
                     return false;
             }
             else if (iEntry.param <= 100)

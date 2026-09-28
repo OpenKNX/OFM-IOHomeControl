@@ -11942,14 +11942,14 @@ TEST(controller_uses_profile_registry_for_captured_fp3_tilt_tx_and_rx)
     {
         uint16_t profile;
         uint8_t subProfile;
-        bool fp3Orientation;
+        uint8_t orientationIndex;
     };
     const ProfileCase kCases[] = {
-        {1, 0, false},  // Interior Venetian: orientation is FP1.
-        {2, 0, false},  // Roller shutter: no orientation parameter.
-        {2, 1, true},   // Adjustable slats roller shutter: FP3.
-        {17, 0, true},  // Exterior Venetian: FP3.
-        {1, 1, false},  // Unlisted subprofile: no inferred FP semantics.
+        {1, 0, 1},     // Interior Venetian: orientation is FP1.
+        {2, 0, 0},     // Roller shutter: no orientation parameter.
+        {2, 1, 3},     // Adjustable slats roller shutter: FP3.
+        {17, 0, 3},    // Exterior Venetian: FP3.
+        {1, 1, 0},     // Unlisted subprofile: no inferred FP semantics.
     };
 
     for (const ProfileCase &lCase : kCases)
@@ -11966,7 +11966,7 @@ TEST(controller_uses_profile_registry_for_captured_fp3_tilt_tx_and_rx)
         lChannel.onProtocolIdentity(lDeviceNodeId, lIdentity);
 
         ASSERT_EQ(lController.sendTiltCommand(lDeviceNodeId, lKey, 25),
-                  lCase.fp3Orientation);
+                  lCase.orientationIndex != 0);
 
         uint8_t lData[15] = {};
         lData[13] = static_cast<uint8_t>(lTiltRaw >> 8);
@@ -11976,7 +11976,49 @@ TEST(controller_uses_profile_registry_for_captured_fp3_tilt_tx_and_rx)
                                  IoHomeCommand::PrivateResponse,
                                  lData, sizeof(lData));
         ASSERT_TRUE(queueControllerResponse(lController, lResponse));
-        ASSERT_EQ(lChannel.testHasSlatFeedback(), lCase.fp3Orientation);
+        ASSERT_EQ(lChannel.testHasSlatFeedback(), lCase.orientationIndex == 3);
+    }
+}
+
+TEST(controller_profile_fp_tx_uses_semantic_index_not_fixed_slot)
+{
+    const uint32_t lRemote = 0x831F2A;
+    const uint32_t lDevice = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    struct Case { uint16_t profile; uint8_t subProfile;
+                  ParameterSemantic semantic; uint8_t index; };
+    const Case kCases[] = {
+        {1, 0, ParameterSemantic::SlatOrientation, 1},
+        {1, 0, ParameterSemantic::SlatOrientationSpeed, 2},
+        {1, 0, ParameterSemantic::LinearSpeed, 3},
+        {2, 0, ParameterSemantic::LinearSpeed, 1},
+        {2, 1, ParameterSemantic::SlatOrientationSpeed, 2},
+        {2, 1, ParameterSemantic::SlatOrientation, 3},
+        {17, 0, ParameterSemantic::LinearSpeed, 1},
+        {17, 0, ParameterSemantic::SlatOrientation, 3},
+    };
+    for (const Case &lCase : kCases)
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemote, lDevice, lKey);
+        IoHomeProtocolIdentity lIdentity;
+        lIdentity.valid = true;
+        lIdentity.profile = lCase.profile;
+        lIdentity.subProfile = lCase.subProfile;
+        lChannel.onProtocolIdentity(lDevice, lIdentity);
+        ASSERT_TRUE(lController.sendProfileParameterCommand(
+            lDevice, lKey, lCase.semantic, 25));
+        IoHomeFrame lTx;
+        ASSERT_TRUE(transmitQueuedControllerFrame(lController, lTx));
+        ASSERT_EQ(lTx.dataLen, 8U);
+        ASSERT_EQ(lTx.data[4], static_cast<uint8_t>(0x80U >> (lCase.index - 1)));
+        const uint16_t lRaw = (static_cast<uint16_t>(lTx.data[5]) << 8) | lTx.data[6];
+        ASSERT_EQ(lRaw, ioHomePercentToRaw(25,
+            ioHomeIsOrientationSemantic(lCase.semantic)
+                ? ParameterPolarity::Reversed : ParameterPolarity::Normal));
     }
 }
 

@@ -3,6 +3,7 @@
 #include "../protocol/IoHomeFrame.h"
 #include "../protocol/IoHomeCrypto.h"
 #include "../protocol/IoHomeCommands.h"
+#include "../protocol/IoHomeProfileRegistry.h"
 #include <stdint.h>
 #include <string>
 
@@ -152,8 +153,9 @@ struct IoHomeQueueEntry
   OneWayDestinationMode oneWayDestinationMode; // normal/profile typed, all, exact, or explicit type
   uint32_t oneWayExactDestination;             // exact 24-bit 1W dst for diagnostics
   uint8_t sourceChannelIndex;                  // 0xFF when not queued from a concrete channel
-  bool twoWayTilt;                             // true: 2W tilt-only Execute payload
-  uint8_t twoWayTiltPercent;
+  bool twoWayFp;                               // profile-selected functional parameter
+  uint8_t twoWayFpIndex;
+  uint16_t twoWayFpRaw;
   uint8_t retries;
   uint8_t maxAttempts;
   uint8_t authenticatedUnconfirmedTries;
@@ -525,6 +527,8 @@ public:
                                              uint8_t iSelectorOrBlock);
   static bool decodeStatusUpdateOriginator(const IoHomeFrame &iFrame, uint8_t &oOriginator);
   bool sendTiltCommand(uint32_t iDestNodeId, const uint8_t *iEncKey, uint8_t iTiltPercent);
+  bool sendProfileParameterCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
+                                   ParameterSemantic iSemantic, uint8_t iPercent);
 
   // Start pairing process for a channel
   bool startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId = 0);
