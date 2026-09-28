@@ -148,6 +148,7 @@ function IOHC_configureImportedChannel(device, channelNumber, discovery) {
                            IOHC_importDeviceLabel(etsType) + " " + IOHC_formatNodeId(discovery.nodeId));
     IOHC_setParameterValue(device, prefix + "ProtocolMode", 0);
     IOHC_setParameterValue(device, prefix + "DeviceType", etsType);
+    IOHC_setParameterValue(device, prefix + "ProfileOverride", 0);
     IOHC_setParameterValue(device, prefix + "TwoWayPowerClass", discovery.powerClass);
     IOHC_setParameterValue(device, prefix + "Suspend", 0);
     IOHC_setParameterValue(device, prefix + "PairingLastResult", "Automatisch importiert");

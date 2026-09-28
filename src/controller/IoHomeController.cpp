@@ -442,7 +442,7 @@ namespace
         if (!iChannel)
             return;
         const IoHomeProfileDescriptor *lDescriptor =
-            ioHomeProfileDescriptor(iChannel->getProtocolIdentity());
+            iChannel->getEffectiveProfileDescriptor();
         const ParameterSemantic lSemantic = ioHomeParameterSemantic(lDescriptor, iIndex);
         if (lDescriptor && (lSemantic == ParameterSemantic::Unsupported ||
                             lSemantic == ParameterSemantic::Unknown))
@@ -494,7 +494,7 @@ namespace
         }
 
         const IoHomeProfileDescriptor *lDescriptor =
-            ioHomeProfileDescriptor(iChannel->getProtocolIdentity());
+            iChannel->getEffectiveProfileDescriptor();
         if (iChannel->getProtocolIdentity().valid && !lDescriptor)
         {
             logDebugP("Unknown profile MP target/current raw=0x%04X/0x%04X",
@@ -2305,7 +2305,7 @@ bool IoHomeController::sendProfileParameterCommand(uint32_t iDestNodeId,
     if (lCh && !lCh->allowsActuatorControls())
         return false;
     const IoHomeProfileDescriptor *lDescriptor = lCh
-        ? ioHomeProfileDescriptor(lCh->getProtocolIdentity()) : nullptr;
+        ? lCh->getEffectiveProfileDescriptor() : nullptr;
     if (lCh && lCh->getProtocolIdentity().valid && !lDescriptor)
         return false;
     const uint8_t lIndex = lDescriptor

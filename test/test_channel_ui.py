@@ -23,6 +23,26 @@ class ChannelUiTest(unittest.TestCase):
         cls.share = parse("IoHomecontrol.share.xml")
         cls.template = parse("IoHomecontrol.templ.xml")
 
+    def test_profile_auto_and_manual_override_are_exposed(self) -> None:
+        selection = self.share.find(
+            ".//k:ParameterType[@Name='IOHCChannelSelection']", NS
+        )
+        auto = selection.find(".//k:Enumeration[@Value='1']", NS)
+        self.assertEqual(auto.get("Text"), "Automatisch (Discovery)")
+        override = self.template.find(
+            ".//k:Parameter[@Name='c%C%ProfileOverride']", NS
+        )
+        self.assertEqual(override.get("Value"), "0")
+        self.assertEqual(override.get("Offset"), "66")
+        expert = self.template.find(
+            ".//k:ParameterBlock[@Name='ExpertSettings']", NS
+        )
+        self.assertIsNotNone(expert.find(
+            "k:ParameterRefRef[@RefId='%AID%_UP-%TT%%CC%101_R-%TT%%CC%10101']", NS
+        ))
+        script = (ROOT / "src" / "IoHomecontrol.script.js").read_text()
+        self.assertIn('prefix + "ProfileOverride", 0', script)
+
     def test_all_channels_are_selected_by_device_type(self) -> None:
         visible = self.share.find(".//k:Parameter[@Name='VisibleChannels']", NS)
         self.assertIsNotNone(visible)
@@ -621,7 +641,7 @@ class ChannelUiTest(unittest.TestCase):
         self.assertEqual(mode.get("BitOffset"), "6")
         self.assertEqual(delay.get("Value"), "300")
         self.assertEqual(delay.get("Offset"), "63")
-        self.assertEqual(self.template.find(".//k:Union", NS).get("SizeInBit"), "528")
+        self.assertEqual(self.template.find(".//k:Union", NS).get("SizeInBit"), "544")
 
         expert = self.template.find(".//k:ParameterBlock[@Name='ExpertSettings']", NS)
         two_way = expert.find("k:choose/k:when[@test='0']", NS)

@@ -58,10 +58,13 @@
                 </TypeRestriction>
               </ParameterType>
               <!-- ETS channel selector: 0 disables, other values map to IOHCDeviceType + 1. -->
+              <ParameterType Id="%AID%_PT-IOHCProfileOverride" Name="IOHCProfileOverride">
+                <TypeNumber SizeInBit="16" Type="unsignedInt" minInclusive="0" maxInclusive="65535" />
+              </ParameterType>
               <ParameterType Id="%AID%_PT-IOHCChannelSelection" Name="IOHCChannelSelection">
                 <TypeRestriction Base="Value" SizeInBit="8">
                   <Enumeration Text="Deaktiviert" Value="0" Id="%ENID%" />
-                  <Enumeration Text="Generisch" Value="1" Id="%ENID%" />
+                  <Enumeration Text="Automatisch (Discovery)" Value="1" Id="%ENID%" />
                   <Enumeration Text="Jalousie / Rollladen" Value="2" Id="%ENID%" />
                   <Enumeration Text="Fenster" Value="3" Id="%ENID%" />
                   <Enumeration Text="Markise" Value="4" Id="%ENID%" />

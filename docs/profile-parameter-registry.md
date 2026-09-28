@@ -17,16 +17,25 @@ The distinction between interior and exterior Venetian blinds matters:
 | `0x0040` interior | slat orientation | slat orientation speed | blind speed |
 | `0x0440` exterior | blind speed | slat orientation speed | slat orientation |
 
-The existing captured two-way tilt Execute and tilt feedback paths address
-FP3. They are enabled for a discovered profile only when this registry assigns
-FP3 an orientation semantic. A known interior Venetian blind therefore does
-not receive an FP3 tilt command or interpret FP3 feedback as slat position.
-Legacy channels without discovery metadata retain their configured behavior.
-The existing one-way combined position/slat frame has no confirmed parameter
-index for a discovered profile, so it is not promoted to a profile-aware FP
-command by this registry.
+The two-way Execute path selects FP1, FP2, or FP3 from the registry and builds
+the corresponding activation bit. The captured FP3 status field is interpreted
+as tilt only for profiles that assign FP3 an orientation semantic; for an
+interior Venetian blind, that field reports speed instead. Legacy channels
+without discovery metadata retain their captured FP3 tilt behavior. The
+one-way combined position/slat frame has no confirmed parameter index for a
+discovered profile and remains disabled in that case.
 
-The registry also provides MP semantics to the status path and derives
-capability flags from its MP/FP assignments. This step does not change MP
-polarity or implement arbitrary FP activation masks; those are P1-MP.2 and
-P1-MP.3. Profile-specific routing of all received FP values is P1-MP.4.
+The registry provides MP semantics, polarity, functional-parameter indices,
+and descriptor-derived capabilities to both command and feedback paths.
+An explicit packed-profile override can change behavior without modifying
+the hardware-discovered identity.
+
+ETS uses `ProfileOverride = 0` for automatic discovery-based behavior. An
+expert may enter a documented packed value as a decimal number (for example,
+`64` for interior Venetian or `1088` for exterior Venetian). A conflicting
+override is logged, while the original Profile/SubProfile remains in
+diagnostics and persistence. The automatic ETS channel exposes the common
+control objects; firmware accepts only operations supported by the discovered
+descriptor. ETS cannot add or remove group objects after a radio discovery,
+so imported channels may still choose a static display role without forcing
+the protocol profile.

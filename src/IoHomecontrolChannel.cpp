@@ -59,6 +59,10 @@
 #define ParamIOHC_cTwoWayAcei IOHC_ACEI_DEFAULT
 #endif
 
+#ifndef ParamIOHC_cProfileOverride
+#define ParamIOHC_cProfileOverride 0
+#endif
+
 // ---------------------------------------------------------------------------
 // Scene parameter access
 //
@@ -278,6 +282,7 @@ void IoHomecontrolChannel::setup()
             : PairingDiscoverConfirmMode::Send);
     setConfigured2WKeyInitDelay(lTwoWayKeyInitDelay <= 10000 ? lTwoWayKeyInitDelay : 300);
     setConfigured2WAcei(lTwoWayAcei == 0x63 ? 0x63 : IOHC_ACEI_DEFAULT);
+    setManualProfileOverride(static_cast<uint16_t>(ParamIOHC_cProfileOverride));
     TwoWayDiscoverySettings lDiscoverySettings;
     if (lTwoWayDiscoveryCommand <= static_cast<uint8_t>(TwoWayDiscoveryCommandMode::DiscoverSPE))
         lDiscoverySettings.command = static_cast<TwoWayDiscoveryCommandMode>(lTwoWayDiscoveryCommand);
@@ -417,6 +422,43 @@ void IoHomecontrolChannel::processInputKo(uint8_t iIoIndex, GroupObject &iKo)
     {
         logDebugP("Channel locked, ignoring KO %d", iIoIndex);
         return;
+    }
+
+    if (const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor())
+    {
+        const IoHomeGenericCapabilities lCaps = ioHomeProfileCapabilities(lDescriptor);
+        bool lSupported = true;
+        switch (iIoIndex)
+        {
+        case IOHC_KoCHPosition:
+            lSupported = lCaps.position || lCaps.light || lCaps.ventilation || lCaps.heating;
+            break;
+        case IOHC_KoCHUpDown:
+        case IOHC_KoCHStepStop:
+        case IOHC_KoCHStop:
+            lSupported = lCaps.position;
+            break;
+        case IOHC_KoCHOnOff:
+            lSupported = lCaps.onOff || lCaps.light || lCaps.lock || lCaps.heating;
+            break;
+        case IOHC_KoCHSlat:
+            lSupported = lCaps.tilt;
+            break;
+        case IOHC_KoCHFavorite:
+            lSupported = lCaps.position;
+            break;
+        case IOHC_KoCHVentilation:
+            lSupported = lDescriptor->securedVentilation;
+            break;
+        default:
+            break;
+        }
+        if (!lSupported)
+        {
+            logDebugP("Ignoring KO %u unsupported by profile %s",
+                      static_cast<unsigned>(iIoIndex), lDescriptor->label);
+            return;
+        }
     }
 
     switch (iIoIndex)
@@ -889,6 +931,11 @@ void IoHomecontrolChannel::onProtocolIdentity(
     mProtocolIdentity = lIdentity;
     mProfile = lIdentity.profile;
     mSubProfile = lIdentity.subProfile;
+    if (mManualPackedProfile != 0 &&
+        mManualPackedProfile != ((lIdentity.profile << 6) | lIdentity.subProfile))
+        logInfoP("Manual profile 0x%04X overrides discovered profile 0x%04X for behavior only",
+                 mManualPackedProfile,
+                 static_cast<unsigned>((lIdentity.profile << 6) | lIdentity.subProfile));
     logDebugP("Protocol identity: ioAddress=0x%06X profile=0x%04X subProfile=0x%02X manufacturerId=0x%02X ioBackboneAddress=%s MIB=%s",
               lIdentity.ioAddress, lIdentity.profile, lIdentity.subProfile,
               lIdentity.manufacturerId,
@@ -919,7 +966,31 @@ const IoHomeProtocolIdentity &IoHomecontrolChannel::getProtocolIdentity() const
 
 IoHomeGenericCapabilities IoHomecontrolChannel::getProfileCapabilities() const
 {
-    return ioHomeProfileCapabilities(ioHomeProfileDescriptor(mProtocolIdentity));
+    return ioHomeProfileCapabilities(getEffectiveProfileDescriptor());
+}
+
+const IoHomeProfileDescriptor *IoHomecontrolChannel::getEffectiveProfileDescriptor() const
+{
+    if (mManualPackedProfile != 0)
+        return ioHomeProfileDescriptor(mManualPackedProfile >> 6,
+                                       mManualPackedProfile & 0x3F);
+    return ioHomeProfileDescriptor(mProtocolIdentity);
+}
+
+void IoHomecontrolChannel::setManualProfileOverride(uint16_t iPackedType)
+{
+    if (iPackedType != 0 &&
+        !ioHomeProfileDescriptor(iPackedType >> 6, iPackedType & 0x3F))
+    {
+        logInfoP("Ignoring unsupported manual profile 0x%04X", iPackedType);
+        iPackedType = 0;
+    }
+    mManualPackedProfile = iPackedType;
+    if (mProtocolIdentity.valid && iPackedType != 0 &&
+        iPackedType != ((mProtocolIdentity.profile << 6) | mProtocolIdentity.subProfile))
+        logInfoP("Manual profile 0x%04X overrides discovered profile 0x%04X for behavior only",
+                 iPackedType,
+                 static_cast<unsigned>((mProtocolIdentity.profile << 6) | mProtocolIdentity.subProfile));
 }
 
 bool IoHomecontrolChannel::allowsActuatorControls() const
@@ -1256,8 +1327,7 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
 {
     if (!allowsActuatorControls())
         return;
-    const IoHomeProfileDescriptor *lDescriptor =
-        ioHomeProfileDescriptor(mProtocolIdentity);
+    const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor();
     if (lDescriptor && ioHomeParameterSemantic(lDescriptor, 0) == ParameterSemantic::Unsupported)
         return;
     if (iSlatPercent != 0xFF && mIs1W && lDescriptor)
@@ -1340,8 +1410,7 @@ void IoHomecontrolChannel::sendSlatCommand(float iPercent)
 {
     if (!allowsActuatorControls())
         return;
-    const IoHomeProfileDescriptor *lDescriptor =
-        ioHomeProfileDescriptor(mProtocolIdentity);
+    const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor();
     if (mProtocolIdentity.valid && !lDescriptor)
         return;
     // The legacy 1W combined Execute carries a capture-specific FP shape.
@@ -1400,7 +1469,9 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll)
     const bool lStopSettlePoll = iTrackedPoll && mStopSettlePollPending;
     const uint8_t lMaxAttempts = lStopSettlePoll ? IOHC_EXCHANGE_MAX_ATTEMPTS : 1U;
     if (!mIs1W && isTiltCapableDeviceType() &&
-        ioHomeSupportsCapturedFp3Orientation(mProtocolIdentity))
+        (getEffectiveProfileDescriptor()
+             ? ioHomeSupportsCapturedFp3Orientation(getEffectiveProfileDescriptor())
+             : !mProtocolIdentity.valid))
     {
         const bool lQueued = mController.sendBackgroundCommand(
             mNodeId, mEncKey, IoHomeCommand::Private,
@@ -1504,23 +1575,46 @@ bool IoHomecontrolChannel::isStatusPollTrackingActive(uint32_t iNowMs) const
 
 bool IoHomecontrolChannel::isOnOffDeviceType() const
 {
+    if (const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor())
+    {
+        const IoHomeGenericCapabilities lCaps = ioHomeProfileCapabilities(lDescriptor);
+        return lCaps.light || lCaps.onOff;
+    }
     return ParamIOHC_cDeviceType == 6 || ParamIOHC_cDeviceType == 12;
 }
 
 bool IoHomecontrolChannel::isDimmableLight() const
 {
+    if (const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor())
+        return ioHomeParameterIndex(lDescriptor,
+                                    ParameterSemantic::LightIntensityGradient) != 0xFF;
     return ParamIOHC_cDeviceType == 6 && ParamIOHC_cDimmable;
 }
 
 bool IoHomecontrolChannel::isLockDeviceType() const
 {
+    if (const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor())
+        return ioHomeProfileCapabilities(lDescriptor).lock;
     return ParamIOHC_cDeviceType == 8;
+}
+
+uint8_t IoHomecontrolChannel::effectiveDeviceType() const
+{
+    if (const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor())
+    {
+        const IoHomeGenericCapabilities lCaps = ioHomeProfileCapabilities(lDescriptor);
+        if (lCaps.light) return 6;
+        if (lCaps.lock) return 8;
+        if (lCaps.onOff) return 12;
+        if (lCaps.ventilation) return 11;
+        if (lCaps.position) return 1;
+    }
+    return ParamIOHC_cDeviceType;
 }
 
 bool IoHomecontrolChannel::isTiltCapableDeviceType() const
 {
-    if (const IoHomeProfileDescriptor *lDescriptor =
-            ioHomeProfileDescriptor(mProtocolIdentity))
+    if (const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor())
         return ioHomeProfileCapabilities(lDescriptor).tilt;
     if (mProtocolIdentity.valid)
         return false;
@@ -1562,7 +1656,7 @@ bool IoHomecontrolChannel::restoreLastKnownStateAfterStartup()
 {
     bool lBinaryState = false;
 
-    switch (ParamIOHC_cDeviceType)
+    switch (effectiveDeviceType())
     {
     case 0:
     case 1:
@@ -1977,8 +2071,7 @@ bool IoHomecontrolChannel::storeSceneStateToEts(uint8_t iSceneIndex, uint8_t iSc
 
 void IoHomecontrolChannel::sendVentilationPosition()
 {
-    const IoHomeProfileDescriptor *lDescriptor =
-        ioHomeProfileDescriptor(mProtocolIdentity);
+    const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor();
     if (mProtocolIdentity.valid && (!lDescriptor || !lDescriptor->securedVentilation))
     {
         logDebugP("Secured ventilation is not defined for this profile");
@@ -2019,7 +2112,7 @@ void IoHomecontrolChannel::handleSceneRecall(uint8_t iScene)
         return;
 
     uint8_t lSceneIndex = iScene - 1;
-    uint8_t lDeviceType = ParamIOHC_cDeviceType;
+    uint8_t lDeviceType = effectiveDeviceType();
 
     // Thermostat scenes: temperature + cozy mode
     if (lDeviceType == 5)
@@ -2099,7 +2192,7 @@ void IoHomecontrolChannel::handleSceneControl(uint8_t iControl)
         return;
 
     uint8_t lSceneIndex = lScene - 1;
-    uint8_t lDeviceType = ParamIOHC_cDeviceType;
+    uint8_t lDeviceType = effectiveDeviceType();
 
     // Thermostat/Licht/Schloss/Schalter: store not supported (ETS-configured only)
     if (lDeviceType == 5 || lDeviceType == 6 || lDeviceType == 8 || lDeviceType == 12)
@@ -2146,7 +2239,7 @@ void IoHomecontrolChannel::handleWindAlarm(bool iAlarm)
     if (iAlarm)
     {
         logDebugP("WIND/RAIN ALARM — safety action");
-        uint8_t lDevType = ParamIOHC_cDeviceType;
+        uint8_t lDevType = effectiveDeviceType();
         switch (lDevType)
         {
         case 2: // Fenster — close

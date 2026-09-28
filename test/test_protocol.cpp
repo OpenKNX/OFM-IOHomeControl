@@ -12065,6 +12065,39 @@ TEST(controller_profile_fp_tx_uses_semantic_index_not_fixed_slot)
     }
 }
 
+TEST(controller_manual_profile_override_keeps_discovery_identity)
+{
+    const uint32_t lRemote = 0x831F2A;
+    const uint32_t lDevice = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemote, lDevice, lKey);
+    IoHomeProtocolIdentity lIdentity;
+    lIdentity.valid = true;
+    lIdentity.profile = 1;
+    lIdentity.subProfile = 0;
+    lChannel.onProtocolIdentity(lDevice, lIdentity);
+    ASSERT_EQ(ioHomeParameterIndex(lChannel.getEffectiveProfileDescriptor(),
+                                   ParameterSemantic::SlatOrientation), 1U);
+    lChannel.setManualProfileOverride(0x0440);
+    ASSERT_EQ(lChannel.getProtocolIdentity().profile, 1U);
+    ASSERT_EQ(ioHomeParameterIndex(lChannel.getEffectiveProfileDescriptor(),
+                                   ParameterSemantic::SlatOrientation), 3U);
+    ASSERT_TRUE(lController.sendTiltCommand(lDevice, lKey, 25));
+    IoHomeFrame lTx;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lTx));
+    ASSERT_EQ(lTx.data[4], 0x20U);
+    lChannel.setManualProfileOverride(0);
+    ASSERT_EQ(ioHomeParameterIndex(lChannel.getEffectiveProfileDescriptor(),
+                                   ParameterSemantic::SlatOrientation), 1U);
+    lChannel.setManualProfileOverride(0xFFFF);
+    ASSERT_EQ(ioHomeParameterIndex(lChannel.getEffectiveProfileDescriptor(),
+                                   ParameterSemantic::SlatOrientation), 1U);
+}
+
 TEST(controller_2w_execute_ignores_combined_slat_param)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;

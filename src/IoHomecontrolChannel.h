@@ -52,6 +52,8 @@ public:
   bool hasProtocolIdentity() const;
   uint32_t getIoAddress() const;
   const IoHomeProtocolIdentity &getProtocolIdentity() const;
+  const IoHomeProfileDescriptor *getEffectiveProfileDescriptor() const;
+  void setManualProfileOverride(uint16_t iPackedType);
   IoHomeGenericCapabilities getProfileCapabilities() const;
   bool allowsActuatorControls() const;
   void onBatteryLevel(uint8_t iPercent);
@@ -238,6 +240,7 @@ private:
   uint8_t mSubProfile = 0;
   uint32_t mIoAddress = 0;
   IoHomeProtocolIdentity mProtocolIdentity{};
+  uint16_t mManualPackedProfile = 0;
   IoHomeProductIdentityEvidence mProductIdentityEvidence{};
 
   // P3: Scene position data (10 ETS-backed scenes x 1 byte, 0xFF = not set)
@@ -285,6 +288,7 @@ private:
   bool isLockDeviceType() const;
   bool isTiltCapableDeviceType() const;
   bool isBinaryDeviceType() const;
+  uint8_t effectiveDeviceType() const;
   void publishBinaryStatus();
 
   GroupObject &getKo(uint8_t iIoIndex);

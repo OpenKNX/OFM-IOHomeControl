@@ -397,6 +397,20 @@ public:
     return mProtocolIdentity.valid ? mProtocolIdentity.ioAddress : mIoAddress;
   }
   const IoHomeProtocolIdentity &getProtocolIdentity() const { return mProtocolIdentity; }
+  const IoHomeProfileDescriptor *getEffectiveProfileDescriptor() const
+  {
+    return mManualPackedProfile != 0
+               ? ioHomeProfileDescriptor(mManualPackedProfile >> 6,
+                                         mManualPackedProfile & 0x3F)
+               : ioHomeProfileDescriptor(mProtocolIdentity);
+  }
+  void setManualProfileOverride(uint16_t iPackedType)
+  {
+    mManualPackedProfile = iPackedType != 0 &&
+                                   ioHomeProfileDescriptor(iPackedType >> 6,
+                                                           iPackedType & 0x3F)
+                               ? iPackedType : 0;
+  }
   bool allowsActuatorControls() const
   {
     return mProtocolIdentity.nodeClass == IoHomeNodeClass::Unknown ||
@@ -548,6 +562,7 @@ private:
   uint8_t mConfigured2WAcei = IOHC_ACEI_DEFAULT;
   uint32_t mIoAddress = 0;
   IoHomeProtocolIdentity mProtocolIdentity{};
+  uint16_t mManualPackedProfile = 0;
   IoHomeProductIdentityEvidence mProductIdentityEvidence{};
   char mDeviceName[21] = {};
   bool mConfigured1WEnrollmentMac = false;
