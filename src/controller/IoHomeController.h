@@ -1227,6 +1227,9 @@ private:
   void processPairSendEnrichment();
   void processPairWaitEnrichment();
   void advancePairEnrichment(const char *iResult);
+  void recordGeneralInfo3Failure(IoHomeGeneralInfo3Outcome iOutcome,
+                                 const uint8_t *iData = nullptr,
+                                 uint8_t iDataLen = 0);
   IoHomeCommand pairEnrichmentRequest() const;
   IoHomeCommand pairEnrichmentResponse() const;
   void processPairSendSetConfig1();

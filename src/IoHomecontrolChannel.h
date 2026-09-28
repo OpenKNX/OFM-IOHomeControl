@@ -36,6 +36,9 @@ public:
   void onDeviceName(const char *iName, uint8_t iLen);
   void onPostPairEnrichmentResponse(IoHomeCommand iResponse,
                                     const uint8_t *iData, uint8_t iDataLen);
+  void onGeneralInfo3Requested();
+  void onGeneralInfo3Failure(IoHomeGeneralInfo3Outcome iOutcome,
+                             const uint8_t *iData = nullptr, uint8_t iDataLen = 0);
   void clearProductIdentityEvidence();
   const IoHomeProductIdentityEvidence &getProductIdentityEvidence() const;
   IoHomeProductSignature getGeneralInfo1ProductSignature() const;
@@ -46,6 +49,7 @@ public:
   bool hasProtocolIdentity() const;
   uint32_t getIoAddress() const;
   const IoHomeProtocolIdentity &getProtocolIdentity() const;
+  bool allowsActuatorControls() const;
   void onBatteryLevel(uint8_t iPercent);
   void onEstimate(uint8_t iSeconds);
   void onStatusExpected();

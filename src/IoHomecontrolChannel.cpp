@@ -404,6 +404,13 @@ void IoHomecontrolChannel::processInputKo(uint8_t iIoIndex, GroupObject &iKo)
         return;
     }
 
+    if (!allowsActuatorControls() && iIoIndex != IOHC_KoCHLock)
+    {
+        logDebugP("Ignoring actuator KO %d for known %s node", iIoIndex,
+                  ioHomeNodeClassName(mProtocolIdentity.nodeClass));
+        return;
+    }
+
     // P2: Lock check — only Lock and WindAlarm KOs bypass the lock
     if (mLocked && iIoIndex != IOHC_KoCHLock && iIoIndex != IOHC_KoCHWindAlarm)
     {
@@ -785,11 +792,41 @@ void IoHomecontrolChannel::onPostPairEnrichmentResponse(
     case IoHomeCommand::GetGeneralInfo3Response:
         mProductIdentityEvidence.generalInfo3Len = copyEnrichmentPayload(
             mProductIdentityEvidence.generalInfo3, iData, iDataLen);
+        mProductIdentityEvidence.generalInfo3Outcome =
+            IoHomeGeneralInfo3Outcome::Response;
+        memset(mProductIdentityEvidence.generalInfo3ErrorResponse, 0,
+               sizeof(mProductIdentityEvidence.generalInfo3ErrorResponse));
+        mProductIdentityEvidence.generalInfo3ErrorResponseLen = 0;
         break;
 
     default:
         break;
     }
+}
+
+void IoHomecontrolChannel::onGeneralInfo3Requested()
+{
+    mProductIdentityEvidence.generalInfo3Outcome =
+        IoHomeGeneralInfo3Outcome::Requested;
+    memset(mProductIdentityEvidence.generalInfo3, 0,
+           sizeof(mProductIdentityEvidence.generalInfo3));
+    mProductIdentityEvidence.generalInfo3Len = 0;
+    memset(mProductIdentityEvidence.generalInfo3ErrorResponse, 0,
+           sizeof(mProductIdentityEvidence.generalInfo3ErrorResponse));
+    mProductIdentityEvidence.generalInfo3ErrorResponseLen = 0;
+}
+
+void IoHomecontrolChannel::onGeneralInfo3Failure(
+    IoHomeGeneralInfo3Outcome iOutcome, const uint8_t *iData, uint8_t iDataLen)
+{
+    if (iOutcome != IoHomeGeneralInfo3Outcome::ErrorResponse &&
+        iOutcome != IoHomeGeneralInfo3Outcome::Timeout &&
+        iOutcome != IoHomeGeneralInfo3Outcome::TransportFailure)
+        return;
+
+    mProductIdentityEvidence.generalInfo3Outcome = iOutcome;
+    mProductIdentityEvidence.generalInfo3ErrorResponseLen = copyEnrichmentPayload(
+        mProductIdentityEvidence.generalInfo3ErrorResponse, iData, iDataLen);
 }
 
 void IoHomecontrolChannel::clearProductIdentityEvidence()
@@ -824,6 +861,9 @@ void IoHomecontrolChannel::onProtocolIdentity(
     mIoAddress = iIoAddress & 0x00FFFFFF;
     IoHomeProtocolIdentity lIdentity = iIdentity;
     lIdentity.ioAddress = mIoAddress;
+    if (lIdentity.nodeClass == IoHomeNodeClass::Unknown &&
+        mProtocolIdentity.valid && mProtocolIdentity.ioAddress == mIoAddress)
+        lIdentity.nodeClass = mProtocolIdentity.nodeClass;
     // Hardware protocol identity is immutable with respect to ETS choices.
     // ETS device-role and command-shape parameters remain separate and never
     // write back into this discovery-derived object.
@@ -856,6 +896,12 @@ uint32_t IoHomecontrolChannel::getIoAddress() const
 const IoHomeProtocolIdentity &IoHomecontrolChannel::getProtocolIdentity() const
 {
     return mProtocolIdentity;
+}
+
+bool IoHomecontrolChannel::allowsActuatorControls() const
+{
+    return mProtocolIdentity.nodeClass == IoHomeNodeClass::Unknown ||
+           mProtocolIdentity.nodeClass == IoHomeNodeClass::Actuator;
 }
 
 void IoHomecontrolChannel::onBatteryLevel(uint8_t iPercent)
@@ -1184,6 +1230,8 @@ OneWayPowerClass IoHomecontrolChannel::getConfigured1WPowerClass() const { retur
 
 void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPercent)
 {
+    if (!allowsActuatorControls())
+        return;
     logDebugP("Send position %.1f%%", iPercent);
     const float lTargetPosition = clampPercent(iPercent);
     uint8_t lParam = (uint8_t)(iPercent + 0.5f);
@@ -1202,6 +1250,8 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
 
 void IoHomecontrolChannel::sendUpDown(bool iDown)
 {
+    if (!allowsActuatorControls())
+        return;
     logDebugP("Send %s", iDown ? "DOWN" : "UP");
     uint8_t lPercent = iDown ? 100 : 0;
     const bool lQueued = mIs1W
@@ -1219,6 +1269,8 @@ void IoHomecontrolChannel::sendUpDown(bool iDown)
 
 void IoHomecontrolChannel::sendStop()
 {
+    if (!allowsActuatorControls())
+        return;
     logDebugP("Send STOP");
     const bool lQueued = mIs1W
                              ? mController.sendChannelCommand(this, IoHomeCommand::Execute, 0xD2)
@@ -1240,6 +1292,8 @@ void IoHomecontrolChannel::sendStop()
 
 void IoHomecontrolChannel::sendFavorite()
 {
+    if (!allowsActuatorControls())
+        return;
     logDebugP("Send FAVORITE");
     const bool lQueued = mIs1W
                              ? mController.sendChannelCommand(this, IoHomeCommand::Execute, 0xD8)
@@ -1255,6 +1309,8 @@ void IoHomecontrolChannel::sendFavorite()
 
 void IoHomecontrolChannel::sendSlatCommand(float iPercent)
 {
+    if (!allowsActuatorControls())
+        return;
     const float lSlatPercent = clampPercent(iPercent);
     logDebugP("Send slat %.1f%% (with current position %.1f%%)", lSlatPercent, mCurrentPosition);
 
@@ -1283,7 +1339,7 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll)
 {
     // 1W is one-way: the device cannot answer a 2W status request, so never
     // emit one (it would only trigger an endless failed-poll/retry loop).
-    if (mIs1W)
+    if (mIs1W || !allowsActuatorControls())
         return false;
 
     logDebugP("Request status");

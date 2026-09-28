@@ -293,6 +293,11 @@ public:
     case IoHomeCommand::GetGeneralInfo3Response:
       lTarget = mProductIdentityEvidence.generalInfo3;
       lStoredLen = &mProductIdentityEvidence.generalInfo3Len;
+      mProductIdentityEvidence.generalInfo3Outcome =
+          IoHomeGeneralInfo3Outcome::Response;
+      memset(mProductIdentityEvidence.generalInfo3ErrorResponse, 0,
+             sizeof(mProductIdentityEvidence.generalInfo3ErrorResponse));
+      mProductIdentityEvidence.generalInfo3ErrorResponseLen = 0;
       break;
     default:
       return;
@@ -318,6 +323,34 @@ public:
           mProductIdentityEvidence.generalInfo2SubProfile == mProtocolIdentity.subProfile;
     }
   }
+  void onGeneralInfo3Requested()
+  {
+    mProductIdentityEvidence.generalInfo3Outcome =
+        IoHomeGeneralInfo3Outcome::Requested;
+    memset(mProductIdentityEvidence.generalInfo3, 0,
+           sizeof(mProductIdentityEvidence.generalInfo3));
+    mProductIdentityEvidence.generalInfo3Len = 0;
+    memset(mProductIdentityEvidence.generalInfo3ErrorResponse, 0,
+           sizeof(mProductIdentityEvidence.generalInfo3ErrorResponse));
+    mProductIdentityEvidence.generalInfo3ErrorResponseLen = 0;
+  }
+  void onGeneralInfo3Failure(IoHomeGeneralInfo3Outcome iOutcome,
+                             const uint8_t *iData = nullptr, uint8_t iDataLen = 0)
+  {
+    if (iOutcome != IoHomeGeneralInfo3Outcome::ErrorResponse &&
+        iOutcome != IoHomeGeneralInfo3Outcome::Timeout &&
+        iOutcome != IoHomeGeneralInfo3Outcome::TransportFailure)
+      return;
+    mProductIdentityEvidence.generalInfo3Outcome = iOutcome;
+    const uint8_t lLen = iDataLen < IOHC_DEVICE_INFO_RAW_MAX_SIZE
+                             ? iDataLen
+                             : IOHC_DEVICE_INFO_RAW_MAX_SIZE;
+    memset(mProductIdentityEvidence.generalInfo3ErrorResponse, 0,
+           sizeof(mProductIdentityEvidence.generalInfo3ErrorResponse));
+    if (iData && lLen > 0)
+      memcpy(mProductIdentityEvidence.generalInfo3ErrorResponse, iData, lLen);
+    mProductIdentityEvidence.generalInfo3ErrorResponseLen = lLen;
+  }
   void clearProductIdentityEvidence()
   {
     memset(mDeviceName, 0, sizeof(mDeviceName));
@@ -337,6 +370,9 @@ public:
     mIoAddress = iIoAddress & 0x00FFFFFF;
     IoHomeProtocolIdentity lIdentity = iIdentity;
     lIdentity.ioAddress = mIoAddress;
+    if (lIdentity.nodeClass == IoHomeNodeClass::Unknown &&
+        mProtocolIdentity.valid && mProtocolIdentity.ioAddress == mIoAddress)
+      lIdentity.nodeClass = mProtocolIdentity.nodeClass;
     mProtocolIdentity = lIdentity;
   }
   void clearProtocolIdentity()
@@ -350,6 +386,11 @@ public:
     return mProtocolIdentity.valid ? mProtocolIdentity.ioAddress : mIoAddress;
   }
   const IoHomeProtocolIdentity &getProtocolIdentity() const { return mProtocolIdentity; }
+  bool allowsActuatorControls() const
+  {
+    return mProtocolIdentity.nodeClass == IoHomeNodeClass::Unknown ||
+           mProtocolIdentity.nodeClass == IoHomeNodeClass::Actuator;
+  }
   void onBatteryLevel(uint8_t iPercent)
   {
     mHasBatteryLevel = true;

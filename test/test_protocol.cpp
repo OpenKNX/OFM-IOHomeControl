@@ -2656,6 +2656,34 @@ TEST(general_info1_product_signature_is_first_ten_bytes_and_binary_safe)
     ASSERT_MEM_EQ(lSignature.bytes, kBinaryGi1, IOHC_PRODUCT_SIGNATURE_SIZE);
 }
 
+TEST(node_class_is_explicit_independent_and_unknown_is_backward_compatible)
+{
+    IoHomeProtocolIdentity lIdentity;
+    lIdentity.valid = true;
+    lIdentity.ioAddress = 0x123456;
+    lIdentity.profile = 2;
+    lIdentity.subProfile = 0;
+    ASSERT_EQ(lIdentity.nodeClass, IoHomeNodeClass::Unknown);
+
+    IoHomecontrolChannel lChannel;
+    lChannel.onProtocolIdentity(lIdentity.ioAddress, lIdentity);
+    ASSERT_TRUE(lChannel.allowsActuatorControls());
+
+    lIdentity.nodeClass = IoHomeNodeClass::Sensor;
+    lChannel.onProtocolIdentity(lIdentity.ioAddress, lIdentity);
+    ASSERT_TRUE(!lChannel.allowsActuatorControls());
+    ASSERT_EQ(lChannel.getProtocolIdentity().profile, 2U);
+
+    // A later 0x29 refresh has no authoritative class field. It must not erase
+    // an independently confirmed class for the same ioAddress.
+    lIdentity.nodeClass = IoHomeNodeClass::Unknown;
+    lChannel.onProtocolIdentity(lIdentity.ioAddress, lIdentity);
+    ASSERT_EQ(lChannel.getProtocolIdentity().nodeClass, IoHomeNodeClass::Sensor);
+    ASSERT_TRUE(!lChannel.allowsActuatorControls());
+
+    ASSERT_EQ(decodeIoHomeNodeClass(0xFE), IoHomeNodeClass::Unknown);
+}
+
 TEST(discovery_spe_response_frame)
 {
     // DiscoverSPEResponse (0x2B) — encrypted discovery response
@@ -10475,12 +10503,16 @@ TEST(controller_post_pair_enrichment_is_ordered_raw_safe_and_optional)
     ASSERT_EQ(lEnrichment.generalInfo2Profile, 2U);
     ASSERT_EQ(lEnrichment.generalInfo2SubProfile, 0U);
     ASSERT_TRUE(lEnrichment.generalInfo2MatchesDiscovery);
+    ASSERT_EQ(lEnrichment.generalInfo3Outcome,
+              IoHomeGeneralInfo3Outcome::Requested);
 
     // GI3 is optional. Its independent timeout advances to SetConfig1 and
     // cannot revoke the already-completed key exchange.
     ioHomeTestAdvanceMillis(IoHomeController::kPairEnrichmentStepTimeoutMs + 1U);
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::PairSendSetConfig1);
+    ASSERT_EQ(lEnrichment.generalInfo3Outcome,
+              IoHomeGeneralInfo3Outcome::Timeout);
     lController.radio().testClearTransmittedPacket();
     lController.loop();
     ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
@@ -13717,6 +13749,54 @@ TEST(controller_gi1_raw_and_gi2_confirmation_never_overwrite_discovery)
     ASSERT_EQ(lAfterInfo1.ioBackboneAddress, 0x123456U);
     ASSERT_EQ(lAfterInfo1.multiInfoByte, 0xED);
     ASSERT_EQ(lAfterInfo1.discoveryTimestamp, 0xABCDU);
+}
+
+TEST(controller_gi3_is_raw_evidence_only_and_records_query_outcomes)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lDeviceNodeId = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    static const uint8_t kGi3[] = {75, 0xA5, 0x01, 0xFF};
+    static const uint8_t kError[] = {0x58, 0x02};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, lDeviceNodeId, lKey);
+
+    IoHomeFrame lInfo3;
+    buildSimpleResponseFrame(lInfo3, lRemoteNodeId, lDeviceNodeId,
+                             IoHomeCommand::GetGeneralInfo3Response,
+                             kGi3, sizeof(kGi3));
+    ASSERT_TRUE(queueControllerResponse(lController, lInfo3));
+
+    const IoHomeProductIdentityEvidence &lResponse =
+        lChannel.getProductIdentityEvidence();
+    ASSERT_EQ(lResponse.generalInfo3Outcome,
+              IoHomeGeneralInfo3Outcome::Response);
+    ASSERT_EQ(lResponse.generalInfo3Len, sizeof(kGi3));
+    ASSERT_MEM_EQ(lResponse.generalInfo3, kGi3, sizeof(kGi3));
+    ASSERT_TRUE(!lChannel.testHasPositionFeedback());
+    ASSERT_TRUE(!lChannel.testHasStatusUpdate());
+
+    lChannel.onGeneralInfo3Requested();
+    ASSERT_EQ(lChannel.getProductIdentityEvidence().generalInfo3Outcome,
+              IoHomeGeneralInfo3Outcome::Requested);
+    ASSERT_EQ(lChannel.getProductIdentityEvidence().generalInfo3Len, 0U);
+
+    lChannel.onGeneralInfo3Failure(IoHomeGeneralInfo3Outcome::ErrorResponse,
+                                   kError, sizeof(kError));
+    const IoHomeProductIdentityEvidence &lError =
+        lChannel.getProductIdentityEvidence();
+    ASSERT_EQ(lError.generalInfo3Outcome,
+              IoHomeGeneralInfo3Outcome::ErrorResponse);
+    ASSERT_EQ(lError.generalInfo3ErrorResponseLen, sizeof(kError));
+    ASSERT_MEM_EQ(lError.generalInfo3ErrorResponse, kError, sizeof(kError));
+
+    lChannel.onGeneralInfo3Failure(IoHomeGeneralInfo3Outcome::Timeout);
+    ASSERT_EQ(lChannel.getProductIdentityEvidence().generalInfo3Outcome,
+              IoHomeGeneralInfo3Outcome::Timeout);
 }
 
 TEST(controller_response_timing_is_tagged_with_protocol_identity)

@@ -2588,6 +2588,13 @@ bool IoHomeController::captureProtocolIdentity(
     IoHomeProtocolIdentity lMetadata =
         decodeProtocolIdentity(iFrame.data, iFrame.dataLen);
     lMetadata.ioAddress = iFrame.getSrcNodeId();
+    if (iChannel)
+    {
+        const IoHomeProtocolIdentity &lPrevious = iChannel->getProtocolIdentity();
+        if (lPrevious.valid && lPrevious.ioAddress == lMetadata.ioAddress &&
+            lPrevious.nodeClass != IoHomeNodeClass::Unknown)
+            lMetadata.nodeClass = lPrevious.nodeClass;
+    }
     lMetadata.metadataSource =
         iFrame.commandId == IoHomeCommand::DiscoverSPEResponse
             ? IoHomeMetadataSource::DiscoverSpeResponse
@@ -2623,6 +2630,7 @@ bool IoHomeController::captureProtocolIdentity(
             iChannel->getIoAddress() != iFrame.getSrcNodeId() ||
             lPrevious.valid != lMetadata.valid ||
             lPrevious.fullMetadata != lMetadata.fullMetadata ||
+            lPrevious.nodeClass != lMetadata.nodeClass ||
             lPrevious.profile != lMetadata.profile ||
             lPrevious.subProfile != lMetadata.subProfile ||
             lPrevious.hasIoBackboneAddress != lMetadata.hasIoBackboneAddress ||
@@ -4169,8 +4177,12 @@ void IoHomeController::rememberProtocolIdentity(
     IoHomeNodeStats *lStats = findOrAddNodeStats(iNodeId);
     if (lStats)
     {
+        const IoHomeNodeClass lPreviousClass =
+            lStats->protocolIdentity.nodeClass;
         lStats->protocolIdentity = iMetadata;
         lStats->protocolIdentity.ioAddress = iNodeId & 0x00FFFFFF;
+        if (lStats->protocolIdentity.nodeClass == IoHomeNodeClass::Unknown)
+            lStats->protocolIdentity.nodeClass = lPreviousClass;
     }
 }
 
@@ -4522,8 +4534,9 @@ void IoHomeController::tracePairDiagnosticDiscoveryInterpretation(const IoHomeFr
         const std::string lRaw = hexDump(iFrame.data, iFrame.dataLen);
         if (lMetadata.valid)
         {
-            logInfoP("PairDiag: discovery ioAddress=%06X ioBackboneAddress=%s profile=%u subProfile=%u combined=0x%04X manufacturerId=%s(0x%02X) full=%s raw=%s",
+            logInfoP("PairDiag: discovery ioAddress=%06X class=%s ioBackboneAddress=%s profile=%u subProfile=%u combined=0x%04X manufacturerId=%s(0x%02X) full=%s raw=%s",
                      iFrame.getSrcNodeId(),
+                     ioHomeNodeClassName(lMetadata.nodeClass),
                      lMetadata.hasIoBackboneAddress ? "present" : "n/a",
                      static_cast<unsigned>(lMetadata.profile),
                      static_cast<unsigned>(lMetadata.subProfile),
@@ -4807,8 +4820,9 @@ void IoHomeController::logPairDiagnosticStatus() const
     {
         const std::string lRaw = hexDump(mPairProtocolIdentity.rawData,
                                          mPairProtocolIdentity.rawDataLen);
-        logInfoP("PairDiag: discovery ioAddress=%06X ioBackboneAddress=%s profile=%u subProfile=%u combined=0x%04X manufacturerId=%s(0x%02X) source=%s raw=%s",
+        logInfoP("PairDiag: discovery ioAddress=%06X class=%s ioBackboneAddress=%s profile=%u subProfile=%u combined=0x%04X manufacturerId=%s(0x%02X) source=%s raw=%s",
                  mDiscoveredNodeId,
+                 ioHomeNodeClassName(mPairProtocolIdentity.nodeClass),
                  mPairProtocolIdentity.hasIoBackboneAddress ? "present" : "n/a",
                  static_cast<unsigned>(mPairProtocolIdentity.profile),
                  static_cast<unsigned>(mPairProtocolIdentity.subProfile),
@@ -5393,7 +5407,10 @@ void IoHomeController::loop()
                     }
                     else if (mRxFrame.commandId == IoHomeCommand::ErrorResponse)
                     {
-                        advancePairEnrichment("unsupported");
+                        recordGeneralInfo3Failure(
+                            IoHomeGeneralInfo3Outcome::ErrorResponse,
+                            mRxFrame.data, mRxFrame.dataLen);
+                        advancePairEnrichment("error-response");
                     }
                 }
             }
@@ -7762,6 +7779,17 @@ void IoHomeController::advancePairEnrichment(const char *iResult)
                  : ControllerState::PairSendEnrichment;
 }
 
+void IoHomeController::recordGeneralInfo3Failure(
+    IoHomeGeneralInfo3Outcome iOutcome, const uint8_t *iData, uint8_t iDataLen)
+{
+    if (mPairEnrichmentStep != PairEnrichmentStep::GeneralInfo3)
+        return;
+    IoHomecontrolChannel *lChannel =
+        mModule ? mModule->getChannel(mPairingChannel) : nullptr;
+    if (lChannel)
+        lChannel->onGeneralInfo3Failure(iOutcome, iData, iDataLen);
+}
+
 void IoHomeController::processPairSendEnrichment()
 {
     if (mPairEnrichmentStep == PairEnrichmentStep::Complete)
@@ -7775,6 +7803,7 @@ void IoHomeController::processPairSendEnrichment()
     lEntry.command = pairEnrichmentRequest();
     if (!buildTxFrame(lEntry))
     {
+        recordGeneralInfo3Failure(IoHomeGeneralInfo3Outcome::TransportFailure);
         advancePairEnrichment("build-failed");
         return;
     }
@@ -7782,6 +7811,7 @@ void IoHomeController::processPairSendEnrichment()
     mTxLen = mTxFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen == 0)
     {
+        recordGeneralInfo3Failure(IoHomeGeneralInfo3Outcome::TransportFailure);
         advancePairEnrichment("serialize-failed");
         return;
     }
@@ -7792,6 +7822,7 @@ void IoHomeController::processPairSendEnrichment()
         return;
     if (lPrepErr != RadioError::None)
     {
+        recordGeneralInfo3Failure(IoHomeGeneralInfo3Outcome::TransportFailure);
         advancePairEnrichment("radio-setup-failed");
         return;
     }
@@ -7800,11 +7831,19 @@ void IoHomeController::processPairSendEnrichment()
     const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
     if (lErr == RadioError::None)
     {
+        if (mPairEnrichmentStep == PairEnrichmentStep::GeneralInfo3)
+        {
+            IoHomecontrolChannel *lChannel =
+                mModule ? mModule->getChannel(mPairingChannel) : nullptr;
+            if (lChannel)
+                lChannel->onGeneralInfo3Requested();
+        }
         mStateTimer = millis();
         mState = ControllerState::PairWaitEnrichment;
     }
     else if (lErr != RadioError::Busy)
     {
+        recordGeneralInfo3Failure(IoHomeGeneralInfo3Outcome::TransportFailure);
         advancePairEnrichment("tx-failed");
     }
 }
@@ -7816,12 +7855,16 @@ void IoHomeController::processPairWaitEnrichment()
         return;
     if (lRxErr != RadioError::None)
     {
+        recordGeneralInfo3Failure(IoHomeGeneralInfo3Outcome::TransportFailure);
         advancePairEnrichment("rx-setup-failed");
         return;
     }
 
     if (millis() - mStateTimer > kPairEnrichmentStepTimeoutMs)
+    {
+        recordGeneralInfo3Failure(IoHomeGeneralInfo3Outcome::Timeout);
         advancePairEnrichment("timeout");
+    }
 }
 
 void IoHomeController::processPairSendSetConfig1()
@@ -9295,24 +9338,8 @@ void IoHomeController::dispatchRxFrame()
             {
                 lCh->onPostPairEnrichmentResponse(
                     mRxFrame.commandId, mRxFrame.data, mRxFrame.dataLen);
-                // Position and status from info query
-                float lPercent = 0.0f;
-                bool lHasCurrentPosition = false;
-                if (mRxFrame.dataLen >= 1)
-                {
-                    lPercent = (float)mRxFrame.data[0];
-                    if (lPercent > 100.0f)
-                        lPercent = 100.0f;
-                    lHasCurrentPosition = true;
-                    lCh->onPositionFeedback(lPercent);
-                }
-                if (mRxFrame.dataLen >= 3)
-                {
-                    bool lMoving = (mRxFrame.data[2] & 0x01) != 0;
-                    lCh->onStatusUpdate(lMoving);
-                    lCh->logStatusSummary(lPercent, lHasCurrentPosition,
-                                          0.0f, false, lMoving);
-                }
+                // GI3 semantics are not capture-confirmed. Preserve the raw
+                // payload only; never feed its bytes into production state.
                 break;
             }
             // --- Unused commands (documented for protocol completeness) ---

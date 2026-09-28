@@ -78,14 +78,16 @@ class ChannelUiTest(unittest.TestCase):
         write_flash = source.split("void IoHomecontrol::writeFlash()", 1)[1].split(
             "void IoHomecontrol::readFlash", 1
         )[0]
-        self.assertIn("openknx.flash.writeByte(16)", write_flash)
+        self.assertIn("openknx.flash.writeByte(17)", write_flash)
         self.assertIn("encodeProtocolIdentity(", write_flash)
+        self.assertIn("lMetadata.nodeClass", write_flash)
 
         read_flash = source.split("void IoHomecontrol::readFlash", 1)[1]
         current_layout_branch = read_flash.split("else if", 1)[0]
-        self.assertIn("lVersion == 16", current_layout_branch)
-        self.assertIn("kFlashRecordV16 = 57", current_layout_branch)
+        self.assertIn("lVersion == 17", current_layout_branch)
+        self.assertIn("kFlashRecordV17 = 58", current_layout_branch)
         self.assertIn("decodeProtocolIdentity(lDiscoveryRaw, lDecodeLen)", current_layout_branch)
+        self.assertIn("decodeIoHomeNodeClass(openknx.flash.readByte())", current_layout_branch)
         self.assertIn("decodeProtocolIdentityMib(lState.protocolIdentity, lMib)", read_flash)
         self.assertIn("lState.protocolIdentity.discoveryTimestamp = lDiscoveryTimestamp", read_flash)
 
@@ -234,6 +236,36 @@ class ChannelUiTest(unittest.TestCase):
             "decodePackedDeviceType", "decodePackedDeviceSubtype",
         ):
             self.assertNotIn(legacy_name, commands)
+
+    def test_node_class_is_explicit_and_gi3_remains_raw_only(self) -> None:
+        commands = (ROOT / "src" / "protocol" / "IoHomeCommands.h").read_text()
+        channel = (ROOT / "src" / "IoHomecontrolChannel.cpp").read_text()
+        controller = (ROOT / "src" / "controller" / "IoHomeController.cpp").read_text()
+
+        node_class = commands.split("enum class IoHomeNodeClass", 1)[1].split("};", 1)[0]
+        for value in ("Unknown", "Actuator", "Sensor", "Controller", "Stack", "Beacon"):
+            self.assertIn(value, node_class)
+
+        identity = commands.split("struct IoHomeProtocolIdentity", 1)[1].split(
+            "inline bool ioHomeKeyStateKnown", 1
+        )[0]
+        self.assertIn("IoHomeNodeClass nodeClass", identity)
+        self.assertIn("IoHomeNodeClass::Unknown", identity)
+        self.assertNotIn("profile ==", node_class)
+
+        controls = channel.split("bool IoHomecontrolChannel::allowsActuatorControls", 1)[1].split(
+            "void IoHomecontrolChannel::onBatteryLevel", 1
+        )[0]
+        self.assertIn("IoHomeNodeClass::Unknown", controls)
+        self.assertIn("IoHomeNodeClass::Actuator", controls)
+
+        dispatch = controller.split("void IoHomeController::dispatchRxFrame()", 1)[1]
+        info3 = dispatch.split("case IoHomeCommand::GetGeneralInfo3Response", 1)[1].split(
+            "case IoHomeCommand::Private2Response", 1
+        )[0]
+        self.assertIn("onPostPairEnrichmentResponse", info3)
+        self.assertNotIn("onPositionFeedback", info3)
+        self.assertNotIn("onStatusUpdate", info3)
 
     def test_selection_table_matches_shared_layout(self) -> None:
         selection = self.share.find(

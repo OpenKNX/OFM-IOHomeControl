@@ -570,6 +570,29 @@ enum class IoHomeKeyState : uint8_t
     Unknown = 0xFF
 };
 
+// Node class is an independent protocol dimension. It must never be inferred
+// from Profile/SubProfile: public gateway implementations carry both values
+// separately, and the same profile number can occur in different classes.
+enum class IoHomeNodeClass : uint8_t
+{
+    Unknown = 0,
+    Actuator = 1,
+    Sensor = 2,
+    Controller = 3,
+    Stack = 4,
+    Beacon = 5
+};
+
+enum class IoHomeGeneralInfo3Outcome : uint8_t
+{
+    NotQueried = 0,
+    Requested = 1,
+    Response = 2,
+    ErrorResponse = 3,
+    Timeout = 4,
+    TransportFailure = 5
+};
+
 enum class IoHomeMetadataSource : uint8_t
 {
     Unknown = 0,
@@ -610,6 +633,39 @@ inline const char *ioHomePowerModeName(IoHomePowerMode iMode)
     }
 }
 
+inline const char *ioHomeNodeClassName(IoHomeNodeClass iClass)
+{
+    switch (iClass)
+    {
+    case IoHomeNodeClass::Actuator: return "actuator";
+    case IoHomeNodeClass::Sensor: return "sensor";
+    case IoHomeNodeClass::Controller: return "controller";
+    case IoHomeNodeClass::Stack: return "stack";
+    case IoHomeNodeClass::Beacon: return "beacon";
+    default: return "unknown";
+    }
+}
+
+inline IoHomeNodeClass decodeIoHomeNodeClass(uint8_t iValue)
+{
+    return iValue <= static_cast<uint8_t>(IoHomeNodeClass::Beacon)
+               ? static_cast<IoHomeNodeClass>(iValue)
+               : IoHomeNodeClass::Unknown;
+}
+
+inline const char *ioHomeGeneralInfo3OutcomeName(IoHomeGeneralInfo3Outcome iOutcome)
+{
+    switch (iOutcome)
+    {
+    case IoHomeGeneralInfo3Outcome::Requested: return "requested";
+    case IoHomeGeneralInfo3Outcome::Response: return "response";
+    case IoHomeGeneralInfo3Outcome::ErrorResponse: return "error-response";
+    case IoHomeGeneralInfo3Outcome::Timeout: return "timeout";
+    case IoHomeGeneralInfo3Outcome::TransportFailure: return "transport-failure";
+    default: return "not-queried";
+    }
+}
+
 inline uint8_t ioHomeSlaveTimeKlfValue(uint8_t iClass)
 {
     static constexpr uint8_t kValues[] = {5, 10, 20, 40};
@@ -625,6 +681,7 @@ struct IoHomeProtocolIdentity
     uint16_t profile = 0;
     uint8_t subProfile = 0;
     uint16_t nodeTypeSubType = 0;
+    IoHomeNodeClass nodeClass = IoHomeNodeClass::Unknown;
     bool hasIoBackboneAddress = false;
     uint32_t ioBackboneAddress = 0;
     uint8_t manufacturerId = 0;
@@ -688,6 +745,9 @@ struct IoHomeProductIdentityEvidence
     uint8_t generalInfo2Len = 0;
     uint8_t generalInfo3[IOHC_DEVICE_INFO_RAW_MAX_SIZE] = {};
     uint8_t generalInfo3Len = 0;
+    IoHomeGeneralInfo3Outcome generalInfo3Outcome = IoHomeGeneralInfo3Outcome::NotQueried;
+    uint8_t generalInfo3ErrorResponse[IOHC_DEVICE_INFO_RAW_MAX_SIZE] = {};
+    uint8_t generalInfo3ErrorResponseLen = 0;
     bool generalInfo2TypeValid = false;
     uint16_t generalInfo2Profile = 0;
     uint8_t generalInfo2SubProfile = 0;

@@ -2598,24 +2598,24 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
 }
 
 // --- Flash persistence ---
-// Layout v16: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
+// Layout v17: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
 // default 1W broadcastType(1) + numChannels(1) +
 // per-channel: index(1) + flags(1) + actuatorNodeId(3) + actuatorKey(16) +
 // 1W reservedSeq(2) + 1W controllerNodeId(3) + 1W controllerKey(16) +
 // 1W manufacturer(1) + discoveryFlags(1) + ioAddress(3) +
-// discoveryRawLen(1) + discoveryRaw(9) = 57 bytes + remoteMap
+// discoveryRawLen(1) + discoveryRaw(9) + nodeClass(1) = 58 bytes + remoteMap
 // flags: bit0=paired, bit1=is1W, bit2=2W low-power,
 //        bit3=2W power class learned, bit4=1W enrolled
 // discoveryFlags: bit0=valid (remaining bits reserved)
 
 uint16_t IoHomecontrol::flashSize()
 {
-    return 1 + 16 + 3 + 1 + 1 + (IOHC_ChannelCount * 57) + mRemoteMap.flashSize();
+    return 1 + 16 + 3 + 1 + 1 + (IOHC_ChannelCount * 58) + mRemoteMap.flashSize();
 }
 
 void IoHomecontrol::writeFlash()
 {
-    openknx.flash.writeByte(16); // canonical discovery payload; v14/v15 remain readable
+    openknx.flash.writeByte(17); // node class; v14-v16 remain readable
 
     // Write system key
     const uint8_t *lSysKey = mController.getSystemKey();
@@ -2675,6 +2675,7 @@ void IoHomecontrol::writeFlash()
         openknx.flash.writeByte(lDiscoveryRawLen);
         for (uint8_t k = 0; k < sizeof(lDiscoveryRaw); k++)
             openknx.flash.writeByte(lDiscoveryRaw[k]);
+        openknx.flash.writeByte(static_cast<uint8_t>(lMetadata.nodeClass));
     }
 
     // Write remote map
@@ -2694,6 +2695,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
     constexpr uint16_t kFlashRecordV14 = 55;
     constexpr uint16_t kFlashRecordV15 = 57;
     constexpr uint16_t kFlashRecordV16 = 57;
+    constexpr uint16_t kFlashRecordV17 = 58;
     constexpr uint16_t kFlashHeaderV8 = 1 + 16 + 3 + 1 + 1 + 1;
     constexpr uint16_t kFlashHeaderV7 = 1 + 16 + 3 + 1 + 1;
     constexpr uint16_t kFlashHeaderV6 = 1 + 16 + 1;
@@ -2705,7 +2707,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
     uint8_t lVersion = openknx.flash.readByte();
 
-    if (lVersion == 16 || lVersion == 15 || lVersion == 14 || lVersion == 13 || lVersion == 12 || lVersion == 11 ||
+    if (lVersion == 17 || lVersion == 16 || lVersion == 15 || lVersion == 14 || lVersion == 13 || lVersion == 12 || lVersion == 11 ||
         lVersion == 10 || lVersion == 9)
     {
         if (iSize < kFlashHeaderV9)
@@ -2724,7 +2726,8 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
         const uint8_t lCount = openknx.flash.readByte();
         const uint8_t lConfiguredCount = mNumChannels > 0 ? mNumChannels : configuredChannelCount();
-        const uint16_t lRecordSize = lVersion >= 16 ? kFlashRecordV16
+        const uint16_t lRecordSize = lVersion >= 17 ? kFlashRecordV17
+                                     : lVersion >= 16 ? kFlashRecordV16
                                      : lVersion >= 15 ? kFlashRecordV15
                                      : lVersion >= 14 ? kFlashRecordV14
                                                       : kFlashRecordV9;
@@ -2781,6 +2784,9 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
                     lRestoredDiscoveryMetadata =
                         decodeProtocolIdentity(lDiscoveryRaw, lDecodeLen);
                 }
+                if (lVersion >= 17)
+                    lRestoredDiscoveryMetadata.nodeClass =
+                        decodeIoHomeNodeClass(openknx.flash.readByte());
             }
             else if (lVersion >= 14)
             {
@@ -3665,8 +3671,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                     const IoHomeProtocolIdentity &lMetadata = lCh->getProtocolIdentity();
                     if (lMetadata.valid)
                     {
-                        logInfoP("  protocol identity: ioAddress=0x%06X profile=%u subProfile=%u manufacturerId=%s(0x%02X) ioBackboneAddress=%s source=%s keyState=%s keyStateSource=%s",
+                        logInfoP("  protocol identity: ioAddress=0x%06X class=%s profile=%u subProfile=%u manufacturerId=%s(0x%02X) ioBackboneAddress=%s source=%s keyState=%s keyStateSource=%s",
                                  lCh->getIoAddress(),
+                                 ioHomeNodeClassName(lMetadata.nodeClass),
                                  static_cast<unsigned>(lMetadata.profile),
                                  static_cast<unsigned>(lMetadata.subProfile),
                                  ioHomeManufacturerName(lMetadata.manufacturerId),
@@ -3714,6 +3721,12 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                              static_cast<unsigned>(lEnrichment.generalInfo2SubProfile),
                              lEnrichment.generalInfo3Len
                                  ? metadataHex(lEnrichment.generalInfo3, lEnrichment.generalInfo3Len).c_str()
+                                 : "n/a");
+                    logInfoP("  GI3 query: outcome=%s errorRaw=%s",
+                             ioHomeGeneralInfo3OutcomeName(lEnrichment.generalInfo3Outcome),
+                             lEnrichment.generalInfo3ErrorResponseLen
+                                 ? metadataHex(lEnrichment.generalInfo3ErrorResponse,
+                                               lEnrichment.generalInfo3ErrorResponseLen).c_str()
                                  : "n/a");
                     const TwoWayDiscoverySettings &lDiscovery = lCh->getConfigured2WDiscoverySettings();
                     const TwoWayDiscoveryFrameOptions lResolvedDiscovery =
@@ -3785,8 +3798,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                     const IoHomeProtocolIdentity &lMetadata = lCh->getProtocolIdentity();
                     if (lMetadata.valid)
                     {
-                        logInfoP("       protocol identity ioAddress=0x%06X profile=%u subProfile=%u manufacturerId=%s(0x%02X) source=%s keyState=%s keyStateSource=%s MIB=%s",
+                        logInfoP("       protocol identity ioAddress=0x%06X class=%s profile=%u subProfile=%u manufacturerId=%s(0x%02X) source=%s keyState=%s keyStateSource=%s MIB=%s",
                                  lCh->getIoAddress(),
+                                 ioHomeNodeClassName(lMetadata.nodeClass),
                                  static_cast<unsigned>(lMetadata.profile),
                                  static_cast<unsigned>(lMetadata.subProfile),
                                  ioHomeManufacturerName(lMetadata.manufacturerId),
@@ -3832,6 +3846,12 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                              static_cast<unsigned>(lEnrichment.generalInfo2SubProfile),
                              lEnrichment.generalInfo3Len
                                  ? metadataHex(lEnrichment.generalInfo3, lEnrichment.generalInfo3Len).c_str()
+                                 : "n/a");
+                    logInfoP("       GI3 query outcome=%s errorRaw=%s",
+                             ioHomeGeneralInfo3OutcomeName(lEnrichment.generalInfo3Outcome),
+                             lEnrichment.generalInfo3ErrorResponseLen
+                                 ? metadataHex(lEnrichment.generalInfo3ErrorResponse,
+                                               lEnrichment.generalInfo3ErrorResponseLen).c_str()
                                  : "n/a");
                     const TwoWayDiscoveryFrameOptions lDiscovery =
                         mController.resolveTwoWayDiscoveryOptions(
