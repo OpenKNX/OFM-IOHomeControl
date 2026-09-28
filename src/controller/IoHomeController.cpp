@@ -5458,8 +5458,15 @@ void IoHomeController::loop()
                         IoHomecontrolChannel *lChannel =
                             mModule ? mModule->getChannel(mPairingChannel) : nullptr;
                         if (lChannel)
+                        {
+                            const bool lChanged = ioHomePersistableEnrichmentChanged(
+                                lChannel->getProductIdentityEvidence(),
+                                mRxFrame.commandId, mRxFrame.data, mRxFrame.dataLen);
                             lChannel->onPostPairEnrichmentResponse(
                                 mRxFrame.commandId, mRxFrame.data, mRxFrame.dataLen);
+                            if (lChanged)
+                                openknx.flash.save();
+                        }
                         if (mPairDiagnosticTraceEnabled)
                         {
                             logInfoP("PairDiag: enrichment rx cmd=%s(0x%02X) len=%u raw=%s",
@@ -5478,7 +5485,7 @@ void IoHomeController::loop()
                                          ioHomeProductSignatureHex(lSignature).c_str(),
                                          ioHomeProductSignaturePrintable(lSignature).c_str());
                                 logInfoP("PairDiag: product family=%s confidence=%s protocolProfile=%u/%u",
-                                         lChannel->getProductIdentityEvidence().productFamilyLabel
+                                         lChannel->getProductIdentityEvidence().productFamilyLabel[0]
                                              ? lChannel->getProductIdentityEvidence().productFamilyLabel : "unmatched",
                                          ioHomeIdentificationConfidenceName(ioHomeIdentificationConfidence(
                                              lChannel->getProtocolIdentity(),
@@ -9421,8 +9428,13 @@ void IoHomeController::dispatchRxFrame()
             }
             case IoHomeCommand::GetNameResponse:
             {
+                const bool lChanged = ioHomePersistableEnrichmentChanged(
+                    lCh->getProductIdentityEvidence(), mRxFrame.commandId,
+                    mRxFrame.data, mRxFrame.dataLen);
                 lCh->onPostPairEnrichmentResponse(
                     mRxFrame.commandId, mRxFrame.data, mRxFrame.dataLen);
+                if (lChanged)
+                    openknx.flash.save();
                 break;
             }
             case IoHomeCommand::SetNameResponse:
@@ -9434,16 +9446,26 @@ void IoHomeController::dispatchRxFrame()
             {
                 // GI1 is vendor/model information. Captures contain ASCII-like
                 // signatures here, not the discovery type/manufacturer layout.
+                const bool lChanged = ioHomePersistableEnrichmentChanged(
+                    lCh->getProductIdentityEvidence(), mRxFrame.commandId,
+                    mRxFrame.data, mRxFrame.dataLen);
                 lCh->onPostPairEnrichmentResponse(
                     mRxFrame.commandId, mRxFrame.data, mRxFrame.dataLen);
+                if (lChanged)
+                    openknx.flash.save();
                 break;
             }
             case IoHomeCommand::GetGeneralInfo2Response:
             {
                 // GI2 confirms profile/subProfile at bytes 10..11. The channel keeps
                 // this secondary result beside, never over, the primary 0x29.
+                const bool lChanged = ioHomePersistableEnrichmentChanged(
+                    lCh->getProductIdentityEvidence(), mRxFrame.commandId,
+                    mRxFrame.data, mRxFrame.dataLen);
                 lCh->onPostPairEnrichmentResponse(
                     mRxFrame.commandId, mRxFrame.data, mRxFrame.dataLen);
+                if (lChanged)
+                    openknx.flash.save();
                 applyGeneralInfo2TiltInfo(lCh, mRxFrame.data, mRxFrame.dataLen);
                 break;
             }

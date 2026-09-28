@@ -1284,6 +1284,7 @@ void IoHomecontrol::restoreChannelFlashState(uint8_t iIndex, const FlashChannelS
     lChannel->setOneWayControllerManufacturer(iState.oneWayControllerManufacturer);
     if (iState.protocolIdentity.valid)
         lChannel->onProtocolIdentity(iState.ioAddress, iState.protocolIdentity);
+    lChannel->restoreProductIdentityEvidence(iState.productIdentityEvidence);
 }
 
 void IoHomecontrol::applyPendingFlashChannelState()
@@ -2599,24 +2600,30 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
 }
 
 // --- Flash persistence ---
-// Layout v17: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
+// Layout v18: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
 // default 1W broadcastType(1) + numChannels(1) +
 // per-channel: index(1) + flags(1) + actuatorNodeId(3) + actuatorKey(16) +
 // 1W reservedSeq(2) + 1W controllerNodeId(3) + 1W controllerKey(16) +
 // 1W manufacturer(1) + discoveryFlags(1) + ioAddress(3) +
-// discoveryRawLen(1) + discoveryRaw(9) + nodeClass(1) = 58 bytes + remoteMap
+// discoveryRawLen(1) + discoveryRaw(9) + nodeClass(1) +
+// keyState(1) + keyStateSource(1) + name/GI1/GI2 (each length(1)+raw(23)) +
+// manufacturerSubType(2) + productFamily(48) + identificationConfidence(1)
+// = 183 bytes per channel + remoteMap. Raw discovery reconstructs the MIB,
+// profile, backbone, manufacturer and power fields without a second schema.
 // flags: bit0=paired, bit1=is1W, bit2=2W low-power,
 //        bit3=2W power class learned, bit4=1W enrolled
 // discoveryFlags: bit0=valid (remaining bits reserved)
 
 uint16_t IoHomecontrol::flashSize()
 {
-    return 1 + 16 + 3 + 1 + 1 + (IOHC_ChannelCount * 58) + mRemoteMap.flashSize();
+    return 1 + 16 + 3 + 1 + 1 +
+           (IOHC_ChannelCount * (58 + IOHC_ENRICHED_FLASH_SIZE)) +
+           mRemoteMap.flashSize();
 }
 
 void IoHomecontrol::writeFlash()
 {
-    openknx.flash.writeByte(17); // node class; v14-v16 remain readable
+    openknx.flash.writeByte(18); // enriched metadata; v9-v17 remain readable
 
     // Write system key
     const uint8_t *lSysKey = mController.getSystemKey();
@@ -2677,6 +2684,25 @@ void IoHomecontrol::writeFlash()
         for (uint8_t k = 0; k < sizeof(lDiscoveryRaw); k++)
             openknx.flash.writeByte(lDiscoveryRaw[k]);
         openknx.flash.writeByte(static_cast<uint8_t>(lMetadata.nodeClass));
+        openknx.flash.writeByte(static_cast<uint8_t>(lMetadata.keyState));
+        openknx.flash.writeByte(static_cast<uint8_t>(lMetadata.keyStateSource));
+        const IoHomeProductIdentityEvidence &lEvidence =
+            mChannels[i]->getProductIdentityEvidence();
+        const uint8_t *const lPayloads[] = {
+            lEvidence.nameResponse, lEvidence.generalInfo1, lEvidence.generalInfo2};
+        const uint8_t lLengths[] = {
+            lEvidence.nameResponseLen, lEvidence.generalInfo1Len, lEvidence.generalInfo2Len};
+        for (uint8_t p = 0; p < 3; ++p)
+        {
+            openknx.flash.writeByte(lLengths[p]);
+            for (uint8_t k = 0; k < IOHC_DEVICE_INFO_RAW_MAX_SIZE; ++k)
+                openknx.flash.writeByte(lPayloads[p][k]);
+        }
+        openknx.flash.writeByte(lEvidence.manufacturerSubType >> 8);
+        openknx.flash.writeByte(lEvidence.manufacturerSubType & 0xFF);
+        for (uint8_t k = 0; k < IOHC_PRODUCT_FAMILY_LABEL_SIZE; ++k)
+            openknx.flash.writeByte(static_cast<uint8_t>(lEvidence.productFamilyLabel[k]));
+        openknx.flash.writeByte(static_cast<uint8_t>(lEvidence.identificationConfidence));
     }
 
     // Write remote map
@@ -2697,6 +2723,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
     constexpr uint16_t kFlashRecordV15 = 57;
     constexpr uint16_t kFlashRecordV16 = 57;
     constexpr uint16_t kFlashRecordV17 = 58;
+    constexpr uint16_t kFlashRecordV18 = 58 + IOHC_ENRICHED_FLASH_SIZE;
     constexpr uint16_t kFlashHeaderV8 = 1 + 16 + 3 + 1 + 1 + 1;
     constexpr uint16_t kFlashHeaderV7 = 1 + 16 + 3 + 1 + 1;
     constexpr uint16_t kFlashHeaderV6 = 1 + 16 + 1;
@@ -2708,7 +2735,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
     uint8_t lVersion = openknx.flash.readByte();
 
-    if (lVersion == 17 || lVersion == 16 || lVersion == 15 || lVersion == 14 || lVersion == 13 || lVersion == 12 || lVersion == 11 ||
+    if (lVersion == 18 || lVersion == 17 || lVersion == 16 || lVersion == 15 || lVersion == 14 || lVersion == 13 || lVersion == 12 || lVersion == 11 ||
         lVersion == 10 || lVersion == 9)
     {
         if (iSize < kFlashHeaderV9)
@@ -2727,7 +2754,8 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
         const uint8_t lCount = openknx.flash.readByte();
         const uint8_t lConfiguredCount = mNumChannels > 0 ? mNumChannels : configuredChannelCount();
-        const uint16_t lRecordSize = lVersion >= 17 ? kFlashRecordV17
+        const uint16_t lRecordSize = lVersion >= 18 ? kFlashRecordV18
+                                     : lVersion >= 17 ? kFlashRecordV17
                                      : lVersion >= 16 ? kFlashRecordV16
                                      : lVersion >= 15 ? kFlashRecordV15
                                      : lVersion >= 14 ? kFlashRecordV14
@@ -2767,6 +2795,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
             uint8_t lMib = 0;
             uint16_t lDiscoveryTimestamp = 0;
             IoHomeProtocolIdentity lRestoredDiscoveryMetadata;
+            IoHomeProductIdentityEvidence lRestoredEnrichment;
             if (lVersion >= 16)
             {
                 lMetadataFlags = openknx.flash.readByte();
@@ -2788,6 +2817,46 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
                 if (lVersion >= 17)
                     lRestoredDiscoveryMetadata.nodeClass =
                         decodeIoHomeNodeClass(openknx.flash.readByte());
+                if (lVersion >= 18)
+                {
+                    const uint8_t lKeyState = openknx.flash.readByte();
+                    const uint8_t lKeySource = openknx.flash.readByte();
+                    lRestoredDiscoveryMetadata.keyState =
+                        lKeyState <= static_cast<uint8_t>(IoHomeKeyState::Current)
+                            ? static_cast<IoHomeKeyState>(lKeyState)
+                            : IoHomeKeyState::Unknown;
+                    lRestoredDiscoveryMetadata.keyStateSource =
+                        lKeySource <= static_cast<uint8_t>(IoHomeMetadataSource::Restored)
+                            ? static_cast<IoHomeMetadataSource>(lKeySource)
+                            : IoHomeMetadataSource::Unknown;
+                    uint8_t *const lPayloads[] = {
+                        lRestoredEnrichment.nameResponse,
+                        lRestoredEnrichment.generalInfo1,
+                        lRestoredEnrichment.generalInfo2};
+                    uint8_t *const lLengths[] = {
+                        &lRestoredEnrichment.nameResponseLen,
+                        &lRestoredEnrichment.generalInfo1Len,
+                        &lRestoredEnrichment.generalInfo2Len};
+                    for (uint8_t p = 0; p < 3; ++p)
+                    {
+                        const uint8_t lStoredLength = openknx.flash.readByte();
+                        *lLengths[p] = lStoredLength < IOHC_DEVICE_INFO_RAW_MAX_SIZE
+                                           ? lStoredLength : IOHC_DEVICE_INFO_RAW_MAX_SIZE;
+                        for (uint8_t k = 0; k < IOHC_DEVICE_INFO_RAW_MAX_SIZE; ++k)
+                            lPayloads[p][k] = openknx.flash.readByte();
+                    }
+                    lRestoredEnrichment.manufacturerSubType =
+                        (static_cast<uint16_t>(openknx.flash.readByte()) << 8) |
+                        openknx.flash.readByte();
+                    for (uint8_t k = 0; k < IOHC_PRODUCT_FAMILY_LABEL_SIZE; ++k)
+                        lRestoredEnrichment.productFamilyLabel[k] =
+                            static_cast<char>(openknx.flash.readByte());
+                    lRestoredEnrichment.productFamilyLabel[IOHC_PRODUCT_FAMILY_LABEL_SIZE - 1] = '\0';
+                    const uint8_t lConfidence = openknx.flash.readByte();
+                    if (lConfidence <= static_cast<uint8_t>(IoHomeIdentificationConfidence::VendorFamilyExact))
+                        lRestoredEnrichment.identificationConfidence =
+                            static_cast<IoHomeIdentificationConfidence>(lConfidence);
+                }
             }
             else if (lVersion >= 14)
             {
@@ -2830,6 +2899,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
             lState.oneWayControllerNodeId = lControllerNodeId;
             memcpy(lState.oneWayControllerKey, lControllerKey, sizeof(lState.oneWayControllerKey));
             lState.oneWayControllerManufacturer = lManufacturer;
+            lState.productIdentityEvidence = lRestoredEnrichment;
             if (lVersion >= 16)
             {
                 if (lRestoredDiscoveryMetadata.valid)
@@ -3715,7 +3785,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                         lCh->getProductIdentityEvidence();
                     logInfoP("  Product identification: manufacturerSubType=%u productFamily=%s confidence=%s manufacturerConflict=%u",
                              static_cast<unsigned>(lEnrichment.manufacturerSubType),
-                             lEnrichment.productFamilyLabel ? lEnrichment.productFamilyLabel : "unmatched",
+                             lEnrichment.productFamilyLabel[0] ? lEnrichment.productFamilyLabel : "unmatched",
                              ioHomeIdentificationConfidenceName(ioHomeIdentificationConfidence(lMetadata, lEnrichment)),
                              lEnrichment.manufacturerSignatureInconsistent ? 1U : 0U);
                     logInfoP("  enrichment: name=%s GI1=%s ascii=%s GI2=%s GI2Type=%s%u/%u GI3=%s",
@@ -3854,7 +3924,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                         lCh->getProductIdentityEvidence();
                     logInfoP("       Product identification: manufacturerSubType=%u productFamily=%s confidence=%s manufacturerConflict=%u",
                              static_cast<unsigned>(lEnrichment.manufacturerSubType),
-                             lEnrichment.productFamilyLabel ? lEnrichment.productFamilyLabel : "unmatched",
+                             lEnrichment.productFamilyLabel[0] ? lEnrichment.productFamilyLabel : "unmatched",
                              ioHomeIdentificationConfidenceName(ioHomeIdentificationConfidence(lMetadata, lEnrichment)),
                              lEnrichment.manufacturerSignatureInconsistent ? 1U : 0U);
                     logInfoP("       enrichment name=%s GI1=%s ascii=%s GI2=%s GI2Type=%s%u/%u GI3=%s",

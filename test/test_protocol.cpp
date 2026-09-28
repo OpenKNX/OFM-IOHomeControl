@@ -2789,6 +2789,39 @@ TEST(product_identification_confidence_keeps_generic_profile_visible)
     ASSERT_EQ(lIdentity.profile, 2U);
 }
 
+TEST(restored_enrichment_rebuilds_product_identity_without_changing_protocol)
+{
+    IoHomeProtocolIdentity lIdentity;
+    lIdentity.valid = true;
+    lIdentity.ioAddress = 0x123456;
+    lIdentity.profile = 2;
+    lIdentity.manufacturerId = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
+    IoHomeProductIdentityEvidence lStored;
+    memcpy(lStored.nameResponse, "Motor", 5);
+    lStored.nameResponseLen = 5;
+    memcpy(lStored.generalInfo1, "5163340C06", 10);
+    lStored.generalInfo1Len = 10;
+    encodePackedProfile(2, 0, lStored.generalInfo2[10], lStored.generalInfo2[11]);
+    lStored.generalInfo2Len = 12;
+    ASSERT_TRUE(ioHomePersistableEnrichmentChanged(
+        IoHomeProductIdentityEvidence{}, IoHomeCommand::GetGeneralInfo1Response,
+        lStored.generalInfo1, lStored.generalInfo1Len));
+    IoHomecontrolChannel lChannel;
+    lChannel.onProtocolIdentity(lIdentity.ioAddress, lIdentity);
+    lChannel.restoreProductIdentityEvidence(lStored);
+    const IoHomeProductIdentityEvidence &lRestored =
+        lChannel.getProductIdentityEvidence();
+    ASSERT_EQ(strcmp(lChannel.getDeviceName(), "Motor"), 0);
+    ASSERT_EQ(lRestored.manufacturerSubType, 1U);
+    ASSERT_TRUE(lRestored.generalInfo2MatchesDiscovery);
+    ASSERT_EQ(lRestored.identificationConfidence,
+              IoHomeIdentificationConfidence::VendorFamilyExact);
+    ASSERT_EQ(lChannel.getProtocolIdentity().profile, 2U);
+    ASSERT_TRUE(!ioHomePersistableEnrichmentChanged(
+        lRestored, IoHomeCommand::GetGeneralInfo1Response,
+        lStored.generalInfo1, lStored.generalInfo1Len));
+}
+
 TEST(node_class_is_explicit_independent_and_unknown_is_backward_compatible)
 {
     IoHomeProtocolIdentity lIdentity;

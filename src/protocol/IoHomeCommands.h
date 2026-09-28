@@ -774,6 +774,18 @@ struct IoHomeGenericCapabilities
 // local to the command model because IoHomeFrame.h includes this header before
 // declaring IOHC_FRAME_MAX_DATA.
 static constexpr uint8_t IOHC_DEVICE_INFO_RAW_MAX_SIZE = 23;
+static constexpr uint8_t IOHC_PRODUCT_FAMILY_LABEL_SIZE = 48;
+static constexpr uint16_t IOHC_ENRICHED_FLASH_SIZE =
+    2 + 3 * (1 + IOHC_DEVICE_INFO_RAW_MAX_SIZE) + 2 +
+    IOHC_PRODUCT_FAMILY_LABEL_SIZE + 1;
+
+enum class IoHomeIdentificationConfidence : uint8_t
+{
+    Unknown,
+    GenericProfile,
+    VendorFamilyWildcard,
+    VendorFamilyExact,
+};
 
 // Layer 3: optional vendor/commercial identification evidence. Basic control
 // must never depend on these fields or on a successful product match.
@@ -782,10 +794,12 @@ struct IoHomeProductIdentityEvidence
     // Vendor/commercial classification only; zero means unknown or unmatched.
     // This must never select generic protocol behavior or replace profile.
     uint16_t manufacturerSubType = 0;
-    const char *productFamilyLabel = nullptr;
+    char productFamilyLabel[IOHC_PRODUCT_FAMILY_LABEL_SIZE] = {};
     uint16_t productQuirkFlags = 0;
     bool manufacturerSignatureInconsistent = false;
     uint8_t signatureManufacturerId = 0;
+    IoHomeIdentificationConfidence identificationConfidence =
+        IoHomeIdentificationConfidence::Unknown;
     uint8_t nameResponse[IOHC_DEVICE_INFO_RAW_MAX_SIZE] = {};
     uint8_t nameResponseLen = 0;
     uint8_t generalInfo1[IOHC_DEVICE_INFO_RAW_MAX_SIZE] = {};
@@ -802,6 +816,35 @@ struct IoHomeProductIdentityEvidence
     uint8_t generalInfo2SubProfile = 0;
     bool generalInfo2MatchesDiscovery = false;
 };
+
+inline bool ioHomePersistableEnrichmentChanged(
+    const IoHomeProductIdentityEvidence &iEvidence,
+    IoHomeCommand iResponse, const uint8_t *iData, uint8_t iDataLen)
+{
+    const uint8_t *lStored = nullptr;
+    uint8_t lStoredLen = 0;
+    switch (iResponse)
+    {
+    case IoHomeCommand::GetNameResponse:
+        lStored = iEvidence.nameResponse;
+        lStoredLen = iEvidence.nameResponseLen;
+        break;
+    case IoHomeCommand::GetGeneralInfo1Response:
+        lStored = iEvidence.generalInfo1;
+        lStoredLen = iEvidence.generalInfo1Len;
+        break;
+    case IoHomeCommand::GetGeneralInfo2Response:
+        lStored = iEvidence.generalInfo2;
+        lStoredLen = iEvidence.generalInfo2Len;
+        break;
+    default:
+        return false;
+    }
+    const uint8_t lLength = iDataLen < IOHC_DEVICE_INFO_RAW_MAX_SIZE
+                                ? iDataLen : IOHC_DEVICE_INFO_RAW_MAX_SIZE;
+    return lStoredLen != lLength ||
+           (lLength > 0 && (!iData || memcmp(lStored, iData, lLength) != 0));
+}
 
 static constexpr uint8_t IOHC_PRODUCT_SIGNATURE_SIZE = 10;
 
@@ -917,14 +960,6 @@ struct IoHomeVendorProductMatch
     uint8_t signatureManufacturerId = 0;
 };
 
-enum class IoHomeIdentificationConfidence : uint8_t
-{
-    Unknown,
-    GenericProfile,
-    VendorFamilyWildcard,
-    VendorFamilyExact,
-};
-
 inline const char *ioHomeIdentificationConfidenceName(
     IoHomeIdentificationConfidence iConfidence)
 {
@@ -1033,13 +1068,22 @@ inline void ioHomeUpdateVendorProductEvidence(
     const IoHomeVendorProductMatch lMatch =
         ioHomeLookupVendorProduct(iIdentity, ioEvidence);
     ioEvidence.manufacturerSubType = lMatch.manufacturerSubType;
-    ioEvidence.productFamilyLabel = lMatch.productFamilyLabel;
+    memset(ioEvidence.productFamilyLabel, 0, sizeof(ioEvidence.productFamilyLabel));
+    if (lMatch.productFamilyLabel)
+    {
+        const size_t lLength = strlen(lMatch.productFamilyLabel);
+        memcpy(ioEvidence.productFamilyLabel, lMatch.productFamilyLabel,
+               lLength < sizeof(ioEvidence.productFamilyLabel)
+                   ? lLength : sizeof(ioEvidence.productFamilyLabel) - 1);
+    }
     ioEvidence.productQuirkFlags = lMatch.optionalQuirkFlags;
     ioEvidence.manufacturerSignatureInconsistent =
         lMatch.quality == IoHomeSignatureMatchQuality::None &&
         lMatch.manufacturerInconsistent;
     ioEvidence.signatureManufacturerId = ioEvidence.manufacturerSignatureInconsistent
                                               ? lMatch.signatureManufacturerId : 0;
+    ioEvidence.identificationConfidence =
+        ioHomeIdentificationConfidence(iIdentity, lMatch);
 }
 
 inline void decodeProtocolIdentityMib(IoHomeProtocolIdentity &ioIdentity,

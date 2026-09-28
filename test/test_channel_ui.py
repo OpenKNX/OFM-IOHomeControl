@@ -119,16 +119,21 @@ class ChannelUiTest(unittest.TestCase):
         write_flash = source.split("void IoHomecontrol::writeFlash()", 1)[1].split(
             "void IoHomecontrol::readFlash", 1
         )[0]
-        self.assertIn("openknx.flash.writeByte(17)", write_flash)
+        self.assertIn("openknx.flash.writeByte(18)", write_flash)
         self.assertIn("encodeProtocolIdentity(", write_flash)
         self.assertIn("lMetadata.nodeClass", write_flash)
 
         read_flash = source.split("void IoHomecontrol::readFlash", 1)[1]
         current_layout_branch = read_flash.split("else if", 1)[0]
-        self.assertIn("lVersion == 17", current_layout_branch)
+        self.assertIn("lVersion == 18", current_layout_branch)
+        self.assertIn("kFlashRecordV18 = 58 + IOHC_ENRICHED_FLASH_SIZE", current_layout_branch)
         self.assertIn("kFlashRecordV17 = 58", current_layout_branch)
         self.assertIn("decodeProtocolIdentity(lDiscoveryRaw, lDecodeLen)", current_layout_branch)
         self.assertIn("decodeIoHomeNodeClass(openknx.flash.readByte())", current_layout_branch)
+        self.assertIn("lRestoredEnrichment.nameResponse", current_layout_branch)
+        self.assertIn("lRestoredEnrichment.generalInfo1", current_layout_branch)
+        self.assertIn("lRestoredEnrichment.generalInfo2", current_layout_branch)
+        self.assertIn("restoreProductIdentityEvidence", source)
         self.assertIn("decodeProtocolIdentityMib(lState.protocolIdentity, lMib)", read_flash)
         self.assertIn("lState.protocolIdentity.discoveryTimestamp = lDiscoveryTimestamp", read_flash)
 
@@ -199,8 +204,8 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn("applyGeneralInfo2TiltInfo", info2)
         self.assertNotIn("onDeviceInfo", info1)
         self.assertNotIn("onDeviceInfo", info2)
-        self.assertNotIn("openknx.flash.save()", info1)
-        self.assertNotIn("openknx.flash.save()", info2)
+        self.assertIn("openknx.flash.save()", info1)
+        self.assertIn("openknx.flash.save()", info2)
 
         enrichment = channel_source.split(
             "void IoHomecontrolChannel::onPostPairEnrichmentResponse", 1

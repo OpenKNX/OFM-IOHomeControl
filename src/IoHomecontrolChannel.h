@@ -43,6 +43,7 @@ public:
   void onGeneralInfo3Failure(IoHomeGeneralInfo3Outcome iOutcome,
                              const uint8_t *iData = nullptr, uint8_t iDataLen = 0);
   void clearProductIdentityEvidence();
+  void restoreProductIdentityEvidence(const IoHomeProductIdentityEvidence &iEvidence);
   const IoHomeProductIdentityEvidence &getProductIdentityEvidence() const;
   IoHomeProductSignature getGeneralInfo1ProductSignature() const;
   const char *getDeviceName() const;

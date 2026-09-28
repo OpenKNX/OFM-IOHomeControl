@@ -78,6 +78,7 @@ private:
     uint8_t oneWayControllerManufacturer = 2;
     uint32_t ioAddress = 0;
     IoHomeProtocolIdentity protocolIdentity{};
+    IoHomeProductIdentityEvidence productIdentityEvidence{};
   };
 
   IoHomecontrolChannel *mChannels[IOHC_ChannelCount] = {};

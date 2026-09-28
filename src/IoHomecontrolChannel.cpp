@@ -909,6 +909,27 @@ void IoHomecontrolChannel::clearProductIdentityEvidence()
     mProductIdentityEvidence = IoHomeProductIdentityEvidence{};
 }
 
+void IoHomecontrolChannel::restoreProductIdentityEvidence(
+    const IoHomeProductIdentityEvidence &iEvidence)
+{
+    mProductIdentityEvidence = iEvidence;
+    onDeviceName(reinterpret_cast<const char *>(iEvidence.nameResponse),
+                 iEvidence.nameResponseLen);
+    mProductIdentityEvidence.generalInfo2TypeValid = iEvidence.generalInfo2Len >= 12;
+    if (mProductIdentityEvidence.generalInfo2TypeValid)
+    {
+        mProductIdentityEvidence.generalInfo2Profile = decodePackedProfile(
+            iEvidence.generalInfo2[10], iEvidence.generalInfo2[11]);
+        mProductIdentityEvidence.generalInfo2SubProfile =
+            decodePackedSubProfile(iEvidence.generalInfo2[11]);
+        mProductIdentityEvidence.generalInfo2MatchesDiscovery =
+            mProtocolIdentity.valid &&
+            mProductIdentityEvidence.generalInfo2Profile == mProtocolIdentity.profile &&
+            mProductIdentityEvidence.generalInfo2SubProfile == mProtocolIdentity.subProfile;
+    }
+    ioHomeUpdateVendorProductEvidence(mProtocolIdentity, mProductIdentityEvidence);
+}
+
 const IoHomeProductIdentityEvidence &IoHomecontrolChannel::getProductIdentityEvidence() const
 {
     return mProductIdentityEvidence;
