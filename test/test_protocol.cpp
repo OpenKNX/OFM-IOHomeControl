@@ -11977,6 +11977,8 @@ TEST(controller_uses_profile_registry_for_captured_fp3_tilt_tx_and_rx)
                                  lData, sizeof(lData));
         ASSERT_TRUE(queueControllerResponse(lController, lResponse));
         ASSERT_EQ(lChannel.testHasSlatFeedback(), lCase.orientationIndex == 3);
+        ASSERT_EQ(lChannel.testHasVelocityFeedback(), lCase.profile == 1 &&
+                  lCase.subProfile == 0);
     }
 }
 

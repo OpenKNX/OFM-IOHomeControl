@@ -436,6 +436,49 @@ namespace
         return ((uint16_t)iData[iOffset] << 8) | iData[iOffset + 1];
     }
 
+    void dispatchProfileParameterFeedback(IoHomecontrolChannel *iChannel,
+                                          uint8_t iIndex, uint16_t iRaw)
+    {
+        if (!iChannel)
+            return;
+        const IoHomeProfileDescriptor *lDescriptor =
+            ioHomeProfileDescriptor(iChannel->getProtocolIdentity());
+        const ParameterSemantic lSemantic = ioHomeParameterSemantic(lDescriptor, iIndex);
+        if (lDescriptor && (lSemantic == ParameterSemantic::Unsupported ||
+                            lSemantic == ParameterSemantic::Unknown))
+        {
+            logDebugP("Ignoring unsupported profile parameter %u raw=0x%04X",
+                      static_cast<unsigned>(iIndex), static_cast<unsigned>(iRaw));
+            return;
+        }
+        if (!lDescriptor && iChannel->getProtocolIdentity().valid)
+        {
+            logDebugP("Unknown profile parameter %u raw=0x%04X",
+                      static_cast<unsigned>(iIndex), static_cast<unsigned>(iRaw));
+            return;
+        }
+        // Legacy channels have no discovered type; their captured FP3 value
+        // remains an orientation until a profile is known.
+        const ParameterSemantic lEffective = !lDescriptor && iIndex == 3
+                                                 ? ParameterSemantic::SlatOrientation
+                                                 : lSemantic;
+        const ParameterPolarity lPolarity = ioHomeIsOrientationSemantic(lEffective)
+                                                ? ParameterPolarity::Reversed
+                                                : ParameterPolarity::Normal;
+        float lPercent = 0.0f;
+        if (!ioHomeRawToPercent(iRaw, lPolarity, lPercent))
+            return;
+        if (ioHomeIsOrientationSemantic(lEffective))
+            iChannel->onSlatFeedback(lPercent);
+        else if (ioHomeIsSpeedSemantic(lEffective))
+            iChannel->onVelocityFeedback(lEffective, lPercent);
+        else
+            logDebugP("Unrouted profile parameter %u semantic=%s raw=0x%04X",
+                      static_cast<unsigned>(iIndex),
+                      ioHomeParameterSemanticName(lEffective),
+                      static_cast<unsigned>(iRaw));
+    }
+
     void dispatchPositionStatus(IoHomecontrolChannel *iChannel,
                                 const uint8_t *iData,
                                 uint8_t iDataLen,
@@ -452,6 +495,13 @@ namespace
 
         const IoHomeProfileDescriptor *lDescriptor =
             ioHomeProfileDescriptor(iChannel->getProtocolIdentity());
+        if (iChannel->getProtocolIdentity().valid && !lDescriptor)
+        {
+            logDebugP("Unknown profile MP target/current raw=0x%04X/0x%04X",
+                      static_cast<unsigned>(readU16BE(iData, iTargetOffset)),
+                      static_cast<unsigned>(readU16BE(iData, iCurrentOffset)));
+            return;
+        }
         const ParameterSemantic lMpSemantic =
             ioHomeParameterSemantic(lDescriptor, 0);
         if (lDescriptor && (lMpSemantic == ParameterSemantic::Unsupported ||
@@ -493,10 +543,16 @@ namespace
             lMoving = false;
         }
 
-        if (lHasTargetPosition)
+        const bool lPosition = !lDescriptor || ioHomeIsPositionSemantic(lMpSemantic);
+        if (lPosition && lHasTargetPosition)
             iChannel->onTargetPositionFeedback(lTargetPercent);
         if (lHasCurrentPosition)
-            iChannel->onPositionFeedback(lCurrentPercent);
+        {
+            if (lPosition)
+                iChannel->onPositionFeedback(lCurrentPercent);
+            else
+                iChannel->onScalarFeedback(lCurrentPercent);
+        }
 
         iChannel->onStatusUpdate(lMoving);
         iChannel->logStatusSummary(lCurrentPercent, lHasCurrentPosition,
@@ -522,43 +578,19 @@ namespace
     {
         if (!iChannel || !iData || iDataLen < 15)
             return;
-        if (!ioHomeSupportsCapturedFp3Orientation(
-                iChannel->getProtocolIdentity()))
-            return;
-
         const uint16_t lTiltRaw = readU16BE(iData, 13);
-        if (lTiltRaw > IOHC_POSITION_MAX)
-            return;
-
-        float lTiltPercent = 100.0f - ((float)lTiltRaw * 100.0f / IOHC_POSITION_MAX);
-        if (lTiltPercent < 0.0f)
-            lTiltPercent = 0.0f;
-        if (lTiltPercent > 100.0f)
-            lTiltPercent = 100.0f;
-        iChannel->onSlatFeedback(lTiltPercent);
+        dispatchProfileParameterFeedback(iChannel, 3, lTiltRaw);
     }
 
     void applyGeneralInfo2TiltInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData, uint8_t iDataLen)
     {
         if (!iChannel || !iData || iDataLen < 15)
             return;
-        if (!ioHomeSupportsCapturedFp3Orientation(
-                iChannel->getProtocolIdentity()))
-            return;
-
         if (iData[12] == 0x00)
             return;
 
         const uint16_t lTiltRaw = readU16BE(iData, 13);
-        if (lTiltRaw > IOHC_POSITION_MAX)
-            return;
-
-        float lTiltPercent = 100.0f - ((float)lTiltRaw * 100.0f / IOHC_POSITION_MAX);
-        if (lTiltPercent < 0.0f)
-            lTiltPercent = 0.0f;
-        if (lTiltPercent > 100.0f)
-            lTiltPercent = 100.0f;
-        iChannel->onSlatFeedback(lTiltPercent);
+        dispatchProfileParameterFeedback(iChannel, 3, lTiltRaw);
     }
 
     void initGatewayResponseFrame(IoHomeFrame &oFrame,

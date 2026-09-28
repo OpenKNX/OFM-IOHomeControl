@@ -667,6 +667,24 @@ void IoHomecontrolChannel::onSlatFeedback(float iSlatPercent)
     logDebugP("Slat feedback: %.1f%%", iSlatPercent);
 }
 
+void IoHomecontrolChannel::onScalarFeedback(float iPercent)
+{
+    // Binary/light/heating status shares the channel's numeric state but is
+    // not published as a cover-position KO.
+    mCurrentPosition = clampPercent(iPercent);
+    mTargetPosition = mCurrentPosition;
+    publishBinaryStatus();
+    logDebugP("Scalar feedback: %.1f%%", mCurrentPosition);
+}
+
+void IoHomecontrolChannel::onVelocityFeedback(ParameterSemantic iSemantic,
+                                               float iPercent)
+{
+    mCurrentVelocity = clampPercent(iPercent);
+    logDebugP("%s feedback: %.1f%%",
+              ioHomeParameterSemanticName(iSemantic), mCurrentVelocity);
+}
+
 void IoHomecontrolChannel::onDeviceName(const char *iName, uint8_t iLen)
 {
     // Strip leading control characters (bytes <= 0x20)

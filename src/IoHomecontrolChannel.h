@@ -2,6 +2,7 @@
 #include "OpenKNX.h"
 #include "knxprod.h"
 #include "protocol/IoHomeCommands.h"
+#include "protocol/IoHomeProfileRegistry.h"
 
 #define IOHC_1W_SEQUENCE_RESERVE_WINDOW 16
 
@@ -33,6 +34,8 @@ public:
   void onTargetPositionFeedback(float iTargetPositionPercent);
   void onStatusUpdate(bool iIsMoving);
   void onSlatFeedback(float iSlatPercent);
+  void onScalarFeedback(float iPercent);
+  void onVelocityFeedback(ParameterSemantic iSemantic, float iPercent);
   void onDeviceName(const char *iName, uint8_t iLen);
   void onPostPairEnrichmentResponse(IoHomeCommand iResponse,
                                     const uint8_t *iData, uint8_t iDataLen);
@@ -190,6 +193,7 @@ private:
   OneWayPowerClass mConfigured1WPowerClass = OneWayPowerClass::Automatic;
   float mCurrentPosition = 0.0f;
   float mCurrentSlat = 0.0f;
+  float mCurrentVelocity = 0.0f;
   bool mIsMoving = false;
   bool mHas2WHeardEvidence = false;
   bool mHas2WMovingEvidence = false;

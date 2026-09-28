@@ -245,6 +245,17 @@ public:
     mHasSlatFeedback = true;
     mSlatFeedback = iPercent;
   }
+  void onScalarFeedback(float iPercent)
+  {
+    mHasScalarFeedback = true;
+    mScalarFeedback = iPercent;
+  }
+  void onVelocityFeedback(ParameterSemantic iSemantic, float iPercent)
+  {
+    mHasVelocityFeedback = true;
+    mVelocitySemantic = iSemantic;
+    mVelocityFeedback = iPercent;
+  }
   void onDeviceName(const char *iName, uint8_t iLen)
   {
     uint8_t lStart = 0;
@@ -484,6 +495,11 @@ public:
   bool testStatusMoving() const { return mStatusMoving; }
   bool testHasSlatFeedback() const { return mHasSlatFeedback; }
   float testSlatFeedback() const { return mSlatFeedback; }
+  bool testHasScalarFeedback() const { return mHasScalarFeedback; }
+  float testScalarFeedback() const { return mScalarFeedback; }
+  bool testHasVelocityFeedback() const { return mHasVelocityFeedback; }
+  ParameterSemantic testVelocitySemantic() const { return mVelocitySemantic; }
+  float testVelocityFeedback() const { return mVelocityFeedback; }
   bool testHasBatteryLevel() const { return mHasBatteryLevel; }
   uint8_t testBatteryLevel() const { return mBatteryLevel; }
   bool testHasEstimate() const { return mHasEstimate; }
@@ -553,6 +569,11 @@ private:
   bool mStopSettlePollPending = false;
   bool mHasSlatFeedback = false;
   float mSlatFeedback = 0.0f;
+  bool mHasScalarFeedback = false;
+  float mScalarFeedback = 0.0f;
+  bool mHasVelocityFeedback = false;
+  ParameterSemantic mVelocitySemantic = ParameterSemantic::Unknown;
+  float mVelocityFeedback = 0.0f;
   bool mHasBatteryLevel = false;
   uint8_t mBatteryLevel = 0xFF;
   bool mHasEstimate = false;

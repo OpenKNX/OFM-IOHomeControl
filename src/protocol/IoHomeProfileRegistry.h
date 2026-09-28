@@ -89,6 +89,23 @@ inline bool ioHomeIsOrientationSemantic(ParameterSemantic iSemantic)
            iSemantic == ParameterSemantic::HangerOrientation;
 }
 
+inline bool ioHomeIsPositionSemantic(ParameterSemantic iSemantic)
+{
+    return iSemantic == ParameterSemantic::Position ||
+           iSemantic == ParameterSemantic::CurtainPosition ||
+           iSemantic == ParameterSemantic::UpperCurtainPosition ||
+           iSemantic == ParameterSemantic::LowerCurtainPosition ||
+           iSemantic == ParameterSemantic::ShutterClosure;
+}
+
+inline bool ioHomeIsSpeedSemantic(ParameterSemantic iSemantic)
+{
+    return iSemantic == ParameterSemantic::LinearSpeed ||
+           iSemantic == ParameterSemantic::AngularSpeed ||
+           iSemantic == ParameterSemantic::SlatOrientationSpeed ||
+           iSemantic == ParameterSemantic::HangerOrientationSpeed;
+}
+
 // The captured status selector addresses FP3; use the general profile index
 // for commands that target another orientation slot.
 inline bool ioHomeSupportsCapturedFp3Orientation(
