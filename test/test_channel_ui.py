@@ -42,6 +42,21 @@ class ChannelUiTest(unittest.TestCase):
         ))
         script = (ROOT / "src" / "IoHomecontrol.script.js").read_text()
         self.assertIn('prefix + "ProfileOverride", 0', script)
+        channel = (ROOT / "src" / "IoHomecontrolChannel.cpp").read_text()
+        controller = (ROOT / "src" / "controller" / "IoHomeController.cpp").read_text()
+        self.assertIn("setManualProfileOverride(static_cast<uint16_t>(ParamIOHC_cProfileOverride))", channel)
+        self.assertIn("getEffectiveProfileDescriptor()", channel)
+        self.assertIn("getEffectiveProfileDescriptor()", controller)
+        self.assertIn("mProtocolIdentity = lIdentity", channel)
+        auto_object_sets = [
+            {ref.get("RefId") for ref in when.findall("k:ComObjectRefRef", NS)}
+            for when in self.template.findall(".//k:when[@test='1']", NS)
+        ]
+        self.assertTrue(any({
+            "%AID%_O-%TT%%CC%000_R-%TT%%CC%00001",  # position
+            "%AID%_O-%TT%%CC%003_R-%TT%%CC%00301",  # on/off
+            "%AID%_O-%TT%%CC%008_R-%TT%%CC%00801",  # orientation
+        } <= refs for refs in auto_object_sets))
 
     def test_all_channels_are_selected_by_device_type(self) -> None:
         visible = self.share.find(".//k:Parameter[@Name='VisibleChannels']", NS)

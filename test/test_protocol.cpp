@@ -2844,6 +2844,72 @@ TEST(klf_capabilities_are_derived_from_mp_fp_semantics)
     ASSERT_TRUE(!lUnknown.position && !lUnknown.tilt && !lUnknown.light);
 }
 
+TEST(klf_profile_golden_matrix_roundtrips_parameter_indices)
+{
+    using S = ParameterSemantic;
+    struct Golden
+    {
+        uint16_t packed;
+        S mp;
+        S fp1;
+        S fp2;
+        S fp3;
+        ParameterPolarity polarity;
+        uint32_t flags;
+    };
+    static constexpr Golden kProfiles[] = {
+        {0x0040, S::Position, S::SlatOrientation, S::SlatOrientationSpeed,
+         S::LinearSpeed, ParameterPolarity::Normal,
+         IoHomeCapabilityPosition | IoHomeCapabilitySpeed |
+             IoHomeCapabilityOrientation | IoHomeCapabilityOrientationSpeed},
+        {0x0080, S::Position, S::LinearSpeed, S::Unsupported, S::Unsupported,
+         ParameterPolarity::Normal, IoHomeCapabilityPosition | IoHomeCapabilitySpeed},
+        {0x0081, S::Position, S::LinearSpeed, S::SlatOrientationSpeed,
+         S::SlatOrientation, ParameterPolarity::Normal,
+         IoHomeCapabilityPosition | IoHomeCapabilitySpeed |
+             IoHomeCapabilityOrientation | IoHomeCapabilityOrientationSpeed},
+        {0x0100, S::Position, S::LinearSpeed, S::Unsupported, S::Unsupported,
+         ParameterPolarity::Reversed, IoHomeCapabilityPosition | IoHomeCapabilitySpeed},
+        {0x0180, S::LightIntensity, S::LightIntensityGradient,
+         S::Unsupported, S::Unsupported, ParameterPolarity::Reversed,
+         IoHomeCapabilityLight},
+        {0x0340, S::Position, S::UpperCurtainPosition,
+         S::LowerCurtainPosition, S::LinearSpeed, ParameterPolarity::Normal,
+         IoHomeCapabilityPosition | IoHomeCapabilityDualCurtain | IoHomeCapabilitySpeed},
+        {0x0440, S::Position, S::LinearSpeed, S::SlatOrientationSpeed,
+         S::SlatOrientation, ParameterPolarity::Normal,
+         IoHomeCapabilityPosition | IoHomeCapabilitySpeed |
+             IoHomeCapabilityOrientation | IoHomeCapabilityOrientationSpeed},
+        {0x0480, S::CurtainPosition, S::LinearSpeed,
+         S::HangerOrientationSpeed, S::HangerOrientation,
+         ParameterPolarity::Normal,
+         IoHomeCapabilityPosition | IoHomeCapabilitySpeed |
+             IoHomeCapabilityOrientation | IoHomeCapabilityOrientationSpeed},
+    };
+    for (const Golden &lGolden : kProfiles)
+    {
+        const IoHomeProfileDescriptor *lDescriptor =
+            ioHomeProfileDescriptor(lGolden.packed >> 6, lGolden.packed & 0x3F);
+        ASSERT_TRUE(lDescriptor != nullptr);
+        ASSERT_EQ(lDescriptor->mpPolarity, lGolden.polarity);
+        ASSERT_EQ(lDescriptor->capabilityFlags, lGolden.flags);
+        const S lExpected[] = {lGolden.mp, lGolden.fp1, lGolden.fp2, lGolden.fp3};
+        for (uint8_t lIndex = 0; lIndex < 4; ++lIndex)
+        {
+            ASSERT_EQ(ioHomeParameterSemantic(lDescriptor, lIndex), lExpected[lIndex]);
+            if (lExpected[lIndex] != S::Unsupported)
+                ASSERT_EQ(ioHomeParameterIndex(lDescriptor, lExpected[lIndex]), lIndex);
+        }
+        ASSERT_EQ(ioHomeParameterSemantic(lDescriptor, 4), S::Unsupported);
+        ASSERT_EQ(ioHomeParameterIndex(lDescriptor, S::Unsupported), 0xFFU);
+        ASSERT_EQ(ioHomePercentToRaw(100.0f, lGolden.polarity),
+                  lGolden.polarity == ParameterPolarity::Normal ? IOHC_POSITION_MAX : 0U);
+    }
+    const IoHomeProfileDescriptor *lRoller = ioHomeProfileDescriptor(0x0080 >> 6, 0);
+    ASSERT_EQ(ioHomeParameterIndex(lRoller, S::SlatOrientation), 0xFFU);
+    ASSERT_TRUE(!ioHomeProfileCapabilities(lRoller).tilt);
+}
+
 TEST(discovery_spe_response_frame)
 {
     // DiscoverSPEResponse (0x2B) — encrypted discovery response
@@ -12037,8 +12103,15 @@ TEST(controller_profile_fp_tx_uses_semantic_index_not_fixed_slot)
         {2, 0, ParameterSemantic::LinearSpeed, 1},
         {2, 1, ParameterSemantic::SlatOrientationSpeed, 2},
         {2, 1, ParameterSemantic::SlatOrientation, 3},
+        {6, 0, ParameterSemantic::LightIntensityGradient, 1},
+        {13, 0, ParameterSemantic::UpperCurtainPosition, 1},
+        {13, 0, ParameterSemantic::LowerCurtainPosition, 2},
+        {13, 0, ParameterSemantic::LinearSpeed, 3},
         {17, 0, ParameterSemantic::LinearSpeed, 1},
         {17, 0, ParameterSemantic::SlatOrientation, 3},
+        {18, 0, ParameterSemantic::LinearSpeed, 1},
+        {18, 0, ParameterSemantic::HangerOrientationSpeed, 2},
+        {18, 0, ParameterSemantic::HangerOrientation, 3},
     };
     for (const Case &lCase : kCases)
     {
@@ -12062,6 +12135,166 @@ TEST(controller_profile_fp_tx_uses_semantic_index_not_fixed_slot)
         ASSERT_EQ(lRaw, ioHomePercentToRaw(25,
             ioHomeIsOrientationSemantic(lCase.semantic)
                 ? ParameterPolarity::Reversed : ParameterPolarity::Normal));
+    }
+}
+
+TEST(controller_profile_golden_mp_status_polarity_and_scalar_routing)
+{
+    const uint32_t lRemote = 0x831F2A;
+    const uint32_t lDevice = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    struct Golden
+    {
+        uint16_t packed;
+        bool position;
+        bool reversed;
+    };
+    static const Golden kCases[] = {
+        {0x0080, true, false},  // shutter: zero is zero percent down
+        {0x0100, true, true},   // window: zero is fully open
+        {0x0180, false, true},  // light: zero is full output
+        {0x03C0, false, true},  // switch: zero is on
+    };
+    for (const Golden &lCase : kCases)
+    {
+        for (const uint16_t lRaw : {static_cast<uint16_t>(0),
+                                    static_cast<uint16_t>(IOHC_POSITION_MAX)})
+        {
+            IoHomeController lController;
+            IoHomecontrol lModule;
+            IoHomecontrolChannel lChannel;
+            initPaired2WControllerForTest(lController, lModule, lChannel,
+                                          lRemote, lDevice, lKey);
+            IoHomeProtocolIdentity lIdentity;
+            lIdentity.valid = true;
+            lIdentity.profile = lCase.packed >> 6;
+            lIdentity.subProfile = lCase.packed & 0x3F;
+            lChannel.onProtocolIdentity(lDevice, lIdentity);
+            ASSERT_TRUE(lController.sendCommand(lDevice, lKey,
+                                                IoHomeCommand::Private, 0x03));
+            IoHomeFrame lTx;
+            ASSERT_TRUE(transmitQueuedControllerFrame(lController, lTx));
+            uint8_t lData[8] = {};
+            lData[0] = 0x01;
+            lData[2] = static_cast<uint8_t>(lRaw >> 8);
+            lData[3] = static_cast<uint8_t>(lRaw & 0xFF);
+            lData[4] = lData[2];
+            lData[5] = lData[3];
+            IoHomeFrame lResponse;
+            buildPrivateResponseFrame(lResponse, lRemote, lDevice,
+                                      lData, sizeof(lData));
+            ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+            const float lExpected = (lRaw == 0) == lCase.reversed ? 100.0f : 0.0f;
+            ASSERT_EQ(lChannel.testHasPositionFeedback(), lCase.position);
+            ASSERT_EQ(lChannel.testHasScalarFeedback(), !lCase.position);
+            if (lCase.position)
+            {
+                ASSERT_FLOAT_EQ(lChannel.testPositionFeedback(), lExpected, 0.01f);
+                ASSERT_FLOAT_EQ(lChannel.testTargetPositionFeedback(), lExpected, 0.01f);
+            }
+            else
+                ASSERT_FLOAT_EQ(lChannel.testScalarFeedback(), lExpected, 0.01f);
+        }
+    }
+}
+
+TEST(controller_unknown_profile_has_no_guessed_semantics_but_keeps_raw_execute)
+{
+    const uint32_t lRemote = 0x831F2A;
+    const uint32_t lDevice = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    static const uint8_t kRaw[] = {0x01, 0x63, 0x4A, 0x00, 0x00, 0x00};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemote, lDevice, lKey);
+    IoHomeProtocolIdentity lIdentity;
+    lIdentity.valid = true;
+    lIdentity.profile = 1;
+    lIdentity.subProfile = 1; // absent from the documented profile table
+    lChannel.onProtocolIdentity(lDevice, lIdentity);
+    const IoHomeProfileDescriptor *lDescriptor = lChannel.getEffectiveProfileDescriptor();
+    ASSERT_TRUE(lDescriptor == nullptr);
+    for (uint8_t lIndex = 0; lIndex <= 16; ++lIndex)
+        ASSERT_EQ(ioHomeParameterSemantic(lDescriptor, lIndex), ParameterSemantic::Unknown);
+    const IoHomeGenericCapabilities lCaps = ioHomeProfileCapabilities(lDescriptor);
+    ASSERT_TRUE(!lCaps.position && !lCaps.velocity && !lCaps.tilt &&
+                !lCaps.tiltVelocity && !lCaps.light && !lCaps.lock &&
+                !lCaps.onOff && !lCaps.ventilation && !lCaps.heating &&
+                !lCaps.dualCurtain);
+    ASSERT_TRUE(!lController.sendProfileParameterCommand(
+        lDevice, lKey, ParameterSemantic::SlatOrientation, 25));
+    ASSERT_TRUE(!lController.sendProfileParameterCommand(
+        lDevice, lKey, ParameterSemantic::LinearSpeed, 25));
+    ASSERT_TRUE(lController.sendRawTwoWayExecute(&lChannel, kRaw, sizeof(kRaw)));
+    IoHomeFrame lTx;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lTx));
+    ASSERT_EQ(lTx.commandId, IoHomeCommand::Execute);
+    ASSERT_EQ(lTx.dataLen, sizeof(kRaw));
+    ASSERT_MEM_EQ(lTx.data, kRaw, sizeof(kRaw));
+    uint8_t lStatus[8] = {0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    IoHomeFrame lResponse;
+    buildPrivateResponseFrame(lResponse, lRemote, lDevice,
+                              lStatus, sizeof(lStatus));
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    ASSERT_TRUE(!lChannel.testHasPositionFeedback());
+    ASSERT_TRUE(!lChannel.testHasScalarFeedback());
+    ASSERT_EQ(lChannel.getProtocolIdentity().profile, 1U);
+    ASSERT_EQ(lChannel.getProtocolIdentity().subProfile, 1U);
+}
+
+TEST(controller_profile_golden_fp3_feedback_uses_documented_semantic)
+{
+    const uint32_t lRemote = 0x831F2A;
+    const uint32_t lDevice = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    struct Golden
+    {
+        uint16_t packed;
+        ParameterSemantic fp3;
+    };
+    static constexpr Golden kCases[] = {
+        {0x0040, ParameterSemantic::LinearSpeed},
+        {0x0080, ParameterSemantic::Unsupported},
+        {0x0081, ParameterSemantic::SlatOrientation},
+        {0x0180, ParameterSemantic::Unsupported},
+        {0x0340, ParameterSemantic::LinearSpeed},
+        {0x0440, ParameterSemantic::SlatOrientation},
+        {0x0480, ParameterSemantic::HangerOrientation},
+    };
+    for (const Golden &lCase : kCases)
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initPaired2WControllerForTest(lController, lModule, lChannel,
+                                      lRemote, lDevice, lKey);
+        IoHomeProtocolIdentity lIdentity;
+        lIdentity.valid = true;
+        lIdentity.profile = lCase.packed >> 6;
+        lIdentity.subProfile = lCase.packed & 0x3F;
+        lChannel.onProtocolIdentity(lDevice, lIdentity);
+        uint8_t lData[15] = {};
+        const uint16_t lRaw = IOHC_POSITION_MAX / 4;
+        lData[13] = static_cast<uint8_t>(lRaw >> 8);
+        lData[14] = static_cast<uint8_t>(lRaw & 0xFF);
+        IoHomeFrame lResponse;
+        buildSimpleResponseFrame(lResponse, lRemote, lDevice,
+                                 IoHomeCommand::PrivateResponse,
+                                 lData, sizeof(lData));
+        ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+        const bool lOrientation = ioHomeIsOrientationSemantic(lCase.fp3);
+        const bool lSpeed = ioHomeIsSpeedSemantic(lCase.fp3);
+        ASSERT_EQ(lChannel.testHasSlatFeedback(), lOrientation);
+        ASSERT_EQ(lChannel.testHasVelocityFeedback(), lSpeed);
+        if (lOrientation)
+            ASSERT_FLOAT_EQ(lChannel.testSlatFeedback(), 75.0f, 0.01f);
+        if (lSpeed)
+        {
+            ASSERT_EQ(lChannel.testVelocitySemantic(), lCase.fp3);
+            ASSERT_FLOAT_EQ(lChannel.testVelocityFeedback(), 25.0f, 0.01f);
+        }
     }
 }
 
