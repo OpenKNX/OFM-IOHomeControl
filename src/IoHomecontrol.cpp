@@ -3672,11 +3672,12 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                     const IoHomeProtocolIdentity &lMetadata = lCh->getProtocolIdentity();
                     if (lMetadata.valid)
                     {
-                        logInfoP("  protocol identity: ioAddress=0x%06X class=%s profile=%u subProfile=%u manufacturerId=%s(0x%02X) ioBackboneAddress=%s source=%s keyState=%s keyStateSource=%s",
+                        logInfoP("  Protocol: ioAddress=0x%06X class=%s profile=%u subProfile=%u nodeType=0x%04X manufacturer=%s(%u) ioBackboneAddress=%s source=%s keyState=%s keyStateSource=%s",
                                  lCh->getIoAddress(),
                                  ioHomeNodeClassName(lMetadata.nodeClass),
                                  static_cast<unsigned>(lMetadata.profile),
                                  static_cast<unsigned>(lMetadata.subProfile),
+                                 static_cast<unsigned>(lMetadata.nodeTypeSubType),
                                  ioHomeManufacturerName(lMetadata.manufacturerId),
                                  static_cast<unsigned>(lMetadata.manufacturerId),
                                  lMetadata.hasIoBackboneAddress ? "present" : "n/a",
@@ -3712,12 +3713,11 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                     }
                     const IoHomeProductIdentityEvidence &lEnrichment =
                         lCh->getProductIdentityEvidence();
-                    logInfoP("  product identification: manufacturerSubType=%u family=%s confidence=%s protocolProfile=%u/%u",
+                    logInfoP("  Product identification: manufacturerSubType=%u productFamily=%s confidence=%s manufacturerConflict=%u",
                              static_cast<unsigned>(lEnrichment.manufacturerSubType),
                              lEnrichment.productFamilyLabel ? lEnrichment.productFamilyLabel : "unmatched",
                              ioHomeIdentificationConfidenceName(ioHomeIdentificationConfidence(lMetadata, lEnrichment)),
-                             static_cast<unsigned>(lMetadata.profile),
-                             static_cast<unsigned>(lMetadata.subProfile));
+                             lEnrichment.manufacturerSignatureInconsistent ? 1U : 0U);
                     logInfoP("  enrichment: name=%s GI1=%s ascii=%s GI2=%s GI2Type=%s%u/%u GI3=%s",
                              lCh->getDeviceName()[0] ? lCh->getDeviceName() : "n/a",
                              lEnrichment.generalInfo1Len
@@ -3813,11 +3813,12 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                     const IoHomeProtocolIdentity &lMetadata = lCh->getProtocolIdentity();
                     if (lMetadata.valid)
                     {
-                        logInfoP("       protocol identity ioAddress=0x%06X class=%s profile=%u subProfile=%u manufacturerId=%s(0x%02X) source=%s keyState=%s keyStateSource=%s MIB=%s",
+                        logInfoP("       Protocol: ioAddress=0x%06X class=%s profile=%u subProfile=%u nodeType=0x%04X manufacturer=%s(%u) source=%s keyState=%s keyStateSource=%s MIB=%s",
                                  lCh->getIoAddress(),
                                  ioHomeNodeClassName(lMetadata.nodeClass),
                                  static_cast<unsigned>(lMetadata.profile),
                                  static_cast<unsigned>(lMetadata.subProfile),
+                                 static_cast<unsigned>(lMetadata.nodeTypeSubType),
                                  ioHomeManufacturerName(lMetadata.manufacturerId),
                                  static_cast<unsigned>(lMetadata.manufacturerId),
                                  ioHomeMetadataSourceName(lMetadata.metadataSource),
@@ -3851,12 +3852,11 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                     }
                     const IoHomeProductIdentityEvidence &lEnrichment =
                         lCh->getProductIdentityEvidence();
-                    logInfoP("       product identification manufacturerSubType=%u family=%s confidence=%s protocolProfile=%u/%u",
+                    logInfoP("       Product identification: manufacturerSubType=%u productFamily=%s confidence=%s manufacturerConflict=%u",
                              static_cast<unsigned>(lEnrichment.manufacturerSubType),
                              lEnrichment.productFamilyLabel ? lEnrichment.productFamilyLabel : "unmatched",
                              ioHomeIdentificationConfidenceName(ioHomeIdentificationConfidence(lMetadata, lEnrichment)),
-                             static_cast<unsigned>(lMetadata.profile),
-                             static_cast<unsigned>(lMetadata.subProfile));
+                             lEnrichment.manufacturerSignatureInconsistent ? 1U : 0U);
                     logInfoP("       enrichment name=%s GI1=%s ascii=%s GI2=%s GI2Type=%s%u/%u GI3=%s",
                              lCh->getDeviceName()[0] ? lCh->getDeviceName() : "n/a",
                              lEnrichment.generalInfo1Len

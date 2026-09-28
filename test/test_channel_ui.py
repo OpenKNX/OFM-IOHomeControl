@@ -23,6 +23,12 @@ class ChannelUiTest(unittest.TestCase):
         cls.share = parse("IoHomecontrol.share.xml")
         cls.template = parse("IoHomecontrol.templ.xml")
 
+    def test_status_keeps_protocol_and_product_identity_separate(self) -> None:
+        module_source = (ROOT / "src" / "IoHomecontrol.cpp").read_text()
+        self.assertIn("Protocol: ioAddress=", module_source)
+        self.assertIn("Product identification: manufacturerSubType=", module_source)
+        self.assertIn("productFamily=%s confidence=%s", module_source)
+
     def test_profile_auto_and_manual_override_are_exposed(self) -> None:
         selection = self.share.find(
             ".//k:ParameterType[@Name='IOHCChannelSelection']", NS
