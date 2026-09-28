@@ -2742,7 +2742,17 @@ TEST(vendor_database_requires_manufacturer_and_prefers_exact_signature)
     ASSERT_EQ(lBest.quality, IoHomeSignatureMatchQuality::Exact);
     ASSERT_EQ(lBest.manufacturerSubType, 3U);
     lIdentity.manufacturerId = static_cast<uint8_t>(IoHomeManufacturer::Velux);
-    ASSERT_EQ(ioHomeLookupVendorProduct(lIdentity, lEvidence).manufacturerSubType, 0U);
+    const IoHomeVendorProductMatch lConflict =
+        ioHomeLookupVendorProduct(lIdentity, lEvidence);
+    ASSERT_EQ(lConflict.manufacturerSubType, 0U);
+    ASSERT_TRUE(lConflict.manufacturerInconsistent);
+    ASSERT_EQ(lConflict.signatureManufacturerId,
+              static_cast<uint8_t>(IoHomeManufacturer::Somfy));
+    ioHomeUpdateVendorProductEvidence(lIdentity, lEvidence);
+    ASSERT_TRUE(lEvidence.manufacturerSignatureInconsistent);
+    ASSERT_EQ(lEvidence.manufacturerSubType, 0U);
+    ASSERT_EQ(lIdentity.manufacturerId,
+              static_cast<uint8_t>(IoHomeManufacturer::Velux));
     ASSERT_EQ(ioHomeLookupVendorProduct(lIdentity, lEvidence, kEntries, 2).quality,
               IoHomeSignatureMatchQuality::None);
     lIdentity.manufacturerId = 2;

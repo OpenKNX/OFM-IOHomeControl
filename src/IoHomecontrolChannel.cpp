@@ -866,6 +866,12 @@ void IoHomecontrolChannel::onPostPairEnrichmentResponse(
         break;
     }
     ioHomeUpdateVendorProductEvidence(mProtocolIdentity, mProductIdentityEvidence);
+    if (mProductIdentityEvidence.manufacturerSignatureInconsistent &&
+        (iResponse == IoHomeCommand::GetGeneralInfo1Response ||
+         iResponse == IoHomeCommand::GetGeneralInfo2Response))
+        logInfoP("Product signature manufacturer conflict: discovery=%u signatureDatabase=%u; discovery retained",
+                 static_cast<unsigned>(mProtocolIdentity.manufacturerId),
+                 static_cast<unsigned>(mProductIdentityEvidence.signatureManufacturerId));
 }
 
 void IoHomecontrolChannel::onGeneralInfo3Requested()

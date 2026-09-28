@@ -775,6 +775,8 @@ struct IoHomeProductIdentityEvidence
     uint16_t manufacturerSubType = 0;
     const char *productFamilyLabel = nullptr;
     uint16_t productQuirkFlags = 0;
+    bool manufacturerSignatureInconsistent = false;
+    uint8_t signatureManufacturerId = 0;
     uint8_t nameResponse[IOHC_DEVICE_INFO_RAW_MAX_SIZE] = {};
     uint8_t nameResponseLen = 0;
     uint8_t generalInfo1[IOHC_DEVICE_INFO_RAW_MAX_SIZE] = {};
@@ -902,6 +904,8 @@ struct IoHomeVendorProductMatch
     uint16_t manufacturerSubType = 0;
     const char *productFamilyLabel = nullptr;
     uint16_t optionalQuirkFlags = 0;
+    bool manufacturerInconsistent = false;
+    uint8_t signatureManufacturerId = 0;
 };
 
 enum class IoHomeIdentificationConfidence : uint8_t
@@ -956,13 +960,20 @@ inline IoHomeVendorProductMatch ioHomeLookupVendorProduct(
              lEntry.nodeClass != iIdentity.nodeClass) ||
             (lEntry.profile != 0xFFFF && lEntry.profile != iIdentity.profile) ||
             (lEntry.subProfile != 0xFF && lEntry.subProfile != iIdentity.subProfile) ||
-            lEntry.manufacturerId != iIdentity.manufacturerId ||
             lEntry.manufacturerSubType == 0 || !lEntry.productFamilyLabel)
             continue;
         const IoHomeSignatureMatchQuality lQuality = ioHomeMatchSignaturePattern(
             lSignature, lEntry.signaturePattern, IOHC_PRODUCT_SIGNATURE_SIZE);
         if (lQuality == IoHomeSignatureMatchQuality::None)
             continue;
+        if (lEntry.manufacturerId != iIdentity.manufacturerId)
+        {
+            // A signature alone cannot change the discovery manufacturer.
+            // Keep the strongest foreign match only as inconsistency evidence.
+            lBest.manufacturerInconsistent = true;
+            lBest.signatureManufacturerId = lEntry.manufacturerId;
+            continue;
+        }
         uint8_t lSpecificity = 0;
         for (uint8_t j = 0; j < IOHC_PRODUCT_SIGNATURE_SIZE; ++j)
             lSpecificity += lEntry.signaturePattern[j] != 0x3F;
@@ -1015,6 +1026,11 @@ inline void ioHomeUpdateVendorProductEvidence(
     ioEvidence.manufacturerSubType = lMatch.manufacturerSubType;
     ioEvidence.productFamilyLabel = lMatch.productFamilyLabel;
     ioEvidence.productQuirkFlags = lMatch.optionalQuirkFlags;
+    ioEvidence.manufacturerSignatureInconsistent =
+        lMatch.quality == IoHomeSignatureMatchQuality::None &&
+        lMatch.manufacturerInconsistent;
+    ioEvidence.signatureManufacturerId = ioEvidence.manufacturerSignatureInconsistent
+                                              ? lMatch.signatureManufacturerId : 0;
 }
 
 inline void decodeProtocolIdentityMib(IoHomeProtocolIdentity &ioIdentity,
