@@ -722,10 +722,13 @@ struct IoHomeGenericCapabilities
     bool position = false;
     bool velocity = false;
     bool tilt = false;
+    bool tiltVelocity = false;
     bool light = false;
     bool lock = false;
+    bool onOff = false;
     bool ventilation = false;
     bool heating = false;
+    bool dualCurtain = false;
 };
 
 // Device-information responses use the normal 2W payload ceiling. Keep this

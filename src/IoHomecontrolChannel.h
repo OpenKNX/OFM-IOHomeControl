@@ -52,6 +52,7 @@ public:
   bool hasProtocolIdentity() const;
   uint32_t getIoAddress() const;
   const IoHomeProtocolIdentity &getProtocolIdentity() const;
+  IoHomeGenericCapabilities getProfileCapabilities() const;
   bool allowsActuatorControls() const;
   void onBatteryLevel(uint8_t iPercent);
   void onEstimate(uint8_t iSeconds);

@@ -917,6 +917,11 @@ const IoHomeProtocolIdentity &IoHomecontrolChannel::getProtocolIdentity() const
     return mProtocolIdentity;
 }
 
+IoHomeGenericCapabilities IoHomecontrolChannel::getProfileCapabilities() const
+{
+    return ioHomeProfileCapabilities(ioHomeProfileDescriptor(mProtocolIdentity));
+}
+
 bool IoHomecontrolChannel::allowsActuatorControls() const
 {
     return mProtocolIdentity.nodeClass == IoHomeNodeClass::Unknown ||
@@ -1516,7 +1521,7 @@ bool IoHomecontrolChannel::isTiltCapableDeviceType() const
 {
     if (const IoHomeProfileDescriptor *lDescriptor =
             ioHomeProfileDescriptor(mProtocolIdentity))
-        return (lDescriptor->capabilityFlags & IoHomeCapabilityOrientation) != 0;
+        return ioHomeProfileCapabilities(lDescriptor).tilt;
     if (mProtocolIdentity.valid)
         return false;
 

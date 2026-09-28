@@ -79,6 +79,8 @@ ParameterSemantic ioHomeParameterSemantic(const IoHomeProfileDescriptor *iDescri
 uint8_t ioHomeParameterIndex(const IoHomeProfileDescriptor *iDescriptor,
                              ParameterSemantic iSemantic);
 const char *ioHomeParameterSemanticName(ParameterSemantic iSemantic);
+IoHomeGenericCapabilities ioHomeProfileCapabilities(
+    const IoHomeProfileDescriptor *iDescriptor);
 uint16_t ioHomePercentToRaw(float iPercent, ParameterPolarity iPolarity);
 bool ioHomeRawToPercent(uint16_t iRaw, ParameterPolarity iPolarity,
                         float &oPercent);

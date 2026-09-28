@@ -155,6 +155,26 @@ uint8_t ioHomeParameterIndex(const IoHomeProfileDescriptor *iDescriptor,
     return 0xFF;
 }
 
+IoHomeGenericCapabilities ioHomeProfileCapabilities(
+    const IoHomeProfileDescriptor *iDescriptor)
+{
+    IoHomeGenericCapabilities lCapabilities;
+    if (!iDescriptor)
+        return lCapabilities;
+    const uint32_t lFlags = iDescriptor->capabilityFlags;
+    lCapabilities.position = (lFlags & IoHomeCapabilityPosition) != 0;
+    lCapabilities.velocity = (lFlags & IoHomeCapabilitySpeed) != 0;
+    lCapabilities.tilt = (lFlags & IoHomeCapabilityOrientation) != 0;
+    lCapabilities.tiltVelocity = (lFlags & IoHomeCapabilityOrientationSpeed) != 0;
+    lCapabilities.light = (lFlags & IoHomeCapabilityLight) != 0;
+    lCapabilities.lock = (lFlags & IoHomeCapabilityLock) != 0;
+    lCapabilities.onOff = (lFlags & IoHomeCapabilitySwitch) != 0;
+    lCapabilities.ventilation = (lFlags & IoHomeCapabilityVentilation) != 0;
+    lCapabilities.heating = (lFlags & IoHomeCapabilityHeating) != 0;
+    lCapabilities.dualCurtain = (lFlags & IoHomeCapabilityDualCurtain) != 0;
+    return lCapabilities;
+}
+
 const char *ioHomeParameterSemanticName(ParameterSemantic iSemantic)
 {
     switch (iSemantic)

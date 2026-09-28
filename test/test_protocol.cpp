@@ -2803,6 +2803,47 @@ TEST(klf_profile_mp_polarity_and_window_ventilation_alias)
     ASSERT_TRUE(ioHomeProfileDescriptor(4, 1)->securedVentilation);
 }
 
+TEST(klf_capabilities_are_derived_from_mp_fp_semantics)
+{
+    struct Case
+    {
+        uint16_t packed;
+        uint32_t flags;
+    };
+    const Case kCases[] = {
+        {0x0040, IoHomeCapabilityPosition | IoHomeCapabilitySpeed |
+                     IoHomeCapabilityOrientation | IoHomeCapabilityOrientationSpeed},
+        {0x0080, IoHomeCapabilityPosition | IoHomeCapabilitySpeed},
+        {0x0340, IoHomeCapabilityPosition | IoHomeCapabilityDualCurtain |
+                     IoHomeCapabilitySpeed},
+        {0x0180, IoHomeCapabilityLight},
+        {0x0240, IoHomeCapabilityLock},
+        {0x03C0, IoHomeCapabilitySwitch},
+        {0x0500, IoHomeCapabilityVentilation},
+        {0x0540, IoHomeCapabilityHeating},
+    };
+    for (const Case &lCase : kCases)
+    {
+        const IoHomeProfileDescriptor *lDescriptor =
+            ioHomeProfileDescriptor(lCase.packed >> 6, lCase.packed & 0x3F);
+        ASSERT_TRUE(lDescriptor != nullptr);
+        ASSERT_EQ(lDescriptor->capabilityFlags, lCase.flags);
+        const IoHomeGenericCapabilities lCaps = ioHomeProfileCapabilities(lDescriptor);
+        ASSERT_EQ(lCaps.position, (lCase.flags & IoHomeCapabilityPosition) != 0);
+        ASSERT_EQ(lCaps.velocity, (lCase.flags & IoHomeCapabilitySpeed) != 0);
+        ASSERT_EQ(lCaps.tilt, (lCase.flags & IoHomeCapabilityOrientation) != 0);
+        ASSERT_EQ(lCaps.tiltVelocity, (lCase.flags & IoHomeCapabilityOrientationSpeed) != 0);
+        ASSERT_EQ(lCaps.light, (lCase.flags & IoHomeCapabilityLight) != 0);
+        ASSERT_EQ(lCaps.lock, (lCase.flags & IoHomeCapabilityLock) != 0);
+        ASSERT_EQ(lCaps.onOff, (lCase.flags & IoHomeCapabilitySwitch) != 0);
+        ASSERT_EQ(lCaps.ventilation, (lCase.flags & IoHomeCapabilityVentilation) != 0);
+        ASSERT_EQ(lCaps.heating, (lCase.flags & IoHomeCapabilityHeating) != 0);
+        ASSERT_EQ(lCaps.dualCurtain, (lCase.flags & IoHomeCapabilityDualCurtain) != 0);
+    }
+    const IoHomeGenericCapabilities lUnknown = ioHomeProfileCapabilities(nullptr);
+    ASSERT_TRUE(!lUnknown.position && !lUnknown.tilt && !lUnknown.light);
+}
+
 TEST(discovery_spe_response_frame)
 {
     // DiscoverSPEResponse (0x2B) — encrypted discovery response
