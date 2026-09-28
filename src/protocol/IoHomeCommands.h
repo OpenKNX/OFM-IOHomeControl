@@ -769,6 +769,35 @@ struct IoHomeProductSignature
     uint8_t length = 0;
 };
 
+enum class IoHomeSignatureMatchQuality : uint8_t
+{
+    None,
+    Wildcard,
+    Exact,
+};
+
+// A literal '?' in a database pattern matches exactly one byte, including a
+// non-printable one. The candidate signature itself is always byte-exact.
+inline IoHomeSignatureMatchQuality ioHomeMatchSignaturePattern(
+    const IoHomeProductSignature &iSignature,
+    const uint8_t *iPattern, uint8_t iPatternLen)
+{
+    if (!iPattern || iSignature.length == 0 ||
+        iSignature.length != iPatternLen ||
+        iPatternLen > IOHC_PRODUCT_SIGNATURE_SIZE)
+        return IoHomeSignatureMatchQuality::None;
+    bool lWildcard = false;
+    for (uint8_t i = 0; i < iPatternLen; ++i)
+    {
+        if (iPattern[i] == 0x3F)
+            lWildcard = true;
+        else if (iPattern[i] != iSignature.bytes[i])
+            return IoHomeSignatureMatchQuality::None;
+    }
+    return lWildcard ? IoHomeSignatureMatchQuality::Wildcard
+                     : IoHomeSignatureMatchQuality::Exact;
+}
+
 inline IoHomeProductSignature ioHomeGeneralInfo1ProductSignature(
     const IoHomeProductIdentityEvidence &iEvidence)
 {

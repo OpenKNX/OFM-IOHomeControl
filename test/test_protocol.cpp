@@ -2662,6 +2662,26 @@ TEST(general_info1_product_signature_is_first_ten_bytes_and_binary_safe)
     ASSERT_EQ(ioHomeGeneralInfo1ProductSignature(lEvidence).length, 3U);
 }
 
+TEST(product_signature_wildcards_are_bytewise_and_length_strict)
+{
+    IoHomeProductSignature lSignature;
+    memcpy(lSignature.bytes, "5071665A\0Z", 10);
+    lSignature.length = 10;
+    const uint8_t kWildcard[] = "5071665???";
+    const uint8_t kExact[] = {'5','0','7','1','6','6','5','A',0,'Z'};
+    ASSERT_EQ(ioHomeMatchSignaturePattern(lSignature, kWildcard, 10),
+              IoHomeSignatureMatchQuality::Wildcard);
+    ASSERT_EQ(ioHomeMatchSignaturePattern(lSignature, kExact, 10),
+              IoHomeSignatureMatchQuality::Exact);
+    ASSERT_EQ(ioHomeMatchSignaturePattern(lSignature, kExact, 9),
+              IoHomeSignatureMatchQuality::None);
+    ASSERT_EQ(ioHomeMatchSignaturePattern(lSignature,
+                  reinterpret_cast<const uint8_t *>("5125936???"), 10),
+              IoHomeSignatureMatchQuality::None);
+    ASSERT_EQ(ioHomeMatchSignaturePattern(lSignature, nullptr, 10),
+              IoHomeSignatureMatchQuality::None);
+}
+
 TEST(node_class_is_explicit_independent_and_unknown_is_backward_compatible)
 {
     IoHomeProtocolIdentity lIdentity;
