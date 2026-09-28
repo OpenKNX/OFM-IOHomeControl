@@ -35,6 +35,12 @@ public:
   void onSlatFeedback(float iSlatPercent);
   void onDeviceName(const char *iName, uint8_t iLen);
   void onDeviceInfo(uint16_t iType, uint8_t iSubtype, uint8_t iManufacturer);
+  void onDiscoveryMetadata(uint32_t iSourceNodeId,
+                           const IoHomeDiscoveryMetadata &iMetadata);
+  void clearDiscoveryMetadata();
+  bool hasDiscoveryMetadata() const;
+  uint32_t getDiscoveryNodeId() const;
+  const IoHomeDiscoveryMetadata &getDiscoveryMetadata() const;
   void onBatteryLevel(uint8_t iPercent);
   void onEstimate(uint8_t iSeconds);
   void onStatusExpected();
@@ -217,6 +223,8 @@ private:
   uint16_t mDeviceType = 0;
   uint8_t mDeviceSubtype = 0;
   uint8_t mManufacturer = 0;
+  uint32_t mDiscoveryNodeId = 0;
+  IoHomeDiscoveryMetadata mDiscoveryMetadata{};
 
   // P3: Scene position data (10 ETS-backed scenes x 1 byte, 0xFF = not set)
   uint8_t mScenePositions[kMaxSceneCount] = {};

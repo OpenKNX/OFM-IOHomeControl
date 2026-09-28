@@ -247,6 +247,22 @@ public:
   }
   void onDeviceName(const char *, uint8_t) {}
   void onDeviceInfo(uint16_t, uint8_t, uint8_t) {}
+  void onDiscoveryMetadata(uint32_t iSourceNodeId,
+                           const IoHomeDiscoveryMetadata &iMetadata)
+  {
+    if (!iMetadata.valid)
+      return;
+    mDiscoveryNodeId = iSourceNodeId & 0x00FFFFFF;
+    mDiscoveryMetadata = iMetadata;
+  }
+  void clearDiscoveryMetadata()
+  {
+    mDiscoveryNodeId = 0;
+    mDiscoveryMetadata = IoHomeDiscoveryMetadata{};
+  }
+  bool hasDiscoveryMetadata() const { return mDiscoveryMetadata.valid; }
+  uint32_t getDiscoveryNodeId() const { return mDiscoveryNodeId; }
+  const IoHomeDiscoveryMetadata &getDiscoveryMetadata() const { return mDiscoveryMetadata; }
   void onBatteryLevel(uint8_t iPercent)
   {
     mHasBatteryLevel = true;
@@ -386,6 +402,8 @@ private:
   uint8_t mConfigured1WBroadcastType = 0;
   uint8_t mConfigured1WAcei = 0; // mirrors production automatic-by-manufacturer default
   uint8_t mConfigured2WAcei = IOHC_ACEI_DEFAULT;
+  uint32_t mDiscoveryNodeId = 0;
+  IoHomeDiscoveryMetadata mDiscoveryMetadata{};
   bool mConfigured1WEnrollmentMac = false;
   OneWayEnrollmentFinalizer mConfigured1WEnrollmentFinalizer = OneWayEnrollmentFinalizer::Automatic;
   OneWayExecuteDestinationPolicy mConfigured1WExecuteDestinationPolicy = OneWayExecuteDestinationPolicy::Automatic;

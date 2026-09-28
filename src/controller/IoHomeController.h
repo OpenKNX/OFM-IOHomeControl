@@ -970,6 +970,7 @@ private:
   int8_t mOneWayEnrollmentActiveTrace = -1;
   uint8_t mPairingChallenge[6];
   uint32_t mDiscoveredNodeId;
+  IoHomeDiscoveryMetadata mPairDiscoveryMetadata{};
   // Optional 2W target supplied by the caller. Discovery is broadcast, but a
   // response must not bind this pairing transaction to another learn-mode device.
   uint32_t mPairingKnownNodeId;
@@ -1338,6 +1339,10 @@ private:
   bool learnPowerClassFromDiscovery(IoHomecontrolChannel *iChannel,
                                     const IoHomeFrame &iFrame,
                                     const char *iSource);
+  bool captureDiscoveryMetadata(IoHomecontrolChannel *iChannel,
+                                const IoHomeFrame &iFrame,
+                                const char *iSource,
+                                IoHomeDiscoveryMetadata *oMetadata = nullptr);
   IoHomecontrolChannel *oneWayProfileForNode(uint32_t iNodeId) const;
   uint8_t oneWayBroadcastTypeForNode(uint32_t iNodeId) const;
   uint32_t oneWayDestinationForEntry(const IoHomeQueueEntry &iEntry) const;

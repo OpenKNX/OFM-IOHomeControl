@@ -2307,19 +2307,65 @@ TEST(discovery_response_metadata_uses_full_layout_offsets)
         decodeDiscoveryMetadata(lData, sizeof(lData));
 
     ASSERT_TRUE(lMetadata.valid);
+    ASSERT_TRUE(lMetadata.fullMetadata);
     ASSERT_EQ(lMetadata.deviceType,
               static_cast<uint16_t>(IoHomeDeviceType::RollerShutter));
     ASSERT_EQ(lMetadata.subtype, 0);
+    ASSERT_EQ(lMetadata.nodeTypeSubType, 0x0080);
+    ASSERT_TRUE(lMetadata.hasBackboneId);
+    ASSERT_EQ(lMetadata.backboneId, 0x000000U);
     ASSERT_EQ(lMetadata.manufacturer,
               static_cast<uint8_t>(IoHomeManufacturer::Velux));
     ASSERT_TRUE(lMetadata.hasPowerClass);
     ASSERT_TRUE(lMetadata.lowPower);
+    ASSERT_EQ(lMetadata.rawDataLen, sizeof(lData));
+    ASSERT_MEM_EQ(lMetadata.rawData, lData, sizeof(lData));
 
     const IoHomeDiscoveryMetadata lTypeOnly =
         decodeDiscoveryMetadata(lData, IOHC_DISCOVERY_METADATA_SIZE);
     ASSERT_TRUE(lTypeOnly.valid);
+    ASSERT_TRUE(!lTypeOnly.fullMetadata);
+    ASSERT_TRUE(!lTypeOnly.hasBackboneId);
     ASSERT_EQ(lTypeOnly.manufacturer, 0);
     ASSERT_TRUE(!lTypeOnly.hasPowerClass);
+}
+
+TEST(discovery_type_subtype_helpers_cover_klf_profiles_and_reserved_values)
+{
+    struct TestCase
+    {
+        uint8_t packed0;
+        uint8_t packed1;
+        uint16_t type;
+        uint8_t subtype;
+        uint16_t combined;
+    };
+    const TestCase lCases[] = {
+        {0x00, 0x80, 2, 0, 0x0080}, // Roller shutter
+        {0x00, 0x81, 2, 1, 0x0081}, // Adjustable-slat roller shutter
+        {0x01, 0x00, 4, 0, 0x0100}, // Window opener
+        {0x04, 0x40, 17, 0, 0x0440}, // Exterior Venetian blind
+        {0xFF, 0xFF, 0x03FF, 0x3F, 0xFFFF}, // Reserved values stay representable
+    };
+
+    for (const TestCase &lCase : lCases)
+    {
+        ASSERT_EQ(decodePackedDeviceType(lCase.packed0, lCase.packed1), lCase.type);
+        ASSERT_EQ(decodePackedDeviceSubtype(lCase.packed1), lCase.subtype);
+        ASSERT_EQ(encodeNodeTypeSubType(lCase.type, lCase.subtype), lCase.combined);
+
+        uint16_t lDecodedType = 0;
+        uint8_t lDecodedSubtype = 0;
+        decodeNodeTypeSubType(lCase.combined, lDecodedType, lDecodedSubtype);
+        ASSERT_EQ(lDecodedType, lCase.type);
+        ASSERT_EQ(lDecodedSubtype, lCase.subtype);
+
+        uint8_t lPacked0 = 0;
+        uint8_t lPacked1 = 0;
+        encodePackedDeviceType(lCase.type, lCase.subtype, lPacked0, lPacked1);
+        ASSERT_EQ(lPacked0, lCase.packed0);
+        ASSERT_EQ(lPacked1, lCase.packed1);
+    }
 }
 
 TEST(packed_device_metadata_known_answers_and_roundtrips)
@@ -10039,6 +10085,65 @@ static bool queueKeyTransferConfirmationAndCaptureSetConfig1(IoHomeController &i
         return false;
 
     return deserializeFrameForTest(oSetConfig1Frame, lSetConfigPacket.data(), static_cast<uint8_t>(lSetConfigPacket.size()));
+}
+
+TEST(controller_pairing_stores_029_metadata_before_key_exchange_and_keeps_source_separate)
+{
+    const uint32_t lRemoteNodeId = 0x831F2A;
+    const uint32_t lCapturedDeviceNodeId = 0xFB7B08;
+    const uint8_t lKey[16] = {
+        0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+        0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    static const uint8_t kCapturedPayload[IOHC_DISCOVERY_FULL_SIZE] = {
+        0x00, 0x80, // Roller shutter type 2, subtype 0
+        0x00, 0x00, 0x00, // Backbone reference is valid zero, not node ID
+        0x01, 0xDD, 0xFF, 0xFF};
+
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemoteNodeId, 0, lKey);
+    lController.setSystemKey(lKey);
+    ASSERT_TRUE(lController.startPairing(0));
+
+    IoHomeFrame lDiscoveryRequest;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lDiscoveryRequest));
+    ASSERT_EQ(lDiscoveryRequest.commandId, IoHomeCommand::DiscoverRequest);
+
+    IoHomeFrame lResponse;
+    lResponse.init();
+    lResponse.ctrlByte0 = IOHC_CTRL0_END;
+    lResponse.setSrcNode(lCapturedDeviceNodeId);
+    lResponse.setDestNode(lRemoteNodeId);
+    lResponse.commandId = IoHomeCommand::DiscoverResponse;
+    memcpy(lResponse.data, kCapturedPayload, sizeof(kCapturedPayload));
+    lResponse.dataLen = sizeof(kCapturedPayload);
+    lResponse.hasHmac = false;
+
+    uint8_t lBuffer[IOHC_FRAME_BUFFER_SIZE];
+    const uint8_t lLen = serializeFrameForTest(lResponse, lBuffer, sizeof(lBuffer));
+    ASSERT_TRUE(lLen > 0);
+    lController.radio().testQueueReceivedPacket(lBuffer, lLen);
+    lController.loop();
+
+    // Metadata is available immediately, before the key exchange has paired
+    // the channel or assigned its operational node ID.
+    ASSERT_TRUE(lChannel.hasDiscoveryMetadata());
+    ASSERT_EQ(lChannel.getNodeId(), 0U);
+    ASSERT_EQ(lChannel.getDiscoveryNodeId(), lCapturedDeviceNodeId);
+    const IoHomeDiscoveryMetadata &lMetadata = lChannel.getDiscoveryMetadata();
+    ASSERT_TRUE(lMetadata.valid);
+    ASSERT_TRUE(lMetadata.fullMetadata);
+    ASSERT_EQ(lMetadata.deviceType, 2U);
+    ASSERT_EQ(lMetadata.subtype, 0U);
+    ASSERT_EQ(lMetadata.nodeTypeSubType, 0x0080U);
+    ASSERT_TRUE(lMetadata.hasBackboneId);
+    ASSERT_EQ(lMetadata.backboneId, 0x000000U);
+    ASSERT_EQ(lMetadata.rawDataLen, sizeof(kCapturedPayload));
+    ASSERT_MEM_EQ(lMetadata.rawData, kCapturedPayload, sizeof(kCapturedPayload));
+    ASSERT_TRUE(lController.state() == ControllerState::PairSendDiscoveryConfirmation ||
+                lController.state() == ControllerState::PairWaitDiscoveryConfirmationAck);
 }
 
 TEST(controller_default_2w_pairing_confirms_discovery_before_key_init)

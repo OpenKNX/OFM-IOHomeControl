@@ -2584,6 +2584,58 @@ bool IoHomeController::learnPowerClassFromDiscovery(IoHomecontrolChannel *iChann
     return lChanged;
 }
 
+bool IoHomeController::captureDiscoveryMetadata(
+    IoHomecontrolChannel *iChannel, const IoHomeFrame &iFrame,
+    const char *iSource, IoHomeDiscoveryMetadata *oMetadata)
+{
+    if (iFrame.commandId != IoHomeCommand::DiscoverResponse &&
+        iFrame.commandId != IoHomeCommand::DiscoverSPEResponse)
+        return false;
+
+    const IoHomeDiscoveryMetadata lMetadata =
+        decodeDiscoveryMetadata(iFrame.data, iFrame.dataLen);
+    if (oMetadata)
+        *oMetadata = lMetadata;
+
+    const std::string lRaw = hexDump(iFrame.data, iFrame.dataLen);
+    if (!lMetadata.valid)
+    {
+        logInfoP("Discovery metadata from %s: Node=%06X incomplete len=%u raw=%s",
+                 iSource ? iSource : "discovery",
+                 iFrame.getSrcNodeId(),
+                 static_cast<unsigned>(iFrame.dataLen),
+                 lRaw.c_str());
+        return false;
+    }
+
+    if (iChannel)
+        iChannel->onDiscoveryMetadata(iFrame.getSrcNodeId(), lMetadata);
+
+    if (lMetadata.hasBackboneId)
+    {
+        logInfoP("Discovery metadata from %s: Node=%06X Backbone=%06X type=%u subtype=%u combined=0x%04X full=%s raw=%s",
+                 iSource ? iSource : "discovery",
+                 iFrame.getSrcNodeId(), lMetadata.backboneId,
+                 static_cast<unsigned>(lMetadata.deviceType),
+                 static_cast<unsigned>(lMetadata.subtype),
+                 static_cast<unsigned>(lMetadata.nodeTypeSubType),
+                 lMetadata.fullMetadata ? "yes" : "no",
+                 lRaw.c_str());
+    }
+    else
+    {
+        logInfoP("Discovery metadata from %s: Node=%06X Backbone=n/a type=%u subtype=%u combined=0x%04X full=%s raw=%s",
+                 iSource ? iSource : "discovery",
+                 iFrame.getSrcNodeId(),
+                 static_cast<unsigned>(lMetadata.deviceType),
+                 static_cast<unsigned>(lMetadata.subtype),
+                 static_cast<unsigned>(lMetadata.nodeTypeSubType),
+                 lMetadata.fullMetadata ? "yes" : "no",
+                 lRaw.c_str());
+    }
+    return true;
+}
+
 IoHomecontrolChannel *IoHomeController::oneWayProfileForNode(uint32_t iNodeId) const
 {
     return oneWayProfileForChannel(channelForNode(iNodeId));
@@ -2733,6 +2785,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mPairPulledKeyFrame.init();
     mDiscoverySPE = false;
     mDiscoveredNodeId = 0;
+    mPairDiscoveryMetadata = IoHomeDiscoveryMetadata{};
     mPairingKnownNodeId = iKnownNodeId & 0x00FFFFFF;
     mPairKeyExchangeAttempts = 0;
     mPairKeyExchangeStartTime = 0;
@@ -2751,6 +2804,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(iChannelIndex) : nullptr;
     if (lCh)
     {
+        lCh->clearDiscoveryMetadata();
         mPairDiscoverConfirmMode = lCh->getConfigured2WDiscoverConfirmMode();
         mPairKeyInitDelayMs = lCh->getConfigured2WKeyInitDelay();
     }
@@ -4261,7 +4315,10 @@ void IoHomeController::tracePairDiagnosticFrame(const char *iPrefix, const IoHom
              iFrame.dataLen,
              iFrame.hasHmac ? 1 : 0);
 
-    if (mState == ControllerState::DiscoveryListening && strcmp(iPrefix, "rx") == 0)
+    if (strcmp(iPrefix, "rx") == 0 &&
+        (mState == ControllerState::DiscoveryListening ||
+         iFrame.commandId == IoHomeCommand::DiscoverResponse ||
+         iFrame.commandId == IoHomeCommand::DiscoverSPEResponse))
         tracePairDiagnosticDiscoveryInterpretation(iFrame, iFreqIdx);
 }
 
@@ -4271,6 +4328,39 @@ void IoHomeController::tracePairDiagnosticDiscoveryInterpretation(const IoHomeFr
 
     switch (iFrame.commandId)
     {
+    case IoHomeCommand::DiscoverResponse:
+    case IoHomeCommand::DiscoverSPEResponse:
+    {
+        const IoHomeDiscoveryMetadata lMetadata =
+            decodeDiscoveryMetadata(iFrame.data, iFrame.dataLen);
+        const std::string lRaw = hexDump(iFrame.data, iFrame.dataLen);
+        if (lMetadata.valid && lMetadata.hasBackboneId)
+        {
+            logInfoP("PairDiag: discovery metadata Node: %06X Backbone: %06X Type: %u SubType: %u Combined: 0x%04X Full: %s Raw: %s",
+                     iFrame.getSrcNodeId(), lMetadata.backboneId,
+                     static_cast<unsigned>(lMetadata.deviceType),
+                     static_cast<unsigned>(lMetadata.subtype),
+                     static_cast<unsigned>(lMetadata.nodeTypeSubType),
+                     lMetadata.fullMetadata ? "yes" : "no", lRaw.c_str());
+        }
+        else if (lMetadata.valid)
+        {
+            logInfoP("PairDiag: discovery metadata Node: %06X Backbone: n/a Type: %u SubType: %u Combined: 0x%04X Full: no Raw: %s",
+                     iFrame.getSrcNodeId(),
+                     static_cast<unsigned>(lMetadata.deviceType),
+                     static_cast<unsigned>(lMetadata.subtype),
+                     static_cast<unsigned>(lMetadata.nodeTypeSubType),
+                     lRaw.c_str());
+        }
+        else
+        {
+            logInfoP("PairDiag: discovery metadata Node: %06X incomplete len=%u Raw: %s",
+                     iFrame.getSrcNodeId(), static_cast<unsigned>(iFrame.dataLen),
+                     lRaw.c_str());
+        }
+        break;
+    }
+
     case IoHomeCommand::Discover2ERequest:
         logInfoP("PairDiag: discovery note 1W learn request src=0x%06X dst=0x%06X freq=%u %luHz",
                  iFrame.getSrcNodeId(),
@@ -4516,6 +4606,25 @@ void IoHomeController::logPairDiagnosticStatus() const
              static_cast<unsigned>(mPairingTelemetry.lastReceivedCommand),
              static_cast<unsigned>(mPairingTelemetry.rejectedFrames),
              static_cast<unsigned>(mPairingTelemetry.keyExchangeAttempts));
+    if (mPairDiscoveryMetadata.valid)
+    {
+        const std::string lRaw = hexDump(mPairDiscoveryMetadata.rawData,
+                                         mPairDiscoveryMetadata.rawDataLen);
+        if (mPairDiscoveryMetadata.hasBackboneId)
+            logInfoP("PairDiag: discovery Node: %06X Backbone: %06X Type: %u SubType: %u Combined: 0x%04X Raw: %s",
+                     mDiscoveredNodeId, mPairDiscoveryMetadata.backboneId,
+                     static_cast<unsigned>(mPairDiscoveryMetadata.deviceType),
+                     static_cast<unsigned>(mPairDiscoveryMetadata.subtype),
+                     static_cast<unsigned>(mPairDiscoveryMetadata.nodeTypeSubType),
+                     lRaw.c_str());
+        else
+            logInfoP("PairDiag: discovery Node: %06X Backbone: n/a Type: %u SubType: %u Combined: 0x%04X Raw: %s",
+                     mDiscoveredNodeId,
+                     static_cast<unsigned>(mPairDiscoveryMetadata.deviceType),
+                     static_cast<unsigned>(mPairDiscoveryMetadata.subtype),
+                     static_cast<unsigned>(mPairDiscoveryMetadata.nodeTypeSubType),
+                     lRaw.c_str());
+    }
     logInfoP("PairDiag: 1W mode=%s profile=%s addDestination=%u/%u finalizer=%s traceEntries=%u",
              pairing1WModeName(mPairing1WMode),
              pairing1WProfile().name,
@@ -4874,12 +4983,21 @@ void IoHomeController::loop()
                         mRxFrame.getDestNodeId() == mOwnNodeId &&
                         (mPairingKnownNodeId == 0 || lSource == mPairingKnownNodeId))
                     {
-                        mDiscoveredNodeId = mRxFrame.getSrcNodeId();
+                        // Capture and expose discovery metadata before moving
+                        // into confirmation/key exchange. The RF source is the
+                        // node ID; payload bytes 2..4 remain an independent
+                        // backbone reference, including the valid value zero.
+                        IoHomecontrolChannel *lPairChannel =
+                            mModule ? mModule->getChannel(mPairingChannel) : nullptr;
+                        captureDiscoveryMetadata(lPairChannel, mRxFrame,
+                                                 "pairing discovery",
+                                                 &mPairDiscoveryMetadata);
+                        mDiscoveredNodeId = lSource;
                         // Cap subsequent directed START preambles to the exact
                         // discovery request that produced this correlated 0x29.
                         mPairAcceptedDiscoveryPreamble = mPairDiscoveryTxPreamble;
-                        if (mModule)
-                            learnPowerClassFromDiscovery(mModule->getChannel(mPairingChannel),
+                        if (lPairChannel)
+                            learnPowerClassFromDiscovery(lPairChannel,
                                                          mRxFrame, "pairing discovery");
                         mPairingFreqIdx = mLastResponseFreqIdx;
                         mPairKeyExchangeAttempts = 0;
@@ -8564,7 +8682,10 @@ void IoHomeController::dispatchRxFrame()
          mRxFrame.commandId == IoHomeCommand::DiscoverSPEResponse))
     {
         mModule->onDiscoveryResponse(mRxFrame);
-        learnPowerClassFromDiscovery(channelForNode(lSrcNode), mRxFrame,
+        IoHomecontrolChannel *lChannel = channelForNode(lSrcNode);
+        captureDiscoveryMetadata(lChannel, mRxFrame,
+                                 "roll-call discovery");
+        learnPowerClassFromDiscovery(lChannel, mRxFrame,
                                      "roll-call discovery");
         mModule->remoteMap().observeAddress(lSrcNode);
         recordScanFrame(mRxFrame, mRxBuffer, mRxRawLen, mRadio.lastRssi(), mCurrentFreqIdx);

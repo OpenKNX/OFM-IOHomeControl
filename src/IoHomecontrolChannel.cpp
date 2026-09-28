@@ -701,6 +701,43 @@ void IoHomecontrolChannel::onDeviceInfo(uint16_t iType, uint8_t iSubtype, uint8_
     logDebugP("Device info: type=0x%04X subtype=0x%02X mfg=0x%02X", iType, iSubtype, iManufacturer);
 }
 
+void IoHomecontrolChannel::onDiscoveryMetadata(
+    uint32_t iSourceNodeId, const IoHomeDiscoveryMetadata &iMetadata)
+{
+    if (!iMetadata.valid)
+        return;
+
+    // The RF source is the actuator node identity. The three bytes at payload
+    // offsets 2..4 are a separate backbone reference and may legitimately be
+    // zero or equal to another node's reference.
+    mDiscoveryNodeId = iSourceNodeId & 0x00FFFFFF;
+    mDiscoveryMetadata = iMetadata;
+    mDeviceType = iMetadata.deviceType;
+    mDeviceSubtype = iMetadata.subtype;
+    mManufacturer = iMetadata.manufacturer;
+}
+
+void IoHomecontrolChannel::clearDiscoveryMetadata()
+{
+    mDiscoveryNodeId = 0;
+    mDiscoveryMetadata = IoHomeDiscoveryMetadata{};
+}
+
+bool IoHomecontrolChannel::hasDiscoveryMetadata() const
+{
+    return mDiscoveryMetadata.valid;
+}
+
+uint32_t IoHomecontrolChannel::getDiscoveryNodeId() const
+{
+    return mDiscoveryNodeId;
+}
+
+const IoHomeDiscoveryMetadata &IoHomecontrolChannel::getDiscoveryMetadata() const
+{
+    return mDiscoveryMetadata;
+}
+
 void IoHomecontrolChannel::onBatteryLevel(uint8_t iPercent)
 {
     mBatteryLevel = iPercent;

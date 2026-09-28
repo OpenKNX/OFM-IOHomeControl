@@ -802,6 +802,7 @@ void IoHomecontrol::onDiscoveryResponse(const IoHomeFrame &iFrame)
         return;
 
     const IoHomeDiscoveryMetadata lMetadata = decodeDiscoveryMetadata(iFrame.data, iFrame.dataLen);
+    lDevice->discoveryMetadata = lMetadata;
     if (lMetadata.valid)
     {
         lDevice->deviceType = lMetadata.deviceType;
@@ -958,7 +959,10 @@ bool IoHomecontrol::applyKeyImportDeviceToChannel(const KeyImportDevice &iDevice
         lChannel->setLowPower2W(false);
     else
         lChannel->clearLearnedLowPower2W();
-    lChannel->onDeviceInfo(iDevice.deviceType, iDevice.subtype, iDevice.manufacturer);
+    if (iDevice.discoveryMetadata.valid)
+        lChannel->onDiscoveryMetadata(iDevice.nodeId, iDevice.discoveryMetadata);
+    else
+        lChannel->onDeviceInfo(iDevice.deviceType, iDevice.subtype, iDevice.manufacturer);
     logInfoP("ETS key import: assigned 0x%06X to channel %u",
              iDevice.nodeId, static_cast<unsigned>(iChannelIndex + 1));
     return true;

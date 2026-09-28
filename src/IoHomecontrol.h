@@ -117,6 +117,7 @@ private:
     uint8_t subtype = 0;
     uint8_t manufacturer = 0;
     uint8_t powerClass = 0; // 0=unknown, 1=always alive, 2=low power
+    IoHomeDiscoveryMetadata discoveryMetadata{};
   };
 
   // Discovery is a network inventory, not a configured-channel list. Keep

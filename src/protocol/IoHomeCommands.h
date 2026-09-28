@@ -462,6 +462,29 @@ inline void encodePackedDeviceType(uint16_t iType, uint8_t iSubtype,
     oTypeSub = static_cast<uint8_t>(((iType & 0x03) << 6) | (iSubtype & 0x3F));
 }
 
+inline uint16_t decodePackedDeviceType(uint8_t iTypeMsb, uint8_t iTypeSub)
+{
+    return (static_cast<uint16_t>(iTypeMsb) << 2) |
+           (static_cast<uint16_t>(iTypeSub) >> 6);
+}
+
+inline uint8_t decodePackedDeviceSubtype(uint8_t iTypeSub)
+{
+    return static_cast<uint8_t>(iTypeSub & 0x3F);
+}
+
+inline uint16_t encodeNodeTypeSubType(uint16_t iType, uint8_t iSubtype)
+{
+    return static_cast<uint16_t>(((iType & 0x03FF) << 6) | (iSubtype & 0x3F));
+}
+
+inline void decodeNodeTypeSubType(uint16_t iNodeTypeSubType,
+                                  uint16_t &oType, uint8_t &oSubtype)
+{
+    oType = static_cast<uint16_t>((iNodeTypeSubType >> 6) & 0x03FF);
+    oSubtype = static_cast<uint8_t>(iNodeTypeSubType & 0x3F);
+}
+
 // io-homecontrol frequencies (Hz)
 #define IOHC_FREQ_1 868250000UL // 868.25 MHz
 #define IOHC_FREQ_2 868950000UL // 868.95 MHz
@@ -493,6 +516,7 @@ constexpr uint32_t IOHC_FREQUENCIES[IOHC_NUM_FREQUENCIES] = {
 #define IOHC_DISCOVERY_EXTENDED_SIZE (IOHC_DISCOVERY_FLAGS_OFFSET + 1)
 #define IOHC_DISCOVERY_TIMESTAMP_OFFSET 7
 #define IOHC_DISCOVERY_FULL_SIZE 9
+#define IOHC_DISCOVERY_RAW_MAX_SIZE 23
 #define IOHC_DISCOVERY_POWER_SAVE_MASK 0x03
 #define IOHC_POWER_SAVE_ALWAYS_ALIVE 0x00
 #define IOHC_POWER_SAVE_LOW_POWER 0x01
@@ -500,21 +524,40 @@ constexpr uint32_t IOHC_FREQUENCIES[IOHC_NUM_FREQUENCIES] = {
 struct IoHomeDiscoveryMetadata
 {
     bool valid = false;
+    bool fullMetadata = false;
     uint16_t deviceType = 0;
     uint8_t subtype = 0;
+    uint16_t nodeTypeSubType = 0;
+    bool hasBackboneId = false;
+    uint32_t backboneId = 0;
     uint8_t manufacturer = 0;
     bool hasPowerClass = false;
     bool lowPower = false;
+    uint8_t rawData[IOHC_DISCOVERY_RAW_MAX_SIZE] = {};
+    uint8_t rawDataLen = 0;
 };
 
 inline IoHomeDiscoveryMetadata decodeDiscoveryMetadata(const uint8_t *iData, uint8_t iDataLen)
 {
     IoHomeDiscoveryMetadata lResult;
-    if (!iData || iDataLen < IOHC_DISCOVERY_METADATA_SIZE) return lResult;
+    if (!iData) return lResult;
+    lResult.rawDataLen = iDataLen < IOHC_DISCOVERY_RAW_MAX_SIZE
+                             ? iDataLen
+                             : IOHC_DISCOVERY_RAW_MAX_SIZE;
+    memcpy(lResult.rawData, iData, lResult.rawDataLen);
+    if (iDataLen < IOHC_DISCOVERY_METADATA_SIZE) return lResult;
     lResult.valid = true;
-    lResult.deviceType = (static_cast<uint16_t>(iData[0]) << 2) |
-                         (static_cast<uint16_t>(iData[1]) >> 6);
-    lResult.subtype = static_cast<uint8_t>(iData[1] & 0x3F);
+    lResult.fullMetadata = iDataLen >= IOHC_DISCOVERY_FULL_SIZE;
+    lResult.deviceType = decodePackedDeviceType(iData[0], iData[1]);
+    lResult.subtype = decodePackedDeviceSubtype(iData[1]);
+    lResult.nodeTypeSubType = encodeNodeTypeSubType(lResult.deviceType, lResult.subtype);
+    if (iDataLen > IOHC_DISCOVERY_BACKBONE_OFFSET + 2)
+    {
+        lResult.hasBackboneId = true;
+        lResult.backboneId = (static_cast<uint32_t>(iData[IOHC_DISCOVERY_BACKBONE_OFFSET]) << 16) |
+                             (static_cast<uint32_t>(iData[IOHC_DISCOVERY_BACKBONE_OFFSET + 1]) << 8) |
+                             static_cast<uint32_t>(iData[IOHC_DISCOVERY_BACKBONE_OFFSET + 2]);
+    }
     if (iDataLen > IOHC_DISCOVERY_MANUFACTURER_OFFSET)
         lResult.manufacturer = iData[IOHC_DISCOVERY_MANUFACTURER_OFFSET];
     if (iDataLen > IOHC_DISCOVERY_FLAGS_OFFSET)
