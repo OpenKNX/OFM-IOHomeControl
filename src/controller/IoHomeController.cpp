@@ -2693,7 +2693,10 @@ bool IoHomeController::captureProtocolIdentity(
     // same path, so the inventory never acquires a second parser or schema.
     const IoHomeProtocolIdentity *lKnown =
         protocolIdentityForIoAddress(iFrame.getSrcNodeId());
-    const bool lNewDiscovery = ioHomeDiscoveryRecordChanged(lKnown, lMetadata);
+    const bool lRegistryAccepted = !lKnown ||
+        ioHomeShouldAcceptProtocolIdentity(*lKnown, lMetadata);
+    const bool lNewDiscovery = lRegistryAccepted &&
+        ioHomeDiscoveryRecordChanged(lKnown, lMetadata);
     rememberProtocolIdentity(iFrame.getSrcNodeId(), lMetadata);
 
     bool lPersistedMetadataChanged = false;
@@ -2704,7 +2707,9 @@ bool IoHomeController::captureProtocolIdentity(
         const IoHomeProtocolIdentity &lPrevious = iChannel->getProtocolIdentity();
         lHadPreviousTimestamp = lPrevious.hasDiscoveryTimestamp;
         lPreviousTimestamp = lPrevious.discoveryTimestamp;
-        lPersistedMetadataChanged =
+        const bool lChannelAccepted =
+            ioHomeShouldAcceptProtocolIdentity(lPrevious, lMetadata);
+        lPersistedMetadataChanged = lChannelAccepted && (
             iChannel->getIoAddress() != iFrame.getSrcNodeId() ||
             lPrevious.valid != lMetadata.valid ||
             lPrevious.fullMetadata != lMetadata.fullMetadata ||
@@ -2717,10 +2722,12 @@ bool IoHomeController::captureProtocolIdentity(
             lPrevious.hasMib != lMetadata.hasMib ||
             lPrevious.multiInfoByte != lMetadata.multiInfoByte ||
             lPrevious.hasDiscoveryTimestamp != lMetadata.hasDiscoveryTimestamp ||
-            lPrevious.discoveryTimestamp != lMetadata.discoveryTimestamp;
-        iChannel->onProtocolIdentity(iFrame.getSrcNodeId(), lMetadata);
-        const bool lPowerClassChanged = learnPowerClassFromDiscovery(
-            iChannel, lMetadata, iFrame.getSrcNodeId(), iSource);
+            lPrevious.discoveryTimestamp != lMetadata.discoveryTimestamp);
+        if (lChannelAccepted)
+            iChannel->onProtocolIdentity(iFrame.getSrcNodeId(), lMetadata);
+        const bool lPowerClassChanged = lChannelAccepted &&
+            learnPowerClassFromDiscovery(
+                iChannel, lMetadata, iFrame.getSrcNodeId(), iSource);
         // The complete identity and its learned wake policy are committed
         // together, so one response causes at most one write.
         if (lPersistedMetadataChanged || lPowerClassChanged)

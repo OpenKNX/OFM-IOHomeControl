@@ -810,7 +810,7 @@ void IoHomecontrol::onDiscoveryResponse(
     // The controller decodes both 0x29 and layout-compatible 0x2B responses
     // once and passes the complete authoritative model to every consumer. Do
     // not let a later partial response discard an already-complete record.
-    if (iMetadata.fullMetadata || !lDevice->protocolIdentity.fullMetadata)
+    if (ioHomeShouldAcceptProtocolIdentity(lDevice->protocolIdentity, iMetadata))
         lDevice->protocolIdentity = iMetadata;
 }
 

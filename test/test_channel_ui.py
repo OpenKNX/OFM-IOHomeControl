@@ -177,7 +177,7 @@ class ChannelUiTest(unittest.TestCase):
         discovery_handler = module_source.split(
             "void IoHomecontrol::onDiscoveryResponse", 1
         )[1].split("void IoHomecontrol::processKeyImportWorkflow", 1)[0]
-        self.assertIn("iMetadata.fullMetadata", discovery_handler)
+        self.assertIn("ioHomeShouldAcceptProtocolIdentity", discovery_handler)
         self.assertIn("lDevice->protocolIdentity = iMetadata", discovery_handler)
 
     def test_protocol_identity_uses_one_structured_persisted_object(self) -> None:

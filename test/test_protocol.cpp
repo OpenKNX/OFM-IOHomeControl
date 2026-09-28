@@ -11123,6 +11123,34 @@ TEST(controller_spe_discovery_registers_same_complete_metadata_model)
     ASSERT_EQ(lMetadata->slaveTimeClass, 3U);
     ASSERT_EQ(lMetadata->discoveryTimestamp, 0x1234U);
     ASSERT_MEM_EQ(lMetadata->rawData, kPayload, sizeof(kPayload));
+
+    // A shorter SPE reply may contain a different MIB, but cannot displace
+    // the full stored model (or its power policy).
+    uint8_t lPartial[7] = {0x00, 0xC0, 0, 0, 0, 2, 0x1C};
+    memcpy(lResponse.data, lPartial, sizeof(lPartial));
+    lResponse.dataLen = sizeof(lPartial);
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    lMetadata = lController.protocolIdentityForIoAddress(lDeviceNodeId);
+    ASSERT_TRUE(lMetadata != nullptr);
+    ASSERT_EQ(lMetadata->profile, 2U);
+    ASSERT_EQ(lMetadata->manufacturerId,
+              static_cast<uint8_t>(IoHomeManufacturer::Somfy));
+    ASSERT_EQ(lMetadata->multiInfoByte, 0xED);
+    ASSERT_EQ(lMetadata->discoveryTimestamp, 0x1234U);
+
+    // A complete 0x29 record is equal-authority and follows the same decoder.
+    lResponse.commandId = IoHomeCommand::DiscoverResponse;
+    memcpy(lResponse.data, kPayload, sizeof(kPayload));
+    lResponse.data[8] = 0x35;
+    lResponse.dataLen = sizeof(kPayload);
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    lMetadata = lController.protocolIdentityForIoAddress(lDeviceNodeId);
+    ASSERT_TRUE(lMetadata != nullptr);
+    ASSERT_EQ(lMetadata->metadataSource,
+              IoHomeMetadataSource::DiscoverResponse);
+    ASSERT_EQ(lMetadata->discoveryTimestamp, 0x1235U);
+    ASSERT_EQ(lMetadata->profile, 2U);
+    ASSERT_EQ(lMetadata->subProfile, 1U);
 }
 
 TEST(controller_default_2w_pairing_confirms_discovery_before_key_init)
