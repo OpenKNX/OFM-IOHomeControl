@@ -2648,6 +2648,7 @@ TEST(general_info1_product_signature_is_first_ten_bytes_and_binary_safe)
         0x00, 0xFF, 0x10, 0x3F, 0x80, 0x7F, 0x01,
         0x02, 0x03, 0x04, 0xAA, 0xBB, 0xCC, 0xDD};
     IoHomeProductIdentityEvidence lEvidence;
+    ASSERT_EQ(lEvidence.manufacturerSubType, 0U);
     memcpy(lEvidence.generalInfo1, kBinaryGi1, sizeof(kBinaryGi1));
     lEvidence.generalInfo1Len = sizeof(kBinaryGi1);
 

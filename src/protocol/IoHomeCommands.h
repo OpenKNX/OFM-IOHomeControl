@@ -740,6 +740,9 @@ static constexpr uint8_t IOHC_DEVICE_INFO_RAW_MAX_SIZE = 23;
 // must never depend on these fields or on a successful product match.
 struct IoHomeProductIdentityEvidence
 {
+    // Vendor/commercial classification only; zero means unknown or unmatched.
+    // This must never select generic protocol behavior or replace profile.
+    uint16_t manufacturerSubType = 0;
     uint8_t nameResponse[IOHC_DEVICE_INFO_RAW_MAX_SIZE] = {};
     uint8_t nameResponseLen = 0;
     uint8_t generalInfo1[IOHC_DEVICE_INFO_RAW_MAX_SIZE] = {};
