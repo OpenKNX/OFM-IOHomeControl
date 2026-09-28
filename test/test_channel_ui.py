@@ -78,14 +78,37 @@ class ChannelUiTest(unittest.TestCase):
         write_flash = source.split("void IoHomecontrol::writeFlash()", 1)[1].split(
             "void IoHomecontrol::readFlash", 1
         )[0]
-        self.assertIn("openknx.flash.writeByte(15)", write_flash)
+        self.assertIn("openknx.flash.writeByte(16)", write_flash)
+        self.assertIn("encodeDiscoveryMetadata(", write_flash)
 
         read_flash = source.split("void IoHomecontrol::readFlash", 1)[1]
         current_layout_branch = read_flash.split("else if", 1)[0]
-        self.assertIn("lVersion == 15", current_layout_branch)
-        self.assertIn("kFlashRecordV15 = 57", current_layout_branch)
-        self.assertIn("decodeDiscoveryMib(lState.discoveryMetadata, lMib)", current_layout_branch)
-        self.assertIn("lState.discoveryMetadata.discoveryTimestamp = lDiscoveryTimestamp", current_layout_branch)
+        self.assertIn("lVersion == 16", current_layout_branch)
+        self.assertIn("kFlashRecordV16 = 57", current_layout_branch)
+        self.assertIn("decodeDiscoveryMetadata(lDiscoveryRaw, lDecodeLen)", current_layout_branch)
+        self.assertIn("decodeDiscoveryMib(lState.discoveryMetadata, lMib)", read_flash)
+        self.assertIn("lState.discoveryMetadata.discoveryTimestamp = lDiscoveryTimestamp", read_flash)
+
+    def test_discovery_consumers_share_complete_metadata_model(self) -> None:
+        header = (ROOT / "src" / "IoHomecontrol.h").read_text()
+        key_import = header.split("struct KeyImportDevice", 1)[1].split("};", 1)[0]
+        self.assertIn("IoHomeDiscoveryMetadata discoveryMetadata", key_import)
+        self.assertNotIn("uint16_t deviceType", key_import)
+        self.assertNotIn("uint8_t subtype", key_import)
+        self.assertNotIn("uint8_t manufacturer", key_import)
+        self.assertNotIn("uint8_t powerClass", key_import)
+
+        module_source = (ROOT / "src" / "IoHomecontrol.cpp").read_text()
+        discovery_handler = module_source.split(
+            "void IoHomecontrol::onDiscoveryResponse", 1
+        )[1].split("void IoHomecontrol::processKeyImportWorkflow", 1)[0]
+        self.assertIn("const IoHomeDiscoveryMetadata &iMetadata", discovery_handler)
+        self.assertNotIn("decodeDiscoveryMetadata(", discovery_handler)
+
+        controller_source = (ROOT / "src" / "controller" / "IoHomeController.cpp").read_text()
+        self.assertIn(
+            "mModule->onDiscoveryResponse(mRxFrame, lMetadata)", controller_source
+        )
 
     def test_selection_table_matches_shared_layout(self) -> None:
         selection = self.share.find(

@@ -585,7 +585,9 @@ struct IoHomeDiscoveryMetadata
     bool ioMember = false;
     bool rfSupport = false;
     bool syncControlGroupCandidate = false;
-    uint8_t turnaroundClass = 0;
+    // 0..3 only when a MIB was present. 0xFF keeps an absent MIB distinct
+    // from the valid KLF turnaround class 0.
+    uint8_t turnaroundClass = 0xFF;
     uint8_t turnaroundKlfValue = 0;
     bool turnaroundUnitConfirmed = false;
     bool hasDiscoveryTimestamp = false;
@@ -668,6 +670,50 @@ inline IoHomeDiscoveryMetadata decodeDiscoveryMetadata(const uint8_t *iData, uin
             static_cast<uint16_t>(iData[IOHC_DISCOVERY_TIMESTAMP_OFFSET + 1]);
     }
     return lResult;
+}
+
+inline uint8_t encodeDiscoveryMetadata(const IoHomeDiscoveryMetadata &iMetadata,
+                                       uint8_t *oData, uint8_t iCapacity)
+{
+    if (!iMetadata.valid || !oData)
+        return 0;
+
+    uint8_t lLength = IOHC_DISCOVERY_METADATA_SIZE;
+    if (iMetadata.hasBackboneId)
+        lLength = IOHC_DISCOVERY_MANUFACTURER_OFFSET;
+    if (iMetadata.manufacturer != 0 || iMetadata.rawDataLen > IOHC_DISCOVERY_MANUFACTURER_OFFSET)
+        lLength = IOHC_DISCOVERY_MANUFACTURER_OFFSET + 1;
+    if (iMetadata.hasMib)
+        lLength = IOHC_DISCOVERY_EXTENDED_SIZE;
+    if (iMetadata.hasDiscoveryTimestamp || iMetadata.fullMetadata)
+        lLength = IOHC_DISCOVERY_FULL_SIZE;
+    if (iCapacity < lLength)
+        return 0;
+
+    memset(oData, 0, lLength);
+    encodePackedDeviceType(iMetadata.deviceType, iMetadata.subtype,
+                           oData[0], oData[1]);
+    if (lLength > IOHC_DISCOVERY_BACKBONE_OFFSET + 2)
+    {
+        oData[IOHC_DISCOVERY_BACKBONE_OFFSET] =
+            static_cast<uint8_t>((iMetadata.backboneId >> 16) & 0xFF);
+        oData[IOHC_DISCOVERY_BACKBONE_OFFSET + 1] =
+            static_cast<uint8_t>((iMetadata.backboneId >> 8) & 0xFF);
+        oData[IOHC_DISCOVERY_BACKBONE_OFFSET + 2] =
+            static_cast<uint8_t>(iMetadata.backboneId & 0xFF);
+    }
+    if (lLength > IOHC_DISCOVERY_MANUFACTURER_OFFSET)
+        oData[IOHC_DISCOVERY_MANUFACTURER_OFFSET] = iMetadata.manufacturer;
+    if (lLength > IOHC_DISCOVERY_FLAGS_OFFSET)
+        oData[IOHC_DISCOVERY_FLAGS_OFFSET] = iMetadata.mib;
+    if (lLength > IOHC_DISCOVERY_TIMESTAMP_OFFSET + 1)
+    {
+        oData[IOHC_DISCOVERY_TIMESTAMP_OFFSET] =
+            static_cast<uint8_t>((iMetadata.discoveryTimestamp >> 8) & 0xFF);
+        oData[IOHC_DISCOVERY_TIMESTAMP_OFFSET + 1] =
+            static_cast<uint8_t>(iMetadata.discoveryTimestamp & 0xFF);
+    }
+    return lLength;
 }
 
 inline const char *ioHomeCommandResultName(uint8_t iCode)

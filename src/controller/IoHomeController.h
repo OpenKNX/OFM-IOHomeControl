@@ -1337,7 +1337,8 @@ private:
                                       const IoHomeQueueEntry &iEntry) const;
   TwoWayDiscoverySettings pairingDiscoverySettings() const;
   bool learnPowerClassFromDiscovery(IoHomecontrolChannel *iChannel,
-                                    const IoHomeFrame &iFrame,
+                                    const IoHomeDiscoveryMetadata &iMetadata,
+                                    uint32_t iSourceNodeId,
                                     const char *iSource);
   bool captureDiscoveryMetadata(IoHomecontrolChannel *iChannel,
                                 const IoHomeFrame &iFrame,

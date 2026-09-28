@@ -474,7 +474,8 @@ public:
     mLastPassiveKeyResult = iResult;
   }
 
-  void onDiscoveryResponse(const IoHomeFrame &) {}
+  void onDiscoveryResponse(const IoHomeFrame &,
+                           const IoHomeDiscoveryMetadata &) {}
 
   void onKeyImportCandidateObserved(uint32_t iNodeId)
   {

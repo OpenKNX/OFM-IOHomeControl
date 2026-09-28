@@ -56,7 +56,8 @@ public:
   bool ensureOneWayControllerProfile(IoHomecontrolChannel *iChannel);
   IoHomeRemoteMap &remoteMap();
   void onPassiveKeyCaptured(const IoHomeController::PassiveKeyResult &iResult);
-  void onDiscoveryResponse(const IoHomeFrame &iFrame);
+  void onDiscoveryResponse(const IoHomeFrame &iFrame,
+                           const IoHomeDiscoveryMetadata &iMetadata);
   void onKeyImportCandidateObserved(uint32_t iNodeId);
   void onAuthenticatedDirectedDiscovery(uint32_t iNodeId);
 
@@ -115,10 +116,6 @@ private:
   {
     bool valid = false;
     uint32_t nodeId = 0;
-    uint16_t deviceType = 0;
-    uint8_t subtype = 0;
-    uint8_t manufacturer = 0;
-    uint8_t powerClass = 0; // 0=unknown, 1=always alive, 2=low power
     IoHomeDiscoveryMetadata discoveryMetadata{};
   };
 

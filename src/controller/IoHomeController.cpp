@@ -2552,24 +2552,14 @@ uint16_t IoHomeController::preambleForQueued2WAttempt(const IoHomeFrame &,
 }
 
 bool IoHomeController::learnPowerClassFromDiscovery(IoHomecontrolChannel *iChannel,
-                                                     const IoHomeFrame &iFrame,
+                                                     const IoHomeDiscoveryMetadata &iMetadata,
+                                                     uint32_t iSourceNodeId,
                                                      const char *iSource)
 {
-    if (!iChannel || iChannel->is1W() ||
-        (iFrame.commandId != IoHomeCommand::DiscoverResponse &&
-         iFrame.commandId != IoHomeCommand::DiscoverSPEResponse) ||
-        iFrame.dataLen < IOHC_DISCOVERY_EXTENDED_SIZE)
-    {
+    if (!iChannel || iChannel->is1W() || !iMetadata.hasPowerClass)
         return false;
-    }
 
-    const IoHomeDiscoveryMetadata lMetadata = decodeDiscoveryMetadata(iFrame.data, iFrame.dataLen);
-    if (!lMetadata.hasPowerClass)
-    {
-        return false;
-    }
-
-    const bool lLowPower = lMetadata.lowPower;
+    const bool lLowPower = iMetadata.lowPower;
     const bool lChanged = !iChannel->hasLearnedLowPower2W() ||
                           iChannel->isLowPower2W() != lLowPower;
     iChannel->setLowPower2W(lLowPower);
@@ -2577,10 +2567,11 @@ bool IoHomeController::learnPowerClassFromDiscovery(IoHomecontrolChannel *iChann
     {
         logInfoP("2W power class learned from %s for 0x%06X: %s",
                  iSource ? iSource : "discovery",
-                 iFrame.getSrcNodeId(),
+                 iSourceNodeId,
                  lLowPower ? "low-power" : "always-alive");
-        openknx.flash.save();
     }
+    // Native-test logging macros discard their arguments entirely.
+    (void)iSourceNodeId;
     return lChanged;
 }
 
@@ -2616,10 +2607,6 @@ bool IoHomeController::captureDiscoveryMetadata(
         const IoHomeDiscoveryMetadata &lPrevious = iChannel->getDiscoveryMetadata();
         lHadPreviousTimestamp = lPrevious.hasDiscoveryTimestamp;
         lPreviousTimestamp = lPrevious.discoveryTimestamp;
-        const bool lPowerClassWillChange =
-            lMetadata.hasPowerClass &&
-            (!iChannel->hasLearnedLowPower2W() ||
-             iChannel->isLowPower2W() != lMetadata.lowPower);
         lPersistedMetadataChanged =
             iChannel->getDiscoveryNodeId() != iFrame.getSrcNodeId() ||
             lPrevious.valid != lMetadata.valid ||
@@ -2634,10 +2621,11 @@ bool IoHomeController::captureDiscoveryMetadata(
             lPrevious.hasDiscoveryTimestamp != lMetadata.hasDiscoveryTimestamp ||
             lPrevious.discoveryTimestamp != lMetadata.discoveryTimestamp;
         iChannel->onDiscoveryMetadata(iFrame.getSrcNodeId(), lMetadata);
-        // The immediately following power-class learner already schedules a
-        // save when that compatibility field changes. Coalesce both updates
-        // into one flash write, while still persisting metadata-only changes.
-        if (lPersistedMetadataChanged && !lPowerClassWillChange)
+        const bool lPowerClassChanged = learnPowerClassFromDiscovery(
+            iChannel, lMetadata, iFrame.getSrcNodeId(), iSource);
+        // The complete discovery model and its compatibility power-class view
+        // are committed together, so one response causes at most one write.
+        if (lPersistedMetadataChanged || lPowerClassChanged)
             openknx.flash.save();
     }
 
@@ -5066,9 +5054,6 @@ void IoHomeController::loop()
                         // Cap subsequent directed START preambles to the exact
                         // discovery request that produced this correlated 0x29.
                         mPairAcceptedDiscoveryPreamble = mPairDiscoveryTxPreamble;
-                        if (lPairChannel)
-                            learnPowerClassFromDiscovery(lPairChannel,
-                                                         mRxFrame, "pairing discovery");
                         mPairingFreqIdx = mLastResponseFreqIdx;
                         mPairKeyExchangeAttempts = 0;
                         mPairKeyExchangeStartTime = 0;
@@ -8751,12 +8736,11 @@ void IoHomeController::dispatchRxFrame()
         (mRxFrame.commandId == IoHomeCommand::DiscoverResponse ||
          mRxFrame.commandId == IoHomeCommand::DiscoverSPEResponse))
     {
-        mModule->onDiscoveryResponse(mRxFrame);
         IoHomecontrolChannel *lChannel = channelForNode(lSrcNode);
+        IoHomeDiscoveryMetadata lMetadata;
         captureDiscoveryMetadata(lChannel, mRxFrame,
-                                 "roll-call discovery");
-        learnPowerClassFromDiscovery(lChannel, mRxFrame,
-                                     "roll-call discovery");
+                                 "roll-call discovery", &lMetadata);
+        mModule->onDiscoveryResponse(mRxFrame, lMetadata);
         mModule->remoteMap().observeAddress(lSrcNode);
         recordScanFrame(mRxFrame, mRxBuffer, mRxRawLen, mRadio.lastRssi(), mCurrentFreqIdx);
         updateNodeStats(lSrcNode, mRadio.lastRssi(), mRxFrame.commandId);

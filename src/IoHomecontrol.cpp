@@ -764,7 +764,8 @@ void IoHomecontrol::onAuthenticatedDirectedDiscovery(uint32_t iNodeId)
                  iNodeId);
 }
 
-void IoHomecontrol::onDiscoveryResponse(const IoHomeFrame &iFrame)
+void IoHomecontrol::onDiscoveryResponse(
+    const IoHomeFrame &iFrame, const IoHomeDiscoveryMetadata &iMetadata)
 {
     if (mKeyImportPhase != KeyImportPhase::Scanning ||
         (iFrame.commandId != IoHomeCommand::DiscoverResponse &&
@@ -781,16 +782,9 @@ void IoHomecontrol::onDiscoveryResponse(const IoHomeFrame &iFrame)
     if (!lDevice)
         return;
 
-    const IoHomeDiscoveryMetadata lMetadata = decodeDiscoveryMetadata(iFrame.data, iFrame.dataLen);
-    lDevice->discoveryMetadata = lMetadata;
-    if (lMetadata.valid)
-    {
-        lDevice->deviceType = lMetadata.deviceType;
-        lDevice->subtype = lMetadata.subtype;
-        lDevice->manufacturer = lMetadata.manufacturer;
-    }
-    if (lMetadata.hasPowerClass)
-        lDevice->powerClass = lMetadata.lowPower ? 2 : 1;
+    // The controller decodes both 0x29 and layout-compatible 0x2B responses
+    // once and passes the complete authoritative model to every consumer.
+    lDevice->discoveryMetadata = iMetadata;
 }
 
 void IoHomecontrol::processKeyImportWorkflow()
@@ -933,16 +927,12 @@ bool IoHomecontrol::applyKeyImportDeviceToChannel(const KeyImportDevice &iDevice
     lChannel->setNodeId(iDevice.nodeId);
     lChannel->setEncryptionKey(mKeyImportKey.key);
     lChannel->setOneWayEnrolled(false);
-    if (iDevice.powerClass == 2)
-        lChannel->setLowPower2W(true);
-    else if (iDevice.powerClass == 1)
-        lChannel->setLowPower2W(false);
+    if (iDevice.discoveryMetadata.hasPowerClass)
+        lChannel->setLowPower2W(iDevice.discoveryMetadata.lowPower);
     else
         lChannel->clearLearnedLowPower2W();
     if (iDevice.discoveryMetadata.valid)
         lChannel->onDiscoveryMetadata(iDevice.nodeId, iDevice.discoveryMetadata);
-    else
-        lChannel->onDeviceInfo(iDevice.deviceType, iDevice.subtype, iDevice.manufacturer);
     logInfoP("ETS key import: assigned 0x%06X to channel %u",
              iDevice.nodeId, static_cast<unsigned>(iChannelIndex + 1));
     return true;
@@ -2472,11 +2462,14 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
             resultData[3] = (lDevice.nodeId >> 16) & 0xFF;
             resultData[4] = (lDevice.nodeId >> 8) & 0xFF;
             resultData[5] = lDevice.nodeId & 0xFF;
-            resultData[6] = lDevice.deviceType & 0xFF;
-            resultData[7] = (lDevice.deviceType >> 8) & 0x03;
-            resultData[8] = lDevice.subtype;
-            resultData[9] = lDevice.manufacturer;
-            resultData[10] = lDevice.powerClass;
+            const IoHomeDiscoveryMetadata &lMetadata = lDevice.discoveryMetadata;
+            resultData[6] = lMetadata.deviceType & 0xFF;
+            resultData[7] = (lMetadata.deviceType >> 8) & 0x03;
+            resultData[8] = lMetadata.subtype;
+            resultData[9] = lMetadata.manufacturer;
+            resultData[10] = lMetadata.hasPowerClass
+                                 ? (lMetadata.lowPower ? 2 : 1)
+                                 : 0;
             resultLength = 11;
         }
         return true;
@@ -2577,18 +2570,15 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
 }
 
 // --- Flash persistence ---
-// Layout v15: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
+// Layout v16: version(1) + 2W systemKey(16) + 2W ownNodeId(3) +
 // default 1W broadcastType(1) + numChannels(1) +
 // per-channel: index(1) + flags(1) + actuatorNodeId(3) + actuatorKey(16) +
 // 1W reservedSeq(2) + 1W controllerNodeId(3) + 1W controllerKey(16) +
 // 1W manufacturer(1) + discoveryFlags(1) + discoveryNodeId(3) +
-// discoveryType(2) + discoverySubtype(1) + backboneId(3) +
-// discoveryManufacturer(1) + rawMib(1) + discoveryTimestamp(2) =
-// 57 bytes + remoteMap
+// discoveryRawLen(1) + discoveryRaw(9) = 57 bytes + remoteMap
 // flags: bit0=paired, bit1=is1W, bit2=2W low-power,
 //        bit3=2W power class learned, bit4=1W enrolled
-// discoveryFlags: bit0=valid, bit1=full payload, bit2=backbone present,
-//                 bit3=MIB present, bit4=timestamp present
+// discoveryFlags: bit0=valid (remaining bits reserved)
 
 uint16_t IoHomecontrol::flashSize()
 {
@@ -2597,7 +2587,7 @@ uint16_t IoHomecontrol::flashSize()
 
 void IoHomecontrol::writeFlash()
 {
-    openknx.flash.writeByte(15); // v14 + raw discovery timestamp
+    openknx.flash.writeByte(16); // canonical discovery payload; v14/v15 remain readable
 
     // Write system key
     const uint8_t *lSysKey = mController.getSystemKey();
@@ -2646,32 +2636,17 @@ void IoHomecontrol::writeFlash()
         openknx.flash.writeByte(mChannels[i]->getOneWayControllerManufacturer());
 
         const IoHomeDiscoveryMetadata &lMetadata = mChannels[i]->getDiscoveryMetadata();
-        uint8_t lMetadataFlags = 0;
-        if (lMetadata.valid)
-            lMetadataFlags |= 0x01;
-        if (lMetadata.fullMetadata)
-            lMetadataFlags |= 0x02;
-        if (lMetadata.hasBackboneId)
-            lMetadataFlags |= 0x04;
-        if (lMetadata.hasMib)
-            lMetadataFlags |= 0x08;
-        if (lMetadata.hasDiscoveryTimestamp)
-            lMetadataFlags |= 0x10;
-        openknx.flash.writeByte(lMetadataFlags);
+        openknx.flash.writeByte(lMetadata.valid ? 0x01 : 0x00);
         const uint32_t lDiscoveryNodeId = mChannels[i]->getDiscoveryNodeId();
         openknx.flash.writeByte((lDiscoveryNodeId >> 16) & 0xFF);
         openknx.flash.writeByte((lDiscoveryNodeId >> 8) & 0xFF);
         openknx.flash.writeByte(lDiscoveryNodeId & 0xFF);
-        openknx.flash.writeByte((lMetadata.deviceType >> 8) & 0xFF);
-        openknx.flash.writeByte(lMetadata.deviceType & 0xFF);
-        openknx.flash.writeByte(lMetadata.subtype);
-        openknx.flash.writeByte((lMetadata.backboneId >> 16) & 0xFF);
-        openknx.flash.writeByte((lMetadata.backboneId >> 8) & 0xFF);
-        openknx.flash.writeByte(lMetadata.backboneId & 0xFF);
-        openknx.flash.writeByte(lMetadata.manufacturer);
-        openknx.flash.writeByte(lMetadata.mib);
-        openknx.flash.writeByte((lMetadata.discoveryTimestamp >> 8) & 0xFF);
-        openknx.flash.writeByte(lMetadata.discoveryTimestamp & 0xFF);
+        uint8_t lDiscoveryRaw[IOHC_DISCOVERY_FULL_SIZE] = {};
+        const uint8_t lDiscoveryRawLen = encodeDiscoveryMetadata(
+            lMetadata, lDiscoveryRaw, sizeof(lDiscoveryRaw));
+        openknx.flash.writeByte(lDiscoveryRawLen);
+        for (uint8_t k = 0; k < sizeof(lDiscoveryRaw); k++)
+            openknx.flash.writeByte(lDiscoveryRaw[k]);
     }
 
     // Write remote map
@@ -2690,6 +2665,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
     constexpr uint16_t kFlashRecordV9 = 43;
     constexpr uint16_t kFlashRecordV14 = 55;
     constexpr uint16_t kFlashRecordV15 = 57;
+    constexpr uint16_t kFlashRecordV16 = 57;
     constexpr uint16_t kFlashHeaderV8 = 1 + 16 + 3 + 1 + 1 + 1;
     constexpr uint16_t kFlashHeaderV7 = 1 + 16 + 3 + 1 + 1;
     constexpr uint16_t kFlashHeaderV6 = 1 + 16 + 1;
@@ -2701,7 +2677,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
     uint8_t lVersion = openknx.flash.readByte();
 
-    if (lVersion == 15 || lVersion == 14 || lVersion == 13 || lVersion == 12 || lVersion == 11 ||
+    if (lVersion == 16 || lVersion == 15 || lVersion == 14 || lVersion == 13 || lVersion == 12 || lVersion == 11 ||
         lVersion == 10 || lVersion == 9)
     {
         if (iSize < kFlashHeaderV9)
@@ -2720,7 +2696,8 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
         const uint8_t lCount = openknx.flash.readByte();
         const uint8_t lConfiguredCount = mNumChannels > 0 ? mNumChannels : configuredChannelCount();
-        const uint16_t lRecordSize = lVersion >= 15 ? kFlashRecordV15
+        const uint16_t lRecordSize = lVersion >= 16 ? kFlashRecordV16
+                                     : lVersion >= 15 ? kFlashRecordV15
                                      : lVersion >= 14 ? kFlashRecordV14
                                                       : kFlashRecordV9;
         const uint8_t lReadCount = clampFlashRecordCount(lCount, lConfiguredCount, iSize, kFlashHeaderV9, lRecordSize);
@@ -2757,7 +2734,27 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
             uint8_t lDiscoveryManufacturer = 0;
             uint8_t lMib = 0;
             uint16_t lDiscoveryTimestamp = 0;
-            if (lVersion >= 14)
+            IoHomeDiscoveryMetadata lRestoredDiscoveryMetadata;
+            if (lVersion >= 16)
+            {
+                lMetadataFlags = openknx.flash.readByte();
+                lDiscoveryNodeId = ((uint32_t)openknx.flash.readByte() << 16) |
+                                   ((uint32_t)openknx.flash.readByte() << 8) |
+                                   (uint32_t)openknx.flash.readByte();
+                const uint8_t lStoredRawLen = openknx.flash.readByte();
+                uint8_t lDiscoveryRaw[IOHC_DISCOVERY_FULL_SIZE] = {};
+                for (uint8_t k = 0; k < sizeof(lDiscoveryRaw); k++)
+                    lDiscoveryRaw[k] = openknx.flash.readByte();
+                if ((lMetadataFlags & 0x01) != 0)
+                {
+                    const uint8_t lDecodeLen = lStoredRawLen < sizeof(lDiscoveryRaw)
+                                                   ? lStoredRawLen
+                                                   : sizeof(lDiscoveryRaw);
+                    lRestoredDiscoveryMetadata =
+                        decodeDiscoveryMetadata(lDiscoveryRaw, lDecodeLen);
+                }
+            }
+            else if (lVersion >= 14)
             {
                 lMetadataFlags = openknx.flash.readByte();
                 lDiscoveryNodeId = ((uint32_t)openknx.flash.readByte() << 16) |
@@ -2798,7 +2795,15 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
             lState.oneWayControllerNodeId = lControllerNodeId;
             memcpy(lState.oneWayControllerKey, lControllerKey, sizeof(lState.oneWayControllerKey));
             lState.oneWayControllerManufacturer = lManufacturer;
-            if ((lMetadataFlags & 0x01) != 0)
+            if (lVersion >= 16)
+            {
+                if (lRestoredDiscoveryMetadata.valid)
+                {
+                    lState.discoveryNodeId = lDiscoveryNodeId;
+                    lState.discoveryMetadata = lRestoredDiscoveryMetadata;
+                }
+            }
+            else if ((lMetadataFlags & 0x01) != 0)
             {
                 lState.discoveryNodeId = lDiscoveryNodeId;
                 lState.discoveryMetadata.valid = true;

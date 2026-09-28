@@ -2340,8 +2340,68 @@ TEST(discovery_response_metadata_uses_full_layout_offsets)
     ASSERT_EQ(lTypeOnly.manufacturer, 0);
     ASSERT_TRUE(!lTypeOnly.hasMib);
     ASSERT_EQ(lTypeOnly.powerMode, IoHomePowerMode::Unknown);
+    ASSERT_EQ(lTypeOnly.turnaroundClass, 0xFF);
+    ASSERT_EQ(lTypeOnly.turnaroundKlfValue, 0);
     ASSERT_TRUE(!lTypeOnly.hasDiscoveryTimestamp);
     ASSERT_TRUE(!lTypeOnly.hasPowerClass);
+}
+
+TEST(discovery_complete_model_roundtrips_and_matches_normal_and_spe_responses)
+{
+    const uint8_t lPayload[IOHC_DISCOVERY_FULL_SIZE] = {
+        0x04, 0x41, 0x12, 0x34, 0x56, 0x02, 0x6C, 0xAB, 0xCD};
+    const IoHomeDiscoveryMetadata lOriginal =
+        decodeDiscoveryMetadata(lPayload, sizeof(lPayload));
+    ASSERT_TRUE(lOriginal.valid);
+    ASSERT_TRUE(lOriginal.fullMetadata);
+
+    uint8_t lEncoded[IOHC_DISCOVERY_FULL_SIZE] = {};
+    ASSERT_EQ(encodeDiscoveryMetadata(lOriginal, lEncoded, sizeof(lEncoded)),
+              IOHC_DISCOVERY_FULL_SIZE);
+    ASSERT_MEM_EQ(lEncoded, lPayload, sizeof(lPayload));
+
+    IoHomeDiscoveryMetadata lDecodedByCommand[2];
+    const IoHomeCommand lCommands[] = {
+        IoHomeCommand::DiscoverResponse,
+        IoHomeCommand::DiscoverSPEResponse,
+    };
+    for (uint8_t i = 0; i < 2; ++i)
+    {
+        IoHomeFrame lFrame;
+        lFrame.init();
+        lFrame.ctrlByte0 = IOHC_CTRL0_END;
+        lFrame.setSrcNode(0x485B37);
+        lFrame.setDestNode(0x1A380B);
+        lFrame.commandId = lCommands[i];
+        memcpy(lFrame.data, lPayload, sizeof(lPayload));
+        lFrame.dataLen = sizeof(lPayload);
+        lFrame.hasHmac = false;
+
+        uint8_t lWire[IOHC_FRAME_BUFFER_SIZE] = {};
+        const uint8_t lWireLen = serializeFrameForTest(lFrame, lWire, sizeof(lWire));
+        IoHomeFrame lParsed;
+        ASSERT_TRUE(deserializeFrameForTest(lParsed, lWire, lWireLen));
+        lDecodedByCommand[i] =
+            decodeDiscoveryMetadata(lParsed.data, lParsed.dataLen);
+    }
+
+    ASSERT_EQ(lDecodedByCommand[0].deviceType, lDecodedByCommand[1].deviceType);
+    ASSERT_EQ(lDecodedByCommand[0].subtype, lDecodedByCommand[1].subtype);
+    ASSERT_EQ(lDecodedByCommand[0].backboneId, lDecodedByCommand[1].backboneId);
+    ASSERT_EQ(lDecodedByCommand[0].manufacturer, lDecodedByCommand[1].manufacturer);
+    ASSERT_EQ(lDecodedByCommand[0].mib, lDecodedByCommand[1].mib);
+    ASSERT_EQ(lDecodedByCommand[0].powerMode, lDecodedByCommand[1].powerMode);
+    ASSERT_EQ(lDecodedByCommand[0].ioMember, lDecodedByCommand[1].ioMember);
+    ASSERT_EQ(lDecodedByCommand[0].rfSupport, lDecodedByCommand[1].rfSupport);
+    ASSERT_EQ(lDecodedByCommand[0].syncControlGroupCandidate,
+              lDecodedByCommand[1].syncControlGroupCandidate);
+    ASSERT_EQ(lDecodedByCommand[0].turnaroundClass,
+              lDecodedByCommand[1].turnaroundClass);
+    ASSERT_EQ(lDecodedByCommand[0].discoveryTimestamp,
+              lDecodedByCommand[1].discoveryTimestamp);
+    ASSERT_MEM_EQ(lDecodedByCommand[0].rawData,
+                  lDecodedByCommand[1].rawData,
+                  lDecodedByCommand[0].rawDataLen);
 }
 
 TEST(discovery_timestamp_is_big_endian_raw_and_requires_both_bytes)
