@@ -936,6 +936,33 @@ TEST(diagnostic_raw_fp_payload_is_exact_and_rejects_unverified_indices)
     ASSERT_TRUE(!ioHomeBuildDiagnosticFpRawPayload(16, 0x1234, lPayload));
 }
 
+TEST(fp1_to_fp16_masks_and_refresh_value_order_are_golden)
+{
+    for (uint8_t lIndex = 1; lIndex <= 16; ++lIndex)
+    {
+        const IoHomeFpSelection lSelection = ioHomeFpSelection(lIndex);
+        const uint8_t lExpected = static_cast<uint8_t>(0x80U >> ((lIndex - 1) % 8));
+        ASSERT_EQ(lSelection.fpi1, lIndex <= 8 ? lExpected : 0);
+        ASSERT_EQ(lSelection.fpi2, lIndex >= 9 ? lExpected : 0);
+    }
+    const uint8_t lIndices[] = {16, 3, 9};
+    const uint8_t lExtended[] = {0x10, 0x01, 0x22};
+    uint8_t lPayload[5] = {};
+    uint8_t lLength = 0;
+    ASSERT_TRUE(ioHomeBuildFpRefreshRepresentation(lIndices, lExtended, 3,
+                                                   lPayload, lLength));
+    const uint8_t kExpected[] = {0x20, 0x01, 0x81, 0x22, 0x10};
+    ASSERT_EQ(lLength, sizeof(kExpected));
+    ASSERT_MEM_EQ(lPayload, kExpected, sizeof(kExpected));
+    const uint8_t lDuplicate[] = {3, 3};
+    ASSERT_TRUE(!ioHomeBuildFpRefreshRepresentation(lDuplicate, lExtended, 2,
+                                                    lPayload, lLength));
+    ASSERT_EQ(lLength, 0);
+    const uint8_t lTooMany[] = {1, 2, 3, 4};
+    IoHomeFpSelection lSelection;
+    ASSERT_TRUE(!ioHomeFpSelectIndices(lTooMany, 4, lSelection));
+}
+
 // =====================================================================
 // 13. IV checksum cross-check against reference algorithm
 // =====================================================================
