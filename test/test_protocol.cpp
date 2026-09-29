@@ -2520,6 +2520,24 @@ TEST(discovery_multi_information_byte_decodes_klf_semantics_without_coercion)
     ASSERT_TRUE(lReserved.syncControlGroupCandidate);
 }
 
+TEST(discovery_multi_information_byte_roundtrips_all_raw_values)
+{
+    for (unsigned lRaw = 0; lRaw <= 0xFF; ++lRaw)
+    {
+        uint8_t lData[IOHC_DISCOVERY_FULL_SIZE] = {
+            0x00, 0x80, 0x12, 0x34, 0x56, 0x01,
+            static_cast<uint8_t>(lRaw), 0xAB, 0xCD};
+        const IoHomeProtocolIdentity lIdentity =
+            decodeProtocolIdentity(lData, sizeof(lData));
+        ASSERT_EQ(lIdentity.multiInfoByte, lRaw);
+        ASSERT_MEM_EQ(lIdentity.rawData, lData, sizeof(lData));
+        uint8_t lEncoded[IOHC_DISCOVERY_FULL_SIZE] = {};
+        ASSERT_EQ(encodeProtocolIdentity(lIdentity, lEncoded, sizeof(lEncoded)),
+                  sizeof(lData));
+        ASSERT_MEM_EQ(lEncoded, lData, sizeof(lData));
+    }
+}
+
 TEST(discovery_type_subtype_helpers_cover_klf_profiles_and_reserved_values)
 {
     struct TestCase
