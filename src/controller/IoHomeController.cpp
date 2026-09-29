@@ -2083,7 +2083,8 @@ bool IoHomeController::sendOneWayChannelRawExecute(IoHomecontrolChannel *iChanne
 }
 
 bool IoHomeController::sendRawTwoWayExecute(IoHomecontrolChannel *iChannel,
-                                            const uint8_t *iPayload, uint8_t iPayloadLen)
+                                            const uint8_t *iPayload, uint8_t iPayloadLen,
+                                            bool iSingleAttempt)
 {
     if (!iChannel || iChannel->is1W() || !iChannel->isPaired() ||
         iPayload == nullptr ||
@@ -2107,7 +2108,8 @@ bool IoHomeController::sendRawTwoWayExecute(IoHomecontrolChannel *iChannel,
     memcpy(lEntry.twoWayRawData, iPayload, iPayloadLen);
     lEntry.sourceChannelIndex = channelIndexFor(iChannel);
     lEntry.retries = 0;
-    lEntry.maxAttempts = (iPayload[2] == 0xD8) ? 1 : IOHC_EXCHANGE_MAX_ATTEMPTS;
+    lEntry.maxAttempts = (iSingleAttempt || iPayload[2] == 0xD8)
+                             ? 1 : IOHC_EXCHANGE_MAX_ATTEMPTS;
     lEntry.retryReason = TwoWayRetryReason::Initial;
     lEntry.background = false;
     lEntry.active = true;

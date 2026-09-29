@@ -483,7 +483,8 @@ public:
   // retries, challenge-response authentication, and result handling remain
   // the same as for ordinary registered-device commands.
   bool sendRawTwoWayExecute(IoHomecontrolChannel *iChannel,
-                            const uint8_t *iPayload, uint8_t iPayloadLen);
+                            const uint8_t *iPayload, uint8_t iPayloadLen,
+                            bool iSingleAttempt = false);
   static bool buildRawTwoWayExecuteFrame(IoHomeFrame &oFrame,
                                          uint32_t iSrcNodeId,
                                          uint32_t iDestNodeId,

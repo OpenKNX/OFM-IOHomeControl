@@ -924,6 +924,18 @@ TEST(fp_selection_represents_both_fpi_bytes_without_transmitting)
     ASSERT_EQ(ioHomeFpSelection(17).fpi2, 0);
 }
 
+TEST(diagnostic_raw_fp_payload_is_exact_and_rejects_unverified_indices)
+{
+    uint8_t lPayload[8] = {};
+    ASSERT_TRUE(ioHomeBuildDiagnosticFpRawPayload(3, 0xF7FF, lPayload));
+    const uint8_t kExpected[8] = {0x01, 0xE7, 0xD4, 0x00,
+                                  0x20, 0xF7, 0xFF, 0x00};
+    ASSERT_MEM_EQ(lPayload, kExpected, sizeof(kExpected));
+    ASSERT_TRUE(!ioHomeBuildDiagnosticFpRawPayload(0, 0x1234, lPayload));
+    ASSERT_TRUE(!ioHomeBuildDiagnosticFpRawPayload(4, 0x1234, lPayload));
+    ASSERT_TRUE(!ioHomeBuildDiagnosticFpRawPayload(16, 0x1234, lPayload));
+}
+
 // =====================================================================
 // 13. IV checksum cross-check against reference algorithm
 // =====================================================================

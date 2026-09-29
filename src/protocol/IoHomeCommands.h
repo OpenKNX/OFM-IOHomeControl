@@ -481,6 +481,24 @@ inline bool ioHomeBuildFpRefreshRepresentation(const uint8_t *iIndices,
                 oData[oLen++] = iExtendedInfo[i];
     return true;
 }
+
+// Captured single-FP 2W Execute shape; higher FP/FPI2 transmit layout is not
+// capture-confirmed. No semantic conversion is applied to iRaw.
+inline bool ioHomeBuildDiagnosticFpRawPayload(uint8_t iFpIndex, uint16_t iRaw,
+                                               uint8_t *oData)
+{
+    if (!oData || iFpIndex < 1 || iFpIndex > 3)
+        return false;
+    oData[0] = 0x01; // user originator (IOHC_ORIGINATOR_USER)
+    oData[1] = 0xE7;
+    oData[2] = 0xD4;
+    oData[3] = 0x00;
+    oData[4] = ioHomeFpSelection(iFpIndex).fpi1;
+    oData[5] = static_cast<uint8_t>(iRaw >> 8);
+    oData[6] = static_cast<uint8_t>(iRaw & 0xFF);
+    oData[7] = 0x00;
+    return true;
+}
 #define IOHC_POSITION_FAVORITE 0xD800
 #define IOHC_POSITION_MAX 0xC800        // 100% = fully closed
 #define IOHC_POSITION_VENT 0xD803       // ventilation position

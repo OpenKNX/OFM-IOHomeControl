@@ -3252,6 +3252,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc discover spe", "Encrypted SPE/sub-device discovery");
     openknx.console.printHelpLine("iohc metadata refresh NODE", "Refresh name, GI1 and GI2 for a paired 2W node (hex)");
     openknx.console.printHelpLine("iohc fp read NODE 1[,2,3]", "Raw FP diagnostic; only single FP1-FP3 transmits");
+    openknx.console.printHelpLine("iohc fp raw NODE INDEX RAW16", "Expert single-attempt FP write; only FP1-FP3 transmits");
     openknx.console.printHelpLine("iohc autospe on|off|status", "Runtime post-pair SPE discovery");
     openknx.console.printHelpLine("iohc extract preamble cold|response auto|N", "Runtime-only key-extraction preamble override");
     openknx.console.printHelpLine("iohcNN identify", "Ask paired 2W device NN to identify itself");
@@ -3580,6 +3581,55 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         logInfoP("FP read: captured native Private selector, raw reply only; no KO publication");
         logInfoP("FP read: %s", mController.sendDiagnosticFpRead(lChannel, lIndices[0])
                               ? "queued" : "queue failed");
+        return true;
+    }
+
+    if (lSub == "fp raw" || lSub.rfind("fp raw ", 0) == 0)
+    {
+        std::string lArgs = trimSpaces(lSub.substr(strlen("fp raw")));
+        std::string lNodeText;
+        std::string lIndexText;
+        std::string lRawText;
+        uint32_t lNodeId = 0;
+        uint32_t lIndex = 0;
+        uint32_t lRaw = 0;
+        if (!takeToken(lArgs, lNodeText) || !takeToken(lArgs, lIndexText) ||
+            !takeToken(lArgs, lRawText) || !lArgs.empty() ||
+            !parseHex24(lNodeText, lNodeId) || lNodeId == 0 ||
+            !parseUnsignedDecimal(lIndexText, lIndex) || lIndex < 1 || lIndex > 16 ||
+            !parseHex24(lRawText, lRaw) || lRaw > 0xFFFF)
+        {
+            logInfoP("Usage: iohc fp raw <paired-2W-node-hex> <FP1..FP16 index> <raw16 hex>");
+            return true;
+        }
+        IoHomecontrolChannel *lChannel = nullptr;
+        for (uint8_t i = 0; i < mNumChannels; ++i)
+            if (mChannels[i] && mChannels[i]->isPaired() && !mChannels[i]->is1W() &&
+                mChannels[i]->getNodeId() == lNodeId)
+                lChannel = mChannels[i];
+        if (!lChannel)
+        {
+            logInfoP("FP raw: node 0x%06X is not paired 2W", static_cast<unsigned>(lNodeId));
+            return true;
+        }
+        const IoHomeFpSelection lSelection = ioHomeFpSelection(static_cast<uint8_t>(lIndex));
+        logInfoP("WARNING: expert raw FP write; device-specific/discrete values can be dangerous. No percentage conversion or automatic retries.");
+        logInfoP("FP raw node=0x%06X FP%u raw=0x%04X FPI1=0x%02X FPI2=0x%02X",
+                 static_cast<unsigned>(lNodeId), static_cast<unsigned>(lIndex),
+                 static_cast<unsigned>(lRaw), static_cast<unsigned>(lSelection.fpi1),
+                 static_cast<unsigned>(lSelection.fpi2));
+        uint8_t lPayload[IOHC_2W_RAW_EXEC_EXTENDED_LEN] = {};
+        if (!ioHomeBuildDiagnosticFpRawPayload(static_cast<uint8_t>(lIndex),
+                                               static_cast<uint16_t>(lRaw), lPayload))
+        {
+            logInfoP("FP raw: native RF FPI2/FP4+ Execute layout is unverified; no TX");
+            return true;
+        }
+        const std::string lPayloadHex = metadataHex(lPayload, sizeof(lPayload));
+        logInfoP("FP raw final Execute payload=%s", lPayloadHex.c_str());
+        logInfoP("FP raw: %s", mController.sendRawTwoWayExecute(
+                     lChannel, lPayload, sizeof(lPayload), true)
+                     ? "queued single attempt" : "queue failed");
         return true;
     }
 
