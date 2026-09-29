@@ -9048,8 +9048,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                                    ? static_cast<uint8_t>(iEntry.param2)
                                    : 0x00;
             // FP2: ignore
-            mTxFrame.data[4] = (IOHC_POSITION_UNKNOWN >> 8) & 0xFF;
-            mTxFrame.data[5] = IOHC_POSITION_UNKNOWN & 0xFF;
+            mTxFrame.data[4] = (IOHC_PARAMETER_IGNORE >> 8) & 0xFF;
+            mTxFrame.data[5] = IOHC_PARAMETER_IGNORE & 0xFF;
             // Remaining bytes: standard padding
             mTxFrame.data[6] = 0x00;
             mTxFrame.data[7] = 0x00;

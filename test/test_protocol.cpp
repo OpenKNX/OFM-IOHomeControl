@@ -1302,10 +1302,10 @@ TEST(position_decoding)
     ASSERT_EQ(decode(IOHC_POSITION_MAX / 4), 25);  // 25%
 
     // Special values should be filtered BEFORE decode in controller
-    // (STOP=0xD200, FAVORITE=0xD800, UNKNOWN=0xD400 are all > 0xC800)
+    // (CURRENT=0xD200, FAVORITE=0xD800, IGNORE=0xD400 are all > 0xC800)
     ASSERT_TRUE((IOHC_POSITION_STOP & 0xFFFF) > IOHC_POSITION_MAX);
     ASSERT_TRUE((IOHC_POSITION_FAVORITE & 0xFFFF) > IOHC_POSITION_MAX);
-    ASSERT_TRUE((IOHC_POSITION_UNKNOWN & 0xFFFF) > IOHC_POSITION_MAX);
+    ASSERT_TRUE((IOHC_PARAMETER_IGNORE & 0xFFFF) > IOHC_POSITION_MAX);
 }
 
 TEST(position_decoding_from_frame)
@@ -1424,7 +1424,7 @@ TEST(favorite_position_encoding)
 
     // Verify special values are distinct
     ASSERT_TRUE(IOHC_POSITION_STOP != IOHC_POSITION_FAVORITE);
-    ASSERT_TRUE(IOHC_POSITION_UNKNOWN != IOHC_POSITION_FAVORITE);
+    ASSERT_TRUE(IOHC_PARAMETER_IGNORE != IOHC_POSITION_FAVORITE);
 }
 
 // =====================================================================
@@ -1625,7 +1625,11 @@ TEST(position_special_values_encoding)
 {
     // Verify all special position constants
     ASSERT_EQ(IOHC_POSITION_STOP, 0xD200);
-    ASSERT_EQ(IOHC_POSITION_UNKNOWN, 0xD400);
+    ASSERT_EQ(IOHC_PARAMETER_TARGET, 0xD100);
+    ASSERT_EQ(IOHC_PARAMETER_CURRENT, 0xD200);
+    ASSERT_EQ(IOHC_PARAMETER_DEFAULT, 0xD300);
+    ASSERT_EQ(IOHC_PARAMETER_IGNORE, 0xD400);
+    ASSERT_EQ(IOHC_NO_FEEDBACK_VALUE, 0xF7FF);
     ASSERT_EQ(IOHC_POSITION_FAVORITE, 0xD800);
     ASSERT_EQ(IOHC_POSITION_MAX, 0xC800);
 
@@ -1801,10 +1805,10 @@ TEST(status_update_reference_layout)
 
 TEST(status_update_special_position_filter)
 {
-    // Special values (STOP, FAVORITE, UNKNOWN) must be filtered before decode
+    // Special parameter and feedback values must be filtered before decode
     uint16_t stopVal = IOHC_POSITION_STOP & 0xFFFF;
     uint16_t favVal = IOHC_POSITION_FAVORITE & 0xFFFF;
-    uint16_t unkVal = IOHC_POSITION_UNKNOWN & 0xFFFF;
+    uint16_t unkVal = IOHC_PARAMETER_IGNORE & 0xFFFF;
 
     // All are > IOHC_POSITION_MAX so should be excluded from % conversion
     ASSERT_TRUE(stopVal > IOHC_POSITION_MAX);
@@ -5060,8 +5064,8 @@ TEST(activate_mode_frame)
     frame.data[1] = IOHC_ACEI_DEFAULT;
     frame.data[2] = (IOHC_POSITION_FAVORITE >> 8) & 0xFF; // 0xD8
     frame.data[3] = IOHC_POSITION_FAVORITE & 0xFF;        // 0x00
-    frame.data[4] = (IOHC_POSITION_UNKNOWN >> 8) & 0xFF;  // 0xD4 (FP2 = ignore)
-    frame.data[5] = IOHC_POSITION_UNKNOWN & 0xFF;         // 0x00
+    frame.data[4] = (IOHC_PARAMETER_IGNORE >> 8) & 0xFF;  // 0xD4 (FP2 = ignore)
+    frame.data[5] = IOHC_PARAMETER_IGNORE & 0xFF;         // 0x00
     memset(frame.data + 6, 0, 7);
     frame.dataLen = 13;
     frame.hasHmac = false;
@@ -5140,8 +5144,8 @@ TEST(activate_mode_vent_frame)
     frame.data[1] = IOHC_ACEI_DEFAULT;
     frame.data[2] = (IOHC_POSITION_VENT >> 8) & 0xFF;
     frame.data[3] = IOHC_POSITION_VENT & 0xFF;
-    frame.data[4] = (IOHC_POSITION_UNKNOWN >> 8) & 0xFF;
-    frame.data[5] = IOHC_POSITION_UNKNOWN & 0xFF;
+    frame.data[4] = (IOHC_PARAMETER_IGNORE >> 8) & 0xFF;
+    frame.data[5] = IOHC_PARAMETER_IGNORE & 0xFF;
     memset(frame.data + 6, 0, 7);
     frame.dataLen = 13;
     frame.hasHmac = false;
@@ -12862,8 +12866,8 @@ TEST(controller_private_response_stopped_marker_uses_target_position)
     const uint16_t lTargetRaw = (40UL * IOHC_POSITION_MAX) / 100UL;
     lData[2] = (lTargetRaw >> 8) & 0xFF;
     lData[3] = lTargetRaw & 0xFF;
-    lData[4] = (IOHC_POSITION_UNKNOWN >> 8) & 0xFF;
-    lData[5] = IOHC_POSITION_UNKNOWN & 0xFF;
+    lData[4] = (IOHC_PARAMETER_IGNORE >> 8) & 0xFF;
+    lData[5] = IOHC_PARAMETER_IGNORE & 0xFF;
     lData[7] = 0xFF;
 
     IoHomeFrame lResponse;

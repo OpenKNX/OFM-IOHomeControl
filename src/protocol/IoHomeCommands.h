@@ -405,9 +405,14 @@ inline bool isOpenCloseOnly(IoHomeDeviceType iType)
            iType == IoHomeDeviceType::SwingingShutter;
 }
 
-// Special position values for Execute command
-#define IOHC_POSITION_STOP 0xD200
-#define IOHC_POSITION_UNKNOWN 0xD400
+// KLF special parameter values. Ignore is an outgoing FP placeholder;
+// no-feedback is an incoming status sentinel, not a position.
+#define IOHC_PARAMETER_TARGET 0xD100
+#define IOHC_PARAMETER_CURRENT 0xD200
+#define IOHC_PARAMETER_DEFAULT 0xD300
+#define IOHC_PARAMETER_IGNORE 0xD400
+#define IOHC_NO_FEEDBACK_VALUE 0xF7FF
+#define IOHC_POSITION_STOP IOHC_PARAMETER_CURRENT
 #define IOHC_POSITION_FAVORITE 0xD800
 #define IOHC_POSITION_MAX 0xC800        // 100% = fully closed
 #define IOHC_POSITION_VENT 0xD803       // ventilation position
