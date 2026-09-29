@@ -141,6 +141,8 @@ public:
   OneWayEnrollmentFinalizer getConfigured1WEnrollmentFinalizer() const;
   void setConfigured1WExecuteDestinationPolicy(OneWayExecuteDestinationPolicy iPolicy);
   OneWayExecuteDestinationPolicy getConfigured1WExecuteDestinationPolicy() const;
+  void setConfigured1WEnrollmentDestinationPolicy(OneWayEnrollmentDestinationPolicy iPolicy);
+  OneWayEnrollmentDestinationPolicy getConfigured1WEnrollmentDestinationPolicy() const;
   void setConfigured1WEnrollmentClassMask(uint8_t iMask);
   uint8_t getConfigured1WEnrollmentClassMask() const;
   void setConfigured1WPowerClass(OneWayPowerClass iPowerClass);
@@ -193,6 +195,7 @@ private:
   bool mConfigured1WEnrollmentMac = false;
   OneWayEnrollmentFinalizer mConfigured1WEnrollmentFinalizer = OneWayEnrollmentFinalizer::Automatic;
   OneWayExecuteDestinationPolicy mConfigured1WExecuteDestinationPolicy = OneWayExecuteDestinationPolicy::Automatic;
+  OneWayEnrollmentDestinationPolicy mConfigured1WEnrollmentDestinationPolicy = OneWayEnrollmentDestinationPolicy::Automatic;
   uint8_t mConfigured1WEnrollmentClassMask = 0; // 0 = captured VELUX default (all three)
   OneWayPowerClass mConfigured1WPowerClass = OneWayPowerClass::Automatic;
   float mCurrentPosition = 0.0f;

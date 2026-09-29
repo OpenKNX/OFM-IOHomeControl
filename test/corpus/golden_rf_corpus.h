@@ -107,6 +107,9 @@ struct OneWayEnrollmentReference
 
 // Re-keyed, non-secret equivalent of the observed Smoove Remove -> SendKey
 // sequence. Its 0x30 payload is from the long-standing public crypto vector.
+// laberning/home_io_control issue #147 independently reports a Somfy Situo 1
+// 0x39/0x30 pair to 00003F and a failed class-addressed 0000FF attempt.
+// The issue comparison supports the address policy, not the secret payload.
 static const uint8_t kSmooveRemoveController[] = {
     0x71, 0x00, 0x00, 0x00, 0x3F, 0xB6, 0x0D, 0x1A, 0x39,
     0x02, 0x00, 0x01, 0x61, 0x7A, 0x20, 0x4C, 0x91, 0xD3,

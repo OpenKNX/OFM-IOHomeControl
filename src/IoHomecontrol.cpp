@@ -147,6 +147,16 @@ namespace
         }
     }
 
+    const char *oneWayEnrollmentDestinationPolicyName(OneWayEnrollmentDestinationPolicy iPolicy)
+    {
+        switch (iPolicy)
+        {
+        case OneWayEnrollmentDestinationPolicy::All: return "all";
+        case OneWayEnrollmentDestinationPolicy::Typed: return "typed";
+        default: return "automatic-by-manufacturer";
+        }
+    }
+
     void formatOneWayEnrollmentClasses(uint8_t iMask, char *oText, size_t iSize)
     {
         if (!oText || iSize == 0)
@@ -184,6 +194,7 @@ namespace
         const uint32_t lDestination = lPolicy == OneWayExecuteDestinationPolicy::All
                                           ? iController.oneWayBroadcastTarget(0)
                                           : iController.oneWayBroadcastTarget(iChannel->getConfigured1WBroadcastType());
+        const auto lPairing = iController.oneWayPairingDestinationPreview(iChannel);
         const uint8_t lClassMask = iController.effectiveOneWayEnrollmentClassMask(iChannel);
         char lClasses[32];
         formatOneWayEnrollmentClasses(lClassMask, lClasses, sizeof(lClasses));
@@ -194,12 +205,16 @@ namespace
         const OneWayCopyShape lRepeatShape = IoHomeController::oneWayCopyShape(lPowerClass, lManufacturer, 1);
         openknx.logger.logMacroWrapper(
             0, "IoHomecontrol",
-            "  1W wire profile: manufacturer=%s(0x%02X) executeAcei=0x%02X source=%s executeDst=%s type=%u dst=%06X enrollClasses=%s%s finalizer=%s power=%s first=%u/lp%u repeat=%u/lp%u",
+            "  1W wire profile: manufacturer=%s(0x%02X) executeAcei=0x%02X source=%s executePolicy=%s broadcastType=%u executeDst=%06X pairingProfile=%s enrollPolicy=%s removeDst=%06X addDst=%06X addCount=%u enrollClasses=%s%s finalizer=%s power=%s first=%u/lp%u repeat=%u/lp%u",
             ioHomeManufacturerName(lManufacturer), static_cast<unsigned>(lManufacturer),
             static_cast<unsigned>(lAcei), lAceiOverride ? "ETS-override" : "manufacturer",
             oneWayExecuteDestinationPolicyName(lPolicy),
             static_cast<unsigned>(iChannel->getConfigured1WBroadcastType()),
-            static_cast<unsigned long>(lDestination), lClasses,
+            static_cast<unsigned long>(lDestination), lPairing.profileName,
+            oneWayEnrollmentDestinationPolicyName(iChannel->getConfigured1WEnrollmentDestinationPolicy()),
+            static_cast<unsigned long>(lPairing.removeDestination),
+            static_cast<unsigned long>(lPairing.firstAddDestination),
+            static_cast<unsigned>(lPairing.addDestinationCount), lClasses,
             iChannel->getConfigured1WEnrollmentClassMask() == 0 ? " (automatic)" : " (ETS-override)",
             IoHomeController::oneWayEnrollmentFinalizerName(lFinalizer),
             IoHomeController::oneWayPowerClassName(lPowerClass),

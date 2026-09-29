@@ -122,6 +122,8 @@ public:
   OneWayEnrollmentFinalizer getConfigured1WEnrollmentFinalizer() const { return mConfigured1WEnrollmentFinalizer; }
   void setConfigured1WExecuteDestinationPolicy(OneWayExecuteDestinationPolicy iPolicy) { mConfigured1WExecuteDestinationPolicy = iPolicy; }
   OneWayExecuteDestinationPolicy getConfigured1WExecuteDestinationPolicy() const { return mConfigured1WExecuteDestinationPolicy; }
+  void setConfigured1WEnrollmentDestinationPolicy(OneWayEnrollmentDestinationPolicy iPolicy) { mConfigured1WEnrollmentDestinationPolicy = iPolicy; }
+  OneWayEnrollmentDestinationPolicy getConfigured1WEnrollmentDestinationPolicy() const { return mConfigured1WEnrollmentDestinationPolicy; }
   void setConfigured1WEnrollmentClassMask(uint8_t iMask) { mConfigured1WEnrollmentClassMask = iMask <= IOHC_1W_ENROLL_CLASS_INTERIOR ? iMask : 0; }
   uint8_t getConfigured1WEnrollmentClassMask() const { return mConfigured1WEnrollmentClassMask; }
   void setConfigured1WPowerClass(OneWayPowerClass iPowerClass) { mConfigured1WPowerClass = iPowerClass; }
@@ -601,6 +603,7 @@ private:
   bool mConfigured1WEnrollmentMac = false;
   OneWayEnrollmentFinalizer mConfigured1WEnrollmentFinalizer = OneWayEnrollmentFinalizer::Automatic;
   OneWayExecuteDestinationPolicy mConfigured1WExecuteDestinationPolicy = OneWayExecuteDestinationPolicy::Automatic;
+  OneWayEnrollmentDestinationPolicy mConfigured1WEnrollmentDestinationPolicy = OneWayEnrollmentDestinationPolicy::Automatic;
   uint8_t mConfigured1WEnrollmentClassMask = 0;
   OneWayPowerClass mConfigured1WPowerClass = OneWayPowerClass::Automatic;
   bool mHasPositionFeedback = false;

@@ -1546,6 +1546,8 @@ uint32_t IoHomeController::oneWayBroadcastTarget(uint8_t iBroadcastType) const
 uint8_t IoHomeController::pairing1WAddDestinationCount() const
 {
     const OneWayPairingProfile &lProfile = pairing1WProfile();
+    if (mPairing1WEnrollmentDestinationPolicy != OneWayEnrollmentDestinationPolicy::Automatic)
+        return 1U;
     if (lProfile.addClasses == nullptr)
         return 1U;
     if (mPairing1WEnrollmentClassMask == IOHC_1W_ENROLL_CLASS_INTERIOR)
@@ -1563,6 +1565,12 @@ uint8_t IoHomeController::pairing1WAddDestinationCount() const
 uint32_t IoHomeController::pairing1WAddDestination() const
 {
     const OneWayPairingProfile &lProfile = pairing1WProfile();
+    if (mPairing1WEnrollmentDestinationPolicy == OneWayEnrollmentDestinationPolicy::All)
+        return oneWayBroadcastTarget(0);
+    if (mPairing1WEnrollmentDestinationPolicy == OneWayEnrollmentDestinationPolicy::Typed)
+        return oneWayBroadcastTarget(mPairing1WBroadcastType);
+    if (lProfile.fixedAddDestination != 0)
+        return lProfile.fixedAddDestination;
     if (lProfile.addClasses == nullptr)
         return oneWayBroadcastTarget(mPairing1WBroadcastType);
 
@@ -1592,6 +1600,7 @@ const IoHomeController::OneWayPairingProfile &IoHomeController::oneWayPairingPro
         0x00003F, // finalizer (only used when explicitly enabled)
         nullptr,  // add destination follows the configured broadcast type
         1,
+        0,
     };
     return kGeneric;
 }
@@ -1612,17 +1621,37 @@ const IoHomeController::OneWayPairingProfile &IoHomeController::oneWayPairingPro
         0x00003F,
         kAddClasses,
         static_cast<uint8_t>(sizeof(kAddClasses) / sizeof(kAddClasses[0])),
+        0,
     };
     return kVeluxKli;
 }
 
+const IoHomeController::OneWayPairingProfile &IoHomeController::oneWayPairingProfileSomfy()
+{
+    // Smoove corpus and laberning/home_io_control issue #147 both show
+    // 0x39/0x30 to ALL (00003F), independent of the controlled device class.
+    static const OneWayPairingProfile kSomfy = {
+        "somfy-remote", 0x00003F, 0x00003F, nullptr, 1, 0x00003F,
+    };
+    return kSomfy;
+}
+
 const IoHomeController::OneWayPairingProfile &IoHomeController::pairing1WProfile() const
 {
-    return mPairing1WVeluxProfile ? oneWayPairingProfileVeluxKli() : oneWayPairingProfileGeneric();
+    switch (mPairing1WProfileId)
+    {
+    case OneWayPairingProfileId::VeluxKli: return oneWayPairingProfileVeluxKli();
+    case OneWayPairingProfileId::SomfyRemote: return oneWayPairingProfileSomfy();
+    default: return oneWayPairingProfileGeneric();
+    }
 }
 
 uint32_t IoHomeController::pairing1WRemoveDestination() const
 {
+    if (mPairing1WEnrollmentDestinationPolicy == OneWayEnrollmentDestinationPolicy::All)
+        return oneWayBroadcastTarget(0);
+    if (mPairing1WEnrollmentDestinationPolicy == OneWayEnrollmentDestinationPolicy::Typed)
+        return oneWayBroadcastTarget(mPairing1WBroadcastType);
     const OneWayPairingProfile &lProfile = pairing1WProfile();
     return lProfile.removeDestination != 0 ? lProfile.removeDestination
                                            : oneWayBroadcastTarget(mPairing1WBroadcastType);
@@ -1631,6 +1660,52 @@ uint32_t IoHomeController::pairing1WRemoveDestination() const
 uint32_t IoHomeController::pairing1WFinalizerDestination() const
 {
     return pairing1WProfile().finalizerDestination;
+}
+
+IoHomeController::OneWayPairingDestinationPreview
+IoHomeController::oneWayPairingDestinationPreview(IoHomecontrolChannel *iChannel) const
+{
+    const uint8_t lType = iChannel ? iChannel->getConfigured1WBroadcastType() : 0;
+    IoHomecontrolChannel *lIdentity = oneWayProfileForChannel(iChannel);
+    const uint8_t lManufacturer = lIdentity ? lIdentity->getOneWayControllerManufacturer() : 0;
+    const OneWayPairingProfile &lProfile =
+        lManufacturer == static_cast<uint8_t>(IoHomeManufacturer::Velux)
+            ? oneWayPairingProfileVeluxKli()
+            : lManufacturer == static_cast<uint8_t>(IoHomeManufacturer::Somfy)
+                  ? oneWayPairingProfileSomfy() : oneWayPairingProfileGeneric();
+    const OneWayEnrollmentDestinationPolicy lPolicy = iChannel
+        ? iChannel->getConfigured1WEnrollmentDestinationPolicy()
+        : OneWayEnrollmentDestinationPolicy::Automatic;
+    if (lPolicy != OneWayEnrollmentDestinationPolicy::Automatic)
+    {
+        const uint32_t lDestination = oneWayBroadcastTarget(
+            lPolicy == OneWayEnrollmentDestinationPolicy::All ? 0 : lType);
+        return {lProfile.name, lDestination, lDestination, 1};
+    }
+    const uint32_t lRemove = lProfile.removeDestination != 0
+                                 ? lProfile.removeDestination : oneWayBroadcastTarget(lType);
+    if (lProfile.fixedAddDestination != 0)
+        return {lProfile.name, lRemove, lProfile.fixedAddDestination, 1};
+    if (lProfile.addClasses == nullptr)
+        return {lProfile.name, lRemove, oneWayBroadcastTarget(lType), 1};
+    const uint8_t lMask = effectiveOneWayEnrollmentClassMask(iChannel);
+    if (lMask == IOHC_1W_ENROLL_CLASS_INTERIOR)
+        return {lProfile.name, lRemove,
+                oneWayBroadcastTarget(static_cast<uint8_t>(IoHomeDeviceType::Blind)), 2};
+    uint8_t lFirst = 0xFF;
+    uint8_t lCount = 0;
+    for (uint8_t i = 0; i < lProfile.addClassCount; ++i)
+    {
+        if ((lMask & (1U << i)) == 0) continue;
+        if (lFirst == 0xFF) lFirst = i;
+        ++lCount;
+    }
+    if (lFirst == 0xFF)
+        return {lProfile.name, lRemove,
+                oneWayBroadcastTarget(static_cast<uint8_t>(lProfile.addClasses[0])),
+                lProfile.addClassCount};
+    return {lProfile.name, lRemove,
+            oneWayBroadcastTarget(static_cast<uint8_t>(lProfile.addClasses[lFirst])), lCount};
 }
 
 uint8_t IoHomeController::oneWayBroadcastTypeForEtsDeviceType(uint8_t iEtsDeviceType)
@@ -3022,7 +3097,12 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
 
         IoHomecontrolChannel *lProfile = oneWayProfileForChannel(lCh);
         const uint8_t lManufacturer = lProfile ? lProfile->getOneWayControllerManufacturer() : 0;
-        mPairing1WVeluxProfile = lManufacturer == static_cast<uint8_t>(IoHomeManufacturer::Velux);
+        mPairing1WProfileId = lManufacturer == static_cast<uint8_t>(IoHomeManufacturer::Velux)
+                                 ? OneWayPairingProfileId::VeluxKli
+                                 : lManufacturer == static_cast<uint8_t>(IoHomeManufacturer::Somfy)
+                                       ? OneWayPairingProfileId::SomfyRemote
+                                       : OneWayPairingProfileId::Generic;
+        mPairing1WEnrollmentDestinationPolicy = lCh->getConfigured1WEnrollmentDestinationPolicy();
         mPairing1WEnrollmentClassMask = effectiveOneWayEnrollmentClassMask(lCh);
         mPairing1WFinalizer = resolveOneWayEnrollmentFinalizer(
             lCh->getConfigured1WEnrollmentFinalizer(), lManufacturer);
@@ -3084,8 +3164,9 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
                  oneWayEnrollmentFinalizerName(mPairing1WFinalizer));
         const OneWayCopyShape lFirstShape = pairingOneWayCopyShape(0);
         const OneWayCopyShape lRepeatShape = pairingOneWayCopyShape(1);
-        logInfoP("Pairing: 1W remove dst=0x%06X finalizer dst=0x%06X power=%s first=%u/lp%u repeat=%u/lp%u",
+        logInfoP("Pairing: 1W remove dst=0x%06X add dst=0x%06X finalizer dst=0x%06X power=%s first=%u/lp%u repeat=%u/lp%u",
                  pairing1WRemoveDestination(),
+                 pairing1WAddDestination(),
                  pairing1WFinalizerDestination(),
                  oneWayPowerClassName(pairingOneWayPowerClass()),
                  static_cast<unsigned>(lFirstShape.preamble), lFirstShape.lowPower ? 1U : 0U,
@@ -6891,7 +6972,7 @@ void IoHomeController::processPairSend1WAnnounce()
     mTxFrame.set1WMode();
     mTxFrame.setLowPower(lFirstShape.lowPower);
     mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
-    const bool lClassSweep = mPairing1WVeluxProfile &&
+    const bool lClassSweep = mPairing1WProfileId == OneWayPairingProfileId::VeluxKli &&
                              mPairing1WMode == Pairing1WMode::AnnounceOnly;
     mTxFrame.setDestNode(lClassSweep ? pairing1WAddDestination()
                                     : oneWayBroadcastTarget(mPairing1WBroadcastType));
@@ -6961,7 +7042,7 @@ void IoHomeController::processPairWait1WAnnounce()
         return;
 
     if (mState == ControllerState::PairComplete &&
-        mPairing1WVeluxProfile &&
+        mPairing1WProfileId == OneWayPairingProfileId::VeluxKli &&
         mPairing1WMode == Pairing1WMode::AnnounceOnly &&
         mPairing1WAddDestinationIndex + 1 < pairing1WAddDestinationCount())
     {

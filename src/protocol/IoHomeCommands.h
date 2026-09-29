@@ -288,6 +288,15 @@ enum class OneWayExecuteDestinationPolicy : uint8_t
     All = 2,
 };
 
+// Enrollment-only address policy. Ordinary Execute destinations are controlled
+// independently by OneWayExecuteDestinationPolicy.
+enum class OneWayEnrollmentDestinationPolicy : uint8_t
+{
+    Automatic = 0,
+    All = 1,
+    Typed = 2,
+};
+
 // Per-controller-identity 1W wake-up policy. Automatic preserves the module's
 // existing capture-backed behavior. AlwaysAlive uses the normal 32-symbol
 // preamble for every copy. LowPower sends one 1024-symbol wake-up copy with

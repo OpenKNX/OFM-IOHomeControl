@@ -49,6 +49,9 @@
 #ifndef ParamIOHC_cOneWayExecuteDestination
 #define ParamIOHC_cOneWayExecuteDestination 0
 #endif
+#ifndef ParamIOHC_cOneWayEnrollmentDestination
+#define ParamIOHC_cOneWayEnrollmentDestination 0
+#endif
 #ifndef ParamIOHC_cOneWayEnrollmentClasses
 #define ParamIOHC_cOneWayEnrollmentClasses 0
 #endif
@@ -225,6 +228,7 @@ void IoHomecontrolChannel::setup()
     const bool lOneWayEnrollmentMac = ParamIOHC_cOneWayEnrollmentMac != 0;
     const uint8_t lOneWayEnrollmentFinalizer = static_cast<uint8_t>(ParamIOHC_cOneWayEnrollmentFinalizer);
     const uint8_t lOneWayExecuteDestination = static_cast<uint8_t>(ParamIOHC_cOneWayExecuteDestination);
+    const uint8_t lOneWayEnrollmentDestination = static_cast<uint8_t>(ParamIOHC_cOneWayEnrollmentDestination);
     const uint8_t lOneWayEnrollmentClasses = static_cast<uint8_t>(ParamIOHC_cOneWayEnrollmentClasses);
     const uint8_t lOneWayPowerClass = static_cast<uint8_t>(ParamIOHC_cOneWayPowerClass);
     const uint8_t lTwoWayPowerClass = static_cast<uint8_t>(ParamIOHC_cTwoWayPowerClass);
@@ -316,6 +320,10 @@ void IoHomecontrolChannel::setup()
         lOneWayExecuteDestination <= static_cast<uint8_t>(OneWayExecuteDestinationPolicy::All)
             ? static_cast<OneWayExecuteDestinationPolicy>(lOneWayExecuteDestination)
             : OneWayExecuteDestinationPolicy::Automatic);
+    setConfigured1WEnrollmentDestinationPolicy(
+        lOneWayEnrollmentDestination <= static_cast<uint8_t>(OneWayEnrollmentDestinationPolicy::Typed)
+            ? static_cast<OneWayEnrollmentDestinationPolicy>(lOneWayEnrollmentDestination)
+            : OneWayEnrollmentDestinationPolicy::Automatic);
     setConfigured1WEnrollmentClassMask(lOneWayEnrollmentClasses);
     setConfigured1WPowerClass(
         lOneWayPowerClass <= static_cast<uint8_t>(OneWayPowerClass::LowPower)
@@ -1363,6 +1371,8 @@ void IoHomecontrolChannel::setConfigured1WEnrollmentFinalizer(OneWayEnrollmentFi
 OneWayEnrollmentFinalizer IoHomecontrolChannel::getConfigured1WEnrollmentFinalizer() const { return mConfigured1WEnrollmentFinalizer; }
 void IoHomecontrolChannel::setConfigured1WExecuteDestinationPolicy(OneWayExecuteDestinationPolicy iPolicy) { mConfigured1WExecuteDestinationPolicy = iPolicy; }
 OneWayExecuteDestinationPolicy IoHomecontrolChannel::getConfigured1WExecuteDestinationPolicy() const { return mConfigured1WExecuteDestinationPolicy; }
+void IoHomecontrolChannel::setConfigured1WEnrollmentDestinationPolicy(OneWayEnrollmentDestinationPolicy iPolicy) { mConfigured1WEnrollmentDestinationPolicy = iPolicy; }
+OneWayEnrollmentDestinationPolicy IoHomecontrolChannel::getConfigured1WEnrollmentDestinationPolicy() const { return mConfigured1WEnrollmentDestinationPolicy; }
 void IoHomecontrolChannel::setConfigured1WEnrollmentClassMask(uint8_t iMask) { mConfigured1WEnrollmentClassMask = iMask <= IOHC_1W_ENROLL_CLASS_INTERIOR ? iMask : 0; }
 uint8_t IoHomecontrolChannel::getConfigured1WEnrollmentClassMask() const { return mConfigured1WEnrollmentClassMask; }
 void IoHomecontrolChannel::setConfigured1WPowerClass(OneWayPowerClass iPowerClass) { mConfigured1WPowerClass = iPowerClass; }

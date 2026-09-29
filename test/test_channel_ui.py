@@ -720,6 +720,18 @@ class ChannelUiTest(unittest.TestCase):
             self.assertEqual(refs[ref_id].get("HelpContext"), help_context)
 
     def test_one_way_wire_profile_overrides_are_persistent_and_default_auto(self) -> None:
+        enrollment = self.share.find(
+            ".//k:ParameterType[@Name='IOHCOneWayEnrollmentDestination']", NS
+        )
+        self.assertIsNotNone(enrollment)
+        self.assertEqual(
+            {item.get("Value"): item.get("Text") for item in enrollment.findall(".//k:Enumeration", NS)},
+            {
+                "0": "Automatisch nach Hersteller",
+                "1": "Alle Geräte (00003F)",
+                "2": "Typ-Broadcast",
+            },
+        )
         destination = self.share.find(
             ".//k:ParameterType[@Name='IOHCOneWayExecuteDestination']", NS
         )
@@ -754,6 +766,9 @@ class ChannelUiTest(unittest.TestCase):
             for parameter in self.template.findall(".//k:Parameter", NS)
         }
         self.assertEqual(parameters["c%C%OneWayExecuteDestination"].get("Offset"), "59")
+        self.assertEqual(parameters["c%C%OneWayEnrollmentDestination"].get("Offset"), "0")
+        self.assertEqual(parameters["c%C%OneWayEnrollmentDestination"].get("BitOffset"), "4")
+        self.assertEqual(parameters["c%C%OneWayEnrollmentDestination"].get("Value"), "0")
         self.assertEqual(parameters["c%C%OneWayEnrollmentClasses"].get("Offset"), "60")
         self.assertEqual(parameters["c%C%OneWayPowerClass"].get("Offset"), "61")
         self.assertEqual(parameters["c%C%OneWayExecuteDestination"].get("Value"), "0")
@@ -767,8 +782,14 @@ class ChannelUiTest(unittest.TestCase):
         expert = self.template.find(".//k:ParameterBlock[@Name='ExpertSettings']", NS)
         advanced_one_way = expert.find("k:choose/k:when[@test='1']", NS)
         shown = {ref.get("RefId") for ref in advanced_one_way.findall("k:ParameterRefRef", NS)}
-        for suffix in ("091", "092"):
+        for suffix in ("091", "092", "106"):
             self.assertIn(f"%AID%_UP-%TT%%CC%{suffix}_R-%TT%%CC%{suffix}01", shown)
+
+        channel = (ROOT / "src" / "IoHomecontrolChannel.cpp").read_text()
+        self.assertIn("ParamIOHC_cOneWayEnrollmentDestination", channel)
+        status = (ROOT / "src" / "IoHomecontrol.cpp").read_text()
+        for label in ("executeDst=", "pairingProfile=", "removeDst=", "addDst="):
+            self.assertIn(label, status)
 
         own_profile = one_way.find(
             "k:choose[@ParamRefId='%AID%_UP-%TT%%CC%018_R-%TT%%CC%01801']/k:when[@test='0']",

@@ -9284,7 +9284,7 @@ TEST(controller_generic_1w_pairing_keeps_typed_destination_and_clears_ctrl1)
     IoHomecontrolChannel lChannel;
     initOneWayPairingModeControllerForTest(lController, lModule, lChannel,
                                            0x831F2A, 0x7E9E6E, lKey);
-    lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Somfy));
+    lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Unknown));
     lChannel.setConfigured1WBroadcastType(2);
     lChannel.setConfigured1WEnrollmentFinalizer(OneWayEnrollmentFinalizer::None);
 
@@ -9306,6 +9306,103 @@ TEST(controller_generic_1w_pairing_keeps_typed_destination_and_clears_ctrl1)
     ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
     ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BFU);
     ASSERT_EQ(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
+}
+
+TEST(controller_somfy_issue147_enrollment_uses_all_for_awnings)
+{
+    const uint8_t lKey[16] = {1};
+    const auto *lCorpusRemove = IoHomeGoldenRfCorpus::findFrame("smoove_remove_controller");
+    const auto *lCorpusAdd = IoHomeGoldenRfCorpus::findFrame("smoove_sendkey_no_mac");
+    ASSERT_TRUE(lCorpusRemove != nullptr);
+    ASSERT_TRUE(lCorpusAdd != nullptr);
+    ASSERT_EQ(lCorpusRemove->destination, 0x00003FU);
+    ASSERT_EQ(lCorpusAdd->destination, 0x00003FU);
+    for (uint8_t lEtsRole : {3, 9}) // awning; horizontal awning
+    {
+        ioHomeTestSetMillis(1000);
+        ioHomeTestSetMicros(1000000);
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initOneWayPairingModeControllerForTest(lController, lModule, lChannel,
+                                               0x831F2A, 0x7E9E6E, lKey);
+        lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Somfy));
+        const uint8_t lType = IoHomeController::oneWayBroadcastTypeForEtsDeviceType(lEtsRole);
+        lChannel.setConfigured1WBroadcastType(lType);
+        ASSERT_EQ(lType, lEtsRole == 3 ? 3U : 16U);
+        const auto lPreview = lController.oneWayPairingDestinationPreview(&lChannel);
+        ASSERT_EQ(lPreview.removeDestination, lCorpusRemove->destination);
+        ASSERT_EQ(lPreview.firstAddDestination, lCorpusAdd->destination);
+        ASSERT_EQ(lPreview.addDestinationCount, 1U);
+        ASSERT_TRUE(lController.startPairing1W(0, 0x7E9E6E, Pairing1WMode::RemoveAdd));
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+        ASSERT_EQ(lFrame.commandId, IoHomeCommand::RemoveController);
+        ASSERT_EQ(lFrame.getDestNodeId(), lCorpusRemove->destination);
+        finishCurrentBlind1WPairingTxForTest(lController);
+        ASSERT_EQ(lController.state(), ControllerState::PairSend1WKeyTransfer);
+        lController.radio().testClearTransmittedPacket();
+        lController.loop();
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_EQ(lPacket.size(), 29U);
+        ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+        ASSERT_EQ(lFrame.commandId, IoHomeCommand::SendKey1W);
+        ASSERT_EQ(lFrame.getDestNodeId(), lCorpusAdd->destination);
+        ASSERT_TRUE(!lFrame.hasHmac);
+        finishCurrentBlind1WPairingTxForTest(lController);
+        ASSERT_EQ(lController.state(), ControllerState::PairComplete);
+    }
+}
+
+TEST(controller_somfy_enrollment_override_does_not_change_execute_policy)
+{
+    const uint8_t lKey[16] = {1};
+    for (uint8_t i = 0; i < 2; ++i)
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initOneWayPairingModeControllerForTest(lController, lModule, lChannel,
+                                               0x831F2A, 0x7E9E6E, lKey);
+        lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Somfy));
+        lChannel.setConfigured1WBroadcastType(16);
+        lChannel.setConfigured1WEnrollmentDestinationPolicy(
+            i == 0 ? OneWayEnrollmentDestinationPolicy::Typed
+                   : OneWayEnrollmentDestinationPolicy::All);
+        const auto lPreview = lController.oneWayPairingDestinationPreview(&lChannel);
+        const uint32_t lExpectedPairing = i == 0 ? 0x00043FU : 0x00003FU;
+        ASSERT_EQ(lPreview.removeDestination, lExpectedPairing);
+        ASSERT_EQ(lPreview.firstAddDestination, lExpectedPairing);
+        ASSERT_TRUE(lController.startPairing1W(0, 0x7E9E6E, Pairing1WMode::RemoveAdd));
+        lController.loop();
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+        ASSERT_EQ(lFrame.getDestNodeId(), lExpectedPairing);
+        finishCurrentBlind1WPairingTxForTest(lController);
+        lController.loop();
+        ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+        ASSERT_EQ(lFrame.getDestNodeId(), lExpectedPairing);
+    }
+    for (uint8_t i = 0; i < 2; ++i)
+    {
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        IoHomecontrolChannel lChannel;
+        initOneWayPairingModeControllerForTest(lController, lModule, lChannel,
+                                               0x831F2A, 0x7E9E6E, lKey);
+        lChannel.setNodeId(0x7E9E6E);
+        lChannel.setConfigured1WBroadcastType(16);
+        lChannel.setConfigured1WExecuteDestinationPolicy(
+            i == 0 ? OneWayExecuteDestinationPolicy::Typed : OneWayExecuteDestinationPolicy::All);
+        ASSERT_TRUE(lController.sendChannelCommand(&lChannel, IoHomeCommand::Execute, 0x00));
+        lController.loop();
+        lController.loop();
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(lastTransmittedFrameForTest(lController, lFrame));
+        ASSERT_EQ(lFrame.getDestNodeId(), i == 0 ? 0x00043FU : 0x00003FU);
+    }
 }
 
 TEST(controller_1w_channel_is_operational_without_paired_node)
@@ -16649,6 +16746,7 @@ TEST(controller_1w_channel_broadcast_type3_uses_typed_destination_for_pairing_an
         lChannel.setIs1W(true);
         lChannel.setConfigured1WTargetNodeId(lDeviceNodeId);
         lChannel.setConfigured1WBroadcastType(3);
+        lChannel.setOneWayControllerManufacturer(static_cast<uint8_t>(IoHomeManufacturer::Unknown));
         lChannel.setOneWayControllerNodeId(lRemoteNodeId);
         lChannel.setOneWayControllerKey(lKey);
 

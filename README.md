@@ -73,6 +73,7 @@ For 2W, the module uses one global controller node ID and system key. For 1W, ea
 The 1W path follows the reference remote model more closely than older gateway-derived implementations:
 
 - Default 1W pairing uses the observed remove/add flow (`0x39 RemoveController` followed by unauthenticated `0x30 SendKey1W`).
+- Somfy 1W enrollment addresses both frames to `00003F` regardless of the configured device class, matching the Smoove corpus and the address comparison in [issue #147](https://github.com/laberning/home_io_control/issues/147). The new ETS **1W enrollment destination** setting can explicitly select ALL or typed addressing for special receivers; unknown manufacturers keep the old typed fallback. Normal Execute still obeys the separate **1W command destination** setting.
 - VELUX/KLI-compatible profiles use the KLI enrollment variant: one logical `0x30` is broadcast to `0x0000BF`, `0x0000FF`, and `0x00037F` with a shared sequence number, then authenticated STOP (`0xD200`) and DOWN/CLOSE (`0xC800`) commands are sent to ALL (`0x00003F`) with fresh sequences. The KLI 312 interior preset instead enrolls `Blind` and `VenetianBlind` (`0x0002BF`, `0x00007F`). DOWN starts well within the required three-second window after STOP.
 - The ETS parameter **1W enrollment finalizer** is conservative by default: **Automatic** selects STOP + DOWN only for a VELUX controller manufacturer. **None** disables it, while **STOP + DOWN** explicitly enables it for another profile. It is not assumed that Somfy or unknown 1W devices need this finalizer.
 - `0x30 SendKey1W` has 29 declared bytes: 9-byte header plus `serial/wrappedControllerKey[16] + manufacturer + 0x01 + sequence[2]`. The default profile sends no trailer and no normal in-frame 1W HMAC; an ETS profile option can append a six-byte trailer MAC outside CTRL0's declared length. Controller NID and serial are independent values and the NID must never be inferred from the serial suffix.
@@ -202,7 +203,7 @@ Useful diagnostic entry points include:
 
 - `iohc status` / `iohcNN status` — show 2W identity and per-channel 1W remote identity separately.
 - `iohc extract start [SEC]` / `stop` / `status` / `clear` — arm the temporary 2W device-role responder used to recover the system key from an owned third-party 2W hub during a manual pairing attempt.
-- `iohc 1wctrl status` / `iohcNN 1wctrl status` — show effective 1W profile, type, manufacturer, sequence, reserved sequence, and configured/resolved enrollment finalizer.
+- `iohc 1wctrl status` / `iohcNN 1wctrl status` — show effective 1W profile, type, manufacturer, sequence, reserved sequence, Execute destination, enrollment REMOVE/ADD destinations, and configured/resolved finalizer.
 - `iohcNN pair1w [ADDR] add-only|announce-add` — test reference-style 1W add flows without inserting `0x39` automatically.
 - `iohcNN remove1w [ADDR]` — send the explicit 1W remove flow.
 - `iohcNN send1w-type open|close|stop|vent|force [TYPE|dst=typed|dst=all|dst=exact ADDR]` — test typed/all/exact 1W destinations.

@@ -417,10 +417,23 @@ public:
     uint32_t finalizerDestination;
     const IoHomeDeviceType *addClasses; // nullptr = derive from the broadcast type
     uint8_t addClassCount;
+    uint32_t fixedAddDestination; // 0 = class sweep or configured broadcast type
+  };
+
+  enum class OneWayPairingProfileId : uint8_t { Generic, VeluxKli, SomfyRemote };
+
+  struct OneWayPairingDestinationPreview
+  {
+    const char *profileName;
+    uint32_t removeDestination;
+    uint32_t firstAddDestination;
+    uint8_t addDestinationCount;
   };
 
   static const OneWayPairingProfile &oneWayPairingProfileGeneric();
   static const OneWayPairingProfile &oneWayPairingProfileVeluxKli();
+  static const OneWayPairingProfile &oneWayPairingProfileSomfy();
+  OneWayPairingDestinationPreview oneWayPairingDestinationPreview(IoHomecontrolChannel *iChannel) const;
 
   struct OneWayEnrollmentTraceEntry
   {
@@ -1069,7 +1082,8 @@ private:
   Pairing1WMode mPairing1WMode = Pairing1WMode::RemoveAdd;
   uint8_t mPairing1WBroadcastType = 0;
   OneWayEnrollmentFinalizer mPairing1WFinalizer = OneWayEnrollmentFinalizer::None;
-  bool mPairing1WVeluxProfile = false;
+  OneWayPairingProfileId mPairing1WProfileId = OneWayPairingProfileId::Generic;
+  OneWayEnrollmentDestinationPolicy mPairing1WEnrollmentDestinationPolicy = OneWayEnrollmentDestinationPolicy::Automatic;
   uint8_t mPairing1WEnrollmentClassMask = IOHC_1W_ENROLL_CLASS_ALL;
   uint8_t mPairing1WAddDestinationIndex = 0;
   uint16_t mPairing1WAddSequence = 0;
