@@ -4675,7 +4675,7 @@ void IoHomeController::tracePairDiagnosticDiscoveryInterpretation(const IoHomeFr
             if (lMetadata.hasIoBackboneAddress)
                 logInfoP("PairDiag: discovery ioBackboneAddress value=%06X", lMetadata.ioBackboneAddress);
             if (lMetadata.hasMib)
-                logInfoP("PairDiag: discovery multiInfoByte=0x%02X bits[1:0] powerSaveMode=%u(%s) bit2 ioMembershipFlag=%u bit3 rfSupportInNode=%u bit4=%u[unknown/unused] bit5=%u[provisional/no-production-behavior] bits[7:6] responseTimeClass=%u klfHint=%u unitConfirmed=%u",
+                logInfoP("PairDiag: discovery MIB=0x%02X bits[1:0] powerSaveMode=%u(%s) bit2 ioMembershipFlag=%u bit3 rfSupportInNode=%u bit4=%u[unknown] bit5=%u[provisional SyncCtrlGrp candidate] bits[7:6] responseTimeClass=%u KLFHint=%ums VelocetHint=%us captureUnitConfirmed=%u",
                          static_cast<unsigned>(lMetadata.multiInfoByte),
                          static_cast<unsigned>(lMetadata.powerSaveModeRaw),
                          ioHomePowerModeName(lMetadata.powerSaveMode),
@@ -4684,6 +4684,7 @@ void IoHomeController::tracePairDiagnosticDiscoveryInterpretation(const IoHomeFr
                          (lMetadata.multiInfoByte & IOHC_DISCOVERY_UNKNOWN_BIT4_MASK) ? 1U : 0U,
                          lMetadata.syncControlGroupCandidate ? 1U : 0U,
                          static_cast<unsigned>(lMetadata.responseTimeClass),
+                         static_cast<unsigned>(lMetadata.klfTurnaroundHintMs),
                          static_cast<unsigned>(lMetadata.klfTurnaroundHintMs),
                          lMetadata.responseTimeUnitConfirmed ? 1U : 0U);
             if (lMetadata.hasDiscoveryTimestamp)
@@ -4963,7 +4964,7 @@ void IoHomeController::logPairDiagnosticStatus() const
             logInfoP("PairDiag: discovery ioBackboneAddress value=%06X",
                      mPairProtocolIdentity.ioBackboneAddress);
         if (mPairProtocolIdentity.hasMib)
-            logInfoP("PairDiag: discovery multiInfoByte=0x%02X bits[1:0] powerSaveMode=%u(%s) bit2 ioMembershipFlag=%u bit3 rfSupportInNode=%u bit4=%u[unknown/unused] bit5=%u[provisional/no-production-behavior] bits[7:6] responseTimeClass=%u klfHint=%u unitConfirmed=%u",
+            logInfoP("PairDiag: discovery MIB=0x%02X bits[1:0] powerSaveMode=%u(%s) bit2 ioMembershipFlag=%u bit3 rfSupportInNode=%u bit4=%u[unknown] bit5=%u[provisional SyncCtrlGrp candidate] bits[7:6] responseTimeClass=%u KLFHint=%ums VelocetHint=%us captureUnitConfirmed=%u",
                      static_cast<unsigned>(mPairProtocolIdentity.multiInfoByte),
                      static_cast<unsigned>(mPairProtocolIdentity.powerSaveModeRaw),
                      ioHomePowerModeName(mPairProtocolIdentity.powerSaveMode),
@@ -4972,6 +4973,7 @@ void IoHomeController::logPairDiagnosticStatus() const
                      (mPairProtocolIdentity.multiInfoByte & IOHC_DISCOVERY_UNKNOWN_BIT4_MASK) ? 1U : 0U,
                      mPairProtocolIdentity.syncControlGroupCandidate ? 1U : 0U,
                      static_cast<unsigned>(mPairProtocolIdentity.responseTimeClass),
+                     static_cast<unsigned>(mPairProtocolIdentity.klfTurnaroundHintMs),
                      static_cast<unsigned>(mPairProtocolIdentity.klfTurnaroundHintMs),
                      mPairProtocolIdentity.responseTimeUnitConfirmed ? 1U : 0U);
         if (mPairProtocolIdentity.hasDiscoveryTimestamp)

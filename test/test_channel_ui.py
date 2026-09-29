@@ -264,7 +264,9 @@ class ChannelUiTest(unittest.TestCase):
             self.assertIn(field, commands)
         self.assertIn("IoHomeKeyState::Unknown", commands)
         self.assertIn("IOHC_DISCOVERY_UNKNOWN_BIT4_MASK", commands)
-        self.assertIn("bit4=%u[unknown/unused]", controller)
+        self.assertIn("bit4=%u[unknown]", controller)
+        self.assertIn("bit5=%u[provisional SyncCtrlGrp candidate]", controller)
+        self.assertIn("KLFHint=%ums VelocetHint=%us", controller)
         self.assertIn("getProtocolIdentity", channel_header)
         self.assertIn("protocolIdentityForIoAddress", controller_header)
 

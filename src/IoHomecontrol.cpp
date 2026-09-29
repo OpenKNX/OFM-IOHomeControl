@@ -3983,7 +3983,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                         if (lMetadata.hasIoBackboneAddress)
                             logInfoP("  protocol identity ioBackboneAddress: 0x%06X", lMetadata.ioBackboneAddress);
                         if (lMetadata.hasMib)
-                            logInfoP("  metadata MIB=0x%02X powerSaveMode=%s(%u) ioMembershipFlag=%u rfSupportInNode=%u bit4=%u[unknown] bit5=%u[provisional] responseTimeClass=%u klfTurnaroundHintMs=%u unitConfirmed=%u",
+                            logInfoP("  metadata MIB=0x%02X powerSaveMode=%s(%u) ioMembershipFlag=%u rfSupportInNode=%u bit4=%u[unknown] bit5=%u[provisional SyncCtrlGrp candidate] responseTimeClass=%u KLFHint=%ums VelocetHint=%us captureUnitConfirmed=%u",
                                      static_cast<unsigned>(lMetadata.multiInfoByte),
                                      ioHomePowerModeName(lMetadata.powerSaveMode),
                                      static_cast<unsigned>(lMetadata.powerSaveModeRaw),
@@ -3992,6 +3992,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                                      (lMetadata.multiInfoByte & IOHC_DISCOVERY_UNKNOWN_BIT4_MASK) ? 1U : 0U,
                                      lMetadata.syncControlGroupCandidate ? 1U : 0U,
                                      static_cast<unsigned>(lMetadata.responseTimeClass),
+                                     static_cast<unsigned>(lMetadata.klfTurnaroundHintMs),
                                      static_cast<unsigned>(lMetadata.klfTurnaroundHintMs),
                                      lMetadata.responseTimeUnitConfirmed ? 1U : 0U);
                     }
@@ -4122,7 +4123,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                                  ioHomeParameterSemanticName(ioHomeParameterSemantic(lProfile, 2)),
                                  ioHomeParameterSemanticName(ioHomeParameterSemantic(lProfile, 3)));
                         if (lMetadata.hasMib)
-                            logInfoP("       MIB=0x%02X powerSaveMode=%s(%u) ioMembershipFlag=%u rfSupportInNode=%u bit4=%u[unknown] bit5=%u[provisional] responseTimeClass=%u klfTurnaroundHintMs=%u unitConfirmed=%u",
+                            logInfoP("       MIB=0x%02X powerSaveMode=%s(%u) ioMembershipFlag=%u rfSupportInNode=%u bit4=%u[unknown] bit5=%u[provisional SyncCtrlGrp candidate] responseTimeClass=%u KLFHint=%ums VelocetHint=%us captureUnitConfirmed=%u",
                                      static_cast<unsigned>(lMetadata.multiInfoByte),
                                      ioHomePowerModeName(lMetadata.powerSaveMode),
                                      static_cast<unsigned>(lMetadata.powerSaveModeRaw),
@@ -4131,6 +4132,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                                      (lMetadata.multiInfoByte & IOHC_DISCOVERY_UNKNOWN_BIT4_MASK) ? 1U : 0U,
                                      lMetadata.syncControlGroupCandidate ? 1U : 0U,
                                      static_cast<unsigned>(lMetadata.responseTimeClass),
+                                     static_cast<unsigned>(lMetadata.klfTurnaroundHintMs),
                                      static_cast<unsigned>(lMetadata.klfTurnaroundHintMs),
                                      lMetadata.responseTimeUnitConfirmed ? 1U : 0U);
                     }
