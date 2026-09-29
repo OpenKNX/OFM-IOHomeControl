@@ -80,6 +80,23 @@ and 7-8. KLF v3.18 confirms the profile/subprofile, manufacturer, and backbone
 meanings. The raw MIB and timestamp remain retained; decoding every MIB bit is
 not implied by confirmation of the byte layout.
 
+| Claim | KLF | OVPd | Velocet docs | Capture | Current status |
+| --- | --- | --- | --- | --- | --- |
+| Native 9-byte field order | corresponding system data | explicit `Abstract.lua` serialization | compatible | prior 0x29/0x2B observations | confirmed layout |
+| Profile/subProfile, manufacturer, backbone | defined | stored | described | observed | protocol identity |
+| MIB bits 2/3 polarity | `1` means member/RF support | raw byte only | opposite Yes/No text | needed | KLF interpretation retained |
+| MIB bit 5 | undefined | raw byte only | `SyncCtrlGrp` | needed | provisional; no behavior |
+| MIB bits 7:6 unit | 5/10/20/40 ms | raw byte only | 5/10/20/40 s | timing measurements needed | raw class authoritative |
+| Discovery timestamp | field present | UInt16 | described | raw byte observations | preserve raw; no clock meaning inferred |
+| Native NodeClass RF source | not established here | separate class model | separate classes | needed | unknown |
+
+The raw `multiInfoByte` remains authoritative. `responseTimeClass` is merely
+bits 7:6; the KLF millisecond and Velocet second interpretations are logged
+as source hints, never used to change production timeouts. Bit 5 is only a
+SyncCtrlGrp *candidate* pending differing-device captures. Product evidence
+from GI1/GI2 and software signatures stays in a separate layer from the
+protocol discovery record.
+
 Source: <https://github.com/Velocet/iown-homecontrol/blob/main/docs/parameter/IoHomecontrolOVPd/Node/Class/Abstract.lua>.
 
 ### Research-only extended node types
