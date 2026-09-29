@@ -47,6 +47,30 @@ unsupported. Higher-FP meanings remain unknown in the KLF Appendix-2
 registry until a profile-specific source or capture supplies them.
 
 Source: <https://github.com/Velocet/iown-homecontrol/tree/main/docs/parameter/IoHomecontrolOVPd/Parameter>.
+
+### Higher-FP research evidence (not generic KLF assignments)
+
+These assignments come from Overkiz product/class models, not the KLF
+Appendix-2 generic actuator table. The key is at least
+`(profile, subProfile, FP index)`; manufacturer, product signature, and
+software version may narrow it further. No global `FP16 = operating mode`
+rule is valid.
+
+| Node/profile | Higher FP | Evidence/meaning |
+| --- | --- | --- |
+| Roller shutter subtype 2 | FP9 | projection angle |
+| Sliding window subtype 1 | FP9 | lock state |
+| Indoor siren type 30 | FP9-FP14 | three sound-pattern/sonorous-sequence pairs |
+| Light subtype 1 | FP10, FP11 | colour handling with MP in RGB converters |
+| Light subtype 2 | FP14 | colour temperature |
+| On/off switch subtype 2 | FP13 | MicroModuleOnOff use; exact semantic unconfirmed |
+| Heat pump type 22 | FP15, FP16 | capabilities and active modes |
+| Domestic hot water type 51 | FP10, FP15, FP16 | profile-specific modes/capabilities |
+| Electrical heater type 52 | FP10, FP11 | maximum heat level and transitory timer |
+| Electrical heater subtype 1 | FP12, FP13 | observed in model; generic meaning unconfirmed |
+| Heat recovery ventilation type 53 | FP16 | ventilation configuration mode |
+
+Source: <https://github.com/Velocet/iown-homecontrol/tree/main/docs/parameter/IoHomecontrold/Node/Class>.
 An explicit packed-profile override can change behavior without modifying
 the hardware-discovered identity.
 
