@@ -18,7 +18,7 @@ on:
       - 'test/test_sx1262_iohome_phy.cpp'
       - '.github/workflows/golden-rf-corpus.yml'
   push:
-    branches: [v1dev]
+    branches: [v1dev, v1dev-KLFDocumentation]
     paths:
       - 'test/corpus/**'
       - 'test/test_protocol.cpp'

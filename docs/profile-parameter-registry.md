@@ -6,7 +6,7 @@ Appendix 2, Table 276 (pages 104-105). The registry keys the full packed
 `Profile/SubProfile` pair, not the manufacturer ID or a product signature.
 
 The 30 entries cover every row in Table 276, including the on/off variants
-`0x017A`, `0x01FA`, and `0x057A`. The internal `Unsupported` state means only
+`0x017A`, `0x01BA`, `0x01FA`, and `0x057A`. The internal `Unsupported` state means only
 **not assigned by KLF Appendix 2 for this particular profile**. It does not
 mean FP4-FP16 are unsupported by io-homecontrol: the protocol addresses all
 16 FPs, and newer Overkiz product classes use higher indices. An unlisted
@@ -38,11 +38,25 @@ discovered profile and remains disabled in that case.
 
 The registry provides MP semantics, polarity, functional-parameter indices,
 and descriptor-derived capabilities to both command and feedback paths.
-The value kind is separate from the index: `Relative` values alone may use
-the `0x0000..0xC800` percentage converter; `Discrete` values, access methods
-(`D100` target, `D200` current, `D300` default, `D400` ignore), aliases, and
-unknown values must not. `F7FF` is **no feedback**, not a writable alias.
-For unknown profiles or undefined indices the value kind stays `Unknown`.
+Normal parameter encoding (`Relative`, `Discrete`, or `Unknown`) is separate
+from classification of a raw 16-bit value. Only `0000..C800` may use the
+percentage converter; `C900..D0D0` are percent deltas. `D100` target, `D200`
+current, `D300` default, `D400` ignore, profile-scoped `D8xx` aliases, and
+`F7FF` no-feedback must not be converted to percentages. Unknown `D8xx` and
+other reserved values classify as `Unknown`.
+
+Overkiz aliases are keyed by exact packed profile/subprofile and parameter
+index. `D800` on exterior Venetian FP3 means memorized tilt; roller-shutter
+FP3 is not assigned that alias. Gate `D807`, garage `D809`, and exterior
+Venetian/swinging-shutter `D80A` are likewise scoped. C0.22 HVAC aliases are
+manufacturer-restricted, so they remain research-only rather than generic
+production entries. Alias metadata does not authorize native RF transmission.
+See [`parameter-evidence.md`](parameter-evidence.md) for the class matrix.
+
+The four `.58` On/Off subprofiles carry a binary-only capability. Runtime
+accepts only 0/100 On/Off endpoints, publishes boolean feedback, and rejects
+continuous-position/movement KOs. ETS import exposes On/Off command/status
+instead of percentage KOs for these profiles.
 
 The diagnostic console can represent FP1-FP16 masks, but only a single
 captured FP1-FP3 native Private/Execute shape is transmitted. Multi-FP and
@@ -103,3 +117,7 @@ control objects; firmware accepts only operations supported by the discovered
 descriptor. ETS cannot add or remove group objects after a radio discovery,
 so imported channels may still choose a static display role without forcing
 the protocol profile.
+
+KLF confirms `D803` as secured ventilation for Window Opener, but not the
+exact native 2W Execute payload. The 2W ventilation command stays blocked
+until a native RF capture confirms its frame; the existing 1W path remains.

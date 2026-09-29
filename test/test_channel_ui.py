@@ -404,7 +404,10 @@ class ChannelUiTest(unittest.TestCase):
         )
 
         light = ko_choice.find("k:when[@test='7']", NS)
-        dimmable = light.find("k:choose", NS)
+        dimmable = light.find(
+            "k:choose[@ParamRefId='%AID%_P-%TT%%CC%105_R-%TT%%CC%10501']"
+            "/k:when[@test='0']/k:choose", NS
+        )
         self.assertIsNotNone(dimmable)
         self.assertEqual(
             {ref.get("RefId") for ref in dimmable.findall("k:when[@test='0']/k:ComObjectRefRef", NS)},
@@ -842,6 +845,7 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn('prefix + "Dimmable"', script)
         self.assertIn('prefix + "ImportedProfile"', script)
         self.assertIn('prefix + "ImportedManufacturer"', script)
+        self.assertIn('prefix + "BinaryOnly"', script)
         registry = (ROOT / "src" / "protocol" / "IoHomeProfileRegistry.cpp").read_text()
         registry_rows = registry.split("constexpr IoHomeProfileDescriptor kProfiles[] = {", 1)[1].split("};", 1)[0]
         registry_ids = {int(value, 16) for value in re.findall(r"profile\(0x([0-9A-Fa-f]{4})", registry_rows)}
@@ -851,6 +855,34 @@ class ChannelUiTest(unittest.TestCase):
         imported_ids = {int(value, 16) for value in re.findall(r"case 0x([0-9A-Fa-f]{4}):", import_cases)}
         self.assertTrue(registry_ids <= imported_ids)
         self.assertIn(0x0380, imported_ids)  # Legacy Atlantic Cozy presentation.
+
+    def test_on_off_subprofiles_show_binary_kos_without_position_kos(self) -> None:
+        script = (ROOT / "src" / "IoHomecontrol.script.js").read_text()
+        binary = script.split("function IOHC_isBinaryOnly", 1)[1].split(
+            "function IOHC_configureImportedChannel", 1
+        )[0]
+        for packed in (0x017A, 0x01BA, 0x01FA, 0x057A):
+            self.assertIn(f"case 0x{packed:04X}:", binary)
+        ref = "%AID%_P-%TT%%CC%105_R-%TT%%CC%10501"
+        for selection in ("5", "7", "8"):
+            device = next(node for node in self.template.findall(".//k:choose/k:when", NS)
+                          if node.get("test") == selection and
+                          node.find(f"k:choose[@ParamRefId='{ref}']", NS) is not None)
+            binary_choice = device.find(f"k:choose[@ParamRefId='{ref}']/k:when[@test='1']", NS)
+            refs = {item.get("RefId") for item in binary_choice.findall("k:ComObjectRefRef", NS)}
+            self.assertTrue(any("%CC%003_R" in item for item in refs))
+            self.assertTrue(any("%CC%006_R" in item for item in refs))
+            self.assertFalse(any("%CC%000_R" in item for item in refs))
+
+    def test_two_way_secured_ventilation_is_guarded_before_transmit(self) -> None:
+        source = (ROOT / "src" / "IoHomecontrolChannel.cpp").read_text()
+        ventilation = source.split("void IoHomecontrolChannel::sendVentilationPosition()", 1)[1].split(
+            "void IoHomecontrolChannel::handleSceneRecall", 1
+        )[0]
+        self.assertIn('if (!mIs1W)', ventilation)
+        self.assertIn('VENTILATION disabled for 2W', ventilation)
+        self.assertNotIn('sendRawTwoWayExecute', ventilation)
+        self.assertLess(ventilation.index('if (!mIs1W)'), ventilation.index('mController.sendCommand'))
 
     def test_application_help_uses_relative_ko_references_only(self) -> None:
         documentation = (ROOT / "doc" / "Applikationsbeschreibung-IoHomecontrol.md").read_text()

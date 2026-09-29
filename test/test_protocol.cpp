@@ -1757,8 +1757,9 @@ TEST(parameter_access_methods_and_no_feedback_are_distinct)
     ASSERT_TRUE(!ioHomeRawToPercent(IOHC_NO_FEEDBACK_VALUE,
                                     ParameterPolarity::Normal, lPercent));
     ASSERT_TRUE(ioHomeParameterAlias(0x0080, 0, IOHC_NO_FEEDBACK_VALUE) == nullptr);
-    ASSERT_EQ(ioHomeParameterAlias(0x0080, 0, IOHC_PARAMETER_TARGET)->semantic,
-              IoHomeAliasSemantic::Target);
+    ASSERT_TRUE(ioHomeParameterAlias(0x0080, 0, IOHC_PARAMETER_TARGET) == nullptr);
+    ASSERT_EQ(ioHomeClassifyRawParameterValue(IOHC_PARAMETER_TARGET, 0x0080, 0),
+              RawParameterValueKind::Target);
 }
 
 // =====================================================================
@@ -2589,7 +2590,7 @@ TEST(discovery_multi_information_byte_decodes_klf_semantics_without_coercion)
     {
         uint8_t lData[IOHC_DISCOVERY_EXTENDED_SIZE] = {};
         lData[IOHC_DISCOVERY_FLAGS_OFFSET] =
-            static_cast<uint8_t>((lClass << IOHC_DISCOVERY_SLAVE_TIME_CLASS_SHIFT) |
+            static_cast<uint8_t>((lClass << IOHC_DISCOVERY_RESPONSE_TIME_CLASS_SHIFT) |
                                  IOHC_DISCOVERY_IO_MEMBER_MASK |
                                  IOHC_DISCOVERY_RF_SUPPORT_MASK);
         const IoHomeProtocolIdentity lMetadata =
@@ -3177,11 +3178,11 @@ TEST(klf_appendix2_all_profile_flags_and_polarities_are_golden)
         {0x0100, P::Reversed, kPosition | kSpeed, true},
         {0x0101, P::Reversed, kPosition | kSpeed, true},
         {0x0140, P::Normal, kPosition | kSpeed, false},
-        {0x017A, P::Normal, kPosition, false},
+        {0x017A, P::Normal, IoHomeCapabilitySwitch | IoHomeCapabilityBinaryOnly, false},
         {0x0180, P::Reversed, IoHomeCapabilityLight, false},
-        {0x01BA, P::Reversed, IoHomeCapabilityLight, false},
+        {0x01BA, P::Reversed, IoHomeCapabilityLight | IoHomeCapabilitySwitch | IoHomeCapabilityBinaryOnly, false},
         {0x01C0, P::Normal, kPosition | kSpeed, false},
-        {0x01FA, P::Normal, kPosition, false},
+        {0x01FA, P::Normal, IoHomeCapabilitySwitch | IoHomeCapabilityBinaryOnly, false},
         {0x0240, P::Normal, IoHomeCapabilityLock, false},
         {0x0241, P::Normal, IoHomeCapabilityLock, false},
         {0x0280, P::Normal, kPosition | kSpeed, false},
@@ -3196,7 +3197,7 @@ TEST(klf_appendix2_all_profile_flags_and_polarities_are_golden)
         {0x0502, P::Reversed, IoHomeCapabilityVentilation, false},
         {0x0503, P::Reversed, IoHomeCapabilityVentilation, false},
         {0x0540, P::Reversed, IoHomeCapabilityHeating, false},
-        {0x057A, P::Reversed, IoHomeCapabilityHeating, false},
+        {0x057A, P::Reversed, IoHomeCapabilityHeating | IoHomeCapabilitySwitch | IoHomeCapabilityBinaryOnly, false},
         {0x0600, P::Normal, kPosition | kSpeed, false},
         {0x0601, P::Normal, kPosition | kSpeed, false},
     };
@@ -3211,6 +3212,21 @@ TEST(klf_appendix2_all_profile_flags_and_polarities_are_golden)
         ASSERT_EQ(lDescriptor->mpPolarity, lCase.polarity);
         ASSERT_EQ(lDescriptor->capabilityFlags, lCase.capabilities);
         ASSERT_EQ(lDescriptor->securedVentilation, lCase.securedVentilation);
+    }
+}
+
+TEST(klf_on_off_subprofiles_have_binary_main_parameter_only)
+{
+    for (uint16_t lPacked : {0x017A, 0x01BA, 0x01FA, 0x057A})
+    {
+        const IoHomeProfileDescriptor *lDescriptor = ioHomeProfileDescriptor(lPacked >> 6, lPacked & 0x3F);
+        ASSERT_TRUE(lDescriptor != nullptr);
+        ASSERT_TRUE((lDescriptor->capabilityFlags & IoHomeCapabilityBinaryOnly) != 0);
+        ASSERT_TRUE((lDescriptor->capabilityFlags & IoHomeCapabilitySwitch) != 0);
+        ASSERT_TRUE((lDescriptor->capabilityFlags & IoHomeCapabilityPosition) == 0);
+        ASSERT_EQ(ioHomeParameterDescriptor(lDescriptor, 0).encoding, ParameterEncoding::Discrete);
+        ASSERT_TRUE(!ioHomeParameterDescriptor(lDescriptor, 0).writable);
+        ASSERT_EQ(ioHomeParameterDescriptor(lDescriptor, 1).encoding, ParameterEncoding::Unknown);
     }
 }
 
@@ -3245,29 +3261,29 @@ TEST(klf_profile_registry_preserves_unknowns_and_reverses_venetian_fp_roles)
     ASSERT_TRUE(!ioHomeSupportsCapturedFp3Orientation(lIdentity));
 }
 
-TEST(profile_parameter_value_kind_is_separate_from_fp_index)
+TEST(profile_parameter_encoding_is_separate_from_fp_index)
 {
     const IoHomeProfileDescriptor *lShutter = ioHomeProfileDescriptor(2, 0);
     const IoHomeProfileDescriptor *lSwitch = ioHomeProfileDescriptor(15, 0);
     ASSERT_TRUE(lShutter != nullptr);
     ASSERT_TRUE(lSwitch != nullptr);
-    ASSERT_EQ(ioHomeParameterDescriptor(lShutter, 1).valueKind,
-              ParameterValueKind::Relative);
+    ASSERT_EQ(ioHomeParameterDescriptor(lShutter, 1).encoding,
+              ParameterEncoding::Relative);
     ASSERT_TRUE(ioHomeParameterDescriptor(lShutter, 1).writable);
-    ASSERT_EQ(ioHomeParameterDescriptor(lShutter, 10).valueKind,
-              ParameterValueKind::Unknown);
+    ASSERT_EQ(ioHomeParameterDescriptor(lShutter, 10).encoding,
+              ParameterEncoding::Unknown);
     ASSERT_TRUE(!ioHomeParameterDescriptor(lShutter, 10).writable);
-    ASSERT_EQ(ioHomeParameterDescriptor(lSwitch, 0).valueKind,
-              ParameterValueKind::Discrete);
+    ASSERT_EQ(ioHomeParameterDescriptor(lSwitch, 0).encoding,
+              ParameterEncoding::Discrete);
     ASSERT_TRUE(!ioHomeParameterDescriptor(lSwitch, 0).writable);
-    ASSERT_EQ(ioHomeParameterDescriptor(nullptr, 1).valueKind,
-              ParameterValueKind::Unknown);
+    ASSERT_EQ(ioHomeParameterDescriptor(nullptr, 1).encoding,
+              ParameterEncoding::Unknown);
 }
 
 TEST(parameter_aliases_keep_index_profile_and_source)
 {
     const IoHomeParameterAlias *lMemory = ioHomeParameterAlias(0x0080, 0, 0xD800);
-    const IoHomeParameterAlias *lTilt = ioHomeParameterAlias(0x0080, 3, 0xD800);
+    const IoHomeParameterAlias *lTilt = ioHomeParameterAlias(0x0440, 3, 0xD800);
     ASSERT_TRUE(lMemory != nullptr);
     ASSERT_TRUE(lTilt != nullptr);
     ASSERT_EQ(lMemory->semantic, IoHomeAliasSemantic::MemorizedPosition);
@@ -3278,9 +3294,42 @@ TEST(parameter_aliases_keep_index_profile_and_source)
               IoHomeAliasSemantic::SecuredVentilation);
     ASSERT_EQ(ioHomeParameterAlias(0x0101, 0, 0xD803)->source,
               IoHomeAliasSource::KlfConfirmed);
-    ASSERT_EQ(ioHomeParameterAlias(0x0080, 0, 0xD807)->semantic,
+    ASSERT_EQ(ioHomeParameterAlias(0x01C0, 0, 0xD807)->semantic,
               IoHomeAliasSemantic::PedestrianPosition);
     ASSERT_TRUE(ioHomeParameterAlias(0x0080, 1, 0xD807) == nullptr);
+    ASSERT_TRUE(ioHomeParameterAlias(0x0080, 3, 0xD800) == nullptr);
+    ASSERT_TRUE(ioHomeParameterAlias(0x0080, 0, 0xD807) == nullptr);
+    ASSERT_TRUE(ioHomeParameterAlias(0x0080, 0, 0xD809) == nullptr);
+    ASSERT_TRUE(ioHomeParameterAlias(0x0080, 0, 0xD80F) == nullptr);
+    ASSERT_EQ(ioHomeParameterAlias(0x0140, 0, 0xD809)->semantic,
+              IoHomeAliasSemantic::PartialPosition);
+    ASSERT_EQ(ioHomeParameterAlias(0x0440, 0, 0xD80A)->semantic,
+              IoHomeAliasSemantic::SecuredPosition);
+}
+
+TEST(raw_parameter_value_classifier_is_separate_from_encoding)
+{
+    struct Case { uint16_t raw; RawParameterValueKind kind; };
+    const Case kCases[] = {
+        {0x0000, RawParameterValueKind::Relative},
+        {0x6400, RawParameterValueKind::Relative},
+        {0xC800, RawParameterValueKind::Relative},
+        {0xC900, RawParameterValueKind::PercentDelta},
+        {0xD0D0, RawParameterValueKind::PercentDelta},
+        {0xD100, RawParameterValueKind::Target},
+        {0xD200, RawParameterValueKind::Current},
+        {0xD300, RawParameterValueKind::Default},
+        {0xD400, RawParameterValueKind::Ignore},
+        {0xF7FF, RawParameterValueKind::NoFeedback},
+        {0xFFFF, RawParameterValueKind::Unknown},
+        {0xD8FE, RawParameterValueKind::Unknown},
+    };
+    for (const Case &lCase : kCases)
+        ASSERT_EQ(ioHomeClassifyRawParameterValue(lCase.raw, 0x0440, 0), lCase.kind);
+    ASSERT_EQ(ioHomeClassifyRawParameterValue(0xD800, 0x0440, 0),
+              RawParameterValueKind::Alias);
+    ASSERT_EQ(ioHomeClassifyRawParameterValue(0xD800, 0x0080, 3),
+              RawParameterValueKind::Unknown);
 }
 
 TEST(klf_profile_mp_polarity_and_window_ventilation_alias)
@@ -12965,6 +13014,7 @@ TEST(controller_diagnostic_fp_read_uses_captured_selector_without_publishing)
     ASSERT_EQ(lTx.data[0], 0x03);
     ASSERT_EQ(lTx.data[1], 0x40);
     ASSERT_EQ(lTx.data[2], 0x01);
+    lController.testSetTrustRxPosition(false);
     uint8_t lData[15] = {};
     lData[2] = lData[4] = 0x32;
     lData[13] = 0xFF;
@@ -12974,6 +13024,15 @@ TEST(controller_diagnostic_fp_read_uses_captured_selector_without_publishing)
                              IoHomeCommand::PrivateResponse,
                              lData, sizeof(lData));
     ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    const auto &lSample = lController.lastDiagnosticFpSample();
+    ASSERT_TRUE(lSample.valid);
+    ASSERT_EQ(lSample.ioAddress, lDevice);
+    ASSERT_EQ(lSample.fpIndex, 2U);
+    ASSERT_EQ(lSample.fpi1, 0x40);
+    ASSERT_EQ(lSample.fpi2, 0U);
+    ASSERT_EQ(lSample.payloadLength, 15U);
+    ASSERT_EQ(lSample.raw, 0xFFFF);
+    ASSERT_EQ(lSample.kind, RawParameterValueKind::Unknown);
     ASSERT_TRUE(!lChannel.testHasPositionFeedback());
     ASSERT_TRUE(!lChannel.testHasTargetPositionFeedback());
     ASSERT_TRUE(!lChannel.testHasSlatFeedback());

@@ -38,20 +38,24 @@ enum class ParameterPolarity : uint8_t
     Reversed // 0x0000 = 100%, 0xC800 = 0%
 };
 
-enum class ParameterValueKind : uint8_t
+enum class ParameterEncoding : uint8_t
 {
     Relative,
     Discrete,
-    AccessMethod,
-    Alias,
     Unknown
+};
+
+enum class RawParameterValueKind : uint8_t
+{
+    Relative, PercentDelta, Target, Current, Default, Ignore,
+    Alias, NoFeedback, Unknown
 };
 
 struct IoHomeParameterDescriptor
 {
     uint8_t index = 0; // 0 = MP; 1..16 = FP
     ParameterSemantic semantic = ParameterSemantic::Unknown;
-    ParameterValueKind valueKind = ParameterValueKind::Unknown;
+    ParameterEncoding encoding = ParameterEncoding::Unknown;
     ParameterPolarity polarity = ParameterPolarity::Normal;
     bool writable = false;
 };
@@ -78,18 +82,22 @@ enum class IoHomeAliasSource : uint8_t
 
 struct IoHomeParameterAlias
 {
-    uint16_t packedProfile; // 0xFFFF = research-only, profile not established
+    uint16_t packedProfile; // Exact KLF packed profile/subprofile
     uint8_t parameterIndex; // 0 = MP, 1..16 = FP
     uint16_t value;
     IoHomeAliasSemantic semantic;
     IoHomeAliasSource source;
 };
 
-// Lookup is diagnostic metadata only. A wildcard profile is not permission
-// to transmit an alias to every product; product/capture checks remain needed.
+// Lookup is diagnostic metadata only. It requires an exact profile/subprofile
+// match and does not grant permission to transmit an alias.
 const IoHomeParameterAlias *ioHomeParameterAlias(uint16_t iPackedProfile,
                                                  uint8_t iParameterIndex,
                                                  uint16_t iValue);
+RawParameterValueKind ioHomeClassifyRawParameterValue(uint16_t iRaw,
+                                                      uint16_t iPackedProfile,
+                                                      uint8_t iParameterIndex);
+const char *ioHomeRawParameterValueKindName(RawParameterValueKind iKind);
 
 enum IoHomeProfileCapability : uint32_t
 {
@@ -102,7 +110,8 @@ enum IoHomeProfileCapability : uint32_t
     IoHomeCapabilitySwitch = 1UL << 6,
     IoHomeCapabilityVentilation = 1UL << 7,
     IoHomeCapabilityHeating = 1UL << 8,
-    IoHomeCapabilityDualCurtain = 1UL << 9
+    IoHomeCapabilityDualCurtain = 1UL << 9,
+    IoHomeCapabilityBinaryOnly = 1UL << 10
 };
 
 struct IoHomeProfileDescriptor

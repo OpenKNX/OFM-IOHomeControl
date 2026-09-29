@@ -642,8 +642,8 @@ constexpr uint32_t IOHC_FREQUENCIES[IOHC_NUM_FREQUENCIES] = {
 #define IOHC_DISCOVERY_RF_SUPPORT_MASK 0x08
 #define IOHC_DISCOVERY_UNKNOWN_BIT4_MASK 0x10
 #define IOHC_DISCOVERY_SYNC_CONTROL_GROUP_MASK 0x20
-#define IOHC_DISCOVERY_SLAVE_TIME_CLASS_MASK 0xC0
-#define IOHC_DISCOVERY_SLAVE_TIME_CLASS_SHIFT 6
+#define IOHC_DISCOVERY_RESPONSE_TIME_CLASS_MASK 0xC0
+#define IOHC_DISCOVERY_RESPONSE_TIME_CLASS_SHIFT 6
 #define IOHC_POWER_SAVE_ALWAYS_ALIVE 0x00
 #define IOHC_POWER_SAVE_LOW_POWER 0x01
 
@@ -769,7 +769,7 @@ inline const char *ioHomeGeneralInfo3OutcomeName(IoHomeGeneralInfo3Outcome iOutc
     }
 }
 
-inline uint8_t ioHomeSlaveTimeKlfValue(uint8_t iClass)
+inline uint8_t ioHomeKlfTurnaroundHintMs(uint8_t iClass)
 {
     static constexpr uint8_t kValues[] = {5, 10, 20, 40};
     return kValues[iClass & 0x03];
@@ -1217,8 +1217,8 @@ inline void decodeProtocolIdentityMib(IoHomeProtocolIdentity &ioIdentity,
     ioIdentity.syncControlGroupCandidate =
         (iMib & IOHC_DISCOVERY_SYNC_CONTROL_GROUP_MASK) != 0;
     ioIdentity.responseTimeClass = static_cast<uint8_t>(
-        (iMib & IOHC_DISCOVERY_SLAVE_TIME_CLASS_MASK) >> IOHC_DISCOVERY_SLAVE_TIME_CLASS_SHIFT);
-    ioIdentity.klfTurnaroundHintMs = ioHomeSlaveTimeKlfValue(ioIdentity.responseTimeClass);
+        (iMib & IOHC_DISCOVERY_RESPONSE_TIME_CLASS_MASK) >> IOHC_DISCOVERY_RESPONSE_TIME_CLASS_SHIFT);
+    ioIdentity.klfTurnaroundHintMs = ioHomeKlfTurnaroundHintMs(ioIdentity.responseTimeClass);
     // The KLF millisecond interpretation is not capture-confirmed for native RF.
     ioIdentity.responseTimeUnitConfirmed = false;
 }

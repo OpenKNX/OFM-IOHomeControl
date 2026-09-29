@@ -384,6 +384,20 @@ public:
     uint32_t txEndToFinalResponseUs = 0;
   };
 
+  struct DiagnosticFpSample
+  {
+    bool valid = false;
+    uint32_t ioAddress = 0;
+    uint16_t packedProfile = 0xFFFF;
+    uint8_t manufacturerId = 0xFF;
+    uint8_t fpIndex = 0;
+    uint8_t fpi1 = 0;
+    uint8_t fpi2 = 0;
+    uint8_t payloadLength = 0;
+    uint16_t raw = 0;
+    RawParameterValueKind kind = RawParameterValueKind::Unknown;
+  };
+
   enum class OneWayEnrollPhase : uint8_t
   {
     Remove,
@@ -696,6 +710,10 @@ public:
   const PairingTelemetry &pairingTelemetry() const;
   const ExchangeDiagnostics &exchangeDiagnostics() const;
   const ResponseTimingSample &lastResponseTimingSample() const;
+  const DiagnosticFpSample &lastDiagnosticFpSample() const { return mLastDiagnosticFpSample; }
+#ifdef TEST_NATIVE
+  void testSetTrustRxPosition(bool iTrust) { mTrustRxPosition = iTrust; }
+#endif
   void logPairDiagnosticStatus() const;
   const OneWayEnrollmentTraceEntry *oneWayEnrollmentTrace() const;
   uint8_t oneWayEnrollmentTraceCount() const;
@@ -988,6 +1006,7 @@ private:
   bool mExchangeRequestTxEndValid = false;
   bool mExchangeAuthTxEndValid = false;
   ResponseTimingSample mLastResponseTimingSample{};
+  DiagnosticFpSample mLastDiagnosticFpSample{};
   bool mTrustRxPosition = true; // false while dispatching an immediate Execute reply
 
   // Passive UNKNOWN_86 (0x86) observation. No semantics are assumed; only the

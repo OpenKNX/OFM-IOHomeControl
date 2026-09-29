@@ -2361,7 +2361,7 @@ bool IoHomeController::sendProfileParameterCommand(uint32_t iDestNodeId,
     {
         const IoHomeParameterDescriptor lParameter =
             ioHomeParameterDescriptor(lDescriptor, lIndex);
-        if (!lParameter.writable || lParameter.valueKind != ParameterValueKind::Relative)
+        if (!lParameter.writable || lParameter.encoding != ParameterEncoding::Relative)
             return false;
     }
     if (iPercent > 100)
@@ -9426,24 +9426,46 @@ void IoHomeController::dispatchRxFrame()
             }
             case IoHomeCommand::PrivateResponse:
             {
-                if (!mTrustRxPosition)
-                    break;
                 if (mCurrentCmd.diagnosticFpRead)
                 {
                     const std::string lRawPayload = hexDump(mRxFrame.data, mRxFrame.dataLen);
+                    DiagnosticFpSample lSample;
+                    lSample.valid = true;
+                    lSample.ioAddress = lSrcNode;
+                    lSample.fpIndex = mCurrentCmd.diagnosticFpReadIndex;
+                    lSample.fpi1 = mCurrentCmd.param2;
+                    lSample.fpi2 = 0; // captured native selector has FPI1 only
+                    lSample.payloadLength = mRxFrame.dataLen;
+                    const IoHomeProtocolIdentity &lIdentity = lCh->getProtocolIdentity();
+                    if (lIdentity.valid)
+                    {
+                        lSample.packedProfile = encodeNodeTypeSubType(
+                            lIdentity.profile, lIdentity.subProfile);
+                        lSample.manufacturerId = lIdentity.manufacturerId;
+                    }
                     if (mRxFrame.dataLen >= 15)
-                        logInfoP("FP diagnostic read node=0x%06X FP%u raw=0x%04X payload=%s",
-                                 static_cast<unsigned>(lSrcNode),
-                                 static_cast<unsigned>(mCurrentCmd.diagnosticFpReadIndex),
-                                 static_cast<unsigned>(readU16BE(mRxFrame.data, 13)),
-                                 lRawPayload.c_str());
-                    else
-                        logInfoP("FP diagnostic read node=0x%06X FP%u short reply payload=%s",
-                                 static_cast<unsigned>(lSrcNode),
-                                 static_cast<unsigned>(mCurrentCmd.diagnosticFpReadIndex),
-                                 lRawPayload.c_str());
+                    {
+                        lSample.raw = readU16BE(mRxFrame.data, 13);
+                        lSample.kind = ioHomeClassifyRawParameterValue(
+                            lSample.raw, lSample.packedProfile, lSample.fpIndex);
+                    }
+                    mLastDiagnosticFpSample = lSample;
+                    logInfoP("FP diagnostic node=0x%06X profile=0x%04X manufacturer=0x%02X FP=%u FPI1=0x%02X FPI2=0x%02X len=%u raw=%s0x%04X kind=%s payload=%s",
+                             static_cast<unsigned>(lSample.ioAddress),
+                             static_cast<unsigned>(lSample.packedProfile),
+                             static_cast<unsigned>(lSample.manufacturerId),
+                             static_cast<unsigned>(lSample.fpIndex),
+                             static_cast<unsigned>(lSample.fpi1),
+                             static_cast<unsigned>(lSample.fpi2),
+                             static_cast<unsigned>(lSample.payloadLength),
+                             mRxFrame.dataLen >= 15 ? "" : "unavailable/",
+                             static_cast<unsigned>(lSample.raw),
+                             ioHomeRawParameterValueKindName(lSample.kind),
+                             lRawPayload.c_str());
                     break; // diagnostic reads never publish KOs
                 }
+                if (!mTrustRxPosition)
+                    break;
                 // PrivateResponse (0x04) layout per reference:
                 //   data[0]:    flags (bit 0 = stopped)
                 //   data[1]:    flags (bit 7 = status-expected)

@@ -52,8 +52,13 @@ namespace
             static_cast<uint8_t>(iPackedType & 0x3F),
             IoHomeNodeClass::Actuator, iLabel, iMp,
             {iFp1, iFp2, iFp3},
-            capabilityFor(iMp) | capabilityFor(iFp1) |
-                capabilityFor(iFp2) | capabilityFor(iFp3),
+            ((iPackedType & 0x3F) == 0x3A
+                 ? ((capabilityFor(iMp) | capabilityFor(iFp1) |
+                     capabilityFor(iFp2) | capabilityFor(iFp3)) &
+                    ~static_cast<uint32_t>(IoHomeCapabilityPosition)) |
+                       IoHomeCapabilitySwitch | IoHomeCapabilityBinaryOnly
+                 : capabilityFor(iMp) | capabilityFor(iFp1) |
+                       capabilityFor(iFp2) | capabilityFor(iFp3)),
             iPolarity, iSecuredVentilation};
     }
 
@@ -113,28 +118,42 @@ namespace
     };
 
     constexpr IoHomeParameterAlias kAliases[] = {
-        {0xFFFF, 0, IOHC_PARAMETER_TARGET, IoHomeAliasSemantic::Target,
-         IoHomeAliasSource::KlfConfirmed},
-        {0xFFFF, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition,
-         IoHomeAliasSource::OvpdConfirmed},
-        {0xFFFF, 3, 0xD800, IoHomeAliasSemantic::MemorizedTilt,
+        // OVPd class C0.1/2/3/6/10/16/17/19/24 instantiates MP memory.
+        {0x0040, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::OvpdConfirmed},
+        {0x0080, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::OvpdConfirmed},
+        {0x0081, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::OvpdConfirmed},
+        {0x0082, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::OvpdConfirmed},
+        {0x00C0, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::OvpdConfirmed},
+        {0x0180, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::OvpdConfirmed},
+        {0x01BA, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::OvpdConfirmed},
+        {0x0280, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::OvpdConfirmed},
+        {0x0400, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::OvpdConfirmed},
+        {0x0440, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::OvpdConfirmed},
+        {0x04C0, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::OvpdConfirmed},
+        {0x0600, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::OvpdConfirmed},
+        {0x0601, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::OvpdConfirmed},
+        {0x0440, 3, 0xD800, IoHomeAliasSemantic::MemorizedTilt,
          IoHomeAliasSource::OvpdConfirmed},
         {0x0100, 0, 0xD803, IoHomeAliasSemantic::SecuredVentilation,
          IoHomeAliasSource::KlfConfirmed},
         {0x0101, 0, 0xD803, IoHomeAliasSemantic::SecuredVentilation,
          IoHomeAliasSource::KlfConfirmed},
-        {0xFFFF, 0, 0xD807, IoHomeAliasSemantic::PedestrianPosition,
+        {0x01C0, 0, 0xD807, IoHomeAliasSemantic::PedestrianPosition,
          IoHomeAliasSource::OvpdConfirmed},
-        {0xFFFF, 0, 0xD809, IoHomeAliasSemantic::PartialPosition,
+        {0x01FA, 0, 0xD807, IoHomeAliasSemantic::PedestrianPosition,
          IoHomeAliasSource::OvpdConfirmed},
-        {0xFFFF, 0, 0xD80A, IoHomeAliasSemantic::SecuredPosition,
+        {0x0140, 0, 0xD809, IoHomeAliasSemantic::PartialPosition,
          IoHomeAliasSource::OvpdConfirmed},
-        {0xFFFF, 0, 0xD80F, IoHomeAliasSemantic::Comfort,
+        {0x017A, 0, 0xD809, IoHomeAliasSemantic::PartialPosition,
          IoHomeAliasSource::OvpdConfirmed},
-        {0xFFFF, 0, 0xD812, IoHomeAliasSemantic::Eco,
+        {0x0440, 0, 0xD80A, IoHomeAliasSemantic::SecuredPosition,
          IoHomeAliasSource::OvpdConfirmed},
-        {0xFFFF, 0, 0xD813, IoHomeAliasSemantic::Halted,
+        {0x0600, 0, 0xD80A, IoHomeAliasSemantic::SecuredPosition,
          IoHomeAliasSource::OvpdConfirmed},
+        {0x0601, 0, 0xD80A, IoHomeAliasSemantic::SecuredPosition,
+         IoHomeAliasSource::OvpdConfirmed},
+        // C0.22 HVAC aliases are manufacturer-restricted and have no KLF
+        // Appendix-2 profile in this registry; retain them in research docs.
     };
 }
 
@@ -146,11 +165,46 @@ const IoHomeParameterAlias *ioHomeParameterAlias(uint16_t iPackedProfile,
         return nullptr;
     for (const IoHomeParameterAlias &lAlias : kAliases)
     {
-        if ((lAlias.packedProfile == iPackedProfile || lAlias.packedProfile == 0xFFFF) &&
+        if (lAlias.packedProfile == iPackedProfile &&
             lAlias.parameterIndex == iParameterIndex && lAlias.value == iValue)
             return &lAlias;
     }
     return nullptr;
+}
+
+RawParameterValueKind ioHomeClassifyRawParameterValue(uint16_t iRaw,
+                                                      uint16_t iPackedProfile,
+                                                      uint8_t iParameterIndex)
+{
+    if (iRaw <= 0xC800) return RawParameterValueKind::Relative;
+    if (iRaw >= 0xC900 && iRaw <= 0xD0D0) return RawParameterValueKind::PercentDelta;
+    switch (iRaw)
+    {
+    case 0xD100: return RawParameterValueKind::Target;
+    case 0xD200: return RawParameterValueKind::Current;
+    case 0xD300: return RawParameterValueKind::Default;
+    case 0xD400: return RawParameterValueKind::Ignore;
+    case IOHC_NO_FEEDBACK_VALUE: return RawParameterValueKind::NoFeedback;
+    default: break;
+    }
+    return ioHomeParameterAlias(iPackedProfile, iParameterIndex, iRaw)
+               ? RawParameterValueKind::Alias : RawParameterValueKind::Unknown;
+}
+
+const char *ioHomeRawParameterValueKindName(RawParameterValueKind iKind)
+{
+    switch (iKind)
+    {
+    case RawParameterValueKind::Relative: return "relative";
+    case RawParameterValueKind::PercentDelta: return "percent-delta";
+    case RawParameterValueKind::Target: return "target";
+    case RawParameterValueKind::Current: return "current";
+    case RawParameterValueKind::Default: return "default";
+    case RawParameterValueKind::Ignore: return "ignore";
+    case RawParameterValueKind::Alias: return "alias";
+    case RawParameterValueKind::NoFeedback: return "no-feedback";
+    default: return "unknown";
+    }
 }
 
 const IoHomeProfileDescriptor *ioHomeProfileDescriptor(uint16_t iProfile,
@@ -200,10 +254,12 @@ IoHomeParameterDescriptor ioHomeParameterDescriptor(
         return lResult;
     case ParameterSemantic::LockState:
     case ParameterSemantic::SwitchState:
-        lResult.valueKind = ParameterValueKind::Discrete;
+        lResult.encoding = ParameterEncoding::Discrete;
         return lResult;
     default:
-        lResult.valueKind = ParameterValueKind::Relative;
+        lResult.encoding = (iDescriptor->capabilityFlags & IoHomeCapabilityBinaryOnly) &&
+                                   iParameterIndex == 0
+                               ? ParameterEncoding::Discrete : ParameterEncoding::Relative;
         // Only the existing FP1..FP3 percentage command path is validated.
         lResult.writable = iParameterIndex >= 1 && iParameterIndex <= 3;
         return lResult;

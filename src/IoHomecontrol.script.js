@@ -136,6 +136,18 @@ function IOHC_hasOrientationObjects(protocolType, subProfile) {
     }
 }
 
+function IOHC_isBinaryOnly(protocolType, subProfile) {
+    switch ((protocolType << 6) | subProfile) {
+    case 0x017A: // Garage Door On/Off
+    case 0x01BA: // Light On/Off
+    case 0x01FA: // Gate On/Off
+    case 0x057A: // Exterior Heating On/Off
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 function IOHC_importDeviceLabel(etsType) {
     switch (etsType) {
     case 1: return "Rollladen/Jalousie";
@@ -179,6 +191,8 @@ function IOHC_configureImportedChannel(device, channelNumber, discovery) {
     IOHC_setParameterValue(device, prefix + "ChannelSelection", etsType + 1);
     IOHC_setParameterValue(device, prefix + "OrientationObjects",
                            IOHC_hasOrientationObjects(discovery.protocolType, discovery.subtype));
+    IOHC_setParameterValue(device, prefix + "BinaryOnly",
+                           IOHC_isBinaryOnly(discovery.protocolType, discovery.subtype));
     IOHC_setParameterValue(device, prefix + "Dimmable",
                            discovery.protocolType == 0x06 && discovery.subtype == 0 ? 1 : 0);
     IOHC_setParameterValue(device, prefix + "ProfileOverride", 0);

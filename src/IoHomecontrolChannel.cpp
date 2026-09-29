@@ -431,16 +431,18 @@ void IoHomecontrolChannel::processInputKo(uint8_t iIoIndex, GroupObject &iKo)
     if (const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor())
     {
         const IoHomeGenericCapabilities lCaps = ioHomeProfileCapabilities(lDescriptor);
+        const bool lBinaryOnly = (lDescriptor->capabilityFlags & IoHomeCapabilityBinaryOnly) != 0;
         bool lSupported = true;
         switch (iIoIndex)
         {
         case IOHC_KoCHPosition:
-            lSupported = lCaps.position || lCaps.light || lCaps.ventilation || lCaps.heating;
+            lSupported = !lBinaryOnly &&
+                         (lCaps.position || lCaps.light || lCaps.ventilation || lCaps.heating);
             break;
         case IOHC_KoCHUpDown:
         case IOHC_KoCHStepStop:
         case IOHC_KoCHStop:
-            lSupported = lCaps.position;
+            lSupported = !lBinaryOnly && lCaps.position;
             break;
         case IOHC_KoCHOnOff:
             lSupported = lCaps.onOff || lCaps.light || lCaps.lock || lCaps.heating;
@@ -449,7 +451,7 @@ void IoHomecontrolChannel::processInputKo(uint8_t iIoIndex, GroupObject &iKo)
             lSupported = lCaps.tilt;
             break;
         case IOHC_KoCHFavorite:
-            lSupported = lCaps.position;
+            lSupported = !lBinaryOnly && lCaps.position;
             break;
         case IOHC_KoCHVentilation:
             lSupported = lDescriptor->securedVentilation;
@@ -717,7 +719,10 @@ void IoHomecontrolChannel::onScalarFeedback(float iPercent)
 {
     // Binary/light/heating status shares the channel's numeric state but is
     // not published as a cover-position KO.
-    mCurrentPosition = clampPercent(iPercent);
+    const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor();
+    mCurrentPosition = lDescriptor && (lDescriptor->capabilityFlags & IoHomeCapabilityBinaryOnly)
+                           ? (iPercent >= 50.0f ? 100.0f : 0.0f)
+                           : clampPercent(iPercent);
     mTargetPosition = mCurrentPosition;
     publishBinaryStatus();
     logDebugP("Scalar feedback: %.1f%%", mCurrentPosition);
@@ -1372,6 +1377,12 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
     const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor();
     if (lDescriptor && ioHomeParameterSemantic(lDescriptor, 0) == ParameterSemantic::Unsupported)
         return;
+    if (lDescriptor && (lDescriptor->capabilityFlags & IoHomeCapabilityBinaryOnly) &&
+        (iSlatPercent != 0xFF || (iPercent != 0.0f && iPercent != 100.0f)))
+    {
+        logDebugP("Binary profile accepts only On/Off endpoints");
+        return;
+    }
     if (iSlatPercent != 0xFF && mIs1W && lDescriptor)
     {
         logDebugP("Position+slat command has no validated FP mapping for %s",
@@ -1395,7 +1406,10 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
         sendSlatCommand(iSlatPercent);
 
     clearStopTravelSnapshot();
-    startTravelEstimation(lTargetPosition);
+    if (lDescriptor && (lDescriptor->capabilityFlags & IoHomeCapabilityBinaryOnly))
+        mTargetPosition = lTargetPosition;
+    else
+        startTravelEstimation(lTargetPosition);
     if (!mIs1W || mNodeId != 0)
         startStatusPollTracking(defaultTrackedStatusPollDelayMs());
 }
@@ -1404,6 +1418,8 @@ void IoHomecontrolChannel::sendUpDown(bool iDown)
 {
     if (!allowsActuatorControls())
         return;
+    if (const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor())
+        if (lDescriptor->capabilityFlags & IoHomeCapabilityBinaryOnly) return;
     logDebugP("Send %s", iDown ? "DOWN" : "UP");
     sendPositionCommand(iDown ? 100.0f : 0.0f);
 }
@@ -1412,6 +1428,8 @@ void IoHomecontrolChannel::sendStop()
 {
     if (!allowsActuatorControls())
         return;
+    if (const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor())
+        if (lDescriptor->capabilityFlags & IoHomeCapabilityBinaryOnly) return;
     logDebugP("Send STOP");
     const bool lQueued = mIs1W
                              ? mController.sendChannelCommand(this, IoHomeCommand::Execute, 0xD2)
@@ -1435,6 +1453,8 @@ void IoHomecontrolChannel::sendFavorite()
 {
     if (!allowsActuatorControls())
         return;
+    if (const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor())
+        if (lDescriptor->capabilityFlags & IoHomeCapabilityBinaryOnly) return;
     logDebugP("Send FAVORITE");
     const bool lQueued = mIs1W
                              ? mController.sendChannelCommand(this, IoHomeCommand::Execute, 0xD8)
@@ -1657,6 +1677,7 @@ uint8_t IoHomecontrolChannel::effectiveDeviceType() const
     if (const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor())
     {
         const IoHomeGenericCapabilities lCaps = ioHomeProfileCapabilities(lDescriptor);
+        if (lDescriptor->capabilityFlags & IoHomeCapabilityBinaryOnly) return 12;
         if (lCaps.light) return 6;
         if (lCaps.lock) return 8;
         if (lCaps.onOff) return 12;
@@ -1768,10 +1789,15 @@ bool IoHomecontrolChannel::restoreLastKnownStateAfterStartup()
 
 void IoHomecontrolChannel::publishPositionFeedback(float iPositionPercent, bool iLogMessage)
 {
-    mCurrentPosition = clampPercent(iPositionPercent);
+    const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor();
+    const bool lBinaryOnly = lDescriptor &&
+                             (lDescriptor->capabilityFlags & IoHomeCapabilityBinaryOnly);
+    mCurrentPosition = lBinaryOnly ? (iPositionPercent >= 50.0f ? 100.0f : 0.0f)
+                                   : clampPercent(iPositionPercent);
 
     float lReportPos = ParamIOHC_cInvertDir ? (100.0f - mCurrentPosition) : mCurrentPosition;
-    getKo(IOHC_KoCHPositionFeedback).value((uint8_t)(lReportPos + 0.5f), DPT_Scaling);
+    if (!lBinaryOnly)
+        getKo(IOHC_KoCHPositionFeedback).value((uint8_t)(lReportPos + 0.5f), DPT_Scaling);
     publishBinaryStatus();
 
     if (iLogMessage)
@@ -2129,14 +2155,6 @@ void IoHomecontrolChannel::sendVentilationPosition()
     if (mProtocolIdentity.valid && (!lDescriptor || !lDescriptor->securedVentilation))
     {
         logDebugP("Secured ventilation is not defined for this profile");
-        return;
-    }
-    if (lDescriptor && !mIs1W)
-    {
-        const uint8_t lPayload[] = {IOHC_ORIGINATOR_USER, mConfigured2WAcei,
-                                    0xD8, 0x03, 0x00, 0x00};
-        if (mController.sendRawTwoWayExecute(this, lPayload, sizeof(lPayload)))
-            startStatusPollTracking(defaultTrackedStatusPollDelayMs());
         return;
     }
     // 2W ventilation has not been validated from a real capture yet.

@@ -145,6 +145,14 @@ tables contain overlapping numeric profile meanings across classes.
 
 ### Remaining evidence work
 
+The native 2W secured-ventilation frame shape is capture-required even though
+KLF defines the `D803` semantic. Alias applicability is derived from the
+Overkiz class instantiations, not from a global D8xx dictionary. The MIB
+response-time class requires hardware TX-end/response timing captures before
+choosing KLF milliseconds versus Velocet seconds. MIB bit 5 (`SyncCtrlGrp`
+in Velocet documentation) likewise needs a behaviour capture; neither field
+changes RF timing, grouping, or scheduling in production.
+
 Capture pairing and system-copy traffic for known actuator, sensor, controller,
 stack, and beacon nodes. Compare explicit class values from a known-good
 gateway with every RF response in the same session. Only promote a source into
