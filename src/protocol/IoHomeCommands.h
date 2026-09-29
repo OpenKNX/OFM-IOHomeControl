@@ -710,6 +710,9 @@ struct IoHomeProtocolIdentity
     bool rfSupportInNode = false;
     // Bit 4 deliberately has no decoded field or behavior. Inspect it only in
     // multiInfoByte diagnostics until its meaning is confirmed.
+    // Provisional: Velocet docs/commands.md calls MIB bit 5 "SyncCtrlGrp".
+    // KLF v3.18 does not define it and OVPd retains the MIB without decoding
+    // it. Do not use this candidate for production behavior without captures.
     bool syncControlGroupCandidate = false;
     // 0..3 only when a MIB was present. 0xFF keeps an absent MIB distinct from
     // valid SlaveTimeClass 0. The KLF 5/10/20/40 hint has no confirmed unit and
