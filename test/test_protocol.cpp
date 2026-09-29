@@ -1680,6 +1680,27 @@ TEST(position_special_values_encoding)
     ASSERT_EQ(posRaw, IOHC_POSITION_FAVORITE);
 }
 
+TEST(access_method_values_are_not_relative_percentages)
+{
+    float lPercent = -1.0f;
+    for (const uint16_t lAccessMethod : {
+             static_cast<uint16_t>(IOHC_PARAMETER_TARGET),
+             static_cast<uint16_t>(IOHC_PARAMETER_CURRENT),
+             static_cast<uint16_t>(IOHC_PARAMETER_DEFAULT),
+             static_cast<uint16_t>(IOHC_PARAMETER_IGNORE)})
+    {
+        ASSERT_TRUE(!ioHomeRawToPercent(lAccessMethod,
+                                         ParameterPolarity::Normal, lPercent));
+        ASSERT_TRUE(!ioHomeRawToPercent(lAccessMethod,
+                                         ParameterPolarity::Reversed, lPercent));
+    }
+    ASSERT_TRUE(ioHomeRawToPercent(0, ParameterPolarity::Normal, lPercent));
+    ASSERT_EQ(lPercent, 0.0f);
+    ASSERT_TRUE(ioHomeRawToPercent(IOHC_POSITION_MAX,
+                                   ParameterPolarity::Normal, lPercent));
+    ASSERT_EQ(lPercent, 100.0f);
+}
+
 // =====================================================================
 // 26. Retry logic — queue entry structure
 // =====================================================================
