@@ -3019,6 +3019,10 @@ TEST(klf_profile_mp_polarity_and_window_ventilation_alias)
         {0x0100, ParameterPolarity::Reversed},
         {0x0180, ParameterPolarity::Reversed},
         {0x03C0, ParameterPolarity::Reversed},
+        {0x0500, ParameterPolarity::Reversed},
+        {0x0501, ParameterPolarity::Reversed},
+        {0x0502, ParameterPolarity::Reversed},
+        {0x0503, ParameterPolarity::Reversed},
         {0x0540, ParameterPolarity::Reversed},
     };
     for (const Case &lCase : kCases)
@@ -3029,6 +3033,8 @@ TEST(klf_profile_mp_polarity_and_window_ventilation_alias)
         ASSERT_EQ(lDescriptor->mpPolarity, lCase.polarity);
         ASSERT_EQ(ioHomePercentToRaw(0, lCase.polarity),
                   lCase.polarity == ParameterPolarity::Normal ? 0U : IOHC_POSITION_MAX);
+        ASSERT_EQ(ioHomePercentToRaw(100, lDescriptor->mpPolarity),
+                  lCase.polarity == ParameterPolarity::Normal ? IOHC_POSITION_MAX : 0U);
         float lPercent = -1.0f;
         ASSERT_TRUE(ioHomeRawToPercent(0, lCase.polarity, lPercent));
         ASSERT_EQ(lPercent, lCase.polarity == ParameterPolarity::Normal ? 0.0f : 100.0f);
