@@ -2538,6 +2538,21 @@ TEST(discovery_multi_information_byte_roundtrips_all_raw_values)
     }
 }
 
+TEST(discovery_mib_membership_and_rf_support_keep_klf_polarity)
+{
+    for (uint8_t lFlags = 0; lFlags < 4; ++lFlags)
+    {
+        uint8_t lData[IOHC_DISCOVERY_EXTENDED_SIZE] = {};
+        lData[IOHC_DISCOVERY_FLAGS_OFFSET] = static_cast<uint8_t>(
+            0xA0 | (lFlags << 2)); // non-zero reserved bit 5 and response class
+        const IoHomeProtocolIdentity lIdentity =
+            decodeProtocolIdentity(lData, sizeof(lData));
+        ASSERT_EQ(lIdentity.multiInfoByte, lData[IOHC_DISCOVERY_FLAGS_OFFSET]);
+        ASSERT_EQ(lIdentity.ioMembershipFlag, (lFlags & 1) != 0);
+        ASSERT_EQ(lIdentity.rfSupportInNode, (lFlags & 2) != 0);
+    }
+}
+
 TEST(discovery_type_subtype_helpers_cover_klf_profiles_and_reserved_values)
 {
     struct TestCase
