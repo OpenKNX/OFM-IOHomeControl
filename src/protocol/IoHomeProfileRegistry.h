@@ -56,6 +56,41 @@ struct IoHomeParameterDescriptor
     bool writable = false;
 };
 
+enum class IoHomeAliasSemantic : uint8_t
+{
+    Target,
+    MemorizedPosition,
+    MemorizedTilt,
+    SecuredVentilation,
+    PedestrianPosition,
+    PartialPosition,
+    SecuredPosition,
+    Comfort,
+    Eco,
+    Halted
+};
+
+enum class IoHomeAliasSource : uint8_t
+{
+    KlfConfirmed,
+    OvpdConfirmed
+};
+
+struct IoHomeParameterAlias
+{
+    uint16_t packedProfile; // 0xFFFF = research-only, profile not established
+    uint8_t parameterIndex; // 0 = MP, 1..16 = FP
+    uint16_t value;
+    IoHomeAliasSemantic semantic;
+    IoHomeAliasSource source;
+};
+
+// Lookup is diagnostic metadata only. A wildcard profile is not permission
+// to transmit an alias to every product; product/capture checks remain needed.
+const IoHomeParameterAlias *ioHomeParameterAlias(uint16_t iPackedProfile,
+                                                 uint8_t iParameterIndex,
+                                                 uint16_t iValue);
+
 enum IoHomeProfileCapability : uint32_t
 {
     IoHomeCapabilityPosition = 1UL << 0,

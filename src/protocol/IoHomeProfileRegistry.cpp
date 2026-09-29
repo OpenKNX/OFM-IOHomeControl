@@ -111,6 +111,46 @@ namespace
         profile(0x0601, "Independent Leaf Swinging Shutter", S::ShutterClosure,
                 S::LinearSpeed),
     };
+
+    constexpr IoHomeParameterAlias kAliases[] = {
+        {0xFFFF, 0, IOHC_PARAMETER_TARGET, IoHomeAliasSemantic::Target,
+         IoHomeAliasSource::KlfConfirmed},
+        {0xFFFF, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition,
+         IoHomeAliasSource::OvpdConfirmed},
+        {0xFFFF, 3, 0xD800, IoHomeAliasSemantic::MemorizedTilt,
+         IoHomeAliasSource::OvpdConfirmed},
+        {0x0100, 0, 0xD803, IoHomeAliasSemantic::SecuredVentilation,
+         IoHomeAliasSource::KlfConfirmed},
+        {0x0101, 0, 0xD803, IoHomeAliasSemantic::SecuredVentilation,
+         IoHomeAliasSource::KlfConfirmed},
+        {0xFFFF, 0, 0xD807, IoHomeAliasSemantic::PedestrianPosition,
+         IoHomeAliasSource::OvpdConfirmed},
+        {0xFFFF, 0, 0xD809, IoHomeAliasSemantic::PartialPosition,
+         IoHomeAliasSource::OvpdConfirmed},
+        {0xFFFF, 0, 0xD80A, IoHomeAliasSemantic::SecuredPosition,
+         IoHomeAliasSource::OvpdConfirmed},
+        {0xFFFF, 0, 0xD80F, IoHomeAliasSemantic::Comfort,
+         IoHomeAliasSource::OvpdConfirmed},
+        {0xFFFF, 0, 0xD812, IoHomeAliasSemantic::Eco,
+         IoHomeAliasSource::OvpdConfirmed},
+        {0xFFFF, 0, 0xD813, IoHomeAliasSemantic::Halted,
+         IoHomeAliasSource::OvpdConfirmed},
+    };
+}
+
+const IoHomeParameterAlias *ioHomeParameterAlias(uint16_t iPackedProfile,
+                                                 uint8_t iParameterIndex,
+                                                 uint16_t iValue)
+{
+    if (iParameterIndex > 16)
+        return nullptr;
+    for (const IoHomeParameterAlias &lAlias : kAliases)
+    {
+        if ((lAlias.packedProfile == iPackedProfile || lAlias.packedProfile == 0xFFFF) &&
+            lAlias.parameterIndex == iParameterIndex && lAlias.value == iValue)
+            return &lAlias;
+    }
+    return nullptr;
 }
 
 const IoHomeProfileDescriptor *ioHomeProfileDescriptor(uint16_t iProfile,

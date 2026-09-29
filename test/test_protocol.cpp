@@ -3084,6 +3084,25 @@ TEST(profile_parameter_value_kind_is_separate_from_fp_index)
               ParameterValueKind::Unknown);
 }
 
+TEST(parameter_aliases_keep_index_profile_and_source)
+{
+    const IoHomeParameterAlias *lMemory = ioHomeParameterAlias(0x0080, 0, 0xD800);
+    const IoHomeParameterAlias *lTilt = ioHomeParameterAlias(0x0080, 3, 0xD800);
+    ASSERT_TRUE(lMemory != nullptr);
+    ASSERT_TRUE(lTilt != nullptr);
+    ASSERT_EQ(lMemory->semantic, IoHomeAliasSemantic::MemorizedPosition);
+    ASSERT_EQ(lTilt->semantic, IoHomeAliasSemantic::MemorizedTilt);
+    ASSERT_EQ(lMemory->source, IoHomeAliasSource::OvpdConfirmed);
+    ASSERT_TRUE(ioHomeParameterAlias(0x0080, 0, 0xD803) == nullptr);
+    ASSERT_EQ(ioHomeParameterAlias(0x0100, 0, 0xD803)->semantic,
+              IoHomeAliasSemantic::SecuredVentilation);
+    ASSERT_EQ(ioHomeParameterAlias(0x0101, 0, 0xD803)->source,
+              IoHomeAliasSource::KlfConfirmed);
+    ASSERT_EQ(ioHomeParameterAlias(0x0080, 0, 0xD807)->semantic,
+              IoHomeAliasSemantic::PedestrianPosition);
+    ASSERT_TRUE(ioHomeParameterAlias(0x0080, 1, 0xD807) == nullptr);
+}
+
 TEST(klf_profile_mp_polarity_and_window_ventilation_alias)
 {
     struct Case { uint16_t packed; ParameterPolarity polarity; };
