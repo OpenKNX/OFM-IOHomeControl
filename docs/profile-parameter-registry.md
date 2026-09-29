@@ -38,6 +38,15 @@ discovered profile and remains disabled in that case.
 
 The registry provides MP semantics, polarity, functional-parameter indices,
 and descriptor-derived capabilities to both command and feedback paths.
+
+The protocol's FPI1/FPI2 selection addresses FP1-FP16. The shared Overkiz
+OVPd parameter model publishes MP, FP1-FP3, and FP9-FP16 definitions; it has
+no equivalent shared public FP4-FP8 files in that tree. This is product
+coverage of that implementation, not evidence that FP4-FP8 are reserved or
+unsupported. Higher-FP meanings remain unknown in the KLF Appendix-2
+registry until a profile-specific source or capture supplies them.
+
+Source: <https://github.com/Velocet/iown-homecontrol/tree/main/docs/parameter/IoHomecontrolOVPd/Parameter>.
 An explicit packed-profile override can change behavior without modifying
 the hardware-discovered identity.
 
