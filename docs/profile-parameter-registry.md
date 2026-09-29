@@ -38,6 +38,17 @@ discovered profile and remains disabled in that case.
 
 The registry provides MP semantics, polarity, functional-parameter indices,
 and descriptor-derived capabilities to both command and feedback paths.
+The value kind is separate from the index: `Relative` values alone may use
+the `0x0000..0xC800` percentage converter; `Discrete` values, access methods
+(`D100` target, `D200` current, `D300` default, `D400` ignore), aliases, and
+unknown values must not. `F7FF` is **no feedback**, not a writable alias.
+For unknown profiles or undefined indices the value kind stays `Unknown`.
+
+The diagnostic console can represent FP1-FP16 masks, but only a single
+captured FP1-FP3 native Private/Execute shape is transmitted. Multi-FP and
+FPI2 native RF layouts remain unverified and are displayed without TX. The
+source for mask ordering is OVPd's `Manager.MpFpRefreshManager.lua`; its
+Overkiz command payload is not assumed to be identical to a native RF frame.
 
 The protocol's FPI1/FPI2 selection addresses FP1-FP16. The shared Overkiz
 OVPd parameter model publishes MP, FP1-FP3, and FP9-FP16 definitions; it has
