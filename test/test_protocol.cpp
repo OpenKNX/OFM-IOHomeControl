@@ -2651,6 +2651,50 @@ TEST(discovery_mib_membership_and_rf_support_keep_klf_polarity)
     }
 }
 
+TEST(discovery_nine_byte_layout_roundtrips_extended_ovpd_cases)
+{
+    struct Golden
+    {
+        uint16_t packed;
+        uint32_t backbone;
+        uint8_t manufacturer;
+        uint8_t mib;
+        uint16_t timestamp;
+    };
+    static constexpr Golden kCases[] = {
+        {0x0080, 0x000000, 0x01, 0x00, 0x0000},
+        {0x0081, 0x123456, 0x7E, 0x35, 0xABCD},
+        {0x0740, 0xFFFFFF, 0xFF, 0x92, 0xFFFF},
+        {0x0D40, 0x010203, 0x00, 0xD3, 0x2468},
+    };
+    for (const Golden &lCase : kCases)
+    {
+        uint8_t lData[IOHC_DISCOVERY_FULL_SIZE] = {
+            static_cast<uint8_t>(lCase.packed >> 8),
+            static_cast<uint8_t>(lCase.packed & 0xFF),
+            static_cast<uint8_t>(lCase.backbone >> 16),
+            static_cast<uint8_t>(lCase.backbone >> 8),
+            static_cast<uint8_t>(lCase.backbone),
+            lCase.manufacturer, lCase.mib,
+            static_cast<uint8_t>(lCase.timestamp >> 8),
+            static_cast<uint8_t>(lCase.timestamp)};
+        const IoHomeProtocolIdentity lIdentity =
+            decodeProtocolIdentity(lData, sizeof(lData));
+        ASSERT_TRUE(lIdentity.fullMetadata);
+        ASSERT_EQ(lIdentity.nodeTypeSubType, lCase.packed);
+        ASSERT_EQ(lIdentity.ioBackboneAddress, lCase.backbone);
+        ASSERT_EQ(lIdentity.manufacturerId, lCase.manufacturer);
+        ASSERT_EQ(lIdentity.multiInfoByte, lCase.mib);
+        ASSERT_EQ(lIdentity.powerSaveModeRaw, lCase.mib & 0x03);
+        ASSERT_EQ(lIdentity.responseTimeClass, lCase.mib >> 6);
+        ASSERT_EQ(lIdentity.discoveryTimestamp, lCase.timestamp);
+        uint8_t lEncoded[IOHC_DISCOVERY_FULL_SIZE] = {};
+        ASSERT_EQ(encodeProtocolIdentity(lIdentity, lEncoded, sizeof(lEncoded)),
+                  sizeof(lData));
+        ASSERT_MEM_EQ(lEncoded, lData, sizeof(lData));
+    }
+}
+
 TEST(discovery_type_subtype_helpers_cover_klf_profiles_and_reserved_values)
 {
     struct TestCase
