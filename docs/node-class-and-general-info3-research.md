@@ -74,6 +74,27 @@ not implied by confirmation of the byte layout.
 
 Source: <https://github.com/Velocet/iown-homecontrol/blob/main/docs/parameter/IoHomecontrolOVPd/Node/Class/Abstract.lua>.
 
+### Research-only extended node types
+
+The KLF v3.18 Appendix-2 list and the later Overkiz/Velocet node model are
+separate evidence sets. The following **OVPd-only** types are not inserted
+into the KLF profile registry and do not infer actuator semantics:
+
+| Type | Overkiz/Velocet label | KLF Appendix 2 | Capture |
+| ---: | --- | --- | --- |
+| 27 | Sliding Window | absent | needed |
+| 28 | Zone Control Generator | absent | needed |
+| 29 | Bioclimatic Pergola | absent | needed |
+| 30 | Indoor Siren | absent | needed |
+| 51 | Domestic Hot Water | absent | needed |
+| 52 | Electrical Heater | absent | needed |
+| 53 | Heat Recovery Ventilation | absent | needed |
+| 255 | Central House Control | absent | needed |
+| 1008 | Test and Evaluation | absent | needed |
+| 1023 | Remote Controller | absent | needed |
+
+Source: <https://github.com/Velocet/iown-homecontrol/blob/main/docs/parameter/IoHomecontrolOVPd/Node/nodeModel.lua>.
+
 The current reverse-engineered Overkiz implementation keeps class and profile
 as separate dimensions:
 
