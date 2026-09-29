@@ -28,6 +28,13 @@
   } while (0)
 #endif
 
+#ifndef logDebug
+#define logDebug(...) \
+  do                  \
+  {                   \
+  } while (0)
+#endif
+
 #ifndef logWarnP
 #define logWarnP(...) \
   do                  \
