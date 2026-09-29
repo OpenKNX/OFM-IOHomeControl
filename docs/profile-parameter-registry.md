@@ -74,6 +74,15 @@ Source: <https://github.com/Velocet/iown-homecontrol/tree/main/docs/parameter/Io
 An explicit packed-profile override can change behavior without modifying
 the hardware-discovered identity.
 
+Future vendor/product behavior belongs in a *higher* lookup layer:
+generic `(profile, subProfile)` descriptor, then a manufacturer-specific
+override, then a product/signature/software-version override using GI1/GI2
+evidence. The override result may choose parameter encoding or quirks but
+must never replace the raw discovery record. No unverified product override
+is installed by this registry. Existing manual ETS profile overrides similarly
+change the effective descriptor only; a regression test checks that discovery
+identity remains intact.
+
 ETS uses `ProfileOverride = 0` for automatic discovery-based behavior. An
 expert may enter a documented packed value as a decimal number (for example,
 `64` for interior Venetian or `1088` for exterior Venetian). A conflicting
