@@ -907,6 +907,23 @@ TEST(position_encoding)
     ASSERT_EQ(IOHC_POSITION_STOP, 0xD200);
 }
 
+TEST(fp_selection_represents_both_fpi_bytes_without_transmitting)
+{
+    const IoHomeFpSelection lFirst = ioHomeFpSelection(1);
+    const IoHomeFpSelection lLast = ioHomeFpSelection(16);
+    ASSERT_EQ(lFirst.fpi1, 0x80);
+    ASSERT_EQ(lFirst.fpi2, 0);
+    ASSERT_EQ(lLast.fpi1, 0);
+    ASSERT_EQ(lLast.fpi2, 0x01);
+    const uint8_t lIndices[] = {16, 1, 9};
+    IoHomeFpSelection lCombined;
+    ASSERT_TRUE(ioHomeFpSelectIndices(lIndices, 3, lCombined));
+    ASSERT_EQ(lCombined.fpi1, 0x80);
+    ASSERT_EQ(lCombined.fpi2, 0x81);
+    ASSERT_EQ(ioHomeFpSelection(0).fpi1, 0);
+    ASSERT_EQ(ioHomeFpSelection(17).fpi2, 0);
+}
+
 // =====================================================================
 // 13. IV checksum cross-check against reference algorithm
 // =====================================================================

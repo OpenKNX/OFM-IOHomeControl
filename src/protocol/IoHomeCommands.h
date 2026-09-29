@@ -413,6 +413,48 @@ inline bool isOpenCloseOnly(IoHomeDeviceType iType)
 #define IOHC_PARAMETER_IGNORE 0xD400
 #define IOHC_NO_FEEDBACK_VALUE 0xF7FF
 #define IOHC_POSITION_STOP IOHC_PARAMETER_CURRENT
+
+// FPI1 selects FP1..FP8 and FPI2 selects FP9..FP16. This is a representation
+// helper only; it does not authorize a transmission to a discovered device.
+struct IoHomeFpSelection
+{
+    uint8_t fpi1 = 0;
+    uint8_t fpi2 = 0;
+};
+
+inline IoHomeFpSelection ioHomeFpSelection(uint8_t iFpIndex)
+{
+    IoHomeFpSelection lSelection;
+    if (iFpIndex >= 1 && iFpIndex <= 8)
+        lSelection.fpi1 = static_cast<uint8_t>(0x80U >> (iFpIndex - 1));
+    else if (iFpIndex >= 9 && iFpIndex <= 16)
+        lSelection.fpi2 = static_cast<uint8_t>(0x80U >> (iFpIndex - 9));
+    return lSelection;
+}
+
+// OVPd refreshes no more than three selected FPs in one command. Reject
+// duplicate or invalid indices; values are serialized in ascending FP order.
+inline bool ioHomeFpSelectIndices(const uint8_t *iIndices, uint8_t iCount,
+                                  IoHomeFpSelection &oSelection)
+{
+    oSelection = {};
+    if (!iIndices || iCount == 0 || iCount > 3)
+        return false;
+    for (uint8_t i = 0; i < iCount; ++i)
+    {
+        const IoHomeFpSelection lOne = ioHomeFpSelection(iIndices[i]);
+        if ((lOne.fpi1 == 0 && lOne.fpi2 == 0) ||
+            (oSelection.fpi1 & lOne.fpi1) != 0 ||
+            (oSelection.fpi2 & lOne.fpi2) != 0)
+        {
+            oSelection = {};
+            return false;
+        }
+        oSelection.fpi1 |= lOne.fpi1;
+        oSelection.fpi2 |= lOne.fpi2;
+    }
+    return true;
+}
 #define IOHC_POSITION_FAVORITE 0xD800
 #define IOHC_POSITION_MAX 0xC800        // 100% = fully closed
 #define IOHC_POSITION_VENT 0xD803       // ventilation position
