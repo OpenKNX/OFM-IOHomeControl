@@ -285,6 +285,9 @@ uint16_t ioHomePercentToRaw(float iPercent, ParameterPolarity iPolarity)
 bool ioHomeRawToPercent(uint16_t iRaw, ParameterPolarity iPolarity,
                         float &oPercent)
 {
+    // Unknown feedback is distinct from D400 (an outgoing ignore placeholder).
+    if (iRaw == IOHC_NO_FEEDBACK_VALUE)
+        return false;
     if (iRaw > IOHC_POSITION_MAX)
         return false;
     oPercent = static_cast<float>(iRaw) * 100.0f / IOHC_POSITION_MAX;

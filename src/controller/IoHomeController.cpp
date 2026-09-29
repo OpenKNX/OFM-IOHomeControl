@@ -441,6 +441,12 @@ namespace
     {
         if (!iChannel)
             return;
+        if (iRaw == IOHC_NO_FEEDBACK_VALUE)
+        {
+            logDebugP("No feedback value for FP%u (raw=0xF7FF)",
+                      static_cast<unsigned>(iIndex));
+            return;
+        }
         const IoHomeProfileDescriptor *lDescriptor =
             iChannel->getEffectiveProfileDescriptor();
         const ParameterSemantic lSemantic = ioHomeParameterSemantic(lDescriptor, iIndex);
@@ -515,6 +521,11 @@ namespace
 
         const uint16_t lTargetRaw = readU16BE(iData, iTargetOffset);
         const uint16_t lCurrentRaw = readU16BE(iData, iCurrentOffset);
+        if (lTargetRaw == IOHC_NO_FEEDBACK_VALUE ||
+            lCurrentRaw == IOHC_NO_FEEDBACK_VALUE)
+            logDebugP("MP no-feedback target=0x%04X current=0x%04X",
+                      static_cast<unsigned>(lTargetRaw),
+                      static_cast<unsigned>(lCurrentRaw));
 
         float lCurrentPercent = 0.0f;
         const ParameterPolarity lPolarity = lDescriptor
@@ -524,12 +535,14 @@ namespace
 
         float lTargetPercent = 0.0f;
         bool lHasTargetPosition = ioHomeRawToPercent(lTargetRaw, lPolarity, lTargetPercent);
-        if (!lHasTargetPosition && iStopped && lHasCurrentPosition)
+        if (!lHasTargetPosition && lTargetRaw != IOHC_NO_FEEDBACK_VALUE &&
+            iStopped && lHasCurrentPosition)
         {
             lTargetPercent = lCurrentPercent;
             lHasTargetPosition = true;
         }
-        if (!lHasCurrentPosition && iStopped && lHasTargetPosition)
+        if (!lHasCurrentPosition && lCurrentRaw != IOHC_NO_FEEDBACK_VALUE &&
+            iStopped && lHasTargetPosition)
         {
             lCurrentPercent = lTargetPercent;
             lHasCurrentPosition = true;
