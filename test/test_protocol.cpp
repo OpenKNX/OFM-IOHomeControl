@@ -10594,6 +10594,49 @@ TEST(controller_directed_discovery_requires_challenge_before_accepting_response)
     ASSERT_EQ(lModule.testLastAuthenticatedDirectedNode(), lDeviceNodeId);
 }
 
+TEST(controller_key_import_directed_2e_matches_klr_frame)
+{
+    const uint32_t lHubNodeId = 0xE2D1FF;
+    const uint32_t lDeviceNodeId = 0x562292;
+    const uint8_t lKey[16] = {1};
+    static const uint8_t kKlrDirected2E[] = {
+        0x49, 0x20, 0x56, 0x22, 0x92, 0xE2, 0xD1, 0xFF, 0x2E, 0x02};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lHubNodeId, 0, lKey);
+
+    ASSERT_TRUE(lController.sendBackgroundCommand(
+        lDeviceNodeId, lKey, IoHomeCommand::Discover2ERequest, 0x02));
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_EQ(lPacket.size(), sizeof(kKlrDirected2E));
+    ASSERT_MEM_EQ(lPacket.data(), kKlrDirected2E, sizeof(kKlrDirected2E));
+    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
+    ASSERT_TRUE((lFrame.ctrlByte0 & IOHC_CTRL0_START) != 0);
+    ASSERT_TRUE((lFrame.ctrlByte0 & IOHC_CTRL0_END) == 0);
+    ASSERT_TRUE((lFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) == 0);
+    ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
+    ASSERT_TRUE((lFrame.ctrlByte1 & IOHC_CTRL1_ACK) == 0);
+}
+
+TEST(controller_key_import_directed_verification_uses_observed_frequency)
+{
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  0xE2D1FF, 0, lKey);
+    ASSERT_TRUE(lController.verifyKnownNetworkNode(0x562292, lKey, 2));
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+    ASSERT_EQ(lFrame.commandId, IoHomeCommand::Discover2ERequest);
+    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQUENCIES[2]);
+}
+
 TEST(controller_cozy_temperature_preserves_le16_queue_value)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -11525,17 +11568,32 @@ TEST(controller_spe_discovery_registers_same_complete_metadata_model)
     lResponse.hasHmac = false;
     ASSERT_TRUE(queueControllerResponse(lController, lResponse));
 
+    // The RF window must stay hot; identity decoding is deferred until the
+    // receiver has finished its response-channel scan.
+    ASSERT_TRUE(lController.protocolIdentityForIoAddress(lDeviceNodeId) == nullptr);
+
+    // A shorter SPE reply may contain a different MIB, but cannot displace
+    // the full stored model (or its power policy).
+    uint8_t lPartial[7] = {0x00, 0xC0, 0, 0, 0, 2, 0x1C};
+    memcpy(lResponse.data, lPartial, sizeof(lPartial));
+    lResponse.dataLen = sizeof(lPartial);
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+
+    // A complete 0x29 record is equal-authority and follows the same decoder.
+    lResponse.commandId = IoHomeCommand::DiscoverResponse;
+    memcpy(lResponse.data, kPayload, sizeof(kPayload));
+    lResponse.data[8] = 0x35;
+    lResponse.dataLen = sizeof(kPayload);
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    ioHomeTestSetMillis(ioHomeTestMillis() + IOHC_DISCOVERY_LISTEN_MS + 1);
+    lController.loop();
     const IoHomeProtocolIdentity *lMetadata =
         lController.protocolIdentityForIoAddress(lDeviceNodeId);
     ASSERT_TRUE(lMetadata != nullptr);
     ASSERT_TRUE(lMetadata->valid);
     ASSERT_TRUE(lMetadata->fullMetadata);
     ASSERT_EQ(lMetadata->ioAddress, lDeviceNodeId);
-    ASSERT_EQ(lMetadata->metadataSource,
-              IoHomeMetadataSource::DiscoverSpeResponse);
     ASSERT_EQ(lMetadata->keyState, IoHomeKeyState::Unknown);
-    ASSERT_EQ(lMetadata->profile, 2U);
-    ASSERT_EQ(lMetadata->subProfile, 1U);
     ASSERT_EQ(lMetadata->ioBackboneAddress, 0x123456U);
     ASSERT_EQ(lMetadata->manufacturerId,
               static_cast<uint8_t>(IoHomeManufacturer::Somfy));
@@ -11545,36 +11603,152 @@ TEST(controller_spe_discovery_registers_same_complete_metadata_model)
     ASSERT_TRUE(lMetadata->rfSupportInNode);
     ASSERT_TRUE(lMetadata->syncControlGroupCandidate);
     ASSERT_EQ(lMetadata->responseTimeClass, 3U);
-    ASSERT_EQ(lMetadata->discoveryTimestamp, 0x1234U);
-    ASSERT_MEM_EQ(lMetadata->rawData, kPayload, sizeof(kPayload));
-
-    // A shorter SPE reply may contain a different MIB, but cannot displace
-    // the full stored model (or its power policy).
-    uint8_t lPartial[7] = {0x00, 0xC0, 0, 0, 0, 2, 0x1C};
-    memcpy(lResponse.data, lPartial, sizeof(lPartial));
-    lResponse.dataLen = sizeof(lPartial);
-    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
-    lMetadata = lController.protocolIdentityForIoAddress(lDeviceNodeId);
-    ASSERT_TRUE(lMetadata != nullptr);
-    ASSERT_EQ(lMetadata->profile, 2U);
-    ASSERT_EQ(lMetadata->manufacturerId,
-              static_cast<uint8_t>(IoHomeManufacturer::Somfy));
-    ASSERT_EQ(lMetadata->multiInfoByte, 0xED);
-    ASSERT_EQ(lMetadata->discoveryTimestamp, 0x1234U);
-
-    // A complete 0x29 record is equal-authority and follows the same decoder.
-    lResponse.commandId = IoHomeCommand::DiscoverResponse;
-    memcpy(lResponse.data, kPayload, sizeof(kPayload));
-    lResponse.data[8] = 0x35;
-    lResponse.dataLen = sizeof(kPayload);
-    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
-    lMetadata = lController.protocolIdentityForIoAddress(lDeviceNodeId);
-    ASSERT_TRUE(lMetadata != nullptr);
     ASSERT_EQ(lMetadata->metadataSource,
               IoHomeMetadataSource::DiscoverResponse);
     ASSERT_EQ(lMetadata->discoveryTimestamp, 0x1235U);
     ASSERT_EQ(lMetadata->profile, 2U);
     ASSERT_EQ(lMetadata->subProfile, 1U);
+}
+
+TEST(controller_spe_discovery_defers_three_close_responses)
+{
+    const uint32_t lHub = 0xE2D1FF;
+    const uint32_t lNodes[] = {0x562292, 0xE50470, 0x155D81};
+    const uint8_t lKey[16] = {1};
+    const uint8_t lPayload[IOHC_DISCOVERY_FULL_SIZE] = {
+        0x00, 0x81, 0x12, 0x34, 0x56, 0x02, 0xED, 0x12, 0x34};
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lHub);
+    lController.setSystemKey(lKey);
+    lController.init();
+    lController.startDiscovery(true);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
+    lController.loop(); // complete TX-to-RX transition
+
+    for (uint32_t lNode : lNodes)
+    {
+        IoHomeFrame lResponse;
+        lResponse.init();
+        lResponse.ctrlByte0 = IOHC_CTRL0_END;
+        lResponse.setSrcNode(lNode);
+        lResponse.setDestNode(lHub);
+        lResponse.commandId = IoHomeCommand::DiscoverSPEResponse;
+        memcpy(lResponse.data, lPayload, sizeof(lPayload));
+        lResponse.dataLen = sizeof(lPayload);
+        uint8_t lRaw[IOHC_FRAME_BUFFER_SIZE];
+        const uint8_t lLength = serializeFrameForTest(lResponse, lRaw, sizeof(lRaw));
+        ASSERT_TRUE(lLength > 0);
+        ioHomeTestSetMicros(ioHomeTestMicros() + 3000);
+        lController.radio().testQueueReceivedPacket(lRaw, lLength);
+        lController.loop();
+        ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
+        ASSERT_EQ(lModule.testDiscoveryResponseCount(), 0);
+    }
+
+    ioHomeTestSetMillis(ioHomeTestMillis() + IOHC_DISCOVERY_LISTEN_MS + 1);
+    lController.loop();
+    ASSERT_EQ(lModule.testDiscoveryResponseCount(), 3);
+    for (uint8_t i = 0; i < 3; ++i)
+    {
+        ASSERT_EQ(lModule.testDiscoveryResponseNode(i), lNodes[i]);
+        const IoHomeProtocolIdentity *lIdentity =
+            lController.protocolIdentityForIoAddress(lNodes[i]);
+        ASSERT_TRUE(lIdentity != nullptr);
+        ASSERT_TRUE(lIdentity->valid);
+    }
+}
+
+TEST(controller_spe_discovery_pending_queue_has_bounded_overflow)
+{
+    const uint32_t lHub = 0xE2D1FF;
+    const uint8_t lKey[16] = {1};
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lHub);
+    lController.setSystemKey(lKey);
+    lController.init();
+    lController.startDiscovery(true);
+    lController.loop();
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
+
+    for (uint8_t i = 0; i < 25; ++i)
+    {
+        IoHomeFrame lFrame;
+        lFrame.init();
+        lFrame.ctrlByte0 = IOHC_CTRL0_END;
+        lFrame.setSrcNode(0x562200U + i);
+        lFrame.setDestNode(lHub);
+        lFrame.commandId = IoHomeCommand::DiscoverSPEResponse;
+        lFrame.data[0] = 0x00;
+        lFrame.data[1] = 0x81;
+        lFrame.dataLen = 2;
+        uint8_t lRaw[IOHC_FRAME_BUFFER_SIZE];
+        const uint8_t lLength = serializeFrameForTest(lFrame, lRaw, sizeof(lRaw));
+        ASSERT_TRUE(lLength > 0);
+        lController.radio().testQueueReceivedPacket(lRaw, lLength);
+        lController.loop();
+    }
+    ASSERT_EQ(lModule.testDiscoveryResponseCount(), 0);
+    ioHomeTestSetMillis(ioHomeTestMillis() + IOHC_DISCOVERY_LISTEN_MS + 1);
+    lController.loop();
+    ASSERT_EQ(lModule.testDiscoveryResponseCount(), 24);
+    ASSERT_EQ(lModule.testDiscoveryResponseNode(0), 0x562200U);
+    ASSERT_EQ(lModule.testDiscoveryResponseNode(23), 0x562217U);
+}
+
+TEST(controller_spe_discovery_pairdiag_does_not_change_response_count)
+{
+    for (uint8_t lTraceEnabled = 0; lTraceEnabled < 2; ++lTraceEnabled)
+    {
+        const uint32_t lHub = 0xE2D1FF;
+        const uint8_t lKey[16] = {1};
+        ioHomeTestSetMillis(1000);
+        ioHomeTestSetMicros(1000000);
+        IoHomeController lController;
+        IoHomecontrol lModule;
+        lController.setModule(&lModule);
+        lController.setOwnNodeId(lHub);
+        lController.setSystemKey(lKey);
+        lController.init();
+        lController.setPairDiagnosticTraceEnabled(lTraceEnabled != 0);
+        lController.startDiscovery(true);
+        lController.loop();
+        lController.loop();
+
+        const uint8_t lInvalid[] = {0x00, 0x20, 0x01};
+        lController.radio().testQueueReceivedPacket(lInvalid, sizeof(lInvalid));
+        lController.loop();
+        for (uint8_t i = 0; i < 2; ++i)
+        {
+            IoHomeFrame lFrame;
+            lFrame.init();
+            lFrame.ctrlByte0 = IOHC_CTRL0_END;
+            lFrame.setSrcNode(0x562292U + i);
+            lFrame.setDestNode(lHub);
+            lFrame.commandId = IoHomeCommand::DiscoverSPEResponse;
+            lFrame.data[0] = 0x00;
+            lFrame.data[1] = 0x81;
+            lFrame.dataLen = 2;
+            uint8_t lRaw[IOHC_FRAME_BUFFER_SIZE];
+            const uint8_t lLength = serializeFrameForTest(lFrame, lRaw, sizeof(lRaw));
+            ASSERT_TRUE(lLength > 0);
+            lController.radio().testQueueReceivedPacket(lRaw, lLength);
+            lController.loop();
+        }
+        ASSERT_EQ(lModule.testDiscoveryResponseCount(), 0);
+        ioHomeTestSetMillis(ioHomeTestMillis() + IOHC_DISCOVERY_LISTEN_MS + 1);
+        lController.loop();
+        ASSERT_EQ(lModule.testDiscoveryResponseCount(), 2);
+    }
 }
 
 TEST(controller_default_2w_pairing_confirms_discovery_before_key_init)

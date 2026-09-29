@@ -676,11 +676,24 @@ public:
     mLastPassiveKeyResult = iResult;
   }
 
-  void onDiscoveryResponse(const IoHomeFrame &,
-                           const IoHomeProtocolIdentity &) {}
-
-  void onKeyImportCandidateObserved(uint32_t iNodeId)
+  void onDiscoveryResponse(const IoHomeFrame &iFrame,
+                           const IoHomeProtocolIdentity &)
   {
+    if (mDiscoveryResponseCount < 32)
+      mDiscoveryResponseNodes[mDiscoveryResponseCount++] = iFrame.getSrcNodeId();
+  }
+
+  void onKeyImportPassiveFrame(const IoHomeFrame &iFrame,
+                               uint8_t, int16_t, uint32_t)
+  {
+    const uint32_t lHub = mLastPassiveKeyResult.nodeId;
+    if (lHub == 0 ||
+        (iFrame.getSrcNodeId() != lHub && iFrame.getDestNodeId() != lHub))
+        return;
+    const uint32_t iNodeId = iFrame.getSrcNodeId() == lHub
+                                 ? iFrame.getDestNodeId() : iFrame.getSrcNodeId();
+    if (iNodeId == 0)
+        return;
     mLastKeyImportCandidate = iNodeId;
     mKeyImportCandidateCount++;
   }
@@ -697,6 +710,11 @@ public:
   uint32_t testLastKeyImportCandidate() const { return mLastKeyImportCandidate; }
   uint8_t testAuthenticatedDirectedCount() const { return mAuthenticatedDirectedCount; }
   uint32_t testLastAuthenticatedDirectedNode() const { return mLastAuthenticatedDirectedNode; }
+  uint8_t testDiscoveryResponseCount() const { return mDiscoveryResponseCount; }
+  uint32_t testDiscoveryResponseNode(uint8_t iIndex) const
+  {
+    return iIndex < mDiscoveryResponseCount ? mDiscoveryResponseNodes[iIndex] : 0;
+  }
 
 private:
   IoHomecontrolChannel *mChannels[IOHC_ChannelCount] = {};
@@ -707,4 +725,6 @@ private:
   uint32_t mLastKeyImportCandidate = 0;
   uint8_t mAuthenticatedDirectedCount = 0;
   uint32_t mLastAuthenticatedDirectedNode = 0;
+  uint8_t mDiscoveryResponseCount = 0;
+  uint32_t mDiscoveryResponseNodes[32] = {};
 };

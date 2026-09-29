@@ -153,6 +153,7 @@ struct IoHomeQueueEntry
   OneWayDestinationMode oneWayDestinationMode; // normal/profile typed, all, exact, or explicit type
   uint32_t oneWayExactDestination;             // exact 24-bit 1W dst for diagnostics
   uint8_t sourceChannelIndex;                  // 0xFF when not queued from a concrete channel
+  uint8_t twoWayTxFreqIdx;                     // 0xFF uses the normal 2W command channel
   bool twoWayFp;                               // profile-selected functional parameter
   bool diagnosticFpRead;                       // raw-only, no KO publication
   uint8_t diagnosticFpReadIndex;
@@ -477,6 +478,8 @@ public:
                              IoHomeCommand iCmd, uint8_t iParam,
                              uint16_t iParam2 = 0xFF, uint8_t iParam3 = 0xFF,
                              uint8_t iMaxAttempts = IOHC_EXCHANGE_MAX_ATTEMPTS);
+  bool verifyKnownNetworkNode(uint32_t iNodeId, const uint8_t *iKey,
+                              uint8_t iFrequencyIndex);
   uint16_t normal2WStartPreamble() const;
   static uint32_t estimatedTxAirtimeMs(uint8_t iFrameLen, uint16_t iPreambleSymbols);
 
@@ -954,7 +957,46 @@ private:
     uint32_t txDoneUs;
     uint32_t rxReadyUs;
     uint32_t rxBusyCount;
+    uint32_t rotations;
+    uint32_t preambleHolds;
+    uint32_t syncHolds;
+    uint32_t firstPreambleUs;
+    uint32_t firstSyncUs;
+    uint32_t lastPacketUs;
+    uint32_t maxLoopUs;
+    uint32_t maxProcessingUs;
+    uint32_t packets;
   };
+
+  struct PendingDiscoveryResponse
+  {
+    IoHomeFrame frame;
+    uint32_t source;
+    uint32_t destination;
+    uint32_t receivedAtUs;
+    int16_t rssi;
+    uint8_t frequencyIndex;
+    uint8_t rawLength;
+    uint8_t raw[IOHC_FRAME_BUFFER_SIZE];
+  };
+  static constexpr uint8_t kPendingDiscoveryCapacity = 24;
+  PendingDiscoveryResponse mPendingDiscovery[kPendingDiscoveryCapacity]{};
+  uint8_t mPendingDiscoveryCount = 0;
+  uint8_t mPendingDiscoveryHighWater = 0;
+  uint32_t mPendingDiscoveryOverflow = 0;
+  uint32_t mDiscoveryResponsesReceived = 0;
+  uint32_t mDiscoveryBroadcastsSent = 0;
+  uint32_t mDiscoveryDuplicates = 0;
+  uint32_t mDiscoveryUniqueNodes = 0;
+  uint32_t mDiscoverySeenNodes[kPendingDiscoveryCapacity]{};
+  uint32_t mDiscoveryParseFailures = 0;
+  uint32_t mDiscoveryStartCrcErrors = 0;
+  uint32_t mDiscoveryStartPreambleDetections = 0;
+  uint32_t mDiscoveryStartSyncDetections = 0;
+  uint32_t mDiscoveryLoopStartedUs = 0;
+  bool mDiscoveryMetadataDirty = false;
+  void enqueueDiscoveryResponse();
+  void processPendingDiscoveryResponses();
 
   Radio mRadio;
   IoHomecontrol *mModule;
@@ -1015,6 +1057,11 @@ private:
   uint32_t mExchangeStartPreambleCount = 0;
   uint32_t mExchangeStartSyncCount = 0;
   uint32_t mExchangeRequestTxEndUs = 0;
+  uint32_t mDirectedRequestTxStartUs = 0;
+  uint32_t mDirectedRequestTxEndUs = 0;
+  uint32_t mDirectedRxReadyUs = 0;
+  uint32_t mDirectedFirstPreambleUs = 0;
+  uint32_t mDirectedFirstSyncUs = 0;
   uint32_t mExchangeAuthTxEndUs = 0;
   bool mExchangeRequestTxEndValid = false;
   bool mExchangeAuthTxEndValid = false;
@@ -1052,6 +1099,7 @@ private:
   uint16_t mPairAcceptedDiscoveryPreamble = 0;
   uint32_t mPairKeyExchangeStartTime;
   uint8_t mPairingFreqIdx;
+  uint8_t mDiscoveryLastTxFreqIdx = 0xFF;
   uint8_t mDiscoverySweep; // diagnostic discovery: current full-sweep attempt (0-based)
   uint32_t mPairingStartTime;
   DiscoverySendPhase mDiscoverySendPhase;
@@ -1416,7 +1464,8 @@ private:
   bool queueEmpty() const;
   bool sendCommandInternal(uint32_t iDestNodeId, const uint8_t *iEncKey,
                            IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2,
-                           uint8_t iParam3, uint8_t iMaxAttempts, bool iBackground);
+                           uint8_t iParam3, uint8_t iMaxAttempts, bool iBackground,
+                           uint8_t iFrequencyIndex = 0xFF);
   IoHomecontrolChannel *channelForNode(uint32_t iNodeId) const;
   uint8_t channelIndexFor(IoHomecontrolChannel *iChannel) const;
   IoHomecontrolChannel *channelForQueueEntry(const IoHomeQueueEntry &iEntry) const;
@@ -1434,7 +1483,9 @@ private:
   bool captureProtocolIdentity(IoHomecontrolChannel *iChannel,
                                const IoHomeFrame &iFrame,
                                const char *iSource,
-                               IoHomeProtocolIdentity *oIdentity = nullptr);
+                               IoHomeProtocolIdentity *oIdentity = nullptr,
+                               uint8_t iFrequencyIndex = 0xFF,
+                               int16_t iRssi = 0);
   IoHomeNodeStats *findOrAddNodeStats(uint32_t iNodeId);
   void rememberProtocolIdentity(uint32_t iIoAddress,
                                 const IoHomeProtocolIdentity &iIdentity);

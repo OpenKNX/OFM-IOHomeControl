@@ -183,34 +183,46 @@ function IOHC_setExtractionResult(device, statusText, nodeIds) {
 
 function IOHC_configureImportedChannel(device, channelNumber, discovery) {
     var prefix = "IOHC_c" + channelNumber;
-    var etsType = IOHC_etsDeviceType(discovery.protocolType, discovery.subtype);
+    var etsType = discovery.metadataValid
+                      ? IOHC_etsDeviceType(discovery.protocolType, discovery.subtype) : 0;
     IOHC_setParameterValue(device, prefix + "Name",
-                           IOHC_importDeviceLabel(etsType) + " " + IOHC_formatNodeId(discovery.nodeId));
+                           (discovery.metadataValid ? IOHC_importDeviceLabel(etsType) : "2W-Gerät") +
+                           " " + IOHC_formatNodeId(discovery.nodeId));
     IOHC_setParameterValue(device, prefix + "ProtocolMode", 0);
     IOHC_setParameterValue(device, prefix + "DeviceType", etsType);
     IOHC_setParameterValue(device, prefix + "ChannelSelection", etsType + 1);
     IOHC_setParameterValue(device, prefix + "OrientationObjects",
+                           discovery.metadataValid &&
                            IOHC_hasOrientationObjects(discovery.protocolType, discovery.subtype));
     IOHC_setParameterValue(device, prefix + "BinaryOnly",
+                           discovery.metadataValid &&
                            IOHC_isBinaryOnly(discovery.protocolType, discovery.subtype));
     IOHC_setParameterValue(device, prefix + "Dimmable",
-                           discovery.protocolType == 0x06 && discovery.subtype == 0 ? 1 : 0);
+                           discovery.metadataValid && discovery.protocolType == 0x06 && discovery.subtype == 0 ? 1 : 0);
     IOHC_setParameterValue(device, prefix + "ProfileOverride", 0);
     IOHC_setParameterValue(device, prefix + "TwoWayPowerClass", discovery.powerClass);
     IOHC_setParameterValue(device, prefix + "Suspend", 0);
-    IOHC_setParameterValue(device, prefix + "PairingLastResult", "Automatisch importiert");
+    IOHC_setParameterValue(device, prefix + "PairingLastResult",
+                           discovery.metadataValid ? "Automatisch importiert" :
+                           "Authentifiziert; Metadaten ausstehend");
     IOHC_setParameterValue(device, prefix + "PairedNodeIdDisplay", IOHC_formatNodeId(discovery.nodeId));
     IOHC_setParameterValue(device, prefix + "OneWaySummary", "2W (bidirektional)");
-    IOHC_setParameterValue(device, prefix + "PairingDiag", "Programmierung erforderlich");
+    IOHC_setParameterValue(device, prefix + "PairingDiag",
+                           discovery.metadataValid ? "Programmierung erforderlich" :
+                           "Authentifiziert; Metadaten ausstehend");
     var packedType = (discovery.protocolType << 6) | discovery.subtype;
     var packedText = packedType.toString(16).toUpperCase();
     while (packedText.length < 4) packedText = "0" + packedText;
     IOHC_setParameterValue(device, prefix + "ImportedProfile",
-                           "Profil " + discovery.protocolType + "/" + discovery.subtype +
-                           " (0x" + packedText + ")");
+                           discovery.metadataValid
+                               ? "Profil " + discovery.protocolType + "/" + discovery.subtype +
+                                 " (0x" + packedText + ")"
+                               : "Metadaten ausstehend");
     IOHC_setParameterValue(device, prefix + "ImportedManufacturer",
-                           "Hersteller " + discovery.manufacturer +
-                           ", Energieklasse " + discovery.powerClass);
+                           discovery.metadataValid
+                               ? "Hersteller " + discovery.manufacturer +
+                                 ", Energieklasse " + discovery.powerClass
+                               : "Hersteller und Energieklasse unbekannt");
     // Activate last so all settings are coherent before the calculated
     // channel selector refreshes the dynamic view.
     IOHC_setParameterValue(device, prefix + "Active", 1);
@@ -736,7 +748,12 @@ function IOHC_startKeyExtract(device, online, progress, context) {
                 protocolType: (found[6] || 0) | ((found[7] || 0) << 8),
                 subtype: found[8] || 0,
                 manufacturer: found[9] || 0,
-                powerClass: found[10] || 0
+                powerClass: found[10] || 0,
+                passiveAuthVerified: found.length > 11 && (found[11] & 0x01) != 0,
+                speResponseSeen: found.length > 11 && (found[11] & 0x02) != 0,
+                directedVerified: found.length > 11 && (found[11] & 0x10) != 0,
+                metadataValid: found.length > 11 ? (found[11] & 0x04) != 0 : true,
+                metadataComplete: found.length > 11 ? (found[11] & 0x08) != 0 : true
             };
             discoveries.push(discovery);
             nodeIds.push(discovery.nodeId);
@@ -789,7 +806,14 @@ function IOHC_startKeyExtract(device, online, progress, context) {
             throw new Error("io-homecontrol: Schlüsselübernahme konnte nicht abgeschlossen werden");
         }
 
-        var nodeText = nodeIds.length ? nodeIds.map(IOHC_formatNodeId).join(", ") : "keine";
+        var nodeText = discoveries.length ? discoveries.map(function (entry) {
+            var source = entry.passiveAuthVerified && entry.speResponseSeen ? "passiv+SPE" :
+                         entry.passiveAuthVerified ? "passiv authentifiziert" :
+                         entry.directedVerified ? "gerichtet authentifiziert" : "SPE";
+            var metadata = entry.metadataComplete ? "Metadaten vollständig" :
+                           entry.metadataValid ? "Metadaten teilweise" : "Metadaten ausstehend";
+            return IOHC_formatNodeId(entry.nodeId) + " (" + source + ", " + metadata + ")";
+        }).join(", ") : "keine";
         var summary = configuredChannels + " importiert, " + alreadyConfigured + " vorhanden";
         if (unassigned > 0) {
             summary += ", " + unassigned + " ohne freien Kanal";

@@ -1869,10 +1869,18 @@ bool IoHomeController::sendBackgroundCommand(uint32_t iDestNodeId, const uint8_t
                                iParam3, iMaxAttempts, true);
 }
 
+bool IoHomeController::verifyKnownNetworkNode(uint32_t iNodeId, const uint8_t *iKey,
+                                               uint8_t iFrequencyIndex)
+{
+    return sendCommandInternal(iNodeId, iKey, IoHomeCommand::Discover2ERequest,
+                               0x02, 0xFF, 0xFF, 1, true, iFrequencyIndex);
+}
+
 bool IoHomeController::sendCommandInternal(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                            IoHomeCommand iCmd, uint8_t iParam,
                                            uint16_t iParam2, uint8_t iParam3,
-                                           uint8_t iMaxAttempts, bool iBackground)
+                                           uint8_t iMaxAttempts, bool iBackground,
+                                           uint8_t iFrequencyIndex)
 {
     if (iCmd == IoHomeCommand::WritePrivate && iParam == 0x03)
     {
@@ -1939,6 +1947,7 @@ bool IoHomeController::sendCommandInternal(uint32_t iDestNodeId, const uint8_t *
                                            : OneWayDestinationMode::ProfileTyped;
     lEntry.oneWayExactDestination = 0;
     lEntry.sourceChannelIndex = 0xFF;
+    lEntry.twoWayTxFreqIdx = iFrequencyIndex;
     lEntry.retries = 0;
     lEntry.maxAttempts = iMaxAttempts == 0 ? 1 : iMaxAttempts;
     // A favourite/special Execute is not repeatable: a second "My" can undo
@@ -2773,7 +2782,8 @@ bool IoHomeController::learnPowerClassFromDiscovery(IoHomecontrolChannel *iChann
 
 bool IoHomeController::captureProtocolIdentity(
     IoHomecontrolChannel *iChannel, const IoHomeFrame &iFrame,
-    const char *iSource, IoHomeProtocolIdentity *oMetadata)
+    const char *iSource, IoHomeProtocolIdentity *oMetadata,
+    uint8_t iFrequencyIndex, int16_t iRssi)
 {
     if (iFrame.commandId != IoHomeCommand::DiscoverResponse &&
         iFrame.commandId != IoHomeCommand::DiscoverSPEResponse)
@@ -2847,16 +2857,25 @@ bool IoHomeController::captureProtocolIdentity(
         const bool lPowerClassChanged = lChannelAccepted &&
             learnPowerClassFromDiscovery(
                 iChannel, lMetadata, iFrame.getSrcNodeId(), iSource);
-        // The complete identity and its learned wake policy are committed
-        // together, so one response causes at most one write.
+        // The complete identity and learned wake policy are committed
+        // together. During broadcast discovery, batch all replies until the
+        // scan has left the RF-sensitive response windows.
         if (lPersistedMetadataChanged || lPowerClassChanged)
-            openknx.flash.save();
+        {
+            if (mState == ControllerState::DiscoveryListening ||
+                mState == ControllerState::DiscoverySending)
+                mDiscoveryMetadataDirty = true;
+            else
+                openknx.flash.save();
+        }
     }
 
     if (lNewDiscovery)
     {
-        const uint32_t lFreqHz = mLastResponseFreqIdx < IOHC_NUM_FREQUENCIES
-                                     ? IOHC_FREQUENCIES[mLastResponseFreqIdx] : 0;
+        const uint8_t lFreqIdx = iFrequencyIndex < IOHC_NUM_FREQUENCIES
+                                     ? iFrequencyIndex : mLastResponseFreqIdx;
+        const uint32_t lFreqHz = lFreqIdx < IOHC_NUM_FREQUENCIES
+                                     ? IOHC_FREQUENCIES[lFreqIdx] : 0;
         logInfoP("DISCOVERED: ioAddress=%06X class=%s profile=%u subProfile=%u nodeType=0x%04X manufacturer=%s(%u) backbonePresent=%u backbone=%06X mibPresent=%u mib=0x%02X power=%s ioMember=%u rfSupport=%u responseTimeClass=%u timestampPresent=%u timestamp=%04X freq=%lu rssi=%d source=%s",
                  iFrame.getSrcNodeId(), ioHomeNodeClassName(lMetadata.nodeClass),
                  static_cast<unsigned>(lMetadata.profile),
@@ -2872,7 +2891,8 @@ bool IoHomeController::captureProtocolIdentity(
                  static_cast<unsigned>(lMetadata.responseTimeClass),
                  lMetadata.hasDiscoveryTimestamp ? 1U : 0U,
                  static_cast<unsigned>(lMetadata.discoveryTimestamp),
-                 static_cast<unsigned long>(lFreqHz), mRadio.lastRssi(),
+                 static_cast<unsigned long>(lFreqHz),
+                 iFrequencyIndex < IOHC_NUM_FREQUENCIES ? iRssi : mRadio.lastRssi(),
                  ioHomeMetadataSourceName(lMetadata.metadataSource));
         if (!lMetadata.rfSupportInNode)
             logInfoP("Discovery metadata warning: ioAddress=%06X reports rfSupportInNode=0 but supplied an RF discovery response; raw MIB retained",
@@ -3722,8 +3742,28 @@ void IoHomeController::startDiscovery(bool iEncrypted)
     if (mState != ControllerState::Idle)
         return;
 
+    if (mDiscoveryMetadataDirty)
+    {
+        openknx.flash.save();
+        mDiscoveryMetadataDirty = false;
+    }
+
     mPairingFreqIdx = 0;
+    mDiscoveryLastTxFreqIdx = 0xFF;
     mDiscoverySweep = 0;
+    mPendingDiscoveryCount = 0;
+    mPendingDiscoveryHighWater = 0;
+    mPendingDiscoveryOverflow = 0;
+    mDiscoveryResponsesReceived = 0;
+    mDiscoveryBroadcastsSent = 0;
+    mDiscoveryDuplicates = 0;
+    mDiscoveryUniqueNodes = 0;
+    mDiscoveryParseFailures = 0;
+    const IoHomeRadioHealth lHealth = radioHealth();
+    mDiscoveryStartCrcErrors = lHealth.crcErrorCount;
+    mDiscoveryStartPreambleDetections = lHealth.preambleIrqCount;
+    mDiscoveryStartSyncDetections = lHealth.syncWordIrqCount;
+    memset(mDiscoverySeenNodes, 0, sizeof(mDiscoverySeenNodes));
     mPairingStartTime = millis();
     mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
     resetDiscoveryTimingTrace();
@@ -4821,17 +4861,24 @@ void IoHomeController::tracePairDiagnosticStateChange()
     if (!lRelevant)
         return;
 
-    const uint32_t lPairFreqHz = (mPairingFreqIdx < IOHC_NUM_FREQUENCIES) ? IOHC_FREQUENCIES[mPairingFreqIdx] : 0;
+    const uint8_t lTxFreqIdx = mDiscoveryLastTxFreqIdx < IOHC_NUM_FREQUENCIES
+                                   ? mDiscoveryLastTxFreqIdx
+                                   : (mDiscoverySPE ? speDiscoveryFrequencyIndex(mPairingFreqIdx) : mPairingFreqIdx);
+    const uint32_t lTxFreqHz = lTxFreqIdx < IOHC_NUM_FREQUENCIES ? IOHC_FREQUENCIES[lTxFreqIdx] : 0;
+    const uint32_t lRxFreqHz = mCurrentFreqIdx < IOHC_NUM_FREQUENCIES ? IOHC_FREQUENCIES[mCurrentFreqIdx] : 0;
     const unsigned long lElapsedMs = static_cast<unsigned long>(
         isPairDiagnosticState(mState) && mPairingStartTime != 0 ? (millis() - mPairingStartTime) : 0UL);
 
-    logInfoP("PairDiag: state %s -> %s ch=%u node=0x%06X pairFreq=%u %luHz lastRespFreq=%u elapsed=%lums spe=%d rxScan=%d",
+    logInfoP("PairDiag: state %s -> %s ch=%u node=0x%06X orderIndex=%u txFreqIdx=%u txFreq=%luHz rxFreqIdx=%u rxFreq=%luHz lastRespFreq=%u elapsed=%lums spe=%d rxScan=%d",
              stateName(lPrevState),
              stateName(mState),
              static_cast<unsigned>(mPairingChannel + 1),
              mDiscoveredNodeId,
              static_cast<unsigned>(mPairingFreqIdx),
-             static_cast<unsigned long>(lPairFreqHz),
+             static_cast<unsigned>(lTxFreqIdx),
+             static_cast<unsigned long>(lTxFreqHz),
+             static_cast<unsigned>(mCurrentFreqIdx),
+             static_cast<unsigned long>(lRxFreqHz),
              static_cast<unsigned>(mLastResponseFreqIdx),
              lElapsedMs,
              mDiscoverySPE ? 1 : 0,
@@ -4844,7 +4891,10 @@ void IoHomeController::tracePairDiagnosticCompactPair() const
     if (!mPairDiagnosticTraceEnabled)
         return;
 
-    const uint32_t lPairFreqHz = (mPairingFreqIdx < IOHC_NUM_FREQUENCIES) ? IOHC_FREQUENCIES[mPairingFreqIdx] : 0;
+    const uint8_t lTxFreqIdx = mDiscoveryLastTxFreqIdx < IOHC_NUM_FREQUENCIES
+                                   ? mDiscoveryLastTxFreqIdx
+                                   : (mDiscoverySPE ? speDiscoveryFrequencyIndex(mPairingFreqIdx) : mPairingFreqIdx);
+    const uint32_t lPairFreqHz = lTxFreqIdx < IOHC_NUM_FREQUENCIES ? IOHC_FREQUENCIES[lTxFreqIdx] : 0;
     logInfoP("pair: mode=%s state=%s ch=%u freq=%lu node=0x%06X cmd=0x%02X",
              pairingModeName(mPairing2WMode, mState),
              stateName(mState),
@@ -4950,14 +5000,35 @@ void IoHomeController::serviceBackgroundRxScan()
     // a detected preamble or matched sync word means a packet is in flight and
     // switching now would truncate it. Stay put until reception completes.
     if (mRadio.isPreambleDetected() || mRadio.isSyncDetected())
+    {
+        if (mState == ControllerState::DiscoveryListening)
+        {
+            if (mRadio.isSyncDetected())
+            {
+                ++mDiscoveryTimingTrace.syncHolds;
+                if (mDiscoveryTimingTrace.firstSyncUs == 0)
+                    mDiscoveryTimingTrace.firstSyncUs = lNow;
+            }
+            else
+            {
+                ++mDiscoveryTimingTrace.preambleHolds;
+                if (mDiscoveryTimingTrace.firstPreambleUs == 0)
+                    mDiscoveryTimingTrace.firstPreambleUs = lNow;
+            }
+        }
         return;
+    }
 
     const uint8_t lNextFreqIdx = (mCurrentFreqIdx + 1) % IOHC_NUM_FREQUENCIES;
     if (mRadio.setFrequency(IOHC_FREQUENCIES[lNextFreqIdx]) == RadioError::None)
     {
         mCurrentFreqIdx = lNextFreqIdx;
         if (mRadio.startReceive() == RadioError::None)
+        {
             mRxScanLastSwitch = lNow;
+            if (mState == ControllerState::DiscoveryListening)
+                ++mDiscoveryTimingTrace.rotations;
+        }
     }
 }
 
@@ -4979,7 +5050,21 @@ void IoHomeController::serviceBroadcastResponseScan(uint8_t iRequestFrequencyInd
     // non-request channels; this mirrors the reference ListenPolicy::
     // ROTATE_SKIPPING_REQUEST policy.
     if (mRadio.isPreambleDetected() || mRadio.isSyncDetected())
+    {
+        if (mRadio.isSyncDetected())
+        {
+            ++mDiscoveryTimingTrace.syncHolds;
+            if (mDiscoveryTimingTrace.firstSyncUs == 0)
+                mDiscoveryTimingTrace.firstSyncUs = lNow;
+        }
+        else
+        {
+            ++mDiscoveryTimingTrace.preambleHolds;
+            if (mDiscoveryTimingTrace.firstPreambleUs == 0)
+                mDiscoveryTimingTrace.firstPreambleUs = lNow;
+        }
         return;
+    }
 
     uint8_t lNextFreqIdx = mCurrentFreqIdx;
     do
@@ -4992,24 +5077,31 @@ void IoHomeController::serviceBroadcastResponseScan(uint8_t iRequestFrequencyInd
     {
         mCurrentFreqIdx = lNextFreqIdx;
         if (mRadio.startReceive() == RadioError::None)
+        {
             mRxScanLastSwitch = lNow;
+            ++mDiscoveryTimingTrace.rotations;
+        }
     }
 }
 
 void IoHomeController::logPairDiagnosticStatus() const
 {
-    const uint32_t lPairFreqHz = (mPairingFreqIdx < IOHC_NUM_FREQUENCIES) ? IOHC_FREQUENCIES[mPairingFreqIdx] : 0;
+    const uint8_t lTxFreqIdx = mDiscoveryLastTxFreqIdx < IOHC_NUM_FREQUENCIES
+                                   ? mDiscoveryLastTxFreqIdx
+                                   : (mDiscoverySPE ? speDiscoveryFrequencyIndex(mPairingFreqIdx) : mPairingFreqIdx);
+    const uint32_t lPairFreqHz = lTxFreqIdx < IOHC_NUM_FREQUENCIES ? IOHC_FREQUENCIES[lTxFreqIdx] : 0;
     const uint32_t lCurrentFreqHz = (mCurrentFreqIdx < IOHC_NUM_FREQUENCIES) ? IOHC_FREQUENCIES[mCurrentFreqIdx] : 0;
     const unsigned long lElapsedMs = static_cast<unsigned long>(
         (isPairDiagnosticState(mState) && mPairingStartTime != 0) ? (millis() - mPairingStartTime) : 0UL);
     const IoHomeRadioHealth lHealth = radioHealth();
 
-    logInfoP("PairDiag: trace=%s state=%s ch=%u node=0x%06X pairFreq=%u %luHz currentFreq=%u %luHz lastRespFreq=%u elapsed=%lums spe=%d passive=%d rxScan=%d",
+    logInfoP("PairDiag: trace=%s state=%s ch=%u node=0x%06X orderIndex=%u txFreqIdx=%u txFreq=%luHz rxFreqIdx=%u rxFreq=%luHz lastRespFreq=%u elapsed=%lums spe=%d passive=%d rxScan=%d",
              mPairDiagnosticTraceEnabled ? "on" : "off",
              stateName(mState),
              static_cast<unsigned>(mPairingChannel + 1),
              mDiscoveredNodeId,
              static_cast<unsigned>(mPairingFreqIdx),
+             static_cast<unsigned>(lTxFreqIdx),
              static_cast<unsigned long>(lPairFreqHz),
              static_cast<unsigned>(mCurrentFreqIdx),
              static_cast<unsigned long>(lCurrentFreqHz),
@@ -5018,6 +5110,19 @@ void IoHomeController::logPairDiagnosticStatus() const
              mDiscoverySPE ? 1 : 0,
              mPassiveMode ? 1 : 0,
              mRxScanEnabled ? 1 : 0);
+    logInfoP("PairDiag: discovery broadcasts=%lu responses=%lu unique=%lu duplicate=%lu pendingHigh=%u pendingOverflow=%lu parseFail=%lu crcFail=%lu preambleNoPacket=%lu syncNoPacket=%lu",
+             static_cast<unsigned long>(mDiscoveryBroadcastsSent),
+             static_cast<unsigned long>(mDiscoveryResponsesReceived),
+             static_cast<unsigned long>(mDiscoveryUniqueNodes),
+             static_cast<unsigned long>(mDiscoveryDuplicates),
+             static_cast<unsigned>(mPendingDiscoveryHighWater),
+             static_cast<unsigned long>(mPendingDiscoveryOverflow),
+             static_cast<unsigned long>(mDiscoveryParseFailures),
+             static_cast<unsigned long>(lHealth.crcErrorCount - mDiscoveryStartCrcErrors),
+             static_cast<unsigned long>(lHealth.preambleIrqCount - mDiscoveryStartPreambleDetections > mDiscoveryResponsesReceived
+                                            ? lHealth.preambleIrqCount - mDiscoveryStartPreambleDetections - mDiscoveryResponsesReceived : 0),
+             static_cast<unsigned long>(lHealth.syncWordIrqCount - mDiscoveryStartSyncDetections > mDiscoveryResponsesReceived
+                                            ? lHealth.syncWordIrqCount - mDiscoveryStartSyncDetections - mDiscoveryResponsesReceived : 0));
     logInfoP("PairDiag: outcome=%s diagnostic=%s optionalConfig=%u telemetryPeer=0x%06X lastRx=0x%02X rejected=%u keyAttempts=%u",
              pairingOutcomeName(mPairingTelemetry.outcome),
              pairingOutcomeName(mPairingTelemetry.diagnostic),
@@ -5099,6 +5204,76 @@ void IoHomeController::resetDiscoveryTimingTrace()
     memset(&mDiscoveryTimingTrace, 0, sizeof(mDiscoveryTimingTrace));
 }
 
+void IoHomeController::enqueueDiscoveryResponse()
+{
+    if (mRxFrame.getDestNodeId() != mOwnNodeId ||
+        getAddressClass(mRxFrame.getSrcNodeId()) != IoHomeAddressClass::Unicast)
+        return;
+
+    ++mDiscoveryResponsesReceived;
+    ++mDiscoveryTimingTrace.packets;
+    if (mPendingDiscoveryCount >= kPendingDiscoveryCapacity)
+    {
+        ++mPendingDiscoveryOverflow;
+        return;
+    }
+
+    PendingDiscoveryResponse &lPending = mPendingDiscovery[mPendingDiscoveryCount++];
+    lPending.frame = mRxFrame;
+    lPending.source = mRxFrame.getSrcNodeId();
+    lPending.destination = mRxFrame.getDestNodeId();
+    lPending.frequencyIndex = mCurrentFreqIdx;
+    lPending.rssi = mRadio.lastRssi();
+    lPending.receivedAtUs = micros();
+    mDiscoveryTimingTrace.lastPacketUs = lPending.receivedAtUs;
+    lPending.rawLength = mRxRawLen;
+    memcpy(lPending.raw, mRxBuffer, mRxRawLen);
+    if (mPendingDiscoveryCount > mPendingDiscoveryHighWater)
+        mPendingDiscoveryHighWater = mPendingDiscoveryCount;
+}
+
+void IoHomeController::processPendingDiscoveryResponses()
+{
+    for (uint8_t i = 0; i < mPendingDiscoveryCount; ++i)
+    {
+        const PendingDiscoveryResponse &lPending = mPendingDiscovery[i];
+        const uint32_t lStartedUs = micros();
+        bool lSeen = false;
+        for (uint32_t lNode : mDiscoverySeenNodes)
+        {
+            if (lNode == lPending.source)
+            {
+                lSeen = true;
+                break;
+            }
+        }
+        if (lSeen)
+            ++mDiscoveryDuplicates;
+        else if (mDiscoveryUniqueNodes < kPendingDiscoveryCapacity)
+            mDiscoverySeenNodes[mDiscoveryUniqueNodes++] = lPending.source;
+
+        IoHomeProtocolIdentity lMetadata;
+        captureProtocolIdentity(channelForNode(lPending.source), lPending.frame,
+                                "roll-call discovery", &lMetadata,
+                                lPending.frequencyIndex, lPending.rssi);
+        if (mModule)
+        {
+            mModule->onDiscoveryResponse(lPending.frame, lMetadata);
+            mModule->remoteMap().observeAddress(lPending.source);
+        }
+        recordScanFrame(lPending.frame, lPending.raw, lPending.rawLength,
+                        lPending.rssi, lPending.frequencyIndex);
+        updateNodeStats(lPending.source, lPending.rssi, lPending.frame.commandId);
+        logInfoP("Discovery: %s from 0x%06X freq=%u rssi=%ddBm",
+                 commandName(lPending.frame.commandId), lPending.source,
+                 static_cast<unsigned>(lPending.frequencyIndex), lPending.rssi);
+        const uint32_t lProcessingUs = micros() - lStartedUs;
+        if (lProcessingUs > mDiscoveryTimingTrace.maxProcessingUs)
+            mDiscoveryTimingTrace.maxProcessingUs = lProcessingUs;
+    }
+    mPendingDiscoveryCount = 0;
+}
+
 uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool iForceFlashSave)
 {
     if (!iProfile)
@@ -5147,8 +5322,13 @@ void IoHomeController::logDiscoveryTimingTrace(const char *iReason, unsigned lon
     const unsigned long lTxBusyMaxUs = 0UL;
 #endif
 
-    logInfoP("PairDiag: discovery hop=%u %s prepFreq=%luus prepPre=%luus txLaunch=%luus txDone=%luus rxReady=%luus listen=%lums overshoot=%lums rxBusy=%lu txBusyHits=%lu txBusyTotal=%luus txBusyMax=%luus",
+    const uint8_t lTxFreqIdx = mDiscoverySPE ? speDiscoveryFrequencyIndex(mPairingFreqIdx) : mPairingFreqIdx;
+    logInfoP("PairDiag: discovery order=%u txFreqIdx=%u txFreq=%luHz rxFreqIdx=%u rxFreq=%luHz %s prepFreq=%luus prepPre=%luus txLaunch=%luus txDone=%luus rxReady=%luus listen=%lums overshoot=%lums rxBusy=%lu txBusyHits=%lu txBusyTotal=%luus txBusyMax=%luus",
              static_cast<unsigned>(mPairingFreqIdx),
+             static_cast<unsigned>(lTxFreqIdx),
+             static_cast<unsigned long>(IOHC_FREQUENCIES[lTxFreqIdx]),
+             static_cast<unsigned>(mCurrentFreqIdx),
+             static_cast<unsigned long>(IOHC_FREQUENCIES[mCurrentFreqIdx]),
              iReason,
              lDeltaUs(mDiscoveryTimingTrace.hopStartUs, mDiscoveryTimingTrace.freqReadyUs),
              lDeltaUs(mDiscoveryTimingTrace.freqReadyUs, mDiscoveryTimingTrace.preambleReadyUs),
@@ -5161,6 +5341,18 @@ void IoHomeController::logDiscoveryTimingTrace(const char *iReason, unsigned lon
              lTxBusyHits,
              lTxBusyTotalUs,
              lTxBusyMaxUs);
+    logInfoP("PairDiag: SPE timing pass=%s rotations=%lu packets=%lu firstPreambleUs=%lu firstSyncUs=%lu lastPacketUs=%lu maxLoopUs=%lu maxProcessingUs=%lu preambleHold=%lu syncHold=%lu pendingOverflow=%lu",
+             mDiscoverySweep == 0 ? "low-power" : "always-alive",
+             static_cast<unsigned long>(mDiscoveryTimingTrace.rotations),
+             static_cast<unsigned long>(mDiscoveryTimingTrace.packets),
+             static_cast<unsigned long>(mDiscoveryTimingTrace.firstPreambleUs),
+             static_cast<unsigned long>(mDiscoveryTimingTrace.firstSyncUs),
+             static_cast<unsigned long>(mDiscoveryTimingTrace.lastPacketUs),
+             static_cast<unsigned long>(mDiscoveryTimingTrace.maxLoopUs),
+             static_cast<unsigned long>(mDiscoveryTimingTrace.maxProcessingUs),
+             static_cast<unsigned long>(mDiscoveryTimingTrace.preambleHolds),
+             static_cast<unsigned long>(mDiscoveryTimingTrace.syncHolds),
+             static_cast<unsigned long>(mPendingDiscoveryOverflow));
 
 #if defined(RADIO_SX1262)
     logInfoP("PairDiag: discovery busy hop=%u irq=%lu/%luus status=%lu/%luus clear=%lu/%luus standby=%lu/%luus rx=%lu/%luus other=%lu/%luus",
@@ -5304,6 +5496,25 @@ void IoHomeController::loop()
     if (!mRadio.isInitialized())
         return;
 
+    if (mState == ControllerState::Idle && mDiscoveryMetadataDirty &&
+        !mKeyExtractArmed)
+    {
+        openknx.flash.save();
+        mDiscoveryMetadataDirty = false;
+    }
+
+    if (mState == ControllerState::DiscoveryListening)
+    {
+        const uint32_t lNowUs = micros();
+        if (mDiscoveryLoopStartedUs != 0)
+        {
+            const uint32_t lLoopUs = lNowUs - mDiscoveryLoopStartedUs;
+            if (lLoopUs > mDiscoveryTimingTrace.maxLoopUs)
+                mDiscoveryTimingTrace.maxLoopUs = lLoopUs;
+        }
+        mDiscoveryLoopStartedUs = lNowUs;
+    }
+
     // Reset duty cycle accumulator every hour
     if (millis() - mDutyCycleWindowStart > IOHC_DUTY_CYCLE_WINDOW_MS)
     {
@@ -5387,7 +5598,11 @@ void IoHomeController::loop()
         mRxRawLen = lLen;
         bool lParsed = (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen));
         if (lLen > 0 && !lParsed)
+        {
             mRxParseFailCount++;
+            if (mState == ControllerState::DiscoveryListening)
+                ++mDiscoveryParseFailures;
+        }
         if (lParsed)
         {
             const ControllerState lPairingStateBeforeRx = mState;
@@ -5397,6 +5612,7 @@ void IoHomeController::loop()
             observeUnknown86Frame();
 
             if (mPairDiagnosticTraceEnabled &&
+                mState != ControllerState::DiscoveryListening &&
                 (isPairDiagnosticState(mState) || isPairDiagnosticCommand(mRxFrame.commandId)))
             {
                 tracePairDiagnosticFrame("rx", mRxFrame, mLastResponseFreqIdx, mRadio.lastRssi());
@@ -6093,7 +6309,11 @@ void IoHomeController::processTxPending()
         mRetryAtMs = 0;
     }
     const uint32_t l1WTxFreqHz = IOHC_FREQUENCIES[mCurrentFreqIdx];
-    const RadioError lPrepErr = lIs1WFrame ? configureTxRadio(lPreamble, &l1WTxFreqHz) : configureNormal2WTxRadio(lPreamble);
+    const uint32_t l2WTxFreqHz = mCurrentCmd.twoWayTxFreqIdx < IOHC_NUM_FREQUENCIES
+                                     ? IOHC_FREQUENCIES[mCurrentCmd.twoWayTxFreqIdx]
+                                     : kNormal2WTxFreqHz;
+    const RadioError lPrepErr = lIs1WFrame ? configureTxRadio(lPreamble, &l1WTxFreqHz)
+                                            : configureTxRadio(lPreamble, &l2WTxFreqHz);
     if (lPrepErr == RadioError::Busy)
         return;
     if (lPrepErr != RadioError::None)
@@ -6110,6 +6330,26 @@ void IoHomeController::processTxPending()
     RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
     if (lErr == RadioError::None)
     {
+        if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
+        {
+            mDirectedRequestTxStartUs = micros();
+            mDirectedRequestTxEndUs = 0;
+            mDirectedRxReadyUs = 0;
+            mDirectedFirstPreambleUs = 0;
+            mDirectedFirstSyncUs = 0;
+            const std::string lRaw = hexDump(mTxBuffer, mTxLen);
+            logInfoP("KeyImport directed TX: candidate=%06X raw=%s len=%u ctrl0=%02X ctrl1=%02X src=%06X dst=%06X cmd=%02X payload=%02X freq=%lu preamble=%u lbt=not-applied txStartUs=%lu",
+                     mCurrentCmd.destNodeId, lRaw.c_str(),
+                     static_cast<unsigned>(mTxLen),
+                     static_cast<unsigned>(mTxFrame.ctrlByte0),
+                     static_cast<unsigned>(mTxFrame.ctrlByte1),
+                     mTxFrame.getSrcNodeId(), mTxFrame.getDestNodeId(),
+                     static_cast<unsigned>(static_cast<uint8_t>(mTxFrame.commandId)),
+                     static_cast<unsigned>(mTxFrame.data[0]),
+                     static_cast<unsigned long>(l2WTxFreqHz),
+                     static_cast<unsigned>(lPreamble),
+                     static_cast<unsigned long>(mDirectedRequestTxStartUs));
+        }
         if (!lIs1WFrame)
             beginResponseTimingAttempt();
         mStateTimer = millis();
@@ -6131,6 +6371,9 @@ void IoHomeController::processTxInProgress()
 {
     if (mRadio.state() != RadioState::Transmitting)
     {
+        if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest &&
+            !mAuthResponseSent && mDirectedRequestTxEndUs == 0)
+            mDirectedRequestTxEndUs = micros();
         if ((mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) == 0)
             markResponseTimingTxEnd();
         const RadioError lRxErr = mRadio.startReceive();
@@ -6145,6 +6388,9 @@ void IoHomeController::processTxInProgress()
         }
 
         mRxScanLastSwitch = micros();
+        if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest &&
+            !mAuthResponseSent && mDirectedRxReadyUs == 0)
+            mDirectedRxReadyUs = mRxScanLastSwitch;
         mStateTimer = millis();
         mState = ControllerState::WaitResponse;
         return;
@@ -6152,6 +6398,9 @@ void IoHomeController::processTxInProgress()
 
     if (mRadio.isTxDone())
     {
+        if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest &&
+            !mAuthResponseSent && mDirectedRequestTxEndUs == 0)
+            mDirectedRequestTxEndUs = micros();
         const uint32_t lTxTimeMs = estimatedTxAirtimeMs(mTxLen, mCurrentTxPreambleSymbols);
         mTxTimeAccum[mCurrentFreqIdx] += lTxTimeMs;
 
@@ -6186,6 +6435,9 @@ void IoHomeController::processTxInProgress()
                 return;
             }
             mRxScanLastSwitch = micros();
+            if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest &&
+                !mAuthResponseSent && mDirectedRxReadyUs == 0)
+                mDirectedRxReadyUs = mRxScanLastSwitch;
             mStateTimer = millis();
             mState = ControllerState::WaitResponse;
         }
@@ -6260,6 +6512,13 @@ void IoHomeController::processTx1WRepeat()
 
 void IoHomeController::processWaitResponse()
 {
+    if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
+    {
+        if (mRadio.isPreambleDetected() && mDirectedFirstPreambleUs == 0)
+            mDirectedFirstPreambleUs = micros();
+        if (mRadio.isSyncDetected() && mDirectedFirstSyncUs == 0)
+            mDirectedFirstSyncUs = micros();
+    }
     // Extend timeout if preamble detected (device is responding, packet not complete)
     if (mRadio.isPreambleDetected())
     {
@@ -6280,6 +6539,17 @@ void IoHomeController::processWaitResponse()
         const auto failExchange = [this]() {
             const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
             const bool lAfterChallenge = mSawChallenge && mWaitingFinalResponse;
+            if (lFailedCmd.command == IoHomeCommand::Discover2ERequest)
+                logInfoP("KeyImport directed timeout: candidate=%06X stage=%s requestTx=%lu/%lu rxReady=%lu firstPreamble=%lu firstSync=%lu challenge=%u authTx=%u final2F=0",
+                         lFailedCmd.destNodeId,
+                         lAfterChallenge ? "final-2f" : "challenge-3c",
+                         static_cast<unsigned long>(mDirectedRequestTxStartUs),
+                         static_cast<unsigned long>(mDirectedRequestTxEndUs),
+                         static_cast<unsigned long>(mDirectedRxReadyUs),
+                         static_cast<unsigned long>(mDirectedFirstPreambleUs),
+                         static_cast<unsigned long>(mDirectedFirstSyncUs),
+                         mSawChallenge ? 1U : 0U,
+                         mAuthResponseSent ? 1U : 0U);
             recordExchangeFailure(lFailedCmd, lAfterChallenge);
             mCurrentCmd.active = false;
             mWaitingFinalResponse = false;
@@ -6464,7 +6734,10 @@ void IoHomeController::processResponse()
         if (lLen > 0)
         {
             const uint16_t lPreamble = authResponsePreamble();
-            const RadioError lPrepErr = configureNormal2WTxRadio(lPreamble);
+            const uint32_t lAuthFreqHz = mCurrentCmd.twoWayTxFreqIdx < IOHC_NUM_FREQUENCIES
+                                             ? IOHC_FREQUENCIES[mCurrentCmd.twoWayTxFreqIdx]
+                                             : kNormal2WTxFreqHz;
+            const RadioError lPrepErr = configureTxRadio(lPreamble, &lAuthFreqHz);
             if (lPrepErr == RadioError::Busy)
                 return;
             if (lPrepErr != RadioError::None)
@@ -8390,6 +8663,8 @@ void IoHomeController::processDiscovery()
 #endif
             if (lErr == RadioError::None)
             {
+                ++mDiscoveryBroadcastsSent;
+                mDiscoveryLastTxFreqIdx = lTxFreqIdx;
                 if (mDiscoverySPE)
                 {
                     logInfoP("KeyImport scan tx: cmd=0x%02X src=0x%06X dst=0x%06X ctrl1=0x%02X freq=%lu preamble=%u sweep=%u pass=%s",
@@ -8420,6 +8695,7 @@ void IoHomeController::processDiscovery()
                     mDiscoveryTimingTrace.txStartUs = micros();
                     mStateTimer = millis();
                     mState = ControllerState::DiscoveryListening;
+                    mDiscoveryLoopStartedUs = 0;
                 }
             }
             else if (lErr == RadioError::Busy)
@@ -8477,9 +8753,17 @@ void IoHomeController::processDiscovery()
         lRxErr = ensureReceiveAfterTransmit();
         if (lRxErr == RadioError::Busy)
             return;
+        if (lRxErr == RadioError::None && mDiscoveryTimingTrace.txDoneUs == 0)
+            mDiscoveryTimingTrace.txDoneUs = micros();
 #endif
         if (lRxErr != RadioError::None)
         {
+            processPendingDiscoveryResponses();
+            if (mDiscoveryMetadataDirty)
+            {
+                openknx.flash.save();
+                mDiscoveryMetadataDirty = false;
+            }
             resetDiscoveryTimingTrace();
             mState = ControllerState::Idle;
             return;
@@ -8507,6 +8791,7 @@ void IoHomeController::processDiscovery()
         const unsigned long lListenLimitMs = lFrameArriving ? IOHC_DISCOVERY_LISTEN_EXTENDED_MS : IOHC_DISCOVERY_LISTEN_MS;
         if (lListenElapsedMs > lListenLimitMs)
         {
+            processPendingDiscoveryResponses();
             const bool lMoreFreqs = (mPairingFreqIdx + 1 < IOHC_NUM_FREQUENCIES);
             const uint8_t lSweepCount = mDiscoverySPE ? 2U : IOHC_DISCOVERY_MAX_SWEEPS;
             const bool lMoreSweeps = (mDiscoverySweep + 1 < lSweepCount);
@@ -8532,6 +8817,11 @@ void IoHomeController::processDiscovery()
             else
             {
                 mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
+                if (mDiscoveryMetadataDirty)
+                {
+                    openknx.flash.save();
+                    mDiscoveryMetadataDirty = false;
+                }
                 resetDiscoveryTimingTrace();
                 mState = ControllerState::Idle;
                 startReceive();
@@ -9342,16 +9632,7 @@ void IoHomeController::dispatchRxFrame()
         (mRxFrame.commandId == IoHomeCommand::DiscoverResponse ||
          mRxFrame.commandId == IoHomeCommand::DiscoverSPEResponse))
     {
-        IoHomecontrolChannel *lChannel = channelForNode(lSrcNode);
-        IoHomeProtocolIdentity lMetadata;
-        captureProtocolIdentity(lChannel, mRxFrame,
-                                 "roll-call discovery", &lMetadata);
-        mModule->onDiscoveryResponse(mRxFrame, lMetadata);
-        mModule->remoteMap().observeAddress(lSrcNode);
-        recordScanFrame(mRxFrame, mRxBuffer, mRxRawLen, mRadio.lastRssi(), mCurrentFreqIdx);
-        updateNodeStats(lSrcNode, mRadio.lastRssi(), mRxFrame.commandId);
-        logInfoP("Discovery: %s from 0x%06X freq=%d rssi=%ddBm",
-                 commandName(mRxFrame.commandId), lSrcNode, mCurrentFreqIdx, mRadio.lastRssi());
+        enqueueDiscoveryResponse();
         return;
     }
 
@@ -10021,18 +10302,8 @@ void IoHomeController::processKeyExtractFrame()
         mModule->remoteMap().observeAddress(lSrcNode);
 
     if (mModule && mKeyExtractHubNodeId != 0)
-    {
-        uint32_t lNetworkCandidate = 0;
-        if (lSrcNode == mKeyExtractHubNodeId)
-            lNetworkCandidate = lDstNode;
-        else if (lDstNode == mKeyExtractHubNodeId)
-            lNetworkCandidate = lSrcNode;
-
-        if (lNetworkCandidate != 0 &&
-            lNetworkCandidate != mKeyExtractThrowawayId &&
-            getAddressClass(lNetworkCandidate) == IoHomeAddressClass::Unicast)
-            mModule->onKeyImportCandidateObserved(lNetworkCandidate);
-    }
+        mModule->onKeyImportPassiveFrame(mRxFrame, mCurrentFreqIdx,
+                                         mRadio.lastRssi(), millis());
 
     if (mNetworkScanActive)
     {

@@ -58,7 +58,9 @@ public:
   void onPassiveKeyCaptured(const IoHomeController::PassiveKeyResult &iResult);
   void onDiscoveryResponse(const IoHomeFrame &iFrame,
                            const IoHomeProtocolIdentity &iMetadata);
-  void onKeyImportCandidateObserved(uint32_t iNodeId);
+  void onKeyImportPassiveFrame(const IoHomeFrame &iFrame,
+                               uint8_t iFrequencyIndex, int16_t iRssi,
+                               uint32_t iTimestampMs);
   void onAuthenticatedDirectedDiscovery(uint32_t iNodeId);
 
 private:
@@ -101,6 +103,8 @@ private:
   uint8_t mLastObservedCount = 0;
   bool mAutoSpeDiscoveryAfterPairing = false;
   bool mPendingPostPairSpeDiscovery = false;
+  bool mPendingImportMetadataRetry = false;
+  uint32_t mImportMetadataRetryAtMs = 0;
   bool mMetadataRefreshActive = false;
   uint8_t mMetadataRefreshChannel = 0xFF;
   uint8_t mMetadataRefreshStep = 0;
@@ -124,7 +128,31 @@ private:
   {
     bool valid = false;
     uint32_t nodeId = 0;
+    bool passiveAuthVerified = false;
+    bool directedVerified = false;
+    bool speResponseSeen = false;
     IoHomeProtocolIdentity protocolIdentity{};
+  };
+
+  struct KeyImportCandidate
+  {
+    uint32_t nodeId = 0;
+    uint32_t hubNodeId = 0;
+    uint32_t requestAtMs = 0;
+    uint32_t challengeAtMs = 0;
+    uint32_t authAtMs = 0;
+    uint32_t finalAtMs = 0;
+    uint8_t lastRxFreqIdx = 0xFF;
+    uint8_t klrDirectedFreqIdx = 0xFF;
+    int16_t lastRssi = 0;
+    uint8_t requestPayload = 0;
+    uint8_t challenge[6] = {};
+    uint8_t responseHmac[6] = {};
+    bool requestSeen = false;
+    bool challengeSeen = false;
+    bool authSeen = false;
+    bool finalSeen = false;
+    bool authVerified = false;
   };
 
   // Discovery is a network inventory, not a configured-channel list. Keep
@@ -138,17 +166,21 @@ private:
   KeyImportDevice mKeyImportDevices[kMaxKeyImportDevices] = {};
   uint8_t mKeyImportDeviceCount = 0;
   bool mKeyImportOverflow = false;
-  uint32_t mKeyImportCandidates[kMaxKeyImportDevices] = {};
+  KeyImportCandidate mKeyImportCandidates[kMaxKeyImportDevices] = {};
   uint8_t mKeyImportCandidateCount = 0;
   uint8_t mKeyImportDirectedCandidateIndex = 0;
   uint32_t mKeyImportDirectedNodeId = 0;
   bool mKeyImportBroadcastComplete = false;
   bool mKeyImportDirectedAwaiting = false;
+  bool mKeyImportDirectedTriedGeneric = false;
+  uint16_t mKeyImportDirectedSuccesses = 0;
+  uint16_t mKeyImportDirectedFailures = 0;
 
   void resetKeyImportWorkflow();
   void processKeyImportWorkflow();
   KeyImportDevice *findKeyImportDevice(uint32_t iNodeId);
   KeyImportDevice *addKeyImportDevice(uint32_t iNodeId);
+  void verifyPassiveCandidates();
   bool applyKeyImportDeviceToChannel(const KeyImportDevice &iDevice,
                                      uint8_t iChannelIndex);
   uint8_t assignKeyImportDevice(uint8_t iResultIndex, uint8_t iChannelIndex,
