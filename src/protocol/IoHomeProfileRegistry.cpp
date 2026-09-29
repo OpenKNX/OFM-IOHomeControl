@@ -143,6 +143,33 @@ ParameterSemantic ioHomeParameterSemantic(const IoHomeProfileDescriptor *iDescri
                : iDescriptor->fp[iParameterIndex - 1];
 }
 
+IoHomeParameterDescriptor ioHomeParameterDescriptor(
+    const IoHomeProfileDescriptor *iDescriptor, uint8_t iParameterIndex)
+{
+    IoHomeParameterDescriptor lResult;
+    lResult.index = iParameterIndex;
+    lResult.semantic = ioHomeParameterSemantic(iDescriptor, iParameterIndex);
+    if (!iDescriptor || iParameterIndex > 16)
+        return lResult;
+    lResult.polarity = iParameterIndex == 0 ? iDescriptor->mpPolarity
+                                              : ParameterPolarity::Normal;
+    switch (lResult.semantic)
+    {
+    case ParameterSemantic::Unsupported:
+    case ParameterSemantic::Unknown:
+        return lResult;
+    case ParameterSemantic::LockState:
+    case ParameterSemantic::SwitchState:
+        lResult.valueKind = ParameterValueKind::Discrete;
+        return lResult;
+    default:
+        lResult.valueKind = ParameterValueKind::Relative;
+        // Only the existing FP1..FP3 percentage command path is validated.
+        lResult.writable = iParameterIndex >= 1 && iParameterIndex <= 3;
+        return lResult;
+    }
+}
+
 uint8_t ioHomeParameterIndex(const IoHomeProfileDescriptor *iDescriptor,
                              ParameterSemantic iSemantic)
 {

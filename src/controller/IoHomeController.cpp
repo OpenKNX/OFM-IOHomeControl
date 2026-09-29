@@ -2320,6 +2320,13 @@ bool IoHomeController::sendProfileParameterCommand(uint32_t iDestNodeId,
         : (iSemantic == ParameterSemantic::SlatOrientation ? 3 : 0xFF);
     if (lIndex < 1 || lIndex > 3)
         return false;
+    if (lDescriptor)
+    {
+        const IoHomeParameterDescriptor lParameter =
+            ioHomeParameterDescriptor(lDescriptor, lIndex);
+        if (!lParameter.writable || lParameter.valueKind != ParameterValueKind::Relative)
+            return false;
+    }
     if (iPercent > 100)
         iPercent = 100;
     const bool lReversed = ioHomeIsOrientationSemantic(iSemantic);

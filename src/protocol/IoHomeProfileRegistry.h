@@ -38,6 +38,24 @@ enum class ParameterPolarity : uint8_t
     Reversed // 0x0000 = 100%, 0xC800 = 0%
 };
 
+enum class ParameterValueKind : uint8_t
+{
+    Relative,
+    Discrete,
+    AccessMethod,
+    Alias,
+    Unknown
+};
+
+struct IoHomeParameterDescriptor
+{
+    uint8_t index = 0; // 0 = MP; 1..16 = FP
+    ParameterSemantic semantic = ParameterSemantic::Unknown;
+    ParameterValueKind valueKind = ParameterValueKind::Unknown;
+    ParameterPolarity polarity = ParameterPolarity::Normal;
+    bool writable = false;
+};
+
 enum IoHomeProfileCapability : uint32_t
 {
     IoHomeCapabilityPosition = 1UL << 0,
@@ -77,6 +95,8 @@ const IoHomeProfileDescriptor *ioHomeProfileDescriptor(const IoHomeProtocolIdent
 // an unknown profile or invalid index is Unknown.
 ParameterSemantic ioHomeParameterSemantic(const IoHomeProfileDescriptor *iDescriptor,
                                           uint8_t iParameterIndex);
+IoHomeParameterDescriptor ioHomeParameterDescriptor(
+    const IoHomeProfileDescriptor *iDescriptor, uint8_t iParameterIndex);
 uint8_t ioHomeParameterIndex(const IoHomeProfileDescriptor *iDescriptor,
                              ParameterSemantic iSemantic);
 const char *ioHomeParameterSemanticName(ParameterSemantic iSemantic);

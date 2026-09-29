@@ -3065,6 +3065,25 @@ TEST(klf_profile_registry_preserves_unknowns_and_reverses_venetian_fp_roles)
     ASSERT_TRUE(!ioHomeSupportsCapturedFp3Orientation(lIdentity));
 }
 
+TEST(profile_parameter_value_kind_is_separate_from_fp_index)
+{
+    const IoHomeProfileDescriptor *lShutter = ioHomeProfileDescriptor(2, 0);
+    const IoHomeProfileDescriptor *lSwitch = ioHomeProfileDescriptor(15, 0);
+    ASSERT_TRUE(lShutter != nullptr);
+    ASSERT_TRUE(lSwitch != nullptr);
+    ASSERT_EQ(ioHomeParameterDescriptor(lShutter, 1).valueKind,
+              ParameterValueKind::Relative);
+    ASSERT_TRUE(ioHomeParameterDescriptor(lShutter, 1).writable);
+    ASSERT_EQ(ioHomeParameterDescriptor(lShutter, 10).valueKind,
+              ParameterValueKind::Unknown);
+    ASSERT_TRUE(!ioHomeParameterDescriptor(lShutter, 10).writable);
+    ASSERT_EQ(ioHomeParameterDescriptor(lSwitch, 0).valueKind,
+              ParameterValueKind::Discrete);
+    ASSERT_TRUE(!ioHomeParameterDescriptor(lSwitch, 0).writable);
+    ASSERT_EQ(ioHomeParameterDescriptor(nullptr, 1).valueKind,
+              ParameterValueKind::Unknown);
+}
+
 TEST(klf_profile_mp_polarity_and_window_ventilation_alias)
 {
     struct Case { uint16_t packed; ParameterPolarity polarity; };
