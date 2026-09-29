@@ -721,6 +721,8 @@ public:
   bool diagnostic2WWakeBelief() const;
   void setDiagnosticDiscoverySettings(const TwoWayDiscoverySettings &iSettings);
   const TwoWayDiscoverySettings &diagnosticDiscoverySettings() const;
+  bool setDiagnosticDiscoveryListenMs(uint16_t iMilliseconds);
+  uint16_t diagnosticDiscoveryListenMs() const;
   static const char *stateName(ControllerState iState);
   static const char *pairingOutcomeName(PairingOutcome iOutcome);
   const PairingTelemetry &pairingTelemetry() const;
@@ -964,6 +966,7 @@ private:
     uint32_t firstSyncUs;
     uint32_t lastPacketUs;
     uint32_t maxLoopUs;
+    uint32_t maxRxHotPathUs;
     uint32_t maxProcessingUs;
     uint32_t packets;
   };
@@ -984,6 +987,7 @@ private:
   uint8_t mPendingDiscoveryCount = 0;
   uint8_t mPendingDiscoveryHighWater = 0;
   uint32_t mPendingDiscoveryOverflow = 0;
+  uint32_t mPendingDiscoveryOverflowReported = 0;
   uint32_t mDiscoveryResponsesReceived = 0;
   uint32_t mDiscoveryBroadcastsSent = 0;
   uint32_t mDiscoveryDuplicates = 0;
@@ -1062,6 +1066,8 @@ private:
   uint32_t mDirectedRxReadyUs = 0;
   uint32_t mDirectedFirstPreambleUs = 0;
   uint32_t mDirectedFirstSyncUs = 0;
+  bool mDirectedWrongSourceSeen = false;
+  bool mDirectedWrongCommandSeen = false;
   uint32_t mExchangeAuthTxEndUs = 0;
   bool mExchangeRequestTxEndValid = false;
   bool mExchangeAuthTxEndValid = false;
@@ -1101,6 +1107,7 @@ private:
   uint8_t mPairingFreqIdx;
   uint8_t mDiscoveryLastTxFreqIdx = 0xFF;
   uint8_t mDiscoverySweep; // diagnostic discovery: current full-sweep attempt (0-based)
+  uint16_t mDiagnosticDiscoveryListenMs = IOHC_DISCOVERY_LISTEN_MS;
   uint32_t mPairingStartTime;
   DiscoverySendPhase mDiscoverySendPhase;
   DiscoveryTimingTrace mDiscoveryTimingTrace;

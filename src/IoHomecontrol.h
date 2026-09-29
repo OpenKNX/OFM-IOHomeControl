@@ -3,6 +3,7 @@
 #include "IoHomeRemoteMap.h"
 #include "OpenKNX.h"
 #include "controller/IoHomeController.h"
+#include "protocol/IoHomePassiveAuth.h"
 #include "knxprod.h"
 
 class IoHomecontrol : public OpenKNX::Module
@@ -61,6 +62,7 @@ public:
   void onKeyImportPassiveFrame(const IoHomeFrame &iFrame,
                                uint8_t iFrequencyIndex, int16_t iRssi,
                                uint32_t iTimestampMs);
+  bool hasKeyImportDevicesMissingSpeMetadata() const;
   void onAuthenticatedDirectedDiscovery(uint32_t iNodeId);
 
 private:
@@ -134,25 +136,12 @@ private:
     IoHomeProtocolIdentity protocolIdentity{};
   };
 
-  struct KeyImportCandidate
+  struct KeyImportCandidate : IoHomePassiveAuthEvidence
   {
     uint32_t nodeId = 0;
     uint32_t hubNodeId = 0;
-    uint32_t requestAtMs = 0;
-    uint32_t challengeAtMs = 0;
-    uint32_t authAtMs = 0;
-    uint32_t finalAtMs = 0;
     uint8_t lastRxFreqIdx = 0xFF;
-    uint8_t klrDirectedFreqIdx = 0xFF;
     int16_t lastRssi = 0;
-    uint8_t requestPayload = 0;
-    uint8_t challenge[6] = {};
-    uint8_t responseHmac[6] = {};
-    bool requestSeen = false;
-    bool challengeSeen = false;
-    bool authSeen = false;
-    bool finalSeen = false;
-    bool authVerified = false;
   };
 
   // Discovery is a network inventory, not a configured-channel list. Keep

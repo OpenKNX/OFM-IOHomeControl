@@ -20,6 +20,7 @@
 #include "protocol/IoHomeCommands.h"
 #include "protocol/IoHomeProfileRegistry.h"
 #include "protocol/IoHomeLogRedaction.h"
+#include "protocol/IoHomePassiveAuth.h"
 #include "IoHomeRemoteMap.h"
 #include "corpus/golden_rf_corpus.h"
 
@@ -69,6 +70,41 @@ static void hexdump(const char *label, const uint8_t *data, size_t len)
     for (size_t i = 0; i < len; i++)
         printf("%02x", data[i]);
     printf("\n");
+}
+
+static IoHomeFrame passiveAuthFrame(IoHomeCommand iCommand, uint32_t iSource,
+                                    uint32_t iDestination, const uint8_t *iData,
+                                    uint8_t iDataLen, uint8_t iCtrlByte0 = 0)
+{
+    IoHomeFrame lFrame;
+    lFrame.init();
+    lFrame.ctrlByte0 = iCtrlByte0;
+    lFrame.setSrcNode(iSource);
+    lFrame.setDestNode(iDestination);
+    lFrame.commandId = iCommand;
+    lFrame.dataLen = iDataLen;
+    if (iDataLen != 0)
+        memcpy(lFrame.data, iData, iDataLen);
+    return lFrame;
+}
+
+static void observePassiveExchange(IoHomePassiveAuthEvidence &ioEvidence,
+                                   uint32_t iHub, uint32_t iDevice,
+                                   const uint8_t iChallenge[6],
+                                   const uint8_t iHmac[6], uint32_t iStartMs,
+                                   bool iFinal = true)
+{
+    const uint8_t lSelector = 0x02;
+    ioEvidence.observe(passiveAuthFrame(IoHomeCommand::Discover2ERequest, iHub, iDevice,
+                                        &lSelector, 1), iHub, iDevice, 1, iStartMs);
+    ioEvidence.observe(passiveAuthFrame(IoHomeCommand::ChallengeRequest, iDevice, iHub,
+                                        iChallenge, 6), iHub, iDevice, 2, iStartMs + 10);
+    ioEvidence.observe(passiveAuthFrame(IoHomeCommand::ChallengeResponse, iHub, iDevice,
+                                        iHmac, 6), iHub, iDevice, 0, iStartMs + 20);
+    if (iFinal)
+        ioEvidence.observe(passiveAuthFrame(IoHomeCommand::Discover2EResponse,
+                                            iDevice, iHub, &lSelector, 1, IOHC_CTRL0_END),
+                           iHub, iDevice, 2, iStartMs + 30);
 }
 
 TEST(log_redaction_masks_send_key_1w_payload)
@@ -683,6 +719,212 @@ TEST(frame_rejects_sx1262_parse_fail_capture)
 // =====================================================================
 // 6. HMAC creation and verification
 // =====================================================================
+
+TEST(passive_auth_evidence_promotes_only_complete_verified_exchange)
+{
+    ASSERT_EQ(ioHomePreferredDirectedFrequencyIndex(1, 2), 1);
+    ASSERT_EQ(ioHomePreferredDirectedFrequencyIndex(0xFF, 2), 2);
+    ASSERT_EQ(ioHomePreferredDirectedFrequencyIndex(0xFF, 0xFF), 0xFF);
+    const uint32_t lHub = 0xE2D1FF;
+    const uint32_t lDevice = 0x562292;
+    const uint8_t lKey[16] = {0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
+                              0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
+    const uint8_t lChallenge[6] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
+    const uint8_t lTranscript[2] = {0x2E, 0x02};
+    uint8_t lHmac[6];
+    ASSERT_TRUE(IoHomeCrypto::createHmac2W(lTranscript, sizeof(lTranscript),
+                                            lChallenge, lKey, lHmac));
+
+    IoHomePassiveAuthEvidence lEvidence;
+    observePassiveExchange(lEvidence, lHub, lDevice, lChallenge, lHmac, 1000);
+    ASSERT_TRUE(lEvidence.requestSeen);
+    ASSERT_TRUE(lEvidence.challengeSeen);
+    ASSERT_TRUE(lEvidence.authSeen);
+    ASSERT_TRUE(lEvidence.finalSeen);
+    ASSERT_EQ(lEvidence.requestFreqIdx, 1);
+    ASSERT_EQ(lEvidence.challengeFreqIdx, 2);
+    ASSERT_EQ(lEvidence.authFreqIdx, 0);
+    ASSERT_EQ(lEvidence.finalFreqIdx, 2);
+    ASSERT_TRUE(!lEvidence.authVerified);
+    ASSERT_TRUE(lEvidence.verify(lKey));
+    ASSERT_TRUE(lEvidence.authVerified);
+    ASSERT_EQ(lEvidence.result, IoHomePassiveAuthResult::Verified);
+    ASSERT_MEM_EQ(lEvidence.computedHmac, lHmac, sizeof(lHmac));
+
+    // Later unrelated traffic cannot overwrite the four stage frequencies.
+    const uint8_t lOtherData = 0;
+    lEvidence.observe(passiveAuthFrame(IoHomeCommand::Private, lDevice, lHub,
+                                       &lOtherData, 1), lHub, lDevice, 0, 1100);
+    ASSERT_EQ(lEvidence.requestFreqIdx, 1);
+    ASSERT_EQ(lEvidence.challengeFreqIdx, 2);
+    ASSERT_EQ(lEvidence.authFreqIdx, 0);
+    ASSERT_EQ(lEvidence.finalFreqIdx, 2);
+}
+
+TEST(passive_auth_evidence_rejects_mismatch_order_timeout_and_foreign_nodes)
+{
+    const uint32_t lHub = 0xE2D1FF;
+    const uint32_t lDevice = 0x562292;
+    const uint8_t lKey[16] = {1};
+    const uint8_t lChallenge[6] = {1, 2, 3, 4, 5, 6};
+    const uint8_t lWrongChallenge[6] = {6, 5, 4, 3, 2, 1};
+    const uint8_t lTranscript[2] = {0x2E, 0x02};
+    uint8_t lHmac[6];
+    ASSERT_TRUE(IoHomeCrypto::createHmac2W(lTranscript, sizeof(lTranscript),
+                                            lChallenge, lKey, lHmac));
+    const uint8_t lSelector = 0x02;
+
+    IoHomePassiveAuthEvidence lWrongHmac;
+    uint8_t lCorruptHmac[6];
+    memcpy(lCorruptHmac, lHmac, sizeof(lHmac));
+    lCorruptHmac[0] ^= 0x80;
+    observePassiveExchange(lWrongHmac, lHub, lDevice, lChallenge, lCorruptHmac, 1000);
+    ASSERT_TRUE(!lWrongHmac.verify(lKey));
+    ASSERT_EQ(lWrongHmac.result, IoHomePassiveAuthResult::HmacMismatch);
+
+    IoHomePassiveAuthEvidence lWrongChallengeEvidence;
+    observePassiveExchange(lWrongChallengeEvidence, lHub, lDevice,
+                           lWrongChallenge, lHmac, 1000);
+    ASSERT_TRUE(!lWrongChallengeEvidence.verify(lKey));
+
+    IoHomePassiveAuthEvidence lWrongHub;
+    lWrongHub.observe(passiveAuthFrame(IoHomeCommand::Discover2ERequest,
+                                       0x123456, lDevice, &lSelector, 1),
+                      lHub, lDevice, 1, 1000);
+    ASSERT_TRUE(!lWrongHub.requestSeen);
+    ASSERT_EQ(lWrongHub.result, IoHomePassiveAuthResult::CorrelationFailed);
+
+    IoHomePassiveAuthEvidence lWrongDevice;
+    lWrongDevice.observe(passiveAuthFrame(IoHomeCommand::Discover2ERequest,
+                                          lHub, 0xE50470, &lSelector, 1),
+                         lHub, lDevice, 1, 1000);
+    ASSERT_TRUE(!lWrongDevice.requestSeen);
+
+    IoHomePassiveAuthEvidence lOutOfOrder;
+    lOutOfOrder.observe(passiveAuthFrame(IoHomeCommand::Discover2EResponse,
+                                         lDevice, lHub, &lSelector, 1, IOHC_CTRL0_END),
+                        lHub, lDevice, 2, 1000);
+    ASSERT_TRUE(!lOutOfOrder.finalSeen);
+    ASSERT_TRUE(!lOutOfOrder.verify(lKey));
+
+    IoHomePassiveAuthEvidence lWrongPayload;
+    observePassiveExchange(lWrongPayload, lHub, lDevice, lChallenge, lHmac,
+                           1000, false);
+    const uint8_t lWrongSelector = 0x03;
+    lWrongPayload.observe(passiveAuthFrame(IoHomeCommand::Discover2EResponse,
+                                           lDevice, lHub, &lWrongSelector, 1,
+                                           IOHC_CTRL0_END),
+                          lHub, lDevice, 2, 1030);
+    ASSERT_TRUE(!lWrongPayload.finalSeen);
+    ASSERT_EQ(lWrongPayload.result, IoHomePassiveAuthResult::WrongPayload);
+
+    IoHomePassiveAuthEvidence lReset;
+    observePassiveExchange(lReset, lHub, lDevice, lChallenge, lHmac, 1000, false);
+    lReset.observe(passiveAuthFrame(IoHomeCommand::Discover2ERequest,
+                                    lHub, lDevice, &lSelector, 1),
+                   lHub, lDevice, 1, 1100);
+    ASSERT_TRUE(lReset.requestSeen);
+    ASSERT_TRUE(!lReset.challengeSeen);
+    ASSERT_TRUE(!lReset.authSeen);
+    ASSERT_TRUE(!lReset.finalSeen);
+    ASSERT_TRUE(!lReset.verify(lKey));
+
+    IoHomePassiveAuthEvidence lExpired;
+    lExpired.observe(passiveAuthFrame(IoHomeCommand::Discover2ERequest,
+                                      lHub, lDevice, &lSelector, 1),
+                     lHub, lDevice, 1, 1000);
+    lExpired.observe(passiveAuthFrame(IoHomeCommand::ChallengeRequest,
+                                      lDevice, lHub, lChallenge, 6),
+                     lHub, lDevice, 2, 11001);
+    ASSERT_TRUE(!lExpired.challengeSeen);
+    ASSERT_EQ(lExpired.result, IoHomePassiveAuthResult::Expired);
+
+    ASSERT_TRUE(!ioHomeIsEligiblePassiveCandidate(0x987654, lHub, 0x987654, lHub));
+    ASSERT_TRUE(!ioHomeIsEligiblePassiveCandidate(lHub, lHub, 0x987654, lHub));
+    ASSERT_TRUE(!ioHomeIsEligiblePassiveCandidate(0x000000, lHub, 0x987654, lHub));
+    ASSERT_TRUE(!ioHomeIsEligiblePassiveCandidate(0x00003B, lHub, 0x987654, lHub));
+    ASSERT_TRUE(!ioHomeIsEligiblePassiveCandidate(0x562292, lHub, 0x987654, 0x562292));
+    ASSERT_TRUE(ioHomeIsEligiblePassiveCandidate(lDevice, lHub, 0x987654, 0x112233));
+}
+
+TEST(passive_auth_interleaved_devices_never_share_challenges)
+{
+    const uint32_t lHub = 0xE2D1FF;
+    const uint32_t lA = 0x562292;
+    const uint32_t lB = 0xE50470;
+    const uint8_t lKey[16] = {1};
+    const uint8_t lSelector = 0x02;
+    const uint8_t lTranscript[2] = {0x2E, 0x02};
+    const uint8_t lChallengeA[6] = {1, 2, 3, 4, 5, 6};
+    const uint8_t lChallengeB[6] = {6, 5, 4, 3, 2, 1};
+    uint8_t lHmacA[6];
+    uint8_t lHmacB[6];
+    ASSERT_TRUE(IoHomeCrypto::createHmac2W(lTranscript, sizeof(lTranscript),
+                                            lChallengeA, lKey, lHmacA));
+    ASSERT_TRUE(IoHomeCrypto::createHmac2W(lTranscript, sizeof(lTranscript),
+                                            lChallengeB, lKey, lHmacB));
+    IoHomePassiveAuthEvidence lEvidenceA;
+    IoHomePassiveAuthEvidence lEvidenceB;
+    lEvidenceA.observe(passiveAuthFrame(IoHomeCommand::Discover2ERequest,
+                                        lHub, lA, &lSelector, 1), lHub, lA, 1, 1000);
+    lEvidenceA.observe(passiveAuthFrame(IoHomeCommand::ChallengeRequest,
+                                        lA, lHub, lChallengeA, 6), lHub, lA, 2, 1010);
+    lEvidenceB.observe(passiveAuthFrame(IoHomeCommand::Discover2ERequest,
+                                        lHub, lB, &lSelector, 1), lHub, lB, 0, 1020);
+    lEvidenceB.observe(passiveAuthFrame(IoHomeCommand::ChallengeRequest,
+                                        lB, lHub, lChallengeB, 6), lHub, lB, 1, 1030);
+    lEvidenceA.observe(passiveAuthFrame(IoHomeCommand::ChallengeResponse,
+                                        lHub, lB, lHmacB, 6), lHub, lA, 1, 1040);
+    ASSERT_TRUE(!lEvidenceA.authSeen);
+    lEvidenceA.observe(passiveAuthFrame(IoHomeCommand::ChallengeResponse,
+                                        lHub, lA, lHmacA, 6), lHub, lA, 2, 1050);
+    lEvidenceB.observe(passiveAuthFrame(IoHomeCommand::ChallengeResponse,
+                                        lHub, lB, lHmacB, 6), lHub, lB, 0, 1060);
+    lEvidenceA.observe(passiveAuthFrame(IoHomeCommand::Discover2EResponse,
+                                        lA, lHub, &lSelector, 1, IOHC_CTRL0_END),
+                       lHub, lA, 2, 1070);
+    lEvidenceB.observe(passiveAuthFrame(IoHomeCommand::Discover2EResponse,
+                                        lB, lHub, &lSelector, 1, IOHC_CTRL0_END),
+                       lHub, lB, 1, 1080);
+    ASSERT_TRUE(lEvidenceA.verify(lKey));
+    ASSERT_TRUE(lEvidenceB.verify(lKey));
+    ASSERT_MEM_NEQ(lEvidenceA.challenge, lEvidenceB.challenge, 6);
+    ASSERT_MEM_NEQ(lEvidenceA.responseHmac, lEvidenceB.responseHmac, 6);
+}
+
+TEST(passive_auth_three_device_inventory_survives_one_spe_reply)
+{
+    const uint32_t lHub = 0xE2D1FF;
+    const uint32_t lNodes[3] = {0x562292, 0xE50470, 0x155D81};
+    const uint8_t lKey[16] = {1};
+    const uint8_t lTranscript[2] = {0x2E, 0x02};
+    IoHomePassiveAuthEvidence lEvidence[3];
+    bool lSpeResponseSeen[3] = {false, false, false};
+    lSpeResponseSeen[2] = true;
+
+    for (uint8_t i = 0; i < 3; ++i)
+    {
+        const uint8_t lChallenge[6] = {static_cast<uint8_t>(i + 1), 2, 3, 4, 5, 6};
+        uint8_t lHmac[6];
+        ASSERT_TRUE(IoHomeCrypto::createHmac2W(lTranscript, sizeof(lTranscript),
+                                                lChallenge, lKey, lHmac));
+        observePassiveExchange(lEvidence[i], lHub, lNodes[i], lChallenge, lHmac,
+                               1000 + i * 100);
+        ASSERT_TRUE(lEvidence[i].verify(lKey));
+    }
+
+    uint8_t lInventoryCount = 0;
+    for (uint8_t i = 0; i < 3; ++i)
+    {
+        // This is the production promotion rule: verified passive evidence
+        // establishes inventory; 0x2B only enriches its metadata.
+        if (lEvidence[i].authVerified || lSpeResponseSeen[i])
+            ++lInventoryCount;
+        ASSERT_TRUE(lEvidence[i].authVerified);
+        ASSERT_EQ(lSpeResponseSeen[i], i == 2);
+    }
+    ASSERT_EQ(lInventoryCount, 3);
+}
 
 TEST(hmac_create_verify_roundtrip)
 {
@@ -9759,6 +10001,67 @@ TEST(controller_spe_discovery_scans_both_power_classes_on_all_channels)
     }
 }
 
+TEST(controller_spe_discovery_listen_override_is_runtime_only)
+{
+    const uint8_t lKey[16] = {1};
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(0xE2D1FF);
+    lController.setSystemKey(lKey);
+    lController.init();
+    ASSERT_EQ(lController.diagnosticDiscoveryListenMs(), IOHC_DISCOVERY_LISTEN_MS);
+    ASSERT_TRUE(!lController.setDiagnosticDiscoveryListenMs(99));
+    ASSERT_TRUE(lController.setDiagnosticDiscoveryListenMs(4000));
+    lController.startDiscovery(true);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
+    ASSERT_TRUE(!lController.setDiagnosticDiscoveryListenMs(3000));
+    ioHomeTestAdvanceMillis(IOHC_DISCOVERY_LISTEN_MS + 1);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
+    ioHomeTestAdvanceMillis(2000);
+    lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::DiscoverySending);
+}
+
+TEST(controller_spe_discovery_extra_sweep_only_for_missing_import_metadata)
+{
+    const uint8_t lKey[16] = {1};
+    const uint32_t lExpected[] = {IOHC_FREQ_2, IOHC_FREQ_1, IOHC_FREQ_3,
+                                  IOHC_FREQ_2, IOHC_FREQ_1, IOHC_FREQ_3,
+                                  IOHC_FREQ_2, IOHC_FREQ_1, IOHC_FREQ_3};
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    lModule.testSetMissingSpeMetadata(true);
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(0xE2D1FF);
+    lController.setSystemKey(lKey);
+    lController.init();
+    lController.startDiscovery(true);
+    for (uint8_t i = 0; i < 9; ++i)
+    {
+        lController.loop();
+        ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
+        ASSERT_EQ(lController.radio().testCurrentFrequency(), lExpected[i]);
+        IoHomeFrame lFrame;
+        const auto &lPacket = lController.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(),
+                                            static_cast<uint8_t>(lPacket.size())));
+        ASSERT_EQ(lFrame.ctrlByte1,
+                  (i < 3 || i >= 6) ? static_cast<uint8_t>(IOHC_CTRL1_ACK | IOHC_CTRL1_LOW_POWER) : 0);
+        ioHomeTestAdvanceMillis(IOHC_DISCOVERY_LISTEN_MS + 1);
+        ioHomeTestAdvanceMicros((IOHC_DISCOVERY_LISTEN_MS + 1) * 1000UL);
+        lController.loop();
+        ASSERT_EQ(lController.state(), i < 8 ? ControllerState::DiscoverySending
+                                              : ControllerState::Idle);
+    }
+}
+
 TEST(controller_spe_discovery_normal_preamble_uses_radio_start_default)
 {
     const uint8_t lKey[16] = {1};
@@ -10538,6 +10841,58 @@ static void buildDirectedDiscoveryResponse(IoHomeFrame &oFrame,
     oFrame.hasHmac = false;
 }
 
+TEST(controller_post_import_spe_retry_enriches_assigned_channel_and_defers_flash)
+{
+    const uint32_t lHub = 0xE2D1FF;
+    const uint32_t lDevice = 0x562292;
+    const uint8_t lKey[16] = {1};
+    const uint8_t lPayload[IOHC_DISCOVERY_FULL_SIZE] = {
+        0x00, 0x81, 0x12, 0x34, 0x56, 0x02, 0xED, 0x12, 0x34};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lHub, lDevice, lKey);
+    lController.setSystemKey(lKey);
+    ASSERT_EQ(lChannel.getNodeId(), lDevice);
+    ASSERT_TRUE(!lChannel.hasProtocolIdentity());
+    const uint32_t lSavesBefore = openknx.flash.saveCount;
+
+    lController.startDiscovery(true);
+    lController.loop();
+    IoHomeFrame lResponse;
+    lResponse.init();
+    lResponse.ctrlByte0 = IOHC_CTRL0_END;
+    lResponse.setSrcNode(lDevice);
+    lResponse.setDestNode(lHub);
+    lResponse.commandId = IoHomeCommand::DiscoverSPEResponse;
+    memcpy(lResponse.data, lPayload, sizeof(lPayload));
+    lResponse.dataLen = sizeof(lPayload);
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    ASSERT_TRUE(!lChannel.hasProtocolIdentity());
+    ASSERT_EQ(openknx.flash.saveCount, lSavesBefore);
+
+    ioHomeTestAdvanceMillis(IOHC_DISCOVERY_LISTEN_MS + 1);
+    lController.loop();
+    ASSERT_TRUE(lChannel.getProtocolIdentity().fullMetadata);
+    ASSERT_TRUE(lChannel.hasLearnedLowPower2W());
+    ASSERT_TRUE(lChannel.isLowPower2W());
+    ASSERT_EQ(lChannel.getNodeId(), lDevice);
+    ASSERT_EQ(openknx.flash.saveCount, lSavesBefore);
+
+    for (uint8_t i = 1; i < 6; ++i)
+    {
+        lController.loop();
+        ioHomeTestAdvanceMillis(IOHC_DISCOVERY_LISTEN_MS + 1);
+        lController.loop();
+    }
+    ASSERT_EQ(lController.state(), ControllerState::Idle);
+    lController.loop();
+    ASSERT_EQ(openknx.flash.saveCount, lSavesBefore + 1);
+    ASSERT_EQ(lChannel.getNodeId(), lDevice);
+    ASSERT_TRUE(lChannel.isPaired());
+}
+
 TEST(controller_directed_discovery_requires_challenge_before_accepting_response)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -10567,15 +10922,12 @@ TEST(controller_directed_discovery_requires_challenge_before_accepting_response)
     ASSERT_EQ(lRequest.data[0], 0x02);
 
     // A matching 0x2F without the intervening 0x3C/0x3D authentication must
-    // complete the transport exchange without promoting the passive node.
+    // not complete the exchange or promote the passive node.
     IoHomeFrame lResponse;
     buildDirectedDiscoveryResponse(lResponse, lRemoteNodeId, lDeviceNodeId);
     ASSERT_TRUE(queueControllerResponse(lController, lResponse));
     ASSERT_EQ(lModule.testAuthenticatedDirectedCount(), 0);
-
-    ASSERT_TRUE(lController.sendBackgroundCommand(
-        lDeviceNodeId, lKey, IoHomeCommand::Discover2ERequest, 0x02));
-    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lRequest));
+    ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
 
     IoHomeFrame lChallengeRequest;
     buildPairChallengeRequestFrame(lChallengeRequest, lRemoteNodeId,
@@ -11703,6 +12055,46 @@ TEST(controller_spe_discovery_pending_queue_has_bounded_overflow)
     ASSERT_EQ(lModule.testDiscoveryResponseCount(), 24);
     ASSERT_EQ(lModule.testDiscoveryResponseNode(0), 0x562200U);
     ASSERT_EQ(lModule.testDiscoveryResponseNode(23), 0x562217U);
+}
+
+TEST(controller_spe_discovery_duplicates_cannot_starve_unique_devices)
+{
+    const uint32_t lHub = 0xE2D1FF;
+    const uint8_t lKey[16] = {1};
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    lController.setModule(&lModule);
+    lController.setOwnNodeId(lHub);
+    lController.setSystemKey(lKey);
+    lController.init();
+    lController.startDiscovery(true);
+    lController.loop();
+    lController.loop();
+
+    for (uint8_t i = 0; i < 30; ++i)
+    {
+        IoHomeFrame lFrame;
+        lFrame.init();
+        lFrame.ctrlByte0 = IOHC_CTRL0_END;
+        lFrame.setSrcNode(i == 29 ? 0xE50470 : 0x562292);
+        lFrame.setDestNode(lHub);
+        lFrame.commandId = IoHomeCommand::DiscoverSPEResponse;
+        lFrame.data[0] = 0x00;
+        lFrame.data[1] = 0x81;
+        lFrame.dataLen = 2;
+        uint8_t lRaw[IOHC_FRAME_BUFFER_SIZE];
+        const uint8_t lLength = serializeFrameForTest(lFrame, lRaw, sizeof(lRaw));
+        ASSERT_TRUE(lLength > 0);
+        lController.radio().testQueueReceivedPacket(lRaw, lLength);
+        lController.loop();
+    }
+    ioHomeTestAdvanceMillis(IOHC_DISCOVERY_LISTEN_MS + 1);
+    lController.loop();
+    ASSERT_EQ(lModule.testDiscoveryResponseCount(), 2);
+    ASSERT_EQ(lModule.testDiscoveryResponseNode(0), 0x562292U);
+    ASSERT_EQ(lModule.testDiscoveryResponseNode(1), 0xE50470U);
 }
 
 TEST(controller_spe_discovery_pairdiag_does_not_change_response_count)

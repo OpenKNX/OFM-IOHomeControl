@@ -3754,6 +3754,7 @@ void IoHomeController::startDiscovery(bool iEncrypted)
     mPendingDiscoveryCount = 0;
     mPendingDiscoveryHighWater = 0;
     mPendingDiscoveryOverflow = 0;
+    mPendingDiscoveryOverflowReported = 0;
     mDiscoveryResponsesReceived = 0;
     mDiscoveryBroadcastsSent = 0;
     mDiscoveryDuplicates = 0;
@@ -4262,6 +4263,21 @@ void IoHomeController::setDiagnosticDiscoverySettings(const TwoWayDiscoverySetti
 const TwoWayDiscoverySettings &IoHomeController::diagnosticDiscoverySettings() const
 {
     return mDiagnosticDiscoverySettings;
+}
+
+bool IoHomeController::setDiagnosticDiscoveryListenMs(uint16_t iMilliseconds)
+{
+    if (iMilliseconds < 100 || iMilliseconds > 10000 ||
+        mState == ControllerState::DiscoverySending ||
+        mState == ControllerState::DiscoveryListening)
+        return false;
+    mDiagnosticDiscoveryListenMs = iMilliseconds;
+    return true;
+}
+
+uint16_t IoHomeController::diagnosticDiscoveryListenMs() const
+{
+    return mDiagnosticDiscoveryListenMs;
 }
 
 void IoHomeController::setRxScanEnabled(bool iEnabled)
@@ -5206,15 +5222,43 @@ void IoHomeController::resetDiscoveryTimingTrace()
 
 void IoHomeController::enqueueDiscoveryResponse()
 {
+    const uint32_t lStartedUs = micros();
     if (mRxFrame.getDestNodeId() != mOwnNodeId ||
         getAddressClass(mRxFrame.getSrcNodeId()) != IoHomeAddressClass::Unicast)
         return;
 
     ++mDiscoveryResponsesReceived;
     ++mDiscoveryTimingTrace.packets;
+    mDiscoveryTimingTrace.lastPacketUs = lStartedUs;
+    // Duplicate responses must not consume slots needed by distinct devices.
+    // Keep the fuller payload, or the latest one when both are equally full.
+    for (uint8_t i = 0; i < mPendingDiscoveryCount; ++i)
+    {
+        PendingDiscoveryResponse &lPending = mPendingDiscovery[i];
+        if (lPending.source != mRxFrame.getSrcNodeId() ||
+            lPending.frame.commandId != mRxFrame.commandId)
+            continue;
+        ++mDiscoveryDuplicates;
+        if (mRxFrame.dataLen >= lPending.frame.dataLen)
+        {
+            lPending.frame = mRxFrame;
+            lPending.frequencyIndex = mCurrentFreqIdx;
+            lPending.rssi = mRadio.lastRssi();
+            lPending.receivedAtUs = lStartedUs;
+            lPending.rawLength = mRxRawLen;
+            memcpy(lPending.raw, mRxBuffer, mRxRawLen);
+        }
+        const uint32_t lElapsedUs = micros() - lStartedUs;
+        if (lElapsedUs > mDiscoveryTimingTrace.maxRxHotPathUs)
+            mDiscoveryTimingTrace.maxRxHotPathUs = lElapsedUs;
+        return;
+    }
     if (mPendingDiscoveryCount >= kPendingDiscoveryCapacity)
     {
         ++mPendingDiscoveryOverflow;
+        const uint32_t lElapsedUs = micros() - lStartedUs;
+        if (lElapsedUs > mDiscoveryTimingTrace.maxRxHotPathUs)
+            mDiscoveryTimingTrace.maxRxHotPathUs = lElapsedUs;
         return;
     }
 
@@ -5224,16 +5268,24 @@ void IoHomeController::enqueueDiscoveryResponse()
     lPending.destination = mRxFrame.getDestNodeId();
     lPending.frequencyIndex = mCurrentFreqIdx;
     lPending.rssi = mRadio.lastRssi();
-    lPending.receivedAtUs = micros();
-    mDiscoveryTimingTrace.lastPacketUs = lPending.receivedAtUs;
+    lPending.receivedAtUs = lStartedUs;
     lPending.rawLength = mRxRawLen;
     memcpy(lPending.raw, mRxBuffer, mRxRawLen);
     if (mPendingDiscoveryCount > mPendingDiscoveryHighWater)
         mPendingDiscoveryHighWater = mPendingDiscoveryCount;
+    const uint32_t lElapsedUs = micros() - lStartedUs;
+    if (lElapsedUs > mDiscoveryTimingTrace.maxRxHotPathUs)
+        mDiscoveryTimingTrace.maxRxHotPathUs = lElapsedUs;
 }
 
 void IoHomeController::processPendingDiscoveryResponses()
 {
+    if (mPendingDiscoveryOverflow > mPendingDiscoveryOverflowReported)
+    {
+        logInfoP("WARNING: discovery RX queue overflow; result may be incomplete (dropped=%lu)",
+                 static_cast<unsigned long>(mPendingDiscoveryOverflow));
+        mPendingDiscoveryOverflowReported = mPendingDiscoveryOverflow;
+    }
     for (uint8_t i = 0; i < mPendingDiscoveryCount; ++i)
     {
         const PendingDiscoveryResponse &lPending = mPendingDiscovery[i];
@@ -5264,9 +5316,14 @@ void IoHomeController::processPendingDiscoveryResponses()
         recordScanFrame(lPending.frame, lPending.raw, lPending.rawLength,
                         lPending.rssi, lPending.frequencyIndex);
         updateNodeStats(lPending.source, lPending.rssi, lPending.frame.commandId);
-        logInfoP("Discovery: %s from 0x%06X freq=%u rssi=%ddBm",
+        logInfoP("Discovery: %s from 0x%06X rxFreqIdx=%u rxFreqHz=%lu rssi=%ddBm responseDeltaUs=%lu",
                  commandName(lPending.frame.commandId), lPending.source,
-                 static_cast<unsigned>(lPending.frequencyIndex), lPending.rssi);
+                 static_cast<unsigned>(lPending.frequencyIndex),
+                 static_cast<unsigned long>(lPending.frequencyIndex < IOHC_NUM_FREQUENCIES
+                                                ? IOHC_FREQUENCIES[lPending.frequencyIndex] : 0),
+                 lPending.rssi,
+                 static_cast<unsigned long>(mDiscoveryTimingTrace.txDoneUs != 0
+                                                ? lPending.receivedAtUs - mDiscoveryTimingTrace.txDoneUs : 0));
         const uint32_t lProcessingUs = micros() - lStartedUs;
         if (lProcessingUs > mDiscoveryTimingTrace.maxProcessingUs)
             mDiscoveryTimingTrace.maxProcessingUs = lProcessingUs;
@@ -5336,19 +5393,22 @@ void IoHomeController::logDiscoveryTimingTrace(const char *iReason, unsigned lon
              lDeltaUs(mDiscoveryTimingTrace.txStartUs, mDiscoveryTimingTrace.txDoneUs),
              lDeltaUs(mDiscoveryTimingTrace.txDoneUs, mDiscoveryTimingTrace.rxReadyUs),
              iListenElapsedMs,
-             (iListenElapsedMs > 2000UL) ? (iListenElapsedMs - 2000UL) : 0UL,
+             (iListenElapsedMs > mDiagnosticDiscoveryListenMs)
+                 ? (iListenElapsedMs - mDiagnosticDiscoveryListenMs) : 0UL,
              static_cast<unsigned long>(mDiscoveryTimingTrace.rxBusyCount),
              lTxBusyHits,
              lTxBusyTotalUs,
              lTxBusyMaxUs);
-    logInfoP("PairDiag: SPE timing pass=%s rotations=%lu packets=%lu firstPreambleUs=%lu firstSyncUs=%lu lastPacketUs=%lu maxLoopUs=%lu maxProcessingUs=%lu preambleHold=%lu syncHold=%lu pendingOverflow=%lu",
-             mDiscoverySweep == 0 ? "low-power" : "always-alive",
+    logInfoP("PairDiag: SPE timing sweep=%u pass=%s rotations=%lu packets=%lu firstPreambleUs=%lu firstSyncUs=%lu lastPacketUs=%lu maxLoopUs=%lu maxRxHotPathUs=%lu maxDeferredProcessingUs=%lu preambleHold=%lu syncHold=%lu pendingOverflow=%lu",
+             static_cast<unsigned>(mDiscoverySweep + 1U),
+             (mDiscoverySweep & 1U) == 0 ? "low-power" : "always-alive",
              static_cast<unsigned long>(mDiscoveryTimingTrace.rotations),
              static_cast<unsigned long>(mDiscoveryTimingTrace.packets),
              static_cast<unsigned long>(mDiscoveryTimingTrace.firstPreambleUs),
              static_cast<unsigned long>(mDiscoveryTimingTrace.firstSyncUs),
              static_cast<unsigned long>(mDiscoveryTimingTrace.lastPacketUs),
              static_cast<unsigned long>(mDiscoveryTimingTrace.maxLoopUs),
+             static_cast<unsigned long>(mDiscoveryTimingTrace.maxRxHotPathUs),
              static_cast<unsigned long>(mDiscoveryTimingTrace.maxProcessingUs),
              static_cast<unsigned long>(mDiscoveryTimingTrace.preambleHolds),
              static_cast<unsigned long>(mDiscoveryTimingTrace.syncHolds),
@@ -6273,6 +6333,9 @@ void IoHomeController::processTxPending()
     mTxLen = mTxFrame.serialize(mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen == 0)
     {
+        if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
+            logInfoP("KeyImport directed failure: candidate=%06X stage=tx_failed reason=serialize",
+                     mCurrentCmd.destNodeId);
         notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
         mCurrentCmd.active = false;
         mState = ControllerState::Idle;
@@ -6318,6 +6381,9 @@ void IoHomeController::processTxPending()
         return;
     if (lPrepErr != RadioError::None)
     {
+        if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
+            logInfoP("KeyImport directed failure: candidate=%06X stage=tx_failed reason=radio_config err=%d",
+                     mCurrentCmd.destNodeId, static_cast<int>(lPrepErr));
         notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
         mCurrentCmd.active = false;
         mState = ControllerState::Idle;
@@ -6337,6 +6403,8 @@ void IoHomeController::processTxPending()
             mDirectedRxReadyUs = 0;
             mDirectedFirstPreambleUs = 0;
             mDirectedFirstSyncUs = 0;
+            mDirectedWrongSourceSeen = false;
+            mDirectedWrongCommandSeen = false;
             const std::string lRaw = hexDump(mTxBuffer, mTxLen);
             logInfoP("KeyImport directed TX: candidate=%06X raw=%s len=%u ctrl0=%02X ctrl1=%02X src=%06X dst=%06X cmd=%02X payload=%02X freq=%lu preamble=%u lbt=not-applied txStartUs=%lu",
                      mCurrentCmd.destNodeId, lRaw.c_str(),
@@ -6361,6 +6429,9 @@ void IoHomeController::processTxPending()
     }
     else
     {
+        if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
+            logInfoP("KeyImport directed failure: candidate=%06X stage=tx_failed reason=radio_transmit err=%d",
+                     mCurrentCmd.destNodeId, static_cast<int>(lErr));
         notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
         mCurrentCmd.active = false;
         mState = ControllerState::Idle;
@@ -6540,9 +6611,15 @@ void IoHomeController::processWaitResponse()
             const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
             const bool lAfterChallenge = mSawChallenge && mWaitingFinalResponse;
             if (lFailedCmd.command == IoHomeCommand::Discover2ERequest)
+            {
+                const char *lStage = lAfterChallenge ? "no_final_2f" :
+                    mDirectedWrongCommandSeen ? "valid_packet_wrong_command" :
+                    mDirectedWrongSourceSeen ? "valid_packet_wrong_source" :
+                    mDirectedFirstSyncUs != 0 ? "sync_no_valid_packet" :
+                    mDirectedFirstPreambleUs != 0 ? "preamble_no_sync" : "no_preamble";
                 logInfoP("KeyImport directed timeout: candidate=%06X stage=%s requestTx=%lu/%lu rxReady=%lu firstPreamble=%lu firstSync=%lu challenge=%u authTx=%u final2F=0",
                          lFailedCmd.destNodeId,
-                         lAfterChallenge ? "final-2f" : "challenge-3c",
+                         lStage,
                          static_cast<unsigned long>(mDirectedRequestTxStartUs),
                          static_cast<unsigned long>(mDirectedRequestTxEndUs),
                          static_cast<unsigned long>(mDirectedRxReadyUs),
@@ -6550,6 +6627,7 @@ void IoHomeController::processWaitResponse()
                          static_cast<unsigned long>(mDirectedFirstSyncUs),
                          mSawChallenge ? 1U : 0U,
                          mAuthResponseSent ? 1U : 0U);
+            }
             recordExchangeFailure(lFailedCmd, lAfterChallenge);
             mCurrentCmd.active = false;
             mWaitingFinalResponse = false;
@@ -6695,10 +6773,40 @@ void IoHomeController::processResponse()
         mRxFrame.getSrcNodeId() != mCurrentCmd.destNodeId ||
         mRxFrame.getDestNodeId() != mOwnNodeId)
     {
+        if (mCurrentCmd.active && mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
+        {
+            mDirectedWrongSourceSeen = true;
+            logInfoP("KeyImport directed RX: candidate=%06X stage=valid_packet_wrong_source src=%06X dst=%06X cmd=%02X",
+                     mCurrentCmd.destNodeId, mRxFrame.getSrcNodeId(),
+                     mRxFrame.getDestNodeId(),
+                     static_cast<unsigned>(static_cast<uint8_t>(mRxFrame.commandId)));
+        }
         dispatchRxFrame();
         if (mState == ControllerState::ProcessResponse)
             mState = ControllerState::WaitResponse;
         return;
+    }
+
+    if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
+    {
+        const bool lChallenge = mRxFrame.commandId == IoHomeCommand::ChallengeRequest &&
+                                !mAuthResponseSent && mRxFrame.dataLen >= 6;
+        const bool lFinal = mRxFrame.commandId == IoHomeCommand::Discover2EResponse &&
+                            mRxFrame.dataLen == 1 && mRxFrame.data[0] == mCurrentCmd.param &&
+                            (mRxFrame.ctrlByte0 & IOHC_CTRL0_END) != 0 &&
+                            (mRxFrame.ctrlByte0 & IOHC_CTRL0_START) == 0 &&
+                            mSawChallenge && mWaitingFinalResponse;
+        if (!lChallenge && !lFinal && mRxFrame.commandId != IoHomeCommand::ErrorResponse)
+        {
+            mDirectedWrongCommandSeen = true;
+            logInfoP("KeyImport directed RX: candidate=%06X stage=valid_packet_wrong_command cmd=%02X challenge=%u authTx=%u",
+                     mCurrentCmd.destNodeId,
+                     static_cast<unsigned>(static_cast<uint8_t>(mRxFrame.commandId)),
+                     mSawChallenge ? 1U : 0U, mAuthResponseSent ? 1U : 0U);
+            dispatchRxFrame();
+            mState = ControllerState::WaitResponse;
+            return;
+        }
     }
 
     recordResponseTiming(mRxFrame.commandId != IoHomeCommand::ChallengeRequest);
@@ -6708,6 +6816,12 @@ void IoHomeController::processResponse()
         mCurrentCmd.active && !mAuthResponseSent &&
         mRxFrame.dataLen >= 6)
     {
+        if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
+            logInfoP("KeyImport directed RX: candidate=%06X stage=0x3C_received rxFreqIdx=%u rxFreqHz=%lu",
+                     mCurrentCmd.destNodeId,
+                     static_cast<unsigned>(mCurrentFreqIdx),
+                     static_cast<unsigned long>(mCurrentFreqIdx < IOHC_NUM_FREQUENCIES
+                                                    ? IOHC_FREQUENCIES[mCurrentFreqIdx] : 0));
         // Device challenges our authenticated command — build and send ChallengeResponse (0x3D).
         // The centralized builder keeps 0x3D as a continuation frame and puts
         // the HMAC bytes into data[], never as appended 2W HMAC.
@@ -6753,6 +6867,11 @@ void IoHomeController::processResponse()
             const RadioError lErr = mRadio.startTransmit(mTxBuffer, lLen);
             if (lErr == RadioError::None)
             {
+                if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
+                    logInfoP("KeyImport directed TX: candidate=%06X stage=0x3D_sent txFreqHz=%lu preamble=%u",
+                             mCurrentCmd.destNodeId,
+                             static_cast<unsigned long>(lAuthFreqHz),
+                             static_cast<unsigned>(lPreamble));
                 mAuthResponseSent = true;
                 mWaitingFinalResponse = true;
                 mSawChallenge = true;
@@ -6800,7 +6919,13 @@ void IoHomeController::processResponse()
     dispatchRxFrame();
     mTrustRxPosition = lPreviousTrustRxPosition;
     if (lAuthenticatedDirectedDiscovery && mModule)
+    {
+        logInfoP("KeyImport directed RX: candidate=%06X stage=verified final2F=1 rxFreqIdx=%u rxFreqHz=%lu",
+                 lCompletedCmd.destNodeId, static_cast<unsigned>(mCurrentFreqIdx),
+                 static_cast<unsigned long>(mCurrentFreqIdx < IOHC_NUM_FREQUENCIES
+                                                ? IOHC_FREQUENCIES[mCurrentFreqIdx] : 0));
         mModule->onAuthenticatedDirectedDiscovery(lCompletedCmd.destNodeId);
+    }
     const bool lStatusSeen = mRxFrame.commandId == IoHomeCommand::StatusUpdate ||
                              mRxFrame.commandId == IoHomeCommand::PrivateResponse;
     logInfoP("2W result cmd=0x%02X result=%s challenge=%s challenge_response=%s final_response=yes status=%s",
@@ -8592,7 +8717,7 @@ void IoHomeController::processDiscovery()
         const TwoWayDiscoveryFrameOptions lDiscoveryOptions =
             resolveTwoWayDiscoveryOptions(lRequestedCommand, mDiagnosticDiscoverySettings);
         TwoWayDiscoveryFrameOptions lEffectiveOptions = lDiscoveryOptions;
-        if (mDiscoverySPE && mDiscoverySweep == 1)
+        if (mDiscoverySPE && (mDiscoverySweep & 1U) != 0)
         {
             lEffectiveOptions.lowPower = false;
             lEffectiveOptions.ackCapable = false;
@@ -8667,14 +8792,16 @@ void IoHomeController::processDiscovery()
                 mDiscoveryLastTxFreqIdx = lTxFreqIdx;
                 if (mDiscoverySPE)
                 {
-                    logInfoP("KeyImport scan tx: cmd=0x%02X src=0x%06X dst=0x%06X ctrl1=0x%02X freq=%lu preamble=%u sweep=%u pass=%s",
+                    logInfoP("KeyImport scan tx: cmd=0x%02X src=0x%06X dst=0x%06X ctrl1=0x%02X sweepOrder=%u txFreqIdx=%u txFreqHz=%lu preamble=%u sweep=%u pass=%s",
                              static_cast<unsigned>(static_cast<uint8_t>(mTxFrame.commandId)),
                              mTxFrame.getSrcNodeId(), mTxFrame.getDestNodeId(),
                              static_cast<unsigned>(mTxFrame.ctrlByte1),
+                             static_cast<unsigned>(mPairingFreqIdx),
+                             static_cast<unsigned>(lTxFreqIdx),
                              static_cast<unsigned long>(lDiscoveryFreq),
                              static_cast<unsigned>(lDiscoveryPreamble),
                              static_cast<unsigned>(mDiscoverySweep + 1U),
-                             mDiscoverySweep == 0 ? "low-power" : "always-alive");
+                             (mDiscoverySweep & 1U) == 0 ? "low-power" : "always-alive");
                 }
                 mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
                 // Standard discovery sends the classic 0x28 frame first and then,
@@ -8759,11 +8886,6 @@ void IoHomeController::processDiscovery()
         if (lRxErr != RadioError::None)
         {
             processPendingDiscoveryResponses();
-            if (mDiscoveryMetadataDirty)
-            {
-                openknx.flash.save();
-                mDiscoveryMetadataDirty = false;
-            }
             resetDiscoveryTimingTrace();
             mState = ControllerState::Idle;
             return;
@@ -8772,7 +8894,7 @@ void IoHomeController::processDiscovery()
         if (mDiscoverySPE)
         {
             const uint8_t lRequestFreqIdx = speDiscoveryFrequencyIndex(mPairingFreqIdx);
-            if (mDiscoverySweep == 0)
+            if ((mDiscoverySweep & 1U) == 0)
                 serviceBackgroundRxScan();
             else
             {
@@ -8788,13 +8910,18 @@ void IoHomeController::processDiscovery()
         // sync word matched), extend the listen window by a short grace period
         // so the in-flight response is not truncated by switching frequency.
         const bool lFrameArriving = mRadio.isPreambleDetected() || mRadio.isSyncDetected();
-        const unsigned long lListenLimitMs = lFrameArriving ? IOHC_DISCOVERY_LISTEN_EXTENDED_MS : IOHC_DISCOVERY_LISTEN_MS;
+        const unsigned long lListenLimitMs = mDiagnosticDiscoveryListenMs +
+            (lFrameArriving ? (IOHC_DISCOVERY_LISTEN_EXTENDED_MS - IOHC_DISCOVERY_LISTEN_MS) : 0UL);
         if (lListenElapsedMs > lListenLimitMs)
         {
             processPendingDiscoveryResponses();
             const bool lMoreFreqs = (mPairingFreqIdx + 1 < IOHC_NUM_FREQUENCIES);
             const uint8_t lSweepCount = mDiscoverySPE ? 2U : IOHC_DISCOVERY_MAX_SWEEPS;
-            const bool lMoreSweeps = (mDiscoverySweep + 1 < lSweepCount);
+            const bool lExtraSpeSweep = mDiscoverySPE && mDiscoverySweep == 1 &&
+                mModule && mModule->hasKeyImportDevicesMissingSpeMetadata();
+            const bool lMoreSweeps = (mDiscoverySweep + 1 < lSweepCount) || lExtraSpeSweep;
+            if (!lMoreFreqs && lExtraSpeSweep)
+                logInfoP("KeyImport scan: authenticated device metadata still pending; one extra SPE sweep");
             logDiscoveryTimingTrace((lMoreFreqs || lMoreSweeps) ? "next" : "done", lListenElapsedMs);
             // Next frequency, next sweep, or done
             mPairingFreqIdx++;
@@ -8817,11 +8944,6 @@ void IoHomeController::processDiscovery()
             else
             {
                 mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
-                if (mDiscoveryMetadataDirty)
-                {
-                    openknx.flash.save();
-                    mDiscoveryMetadataDirty = false;
-                }
                 resetDiscoveryTimingTrace();
                 mState = ControllerState::Idle;
                 startReceive();

@@ -683,6 +683,9 @@ public:
       mDiscoveryResponseNodes[mDiscoveryResponseCount++] = iFrame.getSrcNodeId();
   }
 
+  bool hasKeyImportDevicesMissingSpeMetadata() const { return mMissingSpeMetadata; }
+  void testSetMissingSpeMetadata(bool iMissing) { mMissingSpeMetadata = iMissing; }
+
   void onKeyImportPassiveFrame(const IoHomeFrame &iFrame,
                                uint8_t, int16_t, uint32_t)
   {
@@ -727,4 +730,5 @@ private:
   uint32_t mLastAuthenticatedDirectedNode = 0;
   uint8_t mDiscoveryResponseCount = 0;
   uint32_t mDiscoveryResponseNodes[32] = {};
+  bool mMissingSpeMetadata = false;
 };

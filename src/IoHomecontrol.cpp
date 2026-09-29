@@ -732,7 +732,8 @@ void IoHomecontrol::resetKeyImportWorkflow()
     memset(mKeyImportDevices, 0, sizeof(mKeyImportDevices));
     mKeyImportDeviceCount = 0;
     mKeyImportOverflow = false;
-    memset(mKeyImportCandidates, 0, sizeof(mKeyImportCandidates));
+    for (KeyImportCandidate &lCandidate : mKeyImportCandidates)
+        lCandidate = KeyImportCandidate{};
     mKeyImportCandidateCount = 0;
     mKeyImportDirectedCandidateIndex = 0;
     mKeyImportDirectedNodeId = 0;
@@ -790,9 +791,8 @@ void IoHomecontrol::onKeyImportPassiveFrame(const IoHomeFrame &iFrame,
                                          : mController.keyExtractControllerNodeId();
     if ((mKeyImportPhase != KeyImportPhase::Extracting &&
          mKeyImportPhase != KeyImportPhase::Verifying) ||
-        iNodeId == 0 || iNodeId == lHub ||
-        iNodeId == lExtractionNode || iNodeId == mController.getOwnNodeId() ||
-        getAddressClass(iNodeId) != IoHomeAddressClass::Unicast)
+        !ioHomeIsEligiblePassiveCandidate(iNodeId, lHub, lExtractionNode,
+                                          mController.getOwnNodeId()))
         return;
 
     KeyImportCandidate *lCandidate = nullptr;
@@ -823,50 +823,27 @@ void IoHomecontrol::onKeyImportPassiveFrame(const IoHomeFrame &iFrame,
         lCandidate->lastRssi = iRssi;
     }
 
-    // Only the exact hub/device 0x2E -> 0x3C -> 0x3D -> 0x2F
-    // transaction can establish membership. A new request invalidates stale
-    // challenge/auth/final evidence from an earlier attempt.
-    if (lFromHub && iFrame.commandId == IoHomeCommand::Discover2ERequest &&
-        iFrame.dataLen == 1 && iFrame.data[0] == 0x02)
-    {
-        lCandidate->requestSeen = true;
-        lCandidate->challengeSeen = false;
-        lCandidate->authSeen = false;
-        lCandidate->finalSeen = false;
-        lCandidate->authVerified = false;
-        lCandidate->requestPayload = iFrame.data[0];
-        lCandidate->klrDirectedFreqIdx = iFrequencyIndex;
-        lCandidate->requestAtMs = iTimestampMs;
-    }
-    else if (!lFromHub && iFrame.commandId == IoHomeCommand::ChallengeRequest &&
-             iFrame.dataLen >= 6 && lCandidate->requestSeen &&
-             iTimestampMs - lCandidate->requestAtMs <= 10000UL)
-    {
-        memcpy(lCandidate->challenge, iFrame.data, 6);
-        lCandidate->challengeSeen = true;
-        lCandidate->authSeen = false;
-        lCandidate->finalSeen = false;
-        lCandidate->challengeAtMs = iTimestampMs;
-    }
-    else if (lFromHub && iFrame.commandId == IoHomeCommand::ChallengeResponse &&
-             iFrame.dataLen == 6 && lCandidate->challengeSeen &&
-             iTimestampMs - lCandidate->challengeAtMs <= 10000UL)
-    {
-        memcpy(lCandidate->responseHmac, iFrame.data, 6);
-        lCandidate->authSeen = true;
-        lCandidate->finalSeen = false;
-        lCandidate->authAtMs = iTimestampMs;
-    }
-    else if (!lFromHub && iFrame.commandId == IoHomeCommand::Discover2EResponse &&
-             iFrame.dataLen == 1 && iFrame.data[0] == lCandidate->requestPayload &&
-             (iFrame.ctrlByte0 & IOHC_CTRL0_END) != 0 &&
-             (iFrame.ctrlByte0 & IOHC_CTRL0_START) == 0 &&
-             lCandidate->authSeen && iTimestampMs - lCandidate->authAtMs <= 10000UL)
-    {
-        lCandidate->finalSeen = true;
-        lCandidate->finalAtMs = iTimestampMs;
+    // Only the exact ordered hub/device 0x2E -> 0x3C -> 0x3D -> 0x2F
+    // transaction can establish membership. Per-stage RF evidence is immutable
+    // across later unrelated traffic until another valid 0x2E starts over.
+    const bool lHadFinal = lCandidate->finalSeen;
+    lCandidate->observe(iFrame, lHub, iNodeId, iFrequencyIndex, iTimestampMs);
+    if (!lHadFinal && lCandidate->finalSeen)
         verifyPassiveCandidates();
+}
+
+bool IoHomecontrol::hasKeyImportDevicesMissingSpeMetadata() const
+{
+    if (mKeyImportPhase != KeyImportPhase::Scanning)
+        return false;
+    for (uint8_t i = 0; i < mKeyImportDeviceCount; ++i)
+    {
+        const KeyImportDevice &lDevice = mKeyImportDevices[i];
+        if (lDevice.valid && lDevice.passiveAuthVerified &&
+            !lDevice.protocolIdentity.fullMetadata)
+            return true;
     }
+    return false;
 }
 
 void IoHomecontrol::verifyPassiveCandidates()
@@ -880,14 +857,8 @@ void IoHomecontrol::verifyPassiveCandidates()
             !lCandidate.challengeSeen || !lCandidate.authSeen || !lCandidate.finalSeen ||
             lCandidate.hubNodeId != mKeyImportHubNodeId)
             continue;
-        const uint8_t lTranscript[] = {
-            static_cast<uint8_t>(IoHomeCommand::Discover2ERequest),
-            lCandidate.requestPayload};
-        if (!IoHomeCrypto::verifyHmac(lTranscript, sizeof(lTranscript),
-                                      lCandidate.responseHmac,
-                                      lCandidate.challenge, mKeyImportKey.key))
+        if (!lCandidate.verify(mKeyImportKey.key))
             continue;
-        lCandidate.authVerified = true;
         KeyImportDevice *lDevice = addKeyImportDevice(lCandidate.nodeId);
         if (lDevice)
         {
@@ -1004,10 +975,12 @@ void IoHomecontrol::processKeyImportWorkflow()
             mKeyImportDirectedAwaiting = false;
             const KeyImportCandidate &lPrevious =
                 mKeyImportCandidates[mKeyImportDirectedCandidateIndex];
+            const uint8_t lPreviousFreqIdx = ioHomePreferredDirectedFrequencyIndex(
+                lPrevious.requestFreqIdx, lPrevious.lastRxFreqIdx);
             if (!findKeyImportDevice(lPrevious.nodeId) &&
                 !mKeyImportDirectedTriedGeneric &&
-                lPrevious.lastRxFreqIdx < IOHC_NUM_FREQUENCIES &&
-                IOHC_FREQUENCIES[lPrevious.lastRxFreqIdx] != IOHC_FREQ_2)
+                lPreviousFreqIdx < IOHC_NUM_FREQUENCIES &&
+                IOHC_FREQUENCIES[lPreviousFreqIdx] != IOHC_FREQ_2)
             {
                 mKeyImportDirectedTriedGeneric = true;
                 if (mController.verifyKnownNetworkNode(lPrevious.nodeId,
@@ -1016,7 +989,7 @@ void IoHomecontrol::processKeyImportWorkflow()
                     mKeyImportDirectedAwaiting = true;
                     logInfoP("ETS key import: candidate 0x%06X had no verified reply on observed freq=%lu; retrying normal 2W freq=%lu",
                              lPrevious.nodeId,
-                             static_cast<unsigned long>(IOHC_FREQUENCIES[lPrevious.lastRxFreqIdx]),
+                             static_cast<unsigned long>(IOHC_FREQUENCIES[lPreviousFreqIdx]),
                              static_cast<unsigned long>(IOHC_FREQ_2));
                     return;
                 }
@@ -1041,7 +1014,8 @@ void IoHomecontrol::processKeyImportWorkflow()
             const KeyImportCandidate &lCandidateInfo =
                 mKeyImportCandidates[mKeyImportDirectedCandidateIndex];
             const uint32_t lCandidate = lCandidateInfo.nodeId;
-            const uint8_t lObservedFreqIdx = lCandidateInfo.lastRxFreqIdx;
+            const uint8_t lObservedFreqIdx = ioHomePreferredDirectedFrequencyIndex(
+                lCandidateInfo.requestFreqIdx, lCandidateInfo.lastRxFreqIdx);
             const uint8_t lTxFreqIdx = lObservedFreqIdx < IOHC_NUM_FREQUENCIES
                                            ? lObservedFreqIdx : 0xFF;
             if (mController.verifyKnownNetworkNode(lCandidate, mKeyImportKey.key,
@@ -3455,6 +3429,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc metadata refresh NODE", "Refresh name, GI1 and GI2 for a paired 2W node (hex)");
     openknx.console.printHelpLine("iohc keyimport status|candidates|trace", "Show import evidence and verification state");
     openknx.console.printHelpLine("iohc discovery trace", "Show discovery reliability counters");
+    openknx.console.printHelpLine("iohc discovery listen [MS|default]", "Runtime-only discovery listen window (default 2000 ms)");
     openknx.console.printHelpLine("iohc fp read NODE 1[,2,3]", "Raw FP diagnostic; only single FP1-FP3 transmits");
     openknx.console.printHelpLine("iohc fp raw NODE INDEX RAW16", "Expert single-attempt FP write; only FP1-FP3 transmits");
     openknx.console.printHelpLine("iohc autospe on|off|status", "Runtime post-pair SPE discovery");
@@ -3670,6 +3645,29 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         return true;
     }
 
+    if (lSub.rfind("discovery listen", 0) == 0)
+    {
+        const std::string lArg = trimSpaces(lSub.substr(strlen("discovery listen")));
+        if (!lArg.empty())
+        {
+            uint32_t lMilliseconds = 0;
+            if (lArg == "default")
+                lMilliseconds = IOHC_DISCOVERY_LISTEN_MS;
+            else if (!parseUnsignedDecimal(lArg, lMilliseconds))
+                lMilliseconds = 0;
+            if (lMilliseconds > 10000 ||
+                !mController.setDiagnosticDiscoveryListenMs(static_cast<uint16_t>(lMilliseconds)))
+            {
+                logInfoP("Usage: iohc discovery listen [100..10000|default] (not during discovery)");
+                return true;
+            }
+        }
+        logInfoP("Discovery listen window: %u ms (runtime-only; production default %u ms)",
+                 static_cast<unsigned>(mController.diagnosticDiscoveryListenMs()),
+                 static_cast<unsigned>(IOHC_DISCOVERY_LISTEN_MS));
+        return true;
+    }
+
     if (lSub == "keyimport status" || lSub == "keyimport candidates" ||
         lSub == "keyimport trace")
     {
@@ -3692,15 +3690,16 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             {
                 const KeyImportCandidate &lCandidate = mKeyImportCandidates[i];
                 const KeyImportDevice *lDevice = findKeyImportDevice(lCandidate.nodeId);
-                logInfoP("KeyImport candidate %06X: hub=%06X evidence=%s authVerified=%u klr2eFreq=%lu lastFreq=%lu rssi=%d spe2b=%u metadata=%s directed=%s",
+                logInfoP("KeyImport candidate %06X: hub=%06X evidence=%s reason=%s authVerified=%u klr2eFreq=%lu lastFreq=%lu rssi=%d spe2b=%u metadata=%s directed=%s",
                          lCandidate.nodeId, lCandidate.hubNodeId,
                          lCandidate.finalSeen ? "complete-exchange" :
                          lCandidate.authSeen ? "auth-response" :
                          lCandidate.challengeSeen ? "challenge" :
                          lCandidate.requestSeen ? "directed-2e" : "address-only",
+                         lCandidate.diagnosticReason(),
                          lCandidate.authVerified ? 1U : 0U,
-                         static_cast<unsigned long>(lCandidate.klrDirectedFreqIdx < IOHC_NUM_FREQUENCIES
-                                                        ? IOHC_FREQUENCIES[lCandidate.klrDirectedFreqIdx] : 0),
+                         static_cast<unsigned long>(lCandidate.requestFreqIdx < IOHC_NUM_FREQUENCIES
+                                                        ? IOHC_FREQUENCIES[lCandidate.requestFreqIdx] : 0),
                          static_cast<unsigned long>(lCandidate.lastRxFreqIdx < IOHC_NUM_FREQUENCIES
                                                         ? IOHC_FREQUENCIES[lCandidate.lastRxFreqIdx] : 0),
                          lCandidate.lastRssi,
@@ -3709,11 +3708,27 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                          lDevice && lDevice->protocolIdentity.valid ? "partial" : "pending",
                          lDevice ? "verified" : "unverified");
                 if (lSub == "keyimport trace")
+                {
                     logInfoP("  times 2e=%lu 3c=%lu 3d=%lu 2f=%lu",
                              static_cast<unsigned long>(lCandidate.requestAtMs),
                              static_cast<unsigned long>(lCandidate.challengeAtMs),
                              static_cast<unsigned long>(lCandidate.authAtMs),
                              static_cast<unsigned long>(lCandidate.finalAtMs));
+                    logInfoP("  stageFreqHz 2e=%lu 3c=%lu 3d=%lu 2f=%lu",
+                             static_cast<unsigned long>(lCandidate.requestFreqIdx < IOHC_NUM_FREQUENCIES ? IOHC_FREQUENCIES[lCandidate.requestFreqIdx] : 0),
+                             static_cast<unsigned long>(lCandidate.challengeFreqIdx < IOHC_NUM_FREQUENCIES ? IOHC_FREQUENCIES[lCandidate.challengeFreqIdx] : 0),
+                             static_cast<unsigned long>(lCandidate.authFreqIdx < IOHC_NUM_FREQUENCIES ? IOHC_FREQUENCIES[lCandidate.authFreqIdx] : 0),
+                             static_cast<unsigned long>(lCandidate.finalFreqIdx < IOHC_NUM_FREQUENCIES ? IOHC_FREQUENCIES[lCandidate.finalFreqIdx] : 0));
+                    if (lCandidate.challengeSeen)
+                    {
+                        const std::string lChallenge = metadataHex(lCandidate.challenge, sizeof(lCandidate.challenge));
+                        const std::string lReceived = lCandidate.authSeen ? metadataHex(lCandidate.responseHmac, sizeof(lCandidate.responseHmac)) : "pending";
+                        const std::string lComputed = lCandidate.hmacComputed ? metadataHex(lCandidate.computedHmac, sizeof(lCandidate.computedHmac)) : "pending";
+                        logInfoP("  passiveHmac challenge=%s received=%s computed=%s match=%s",
+                                 lChallenge.c_str(), lReceived.c_str(), lComputed.c_str(),
+                                 lCandidate.authVerified ? "yes" : "no");
+                    }
+                }
             }
         }
         return true;

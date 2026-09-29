@@ -164,8 +164,16 @@ class ChannelUiTest(unittest.TestCase):
         self.assertNotIn("decodeProtocolIdentity(", discovery_handler)
 
         controller_source = (ROOT / "src" / "controller" / "IoHomeController.cpp").read_text()
+        pending_discovery_handler = controller_source.split(
+            "void IoHomeController::processPendingDiscoveryResponses()", 1
+        )[1].split("void IoHomeController::", 1)[0]
         self.assertIn(
-            "mModule->onDiscoveryResponse(mRxFrame, lMetadata)", controller_source
+            "captureProtocolIdentity(channelForNode(lPending.source), lPending.frame,",
+            pending_discovery_handler,
+        )
+        self.assertIn(
+            "mModule->onDiscoveryResponse(lPending.frame, lMetadata)",
+            pending_discovery_handler,
         )
         self.assertIn(
             "rememberProtocolIdentity(iFrame.getSrcNodeId(), lMetadata)",
