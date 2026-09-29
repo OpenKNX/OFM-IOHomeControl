@@ -17,6 +17,13 @@ The distinction between interior and exterior Venetian blinds matters:
 | `0x0040` interior | slat orientation | slat orientation speed | blind speed |
 | `0x0440` exterior | blind speed | slat orientation speed | slat orientation |
 
+KLF Table 276 and `GW_COMMAND_SEND_REQ` example 2 both put the *interior*
+Venetian slat angle at FP1; the example selects it with `FPI1=0x80`. A
+separate KLF paragraph groups interior Venetian, exterior Venetian, and louvre
+blinds as though all use FP3 for the angle. That sentence contradicts both
+the table and its explicit command example. Keep `0x0040` FP1 as orientation
+unless a device-specific capture proves otherwise; do not transpose it to FP3.
+
 The two-way Execute and indexed Private status paths select FP1, FP2, or FP3
 from the registry and build the corresponding activation bit. A returned FP3
 field is interpreted as tilt only for profiles that assign FP3 an orientation
