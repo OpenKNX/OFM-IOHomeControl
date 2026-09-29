@@ -377,7 +377,7 @@ public:
     uint16_t profile = 0;
     uint8_t subProfile = 0;
     uint8_t powerSaveModeRaw = 0xFF;
-    uint8_t slaveTimeClass = 0xFF;
+    uint8_t responseTimeClass = 0xFF;
     uint32_t txEndToFirstResponseUs = 0;
     uint32_t txEndToFinalResponseUs = 0;
   };

@@ -2327,9 +2327,9 @@ TEST(discovery_response_metadata_uses_full_layout_offsets)
     ASSERT_TRUE(lMetadata.ioMembershipFlag);
     ASSERT_TRUE(lMetadata.rfSupportInNode);
     ASSERT_TRUE(!lMetadata.syncControlGroupCandidate);
-    ASSERT_EQ(lMetadata.slaveTimeClass, 0);
-    ASSERT_EQ(lMetadata.slaveTimeKlfValue, 5);
-    ASSERT_TRUE(!lMetadata.slaveTimeUnitConfirmed);
+    ASSERT_EQ(lMetadata.responseTimeClass, 0);
+    ASSERT_EQ(lMetadata.klfTurnaroundHintMs, 5);
+    ASSERT_TRUE(!lMetadata.responseTimeUnitConfirmed);
     ASSERT_TRUE(lMetadata.hasDiscoveryTimestamp);
     ASSERT_EQ(lMetadata.discoveryTimestamp, 0xFFFF);
     ASSERT_EQ(lMetadata.rawDataLen, sizeof(lData));
@@ -2343,8 +2343,8 @@ TEST(discovery_response_metadata_uses_full_layout_offsets)
     ASSERT_EQ(lTypeOnly.manufacturerId, 0);
     ASSERT_TRUE(!lTypeOnly.hasMib);
     ASSERT_EQ(lTypeOnly.powerSaveMode, IoHomePowerMode::Unknown);
-    ASSERT_EQ(lTypeOnly.slaveTimeClass, 0xFF);
-    ASSERT_EQ(lTypeOnly.slaveTimeKlfValue, 0);
+    ASSERT_EQ(lTypeOnly.responseTimeClass, 0xFF);
+    ASSERT_EQ(lTypeOnly.klfTurnaroundHintMs, 0);
     ASSERT_TRUE(!lTypeOnly.hasDiscoveryTimestamp);
 }
 
@@ -2397,8 +2397,8 @@ TEST(discovery_complete_model_roundtrips_and_matches_normal_and_spe_responses)
     ASSERT_EQ(lDecodedByCommand[0].rfSupportInNode, lDecodedByCommand[1].rfSupportInNode);
     ASSERT_EQ(lDecodedByCommand[0].syncControlGroupCandidate,
               lDecodedByCommand[1].syncControlGroupCandidate);
-    ASSERT_EQ(lDecodedByCommand[0].slaveTimeClass,
-              lDecodedByCommand[1].slaveTimeClass);
+    ASSERT_EQ(lDecodedByCommand[0].responseTimeClass,
+              lDecodedByCommand[1].responseTimeClass);
     ASSERT_EQ(lDecodedByCommand[0].discoveryTimestamp,
               lDecodedByCommand[1].discoveryTimestamp);
     ASSERT_MEM_EQ(lDecodedByCommand[0].rawData,
@@ -2502,10 +2502,10 @@ TEST(discovery_multi_information_byte_decodes_klf_semantics_without_coercion)
         ASSERT_TRUE(lMetadata.ioMembershipFlag);
         ASSERT_TRUE(lMetadata.rfSupportInNode);
         ASSERT_TRUE(!lMetadata.syncControlGroupCandidate);
-        ASSERT_EQ(lMetadata.slaveTimeClass, lClass);
-        ASSERT_EQ(lMetadata.slaveTimeKlfValue,
+        ASSERT_EQ(lMetadata.responseTimeClass, lClass);
+        ASSERT_EQ(lMetadata.klfTurnaroundHintMs,
                   static_cast<uint8_t>(lClass == 0 ? 5 : lClass == 1 ? 10 : lClass == 2 ? 20 : 40));
-        ASSERT_TRUE(!lMetadata.slaveTimeUnitConfirmed);
+        ASSERT_TRUE(!lMetadata.responseTimeUnitConfirmed);
     }
 
     uint8_t lReservedData[IOHC_DISCOVERY_EXTENDED_SIZE] = {};
@@ -2643,9 +2643,9 @@ TEST(discovery_extended_profiles_and_somfy_identity_fields_roundtrip)
         ASSERT_TRUE(lIdentity.ioMembershipFlag);
         ASSERT_TRUE(lIdentity.rfSupportInNode);
         ASSERT_TRUE((lIdentity.multiInfoByte & IOHC_DISCOVERY_UNKNOWN_BIT4_MASK) != 0);
-        ASSERT_EQ(lIdentity.slaveTimeClass, 3U);
-        ASSERT_EQ(lIdentity.slaveTimeKlfValue, 40U);
-        ASSERT_TRUE(!lIdentity.slaveTimeUnitConfirmed);
+        ASSERT_EQ(lIdentity.responseTimeClass, 3U);
+        ASSERT_EQ(lIdentity.klfTurnaroundHintMs, 40U);
+        ASSERT_TRUE(!lIdentity.responseTimeUnitConfirmed);
         ASSERT_EQ(lIdentity.keyState, IoHomeKeyState::Unknown);
         ASSERT_EQ(lIdentity.keyStateSource, IoHomeMetadataSource::Unknown);
 
@@ -11075,7 +11075,7 @@ TEST(controller_pairing_stores_029_metadata_before_key_exchange_and_keeps_source
     ASSERT_TRUE(lMetadata.ioMembershipFlag);
     ASSERT_TRUE(lMetadata.rfSupportInNode);
     ASSERT_TRUE(!lMetadata.syncControlGroupCandidate);
-    ASSERT_EQ(lMetadata.slaveTimeClass, 0);
+    ASSERT_EQ(lMetadata.responseTimeClass, 0);
     ASSERT_TRUE(lMetadata.hasDiscoveryTimestamp);
     ASSERT_EQ(lMetadata.discoveryTimestamp, 0xFFFF);
     ASSERT_EQ(lMetadata.rawDataLen, sizeof(kCapturedPayload));
@@ -11094,7 +11094,7 @@ TEST(controller_pairing_stores_029_metadata_before_key_exchange_and_keeps_source
     ASSERT_EQ(lRegistered->multiInfoByte, lMetadata.multiInfoByte);
     ASSERT_EQ(lRegistered->powerSaveMode, lMetadata.powerSaveMode);
     ASSERT_EQ(lRegistered->rfSupportInNode, lMetadata.rfSupportInNode);
-    ASSERT_EQ(lRegistered->slaveTimeClass, lMetadata.slaveTimeClass);
+    ASSERT_EQ(lRegistered->responseTimeClass, lMetadata.responseTimeClass);
     ASSERT_EQ(lRegistered->discoveryTimestamp, lMetadata.discoveryTimestamp);
     ASSERT_TRUE(lController.state() == ControllerState::PairSendDiscoveryConfirmation ||
                 lController.state() == ControllerState::PairWaitDiscoveryConfirmationAck);
@@ -11148,7 +11148,7 @@ TEST(controller_spe_discovery_registers_same_complete_metadata_model)
     ASSERT_TRUE(lMetadata->ioMembershipFlag);
     ASSERT_TRUE(lMetadata->rfSupportInNode);
     ASSERT_TRUE(lMetadata->syncControlGroupCandidate);
-    ASSERT_EQ(lMetadata->slaveTimeClass, 3U);
+    ASSERT_EQ(lMetadata->responseTimeClass, 3U);
     ASSERT_EQ(lMetadata->discoveryTimestamp, 0x1234U);
     ASSERT_MEM_EQ(lMetadata->rawData, kPayload, sizeof(kPayload));
 
@@ -14697,7 +14697,7 @@ TEST(controller_response_timing_is_tagged_with_protocol_identity)
     ASSERT_EQ(lTiming.profile, 1008U);
     ASSERT_EQ(lTiming.subProfile, 0x11U);
     ASSERT_EQ(lTiming.powerSaveModeRaw, 1U);
-    ASSERT_EQ(lTiming.slaveTimeClass, 3U);
+    ASSERT_EQ(lTiming.responseTimeClass, 3U);
     ASSERT_TRUE(lTiming.txEndToFirstResponseUs >= 1234U);
     ASSERT_EQ(lTiming.txEndToFirstResponseUs,
               lTiming.txEndToFinalResponseUs);

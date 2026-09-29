@@ -258,7 +258,7 @@ class ChannelUiTest(unittest.TestCase):
         for field in (
             "ioAddress", "ioBackboneAddress", "profile", "subProfile",
             "manufacturerId", "multiInfoByte", "powerSaveMode",
-            "ioMembershipFlag", "rfSupportInNode", "slaveTimeClass",
+            "ioMembershipFlag", "rfSupportInNode", "responseTimeClass",
             "keyState",
         ):
             self.assertIn(field, commands)

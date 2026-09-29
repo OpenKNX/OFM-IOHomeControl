@@ -2738,7 +2738,7 @@ bool IoHomeController::captureProtocolIdentity(
     {
         const uint32_t lFreqHz = mLastResponseFreqIdx < IOHC_NUM_FREQUENCIES
                                      ? IOHC_FREQUENCIES[mLastResponseFreqIdx] : 0;
-        logInfoP("DISCOVERED: ioAddress=%06X class=%s profile=%u subProfile=%u nodeType=0x%04X manufacturer=%s(%u) backbonePresent=%u backbone=%06X mibPresent=%u mib=0x%02X power=%s ioMember=%u rfSupport=%u slaveTimeClass=%u timestampPresent=%u timestamp=%04X freq=%lu rssi=%d source=%s",
+        logInfoP("DISCOVERED: ioAddress=%06X class=%s profile=%u subProfile=%u nodeType=0x%04X manufacturer=%s(%u) backbonePresent=%u backbone=%06X mibPresent=%u mib=0x%02X power=%s ioMember=%u rfSupport=%u responseTimeClass=%u timestampPresent=%u timestamp=%04X freq=%lu rssi=%d source=%s",
                  iFrame.getSrcNodeId(), ioHomeNodeClassName(lMetadata.nodeClass),
                  static_cast<unsigned>(lMetadata.profile),
                  static_cast<unsigned>(lMetadata.subProfile),
@@ -2750,7 +2750,7 @@ bool IoHomeController::captureProtocolIdentity(
                  ioHomePowerModeName(lMetadata.powerSaveMode),
                  lMetadata.ioMembershipFlag ? 1U : 0U,
                  lMetadata.rfSupportInNode ? 1U : 0U,
-                 static_cast<unsigned>(lMetadata.slaveTimeClass),
+                 static_cast<unsigned>(lMetadata.responseTimeClass),
                  lMetadata.hasDiscoveryTimestamp ? 1U : 0U,
                  static_cast<unsigned>(lMetadata.discoveryTimestamp),
                  static_cast<unsigned long>(lFreqHz), mRadio.lastRssi(),
@@ -3219,7 +3219,7 @@ void IoHomeController::beginResponseTimingAttempt()
         mLastResponseTimingSample.profile = lIdentity->profile;
         mLastResponseTimingSample.subProfile = lIdentity->subProfile;
         mLastResponseTimingSample.powerSaveModeRaw = lIdentity->powerSaveModeRaw;
-        mLastResponseTimingSample.slaveTimeClass = lIdentity->slaveTimeClass;
+        mLastResponseTimingSample.responseTimeClass = lIdentity->responseTimeClass;
     }
 }
 
@@ -3251,13 +3251,13 @@ void IoHomeController::recordResponseTiming(bool iFinalResponse)
         mLastResponseTimingSample.txEndToFirstResponseUs =
             lNowUs - mExchangeRequestTxEndUs;
         if (mPairDiagnosticTraceEnabled)
-            logInfoP("PairDiag: response timing first ioAddress=0x%06X manufacturerId=0x%02X profile=%u subProfile=%u powerSaveMode=%u slaveTimeClass=%u delayUs=%lu",
+            logInfoP("PairDiag: response timing first ioAddress=0x%06X manufacturerId=0x%02X profile=%u subProfile=%u powerSaveMode=%u responseTimeClass=%u delayUs=%lu",
                      mLastResponseTimingSample.ioAddress,
                      static_cast<unsigned>(mLastResponseTimingSample.manufacturerId),
                      static_cast<unsigned>(mLastResponseTimingSample.profile),
                      static_cast<unsigned>(mLastResponseTimingSample.subProfile),
                      static_cast<unsigned>(mLastResponseTimingSample.powerSaveModeRaw),
-                     static_cast<unsigned>(mLastResponseTimingSample.slaveTimeClass),
+                     static_cast<unsigned>(mLastResponseTimingSample.responseTimeClass),
                      static_cast<unsigned long>(mLastResponseTimingSample.txEndToFirstResponseUs));
     }
 
@@ -3267,13 +3267,13 @@ void IoHomeController::recordResponseTiming(bool iFinalResponse)
         mLastResponseTimingSample.txEndToFinalResponseUs =
             lNowUs - mExchangeRequestTxEndUs;
         if (mPairDiagnosticTraceEnabled)
-            logInfoP("PairDiag: response timing final ioAddress=0x%06X manufacturerId=0x%02X profile=%u subProfile=%u powerSaveMode=%u slaveTimeClass=%u requestTxEndDelayUs=%lu authTxEndDelayUs=%s%lu",
+            logInfoP("PairDiag: response timing final ioAddress=0x%06X manufacturerId=0x%02X profile=%u subProfile=%u powerSaveMode=%u responseTimeClass=%u requestTxEndDelayUs=%lu authTxEndDelayUs=%s%lu",
                      mLastResponseTimingSample.ioAddress,
                      static_cast<unsigned>(mLastResponseTimingSample.manufacturerId),
                      static_cast<unsigned>(mLastResponseTimingSample.profile),
                      static_cast<unsigned>(mLastResponseTimingSample.subProfile),
                      static_cast<unsigned>(mLastResponseTimingSample.powerSaveModeRaw),
-                     static_cast<unsigned>(mLastResponseTimingSample.slaveTimeClass),
+                     static_cast<unsigned>(mLastResponseTimingSample.responseTimeClass),
                      static_cast<unsigned long>(mLastResponseTimingSample.txEndToFinalResponseUs),
                      mExchangeAuthTxEndValid ? "" : "n/a:",
                      static_cast<unsigned long>(mExchangeAuthTxEndValid
@@ -4631,7 +4631,7 @@ void IoHomeController::tracePairDiagnosticDiscoveryInterpretation(const IoHomeFr
             if (lMetadata.hasIoBackboneAddress)
                 logInfoP("PairDiag: discovery ioBackboneAddress value=%06X", lMetadata.ioBackboneAddress);
             if (lMetadata.hasMib)
-                logInfoP("PairDiag: discovery multiInfoByte=0x%02X bits[1:0] powerSaveMode=%u(%s) bit2 ioMembershipFlag=%u bit3 rfSupportInNode=%u bit4=%u[unknown/unused] bit5=%u[provisional/no-production-behavior] bits[7:6] slaveTimeClass=%u klfHint=%u unitConfirmed=%u",
+                logInfoP("PairDiag: discovery multiInfoByte=0x%02X bits[1:0] powerSaveMode=%u(%s) bit2 ioMembershipFlag=%u bit3 rfSupportInNode=%u bit4=%u[unknown/unused] bit5=%u[provisional/no-production-behavior] bits[7:6] responseTimeClass=%u klfHint=%u unitConfirmed=%u",
                          static_cast<unsigned>(lMetadata.multiInfoByte),
                          static_cast<unsigned>(lMetadata.powerSaveModeRaw),
                          ioHomePowerModeName(lMetadata.powerSaveMode),
@@ -4639,9 +4639,9 @@ void IoHomeController::tracePairDiagnosticDiscoveryInterpretation(const IoHomeFr
                          lMetadata.rfSupportInNode ? 1U : 0U,
                          (lMetadata.multiInfoByte & IOHC_DISCOVERY_UNKNOWN_BIT4_MASK) ? 1U : 0U,
                          lMetadata.syncControlGroupCandidate ? 1U : 0U,
-                         static_cast<unsigned>(lMetadata.slaveTimeClass),
-                         static_cast<unsigned>(lMetadata.slaveTimeKlfValue),
-                         lMetadata.slaveTimeUnitConfirmed ? 1U : 0U);
+                         static_cast<unsigned>(lMetadata.responseTimeClass),
+                         static_cast<unsigned>(lMetadata.klfTurnaroundHintMs),
+                         lMetadata.responseTimeUnitConfirmed ? 1U : 0U);
             if (lMetadata.hasDiscoveryTimestamp)
                 logInfoP("PairDiag: discovery timestamp: 0x%04X",
                          static_cast<unsigned>(lMetadata.discoveryTimestamp));
@@ -4919,7 +4919,7 @@ void IoHomeController::logPairDiagnosticStatus() const
             logInfoP("PairDiag: discovery ioBackboneAddress value=%06X",
                      mPairProtocolIdentity.ioBackboneAddress);
         if (mPairProtocolIdentity.hasMib)
-            logInfoP("PairDiag: discovery multiInfoByte=0x%02X bits[1:0] powerSaveMode=%u(%s) bit2 ioMembershipFlag=%u bit3 rfSupportInNode=%u bit4=%u[unknown/unused] bit5=%u[provisional/no-production-behavior] bits[7:6] slaveTimeClass=%u klfHint=%u unitConfirmed=%u",
+            logInfoP("PairDiag: discovery multiInfoByte=0x%02X bits[1:0] powerSaveMode=%u(%s) bit2 ioMembershipFlag=%u bit3 rfSupportInNode=%u bit4=%u[unknown/unused] bit5=%u[provisional/no-production-behavior] bits[7:6] responseTimeClass=%u klfHint=%u unitConfirmed=%u",
                      static_cast<unsigned>(mPairProtocolIdentity.multiInfoByte),
                      static_cast<unsigned>(mPairProtocolIdentity.powerSaveModeRaw),
                      ioHomePowerModeName(mPairProtocolIdentity.powerSaveMode),
@@ -4927,9 +4927,9 @@ void IoHomeController::logPairDiagnosticStatus() const
                      mPairProtocolIdentity.rfSupportInNode ? 1U : 0U,
                      (mPairProtocolIdentity.multiInfoByte & IOHC_DISCOVERY_UNKNOWN_BIT4_MASK) ? 1U : 0U,
                      mPairProtocolIdentity.syncControlGroupCandidate ? 1U : 0U,
-                     static_cast<unsigned>(mPairProtocolIdentity.slaveTimeClass),
-                     static_cast<unsigned>(mPairProtocolIdentity.slaveTimeKlfValue),
-                     mPairProtocolIdentity.slaveTimeUnitConfirmed ? 1U : 0U);
+                     static_cast<unsigned>(mPairProtocolIdentity.responseTimeClass),
+                     static_cast<unsigned>(mPairProtocolIdentity.klfTurnaroundHintMs),
+                     mPairProtocolIdentity.responseTimeUnitConfirmed ? 1U : 0U);
         if (mPairProtocolIdentity.hasDiscoveryTimestamp)
             logInfoP("PairDiag: discovery timestamp: 0x%04X",
                      static_cast<unsigned>(mPairProtocolIdentity.discoveryTimestamp));

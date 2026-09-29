@@ -715,11 +715,12 @@ struct IoHomeProtocolIdentity
     // it. Do not use this candidate for production behavior without captures.
     bool syncControlGroupCandidate = false;
     // 0..3 only when a MIB was present. 0xFF keeps an absent MIB distinct from
-    // valid SlaveTimeClass 0. The KLF 5/10/20/40 hint has no confirmed unit and
-    // therefore never controls production RF timeouts.
-    uint8_t slaveTimeClass = 0xFF;
-    uint8_t slaveTimeKlfValue = 0;
-    bool slaveTimeUnitConfirmed = false;
+    // valid class 0. KLF calls 5/10/20/40 milliseconds, while Velocet
+    // docs/commands.md calls the same values seconds. The raw class is the
+    // authority; neither source interpretation controls RF timeouts.
+    uint8_t responseTimeClass = 0xFF;
+    uint8_t klfTurnaroundHintMs = 0;
+    bool responseTimeUnitConfirmed = false;
     IoHomeKeyState keyState = IoHomeKeyState::Unknown;
     IoHomeMetadataSource metadataSource = IoHomeMetadataSource::Unknown;
     IoHomeMetadataSource keyStateSource = IoHomeMetadataSource::Unknown;
@@ -1129,11 +1130,11 @@ inline void decodeProtocolIdentityMib(IoHomeProtocolIdentity &ioIdentity,
     ioIdentity.rfSupportInNode = (iMib & IOHC_DISCOVERY_RF_SUPPORT_MASK) != 0;
     ioIdentity.syncControlGroupCandidate =
         (iMib & IOHC_DISCOVERY_SYNC_CONTROL_GROUP_MASK) != 0;
-    ioIdentity.slaveTimeClass = static_cast<uint8_t>(
+    ioIdentity.responseTimeClass = static_cast<uint8_t>(
         (iMib & IOHC_DISCOVERY_SLAVE_TIME_CLASS_MASK) >> IOHC_DISCOVERY_SLAVE_TIME_CLASS_SHIFT);
-    ioIdentity.slaveTimeKlfValue = ioHomeSlaveTimeKlfValue(ioIdentity.slaveTimeClass);
-    // The KLF table exposes values 5/10/20/40 without confirming the unit.
-    ioIdentity.slaveTimeUnitConfirmed = false;
+    ioIdentity.klfTurnaroundHintMs = ioHomeSlaveTimeKlfValue(ioIdentity.responseTimeClass);
+    // The KLF millisecond interpretation is not capture-confirmed for native RF.
+    ioIdentity.responseTimeUnitConfirmed = false;
 }
 
 inline IoHomeProtocolIdentity decodeProtocolIdentity(const uint8_t *iData, uint8_t iDataLen)
