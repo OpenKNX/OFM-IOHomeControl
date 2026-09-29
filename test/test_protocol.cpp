@@ -1740,6 +1740,27 @@ TEST(access_method_values_are_not_relative_percentages)
     ASSERT_EQ(lPercent, 100.0f);
 }
 
+TEST(parameter_access_methods_and_no_feedback_are_distinct)
+{
+    ASSERT_EQ(IOHC_PARAMETER_TARGET, 0xD100);
+    ASSERT_EQ(IOHC_PARAMETER_CURRENT, 0xD200);
+    ASSERT_EQ(IOHC_PARAMETER_DEFAULT, 0xD300);
+    ASSERT_EQ(IOHC_PARAMETER_IGNORE, 0xD400);
+    ASSERT_EQ(IOHC_NO_FEEDBACK_VALUE, 0xF7FF);
+    ASSERT_TRUE(IOHC_PARAMETER_IGNORE != IOHC_NO_FEEDBACK_VALUE);
+    float lPercent = -1.0f;
+    ASSERT_TRUE(ioHomeRawToPercent(0, ParameterPolarity::Normal, lPercent));
+    ASSERT_EQ(lPercent, 0.0f);
+    ASSERT_TRUE(ioHomeRawToPercent(IOHC_POSITION_MAX,
+                                   ParameterPolarity::Normal, lPercent));
+    ASSERT_EQ(lPercent, 100.0f);
+    ASSERT_TRUE(!ioHomeRawToPercent(IOHC_NO_FEEDBACK_VALUE,
+                                    ParameterPolarity::Normal, lPercent));
+    ASSERT_TRUE(ioHomeParameterAlias(0x0080, 0, IOHC_NO_FEEDBACK_VALUE) == nullptr);
+    ASSERT_EQ(ioHomeParameterAlias(0x0080, 0, IOHC_PARAMETER_TARGET)->semantic,
+              IoHomeAliasSemantic::Target);
+}
+
 // =====================================================================
 // 26. Retry logic — queue entry structure
 // =====================================================================
