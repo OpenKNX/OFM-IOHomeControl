@@ -6,8 +6,11 @@ Appendix 2, Table 276 (pages 104-105). The registry keys the full packed
 `Profile/SubProfile` pair, not the manufacturer ID or a product signature.
 
 The 30 entries cover every row in Table 276, including the on/off variants
-`0x017A`, `0x01FA`, and `0x057A`. FP4-FP16 are `Unsupported` for these documented
-entries. An unlisted profile/subprofile resolves to `Unknown` for every
+`0x017A`, `0x01FA`, and `0x057A`. The internal `Unsupported` state means only
+**not assigned by KLF Appendix 2 for this particular profile**. It does not
+mean FP4-FP16 are unsupported by io-homecontrol: the protocol addresses all
+16 FPs, and newer Overkiz product classes use higher indices. An unlisted
+profile/subprofile resolves to `Unknown` for every
 parameter; it never falls back to a different subprofile in the same profile.
 
 The distinction between interior and exterior Venetian blinds matters:

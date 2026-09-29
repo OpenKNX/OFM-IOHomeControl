@@ -72,7 +72,8 @@ const IoHomeProfileDescriptor *ioHomeProfileDescriptor(uint16_t iProfile,
                                                         uint8_t iSubProfile);
 const IoHomeProfileDescriptor *ioHomeProfileDescriptor(const IoHomeProtocolIdentity &iIdentity);
 
-// Index 0 is MP, 1..16 are FP1..FP16. A known but undefined FP is Unsupported;
+// Index 0 is MP, 1..16 are FP1..FP16. Unsupported means not documented by
+// KLF Appendix 2 for this profile, not unsupported by the protocol;
 // an unknown profile or invalid index is Unknown.
 ParameterSemantic ioHomeParameterSemantic(const IoHomeProfileDescriptor *iDescriptor,
                                           uint8_t iParameterIndex);
