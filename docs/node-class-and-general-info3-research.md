@@ -6,6 +6,14 @@ multiple device classes and manufacturers establish stable semantics.
 
 ## GeneralInfo3 (`0x58` / `0x59`)
 
+Protocol identity and product identity are distinct records. The protocol
+record retains ioAddress, packed profile/subProfile, backbone, manufacturer,
+the raw MIB, its decoded power mode, and the discovery timestamp/raw bytes.
+GI1/GI2, software/product signatures, and a commercial model are separate
+product evidence. OVPd uses GI1/GI2 for product-specific class decisions; that
+must not rewrite the observed discovery bytes. An unknown product can still
+have a valid protocol identity, and an unlisted profile must remain unlisted.
+
 The pairing enrichment sequence sends `GetGeneralInfo3` after name, GI1, and
 GI2. A `GetGeneralInfo3Response` is retained byte-for-byte, up to the normal
 23-byte frame-data limit. It does not update position, movement, profile,
