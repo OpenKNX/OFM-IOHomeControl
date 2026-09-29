@@ -3067,6 +3067,60 @@ TEST(klf_appendix2_profile_registry_maps_mp_and_functional_parameters)
     }
 }
 
+TEST(klf_appendix2_all_profile_flags_and_polarities_are_golden)
+{
+    using P = ParameterPolarity;
+    struct Golden { uint16_t packed; P polarity; uint32_t capabilities; bool securedVentilation; };
+    static constexpr uint32_t kPosition = IoHomeCapabilityPosition;
+    static constexpr uint32_t kSpeed = IoHomeCapabilitySpeed;
+    static constexpr uint32_t kOrientation = IoHomeCapabilityOrientation;
+    static constexpr uint32_t kOrientationSpeed = IoHomeCapabilityOrientationSpeed;
+    static constexpr Golden kCases[] = {
+        {0x0040, P::Normal, kPosition | kSpeed | kOrientation | kOrientationSpeed, false},
+        {0x0080, P::Normal, kPosition | kSpeed, false},
+        {0x0081, P::Normal, kPosition | kSpeed | kOrientation | kOrientationSpeed, false},
+        {0x0082, P::Normal, kPosition | kSpeed, false},
+        {0x00C0, P::Normal, kPosition | kSpeed, false},
+        {0x0100, P::Reversed, kPosition | kSpeed, true},
+        {0x0101, P::Reversed, kPosition | kSpeed, true},
+        {0x0140, P::Normal, kPosition | kSpeed, false},
+        {0x017A, P::Normal, kPosition, false},
+        {0x0180, P::Reversed, IoHomeCapabilityLight, false},
+        {0x01BA, P::Reversed, IoHomeCapabilityLight, false},
+        {0x01C0, P::Normal, kPosition | kSpeed, false},
+        {0x01FA, P::Normal, kPosition, false},
+        {0x0240, P::Normal, IoHomeCapabilityLock, false},
+        {0x0241, P::Normal, IoHomeCapabilityLock, false},
+        {0x0280, P::Normal, kPosition | kSpeed, false},
+        {0x0340, P::Normal, kPosition | kSpeed | IoHomeCapabilityDualCurtain, false},
+        {0x03C0, P::Reversed, IoHomeCapabilitySwitch, false},
+        {0x0400, P::Normal, kPosition | kSpeed, false},
+        {0x0440, P::Normal, kPosition | kSpeed | kOrientation | kOrientationSpeed, false},
+        {0x0480, P::Normal, kPosition | kSpeed | kOrientation | kOrientationSpeed, false},
+        {0x04C0, P::Normal, kPosition | kSpeed, false},
+        {0x0500, P::Reversed, IoHomeCapabilityVentilation, false},
+        {0x0501, P::Reversed, IoHomeCapabilityVentilation, false},
+        {0x0502, P::Reversed, IoHomeCapabilityVentilation, false},
+        {0x0503, P::Reversed, IoHomeCapabilityVentilation, false},
+        {0x0540, P::Reversed, IoHomeCapabilityHeating, false},
+        {0x057A, P::Reversed, IoHomeCapabilityHeating, false},
+        {0x0600, P::Normal, kPosition | kSpeed, false},
+        {0x0601, P::Normal, kPosition | kSpeed, false},
+    };
+    ASSERT_EQ(sizeof(kCases) / sizeof(kCases[0]), 30U);
+    for (const Golden &lCase : kCases)
+    {
+        const IoHomeProfileDescriptor *lDescriptor =
+            ioHomeProfileDescriptor(lCase.packed >> 6, lCase.packed & 0x3F);
+        ASSERT_TRUE(lDescriptor != nullptr);
+        ASSERT_EQ(encodeNodeTypeSubType(lDescriptor->profile, lDescriptor->subProfile),
+                  lCase.packed);
+        ASSERT_EQ(lDescriptor->mpPolarity, lCase.polarity);
+        ASSERT_EQ(lDescriptor->capabilityFlags, lCase.capabilities);
+        ASSERT_EQ(lDescriptor->securedVentilation, lCase.securedVentilation);
+    }
+}
+
 TEST(klf_profile_registry_preserves_unknowns_and_reverses_venetian_fp_roles)
 {
     using S = ParameterSemantic;
