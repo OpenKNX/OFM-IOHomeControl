@@ -3251,6 +3251,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc discover", "Broadcast discovery, list devices");
     openknx.console.printHelpLine("iohc discover spe", "Encrypted SPE/sub-device discovery");
     openknx.console.printHelpLine("iohc metadata refresh NODE", "Refresh name, GI1 and GI2 for a paired 2W node (hex)");
+    openknx.console.printHelpLine("iohc fp read NODE 1[,2,3]", "Raw FP diagnostic; only single FP1-FP3 transmits");
     openknx.console.printHelpLine("iohc autospe on|off|status", "Runtime post-pair SPE discovery");
     openknx.console.printHelpLine("iohc extract preamble cold|response auto|N", "Runtime-only key-extraction preamble override");
     openknx.console.printHelpLine("iohcNN identify", "Ask paired 2W device NN to identify itself");
@@ -3514,6 +3515,71 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         mMetadataRefreshActive = true;
         logInfoP("Metadata refresh: scheduled 0x%06X (%s); pairing/key retained",
                  lNodeId, lLowPower ? "low-power pacing" : "normal pacing");
+        return true;
+    }
+
+    if (lSub == "fp read" || lSub.rfind("fp read ", 0) == 0)
+    {
+        std::string lArgs = trimSpaces(lSub.substr(strlen("fp read")));
+        std::string lNodeText;
+        std::string lIndicesText;
+        uint32_t lNodeId = 0;
+        if (!takeToken(lArgs, lNodeText) || !takeToken(lArgs, lIndicesText) ||
+            !lArgs.empty() || !parseHex24(lNodeText, lNodeId) || lNodeId == 0)
+        {
+            logInfoP("Usage: iohc fp read <paired-2W-node-hex> <index[,index[,index]]> (1..16)");
+            return true;
+        }
+        uint8_t lIndices[3] = {};
+        uint8_t lExtInfo[3] = {1, 1, 1};
+        uint8_t lCount = 0;
+        size_t lStart = 0;
+        while (lStart < lIndicesText.size() && lCount < 3)
+        {
+            const size_t lEnd = lIndicesText.find(',', lStart);
+            const std::string lPart = lIndicesText.substr(lStart, lEnd - lStart);
+            uint32_t lIndex = 0;
+            if (!parseUnsignedDecimal(lPart, lIndex) || lIndex < 1 || lIndex > 16)
+                break;
+            lIndices[lCount++] = static_cast<uint8_t>(lIndex);
+            if (lEnd == std::string::npos)
+                lStart = lIndicesText.size();
+            else
+                lStart = lEnd + 1;
+        }
+        IoHomeFpSelection lSelection;
+        uint8_t lPayload[5] = {};
+        uint8_t lPayloadLen = 0;
+        if (lStart != lIndicesText.size() ||
+            !ioHomeFpSelectIndices(lIndices, lCount, lSelection) ||
+            !ioHomeBuildFpRefreshRepresentation(lIndices, lExtInfo, lCount,
+                                                lPayload, lPayloadLen))
+        {
+            logInfoP("FP read: use one to three distinct indices in 1..16");
+            return true;
+        }
+        IoHomecontrolChannel *lChannel = nullptr;
+        for (uint8_t i = 0; i < mNumChannels; ++i)
+            if (mChannels[i] && mChannels[i]->isPaired() && !mChannels[i]->is1W() &&
+                mChannels[i]->getNodeId() == lNodeId)
+                lChannel = mChannels[i];
+        if (!lChannel)
+        {
+            logInfoP("FP read: node 0x%06X is not paired 2W", static_cast<unsigned>(lNodeId));
+            return true;
+        }
+        const std::string lPayloadHex = metadataHex(lPayload, lPayloadLen);
+        logInfoP("FP read representation node=0x%06X FPI1=0x%02X FPI2=0x%02X OVPd=%s",
+                 static_cast<unsigned>(lNodeId), static_cast<unsigned>(lSelection.fpi1),
+                 static_cast<unsigned>(lSelection.fpi2), lPayloadHex.c_str());
+        if (lCount != 1 || lIndices[0] > 3)
+        {
+            logInfoP("FP read: representation only; native multi/FPI2 RF layout is not capture-confirmed, no TX");
+            return true;
+        }
+        logInfoP("FP read: captured native Private selector, raw reply only; no KO publication");
+        logInfoP("FP read: %s", mController.sendDiagnosticFpRead(lChannel, lIndices[0])
+                              ? "queued" : "queue failed");
         return true;
     }
 

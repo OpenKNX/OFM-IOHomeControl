@@ -12786,6 +12786,41 @@ TEST(controller_f7ff_feedback_does_not_publish_mp_or_fp1_to_fp3)
     }
 }
 
+TEST(controller_diagnostic_fp_read_uses_captured_selector_without_publishing)
+{
+    const uint32_t lRemote = 0x831F2A;
+    const uint32_t lDevice = 0x7E9E6E;
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel,
+                                  lRemote, lDevice, lKey);
+    ASSERT_TRUE(!lController.sendDiagnosticFpRead(&lChannel, 0));
+    ASSERT_TRUE(!lController.sendDiagnosticFpRead(&lChannel, 4));
+    ASSERT_TRUE(lController.sendDiagnosticFpRead(&lChannel, 2));
+    IoHomeFrame lTx;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lTx));
+    ASSERT_EQ(lTx.commandId, IoHomeCommand::Private);
+    ASSERT_EQ(lTx.dataLen, 4U);
+    ASSERT_EQ(lTx.data[0], 0x03);
+    ASSERT_EQ(lTx.data[1], 0x40);
+    ASSERT_EQ(lTx.data[2], 0x01);
+    uint8_t lData[15] = {};
+    lData[2] = lData[4] = 0x32;
+    lData[13] = 0xFF;
+    lData[14] = 0xFF;
+    IoHomeFrame lResponse;
+    buildSimpleResponseFrame(lResponse, lRemote, lDevice,
+                             IoHomeCommand::PrivateResponse,
+                             lData, sizeof(lData));
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    ASSERT_TRUE(!lChannel.testHasPositionFeedback());
+    ASSERT_TRUE(!lChannel.testHasTargetPositionFeedback());
+    ASSERT_TRUE(!lChannel.testHasSlatFeedback());
+    ASSERT_TRUE(!lChannel.testHasVelocityFeedback());
+}
+
 TEST(controller_2w_execute_ignores_combined_slat_param)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;

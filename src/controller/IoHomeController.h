@@ -154,6 +154,8 @@ struct IoHomeQueueEntry
   uint32_t oneWayExactDestination;             // exact 24-bit 1W dst for diagnostics
   uint8_t sourceChannelIndex;                  // 0xFF when not queued from a concrete channel
   bool twoWayFp;                               // profile-selected functional parameter
+  bool diagnosticFpRead;                       // raw-only, no KO publication
+  uint8_t diagnosticFpReadIndex;
   uint8_t twoWayFpIndex;
   uint16_t twoWayFpRaw;
   uint8_t retries;
@@ -518,6 +520,7 @@ public:
   bool sendBatteryStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
   bool sendBatteryStateQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
   bool sendTiltStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
+  bool sendDiagnosticFpRead(IoHomecontrolChannel *iChannel, uint8_t iFpIndex);
   bool sendPrivateProbe(uint32_t iDestNodeId, const uint8_t *iEncKey,
                         PrivateProbeShape iShape, uint8_t iFunctionId,
                         uint8_t iSelectorOrBlock = 0);

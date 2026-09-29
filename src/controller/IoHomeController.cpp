@@ -2276,6 +2276,28 @@ bool IoHomeController::sendTiltStatusQuery(uint32_t iDestNodeId, const uint8_t *
     return sendCommand(iDestNodeId, iEncKey, IoHomeCommand::Private, 0x03, 0x20, 0x01);
 }
 
+bool IoHomeController::sendDiagnosticFpRead(IoHomecontrolChannel *iChannel,
+                                            uint8_t iFpIndex)
+{
+    if (!iChannel || !iChannel->isPaired() || iChannel->is1W() ||
+        iFpIndex < 1 || iFpIndex > 3)
+        return false; // native Private selector only captured for FP1..FP3
+    IoHomeQueueEntry lEntry;
+    memset(&lEntry, 0, sizeof(lEntry));
+    lEntry.destNodeId = iChannel->getNodeId();
+    lEntry.encKey = iChannel->getEncryptionKey();
+    lEntry.command = IoHomeCommand::Private;
+    lEntry.param = 0x03;
+    lEntry.param2 = ioHomeFpSelection(iFpIndex).fpi1;
+    lEntry.param3 = 0x01;
+    lEntry.diagnosticFpRead = true;
+    lEntry.diagnosticFpReadIndex = iFpIndex;
+    lEntry.sourceChannelIndex = channelIndexFor(iChannel);
+    lEntry.maxAttempts = 1;
+    lEntry.active = true;
+    return queuePush(lEntry);
+}
+
 bool IoHomeController::sendPrivateProbe(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                         PrivateProbeShape iShape, uint8_t iFunctionId,
                                         uint8_t iSelectorOrBlock)
@@ -9402,6 +9424,22 @@ void IoHomeController::dispatchRxFrame()
             {
                 if (!mTrustRxPosition)
                     break;
+                if (mCurrentCmd.diagnosticFpRead)
+                {
+                    const std::string lRawPayload = hexDump(mRxFrame.data, mRxFrame.dataLen);
+                    if (mRxFrame.dataLen >= 15)
+                        logInfoP("FP diagnostic read node=0x%06X FP%u raw=0x%04X payload=%s",
+                                 static_cast<unsigned>(lSrcNode),
+                                 static_cast<unsigned>(mCurrentCmd.diagnosticFpReadIndex),
+                                 static_cast<unsigned>(readU16BE(mRxFrame.data, 13)),
+                                 lRawPayload.c_str());
+                    else
+                        logInfoP("FP diagnostic read node=0x%06X FP%u short reply payload=%s",
+                                 static_cast<unsigned>(lSrcNode),
+                                 static_cast<unsigned>(mCurrentCmd.diagnosticFpReadIndex),
+                                 lRawPayload.c_str());
+                    break; // diagnostic reads never publish KOs
+                }
                 // PrivateResponse (0x04) layout per reference:
                 //   data[0]:    flags (bit 0 = stopped)
                 //   data[1]:    flags (bit 7 = status-expected)

@@ -455,6 +455,32 @@ inline bool ioHomeFpSelectIndices(const uint8_t *iIndices, uint8_t iCount,
     }
     return true;
 }
+
+// OVPd refresh-command representation, not an authenticated native RF
+// Private/Execute payload. Per-parameter extended-information defaults to 1
+// (current relative value); callers must supply a confirmed discrete code.
+inline bool ioHomeBuildFpRefreshRepresentation(const uint8_t *iIndices,
+                                                const uint8_t *iExtendedInfo,
+                                                uint8_t iCount, uint8_t *oData,
+                                                uint8_t &oLen)
+{
+    oLen = 0;
+    IoHomeFpSelection lSelection;
+    if (!oData || !iExtendedInfo ||
+        !ioHomeFpSelectIndices(iIndices, iCount, lSelection))
+        return false;
+    oData[oLen++] = lSelection.fpi1;
+    for (uint8_t lIndex = 1; lIndex <= 8; ++lIndex)
+        for (uint8_t i = 0; i < iCount; ++i)
+            if (iIndices[i] == lIndex)
+                oData[oLen++] = iExtendedInfo[i];
+    oData[oLen++] = lSelection.fpi2;
+    for (uint8_t lIndex = 9; lIndex <= 16; ++lIndex)
+        for (uint8_t i = 0; i < iCount; ++i)
+            if (iIndices[i] == lIndex)
+                oData[oLen++] = iExtendedInfo[i];
+    return true;
+}
 #define IOHC_POSITION_FAVORITE 0xD800
 #define IOHC_POSITION_MAX 0xC800        // 100% = fully closed
 #define IOHC_POSITION_VENT 0xD803       // ventilation position
