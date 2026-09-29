@@ -62,6 +62,18 @@ NodeClass is versioned in flash layout 17. Older layouts restore it as
 
 ## Native-source investigation
 
+### Discovery identity provenance
+
+The native 9-byte `0x29`/`0x2B` identity layout is **OVPd-confirmed and
+capture-confirmed**. `Node/Class/Abstract.lua` serializes `NodeType` (UInt16),
+`BackboneAddress` (UInt24), `ManufacturerId` (UInt8), `MultiInfoByte` (UInt8),
+and `TimeStamp` (UInt16), corresponding to data offsets 0-1, 2-4, 5, 6,
+and 7-8. KLF v3.18 confirms the profile/subprofile, manufacturer, and backbone
+meanings. The raw MIB and timestamp remain retained; decoding every MIB bit is
+not implied by confirmation of the byte layout.
+
+Source: <https://github.com/Velocet/iown-homecontrol/blob/main/docs/parameter/IoHomecontrolOVPd/Node/Class/Abstract.lua>.
+
 The current reverse-engineered Overkiz implementation keeps class and profile
 as separate dimensions:
 

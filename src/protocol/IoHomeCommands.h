@@ -1135,6 +1135,10 @@ inline void decodeProtocolIdentityMib(IoHomeProtocolIdentity &ioIdentity,
 
 inline IoHomeProtocolIdentity decodeProtocolIdentity(const uint8_t *iData, uint8_t iDataLen)
 {
+    // Native 0x29/0x2B discovery identity layout is OVPd-confirmed by
+    // Node/Class/Abstract.lua and capture-confirmed: NodeType(2),
+    // BackboneAddress(3), ManufacturerId(1), MultiInfoByte(1), TimeStamp(2).
+    // This does not confirm every interpretation of individual MIB bits.
     IoHomeProtocolIdentity lResult;
     if (!iData) return lResult;
     lResult.rawDataLen = iDataLen < IOHC_DISCOVERY_RAW_MAX_SIZE
