@@ -38,16 +38,27 @@ inline std::string ioHomeRedactionMarker(uint8_t iLen)
 // recoverable wrapped/encrypted key from 0x30 or 0x32.
 inline std::string ioHomeFrameHexForLog(const uint8_t *iData, uint8_t iLen)
 {
-    if (iData == nullptr || iLen < IOHC_FRAME_MIN_SIZE)
+    if (iData == nullptr || iLen < 2)
         return ioHomeBytesToHexForLog(iData, iLen);
 
-    const IoHomeCommand lCommand = static_cast<IoHomeCommand>(iData[IOHC_FRAME_MIN_SIZE - 1U]);
+    const bool lExtended = (iData[1] & IOHC_CTRL1_VER_MASK) == 3;
+    const uint8_t lHeaderLen = lExtended ? IOHC_FRAME_EXTENDED_HEADER_SIZE : IOHC_FRAME_MIN_SIZE;
+    if (lExtended && (iLen < lHeaderLen || iData[2] != 0x0B || iData[3] != 0x01))
+    {
+        // An invalid extension leaves command/payload offsets ambiguous. Keep
+        // only control bytes rather than risk rendering recoverable key bytes.
+        return ioHomeBytesToHexForLog(iData, 2) +
+               ioHomeRedactionMarker(static_cast<uint8_t>(iLen - 2));
+    }
+    if (iLen < lHeaderLen)
+        return ioHomeBytesToHexForLog(iData, iLen);
+
+    const IoHomeCommand lCommand = static_cast<IoHomeCommand>(iData[lHeaderLen - 1U]);
     if (!ioHomeCommandCarriesLogSensitiveKeyMaterial(lCommand))
         return ioHomeBytesToHexForLog(iData, iLen);
 
-    std::string lOut = ioHomeBytesToHexForLog(iData, IOHC_FRAME_MIN_SIZE);
-    lOut += ioHomeRedactionMarker(static_cast<uint8_t>(iLen - IOHC_FRAME_MIN_SIZE));
-    return lOut;
+    return ioHomeBytesToHexForLog(iData, lHeaderLen) +
+           ioHomeRedactionMarker(static_cast<uint8_t>(iLen - lHeaderLen));
 }
 
 inline std::string ioHomePayloadHexForLog(IoHomeCommand iCommand,

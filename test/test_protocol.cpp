@@ -107,6 +107,45 @@ static void observePassiveExchange(IoHomePassiveAuthEvidence &ioEvidence,
                            iHub, iDevice, 2, iStartMs + 30);
 }
 
+TEST(log_redaction_extended_headers_use_the_actual_command_offset)
+{
+    uint8_t lFrame[27] = {0x5A, 3, 0x0B, 1, 0x12, 0x34, 0x56, 0xAB, 0xCD, 0xEF, 0x32};
+    memset(lFrame + 11, 0xA5, 16);
+    ASSERT_EQ(ioHomeFrameHexForLog(lFrame, sizeof(lFrame)),
+              "5A030B01123456ABCDEF32[16 bytes redacted]");
+    lFrame[10] = 0x30;
+    ASSERT_EQ(ioHomeFrameHexForLog(lFrame, sizeof(lFrame)),
+              "5A030B01123456ABCDEF30[16 bytes redacted]");
+    lFrame[10] = 0x21;
+    lFrame[8] = 0x32; // An address byte must not be treated as a command.
+    ASSERT_EQ(ioHomeFrameHexForLog(lFrame, sizeof(lFrame)),
+              ioHomeBytesToHexForLog(lFrame, sizeof(lFrame)));
+}
+
+TEST(log_redaction_malformed_extended_headers_are_opaque)
+{
+    uint8_t lFrame[27] = {0x5A, 3, 0x0B, 1, 0, 0, 0, 0, 0, 0, 0x32};
+    for (uint8_t lLen = 2; lLen < 11; ++lLen)
+        ASSERT_EQ(ioHomeFrameHexForLog(lFrame, lLen),
+                  "5A03" + ioHomeRedactionMarker(lLen - 2));
+    lFrame[2] = 0;
+    ASSERT_EQ(ioHomeFrameHexForLog(lFrame, sizeof(lFrame)), "5A03[25 bytes redacted]");
+    lFrame[2] = 0x0B;
+    lFrame[3] = 0;
+    ASSERT_EQ(ioHomeFrameHexForLog(lFrame, sizeof(lFrame)), "5A03[25 bytes redacted]");
+}
+
+TEST(log_redaction_ordinary_versions_retain_key_protection)
+{
+    uint8_t lFrame[25] = {0x58, 0, 0, 0, 0x3F, 0x7E, 0x9E, 0x6E, 0x32};
+    for (uint8_t lVersion = 0; lVersion < 3; ++lVersion)
+    {
+        lFrame[1] = lVersion;
+        ASSERT_EQ(ioHomeFrameHexForLog(lFrame, sizeof(lFrame)),
+                  ioHomeBytesToHexForLog(lFrame, 9) + "[16 bytes redacted]");
+    }
+}
+
 TEST(log_redaction_masks_send_key_1w_payload)
 {
     const uint8_t frame[] = {
