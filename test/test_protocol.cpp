@@ -14579,6 +14579,75 @@ TEST(controller_key_extract_allows_foreground_queue_after_capture)
     ASSERT_EQ(lTransmitted.commandId, IoHomeCommand::Execute);
 }
 
+TEST(controller_key_extract_v3_recipient_headers_and_authentication)
+{
+    const uint32_t lHub = 0x445566;
+    const uint8_t lKey[16] = {0x10,0x32,0x54,0x76,0x98,0xBA,0xDC,0xFE,1,2,3,4,5,6,7,8};
+    const uint8_t lChallenge[6] = {0x64,0x45,0xE0,0x81,0xDC,0x93};
+    ioHomeTestSetMillis(1000);
+    ioHomeTestSetMicros(1000000);
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    initKeyExtractControllerForTest(lController, lModule, 0x112233);
+    ASSERT_TRUE(lController.startKeyExtraction());
+    IoHomeFrame lRequest, lReply;
+    buildGatewayDiscoverRequest(lRequest, lHub);
+    lRequest.ctrlByte1 = 0x73; // v3 + LOW_POWER + ROUTED + ACK_REQUEST
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lReply));
+    const uint32_t lLocal = lReply.getSrcNodeId();
+    ASSERT_EQ(lReply.headerLength(), 11);
+    ASSERT_EQ(lReply.ctrlByte1, 0x8B);
+    ASSERT_EQ(lReply.getDestNodeId(), lHub);
+    ASSERT_EQ(lReply.getFrameOrder(), IOHC_CTRL0_ORDER_LAST);
+
+    lRequest.init();
+    lRequest.setStart2W();
+    lRequest.setSrcNode(lHub);
+    lRequest.setDestNode(lLocal);
+    lRequest.commandId = IoHomeCommand::Confirmation;
+    lRequest.ctrlByte1 = 0x13;
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lReply));
+    ASSERT_EQ(lReply.commandId, IoHomeCommand::ConfirmationACK);
+    ASSERT_EQ(lReply.ctrlByte1, 0x0B);
+    ASSERT_EQ(lReply.getFrameOrder(), IOHC_CTRL0_ORDER_LAST);
+
+    buildKeyExtractKeyInit(lRequest, lHub, lLocal);
+    lRequest.ctrlByte1 = 0x37;
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lReply));
+    ASSERT_EQ(lReply.commandId, IoHomeCommand::ChallengeRequest);
+    ASSERT_EQ(lReply.ctrlByte1, 0x0F);
+    ASSERT_EQ(lReply.getFrameOrder(), IOHC_CTRL0_ORDER_SINGLE);
+    buildKeyExtractKeyTransfer(lRequest, lHub, lLocal, lReply.data, lKey);
+    lRequest.ctrlByte1 = 0x13;
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lReply));
+    ASSERT_EQ(lReply.ctrlByte1, 0x0B);
+    ASSERT_EQ(lReply.getFrameOrder(), IOHC_CTRL0_ORDER_LAST);
+    ASSERT_MEM_EQ(lController.keyExtractResult().key, lKey, sizeof(lKey));
+
+    buildKeyExtractNodeVerifyRequest(lRequest, lHub, lLocal);
+    lRequest.ctrlByte1 = 0x37;
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lReply));
+    ASSERT_EQ(lReply.ctrlByte1, 0x0F);
+    ASSERT_EQ(lReply.getFrameOrder(), IOHC_CTRL0_ORDER_SINGLE);
+    const uint8_t lTranscript[] = {0x37, static_cast<uint8_t>(lLocal >> 16),
+                                  static_cast<uint8_t>(lLocal >> 8), static_cast<uint8_t>(lLocal)};
+    uint8_t lExpected[6];
+    ASSERT_TRUE(IoHomeCrypto::createHmac2W(lTranscript, sizeof(lTranscript), lChallenge, lKey, lExpected));
+    buildPairChallengeRequestFrame(lRequest, lLocal, lHub, lChallenge);
+    lRequest.ctrlByte1 = 0x33;
+    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lReply));
+    ASSERT_TRUE(lController.keyExtractNodeVerificationAuthDone());
+    ASSERT_EQ(lReply.commandId, IoHomeCommand::ChallengeResponse);
+    ASSERT_EQ(lReply.ctrlByte1, 0x0B);
+    ASSERT_EQ(lReply.getFrameOrder(), IOHC_CTRL0_ORDER_LAST);
+    ASSERT_EQ(lReply.dataLen, 6);
+    ASSERT_MEM_EQ(lReply.data, lExpected, 6);
+    const auto &lWire = lController.radio().testLastTransmittedPacket();
+    ASSERT_EQ(lWire[0], 0x90);
+    ASSERT_EQ(lWire[2], 0x0B);
+    ASSERT_EQ(lWire[3], 0x01);
+}
+
 TEST(controller_key_extract_completes_hub_node_verification)
 {
     const uint32_t lOwnNodeId = 0x112233;
@@ -17836,6 +17905,39 @@ TEST(fp_activation_rejects_duplicates_invalid_indices_and_capacity)
     ASSERT_TRUE(!ioHomeBuildActivationRepresentation(0, lValues, 1, nullptr, 23, lLen));
     ASSERT_TRUE(ioHomeBuildActivationRepresentation(0, lValues, 7, lData, 18, lLen));
     ASSERT_EQ(lLen, 18);
+}
+
+TEST(frame_recipient_reply_normalizes_ack_start_and_version_without_payload_changes)
+{
+    struct Vector { uint8_t requestFlags; IoHomeCommand command; bool start; uint8_t reply0; uint8_t reply1; };
+    const Vector lCases[] = {
+        {0x10, IoHomeCommand::ConfirmationACK, false, 0x80, 0x08},
+        {0x08, IoHomeCommand::ConfirmationACK, false, 0x80, 0x10},
+        {0xFB, IoHomeCommand::ChallengeRequest, false, 0x00, 0x9B},
+        {0x37, IoHomeCommand::ChallengeResponse, false, 0x80, 0x0F},
+        {0x17, IoHomeCommand::NodeVerifyResponse, true, 0x40, 0x07},
+        {0x11, IoHomeCommand::ConfirmationACK, false, 0x80, 0x08},
+        {0x12, IoHomeCommand::ConfirmationACK, false, 0x80, 0x08},
+    };
+    for (const auto &lCase : lCases)
+    {
+        IoHomeFrame lRequest, lReply;
+        lRequest.init(); lReply.init();
+        lRequest.ctrlByte1 = lCase.requestFlags;
+        lRequest.setSrcNode(0x123456);
+        lRequest.setDestBroadcast();
+        lReply.commandId = lCase.command;
+        lReply.dataLen = 1; lReply.data[0] = 0xA5;
+        ASSERT_TRUE(ioHomeNormalizeRecipientReply(lReply, lRequest, 0xABCDEF, lCase.start));
+        ASSERT_EQ(lReply.ctrlByte0, lCase.reply0);
+        ASSERT_EQ(lReply.ctrlByte1, lCase.reply1);
+        ASSERT_EQ(lReply.getSrcNodeId(), 0xABCDEFu);
+        ASSERT_EQ(lReply.getDestNodeId(), 0x123456u);
+        ASSERT_EQ(lReply.data[0], 0xA5);
+        ASSERT_TRUE(!ioHomeNormalizeRecipientReply(lReply, lReply, 1));
+        lRequest.set1WMode();
+        ASSERT_TRUE(!ioHomeNormalizeRecipientReply(lReply, lRequest, 1));
+    }
 }
 
 // Regression vectors recovered from the original firmware frame accessors.

@@ -460,3 +460,30 @@ bool IoHomeFrame::deserialize(const uint8_t *iBuffer, uint8_t iLen)
 {
     return deserializeRawWithOptionalCrc(iBuffer, iLen);
 }
+
+bool ioHomeNormalizeRecipientReply(IoHomeFrame &ioReply, const IoHomeFrame &iRequest,
+                                    uint32_t iLocalNodeId, bool iStart)
+{
+    if (&ioReply == &iRequest || (iRequest.ctrlByte0 & IOHC_CTRL0_MODE_1W) ||
+        (ioReply.ctrlByte0 & IOHC_CTRL0_MODE_1W))
+        return false;
+    const bool lPriority = (iRequest.ctrlByte1 & IOHC_CTRL1_PRIORITY) != 0;
+    const bool lEnd = ioReply.commandId == IoHomeCommand::ChallengeResponse ||
+                     (!lPriority && ioReply.commandId != IoHomeCommand::ChallengeRequest);
+    ioReply.ctrlByte0 = (iStart ? IOHC_CTRL0_START : 0) | (lEnd ? IOHC_CTRL0_END : 0);
+    ioReply.ctrlByte1 = iRequest.ctrlByte1 & IOHC_CTRL1_PRIORITY;
+    if (iRequest.ctrlByte1 & (IOHC_CTRL1_ROUTED | IOHC_CTRL1_BEACON))
+        ioReply.ctrlByte1 |= IOHC_CTRL1_BEACON;
+    if ((iRequest.ctrlByte1 & IOHC_CTRL1_VER_MASK) == 3)
+        ioReply.ctrlByte1 |= 3; // Parsed frames have already validated 0B 01.
+    if (!iStart)
+    {
+        if (iRequest.ctrlByte1 & IOHC_CTRL1_ACK_REQUEST)
+            ioReply.ctrlByte1 |= IOHC_CTRL1_ACK_RESPONSE;
+        if (iRequest.ctrlByte1 & IOHC_CTRL1_ACK_RESPONSE)
+            ioReply.ctrlByte1 |= IOHC_CTRL1_ACK_REQUEST;
+    }
+    ioReply.setSrcNode(iLocalNodeId);
+    ioReply.setDestNode(iRequest.getSrcNodeId());
+    return true;
+}

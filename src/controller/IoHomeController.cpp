@@ -764,7 +764,7 @@ namespace
                                             uint32_t iHubNodeId,
                                             uint16_t iType,
                                             uint8_t iSubtype,
-                                            uint8_t iManufacturer)
+                                            uint8_t iManufacturer, const IoHomeFrame &iRequest)
     {
         IoHomeFrame lFrame;
         initGatewayResponseFrame(lFrame, iExtractNodeId, iHubNodeId,
@@ -778,6 +778,8 @@ namespace
         lFrame.data[7] = 0x00;
         lFrame.data[8] = 0x0E;
         lFrame.dataLen = 9;
+        if (!ioHomeNormalizeRecipientReply(lFrame, iRequest, iExtractNodeId))
+            return 0;
         return lFrame.serialize2W(oBuffer, iBufferLen);
     }
 
@@ -785,7 +787,7 @@ namespace
                                               uint8_t iBufferLen,
                                               uint32_t iExtractNodeId,
                                               uint32_t iHubNodeId,
-                                              const uint8_t iChallenge[6])
+                                              const uint8_t iChallenge[6], const IoHomeFrame &iRequest)
     {
         if (iChallenge == nullptr)
             return 0;
@@ -800,13 +802,15 @@ namespace
         memcpy(lFrame.data, iChallenge, 6);
         lFrame.dataLen = 6;
         lFrame.hasHmac = false;
+        if (!ioHomeNormalizeRecipientReply(lFrame, iRequest, iExtractNodeId))
+            return 0;
         return lFrame.serialize2W(oBuffer, iBufferLen);
     }
 
     uint8_t buildExtractKeyConfirmFrame(uint8_t *oBuffer,
                                         uint8_t iBufferLen,
                                         uint32_t iExtractNodeId,
-                                        uint32_t iHubNodeId)
+                                        uint32_t iHubNodeId, const IoHomeFrame &iRequest)
     {
         IoHomeFrame lFrame;
         lFrame.init();
@@ -817,13 +821,15 @@ namespace
         lFrame.commandId = IoHomeCommand::KeyTransferConfirmation;
         lFrame.dataLen = 0;
         lFrame.hasHmac = false;
+        if (!ioHomeNormalizeRecipientReply(lFrame, iRequest, iExtractNodeId))
+            return 0;
         return lFrame.serialize2W(oBuffer, iBufferLen);
     }
 
     uint8_t buildExtractConfirmationAckFrame(uint8_t *oBuffer,
                                              uint8_t iBufferLen,
                                              uint32_t iExtractNodeId,
-                                             uint32_t iHubNodeId)
+                                             uint32_t iHubNodeId, const IoHomeFrame &iRequest)
     {
         IoHomeFrame lFrame;
         lFrame.init();
@@ -834,12 +840,14 @@ namespace
         lFrame.commandId = IoHomeCommand::ConfirmationACK;
         lFrame.dataLen = 0;
         lFrame.hasHmac = false;
+        if (!ioHomeNormalizeRecipientReply(lFrame, iRequest, iExtractNodeId))
+            return 0;
         return lFrame.serialize2W(oBuffer, iBufferLen);
     }
 
     bool buildExtractNodeVerifyResponseFrame(IoHomeFrame &oFrame,
                                              uint32_t iExtractNodeId,
-                                             uint32_t iHubNodeId)
+                                             uint32_t iHubNodeId, const IoHomeFrame &iRequest)
     {
         oFrame.init();
         oFrame.ctrlByte0 = 0;
@@ -852,7 +860,7 @@ namespace
         oFrame.data[2] = static_cast<uint8_t>(iExtractNodeId & 0xFF);
         oFrame.dataLen = 3;
         oFrame.hasHmac = false;
-        return true;
+        return ioHomeNormalizeRecipientReply(oFrame, iRequest, iExtractNodeId);
     }
 
     bool copy2WPayload(uint8_t *oData, uint8_t &oLen, const uint8_t *iTemplate, uint8_t iTemplateLen)
@@ -10518,7 +10526,7 @@ void IoHomeController::processKeyExtractFrame()
         mTxLen = buildExtractDiscoverAnswerFrame(mTxBuffer, sizeof(mTxBuffer),
                                                  mKeyExtractThrowawayId, lSrcNode,
                                                  kExtractDeviceType, kExtractDeviceSubtype,
-                                                 kExtractManufacturer);
+                                                 kExtractManufacturer, mRxFrame);
         if (mTxLen == 0)
             return;
         // Discovery is the only cold reply. Keep enough preamble for a hub
@@ -10545,7 +10553,7 @@ void IoHomeController::processKeyExtractFrame()
         }
 
         mTxLen = buildExtractConfirmationAckFrame(mTxBuffer, sizeof(mTxBuffer),
-                                                   mKeyExtractThrowawayId, lSrcNode);
+                                                   mKeyExtractThrowawayId, lSrcNode, mRxFrame);
         if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
             return;
         mKeyExtractState = ControllerState::ExtractSentConfirmAck;
@@ -10579,7 +10587,7 @@ void IoHomeController::processKeyExtractFrame()
 
         mTxLen = buildExtractChallengeRequestFrame(mTxBuffer, sizeof(mTxBuffer),
                                                    mKeyExtractThrowawayId, lSrcNode,
-                                                   mKeyExtractChallenge);
+                                                   mKeyExtractChallenge, mRxFrame);
         if (mTxLen == 0)
             return;
         if (!queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
@@ -10610,7 +10618,7 @@ void IoHomeController::processKeyExtractFrame()
             }
 
             mTxLen = buildExtractKeyConfirmFrame(mTxBuffer, sizeof(mTxBuffer),
-                                                 mKeyExtractThrowawayId, lSrcNode);
+                                                 mKeyExtractThrowawayId, lSrcNode, mRxFrame);
             if (mTxLen == 0)
                 return;
             if (!queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
@@ -10652,7 +10660,7 @@ void IoHomeController::processKeyExtractFrame()
 
         {
             IoHomeFrame lNodeVerifyResponse;
-            if (!buildExtractNodeVerifyResponseFrame(lNodeVerifyResponse, mKeyExtractThrowawayId, lSrcNode))
+            if (!buildExtractNodeVerifyResponseFrame(lNodeVerifyResponse, mKeyExtractThrowawayId, lSrcNode, mRxFrame))
                 return;
             mTxLen = lNodeVerifyResponse.serialize2W(mTxBuffer, sizeof(mTxBuffer));
             if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
@@ -10677,13 +10685,15 @@ void IoHomeController::processKeyExtractFrame()
         {
             IoHomeFrame lNodeVerifyResponse;
             IoHomeFrame lChallengeResponse;
-            if (!buildExtractNodeVerifyResponseFrame(lNodeVerifyResponse, mKeyExtractThrowawayId, lSrcNode) ||
+            if (!buildExtractNodeVerifyResponseFrame(lNodeVerifyResponse, mKeyExtractThrowawayId, lSrcNode, mRxFrame) ||
                 !build2WChallengeResponse(lChallengeResponse, mKeyExtractThrowawayId, lSrcNode,
                                           TwoWaySenderRole::Device, lNodeVerifyResponse,
                                           mRxFrame.data, mKeyExtractKey))
                 return;
-            // Device-role closing response: END, no low-power bit.
-            lChallengeResponse.ctrlByte0 |= IOHC_CTRL0_END;
+            // Normalize against the received challenge, not the authenticated
+            // 0x37 body. Its HMAC covers command/data, not routing/header bytes.
+            if (!ioHomeNormalizeRecipientReply(lChallengeResponse, mRxFrame, mKeyExtractThrowawayId))
+                return;
             mTxLen = lChallengeResponse.serialize2W(mTxBuffer, sizeof(mTxBuffer));
             if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
                 return;

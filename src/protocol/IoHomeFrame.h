@@ -37,7 +37,9 @@
 #define IOHC_CTRL1_BEACON 0x80
 #define IOHC_CTRL1_ROUTED 0x40
 #define IOHC_CTRL1_LOW_POWER 0x20
-#define IOHC_CTRL1_ACK 0x10
+#define IOHC_CTRL1_ACK_REQUEST 0x10
+#define IOHC_CTRL1_ACK_RESPONSE 0x08
+#define IOHC_CTRL1_ACK IOHC_CTRL1_ACK_REQUEST
 #define IOHC_CTRL1_PRIORITY 0x04
 #define IOHC_CTRL1_VER_MASK 0x03 // protocol version (bits 1:0)
 
@@ -124,3 +126,8 @@ struct IoHomeFrame
     // Get total frame length including HMAC
     uint8_t totalLength() const;
 };
+
+// STM32 recipient reverse-frame rule (0x0800FE5C). Applies to parsed 2W
+// requests, not controller/master continuations. Command and data must be set.
+bool ioHomeNormalizeRecipientReply(IoHomeFrame &ioReply, const IoHomeFrame &iRequest,
+                                    uint32_t iLocalNodeId, bool iStart = false);
