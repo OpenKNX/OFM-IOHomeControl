@@ -17630,6 +17630,124 @@ TEST(controller_1w_missing_profile_does_not_send_empty_frame)
 }
 #endif
 
+// Regression vectors recovered from the original firmware frame accessors.
+TEST(frame_extended_header_golden_roundtrip)
+{
+    const uint8_t lGolden[] = {0x8C, 0x03, 0x0B, 0x01, 0x12, 0x34, 0x56,
+                              0xA1, 0xB2, 0xC3, 0x21, 0xAA, 0x55};
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(lFrame.deserializeFrame(lGolden, sizeof(lGolden)));
+    ASSERT_EQ(lFrame.headerLength(), 11);
+    ASSERT_EQ(lFrame.getDestNodeId(), 0x123456u);
+    ASSERT_EQ(lFrame.getSrcNodeId(), 0xA1B2C3u);
+    ASSERT_EQ(static_cast<uint8_t>(lFrame.commandId), 0x21);
+    ASSERT_EQ(lFrame.dataLen, 2);
+    ASSERT_EQ(lFrame.totalLength(), sizeof(lGolden));
+    uint8_t lBuffer[40];
+    ASSERT_EQ(lFrame.serialize2W(lBuffer, sizeof(lBuffer)), sizeof(lGolden));
+    ASSERT_MEM_EQ(lBuffer, lGolden, sizeof(lGolden));
+    ASSERT_EQ(lFrame.serializeRawWithCrc(lBuffer, sizeof(lBuffer)), 15);
+    ASSERT_EQ(lBuffer[13], 0x25);
+    ASSERT_EQ(lBuffer[14], 0x7D);
+    ASSERT_TRUE(lFrame.deserializeRawWithOptionalCrc(lBuffer, 15));
+    ASSERT_TRUE(lFrame.hasCrc);
+    ASSERT_EQ(lFrame.getSrcNodeId(), 0xA1B2C3u);
+    lBuffer[14] ^= 1;
+    ASSERT_TRUE(!lFrame.deserializeRawWithOptionalCrc(lBuffer, 15));
+}
+
+TEST(frame_extended_header_rejects_invalid_markers_and_lengths)
+{
+    uint8_t lPacket[] = {0x8A, 3, 0x0B, 1, 0, 0, 1, 0, 0, 2, 0x21};
+    IoHomeFrame lFrame;
+    ASSERT_TRUE(lFrame.deserializeFrame(lPacket, sizeof(lPacket)));
+    for (uint8_t lLen = 0; lLen < sizeof(lPacket); ++lLen)
+        ASSERT_TRUE(!lFrame.deserializeFrame(lPacket, lLen));
+    lPacket[2] = 0;
+    ASSERT_TRUE(!lFrame.deserializeFrame(lPacket, sizeof(lPacket)));
+    lPacket[2] = 0x0B;
+    lPacket[3] = 2;
+    ASSERT_TRUE(!lFrame.deserializeRawWithOptionalCrc(lPacket, sizeof(lPacket)));
+    lPacket[3] = 1;
+    lPacket[0] = 0x88; // Declared length cannot fit the version-3 header.
+    ASSERT_TRUE(!lFrame.deserializeFrame(lPacket, sizeof(lPacket)));
+}
+
+TEST(frame_extended_header_payload_budget_and_flags)
+{
+    IoHomeFrame lFrame;
+    lFrame.init();
+    lFrame.ctrlByte0 = IOHC_CTRL0_ORDER_END;
+    lFrame.ctrlByte1 = IOHC_CTRL1_ACK | IOHC_CTRL1_LOW_POWER | 3;
+    uint8_t lBuffer[40];
+    lFrame.dataLen = 21;
+    ASSERT_EQ(lFrame.serialize2W(lBuffer, sizeof(lBuffer)), 32);
+    ASSERT_EQ(lBuffer[0], 0xDF);
+    ASSERT_EQ(lBuffer[1], lFrame.ctrlByte1);
+    IoHomeFrame lParsed;
+    ASSERT_TRUE(lParsed.deserializeFrame(lBuffer, 32));
+    ASSERT_EQ(lParsed.dataLen, 21);
+    for (uint8_t lLen = 22; lLen <= 23; ++lLen)
+    {
+        lFrame.dataLen = lLen;
+        memset(lBuffer, 0xA5, sizeof(lBuffer));
+        ASSERT_EQ(lFrame.serialize2W(lBuffer, sizeof(lBuffer)), 0);
+        ASSERT_EQ(lBuffer[0], 0xA5);
+        ASSERT_EQ(lFrame.serializeRawWithCrc(lBuffer, sizeof(lBuffer)), 0);
+    }
+}
+
+TEST(frame_1w_rejects_declared_length_overflow)
+{
+    IoHomeFrame lFrame;
+    lFrame.init();
+    lFrame.set1WMode();
+    lFrame.commandId = IoHomeCommand::Execute;
+    lFrame.hasHmac = true;
+    uint8_t lBuffer[40];
+    lFrame.dataLen = 17;
+    ASSERT_EQ(lFrame.serialize1W(lBuffer, sizeof(lBuffer)), 32);
+    IoHomeFrame lParsed;
+    ASSERT_TRUE(lParsed.deserializeFrame(lBuffer, 32));
+    ASSERT_EQ(lParsed.dataLen, 17);
+    for (uint8_t lLen = 18; lLen <= 23; ++lLen)
+    {
+        lFrame.dataLen = lLen;
+        memset(lBuffer, 0xA5, sizeof(lBuffer));
+        ASSERT_EQ(lFrame.serialize1W(lBuffer, sizeof(lBuffer)), 0);
+        ASSERT_EQ(lFrame.serializeRawWithCrc(lBuffer, sizeof(lBuffer)), 0);
+        ASSERT_EQ(lBuffer[0], 0xA5);
+    }
+}
+
+TEST(frame_sendkey_capacity_failure_leaves_buffer_untouched)
+{
+    IoHomeFrame lFrame;
+    lFrame.init();
+    lFrame.set1WMode();
+    lFrame.commandId = IoHomeCommand::SendKey1W;
+    lFrame.dataLen = 20;
+    lFrame.hasTrailerMac = true;
+    uint8_t lBuffer[40];
+    for (uint8_t lCapacity = 0; lCapacity < 35; ++lCapacity)
+    {
+        memset(lBuffer, 0xA5, sizeof(lBuffer));
+        ASSERT_EQ(lFrame.serialize1W(lBuffer, lCapacity), 0);
+        for (uint8_t lByte : lBuffer)
+            ASSERT_EQ(lByte, 0xA5);
+    }
+    for (uint8_t lCapacity = 0; lCapacity < 37; ++lCapacity)
+    {
+        memset(lBuffer, 0xA5, sizeof(lBuffer));
+        ASSERT_EQ(lFrame.serializeRawWithCrc(lBuffer, lCapacity), 0);
+        for (uint8_t lByte : lBuffer)
+            ASSERT_EQ(lByte, 0xA5);
+    }
+    ASSERT_EQ(lFrame.serialize1W(lBuffer, 35), 35);
+    ASSERT_EQ(lFrame.serializeRawWithCrc(lBuffer, 37), 37);
+    ASSERT_TRUE(lFrame.deserializeRawWithOptionalCrc(lBuffer, 37));
+}
+
 // =====================================================================
 // main
 // =====================================================================

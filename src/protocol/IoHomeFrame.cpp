@@ -94,11 +94,17 @@ uint32_t IoHomeFrame::getDestNodeId() const
     return ((uint32_t)destNode[0] << 16) | ((uint32_t)destNode[1] << 8) | destNode[2];
 }
 
+uint8_t IoHomeFrame::headerLength() const
+{
+    return (ctrlByte1 & IOHC_CTRL1_VER_MASK) == 3
+               ? IOHC_FRAME_EXTENDED_HEADER_SIZE : IOHC_FRAME_MIN_SIZE;
+}
+
 uint8_t IoHomeFrame::totalLength() const
 {
     // ctrl0 + ctrl1 + dest(3) + src(3) + cmd(1) + data,
     // plus an optional in-frame HMAC, out-of-length trailer MAC, and raw CRC.
-    uint8_t lLen = 9 + dataLen;
+    uint8_t lLen = headerLength() + dataLen;
     if (hasHmac)
         lLen += IOHC_HMAC_SIZE;
     if (hasTrailerMac)
@@ -121,14 +127,15 @@ namespace
         if (!oBuffer)
             return 0;
 
-        const uint8_t lDeclaredLen = 9 + iFrame.dataLen +
+        const uint16_t lDeclaredLen = iFrame.headerLength() + iFrame.dataLen +
                                      (iIncludeHmacInLength ? IOHC_HMAC_SIZE : 0);
-        const uint8_t lTotalLen = 9 + iFrame.dataLen +
+        const uint16_t lTotalLen = iFrame.headerLength() + iFrame.dataLen +
                                   (iAppendHmac ? IOHC_HMAC_SIZE : 0) +
                                   (iAppendCrc ? IOHC_CRC_SIZE : 0);
 
         if (lDeclaredLen < IOHC_FRAME_MIN_SIZE ||
             lDeclaredLen > iMaxDeclaredLen ||
+            lDeclaredLen > IOHC_FRAME_MAX_DECLARED_SIZE ||
             lTotalLen > iMaxLen ||
             iFrame.dataLen > IOHC_FRAME_MAX_DATA)
         {
@@ -144,6 +151,11 @@ namespace
         uint8_t lPos = 0;
         oBuffer[lPos++] = lCtrl0;
         oBuffer[lPos++] = iFrame.ctrlByte1;
+        if (iFrame.headerLength() == IOHC_FRAME_EXTENDED_HEADER_SIZE)
+        {
+            oBuffer[lPos++] = 0x0B;
+            oBuffer[lPos++] = 0x01;
+        }
         memcpy(oBuffer + lPos, iFrame.destNode, IOHC_NODE_ID_SIZE);
         lPos += IOHC_NODE_ID_SIZE;
         memcpy(oBuffer + lPos, iFrame.srcNode, IOHC_NODE_ID_SIZE);
@@ -206,7 +218,8 @@ uint8_t IoHomeFrame::serialize1W(uint8_t *oBuffer, uint8_t iMaxLen) const
 
     if (commandId == IoHomeCommand::SendKey1W)
     {
-        if (hasHmac || dataLen != 20)
+        if (hasHmac || dataLen != 20 ||
+            headerLength() + dataLen + (hasTrailerMac ? IOHC_HMAC_SIZE : 0) > iMaxLen)
             return 0;
 
         const uint8_t lLen = serializeProtocolFrame(*this, oBuffer, iMaxLen,
@@ -242,7 +255,8 @@ uint8_t IoHomeFrame::serializeRawWithCrc(uint8_t *oBuffer, uint8_t iMaxLen) cons
             return 0;
         if (commandId == IoHomeCommand::SendKey1W)
         {
-            if (hasHmac || dataLen != 20)
+            if (hasHmac || dataLen != 20 ||
+                headerLength() + dataLen + (hasTrailerMac ? IOHC_HMAC_SIZE : 0) + IOHC_CRC_SIZE > iMaxLen)
                 return 0;
             const uint8_t lLen = serializeProtocolFrame(*this, oBuffer, iMaxLen,
                                                          IOHC_FRAME_MAX_SIZE_1W,
@@ -290,16 +304,21 @@ bool IoHomeFrame::deserializeFrame(const uint8_t *iBuffer, uint8_t iLen)
     init();
 
     const bool lIs1W = (iBuffer[0] & IOHC_CTRL0_MODE_1W) != 0;
-    const uint8_t lMaxDeclared = lIs1W ? IOHC_FRAME_MAX_SIZE_1W
-                                       : IOHC_FRAME_MAX_SIZE_2W;
+    const uint8_t lMaxDeclared = IOHC_FRAME_MAX_DECLARED_SIZE;
+    const uint8_t lHeaderLen = (iBuffer[1] & IOHC_CTRL1_VER_MASK) == 3
+                                 ? IOHC_FRAME_EXTENDED_HEADER_SIZE : IOHC_FRAME_MIN_SIZE;
+    if (iLen < lHeaderLen ||
+        (lHeaderLen == IOHC_FRAME_EXTENDED_HEADER_SIZE &&
+         (iBuffer[2] != 0x0B || iBuffer[3] != 0x01)))
+        return false;
     const uint8_t lDeclaredLen = (iBuffer[0] & IOHC_CTRL0_LEN_MASK) + 1;
-    if (lDeclaredLen < IOHC_FRAME_MIN_SIZE || lDeclaredLen > lMaxDeclared)
+    if (lDeclaredLen < lHeaderLen || lDeclaredLen > lMaxDeclared)
         return false;
 
     if (!lIs1W && iLen != lDeclaredLen)
         return false;
 
-    const uint8_t lCmd = iBuffer[IOHC_FRAME_MIN_SIZE - 1];
+    const uint8_t lCmd = iBuffer[lHeaderLen - 1];
     // SendKey1W (0x30) may carry a six-byte trailer MAC outside its declared
     // CTRL0 length. It is not a normal 1W HMAC; authenticated 1W commands
     // include their HMAC inside the declared length.
@@ -319,6 +338,8 @@ bool IoHomeFrame::deserializeFrame(const uint8_t *iBuffer, uint8_t iLen)
     uint8_t lPos = 0;
     ctrlByte0 = iBuffer[lPos++];
     ctrlByte1 = iBuffer[lPos++];
+    if (lHeaderLen == IOHC_FRAME_EXTENDED_HEADER_SIZE)
+        lPos += 2;
 
     memcpy(destNode, iBuffer + lPos, IOHC_NODE_ID_SIZE);
     lPos += IOHC_NODE_ID_SIZE;
@@ -393,15 +414,20 @@ bool IoHomeFrame::deserializeRawWithOptionalCrc(const uint8_t *iBuffer, uint8_t 
         return true;
 
     const bool lIs1W = (iBuffer[0] & IOHC_CTRL0_MODE_1W) != 0;
-    const uint8_t lMaxDeclared = lIs1W ? IOHC_FRAME_MAX_SIZE_1W
-                                       : IOHC_FRAME_MAX_SIZE_2W;
+    const uint8_t lMaxDeclared = IOHC_FRAME_MAX_DECLARED_SIZE;
+    const uint8_t lHeaderLen = (iBuffer[1] & IOHC_CTRL1_VER_MASK) == 3
+                                 ? IOHC_FRAME_EXTENDED_HEADER_SIZE : IOHC_FRAME_MIN_SIZE;
+    if (iLen < lHeaderLen ||
+        (lHeaderLen == IOHC_FRAME_EXTENDED_HEADER_SIZE &&
+         (iBuffer[2] != 0x0B || iBuffer[3] != 0x01)))
+        return false;
     const uint8_t lDeclaredLen = (iBuffer[0] & IOHC_CTRL0_LEN_MASK) + 1;
-    if (lDeclaredLen < IOHC_FRAME_MIN_SIZE || lDeclaredLen > lMaxDeclared)
+    if (lDeclaredLen < lHeaderLen || lDeclaredLen > lMaxDeclared)
         return false;
 
     uint8_t lProtocolLen = lDeclaredLen;
 
-    const uint8_t lCmd = iBuffer[IOHC_FRAME_MIN_SIZE - 1];
+    const uint8_t lCmd = iBuffer[lHeaderLen - 1];
     if (iLen == lDeclaredLen + IOHC_CRC_SIZE)
     {
         lProtocolLen = lDeclaredLen;

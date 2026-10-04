@@ -9,6 +9,9 @@
 // a six-byte MAC trailer outside that declared length (35 bytes on air).
 // Other authenticated 1W frames may include an appended 6-byte HMAC.
 #define IOHC_FRAME_MIN_SIZE 9
+#define IOHC_FRAME_EXTENDED_HEADER_SIZE 11
+// CTRL0 has only five length bits, regardless of physical trailer capacity.
+#define IOHC_FRAME_MAX_DECLARED_SIZE 32
 #define IOHC_FRAME_MAX_SIZE_2W 32
 #define IOHC_FRAME_MAX_SIZE_1W 36
 #define IOHC_FRAME_BUFFER_SIZE IOHC_FRAME_MAX_SIZE_1W
@@ -113,6 +116,10 @@ struct IoHomeFrame
     // Legacy compatibility wrapper. Normal RX paths should call deserializeFrame();
     // diagnostics/tests that intentionally pass raw buffers may keep using this.
     bool deserialize(const uint8_t *iBuffer, uint8_t iLen);
+
+    // Version 3 inserts the verified 0B 01 extension before the addresses.
+    // Versions 0, 1 and 2 retain the ordinary nine-byte header.
+    uint8_t headerLength() const;
 
     // Get total frame length including HMAC
     uint8_t totalLength() const;
