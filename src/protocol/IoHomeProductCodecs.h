@@ -125,3 +125,86 @@ inline bool ioHomeEncodeProductTemperature(IoHomeTemperatureProduct iProduct, ui
     oRaw = static_cast<uint16_t>(lRaw);
     return true;
 }
+
+// OVPd RGB definitions 0x60100, 0x60102, 0x10000060102:
+// inverse MP brightness plus FP10=u and FP11=v. No gamma correction.
+struct IoHomeRgbRepresentation
+{
+    uint16_t mp = IOHC_POSITION_MAX;
+    uint16_t u = 0;
+    uint16_t v = 0;
+    bool hasChromaticity = false;
+};
+
+inline bool ioHomeEncodeRgb(double iRed, double iGreen, double iBlue,
+                            IoHomeRgbRepresentation &oValue)
+{
+    if (!std::isfinite(iRed) || !std::isfinite(iGreen) || !std::isfinite(iBlue) ||
+        iRed < 0 || iRed > 255 || iGreen < 0 || iGreen > 255 || iBlue < 0 || iBlue > 255)
+        return false;
+    IoHomeRgbRepresentation lValue;
+    const double r = iRed / 255.0, g = iGreen / 255.0, b = iBlue / 255.0;
+    const double lMaximum = std::fmax(r, std::fmax(g, b));
+    // Retained RGBToVector divides 0/0 for black. Explicit safe policy:
+    // MP=off, omit FP10/11 instead of casting NaN into a wire word.
+    if (lMaximum > 0)
+    {
+        const double X = 2.7689*r + 1.7517*g + 1.1302*b;
+        const double Y = r + 4.5907*g + 0.0601*b;
+        const double Z = 0.056508*g + 5.5943*b;
+        const double lDenominator = X + 15*Y + 3*Z;
+        const double u = 4*X / lDenominator, v = 9*Y / lDenominator;
+        // Deliberate positive truncation policy for representation words.
+        // Source bit-library fractional coercion is not hardware-qualified.
+        lValue.mp = static_cast<uint16_t>((100 - lMaximum*100)*512);
+        lValue.u = static_cast<uint16_t>(u*51200);
+        lValue.v = static_cast<uint16_t>(v*51200);
+        lValue.hasChromaticity = true;
+    }
+    oValue = lValue;
+    return true;
+}
+
+inline bool ioHomeDecodeRgb(uint16_t iMp, uint16_t iU, uint16_t iV,
+                            uint8_t &oRed, uint8_t &oGreen, uint8_t &oBlue)
+{
+    if (iMp > IOHC_POSITION_MAX || iU > IOHC_POSITION_MAX || iV > IOHC_POSITION_MAX)
+        return false;
+    double lRed = 0, lGreen = 0, lBlue = 0;
+    if (iMp != IOHC_POSITION_MAX && iU != 0 && iV != 0)
+    {
+        const double u = iU / 51200.0, v = iV / 51200.0;
+        const double X = 2.25*u/v, Z = (-3*u - 20*v + 12)/(4*v);
+        auto lClamp = [](double iValue) { return std::fmax(0.0, std::fmin(1.0, iValue)); };
+        const double r = lClamp(0.41847*X - 0.15866 - 0.082835*Z);
+        const double g = lClamp(-0.091169*X + 0.25243 + 0.015708*Z);
+        const double b = lClamp(0.0009209*X - 0.0025498 + 0.1786*Z);
+        const double lMaximum = std::fmax(r, std::fmax(g,b));
+        if (lMaximum <= 0) return false;
+        const double lScale = 255*(1 - iMp/51200.0)/lMaximum;
+        lRed = std::round(lScale*r);
+        lGreen = std::round(lScale*g);
+        lBlue = std::round(lScale*b);
+    }
+    oRed = static_cast<uint8_t>(lRed);
+    oGreen = static_cast<uint8_t>(lGreen);
+    oBlue = static_cast<uint8_t>(lBlue);
+    return true;
+}
+
+// OVPd tunable-white definitions 0x60202 and 0x10000060202, FP14.
+// setColorTemperature's second argument is RAW MP, not a percentage.
+inline bool ioHomeDecodeWhiteTemperature(uint16_t iRaw, uint16_t &oKelvin)
+{
+    if (iRaw > IOHC_POSITION_MAX) return false;
+    oKelvin = static_cast<uint16_t>(std::round(iRaw*4500.0/51200 + 2000));
+    return true;
+}
+
+inline bool ioHomeEncodeWhiteTemperature(double iKelvin, uint16_t &oRaw)
+{
+    if (!std::isfinite(iKelvin) || iKelvin < 2000 || iKelvin > 6500) return false;
+    // Same explicit positive truncation policy as RGB.
+    oRaw = static_cast<uint16_t>((iKelvin - 2000)*51200/4500);
+    return true;
+}

@@ -3586,6 +3586,52 @@ TEST(profile_window_security_enum_preserves_unknown_values)
     ASSERT_EQ(lMode, IoHomeWindowSecurityMode::Secured);
 }
 
+TEST(product_lighting_codecs_use_reference_matrix_and_safe_black)
+{
+    IoHomeRgbRepresentation lValue;
+    ASSERT_TRUE(ioHomeEncodeRgb(255, 0, 0, lValue));
+    ASSERT_EQ(lValue.mp, 0);
+    ASSERT_EQ(lValue.u, 31913);
+    ASSERT_EQ(lValue.v, 25932);
+    ASSERT_TRUE(lValue.hasChromaticity);
+    uint8_t lR = 7, lG = 8, lB = 9;
+    ASSERT_TRUE(ioHomeDecodeRgb(lValue.mp, lValue.u, lValue.v, lR, lG, lB));
+    ASSERT_EQ(lR, 255); ASSERT_EQ(lG, 0); ASSERT_EQ(lB, 0);
+    ASSERT_TRUE(ioHomeEncodeRgb(0, 0, 0, lValue));
+    ASSERT_EQ(lValue.mp, IOHC_POSITION_MAX);
+    ASSERT_TRUE(!lValue.hasChromaticity);
+    ASSERT_TRUE(ioHomeDecodeRgb(lValue.mp, 0, 0, lR, lG, lB));
+    ASSERT_EQ(lR, 0); ASSERT_EQ(lG, 0); ASSERT_EQ(lB, 0);
+    ASSERT_TRUE(!ioHomeEncodeRgb(-1, 0, 0, lValue));
+    ASSERT_TRUE(!ioHomeEncodeRgb(256, 0, 0, lValue));
+    ASSERT_TRUE(!ioHomeEncodeRgb(0, std::numeric_limits<double>::quiet_NaN(), 0, lValue));
+    ASSERT_EQ(lValue.mp, IOHC_POSITION_MAX);
+    lR = 7; lG = 8; lB = 9;
+    ASSERT_TRUE(!ioHomeDecodeRgb(0xD400, 1, 1, lR, lG, lB));
+    ASSERT_TRUE(!ioHomeDecodeRgb(0, 0xD400, 1, lR, lG, lB));
+    ASSERT_EQ(lR, 7); ASSERT_EQ(lG, 8); ASSERT_EQ(lB, 9);
+}
+
+TEST(product_white_temperature_uses_fp14_and_raw_mp_passthrough)
+{
+    uint16_t lRaw = 0xBEEF, lKelvin = 999;
+    ASSERT_TRUE(ioHomeDecodeWhiteTemperature(0, lKelvin)); ASSERT_EQ(lKelvin, 2000);
+    ASSERT_TRUE(ioHomeDecodeWhiteTemperature(25600, lKelvin)); ASSERT_EQ(lKelvin, 4250);
+    ASSERT_TRUE(ioHomeDecodeWhiteTemperature(51200, lKelvin)); ASSERT_EQ(lKelvin, 6500);
+    ASSERT_TRUE(!ioHomeDecodeWhiteTemperature(0xD400, lKelvin)); ASSERT_EQ(lKelvin, 6500);
+    ASSERT_TRUE(ioHomeEncodeWhiteTemperature(4250, lRaw)); ASSERT_EQ(lRaw, 25600);
+    ASSERT_TRUE(!ioHomeEncodeWhiteTemperature(1999, lRaw));
+    ASSERT_TRUE(!ioHomeEncodeWhiteTemperature(6501, lRaw));
+    ASSERT_TRUE(!ioHomeEncodeWhiteTemperature(std::numeric_limits<double>::infinity(), lRaw));
+    ASSERT_EQ(lRaw, 25600);
+    const IoHomeFpValue lFp{14, lRaw};
+    uint8_t lData[6], lLength = 0;
+    ASSERT_TRUE(ioHomeBuildActivationRepresentation(0xD400, &lFp, 1, lData, sizeof(lData), lLength));
+    const uint8_t lExpected[] = {0xD4, 0, 0, 0x04, 0x64, 0};
+    ASSERT_EQ(lLength, sizeof(lExpected));
+    ASSERT_TRUE(memcmp(lData, lExpected, sizeof(lExpected)) == 0);
+}
+
 TEST(product_temperature_conversions_match_retained_ovpd_vectors)
 {
     using P = IoHomeTemperatureProduct;
