@@ -2539,6 +2539,34 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         }
         break;
     }
+    case 0x1D: // Versioned recognition snapshot for an assigned channel (no RF TX)
+    {
+        if (length != 2 || data[1] >= mNumChannels)
+            break;
+        const IoHomecontrolChannel &lChannel = *mChannels[data[1]];
+        const IoHomeProtocolIdentity &lIdentity = lChannel.getProtocolIdentity();
+        resultData[0] = 0;
+        resultData[1] = 1; // Snapshot schema version, independent of RF version.
+        resultData[2] = data[1];
+        const uint32_t lNode = lChannel.getNodeId();
+        resultData[3] = (lNode >> 16) & 0xFF;
+        resultData[4] = (lNode >> 8) & 0xFF;
+        resultData[5] = lNode & 0xFF;
+        resultData[6] = lIdentity.valid ? lIdentity.profile & 0xFF : 0;
+        resultData[7] = lIdentity.valid ? (lIdentity.profile >> 8) & 0x03 : 0;
+        resultData[8] = lIdentity.valid ? lIdentity.subProfile : 0;
+        resultData[9] = lIdentity.valid ? lIdentity.manufacturerId : 0;
+        resultData[10] = !lIdentity.valid ? 0 :
+            lIdentity.powerSaveMode == IoHomePowerMode::LowPower ? 2 :
+            lIdentity.powerSaveMode == IoHomePowerMode::AlwaysAlive ? 1 : 0;
+        // Valid identity is discovery evidence, not proof of an exact product model.
+        resultData[11] = (lIdentity.valid ? 0x04 : 0) |
+                         (lIdentity.valid && lIdentity.fullMetadata ? 0x08 : 0) |
+                         (lChannel.isOperational() ? 0x10 : 0) |
+                         (lChannel.is1W() ? 0x20 : 0);
+        resultLength = 12;
+        return true;
+    }
     case 0x13: // Unpair channel
     {
         if (length < 2)

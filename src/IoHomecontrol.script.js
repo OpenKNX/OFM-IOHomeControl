@@ -181,27 +181,82 @@ function IOHC_setExtractionResult(device, statusText, nodeIds) {
     }
 }
 
+// Apply only documented ETS categories. Expert overrides and power policy stay intact.
+function IOHC_applyRecognitionSettings(device, prefix, discovery) {
+    var override = IOHC_getParameter(device, prefix + "ProfileOverride");
+    if ((override && Number(override.value) != 0) || !discovery.metadataValid) return false;
+    var etsType = IOHC_etsDeviceType(discovery.protocolType, discovery.subtype);
+    if (!etsType) return false;
+    IOHC_setParameterValue(device, prefix + "DeviceType", etsType);
+    IOHC_setParameterValue(device, prefix + "ChannelSelection", etsType + 1);
+    IOHC_setParameterValue(device, prefix + "OrientationObjects",
+                           IOHC_hasOrientationObjects(discovery.protocolType, discovery.subtype));
+    IOHC_setParameterValue(device, prefix + "BinaryOnly",
+                           IOHC_isBinaryOnly(discovery.protocolType, discovery.subtype));
+    IOHC_setParameterValue(device, prefix + "Dimmable",
+                           discovery.protocolType == 0x06 && discovery.subtype == 0 ? 1 : 0);
+    return true;
+}
+
+function IOHC_queryRecognition(device, online, context, applySettings) {
+    var channel = context.channelIndex - 1;
+    var prefix = "IOHC_c" + context.channelIndex;
+    var response = IOHC_invokeFunctionProperty(online, [0x1D, channel]);
+    // Older firmware has no snapshot API. Keep the existing status workflow usable.
+    if (!response || response.length != 12 || response[0] != 0 ||
+        response[1] != 1 || response[2] != channel) {
+        IOHC_setParameterValue(device, prefix + "ImportedProfile", "Erkennung nicht verfügbar (Firmware)");
+        IOHC_setParameterValue(device, prefix + "ImportedManufacturer", "Nicht aus aktueller Firmware gelesen");
+        return false;
+    }
+    var discovery = {
+        nodeId: IOHC_readNodeId(response, 3),
+        protocolType: response[6] | (response[7] << 8),
+        subtype: response[8], manufacturer: response[9], powerClass: response[10],
+        metadataValid: (response[11] & 0x04) != 0,
+        metadataComplete: (response[11] & 0x08) != 0
+    };
+    var oneWay = (response[11] & 0x20) != 0;
+    var ready = (response[11] & 0x10) != 0;
+    IOHC_setParameterValue(device, prefix + "ImportedProfile",
+        oneWay ? "1W: keine bestätigte Aktor-Erkennung" :
+        discovery.metadataValid ? "Profil " + discovery.protocolType + "/" + discovery.subtype :
+        "Metadaten ausstehend");
+    IOHC_setParameterValue(device, prefix + "ImportedManufacturer",
+        discovery.metadataValid && !oneWay ? "Hersteller " + discovery.manufacturer +
+        ", Energieklasse " + discovery.powerClass : "Hersteller und Energieklasse unbekannt");
+    if (!applySettings) return false;
+    var applied = !oneWay && ready && discovery.nodeId != 0 &&
+                  IOHC_applyRecognitionSettings(device, prefix, discovery);
+    IOHC_setParameterValue(device, prefix + "PairingDiag", applied ?
+        "Gerätetyp übernommen; ETS laden" : "Keine Übernahme: Profil/Override/Pairing");
+    return applied;
+}
+
+function IOHC_applyRecognizedType(device, online, progress, context) {
+    online.connect();
+    try {
+        IOHC_queryPairingInfo(device, online, progress, context, "Status gelesen", "Status direkt vom Gerät gelesen");
+        var applied = IOHC_queryRecognition(device, online, context, true);
+        progress.setText(applied ? "Erkannten Gerätetyp übernommen. Applikation programmieren." :
+                         "Keine Änderung: Erkennung fehlt oder manuelles Profil ist gesetzt.");
+    } finally {
+        online.disconnect();
+    }
+}
+
 function IOHC_configureImportedChannel(device, channelNumber, discovery) {
     var prefix = "IOHC_c" + channelNumber;
     var etsType = discovery.metadataValid
                       ? IOHC_etsDeviceType(discovery.protocolType, discovery.subtype) : 0;
-    IOHC_setParameterValue(device, prefix + "Name",
-                           (discovery.metadataValid ? IOHC_importDeviceLabel(etsType) : "2W-Gerät") +
-                           " " + IOHC_formatNodeId(discovery.nodeId));
+    var name = IOHC_getParameter(device, prefix + "Name");
+    if (!name || !String(name.value || "").length) {
+        IOHC_setParameterValue(device, prefix + "Name",
+                               (discovery.metadataValid ? IOHC_importDeviceLabel(etsType) : "2W-Gerät") +
+                               " " + IOHC_formatNodeId(discovery.nodeId));
+    }
     IOHC_setParameterValue(device, prefix + "ProtocolMode", 0);
-    IOHC_setParameterValue(device, prefix + "DeviceType", etsType);
-    IOHC_setParameterValue(device, prefix + "ChannelSelection", etsType + 1);
-    IOHC_setParameterValue(device, prefix + "OrientationObjects",
-                           discovery.metadataValid &&
-                           IOHC_hasOrientationObjects(discovery.protocolType, discovery.subtype));
-    IOHC_setParameterValue(device, prefix + "BinaryOnly",
-                           discovery.metadataValid &&
-                           IOHC_isBinaryOnly(discovery.protocolType, discovery.subtype));
-    IOHC_setParameterValue(device, prefix + "Dimmable",
-                           discovery.metadataValid && discovery.protocolType == 0x06 && discovery.subtype == 0 ? 1 : 0);
-    IOHC_setParameterValue(device, prefix + "ProfileOverride", 0);
-    IOHC_setParameterValue(device, prefix + "TwoWayPowerClass", discovery.powerClass);
-    IOHC_setParameterValue(device, prefix + "Suspend", 0);
+    IOHC_applyRecognitionSettings(device, prefix, discovery);
     IOHC_setParameterValue(device, prefix + "PairingLastResult",
                            discovery.metadataValid ? "Automatisch importiert" :
                            "Authentifiziert; Metadaten ausstehend");
@@ -596,6 +651,7 @@ function IOHC_refreshPairingInfo(device, online, progress, context) {
     online.connect();
     try {
         IOHC_queryPairingInfo(device, online, progress, context, "Status gelesen", "Status direkt vom Gerät gelesen");
+        IOHC_queryRecognition(device, online, context, false);
     } finally {
         online.disconnect();
     }

@@ -806,3 +806,9 @@ Sichtbar, sobald für einen unterstützten Aktor-Gerätetyp mindestens eine Szen
 | Kn+24 | Fensterkontakt | 1.019 | Schreiben | Fenster offen/geschlossen |
 
 > Kn+21 (Cozy-Temperaturrückmeldung) bleibt an seiner reservierten Nummer, ist aber ohne Firmware-Publisher in ETS ausgeblendet. Kn+14 sperrt den KNX-Kanal; es ist kein Schlossbefehl.
+
+## Erkannten Gerätetyp aus dem Pairing übernehmen
+
+Nach erfolgreichem 2W-Pairing liest **Status / Erkennung lesen** das im Gateway gespeicherte Profil, Subprofil und den Hersteller. **Erkannten Gerätetyp übernehmen** stellt bei einem dokumentierten Profil den Gerätetyp und die zugehörigen Lamellen-, Dimm- oder Ein/Aus-Objekte ein. Danach muss die Applikation aus ETS programmiert werden. Die reine Statusabfrage verändert keine Einstellungen und sendet keine neue Funkabfrage.
+
+Ein manuelles Profil ungleich 0 verhindert die automatische Typübernahme. Beschreibung, Energieklasse, Suspendierung und Expertenwerte bleiben bei Erkennung und Import erhalten. Ein unbekanntes Profil oder eine 1W-Anmeldung erfordert eine manuelle Geräteauswahl. Die Profil-Erkennung ist kein Nachweis einer exakten Produktbezeichnung. Bei älterer Firmware ohne Erkennungsabfrage bleibt das bisherige Pairing mit manueller Auswahl verfügbar.

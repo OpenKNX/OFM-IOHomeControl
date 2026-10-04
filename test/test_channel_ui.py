@@ -41,6 +41,10 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn("ioHomeMetadataRefreshStepIntervalMs", refresh)
         self.assertIn('lSub.rfind("metadata refresh", 0)', source)
 
+    def test_channel_button_ids_are_unique(self) -> None:
+        ids = [button.get("Id") for button in self.template.findall(".//k:Button", NS)]
+        self.assertEqual(len(ids), len(set(ids)))
+
     def test_profile_auto_and_manual_override_are_exposed(self) -> None:
         selection = self.share.find(
             ".//k:ParameterType[@Name='IOHCChannelSelection']", NS
@@ -59,7 +63,8 @@ class ChannelUiTest(unittest.TestCase):
             "k:ParameterRefRef[@RefId='%AID%_UP-%TT%%CC%101_R-%TT%%CC%10101']", NS
         ))
         script = (ROOT / "src" / "IoHomecontrol.script.js").read_text()
-        self.assertIn('prefix + "ProfileOverride", 0', script)
+        self.assertIn('IOHC_getParameter(device, prefix + "ProfileOverride")', script)
+        self.assertNotIn('prefix + "ProfileOverride", 0', script)
         channel = (ROOT / "src" / "IoHomecontrolChannel.cpp").read_text()
         controller = (ROOT / "src" / "controller" / "IoHomeController.cpp").read_text()
         self.assertIn("setManualProfileOverride(static_cast<uint16_t>(ParamIOHC_cProfileOverride))", channel)

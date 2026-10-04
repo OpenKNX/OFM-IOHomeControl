@@ -23,7 +23,7 @@ SX1262_ERROR_TARGET = $(BUILD_DIR)/test_sx1262_device_errors
 SX1262_PHY_TARGET = $(BUILD_DIR)/test_sx1262_iohome_phy
 TARGETS = $(PROTOCOL_TARGET) $(SX1262_ERROR_TARGET) $(SX1262_PHY_TARGET)
 
-.PHONY: all suite clean run check-protocol check-controller check-exchange check-radio check-ui corpus list
+.PHONY: all suite clean run check-protocol check-controller check-exchange check-radio check-ui corpus list check-ets
 
 all: run
 
@@ -67,3 +67,7 @@ list: $(PROTOCOL_TARGET)
 
 clean:
 	rm -rf $(BUILD_DIR)
+
+# Needs Node.js or the Python quickjs package; executes the actual ETS script.
+check-ets:
+	$(PYTHON) test_ets_recognition.py

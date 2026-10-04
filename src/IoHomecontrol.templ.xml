@@ -25,10 +25,9 @@
               <Parameter Id="%AID%_P-%TT%%CC%013" Name="c%C%PairedNodeIdDisplay" ParameterType="%AID%_PT-IOHCText40Byte" Text="Node-ID (zuletzt gelesen)" Value="unbekannt" Access="Read" />
               <Parameter Id="%AID%_P-%TT%%CC%014" Name="c%C%OneWaySummary" ParameterType="%AID%_PT-IOHCText40Byte" Text="Protokoll / Ziel" Value="Noch nicht gelesen" Access="Read" />
               <Parameter Id="%AID%_P-%TT%%CC%015" Name="c%C%PairingDiag" ParameterType="%AID%_PT-IOHCText40Byte" Text="Letzte Pairing-Diagnose" Value="Noch keine Diagnose" Access="Read" />
-              <!-- ETS-only snapshot from the authenticated key-import result. Normal pairing
-                   does not currently expose these values through the online status API. -->
-              <Parameter Id="%AID%_P-%TT%%CC%103" Name="c%C%ImportedProfile" ParameterType="%AID%_PT-IOHCText40Byte" Text="Importiertes Profil / Subprofil" Value="nicht aus ETS-Import gelesen" Access="Read" op:configTransfer="never" />
-              <Parameter Id="%AID%_P-%TT%%CC%104" Name="c%C%ImportedManufacturer" ParameterType="%AID%_PT-IOHCText40Byte" Text="Importierter Hersteller / Energiemodus" Value="nicht aus ETS-Import gelesen" Access="Read" op:configTransfer="never" />
+              <!-- ETS-only snapshot from import or the versioned channel recognition API. -->
+              <Parameter Id="%AID%_P-%TT%%CC%103" Name="c%C%ImportedProfile" ParameterType="%AID%_PT-IOHCText40Byte" Text="Erkanntes Profil / Subprofil" Value="nicht aus ETS-Import gelesen" Access="Read" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%104" Name="c%C%ImportedManufacturer" ParameterType="%AID%_PT-IOHCText40Byte" Text="Erkannter Hersteller / Energiemodus" Value="nicht aus ETS-Import gelesen" Access="Read" op:configTransfer="never" />
               <!-- ETS-only combined selector. A calculation keeps the historic
                    cActive and cDeviceType memory fields update-compatible. -->
               <Parameter Id="%AID%_P-%TT%%CC%096" Name="c%C%ChannelSelection" ParameterType="%AID%_PT-IOHCChannelSelection" Text="Gerätetyp" Value="0" />
@@ -521,7 +520,7 @@
                             <Column Id="%AID%_PB-nnn_C-2" Width="49%" />
                             <Column Id="%AID%_PB-nnn_C-3" Width="49%" />
                           </Columns>
-                          <Button Id="%AID%_B-%TT%%CC%003" Text="Pairing-Status auslesen" Cell="1,2" EventHandler="IOHC_refreshPairingInfo" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                          <Button Id="%AID%_B-%TT%%CC%003" Text="Status / Erkennung lesen" Cell="1,2" EventHandler="IOHC_refreshPairingInfo" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
 
                           <choose ParamRefId="%AID%_P-%TT%%CC%010_R-%TT%%CC%01001">
                             <when test="0">
@@ -538,6 +537,8 @@
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%013_R-%TT%%CC%01301" IndentLevel="1" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%014_R-%TT%%CC%01401" IndentLevel="1" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%015_R-%TT%%CC%01501" IndentLevel="1" />
+                        <Button Id="%AID%_B-%TT%%CC%006" Text="Erkannten Gerätetyp übernehmen" EventHandler="IOHC_applyRecognizedType" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Nach erfolgreichem 2W-Pairing Status lesen und Gerätetyp übernehmen. Manuelles Profil und Expertenwerte bleiben erhalten. Danach die Applikation programmieren. Unbekannte Profile und 1W erfordern manuelle Auswahl." UIHint="Information" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%103_R-%TT%%CC%10301" IndentLevel="1" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%104_R-%TT%%CC%10401" IndentLevel="1" />
                         <choose ParamRefId="%AID%_P-%TT%%CC%010_R-%TT%%CC%01001">

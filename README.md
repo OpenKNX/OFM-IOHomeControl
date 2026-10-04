@@ -231,6 +231,7 @@ ETS function property interface (objectIndex=160, propertyId=10).
 | 0x19 | `cmd, resultIndex` | `status, index, count, nodeId[3], type[2], subtype, manufacturer, powerClass` | Read one deduplicated device found by the automatic discovery. |
 | 0x1A | `cmd, resultIndex, channel` | `status, existingChannel` | Store a discovered device and the extracted network key in an unused channel. Existing device assignments are reported and never overwritten. |
 | 0x1B | `cmd` | `status` | Force-persist the imported controller identity and all channel assignments. |
+| 0x1D | `cmd, channel` | `status, schema=1, channel, nodeId[3], profileLo, profileHi, subprofile, manufacturer, powerClass, flags` | Read the assigned channel recognition snapshot without RF traffic. Flags: bit 2 identity valid, bit 3 full metadata, bit 4 operational, bit 5 one-way. Discovery identity is a profile hint, not exact product-model authentication. |
 | 0x20 | `cmd, channel, percent` | `status` | Test helper for sending a position command to an already paired device. |
 
 Common status byte values used by commands `0x10`, `0x11`, `0x13`, `0x17`, and `0x20`:
@@ -358,3 +359,9 @@ The io-homecontrol protocol support in this module consolidates findings from se
 
 - io-homecontrol protocol research and implementation references: see [Related protocol sources](#related-protocol-sources)
 - OpenKNX framework: [openknx.de](https://openknx.de)
+
+### Guided recognition in ETS
+
+After successful 2W pairing, use **Status / Erkennung lesen**, then **Erkannten Gerätetyp übernehmen** to configure the documented category and orientation/binary/dimming objects. Download the application afterwards to apply the ETS changes to firmware. Reading status alone never changes settings. Unknown profiles, 1W channels, unpaired channels and a nonzero manual packed profile do not apply an inferred category. Existing names, power-class overrides, suspension, discovery settings and the manual profile remain intact during import and recognition. A snapshot reports the currently stored discovery identity; it does not initiate a new radio query or identify an exact commercial product. Older firmware can still provide pairing status, but requires a manual category selection.
+
+Execute JavaScript regressions with `python3 test/test_ets_recognition.py` (Node.js on PATH or `pip install quickjs` in a test virtual environment). Native checks remain `make -C test run`.
