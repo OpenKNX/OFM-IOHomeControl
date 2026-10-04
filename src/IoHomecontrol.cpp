@@ -6,6 +6,7 @@
 #include "protocol/IoHomeCrypto.h"
 #include "protocol/IoHomeLogRedaction.h"
 #include "protocol/IoHomeProfileRegistry.h"
+#include "protocol/IoHomeProductCodecs.h"
 #if defined(RADIO_SX1262)
 #include "radio/SX1262DeviceErrors.h"
 #include "radio/sx1262Regs-Fsk.h"
@@ -3460,6 +3461,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc keyimport status|candidates|trace", "Show import evidence and verification state");
     openknx.console.printHelpLine("iohc discovery trace", "Show discovery reliability counters");
     openknx.console.printHelpLine("iohc discovery listen [MS|default]", "Runtime-only discovery listen window (default 2000 ms)");
+    openknx.console.printHelpLine("iohc codec temp PRODUCT INDEX RAW16 [MIN_CK MAX_CK [COMFORT_RAW]]", "Offline product conversion; explicit product, index0=MP, no RF TX");
     openknx.console.printHelpLine("iohc fp read NODE 1[,2,3]", "Raw FP diagnostic; only single FP1-FP3 transmits");
     openknx.console.printHelpLine("iohc fp raw NODE INDEX RAW16", "Expert single-attempt FP write; only FP1-FP3 transmits");
     openknx.console.printHelpLine("iohc autospe on|off|status", "Runtime post-pair SPE discovery");
@@ -3884,6 +3886,46 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         logInfoP("FP read: captured native Private selector, raw reply only; no KO publication");
         logInfoP("FP read: %s", mController.sendDiagnosticFpRead(lChannel, lIndices[0])
                               ? "queued" : "queue failed");
+        return true;
+    }
+
+    if (lSub == "codec temp" || lSub.rfind("codec temp ", 0) == 0)
+    {
+        std::string lArgs = trimSpaces(lSub.substr(strlen("codec temp")));
+        std::string lProductText, lIndexText, lRawText, lMinimumText, lMaximumText, lComfortText;
+        IoHomeTemperatureProduct lProduct;
+        IoHomeTemperatureContext lContext;
+        uint32_t lIndex = 0, lRaw = 0, lMinimum = 0, lMaximum = 0, lComfort = 0;
+        bool lValid = takeToken(lArgs, lProductText) && takeToken(lArgs, lIndexText) &&
+                      takeToken(lArgs, lRawText) && ioHomeTemperatureProductByName(lProductText.c_str(), lProduct) &&
+                      parseUnsignedDecimal(lIndexText, lIndex) && lIndex <= 16 &&
+                      parseHex24(lRawText, lRaw) && lRaw <= 0xFFFF;
+        if (lValid && !lArgs.empty())
+        {
+            lValid = takeToken(lArgs, lMinimumText) && takeToken(lArgs, lMaximumText) &&
+                     parseUnsignedDecimal(lMinimumText, lMinimum) && lMinimum <= 0xFFFF &&
+                     parseUnsignedDecimal(lMaximumText, lMaximum) && lMaximum <= 0xFFFF;
+            lContext.hasBounds = lValid;
+            lContext.minimumCentikelvin = static_cast<uint16_t>(lMinimum);
+            lContext.maximumCentikelvin = static_cast<uint16_t>(lMaximum);
+            if (lValid && !lArgs.empty())
+            {
+                lValid = takeToken(lArgs, lComfortText) && parseHex24(lComfortText, lComfort) && lComfort <= 0xFFFF;
+                lContext.hasComfort = lValid;
+                lContext.comfortRaw = static_cast<uint16_t>(lComfort);
+            }
+        }
+        double lTemperature = 0;
+        if (!lValid || !lArgs.empty() ||
+            !ioHomeDecodeProductTemperature(lProduct, static_cast<uint8_t>(lIndex),
+                                            static_cast<uint16_t>(lRaw), lContext, lTemperature))
+        {
+            logInfoP("Temperature codec: unknown/invalid product, slot, raw word or required context; no TX");
+            logInfoP("Usage: iohc codec temp PRODUCT INDEX RAW16 [MIN_CK MAX_CK [COMFORT_RAW]]");
+            return true;
+        }
+        logInfoP("Temperature codec %s index=%u raw=0x%04X Celsius=%.3f (explicit product; no TX)",
+                 lProductText.c_str(), static_cast<unsigned>(lIndex), static_cast<unsigned>(lRaw), lTemperature);
         return true;
     }
 

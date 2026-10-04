@@ -49,6 +49,15 @@ class ChannelUiTest(unittest.TestCase):
         self.assertLess(early_return, loop.index("mController.loop()"))
         self.assertLess(early_return, loop.index("processRadioDiagnostic()"))
 
+    def test_explicit_product_temperature_console_codec_never_transmits(self) -> None:
+        source = (ROOT / "src" / "IoHomecontrol.cpp").read_text()
+        codec = source.split('if (lSub == "codec temp"', 1)[1].split('if (lSub == "fp raw"', 1)[0]
+        self.assertIn("ioHomeTemperatureProductByName", codec)
+        self.assertIn("ioHomeDecodeProductTemperature", codec)
+        self.assertIn("lContext.hasComfort", codec)
+        self.assertNotIn("mController.", codec)
+        self.assertNotIn("flash.save", codec)
+
     def test_channel_button_ids_are_unique(self) -> None:
         ids = [button.get("Id") for button in self.template.findall(".//k:Button", NS)]
         self.assertEqual(len(ids), len(set(ids)))

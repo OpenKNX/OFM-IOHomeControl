@@ -19,6 +19,8 @@
 #include "protocol/IoHomeFrame.h"
 #include "protocol/IoHomeCommands.h"
 #include "protocol/IoHomeProfileRegistry.h"
+#include "protocol/IoHomeProductCodecs.h"
+#include <limits>
 #include "protocol/IoHomeLogRedaction.h"
 #include "protocol/IoHomePassiveAuth.h"
 #include "IoHomeRemoteMap.h"
@@ -3582,6 +3584,66 @@ TEST(profile_window_security_enum_preserves_unknown_values)
     ASSERT_TRUE(!ioHomeDecodeWindowSecurityMode(ioHomeProfileDescriptor(9, 0), 1, lMode));
     ASSERT_TRUE(!ioHomeDecodeWindowSecurityMode(nullptr, 1, lMode));
     ASSERT_EQ(lMode, IoHomeWindowSecurityMode::Secured);
+}
+
+TEST(product_temperature_conversions_match_retained_ovpd_vectors)
+{
+    using P = IoHomeTemperatureProduct;
+    IoHomeTemperatureContext lContext;
+    double lTemperature = 999;
+    ASSERT_TRUE(ioHomeDecodeProductTemperature(P::HeatPump, 0, 0, lContext, lTemperature));
+    ASSERT_FLOAT_EQ(lTemperature, -40.0, 0.001);
+    ASSERT_TRUE(ioHomeDecodeProductTemperature(P::HeatPump, 8, 51200, lContext, lTemperature));
+    ASSERT_FLOAT_EQ(lTemperature, 80.0, 0.001);
+    ASSERT_TRUE(ioHomeDecodeProductTemperature(P::HeatPump, 8, 16896, lContext, lTemperature));
+    ASSERT_FLOAT_EQ(lTemperature, -0.0, 0.001); // -0.4 rounds to zero.
+    ASSERT_TRUE(ioHomeDecodeProductTemperature(P::AtlanticAdjustableHeater, 12, 0, lContext, lTemperature));
+    ASSERT_FLOAT_EQ(lTemperature, 7.0, 0.001);
+    ASSERT_TRUE(ioHomeDecodeProductTemperature(P::AtlanticAdjustableHeater, 12, 51200, lContext, lTemperature));
+    ASSERT_FLOAT_EQ(lTemperature, 28.0, 0.001);
+    ASSERT_TRUE(ioHomeDecodeProductTemperature(P::AtlanticAdjustableHeater, 13, 21943, lContext, lTemperature));
+    ASSERT_FLOAT_EQ(lTemperature, 5.0, 0.001);
+    lContext.hasBounds = true;
+    lContext.minimumCentikelvin = 28015; lContext.maximumCentikelvin = 30115;
+    lContext.hasComfort = true; lContext.comfortRaw = 25600;
+    ASSERT_TRUE(ioHomeDecodeProductTemperature(P::GenericAdjustableHeater, 13, 5120, lContext, lTemperature));
+    ASSERT_FLOAT_EQ(lTemperature, 15.4, 0.001);
+    lContext.minimumCentikelvin = 29315; lContext.maximumCentikelvin = 33515;
+    ASSERT_TRUE(ioHomeDecodeProductTemperature(P::AtlanticDhwV2, 0, 25600, lContext, lTemperature));
+    ASSERT_FLOAT_EQ(lTemperature, 41.0, 0.001);
+    ASSERT_TRUE(ioHomeDecodeProductTemperature(P::AtlanticDhwCentikelvin, 0, 29315, lContext, lTemperature));
+    ASSERT_FLOAT_EQ(lTemperature, 20.0, 0.001);
+}
+
+TEST(product_temperature_codecs_reject_unknown_context_special_words_and_unsafe_inverse)
+{
+    using P = IoHomeTemperatureProduct;
+    IoHomeTemperatureContext lContext;
+    double lTemperature = 123;
+    uint16_t lRaw = 0xBEEF;
+    ASSERT_TRUE(!ioHomeDecodeProductTemperature(P::AtlanticDhwV2, 0, 0, lContext, lTemperature));
+    ASSERT_TRUE(!ioHomeDecodeProductTemperature(P::HeatPump, 9, 0, lContext, lTemperature));
+    for (uint16_t lSpecial : {0xD100, 0xD200, 0xD400, 0xF7FF, 0xFFFF})
+        ASSERT_TRUE(!ioHomeDecodeProductTemperature(P::HeatPump, 0, lSpecial, lContext, lTemperature));
+    ASSERT_EQ(lTemperature, 123);
+    ASSERT_TRUE(!ioHomeEncodeProductTemperature(P::AtlanticAdjustableHeater, 13, 18, lContext, lRaw));
+    ASSERT_EQ(lRaw, 0xBEEF); // Source helper would produce117029 and wrap toC925.
+    ASSERT_TRUE(!ioHomeEncodeProductTemperature(P::HeatPump, 0, std::numeric_limits<double>::quiet_NaN(), lContext, lRaw));
+    ASSERT_TRUE(!ioHomeEncodeProductTemperature(P::HeatPump, 0, std::numeric_limits<double>::infinity(), lContext, lRaw));
+    ASSERT_TRUE(!ioHomeEncodeProductTemperature(P::HeatPump, 8, 20, lContext, lRaw));
+    ASSERT_TRUE(!ioHomeEncodeProductTemperature(P::GenericAdjustableHeater, 13, 20, lContext, lRaw));
+    ASSERT_TRUE(ioHomeEncodeProductTemperature(P::AtlanticAdjustableHeater, 13, 5, lContext, lRaw));
+    ASSERT_EQ(lRaw, 21943);
+    ASSERT_TRUE(ioHomeEncodeProductTemperature(P::HeatPump, 0, -40, lContext, lRaw));
+    ASSERT_EQ(lRaw, 0);
+    ASSERT_TRUE(ioHomeEncodeProductTemperature(P::HeatPump, 0, 80, lContext, lRaw));
+    ASSERT_EQ(lRaw, 51200);
+    lContext.hasBounds = true; lContext.minimumCentikelvin = 28015; lContext.maximumCentikelvin = 30115;
+    ASSERT_TRUE(!ioHomeDecodeProductTemperature(P::GenericAdjustableHeater, 13, 5120, lContext, lTemperature));
+    lContext.hasComfort = true; lContext.comfortRaw = 100;
+    ASSERT_TRUE(!ioHomeDecodeProductTemperature(P::GenericAdjustableHeater, 13, 5120, lContext, lTemperature));
+    lContext.maximumCentikelvin = lContext.minimumCentikelvin;
+    ASSERT_TRUE(!ioHomeEncodeProductTemperature(P::HeatingInterface, 0, 20, lContext, lRaw));
 }
 
 TEST(profile_parameter_encoding_is_separate_from_fp_index)
