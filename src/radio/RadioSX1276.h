@@ -41,7 +41,8 @@ public:
   RadioError configure();
   RadioError setFrequency(uint32_t iFreqHz);
   RadioError setOutputPower(uint8_t iPower);
-  RadioError setPreambleLength(uint16_t iSymbols);
+  // RegPreambleMsb/Lsb count FSK bytes, not bits or UART-framed software bytes.
+  RadioError setPreambleLength(uint16_t iPreambleBytes);
   uint16_t defaultStartPreamble() const { return 32; }
   uint16_t defaultResponsePreamble() const { return 12; }
   RadioError startTransmit(const uint8_t *iData, uint8_t iLen);

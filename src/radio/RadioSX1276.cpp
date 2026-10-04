@@ -150,7 +150,7 @@ RadioError RadioSX1276::configure()
     writeRegister(REG_OSC, RF_OSC_CLKOUT_OFF);
 
     // Bit rate: 38400 bps
-    // BitRate = FXOSC / BitRateReg = 32000000 / 833 = 38400
+    // BitRate = FXOSC / BitRateReg = 32000000 / 833 = 38415.366 bps
     uint16_t lBitRate = 833;
     writeRegister(REG_BITRATEMSB, (lBitRate >> 8) & 0xFF);
     writeRegister(REG_BITRATELSB, lBitRate & 0xFF);
@@ -190,10 +190,10 @@ RadioError RadioSX1276::configure()
     // AFC auto-clear between packets
     writeRegister(REG_AFCFEI, RF_AFCFEI_AFCAUTOCLEAR_ON);
 
-    // Preamble detector: ON, 2-byte window, tolerance=10 bits
+    // Preamble detector: ON, 2-byte window, tolerance=10 chip errors over that window
     writeRegister(REG_PREAMBLEDETECT, 0xAA);
 
-    // Preamble: 8 symbols default (SHORT_PREAMBLE_LENGTH)
+    // FSK preamble: 8 bytes default (64 bit periods; about 1.666 ms).
     writeRegister(REG_PREAMBLEMSB, 0x00);
     writeRegister(REG_PREAMBLELSB, 0x08);
 
@@ -318,13 +318,13 @@ RadioError RadioSX1276::setOutputPower(uint8_t iPower)
     return RadioError::None;
 }
 
-RadioError RadioSX1276::setPreambleLength(uint16_t iSymbols)
+RadioError RadioSX1276::setPreambleLength(uint16_t iPreambleBytes)
 {
     if (!mInitialized)
         return RadioError::NotInitialized;
 
-    writeRegister(REG_PREAMBLEMSB, (iSymbols >> 8) & 0xFF);
-    writeRegister(REG_PREAMBLELSB, iSymbols & 0xFF);
+    writeRegister(REG_PREAMBLEMSB, (iPreambleBytes >> 8) & 0xFF);
+    writeRegister(REG_PREAMBLELSB, iPreambleBytes & 0xFF);
     return RadioError::None;
 }
 
