@@ -1588,7 +1588,9 @@ void IoHomecontrol::setup()
 
 void IoHomecontrol::loop()
 {
-    if (!openknx.afterStartupDelay())
+    // During ETS table programming, Flash::save(true) still declines writes.
+    // Do not run the RF/controller state machines until persistence is usable.
+    if (!knx.configured() || !openknx.afterStartupDelay())
         return;
 
     // Radio diagnostics take exclusive ownership of the radio so the controller

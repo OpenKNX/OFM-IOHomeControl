@@ -41,6 +41,14 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn("ioHomeMetadataRefreshStepIntervalMs", refresh)
         self.assertIn('lSub.rfind("metadata refresh", 0)', source)
 
+    def test_unconfigured_module_cannot_run_controller_or_radio_diagnostics(self) -> None:
+        source = (ROOT / "src" / "IoHomecontrol.cpp").read_text()
+        loop = source.split("void IoHomecontrol::loop()", 1)[1].split("void IoHomecontrol::", 1)[0]
+        guard = loop.index("if (!knx.configured() || !openknx.afterStartupDelay())")
+        early_return = loop.index("return;", guard)
+        self.assertLess(early_return, loop.index("mController.loop()"))
+        self.assertLess(early_return, loop.index("processRadioDiagnostic()"))
+
     def test_channel_button_ids_are_unique(self) -> None:
         ids = [button.get("Id") for button in self.template.findall(".//k:Button", NS)]
         self.assertEqual(len(ids), len(set(ids)))
