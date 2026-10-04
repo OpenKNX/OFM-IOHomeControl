@@ -491,6 +491,50 @@ inline bool ioHomeBuildFpRefreshRepresentation(const uint8_t *iIndices,
     return true;
 }
 
+// Original OTL activation representation: MP, FPI1, ascending FP1..8 values,
+// FPI2, ascending FP9..16 values. This is not a product authorization policy.
+struct IoHomeFpValue
+{
+    uint8_t index;
+    uint16_t raw;
+};
+
+inline bool ioHomeBuildActivationRepresentation(uint16_t iMp,
+    const IoHomeFpValue *iValues, uint8_t iCount, uint8_t *oData,
+    uint8_t iCapacity, uint8_t &oLen)
+{
+    oLen = 0;
+    // Seven FPs fit the reference 21-byte ordinary command-data budget
+    // after its originator/command prefix. Do not infer additional write support.
+    if (!oData || iCount > 7 || (iCount && !iValues) ||
+        4U + 2U * iCount > iCapacity)
+        return false;
+    IoHomeFpSelection lSelection;
+    for (uint8_t i = 0; i < iCount; ++i)
+    {
+        const IoHomeFpSelection lOne = ioHomeFpSelection(iValues[i].index);
+        if ((!lOne.fpi1 && !lOne.fpi2) ||
+            (lSelection.fpi1 & lOne.fpi1) || (lSelection.fpi2 & lOne.fpi2))
+            return false;
+        lSelection.fpi1 |= lOne.fpi1;
+        lSelection.fpi2 |= lOne.fpi2;
+    }
+    oData[oLen++] = static_cast<uint8_t>(iMp >> 8);
+    oData[oLen++] = static_cast<uint8_t>(iMp);
+    for (uint8_t lGroup = 0; lGroup < 2; ++lGroup)
+    {
+        oData[oLen++] = lGroup == 0 ? lSelection.fpi1 : lSelection.fpi2;
+        for (uint8_t lIndex = 1 + 8 * lGroup; lIndex <= 8 + 8 * lGroup; ++lIndex)
+            for (uint8_t i = 0; i < iCount; ++i)
+                if (iValues[i].index == lIndex)
+                {
+                    oData[oLen++] = static_cast<uint8_t>(iValues[i].raw >> 8);
+                    oData[oLen++] = static_cast<uint8_t>(iValues[i].raw);
+                }
+    }
+    return true;
+}
+
 // Captured single-FP 2W Execute shape; higher FP/FPI2 transmit layout is not
 // capture-confirmed. No semantic conversion is applied to iRaw.
 inline bool ioHomeBuildDiagnosticFpRawPayload(uint8_t iFpIndex, uint16_t iRaw,
@@ -500,13 +544,10 @@ inline bool ioHomeBuildDiagnosticFpRawPayload(uint8_t iFpIndex, uint16_t iRaw,
         return false;
     oData[0] = 0x01; // user originator (IOHC_ORIGINATOR_USER)
     oData[1] = 0xE7;
-    oData[2] = 0xD4;
-    oData[3] = 0x00;
-    oData[4] = ioHomeFpSelection(iFpIndex).fpi1;
-    oData[5] = static_cast<uint8_t>(iRaw >> 8);
-    oData[6] = static_cast<uint8_t>(iRaw & 0xFF);
-    oData[7] = 0x00;
-    return true;
+    const IoHomeFpValue lValue{iFpIndex, iRaw};
+    uint8_t lLen = 0;
+    return ioHomeBuildActivationRepresentation(IOHC_PARAMETER_IGNORE, &lValue, 1,
+                                                oData + 2, 6, lLen);
 }
 #define IOHC_POSITION_FAVORITE 0xD800
 #define IOHC_POSITION_MAX 0xC800        // 100% = fully closed

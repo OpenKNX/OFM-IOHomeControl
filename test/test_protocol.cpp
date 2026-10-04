@@ -17630,6 +17630,45 @@ TEST(controller_1w_missing_profile_does_not_send_empty_frame)
 }
 #endif
 
+TEST(fp_activation_sparse_values_are_sorted_across_groups)
+{
+    const IoHomeFpValue lValues[] = {{16, 0xC800}, {9, 0xD200}, {8, 0x1234}, {1, 0x5678}};
+    const uint8_t lGolden[] = {0xD4, 0, 0x81, 0x56, 0x78, 0x12, 0x34, 0x81,
+                              0xD2, 0, 0xC8, 0};
+    uint8_t lData[23];
+    uint8_t lLen = 99;
+    ASSERT_TRUE(ioHomeBuildActivationRepresentation(0xD400, lValues, 4, lData, sizeof(lData), lLen));
+    ASSERT_EQ(lLen, sizeof(lGolden));
+    ASSERT_MEM_EQ(lData, lGolden, sizeof(lGolden));
+    ASSERT_TRUE(ioHomeBuildActivationRepresentation(0x1234, nullptr, 0, lData, 4, lLen));
+    const uint8_t lMpOnly[] = {0x12, 0x34, 0, 0};
+    ASSERT_MEM_EQ(lData, lMpOnly, sizeof(lMpOnly));
+}
+
+TEST(fp_activation_rejects_duplicates_invalid_indices_and_capacity)
+{
+    IoHomeFpValue lValues[8] = {{1, 0}, {1, 1}};
+    uint8_t lData[23];
+    uint8_t lLen = 99;
+    memset(lData, 0xA5, sizeof(lData));
+    ASSERT_TRUE(!ioHomeBuildActivationRepresentation(0, lValues, 2, lData, sizeof(lData), lLen));
+    ASSERT_EQ(lLen, 0);
+    ASSERT_EQ(lData[0], 0xA5);
+    for (uint8_t lIndex : {0, 17, 255})
+    {
+        lValues[0].index = lIndex;
+        ASSERT_TRUE(!ioHomeBuildActivationRepresentation(0, lValues, 1, lData, sizeof(lData), lLen));
+        ASSERT_EQ(lData[0], 0xA5);
+    }
+    for (uint8_t i = 0; i < 8; ++i) lValues[i] = {static_cast<uint8_t>(i + 1), i};
+    ASSERT_TRUE(!ioHomeBuildActivationRepresentation(0, lValues, 8, lData, sizeof(lData), lLen));
+    ASSERT_TRUE(!ioHomeBuildActivationRepresentation(0, lValues, 7, lData, 17, lLen));
+    ASSERT_TRUE(!ioHomeBuildActivationRepresentation(0, nullptr, 1, lData, 23, lLen));
+    ASSERT_TRUE(!ioHomeBuildActivationRepresentation(0, lValues, 1, nullptr, 23, lLen));
+    ASSERT_TRUE(ioHomeBuildActivationRepresentation(0, lValues, 7, lData, 18, lLen));
+    ASSERT_EQ(lLen, 18);
+}
+
 // Regression vectors recovered from the original firmware frame accessors.
 TEST(frame_extended_header_golden_roundtrip)
 {
