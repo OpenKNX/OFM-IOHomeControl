@@ -4,7 +4,7 @@
 #include "protocol/IoHomeCommands.h"
 #include "protocol/IoHomeProfileRegistry.h"
 
-#define IOHC_1W_SEQUENCE_RESERVE_WINDOW 16
+#include "protocol/IoHomeSequence.h"
 
 class IoHomeController;
 

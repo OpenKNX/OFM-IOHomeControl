@@ -17478,6 +17478,64 @@ TEST(controller_1w_execute_uses_remote_identity_not_2w_gateway_identity)
     ASSERT_EQ(lFrame.getDestNodeId(), 0x0000BF);
 }
 
+TEST(controller_1w_sequence_reservation_bypasses_flash_throttle)
+{
+    const uint8_t lKey[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    lModule.testSetChannel(0, &lChannel);
+    lController.setModule(&lModule);
+    lController.init();
+    lChannel.setNodeId(0x7E9E6E);
+    lChannel.setEncryptionKey(lKey);
+    lChannel.setIs1W(true);
+    lChannel.setOneWayControllerNodeId(0x831F2A);
+    lChannel.setOneWayControllerKey(lKey);
+    lChannel.setSequence1W(100);
+    const uint32_t lBefore = openknx.flash.forcedSaveCount;
+    const uint32_t lSuppressedBefore = openknx.flash.suppressedSaveCount;
+    openknx.flash.throttleNonForced = true;
+    const bool lQueued = lController.sendCommand(0x7E9E6E, lKey, IoHomeCommand::Execute, 0xD8, 0x03);
+    lController.loop();
+    lController.loop();
+    openknx.flash.throttleNonForced = false;
+    ASSERT_TRUE(lQueued);
+    ASSERT_EQ(openknx.flash.forcedSaveCount, lBefore + 1);
+    ASSERT_EQ(openknx.flash.suppressedSaveCount, lSuppressedBefore);
+    const auto &lPacket = lController.radio().testLastTransmittedPacket();
+    ASSERT_TRUE(!lPacket.empty());
+    ASSERT_EQ(lChannel.getSequence1W(), 101);
+    ASSERT_EQ(lChannel.getReservedSequence1W(), 117);
+    // A simulated restart loads the persisted high-water, not the used value.
+    IoHomecontrolChannel lRestored;
+    lRestored.setSequence1W(lChannel.getReservedSequence1W());
+    bool lSaveRequired = false;
+    ASSERT_EQ(lRestored.incrementSequence1W(false, lSaveRequired), 118);
+    ASSERT_TRUE(lSaveRequired);
+}
+
+TEST(channel_1w_sequence_idle_restarts_do_not_advance_and_wrap_is_reserved)
+{
+    uint16_t lDurable = 65534;
+    for (uint8_t i = 0; i < 20; ++i)
+    {
+        IoHomecontrolChannel lRestored;
+        lRestored.setSequence1W(lDurable);
+        ASSERT_EQ(lRestored.getReservedSequence1W(), lDurable);
+        ASSERT_EQ(lRestored.getSequence1W(), lDurable);
+    }
+    IoHomecontrolChannel lChannel;
+    lChannel.setSequence1W(lDurable);
+    bool lSave = false;
+    ASSERT_EQ(lChannel.incrementSequence1W(false, lSave), 65535);
+    ASSERT_TRUE(lSave);
+    ASSERT_EQ(lChannel.getReservedSequence1W(), 15);
+    ASSERT_EQ(lChannel.incrementSequence1W(false, lSave), 0);
+    ASSERT_TRUE(!lSave);
+    ASSERT_EQ(lChannel.getReservedSequence1W(), 15);
+}
+
 TEST(channel_1w_sequence_reserve_window_reduces_flash_saves)
 {
     IoHomecontrolChannel lChannel;

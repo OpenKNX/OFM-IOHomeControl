@@ -5342,7 +5342,9 @@ uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool i
     const uint16_t lReservedSequence = iProfile->getReservedSequence1W();
 
     if (lFlashSaveRequired)
-        openknx.flash.save();
+        // A suppressed save would make the new reservation RAM-only and allow
+        // counter reuse after restart. Window renewal must bypass the throttle.
+        openknx.flash.save(true);
 
     if (mPairDiagnosticTraceEnabled)
     {

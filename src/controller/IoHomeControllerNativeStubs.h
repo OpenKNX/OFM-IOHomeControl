@@ -10,9 +10,7 @@
 #define IOHC_ChannelCount 16
 #endif
 
-#ifndef IOHC_1W_SEQUENCE_RESERVE_WINDOW
-#define IOHC_1W_SEQUENCE_RESERVE_WINDOW 16
-#endif
+#include "../protocol/IoHomeSequence.h"
 
 #ifndef logInfoP
 #define logInfoP(...) \
@@ -52,7 +50,15 @@
 struct OpenKnxNativeFlashStub
 {
   uint32_t saveCount = 0;
-  void save(bool = false) { saveCount++; }
+  uint32_t forcedSaveCount = 0;
+  uint32_t suppressedSaveCount = 0;
+  bool throttleNonForced = false;
+  void save(bool iForce = false)
+  {
+    if (!iForce && throttleNonForced) { suppressedSaveCount++; return; }
+    saveCount++;
+    if (iForce) forcedSaveCount++;
+  }
 };
 
 struct OpenKnxNativeStub
@@ -200,12 +206,8 @@ public:
   }
   uint16_t incrementSequence1W(bool iForceReserve, bool &oFlashSaveRequired)
   {
-    mSequence1W = static_cast<uint16_t>(mSequence1W + 1U);
-    const int16_t lRemainingReserved = static_cast<int16_t>(mReservedSequence1W - mSequence1W);
-    oFlashSaveRequired = iForceReserve || mReservedSequence1W == 0 || lRemainingReserved <= 0;
-    if (oFlashSaveRequired)
-      mReservedSequence1W = static_cast<uint16_t>(mSequence1W + IOHC_1W_SEQUENCE_RESERVE_WINDOW);
-    return mSequence1W;
+    return ioHomeAllocateSequence1W(mSequence1W, mReservedSequence1W,
+                                     iForceReserve, oFlashSaveRequired);
   }
   void setOneWayControllerNodeId(uint32_t iNodeId) { mOneWayControllerNodeId = iNodeId & 0x00FFFFFF; }
   uint32_t getOneWayControllerNodeId() const { return mOneWayControllerNodeId; }
