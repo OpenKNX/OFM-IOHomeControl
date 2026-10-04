@@ -29,7 +29,9 @@ enum class ParameterSemantic : uint8_t
     EnergyDemand,
     EnergyGradient,
     ShutterClosure,
-    Unknown
+    Unknown,
+    ProjectionAngle,
+    WindowSecurityMode
 };
 
 enum class ParameterPolarity : uint8_t
@@ -48,8 +50,10 @@ enum class ParameterEncoding : uint8_t
 enum class RawParameterValueKind : uint8_t
 {
     Relative, PercentDelta, Target, Current, Default, Ignore,
-    Alias, NoFeedback, Unknown
+    Alias, NoFeedback, Unknown, Discrete
 };
+
+enum class IoHomeParameterSource : uint8_t { Unknown, KlfAppendix2, Ovpd };
 
 struct IoHomeParameterDescriptor
 {
@@ -58,6 +62,7 @@ struct IoHomeParameterDescriptor
     ParameterEncoding encoding = ParameterEncoding::Unknown;
     ParameterPolarity polarity = ParameterPolarity::Normal;
     bool writable = false;
+    IoHomeParameterSource source = IoHomeParameterSource::Unknown;
 };
 
 enum class IoHomeAliasSemantic : uint8_t
@@ -139,6 +144,14 @@ const IoHomeProfileDescriptor *ioHomeProfileDescriptor(const IoHomeProtocolIdent
 // an unknown profile or invalid index is Unknown.
 ParameterSemantic ioHomeParameterSemantic(const IoHomeProfileDescriptor *iDescriptor,
                                           uint8_t iParameterIndex);
+// Adds exact OVPd read semantics without altering the Appendix-2 table or
+// granting new capabilities/write permission.
+ParameterSemantic ioHomeResolvedParameterSemantic(const IoHomeProfileDescriptor *iDescriptor,
+                                                   uint8_t iParameterIndex);
+enum class IoHomeWindowSecurityMode : uint8_t { DayLocked, HomeSecure, Secured };
+bool ioHomeDecodeWindowSecurityMode(const IoHomeProfileDescriptor *iDescriptor,
+                                     uint16_t iRaw, IoHomeWindowSecurityMode &oMode);
+const char *ioHomeWindowSecurityModeName(IoHomeWindowSecurityMode iMode);
 IoHomeParameterDescriptor ioHomeParameterDescriptor(
     const IoHomeProfileDescriptor *iDescriptor, uint8_t iParameterIndex);
 uint8_t ioHomeParameterIndex(const IoHomeProfileDescriptor *iDescriptor,

@@ -4281,6 +4281,14 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                                  ioHomeParameterSemanticName(ioHomeParameterSemantic(lProfile, 1)),
                                  ioHomeParameterSemanticName(ioHomeParameterSemantic(lProfile, 2)),
                                  ioHomeParameterSemanticName(ioHomeParameterSemantic(lProfile, 3)));
+                        for (uint8_t lIndex = 1; lIndex <= 16; ++lIndex)
+                        {
+                            const auto lParameter = ioHomeParameterDescriptor(lProfile, lIndex);
+                            if (lParameter.source == IoHomeParameterSource::Ovpd)
+                                logInfoP("  OVPd read semantic: FP%u=%s writable=%u",
+                                         lIndex, ioHomeParameterSemanticName(lParameter.semantic),
+                                         lParameter.writable ? 1U : 0U);
+                        }
                         if (lMetadata.hasIoBackboneAddress)
                             logInfoP("  protocol identity ioBackboneAddress: 0x%06X", lMetadata.ioBackboneAddress);
                         if (lMetadata.hasMib)

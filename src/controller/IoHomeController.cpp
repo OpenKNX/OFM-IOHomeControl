@@ -9948,6 +9948,13 @@ void IoHomeController::dispatchRxFrame()
                              static_cast<unsigned>(lSample.raw),
                              ioHomeRawParameterValueKindName(lSample.kind),
                              lRawPayload.c_str());
+                    if (lSample.fpIndex == 1 && lIdentity.valid && mRxFrame.dataLen >= 15)
+                    {
+                        IoHomeWindowSecurityMode lMode;
+                        if (ioHomeDecodeWindowSecurityMode(ioHomeProfileDescriptor(lIdentity), lSample.raw, lMode))
+                            logInfoP("FP1 window-lock security mode: %s (OVPd read semantic)",
+                                     ioHomeWindowSecurityModeName(lMode));
+                    }
                     break; // diagnostic reads never publish KOs
                 }
                 if (!mTrustRxPosition)

@@ -176,6 +176,8 @@ RawParameterValueKind ioHomeClassifyRawParameterValue(uint16_t iRaw,
                                                       uint16_t iPackedProfile,
                                                       uint8_t iParameterIndex)
 {
+    if (iPackedProfile == 0x0241 && iParameterIndex == 1 && iRaw <= 0xC800)
+        return iRaw <= 2 ? RawParameterValueKind::Discrete : RawParameterValueKind::Unknown;
     if (iRaw <= 0xC800) return RawParameterValueKind::Relative;
     if (iRaw >= 0xC900 && iRaw <= 0xD0D0) return RawParameterValueKind::PercentDelta;
     switch (iRaw)
@@ -203,6 +205,7 @@ const char *ioHomeRawParameterValueKindName(RawParameterValueKind iKind)
     case RawParameterValueKind::Ignore: return "ignore";
     case RawParameterValueKind::Alias: return "alias";
     case RawParameterValueKind::NoFeedback: return "no-feedback";
+    case RawParameterValueKind::Discrete: return "discrete";
     default: return "unknown";
     }
 }
@@ -237,12 +240,45 @@ ParameterSemantic ioHomeParameterSemantic(const IoHomeProfileDescriptor *iDescri
                : iDescriptor->fp[iParameterIndex - 1];
 }
 
+ParameterSemantic ioHomeResolvedParameterSemantic(const IoHomeProfileDescriptor *iDescriptor,
+                                                   uint8_t iParameterIndex)
+{
+    if (iDescriptor && iDescriptor->profile == 2 && iDescriptor->subProfile == 2 && iParameterIndex == 9)
+        return ParameterSemantic::ProjectionAngle;
+    if (iDescriptor && iDescriptor->profile == 9 && iDescriptor->subProfile == 1 && iParameterIndex == 1)
+        return ParameterSemantic::WindowSecurityMode;
+    return ioHomeParameterSemantic(iDescriptor, iParameterIndex);
+}
+
+bool ioHomeDecodeWindowSecurityMode(const IoHomeProfileDescriptor *iDescriptor,
+                                     uint16_t iRaw, IoHomeWindowSecurityMode &oMode)
+{
+    if (ioHomeResolvedParameterSemantic(iDescriptor, 1) != ParameterSemantic::WindowSecurityMode || iRaw > 2)
+        return false;
+    oMode = static_cast<IoHomeWindowSecurityMode>(iRaw);
+    return true;
+}
+
+const char *ioHomeWindowSecurityModeName(IoHomeWindowSecurityMode iMode)
+{
+    switch (iMode)
+    {
+    case IoHomeWindowSecurityMode::DayLocked: return "daylocked";
+    case IoHomeWindowSecurityMode::HomeSecure: return "homesecure";
+    case IoHomeWindowSecurityMode::Secured: return "secured";
+    default: return "unknown";
+    }
+}
+
 IoHomeParameterDescriptor ioHomeParameterDescriptor(
     const IoHomeProfileDescriptor *iDescriptor, uint8_t iParameterIndex)
 {
     IoHomeParameterDescriptor lResult;
     lResult.index = iParameterIndex;
-    lResult.semantic = ioHomeParameterSemantic(iDescriptor, iParameterIndex);
+    lResult.semantic = ioHomeResolvedParameterSemantic(iDescriptor, iParameterIndex);
+    if (lResult.semantic != ParameterSemantic::Unknown && lResult.semantic != ParameterSemantic::Unsupported)
+        lResult.source = lResult.semantic == ioHomeParameterSemantic(iDescriptor, iParameterIndex)
+                             ? IoHomeParameterSource::KlfAppendix2 : IoHomeParameterSource::Ovpd;
     if (!iDescriptor || iParameterIndex > 16)
         return lResult;
     lResult.polarity = iParameterIndex == 0 ? iDescriptor->mpPolarity
@@ -254,7 +290,12 @@ IoHomeParameterDescriptor ioHomeParameterDescriptor(
         return lResult;
     case ParameterSemantic::LockState:
     case ParameterSemantic::SwitchState:
+    case ParameterSemantic::WindowSecurityMode:
         lResult.encoding = ParameterEncoding::Discrete;
+        return lResult;
+    case ParameterSemantic::ProjectionAngle:
+        // Meaning is established; do not label degrees or enable writes until
+        // its exact value conversion and command path are qualified.
         return lResult;
     default:
         lResult.encoding = (iDescriptor->capabilityFlags & IoHomeCapabilityBinaryOnly) &&
@@ -325,6 +366,8 @@ const char *ioHomeParameterSemanticName(ParameterSemantic iSemantic)
     case ParameterSemantic::EnergyDemand: return "energy-demand";
     case ParameterSemantic::EnergyGradient: return "energy-gradient";
     case ParameterSemantic::ShutterClosure: return "shutter-closure";
+    case ParameterSemantic::ProjectionAngle: return "projection-angle";
+    case ParameterSemantic::WindowSecurityMode: return "window-security-mode";
     default: return "unknown";
     }
 }

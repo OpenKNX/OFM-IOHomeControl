@@ -3503,6 +3503,48 @@ TEST(klf_profile_registry_preserves_unknowns_and_reverses_venetian_fp_roles)
     ASSERT_TRUE(!ioHomeSupportsCapturedFp3Orientation(lIdentity));
 }
 
+TEST(profile_supplemental_read_semantics_do_not_grant_writes_or_capabilities)
+{
+    const auto *lProjection = ioHomeProfileDescriptor(2, 2);
+    const auto lAngle = ioHomeParameterDescriptor(lProjection, 9);
+    ASSERT_EQ(lAngle.semantic, ParameterSemantic::ProjectionAngle);
+    ASSERT_EQ(lAngle.source, IoHomeParameterSource::Ovpd);
+    ASSERT_EQ(lAngle.encoding, ParameterEncoding::Unknown);
+    ASSERT_TRUE(!lAngle.writable);
+    ASSERT_TRUE(!ioHomeProfileCapabilities(lProjection).tilt);
+    ASSERT_EQ(ioHomeParameterSemantic(lProjection, 9), ParameterSemantic::Unsupported);
+    ASSERT_EQ(ioHomeResolvedParameterSemantic(ioHomeProfileDescriptor(2, 0), 9), ParameterSemantic::Unsupported);
+    const auto lWindow = ioHomeParameterDescriptor(ioHomeProfileDescriptor(9, 1), 1);
+    ASSERT_EQ(lWindow.semantic, ParameterSemantic::WindowSecurityMode);
+    ASSERT_EQ(lWindow.encoding, ParameterEncoding::Discrete);
+    ASSERT_EQ(lWindow.source, IoHomeParameterSource::Ovpd);
+    ASSERT_TRUE(!lWindow.writable);
+    ASSERT_EQ(ioHomeParameterDescriptor(ioHomeProfileDescriptor(9, 0), 1).semantic, ParameterSemantic::Unsupported);
+    ASSERT_EQ(ioHomeParameterDescriptor(nullptr, 1).source, IoHomeParameterSource::Unknown);
+    ASSERT_EQ(ioHomeParameterDescriptor(lProjection, 1).source, IoHomeParameterSource::KlfAppendix2);
+}
+
+TEST(profile_window_security_enum_preserves_unknown_values)
+{
+    const auto *lWindow = ioHomeProfileDescriptor(9, 1);
+    IoHomeWindowSecurityMode lMode = IoHomeWindowSecurityMode::Secured;
+    const char *lNames[] = {"daylocked", "homesecure", "secured"};
+    for (uint16_t i = 0; i < 3; ++i)
+    {
+        ASSERT_TRUE(ioHomeDecodeWindowSecurityMode(lWindow, i, lMode));
+        ASSERT_EQ(static_cast<uint8_t>(lMode), i);
+        ASSERT_TRUE(strcmp(ioHomeWindowSecurityModeName(lMode), lNames[i]) == 0);
+    }
+    for (uint16_t lRaw : {3, 0xC800, 0xD400, 0xF7FF, 0xFFFF})
+    {
+        ASSERT_TRUE(!ioHomeDecodeWindowSecurityMode(lWindow, lRaw, lMode));
+        ASSERT_EQ(lMode, IoHomeWindowSecurityMode::Secured);
+    }
+    ASSERT_TRUE(!ioHomeDecodeWindowSecurityMode(ioHomeProfileDescriptor(9, 0), 1, lMode));
+    ASSERT_TRUE(!ioHomeDecodeWindowSecurityMode(nullptr, 1, lMode));
+    ASSERT_EQ(lMode, IoHomeWindowSecurityMode::Secured);
+}
+
 TEST(profile_parameter_encoding_is_separate_from_fp_index)
 {
     const IoHomeProfileDescriptor *lShutter = ioHomeProfileDescriptor(2, 0);
@@ -13655,6 +13697,36 @@ TEST(controller_f7ff_feedback_does_not_publish_mp_or_fp1_to_fp3)
         ASSERT_TRUE(!lChannel.testHasSlatFeedback());
         ASSERT_TRUE(!lChannel.testHasVelocityFeedback());
     }
+}
+
+TEST(controller_window_lock_diagnostic_read_is_discrete_and_never_publishes_position)
+{
+    const uint8_t lKey[16] = {1};
+    IoHomeController lController;
+    IoHomecontrol lModule;
+    IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel, 0x831F2A, 0x7E9E6E, lKey);
+    IoHomeProtocolIdentity lIdentity;
+    lIdentity.valid = true;
+    lIdentity.profile = 9;
+    lIdentity.subProfile = 1;
+    lChannel.onProtocolIdentity(0x7E9E6E, lIdentity);
+    ASSERT_TRUE(lController.sendDiagnosticFpRead(&lChannel, 1));
+    IoHomeFrame lTx;
+    ASSERT_TRUE(transmitQueuedControllerFrame(lController, lTx));
+    uint8_t lData[15] = {};
+    lData[14] = 2;
+    IoHomeFrame lResponse;
+    buildSimpleResponseFrame(lResponse, 0x831F2A, 0x7E9E6E,
+                             IoHomeCommand::PrivateResponse, lData, sizeof(lData));
+    ASSERT_TRUE(queueControllerResponse(lController, lResponse));
+    ASSERT_EQ(lController.lastDiagnosticFpSample().raw, 2);
+    ASSERT_EQ(lController.lastDiagnosticFpSample().kind, RawParameterValueKind::Discrete);
+    ASSERT_TRUE(!lChannel.testHasPositionFeedback());
+    ASSERT_TRUE(!lChannel.testHasSlatFeedback());
+    ASSERT_TRUE(!lChannel.testHasVelocityFeedback());
+    ASSERT_EQ(ioHomeClassifyRawParameterValue(3, 0x0241, 1), RawParameterValueKind::Unknown);
+    ASSERT_EQ(ioHomeClassifyRawParameterValue(2, 0x0240, 1), RawParameterValueKind::Relative);
 }
 
 TEST(controller_diagnostic_fp_read_uses_captured_selector_without_publishing)
