@@ -1092,6 +1092,14 @@ bool IoHomecontrol::applyKeyImportDeviceToChannel(const KeyImportDevice &iDevice
         mChannels[iChannelIndex]->isOperational())
         return false;
 
+    IoHomeAssignmentReceipt::Value receipt;
+    receipt.generation=mCommissioningJob.generation; receipt.node=iDevice.nodeId;
+    std::memcpy(receipt.key,mKeyImportKey.key,16);
+    receipt.profile=iDevice.protocolIdentity.profile; receipt.subProfile=iDevice.protocolIdentity.subProfile;
+    receipt.manufacturer=iDevice.protocolIdentity.manufacturerId;
+    receipt.power=iDevice.protocolIdentity.powerSaveModeRaw;
+    receipt.metadataValid=iDevice.protocolIdentity.valid; receipt.metadataComplete=iDevice.protocolIdentity.fullMetadata;
+    if (!mAssignmentReceipts.save(iChannelIndex,receipt)) return false;
     IoHomecontrolChannel *lChannel = mChannels[iChannelIndex];
     lChannel->setIs1W(false);
     lChannel->setNodeId(iDevice.nodeId);
@@ -2406,6 +2414,26 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
     }
 }
 
+void IoHomecontrol::restoreAssignmentReceipts()
+{
+    for(uint8_t i=0;i<mNumChannels;i++)
+    {
+        IoHomeAssignmentReceipt::Value receipt;
+        if(mAssignmentReceipts.load(i,receipt)!=IoHomeAssignmentReceipt::Result::Found) continue;
+        auto *ch=mChannels[i]; if(!ch || ch->is1W()) continue;
+        if(ch->getNodeId()!=0 && ch->getNodeId()!=receipt.node)
+        { logInfoP("Assignment recovery conflict channel=%u; no overwrite",i+1);continue; }
+        if(ch->getNodeId()==receipt.node && std::memcmp(ch->getEncryptionKey(),receipt.key,16))
+        { logInfoP("Assignment recovery key conflict channel=%u; no overwrite",i+1);continue; }
+        if(ch->getNodeId()==receipt.node) continue; // retain richer restored metadata
+        ch->setNodeId(receipt.node); ch->setEncryptionKey(receipt.key);
+        IoHomeProtocolIdentity identity; identity.valid=receipt.metadataValid;
+        identity.fullMetadata=false;identity.ioAddress=receipt.node; // receipt is only a partial metadata snapshot
+        identity.profile=receipt.profile;identity.subProfile=receipt.subProfile;identity.manufacturerId=receipt.manufacturer;
+        ch->onProtocolIdentity(receipt.node,identity);
+    }
+}
+
 void IoHomecontrol::updateCommissioningJob()
 {
     using O=IoHomeCommissioningJob::Owner; using S=IoHomeCommissioningJob::Stage;
@@ -2581,6 +2609,29 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         }
         break;
     }
+    case 0x21: // Read/resume or acknowledge an identity-bound assignment receipt
+    {
+        if((length!=2 && length!=9) || data[1]>=mNumChannels) break;
+        IoHomeAssignmentReceipt::Value receipt;
+        if(mAssignmentReceipts.load(data[1],receipt)!=IoHomeAssignmentReceipt::Result::Found)
+        { resultData[0]=3;resultLength=1;return true; }
+        if(length==9)
+        {
+            const uint32_t generation=uint32_t(data[2])<<24|uint32_t(data[3])<<16|uint32_t(data[4])<<8|data[5];
+            const uint32_t node=uint32_t(data[6])<<16|uint32_t(data[7])<<8|data[8];
+            if(generation!=receipt.generation || node!=receipt.node || mChannels[data[1]]->getNodeId()!=node)
+            { resultData[0]=4;resultLength=1;return true; }
+            receipt.projectApplied=true;
+            if(!mAssignmentReceipts.save(data[1],receipt)) { resultData[0]=4;resultLength=1;return true; }
+        }
+        resultData[0]=0;resultData[1]=1;resultData[2]=data[1];
+        for(uint8_t i=0;i<4;i++) resultData[3+i]=receipt.generation>>(24-8*i);
+        for(uint8_t i=0;i<3;i++) resultData[7+i]=receipt.node>>(16-8*i);
+        resultData[10]=receipt.profile;resultData[11]=receipt.profile>>8;
+        resultData[12]=receipt.subProfile;resultData[13]=(receipt.metadataValid?1:0)|(receipt.projectApplied?2:0);
+        resultData[14]=receipt.manufacturer;resultData[15]=receipt.power;
+        resultLength=16;return true;
+    }
     case 0x1F: // Common job snapshot / generation-checked cancellation
     {
         if (length!=1 && length!=5) break;
@@ -2642,6 +2693,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         if (lChannel < mNumChannels)
         {
             mController.cancelPairing();
+            if (!mAssignmentReceipts.erase(lChannel)) { resultData[0]=4;resultLength=1;return true; }
             mChannels[lChannel]->setNodeId(0);
             mChannels[lChannel]->clearLearnedLowPower2W();
             mChannels[lChannel]->setOneWayEnrolled(false);
@@ -3489,6 +3541,7 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
         logDebugP("Unknown flash version %d", lVersion);
     }
 
+    restoreAssignmentReceipts();
     applyOneWayControllerConfiguration();
 }
 

@@ -22,6 +22,7 @@
 #include "protocol/IoHomeProductCodecs.h"
 #include "protocol/IoHomeProductBinding.h"
 #include "protocol/IoHomeCommissioningJob.h"
+#include "protocol/IoHomeAssignmentReceipt.h"
 #include "protocol/IoHomeProductActivation.h"
 #include <limits>
 #include "protocol/IoHomeLogRedaction.h"
@@ -3646,6 +3647,19 @@ TEST(commissioning_job_rejects_concurrent_owner_and_stale_cancel)
     ASSERT_TRUE(j.cancel(1)); ASSERT_TRUE(!j.active());
     ASSERT_TRUE(j.begin(IoHomeCommissioningJob::Owner::Import));
     ASSERT_EQ(j.generation,2); ASSERT_TRUE(!j.cancel(1));
+}
+
+TEST(assignment_receipt_preserves_saved_identity_after_failed_project_ack)
+{
+    IoHomeAssignmentReceipt j;IoHomeAssignmentReceipt::Value v,r;
+    v.node=0x123456;v.key[0]=0xAB;v.generation=8;v.profile=6;v.subProfile=2;v.metadataValid=true;
+    ASSERT_TRUE(j.save(0,v));
+    v.projectApplied=true;j.failWrites=true;ASSERT_TRUE(!j.save(0,v));
+    ASSERT_EQ(j.load(0,r),IoHomeAssignmentReceipt::Result::Found);
+    ASSERT_EQ(r.node,0x123456);ASSERT_EQ(r.key[0],0xAB);ASSERT_EQ(r.generation,8);
+    ASSERT_TRUE(!r.projectApplied);j.failWrites=false;ASSERT_TRUE(j.save(0,v));
+    ASSERT_EQ(j.load(0,r),IoHomeAssignmentReceipt::Result::Found);ASSERT_TRUE(r.projectApplied);
+    ASSERT_TRUE(j.erase(0));ASSERT_EQ(j.load(0,r),IoHomeAssignmentReceipt::Result::Missing);
 }
 
 TEST(product_binding_requires_exact_identity_and_consistent_evidence)

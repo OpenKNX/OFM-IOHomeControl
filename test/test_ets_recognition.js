@@ -90,3 +90,14 @@ test("per-field manual choices survive recognition", function() {
     check(value(d,"OrientationObjects")===1 && value(d,"Dimmable")===1,"manual fields overwritten");
     check(value(d,"BinaryOnly")===1,"allowed binary field not applied");
 });
+
+test("assignment resume acknowledges only after project application",function() {
+    var d=deviceWith({Name:"Office",RecognitionTypeAuto:0,DeviceType:7});var ack=false;
+    var receipt=[0,1,0,0,0,0,8,0x12,0x34,0x56,6,0,58,1,2,0];
+    var online={invokeFunctionProperty:function(o,p,data) {
+        if(data.length===2)return receipt;
+        check(value(d,"Active")===1 && value(d,"Name")==="Office" && value(d,"DeviceType")===7,"manual/project state");
+        check(data.length===9 && data[5]===8 && data[6]===0x12,"receipt identity ACK");ack=true;return receipt;
+    }};
+    check(IOHC_resumeAssignment(d,online,0) && ack,"resume failed");
+});

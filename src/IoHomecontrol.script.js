@@ -204,9 +204,23 @@ function IOHC_queryRecognition(device, online, context, applySettings) {
     return applied;
 }
 
+function IOHC_resumeAssignment(device,online,channel) {
+    var receipt=IOHC_invokeFunctionProperty(online,[0x21,channel]);
+    if(!receipt || receipt.length!==16 || receipt[0]!==0 || receipt[1]!==1 || receipt[2]!==channel) return false;
+    var discovery={nodeId:IOHC_readNodeId(receipt,7),protocolType:receipt[10]|receipt[11]<<8,
+                   subtype:receipt[12],manufacturer:receipt[14],powerClass:receipt[15]===1?2:receipt[15]===0?1:0,
+                   metadataValid:(receipt[13]&1)!==0};
+    IOHC_configureImportedChannel(device,channel+1,discovery);
+    var ack=[0x21,channel].concat(receipt.slice(3,10));
+    var response=IOHC_invokeFunctionProperty(online,ack);
+    if(!response || response[0]!==0) throw new Error("Zuordnung im Gerät gespeichert; ETS-Abgleich erneut ausführen.");
+    return true;
+}
+
 function IOHC_applyRecognizedType(device, online, progress, context) {
     online.connect();
     try {
+        IOHC_resumeAssignment(device,online,context.channelIndex-1);
         IOHC_queryPairingInfo(device, online, progress, context, "Status gelesen", "Status direkt vom Gerät gelesen");
         var applied = IOHC_queryRecognition(device, online, context, true);
         progress.setText(applied ? "Erkannten Gerätetyp übernommen. Applikation programmieren." :

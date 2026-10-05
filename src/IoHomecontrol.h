@@ -5,6 +5,7 @@
 #include "controller/IoHomeController.h"
 #include "protocol/IoHomePassiveAuth.h"
 #include "protocol/IoHomeCommissioningJob.h"
+#include "protocol/IoHomeAssignmentReceipt.h"
 #include "knxprod.h"
 
 class IoHomecontrol : public OpenKNX::Module
@@ -116,6 +117,8 @@ private:
   bool mMetadataRefreshHasRun[IOHC_ChannelCount] = {};
   void processMetadataRefresh();
 
+  IoHomeAssignmentReceipt mAssignmentReceipts;
+  void restoreAssignmentReceipts();
   IoHomeCommissioningJob mCommissioningJob;
   void updateCommissioningJob();
   enum class KeyImportPhase : uint8_t
