@@ -69,12 +69,12 @@ enum class IoHomeCommand : uint8_t
     ChallengeRequest = 0x3C,
     ChallengeResponse = 0x3D,
 
-    // Unknown commands (observed in packet captures, undocumented)
-    Unknown46Request = 0x46,  // Authentication needed (not used)
-    Unknown46Response = 0x47, // (not used)
-                              // Unknown48 = 0x48,  // not used — observed in rspaargaren scan list only
-    Unknown4ARequest = 0x4A,  // No authentication needed (not used)
-    Unknown4AResponse = 0x4B, // (not used)
+    // Recovered ObjectsArray transport; retain existing C++ names for compatibility.
+    Unknown46Request = 0x46,  // Authenticated opening of allowlisted metadata read
+    Unknown46Response = 0x47, // control/disposition/negotiated span
+                              // 0x48/0x49 is the write direction; no RF writer enabled
+    Unknown4ARequest = 0x4A,  // Key-bound read continuation, no per-chunk authentication
+    Unknown4AResponse = 0x4B, // control/countdown/raw bytes
 
     // Device info
     GetName = 0x50,

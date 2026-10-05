@@ -4731,6 +4731,10 @@ const char *IoHomeController::commandName(IoHomeCommand iCmd)
         return "ChallengeRequest";
     case IoHomeCommand::ChallengeResponse:
         return "ChallengeResponse";
+    case IoHomeCommand::Unknown46Request:return "ObjectReadOpen";
+    case IoHomeCommand::Unknown46Response:return "ObjectReadOpenResponse";
+    case IoHomeCommand::Unknown4ARequest:return "ObjectContinuation";
+    case IoHomeCommand::Unknown4AResponse:return "ObjectContinuationResponse";
     case IoHomeCommand::GetName:
         return "GetName";
     case IoHomeCommand::GetNameResponse:
@@ -10380,8 +10384,8 @@ void IoHomeController::dispatchRxFrame()
             case IoHomeCommand::ConfirmationACK:         // 0x2D — device ACKs discovery confirmation (consumed implicitly)
             case IoHomeCommand::Discover2EResponse:      // 0x2F — handled passively above
             case IoHomeCommand::KeyTransferConfirmation: // 0x33 — device confirms key storage (not parsed in reference)
-            case IoHomeCommand::Unknown46Response:       // 0x47 — undocumented (not used)
-            case IoHomeCommand::Unknown4AResponse:       // 0x4B — undocumented (not used)
+            case IoHomeCommand::Unknown46Response:       // 0x47 — object read handled by pending exchange
+            case IoHomeCommand::Unknown4AResponse:       // 0x4B — object read handled by pending exchange
             case IoHomeCommand::SetConfig1Response:      // 0x70 — handled during pairing post-configuration
             case IoHomeCommand::StatusUpdateResponse:    // 0x72 — we send this, shouldn't receive it
             case IoHomeCommand::ErrorResponse:           // 0xFE — error from device
