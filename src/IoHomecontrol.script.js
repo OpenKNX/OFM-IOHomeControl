@@ -1217,3 +1217,21 @@ function IOHC_applyPairingResult(device,online,progress,context) {
   progress.setText("Gespeicherte Zuordnung in ETS übernommen. Manuelle Vorgaben bleiben erhalten. Applikation programmieren; Download ist noch offen.");
  } finally {online.disconnect();}
 }
+function IOHC_recognitionConflicts(device,context,response) {
+ var channel=Number(context.channelIndex)-1;
+ if(!response||response.length!==14||response[0]!==0||response[1]!==1||response[2]!==channel||response[12]<1||response[12]>14||response[13]>7||(response[11]&0x34)!==0x14)throw new Error("Keine gültige gepaarte 2W-Erkennung");
+ var prefix=IOHC_getChannelPrefix(context),names=["DeviceType","OrientationObjects","BinaryOnly","Dimmable"],labels=["Gerätetyp","Orientierung","Binärmodus","Dimmen"],suggested=[response[12],response[13]&1,(response[13]>>1)&1,(response[13]>>2)&1],conflicts=[];
+ for(var i=0;i<names.length;i++) {var parameter=IOHC_getParameter(device,prefix+names[i]);if(parameter&&Number(parameter.value)!==suggested[i])conflicts.push(labels[i]+": ETS "+parameter.value+", Erkennung "+suggested[i]);}
+ var override=IOHC_getParameter(device,prefix+"ProfileOverride");if(override&&Number(override.value)!==0)conflicts.push("Manuelles Profil "+override.value+" sperrt automatische Übernahme");
+ return conflicts;
+}
+function IOHC_showRecognitionConflicts(device,online,progress,context) {
+ online.connect();try {
+  var request=[0x1E,Number(context.channelIndex)-1],first=IOHC_invokeFunctionProperty(online,request),conflicts=IOHC_recognitionConflicts(device,context,first),last=IOHC_invokeFunctionProperty(online,request);
+  if(JSON.stringify(first)!==JSON.stringify(last))throw new Error("Erkennung während des Lesens geändert");
+  progress.setText(conflicts.length?conflicts.join(". ")+". Vorgaben behalten oder automatische Übernahme vorbereiten; nichts geändert.":"ETS-Vorgaben stimmen mit der Erkennung überein; nichts geändert.");
+ }finally{online.disconnect();}
+}
+function IOHC_keepRecognitionSettings(device,online,progress,context) {
+ progress.setText("ETS-Vorgaben beibehalten. "+IOHC_effectiveSettingsText(device,context));
+}

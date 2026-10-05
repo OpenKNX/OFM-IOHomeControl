@@ -269,3 +269,8 @@ test("receipt synchronization never claims a completed download",function(){
  var online={invokeFunctionProperty:function(o,p,data){if(data[0]===0x1D)return snapshot(0x1C,1,0);if(data.length===2)return receipt;return [0];}};
  check(IOHC_resumeAssignment(d,online,0)&&value(d,"SyncStatus")==="Gerät+ETS gespeichert; Download offen","download conflated with ACK");
 });
+test("recognition conflict report preserves manual values and rejects 1W",function(){
+ var d=deviceWith({DeviceType:7,ProfileOverride:448}),before=JSON.stringify(d.params),response=snapshot(0x1C,1,0).concat([1,1]);
+ check(IOHC_recognitionConflicts(d,{channelIndex:1},response).length>=2,"conflicts omitted");check(JSON.stringify(d.params)===before,"conflict report mutated values");
+ response[11]|=32;var failed=false;try{IOHC_recognitionConflicts(d,{channelIndex:1},response);}catch(e){failed=true;}check(failed,"1W recognition invented");
+});
