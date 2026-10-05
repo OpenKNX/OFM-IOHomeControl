@@ -52,9 +52,10 @@ check-controller: $(PROTOCOL_TARGET)
 check-exchange: $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite exchange
 
-check-radio: $(SX1262_ERROR_TARGET) $(SX1262_PHY_TARGET)
+check-radio: $(SX1262_ERROR_TARGET) $(SX1262_PHY_TARGET) $(BUILD_DIR)/test_sx1276_adapter
 	./$(SX1262_ERROR_TARGET)
 	./$(SX1262_PHY_TARGET)
+	./$(BUILD_DIR)/test_sx1276_adapter
 
 check-ui:
 	$(PYTHON) test_channel_ui.py
@@ -71,3 +72,7 @@ clean:
 # Needs Node.js or the Python quickjs package; executes the actual ETS script.
 check-ets:
 	$(PYTHON) test_ets_recognition.py
+
+SX1276_TARGET = $(BUILD_DIR)/test_sx1276_adapter
+$(SX1276_TARGET): test_sx1276_adapter.cpp ../src/radio/RadioSX1276.cpp ../src/radio/RadioSX1276.h | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -o $@ test_sx1276_adapter.cpp ../src/radio/RadioSX1276.cpp

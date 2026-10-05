@@ -3,7 +3,11 @@
 #include "sx1276Regs-Fsk.h"
 #include "../protocol/IoHomeCommands.h"
 #include "../protocol/IoHomeFrame.h"
+#ifndef TEST_NATIVE
 #include "OpenKNX.h"
+#else
+#define logInfoP(...) ((void)0)
+#endif
 
 #ifdef ESP32
 #include <SPI.h>
@@ -126,7 +130,11 @@ void RadioSX1276::resetChip()
 
 std::string RadioSX1276::logPrefix()
 {
+#ifdef TEST_NATIVE
+    return "RadioSX1276";
+#else
     return openknx.logger.buildPrefix("RadioSX1276", 0);
+#endif
 }
 
 RadioError RadioSX1276::configure()
@@ -774,7 +782,9 @@ RadioError RadioSX1276::sendEms2Wake()
 
 uint8_t RadioSX1276::readRegister(uint8_t iAddr)
 {
-#ifdef ESP32
+#ifdef TEST_NATIVE
+    return mNativeRead?mNativeRead(mNativeContext,iAddr):0;
+#elif defined(ESP32)
     uint8_t lVal;
     digitalWrite(mCsPin, LOW);
     SPI.transfer(iAddr & SPI_READ_MASK);
@@ -788,7 +798,9 @@ uint8_t RadioSX1276::readRegister(uint8_t iAddr)
 
 void RadioSX1276::writeRegister(uint8_t iAddr, uint8_t iVal)
 {
-#ifdef ESP32
+#ifdef TEST_NATIVE
+    if(mNativeWrite)mNativeWrite(mNativeContext,iAddr,iVal);
+#elif defined(ESP32)
     digitalWrite(mCsPin, LOW);
     SPI.transfer(iAddr | SPI_WRITE_MASK);
     SPI.transfer(iVal);
@@ -824,7 +836,9 @@ void RadioSX1276::writeFifo(const uint8_t *iData, uint8_t iLen)
 
     // With IoHomeOn=1, the radio handles the length byte internally.
     // Write raw payload data to FIFO (per nicolas5000).
-#ifdef ESP32
+#ifdef TEST_NATIVE
+    for(uint8_t i=0;i<iLen;i++)writeRegister(REG_FIFO,iData[i]);
+#elif defined(ESP32)
     digitalWrite(mCsPin, LOW);
     SPI.transfer(REG_FIFO | SPI_WRITE_MASK);
     for (uint8_t i = 0; i < iLen; i++)
@@ -840,7 +854,7 @@ uint8_t RadioSX1276::readFifo(uint8_t *oData, uint8_t iMaxLen)
 
     // With IoHomeOn=1, read bytes until FIFO is empty (per nicolas5000).
     // The radio strips the length byte; we get raw payload.
-#ifdef ESP32
+#if defined(ESP32) || defined(TEST_NATIVE)
     uint8_t lLen = 0;
     while (!(readRegister(REG_IRQFLAGS2) & RF_IRQFLAGS2_FIFOEMPTY))
     {

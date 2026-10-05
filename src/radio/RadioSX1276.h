@@ -33,6 +33,11 @@ public:
   static constexpr uint8_t PIN_NOT_CONNECTED = RADIO_PIN_NOT_CONNECTED;
 
   RadioSX1276();
+#ifdef TEST_NATIVE
+  using ReadRegister = uint8_t (*)(void *,uint8_t);
+  using WriteRegister = void (*)(void *,uint8_t,uint8_t);
+  void setNativeTransport(void *context,ReadRegister read,WriteRegister write){mNativeContext=context;mNativeRead=read;mNativeWrite=write;}
+#endif
 
   // Logging prefix required by log*P macros used in this class
   std::string logPrefix();
@@ -87,6 +92,9 @@ public:
   RadioError sendEms2Wake();
 
 private:
+#ifdef TEST_NATIVE
+  void *mNativeContext=nullptr;ReadRegister mNativeRead=nullptr;WriteRegister mNativeWrite=nullptr;
+#endif
   uint8_t mCsPin;
   uint8_t mResetPin;
   uint8_t mDio0Pin;

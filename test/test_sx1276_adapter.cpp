@@ -1,0 +1,25 @@
+#include "radio/RadioSX1276.h"
+#include "radio/sx1276Regs-Fsk.h"
+#include <cassert>
+#include <deque>
+#include <vector>
+#include <cstdio>
+struct Bus {
+ uint8_t registers[128]{};std::deque<uint8_t> rx;std::vector<uint8_t> tx;
+ static uint8_t read(void *p,uint8_t a){auto &b=*static_cast<Bus*>(p);if(a==REG_FIFO){assert(!b.rx.empty());auto v=b.rx.front();b.rx.pop_front();return v;}if(a==REG_IRQFLAGS2)return (b.registers[a]&~RF_IRQFLAGS2_FIFOEMPTY)|(b.rx.empty()?RF_IRQFLAGS2_FIFOEMPTY:0);return b.registers[a];}
+ static void write(void *p,uint8_t a,uint8_t v){auto &b=*static_cast<Bus*>(p);if(a==REG_FIFO)b.tx.push_back(v);else if(a==REG_IRQFLAGS2&&(v&RF_IRQFLAGS2_FIFOOVERRUN)){b.rx.clear();b.tx.clear();b.registers[a]&=~RF_IRQFLAGS2_FIFOOVERRUN;}else b.registers[a]=v;}
+};
+int main(){
+ Bus b;b.registers[REG_VERSION]=0x12;RadioSX1276 radio;radio.setNativeTransport(&b,Bus::read,Bus::write);radio.init(1,2,3,4);assert(radio.isInitialized());
+ assert(b.registers[REG_DIOMAPPING1]==0x39&&b.registers[REG_DIOMAPPING2]==0xF1);
+ assert(radio.setReceiveBandwidths(50000,83333)==RadioError::None&&b.registers[REG_RXBW]==0x0B&&b.registers[REG_AFCBW]==0x12);
+ assert(radio.setReceiveBandwidths(12345,83333)==RadioError::InvalidParam);
+ radio.setPreambleLength(12);assert(b.registers[REG_PREAMBLELSB]==12);
+ uint8_t frame[]={0x0A,0x12,0x34};b.rx={9,8,7};assert(radio.startTransmit(frame,3)==RadioError::None);assert(b.rx.empty()&&b.tx==std::vector<uint8_t>(frame,frame+3));
+ assert(radio.setReceiveBandwidths(50000,83333)==RadioError::Busy);b.registers[REG_IRQFLAGS2]=RF_IRQFLAGS2_PACKETSENT;assert(radio.isTxDone()&&radio.txDoneCount()==1);
+ radio.startReceive();b.rx={1,2,3};b.registers[REG_IRQFLAGS2]=RF_IRQFLAGS2_PAYLOADREADY|RF_IRQFLAGS2_CRCOK;assert(radio.isPacketAvailable());uint8_t out[8]{};assert(radio.readPacket(out,8)==3&&out[0]==1&&out[2]==3&&radio.lastReceiveEvidence().admissible());
+ b.rx={1,2,3};b.registers[REG_IRQFLAGS2]=RF_IRQFLAGS2_PAYLOADREADY|RF_IRQFLAGS2_CRCOK;assert(radio.readPacket(out,2)==0&&b.rx.empty()&&radio.lastReceiveEvidence().truncated);
+ b.rx={1,2};b.registers[REG_IRQFLAGS2]=RF_IRQFLAGS2_PAYLOADREADY;assert(radio.readPacket(out,8)==0&&!radio.lastReceiveEvidence().hardwareCrcValid);
+ Bus missing;RadioSX1276 absent;absent.setNativeTransport(&missing,Bus::read,Bus::write);absent.init(1,2,3);assert(!absent.isInitialized());
+ puts("SX1276 actual adapter register/FIFO scenarios passed (SPI electrical timing unqualified)");
+}
