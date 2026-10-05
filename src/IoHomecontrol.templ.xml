@@ -110,6 +110,7 @@
               <Parameter Id="%AID%_P-%TT%%CC%132" Name="c%C%ObjectSpan" ParameterType="%AID%_PT-IOHCObjectSpan" Text="Lesespanne (1..1024)" Value="64" op:configTransfer="never" />
               <Parameter Id="%AID%_P-%TT%%CC%133" Name="c%C%ObjectReadToken" ParameterType="%AID%_PT-IOHCText40Byte" Text="Lesevorgang (Boot / Token / Node)" Value="" op:configTransfer="never" />
               <Parameter Id="%AID%_P-%TT%%CC%134" Name="c%C%ObjectSliceOffset" ParameterType="%AID%_PT-IOHCObjectOffset" Text="Rückleseoffset (16 Bytes)" Value="0" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%135" Name="c%C%SemanticProduct" ParameterType="%AID%_PT-IOHCText40Byte" Text="Produktdefinition für Diagnose (expliziter Name)" Value="none" op:configTransfer="never" />
             </Parameters>
 
             <ParameterRefs>
@@ -189,6 +190,7 @@
               <ParameterRef Id="%AID%_P-%TT%%CC%132_R-%TT%%CC%13201" RefId="%AID%_P-%TT%%CC%132" />
               <ParameterRef Id="%AID%_P-%TT%%CC%133_R-%TT%%CC%13301" RefId="%AID%_P-%TT%%CC%133" />
               <ParameterRef Id="%AID%_P-%TT%%CC%134_R-%TT%%CC%13401" RefId="%AID%_P-%TT%%CC%134" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%135_R-%TT%%CC%13501" RefId="%AID%_P-%TT%%CC%135" />
             </ParameterRefs>
 
             <ParameterCalculations>
@@ -430,7 +432,7 @@
                         <!-- Scene support: available for the selected actuator categories.
                              The complete per-scene UI selection is generated from IoHomecontrol.scene.part.xml. -->
                         <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
-                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Szenenlernen ist nur für Positionsszenen vorgesehen. Bei Cozy, Licht, Schloss und Schalter kann das Szenensteuerungsobjekt Szenen abrufen, aber nicht speichern." UIHint="Information" />
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Die gewählte Kategorie ist keine Produktqualifikation. Lamellen erfordern ein passendes Profil; 2W-Lüftung bleibt gesperrt. Szenenlernen ist nur für Positionsszenen vorgesehen. Bei Cozy, Licht, Schloss und Schalter kann das Szenensteuerungsobjekt Szenen abrufen, aber nicht speichern." UIHint="Information" />
                         <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
                           <when test="&gt;=1">
                             <op:usePart name="IOHCScene" xpath="//Dynamic/*" />
@@ -625,6 +627,8 @@
                         <Button Id="%AID%_B-%TT%%CC%023" Text="Objektstatus lesen" EventHandler="IOHC_objectStatus" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%024" Text="Objektlesen abbrechen" EventHandler="IOHC_objectCancel" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%025" Text="Objektbytes lesen (max. 16 Bytes)" EventHandler="IOHC_objectSlice" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%135_R-%TT%%CC%13501" />
+                        <Button Id="%AID%_B-%TT%%CC%026" Text="Bedeutungen der ausgewählten Produktdefinition anzeigen" EventHandler="IOHC_showSemanticHelp" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%010" Text="Wirksame ETS-Vorgaben anzeigen" EventHandler="IOHC_showEffectiveSettings" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%009" Text="Speicher / Zuordnungsbeleg prüfen" EventHandler="IOHC_readPersistenceEvidence" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%008" Text="Produktwerte abfragen (RF lesen)" EventHandler="IOHC_requestProductObservations" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />

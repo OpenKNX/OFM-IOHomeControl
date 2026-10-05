@@ -2252,7 +2252,7 @@ void IoHomecontrolChannel::handleSceneRecall(uint8_t iScene)
     }
 
     uint8_t lSlat = mSceneSlats[lSceneIndex];
-    bool lUseSlat = lDeviceType == 1;
+    bool lUseSlat = lDeviceType == 1 && isTiltCapableDeviceType();
 
     if (lUseSlat)
         logDebugP("Scene %d recall -> %d%%, lamella %d%%", iScene, lPos, lSlat);
