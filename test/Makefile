@@ -76,3 +76,10 @@ check-ets:
 SX1276_TARGET = $(BUILD_DIR)/test_sx1276_adapter
 $(SX1276_TARGET): test_sx1276_adapter.cpp ../src/radio/RadioSX1276.cpp ../src/radio/RadioSX1276.h | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ test_sx1276_adapter.cpp ../src/radio/RadioSX1276.cpp
+
+STORAGE_TARGET = $(BUILD_DIR)/test_rp2040_storage
+$(STORAGE_TARGET): test_rp2040_storage.cpp fsstub/LittleFS.h ../src/protocol/IoHomeStorageBackend.h ../src/protocol/IoHomeCheckedJournal.h | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -Ifsstub -o $@ test_rp2040_storage.cpp
+.PHONY: check-storage
+check-storage: $(STORAGE_TARGET)
+	./$(STORAGE_TARGET)
