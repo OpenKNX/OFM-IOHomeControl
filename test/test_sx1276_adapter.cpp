@@ -20,6 +20,9 @@ int main(){
  radio.startReceive();b.rx={1,2,3};b.registers[REG_IRQFLAGS2]=RF_IRQFLAGS2_PAYLOADREADY|RF_IRQFLAGS2_CRCOK;assert(radio.isPacketAvailable());uint8_t out[8]{};assert(radio.readPacket(out,8)==3&&out[0]==1&&out[2]==3&&radio.lastReceiveEvidence().admissible());
  b.rx={1,2,3};b.registers[REG_IRQFLAGS2]=RF_IRQFLAGS2_PAYLOADREADY|RF_IRQFLAGS2_CRCOK;assert(radio.readPacket(out,2)==0&&b.rx.empty()&&radio.lastReceiveEvidence().truncated);
  b.rx={1,2};b.registers[REG_IRQFLAGS2]=RF_IRQFLAGS2_PAYLOADREADY;assert(radio.readPacket(out,8)==0&&!radio.lastReceiveEvidence().hardwareCrcValid);
+ assert(!radio.superviseIdleReceive(5000));
+ b.registers[REG_OPMODE]=1;assert(radio.superviseIdleReceive(10000)&&radio.recoveryAttempts()==1&&radio.state()==RadioState::Receiving);
+ b.registers[REG_VERSION]=0;assert(!radio.superviseIdleReceive(15000));assert(!radio.superviseIdleReceive(20000)&&radio.recoveryExhausted());assert(!radio.superviseIdleReceive(25000)&&radio.recoveryAttempts()==3);
  Bus missing;RadioSX1276 absent;absent.setNativeTransport(&missing,Bus::read,Bus::write);absent.init(1,2,3);assert(!absent.isInitialized());
  puts("SX1276 actual adapter register/FIFO scenarios passed (SPI electrical timing unqualified)");
 }

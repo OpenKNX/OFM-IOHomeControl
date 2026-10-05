@@ -5887,6 +5887,11 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
 
 void IoHomeController::loop()
 {
+#if defined(RADIO_SX1276) && !defined(TEST_NATIVE)
+    if(idleForManagedOperation()&&(!mModule||mModule->managementRequestsAllowed())&&mRadio.superviseIdleReceive(millis())){
+        mRxScanLastSwitch=micros();
+    }
+#endif
     serviceObjectRead();
     if (!mRadio.isInitialized())
         return;

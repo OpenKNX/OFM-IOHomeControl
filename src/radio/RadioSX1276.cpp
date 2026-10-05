@@ -303,6 +303,7 @@ RadioError RadioSX1276::setReceiveBandwidths(uint32_t rxHz, uint32_t afcHz)
     const bool verified = readRegister(REG_RXBW)==rx && readRegister(REG_AFCBW)==afc;
     if (wasReceiving) startReceive();
     logConfigDump();
+    if(verified){mRequestedRxHz=rxHz;mRequestedAfcHz=afcHz;}
     return verified ? RadioError::None : RadioError::HardwareError;
 }
 
@@ -342,6 +343,7 @@ RadioError RadioSX1276::setOutputPower(uint8_t iPower)
     }
 
     writeRegister(REG_PACONFIG, lPaConfig);
+    mRequestedPower=iPower;
     return RadioError::None;
 }
 
@@ -604,6 +606,26 @@ RadioState RadioSX1276::state() const
 bool RadioSX1276::isInitialized() const
 {
     return mInitialized;
+}
+
+bool RadioSX1276::superviseIdleReceive(uint32_t nowMs)
+{
+    if(mState==RadioState::Transmitting||mEms2Mode||uint32_t(nowMs-mHealthCheckedMs)<5000)return false;
+    mHealthCheckedMs=nowMs;
+    uint8_t rx=0,afc=0;radioSX1276Bandwidth(mRequestedRxHz,rx);radioSX1276Bandwidth(mRequestedAfcHz,afc);
+    const bool healthy=mInitialized&&readRegister(REG_VERSION)==0x12&&
+        (readRegister(REG_OPMODE)&0x8F)==RF_OPMODE_RX&&readRegister(REG_RXBW)==rx&&readRegister(REG_AFCBW)==afc;
+    if(healthy)return false;
+    if(mRecoveryAttempts>=3)return false;
+    ++mRecoveryAttempts;
+    const uint32_t frequency=mCurrentFreq?mCurrentFreq:IOHC_FREQ_2;
+    const uint32_t rxHz=mRequestedRxHz,afcHz=mRequestedAfcHz;const uint8_t power=mRequestedPower;
+    // Driver-only reset. Protocol identity, keys and counters are not touched.
+    resetChip();mInitialized=readRegister(REG_VERSION)==0x12;
+    if(!mInitialized)return false;
+    calibrate();
+    if(configure()!=RadioError::None||setFrequency(frequency)!=RadioError::None||setReceiveBandwidths(rxHz,afcHz)!=RadioError::None||setOutputPower(power)!=RadioError::None)return false;
+    return startReceive()==RadioError::None;
 }
 
 uint32_t RadioSX1276::txStartCount() const

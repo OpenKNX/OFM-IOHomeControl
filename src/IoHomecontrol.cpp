@@ -2861,6 +2861,16 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         resultData[0]=idle&&mController.requestMpFpRead(mChannels[data[1]],data[2])?0:1;
         resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultLength=4;return true;
     }
+    case 0x39: // SX1276 idle RX recovery counters; never resumes a transaction
+    {
+        if(length!=1)break;resultData[0]=0;resultData[1]=1;
+#if defined(RADIO_SX1276) && !defined(TEST_NATIVE)
+        resultData[2]=1;resultData[3]=mController.radio().recoveryAttempts();resultData[4]=mController.radio().recoveryExhausted();
+#else
+        resultData[2]=0;resultData[3]=0;resultData[4]=0;
+#endif
+        resultLength=5;return true;
+    }
     case 0x37: // Allowlisted object read; provider/key/offset/span/node, all bounded
     {
         if(length!=12||data[1]>=mNumChannels)break;
