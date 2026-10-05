@@ -67,7 +67,13 @@ public:
   RadioState state() const;
   bool isInitialized() const;
   // Call only under exclusive idle ownership; no TX or command replay.
+  enum class RecoveryReason : uint8_t {None,Uninitialized,Version,ReceiveMode,Bandwidth};
   bool superviseIdleReceive(uint32_t nowMs);
+  bool setSupervisionIntervalMs(uint16_t ms) {if((ms!=3000&&ms!=5000)||mState==RadioState::Transmitting)return false;mSupervisionIntervalMs=ms;return true;}
+  uint16_t supervisionIntervalMs()const{return mSupervisionIntervalMs;}
+  uint32_t watchdogTriggers()const{return mWatchdogTriggers;}
+  uint8_t recoverySuccesses()const{return mRecoverySuccesses;}
+  RecoveryReason recoveryReason()const{return mRecoveryReason;}
   uint8_t recoveryAttempts() const {return mRecoveryAttempts;}
   bool recoveryExhausted() const {return mRecoveryAttempts>=3;}
 
@@ -101,7 +107,9 @@ private:
 #ifdef TEST_NATIVE
   void *mNativeContext=nullptr;ReadRegister mNativeRead=nullptr;WriteRegister mNativeWrite=nullptr;
 #endif
-  uint32_t mHealthCheckedMs=0;uint8_t mRecoveryAttempts=0;
+  uint32_t mHealthCheckedMs=0,mWatchdogTriggers=0;uint8_t mRecoveryAttempts=0,mRecoverySuccesses=0;
+  uint16_t mSupervisionIntervalMs=5000;
+  RecoveryReason mRecoveryReason=RecoveryReason::None;
   uint32_t mRequestedRxHz=41667,mRequestedAfcHz=41667;uint8_t mRequestedPower=14;
   uint8_t mDio2Pin=PIN_NOT_CONNECTED;bool mCaptureEdges=false;
   volatile uint32_t mPreambleEdgeUs=0,mSyncEdgeUs=0;volatile bool mPreambleEdgeValid=false,mSyncEdgeValid=false;

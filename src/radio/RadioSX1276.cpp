@@ -626,12 +626,16 @@ bool RadioSX1276::isInitialized() const
 
 bool RadioSX1276::superviseIdleReceive(uint32_t nowMs)
 {
-    if(mState==RadioState::Transmitting||mState==RadioState::Sleep||mEms2Mode||uint32_t(nowMs-mHealthCheckedMs)<5000)return false;
+    if(mState==RadioState::Transmitting||mState==RadioState::Sleep||mEms2Mode||uint32_t(nowMs-mHealthCheckedMs)<mSupervisionIntervalMs)return false;
+    if(isPreambleDetected()||isSyncDetected())return false;
     mHealthCheckedMs=nowMs;
     uint8_t rx=0,afc=0;radioSX1276Bandwidth(mRequestedRxHz,rx);radioSX1276Bandwidth(mRequestedAfcHz,afc);
-    const bool healthy=mInitialized&&readRegister(REG_VERSION)==0x12&&
-        (readRegister(REG_OPMODE)&0x8F)==RF_OPMODE_RX&&readRegister(REG_RXBW)==rx&&readRegister(REG_AFCBW)==afc;
-    if(healthy)return false;
+    mRecoveryReason=!mInitialized?RecoveryReason::Uninitialized:
+        readRegister(REG_VERSION)!=0x12?RecoveryReason::Version:
+        (readRegister(REG_OPMODE)&0x8F)!=RF_OPMODE_RX?RecoveryReason::ReceiveMode:
+        (readRegister(REG_RXBW)!=rx||readRegister(REG_AFCBW)!=afc)?RecoveryReason::Bandwidth:RecoveryReason::None;
+    if(mRecoveryReason==RecoveryReason::None)return false;
+    if(mWatchdogTriggers!=0xFFFFFFFF)++mWatchdogTriggers;
     if(mRecoveryAttempts>=3)return false;
     ++mRecoveryAttempts;
     const uint32_t frequency=mCurrentFreq?mCurrentFreq:IOHC_FREQ_2;
@@ -641,7 +645,8 @@ bool RadioSX1276::superviseIdleReceive(uint32_t nowMs)
     if(!mInitialized)return false;
     calibrate();
     if(configure()!=RadioError::None||setFrequency(frequency)!=RadioError::None||setReceiveBandwidths(rxHz,afcHz)!=RadioError::None||setOutputPower(power)!=RadioError::None)return false;
-    return startReceive()==RadioError::None;
+    if(startReceive()!=RadioError::None)return false;
+    ++mRecoverySuccesses;return true;
 }
 
 uint32_t RadioSX1276::txStartCount() const

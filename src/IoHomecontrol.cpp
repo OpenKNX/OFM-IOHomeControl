@@ -4348,6 +4348,17 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         logInfoP("Discovery family start=%s",mController.startDiscoveryFamily(family)?"started":"blocked");return true;
     }
 
+#if defined(RADIO_SX1276) && !defined(TEST_NATIVE)
+    if(lSub.rfind("radio supervision",0)==0) {
+        const auto arg=trimSpaces(lSub.substr(strlen("radio supervision")));uint32_t ms=0;auto &radio=mController.radio();
+        if(!arg.empty() && (!parseUnsignedDecimal(arg,ms)||!managementRequestsAllowed()||!mController.idleForManagedOperation()||
+           ms>5000||!radio.setSupervisionIntervalMs(ms))) {logInfoP("Usage: iohc radio supervision [3000|5000] (idle only)");return true;}
+        logInfoP("RX watchdog intervalMs=%u triggers=%lu reason=%u resets=%u restored=%u exhausted=%u",
+            radio.supervisionIntervalMs(),static_cast<unsigned long>(radio.watchdogTriggers()),static_cast<unsigned>(radio.recoveryReason()),
+            radio.recoveryAttempts(),radio.recoverySuccesses(),radio.recoveryExhausted());return true;
+    }
+#endif
+
     if(lSub.rfind("radio scan-cadence",0)==0) {
         const auto arg=trimSpaces(lSub.substr(strlen("radio scan-cadence")));uint32_t ms=0;
         if(!arg.empty() && (!parseUnsignedDecimal(arg,ms)||ms>20||!managementRequestsAllowed()||
