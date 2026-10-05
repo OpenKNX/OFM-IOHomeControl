@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 CORE = {
+    'sx1276_peer_campaign': 'physical',
     'sx1276_waveform_crc_fifo': 'physical',
     'sx1276_timing_discovery_low_power': 'physical',
     'peer_authentication_retry_stop': 'physical',
@@ -17,6 +18,9 @@ CORE = {
     'network_assignment_powercut': 'physical',
     'ets_import_reopen_download_resume_upgrade': 'ets',
 }
+QUALIFICATION_CASES = {
+    'sx1276_peer_campaign': ('normal_2w', 'low_power_wake', 'actuator_discovery', 'spe_discovery', 'group_timing', 'directed_timing', 'challenge_key', 'version3', 'oneway', 'crc_fifo', 'scan_hold', 'interference_lbt', 'fault_restore'),}
+
 PRODUCT = {'rgb': 'rgb_binding_read_write_state', 'white': 'white_binding_read_write_state',
            'sensor': 'sensor_status_default_subscription_polling'}
 
@@ -42,6 +46,9 @@ def check(document, root, product=None):
         if record.get('outcome') != 'passed':
             problems.append('unrun, failed or missing')
         else:
+            for case in QUALIFICATION_CASES.get(identifier, ()):
+                if record.get('cases', {}).get(case) != 'passed':
+                    problems.append('missing passed case: ' + case)
             if record.get('kind') != kind:
                 problems.append('wrong evidence kind; model/build tests are insufficient')
             for field in ('ofm_commit', 'oam_commit'):

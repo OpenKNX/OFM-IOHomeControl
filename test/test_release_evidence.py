@@ -34,6 +34,20 @@ class EvidenceTest(unittest.TestCase):
         gate=next(r for r in result if r['id']=='sensor_status_default_subscription_polling')
         self.assertFalse(gate['complete'])
 
+    def test_partial_physical_campaign_cannot_fill_gate(self):
+        import json
+        path=Path(__file__).resolve().parents[1]/'docs/release-evidence.template.json'
+        document=json.loads(path.read_text())
+        for identifier,cases in module.QUALIFICATION_CASES.items():
+            self.assertTrue(cases)
+            record=next(r for r in document['records'] if r['id']==identifier)
+            self.assertEqual(set(record['cases']),set(cases))
+            self.assertTrue(all(value=='not_run' for value in record['cases'].values()))
+            record['outcome']='passed'
+            gate=next(r for r in module.check(document,path.parent) if r['id']==identifier)
+            self.assertFalse(gate['complete'])
+            self.assertTrue(any('missing passed case' in p for p in gate['problems']))
+
     def test_duplicate_records_are_rejected(self):
         with self.assertRaises(ValueError):module.check(dict(schema=1,records=[dict(id='x'),dict(id='x')]),'.')
 

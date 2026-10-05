@@ -66,6 +66,27 @@
       "kind": "physical",
       "outcome": "not_run",
       "artifacts": []
+    },
+    {
+      "id": "sx1276_peer_campaign",
+      "kind": "physical",
+      "outcome": "not_run",
+      "cases": {
+        "normal_2w": "not_run",
+        "low_power_wake": "not_run",
+        "actuator_discovery": "not_run",
+        "spe_discovery": "not_run",
+        "group_timing": "not_run",
+        "directed_timing": "not_run",
+        "challenge_key": "not_run",
+        "version3": "not_run",
+        "oneway": "not_run",
+        "crc_fifo": "not_run",
+        "scan_hold": "not_run",
+        "interference_lbt": "not_run",
+        "fault_restore": "not_run"
+      },
+      "artifacts": []
     }
   ]
 }
