@@ -126,9 +126,13 @@ test("frozen assignment carries identity and stops on stale token",function() {
 test("commissioning status displays frozen candidates without project mutation",function() {
     var d=deviceWith({Name:"Office",ProfileOverride:448}),before=JSON.stringify(d.params),text="",disconnected=false;
     var caps=[0,1,0,0,0,15,0,0,0,9],job=new Array(26).fill(0);job[1]=1;job[2]=2;job[3]=4;job[7]=2;job[8]=255;job[15]=1;job[23]=9;job[25]=3;
-    var online={connect:function(){},disconnect:function(){disconnected=true;},invokeFunctionProperty:function(o,p,data){return data[0]===0x23?caps:job;}};
+    var online={connect:function(){},disconnect:function(){disconnected=true;},invokeFunctionProperty:function(o,p,data){
+        if(data[0]===0x23)return caps;if(data[0]===0x24)return job;
+        check(data[0]===0x25&&data.length===14,"frozen candidate request");
+        return [0,1,data[13],0x12,0x34,0x56,6,0,1,2,1,0x1C,0,0,0,2,0,0,0,1];
+    }};
     IOHC_readCommissioningStatus(d,online,{setText:function(v){text=v;}},{});
-    check(text.indexOf("Kandidaten 3")>=0&&text.indexOf("Ergebnisrevision 1")>=0,"job details missing");
+    check(text.indexOf("Kandidaten 3")>=0&&text.indexOf("Ergebnisrevision 1")>=0&&text.indexOf("gerichtet verifiziert")>=0&&text.indexOf("Profil 6/1")>=0,"job details missing");
     check(disconnected&&JSON.stringify(d.params)===before,"status mutated project or leaked connection");
 });
 test("channel evidence preserves manual fields and labels correlated samples",function() {
@@ -173,4 +177,15 @@ test("product query rejects legacy firmware before any RF request",function() {
     var online={connect:function(){},disconnect:function(){closed=true;},invokeFunctionProperty:function(o,p,data){calls++;check(data[0]===0x23,"legacy RF request");return [0,1,0,0,0,15,0,0,0,9];}};
     try{IOHC_requestProductObservations(deviceWith({}),online,{setText:function(){}},{channelIndex:1});}catch(e){rejected=true;}
     check(rejected&&closed&&calls===1,"legacy query accepted");
+});
+
+test("commissioning candidate view rejects stale snapshot without displaying results",function() {
+    var caps=[0,1,0,0,0,31,0,0,0,9],job=new Array(26).fill(0);job[1]=1;job[2]=2;job[3]=4;job[7]=2;job[8]=255;job[15]=1;job[23]=9;job[25]=1;
+    var text="",closed=false,rejected=false;
+    var online={connect:function(){},disconnect:function(){closed=true;},invokeFunctionProperty:function(o,p,data){
+        if(data[0]===0x23)return caps;if(data[0]===0x24)return job;
+        return [0,1,0,0x12,0x34,0x56,6,0,1,2,1,0x1C,0,0,0,2,0,0,0,2];
+    }};
+    try{IOHC_readCommissioningStatus(deviceWith({}),online,{setText:function(v){text=v;}},{});}catch(e){rejected=true;}
+    check(rejected&&closed&&text==="","stale candidates displayed");
 });

@@ -725,7 +725,24 @@ function IOHC_readCommissioningStatus(device,online,progress,context) {
         if(job.channel<16) text+="; Kanal "+(job.channel+1);
         if(job.node) text+="; Node "+IOHC_formatNodeId(job.node);
         if(job.stage>=1&&job.stage<=3) text+="; Restzeit "+Math.ceil(job.remainingMs/1000)+" s";
-        if(job.owner===2&&job.stage===4) text+="; Kandidaten "+job.count+"; Ergebnis übernehmen";
+        if(job.owner===2&&job.stage===4) {
+            if(job.count>24) throw new Error("Ungültige Kandidatenzahl");
+            text+="; Kandidaten "+job.count+"; Ergebnis übernehmen";
+            for(var index=0;index<job.count;index++) {
+                var candidate=IOHC_invokeFunctionProperty(online,[0x25].concat(job.token,[index]));
+                if(!candidate||candidate.length!==20||candidate[0]!==0||candidate[1]!==1||candidate[2]!==index||
+                   IOHC_read32(candidate,12)!==job.generation||IOHC_read32(candidate,16)!==job.revision)
+                    throw new Error("Kandidatenliste geändert; erneut lesen");
+                var flags=candidate[11];
+                text+=". "+(index+1)+": Node "+IOHC_formatNodeId(IOHC_readNodeId(candidate,3));
+                text+=(flags&4)?", Profil "+(candidate[6]|candidate[7]<<8)+"/"+candidate[8]+", Hersteller "+candidate[9]:", Profil unbekannt";
+                text+=", "+((flags&16)?"gerichtet verifiziert":(flags&1)?"passiv authentifiziert":"nicht verifiziert");
+                text+=", "+((flags&8)?"vollständige":"teilweise")+" Metadaten";
+            }
+            var current=IOHC_jobSnapshot(online);
+            if(!current||JSON.stringify(current.token)!==JSON.stringify(job.token)||current.count!==job.count||current.stage!==job.stage)
+                throw new Error("Einrichtung während des Lesens geändert; erneut lesen");
+        }
         text+=". Statuslesen ändert keine ETS-Einstellungen und bestätigt keinen Geräte-Download.";
         progress.setText(text);
     } finally {online.disconnect();}
