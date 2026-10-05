@@ -5043,6 +5043,8 @@ const char *IoHomeController::commandName(IoHomeCommand iCmd)
         return "KeyTransfer";
     case IoHomeCommand::KeyTransferConfirmation:
         return "KeyTransferConfirmation";
+    case IoHomeCommand::SensorEventDelegationRequest: return "SensorEventDelegationRequest";
+    case IoHomeCommand::SensorEventDelegationResponse: return "SensorEventDelegationResponse";
     case IoHomeCommand::NodeVerifyRequest:
         return "NodeVerifyRequest";
     case IoHomeCommand::NodeVerifyResponse:

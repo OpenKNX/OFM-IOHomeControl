@@ -110,3 +110,14 @@ queued work; other queued commands cannot take ownership while RCM is active.
 Automatic acquisition of SetBeacon database evidence and peer qualification remain
 pending. This does not emulate every reference recipient-side configuration event.
 Source: dated STM32-2W report, sections “RCM action 0x0B” and “SystemId 9/5 selector”.
+
+## 14 — SensorEventDelegation record/selector service
+
+Added named 8D/8E commands, exact 8-byte RAM records, identity/revision-bound
+upsert, exact/controller/sensor removal, non-mutating FF query and strict four-byte
+8E numeric result parser. Capacity 16 is an OFM bound. No persistence is added
+because lifetime is unproven. The caller must authenticate/resolve SensorNode
+identity before applying a selector. No automatic subscriptions or KNX alarm
+publication is enabled. Generic slave RF dispatch/response production remains
+outside the present actuator-controller role; this is the reusable database service.
+Source: dated 2W report “0x8D/0x8E” and “delegation response payload”.

@@ -110,6 +110,8 @@ enum class IoHomeCommand : uint8_t
     SensorStatusResponse = 0x85,
     SensorSubscribeRequest = 0x8B,
     SensorInformationResponse = 0x8C,
+    SensorEventDelegationRequest = 0x8D,
+    SensorEventDelegationResponse = 0x8E,
     // Observed on real 2W START frames (CTRL0=0x50) with an 8-byte payload.
     // CyrilOpenSource/iown-homecontrol-esp32sx1276 lists it among the valid 2W
     // opcodes, but no public source names it or decodes its payload. Keep the

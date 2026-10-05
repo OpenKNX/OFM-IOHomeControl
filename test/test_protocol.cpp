@@ -19976,3 +19976,21 @@ TEST(controller_rcm_sends_empty_prerequisite_and_requires_actual_37)
     ASSERT_TRUE(c.cancelReceiveConfiguration());
     ASSERT_EQ(c.receiveConfiguration().stage(),IoHomeReceiveConfiguration::Stage::Cancelled);
 }
+
+#include "protocol/IoHomeSensorEventDelegation.h"
+TEST(protocol_sensor_delegation_exact_record_scopes_and_nonmutating_query)
+{
+    IoHomeSensorEventDelegation d;using S=IoHomeSensorEventDelegation::Selector;
+    const uint8_t a[3]={1,2,3},b[3]={4,5,6};
+    ASSERT_TRUE(d.apply(S::Upsert,0x111111,7,1,a,0xA5));
+    const uint8_t expected[8]={1,7,1,2,3,0xA5,1,0};ASSERT_MEM_EQ(d.records()[0].bytes,expected,8);
+    ASSERT_TRUE(d.apply(S::Query,0x111111,7,2,a,0));ASSERT_MEM_EQ(d.records()[0].bytes,expected,8);
+    ASSERT_TRUE(d.apply(S::Upsert,0x222222,8,1,a,0));
+    ASSERT_TRUE(d.apply(S::Upsert,0x111111,7,1,b,0));
+    ASSERT_TRUE(d.apply(S::RemoveController,0x111111,7,1,a,0));
+    ASSERT_EQ(d.records()[0].bytes[0],0);ASSERT_EQ(d.records()[1].bytes[0],0);ASSERT_EQ(d.records()[2].bytes[0],1);
+    ASSERT_TRUE(d.apply(S::RemoveSensor,0x111111,7,1,b,0));ASSERT_EQ(d.records()[2].bytes[0],0);
+    IoHomeSensorEventDelegation::Reply result;const uint8_t reply[4]={5,7,0x12,0x34};
+    ASSERT_TRUE(d.decodeReply(reply,4,result));ASSERT_EQ(result.state,7);ASSERT_EQ(result.sensorValue,0x1234);
+    ASSERT_TRUE(!d.decodeReply(reply,3,result));S selector;ASSERT_TRUE(!d.decodeSelector(4,selector));
+}
