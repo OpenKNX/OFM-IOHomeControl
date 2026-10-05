@@ -1,6 +1,23 @@
 #pragma once
 #include "IoHomeProductBinding.h"
 
+// Per-family/FP production qualification. No original-peer write is qualified.
+// A representation codec or an expert override cannot fill these evidence flags.
+struct IoHomeFpWriteQualification {
+    IoHomeBoundProductFamily family;uint8_t index;
+    bool exactIdentity,requestFormat,authSession,unitsRange,originalPeerAccepted;
+    constexpr bool allowed()const{return exactIdentity&&requestFormat&&authSession&&unitsRange&&originalPeerAccepted;}
+};
+inline constexpr IoHomeFpWriteQualification IOHC_FP_WRITE_QUALIFICATION[]={
+    {IoHomeBoundProductFamily::RgbLight,10,false,false,false,false,false},
+    {IoHomeBoundProductFamily::RgbLight,11,false,false,false,false,false},
+    {IoHomeBoundProductFamily::TunableWhiteLight,14,false,false,false,false,false}
+};
+inline bool ioHomeQualifiedFpWrite(IoHomeBoundProductFamily family,uint8_t index){
+    for(const auto &row:IOHC_FP_WRITE_QUALIFICATION)if(row.family==family&&row.index==index)return row.allowed();
+    return false; // absent rows are denied, including all unresolved product FPs
+}
+
 // Conversion knowledge and transport acceptance are separate evidence layers.
 struct IoHomeProductAccess
 {
@@ -11,6 +28,7 @@ struct IoHomeProductAccess
 inline IoHomeProductAccess ioHomeProductAccess(IoHomeBoundProductFamily family,uint8_t index)
 {
     IoHomeProductAccess access;
+    access.rfWrite=ioHomeQualifiedFpWrite(family,index);
     if(family==IoHomeBoundProductFamily::RgbLight && (index==0 || index==10 || index==11))
     { access.decode=true;access.encodeRepresentation=true;access.requiresCoherentTuple=true; }
     if(family==IoHomeBoundProductFamily::TunableWhiteLight && (index==0 || index==14))

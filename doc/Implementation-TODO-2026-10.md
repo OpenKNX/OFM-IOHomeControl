@@ -170,3 +170,13 @@ also discards bounds. Diagnostic MP/FP defaults are never promoted to physical
 bounds; no inverse RF write permission follows from storing context. Dynamic
 product-specific bounds acquisition and unidentified sentinels remain unresolved
 in the dated report and require original-peer/product evidence.
+
+## 22 — Per-family/FP write qualification table
+
+Added explicit RGB FP10/11 and tunable-white FP14 qualification rows requiring
+exact product identity, RF request format, auth/session, units/range and original
+peer acceptance. Every current row is denied; absent rows are denied. Product
+access now obtains write permission from this table rather than representation
+knowledge. Raw reads and offline encoders remain independent. Enable one row
+only with retained product-specific original-peer evidence; exact commercial
+binding and physical write acceptance are not yet qualified.

@@ -20026,3 +20026,12 @@ TEST(protocol_physical_bounds_require_provenance_and_expire_with_channel_context
     ASSERT_EQ(bounds.provenance().evidence,1U);
     channel.invalidateProductContext();ASSERT_TRUE(!bounds.context(0x123456,channel.productContextRevision()));
 }
+
+TEST(protocol_product_write_requires_all_independent_qualification_layers)
+{
+    IoHomeFpWriteQualification row{IoHomeBoundProductFamily::RgbLight,10,true,true,true,true,false};
+    ASSERT_TRUE(!row.allowed());row.originalPeerAccepted=true;ASSERT_TRUE(row.allowed());
+    row.exactIdentity=false;ASSERT_TRUE(!row.allowed());
+    ASSERT_TRUE(!ioHomeQualifiedFpWrite(IoHomeBoundProductFamily::Unknown,10));
+    ASSERT_TRUE(!ioHomeProductAccess(IoHomeBoundProductFamily::RgbLight,10).rfWrite);
+}
