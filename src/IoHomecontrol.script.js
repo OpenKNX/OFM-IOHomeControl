@@ -717,7 +717,7 @@ function IOHC_readCommissioningStatus(device,online,progress,context) {
     try {
         var job=IOHC_jobSnapshot(online);
         if(!job) throw new Error("Firmware unterstützt keinen erweiterten Einrichtungsstatus");
-        var owners=["Keine Einrichtung","Pairing","Schlüsselimport"];
+        var owners=["Keine Einrichtung","Pairing","Schlüsselimport","Schlüsselaufzeichnung","1W-Fernbedienung kopieren"];
         var stages=["Inaktiv","Vorbereitung","Suche","Prüfung","Ergebnis bereit","Speichern","Abgeschlossen","Abgebrochen","Fehlgeschlagen","Unbestätigt"];
         var errors=["kein Fehler","Zeitlimit","Peer/Transport","Speicherfehler","Veraltetes Ergebnis"];
         if(job.owner>=owners.length||job.stage>=stages.length||job.error>=errors.length) throw new Error("Unbekanntes Job-Statusschema");
@@ -743,6 +743,7 @@ function IOHC_readCommissioningStatus(device,online,progress,context) {
             if(!current||JSON.stringify(current.token)!==JSON.stringify(job.token)||current.count!==job.count||current.stage!==job.stage)
                 throw new Error("Einrichtung während des Lesens geändert; erneut lesen");
         }
+        if(job.owner===3||job.owner===4) text+=". Aufzeichnung/Kopie bestätigt keine Aktor-Anmeldung";
         text+=". Statuslesen ändert keine ETS-Einstellungen und bestätigt keinen Geräte-Download.";
         progress.setText(text);
     } finally {online.disconnect();}

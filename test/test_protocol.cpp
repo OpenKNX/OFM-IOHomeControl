@@ -19386,3 +19386,17 @@ TEST(product_lighting_knx_types_are_explicit_and_remain_unqualified) {
     auto white=ioHomeLightingPresentation(IoHomeBoundProductFamily::TunableWhiteLight,14);
     ASSERT_EQ(white.dptMain,7);ASSERT_EQ(white.dptSub,600);ASSERT_TRUE(!white.publicationQualified);
 }
+
+TEST(controller_managed_operation_guard_includes_queued_product_reads) {
+    const uint8_t key[16]={1};IoHomeController controller;IoHomecontrol module;IoHomecontrolChannel channel;
+    initPaired2WControllerForTest(controller,module,channel,0x831F2A,0x7E9E6E,key);
+    IoHomeProtocolIdentity identity;identity.valid=true;identity.nodeClass=IoHomeNodeClass::Actuator;channel.onProtocolIdentity(0x7E9E6E,identity);
+    ASSERT_TRUE(controller.idleForManagedOperation());ASSERT_TRUE(controller.requestMpFpRead(&channel,14));
+    ASSERT_TRUE(!controller.idleForManagedOperation());
+}
+
+TEST(commissioning_job_rejects_start_at_exhausted_generation_without_replacing_owner) {
+    IoHomeCommissioningJob job;job.generation=0xFFFFFFFF;
+    ASSERT_TRUE(!job.canBegin());ASSERT_TRUE(!job.begin(IoHomeCommissioningJob::Owner::KeyCapture));
+    ASSERT_EQ(job.owner,IoHomeCommissioningJob::Owner::None);
+}

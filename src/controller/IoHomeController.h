@@ -918,6 +918,10 @@ public:
   void setModule(IoHomecontrol *iModule);
 
   // Get current state
+  bool idleForManagedOperation() const {
+    return mState==ControllerState::Idle&&queueEmpty()&&!mCurrentCmd.active&&!mPassiveMode&&!mGatewayMode&&
+        !mOneWayKeyReceiveActive&&!mKeyExtractArmed&&!mNetworkScanActive&&!mObjectRead.active();
+  }
   ControllerState state() const;
 
   // Shared production builder for software/bench qualification. Extended

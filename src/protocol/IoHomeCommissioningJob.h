@@ -2,7 +2,7 @@
 #include <stdint.h>
 struct IoHomeCommissioningJob
 {
-    enum class Owner:uint8_t { None, Pairing, Import };
+    enum class Owner:uint8_t { None, Pairing, Import, KeyCapture, OneWayClone };
     enum class Stage:uint8_t { Idle, Preparing, Discovering, Verifying, CandidateReady, Saving, Done, Cancelled, Failed, Unconfirmed };
     uint32_t generation=0,startedMs=0,budgetMs=0,snapshotRevision=0;
     enum class Error:uint8_t { None,Deadline,PeerOrTransport,Persistence,StaleSnapshot };
@@ -12,9 +12,10 @@ struct IoHomeCommissioningJob
     uint8_t channel=0xFF;
     uint32_t node=0;
     bool active() const { return stage>=Stage::Preparing && stage<=Stage::Saving; }
+    bool canBegin() const {return !active()&&generation!=0xFFFFFFFF;}
     bool begin(Owner who,uint8_t target=0xFF,uint32_t now=0,uint32_t budget=0)
     {
-        if (active() || who==Owner::None || generation==0xFFFFFFFF) return false;
+        if (!canBegin() || who==Owner::None) return false;
         ++generation; startedMs=now;budgetMs=budget;snapshotRevision=0;error=Error::None;owner=who; channel=target; node=0; stage=Stage::Preparing; return true;
     }
     bool expired(uint32_t now) const {return active()&&stage!=Stage::CandidateReady&&budgetMs&&uint32_t(now-startedMs)>=budgetMs;}

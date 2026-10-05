@@ -72,6 +72,7 @@ public:
   void onAuthenticatedDirectedDiscovery(uint32_t iNodeId);
 
 private:
+  bool commissioningCanStart();
   struct FlashChannelState
   {
     bool valid = false;

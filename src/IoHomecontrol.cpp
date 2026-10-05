@@ -2511,6 +2511,12 @@ void IoHomecontrol::restoreAssignmentReceipts()
     }
 }
 
+bool IoHomecontrol::commissioningCanStart()
+{
+    updateCommissioningJob();
+    return mCommissioningJob.canBegin()&&!mRadioDiagnostic.active&&!mMetadataRefreshActive&&mController.idleForManagedOperation();
+}
+
 void IoHomecontrol::updateCommissioningJob()
 {
     using O=IoHomeCommissioningJob::Owner; using S=IoHomeCommissioningJob::Stage;
@@ -2522,7 +2528,7 @@ void IoHomecontrol::updateCommissioningJob()
             mCommissioningJob.begin(O::Import,0xFF,millis(),360000);
     }
     if(mCommissioningJob.expired(millis())) {
-        mController.cancelPairing();mController.stopKeyExtraction();resetKeyImportWorkflow();
+        mController.cancelPairing();mController.stopKeyExtraction();mController.stopOneWayKeyReceive();resetKeyImportWorkflow();
         mCommissioningJob.stage=S::Failed;mCommissioningJob.error=IoHomeCommissioningJob::Error::Deadline;
     }
     if (mCommissioningJob.owner==O::Import && mCommissioningJob.active())
@@ -2553,6 +2559,18 @@ void IoHomecontrol::updateCommissioningJob()
             mCommissioningJob.stage=S::Discovering;
         else mCommissioningJob.stage=S::Verifying;
     }
+    if(mCommissioningJob.active()&&mCommissioningJob.owner==O::KeyCapture) {
+        if(mController.keyExtractResult().valid) {mCommissioningJob.node=mController.keyExtractResult().nodeId;mCommissioningJob.stage=mController.isKeyExtractionActive()?S::Verifying:S::Done;}
+        else if(mController.keyExtractStatus()==IoHomeController::KeyExtractStatus::Timeout)mCommissioningJob.stage=S::Failed;
+        else if(!mController.isKeyExtractionActive())mCommissioningJob.stage=S::Cancelled;
+    }
+    if(mCommissioningJob.active()&&mCommissioningJob.owner==O::OneWayClone) {
+        const auto status=mController.oneWayKeyReceiveStatus();
+        if(status==IoHomeController::OneWayKeyReceiveStatus::Captured||status==IoHomeController::OneWayKeyReceiveStatus::CapturedTrailerMacVerified||status==IoHomeController::OneWayKeyReceiveStatus::SharedProfile) {
+            mCommissioningJob.node=mController.oneWayKeyReceiveCapturedNode();mCommissioningJob.stage=S::Done;
+        } else if(status==IoHomeController::OneWayKeyReceiveStatus::Timeout||status==IoHomeController::OneWayKeyReceiveStatus::TrailerMacInvalid)mCommissioningJob.stage=S::Failed;
+        else if(status==IoHomeController::OneWayKeyReceiveStatus::Idle)mCommissioningJob.stage=S::Cancelled;
+    }
     if(mCommissioningJob.stage==S::Done&&mCommissioningJob.node)mCommissioningJob.freeze();
     if(mCommissioningJob.stage==S::Failed&&mCommissioningJob.error==IoHomeCommissioningJob::Error::None)
         mCommissioningJob.error=mNetworkStoreFailed?IoHomeCommissioningJob::Error::Persistence:IoHomeCommissioningJob::Error::PeerOrTransport;
@@ -2568,7 +2586,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
 
     updateCommissioningJob();
     uint8_t lCmd = data[0];
-    if ((lCmd==0x10 || lCmd==0x17) && mCommissioningJob.active())
+    if ((lCmd==0x10 || lCmd==0x16 || lCmd==0x17) && !commissioningCanStart())
     { resultData[0]=4; resultLength=1; return true; }
     switch (lCmd)
     {
@@ -2831,7 +2849,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         {resultData[0]=4;resultLength=1;return true;}
         if(lCmd==0x27) {
             if(!mCommissioningJob.cancel(read32(data+5))){resultData[0]=4;resultLength=1;return true;}
-            mController.cancelPairing();mController.stopKeyExtraction();resetKeyImportWorkflow();
+            mController.cancelPairing();mController.stopKeyExtraction();mController.stopOneWayKeyReceive();resetKeyImportWorkflow();
             resultData[0]=0;resultLength=1;return true;
         }
         if(!mCommissioningJob.matches(read32(data+5),read32(data+9))||mKeyImportPhase!=KeyImportPhase::Complete||
@@ -2899,7 +2917,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         {
             const uint32_t token=uint32_t(data[1])<<24|uint32_t(data[2])<<16|uint32_t(data[3])<<8|data[4];
             if (!mCommissioningJob.cancel(token)) { resultData[0]=4; resultLength=1; return true; }
-            mController.cancelPairing(); mController.stopKeyExtraction(); resetKeyImportWorkflow();
+            mController.cancelPairing(); mController.stopKeyExtraction(); mController.stopOneWayKeyReceive(); resetKeyImportWorkflow();
         }
         resultData[0]=0; resultData[1]=1;
         resultData[2]=static_cast<uint8_t>(mCommissioningJob.owner);
@@ -3009,6 +3027,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
             {
                 if (mController.startOneWayKeyReceive(lChannel, IoHomeController::kOneWayKeyReceiveDefaultTimeoutMs))
                 {
+                    mCommissioningJob.begin(IoHomeCommissioningJob::Owner::OneWayClone,lChannel,millis(),IoHomeController::kOneWayKeyReceiveDefaultTimeoutMs);
                     resultData[0] = 0x00;
                     logInfoP("ETS: 1W clone armed for channel %d", lChannel + 1);
                 }
@@ -5548,10 +5567,14 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                         lTimeoutSec = lParsed;
                 }
 
+                if(!commissioningCanStart()){logInfoP("1W clone blocked by commissioning/diagnostic/RF owner");return true;}
                 if (mController.startOneWayKeyReceive(lIdx, lTimeoutSec * 1000UL))
+                {
+                    mCommissioningJob.begin(IoHomeCommissioningJob::Owner::OneWayClone,lIdx,millis(),lTimeoutSec*1000UL);
                     logInfoP("1W key receive armed on channel %u for %us. Now run the 'copy remote' "
                              "procedure on the original remote so it transmits its key.",
                              static_cast<unsigned>(lIdx + 1), static_cast<unsigned>(lTimeoutSec));
+                }
                 else
                     logInfoP("1W key receive could not start on channel %u (busy or not 1W).",
                              static_cast<unsigned>(lIdx + 1));
@@ -5594,6 +5617,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             return true;
         }
 
+        if(!commissioningCanStart()){logInfoP("1W pairing blocked by commissioning/diagnostic/RF owner");return true;}
         mChannels[lIdx]->setIs1W(true);
         if (lNodeId != 0)
         {
@@ -5603,10 +5627,13 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 
         const bool lOk = mController.startPairing1W(lIdx, lNodeId, lMode);
         if (lOk)
+        {
+            mCommissioningJob.begin(IoHomeCommissioningJob::Owner::Pairing,lIdx,millis(),120000);
             logInfoP("1W mode=%s pairing started ch=%u target=0x%06X",
                      IoHomeController::pairing1WModeName(lMode),
                      static_cast<unsigned>(lIdx + 1),
                      lNodeId & 0x00FFFFFF);
+        }
         else
             logInfoP("1W mode=%s pairing failed to start for channel %u",
                      IoHomeController::pairing1WModeName(lMode),
@@ -5638,6 +5665,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             return true;
         }
 
+        if(!commissioningCanStart()){logInfoP("1W remove blocked by commissioning/diagnostic/RF owner");return true;}
         mChannels[lIdx]->setIs1W(true);
         if (lNodeId != 0)
         {
@@ -5646,6 +5674,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         }
 
         const bool lOk = mController.startPairing1WRemove(lIdx, lNodeId);
+        if(lOk)mCommissioningJob.begin(IoHomeCommissioningJob::Owner::Pairing,lIdx,millis(),120000);
         if (lOk)
             logInfoP("1W mode=remove started ch=%u target=0x%06X", static_cast<unsigned>(lIdx + 1), lNodeId & 0x00FFFFFF);
         else
@@ -5845,6 +5874,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 bool lOk = mController.startPairing(lIdx, lNodeId);
                 if (lOk)
                 {
+                    mCommissioningJob.begin(IoHomeCommissioningJob::Owner::Pairing,lIdx,millis(),120000);
                     if (mChannels[lIdx]->is1W())
                         logInfoP("1W mode=remove-add pairing started for channel %d (default pair command)", lIdx + 1);
                     else
@@ -6504,7 +6534,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             if (!lArg.empty())
             {
                 uint32_t lSeconds = 0;
-                if (!parseUnsignedDecimal(lArg, lSeconds))
+                if (!parseUnsignedDecimal(lArg, lSeconds)||lSeconds>0xFFFFFFFFUL/1000UL)
                 {
                     logInfoP("Invalid sniff timeout: %s", lArg.c_str());
                     return true;
@@ -6629,8 +6659,10 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 lTimeoutMs = lSeconds * 1000UL;
             }
 
+            if(!commissioningCanStart()){logInfoP("Key capture blocked by commissioning/diagnostic/RF owner");return true;}
             if (mController.startKeyExtraction(lTimeoutMs))
             {
+                mCommissioningJob.begin(IoHomeCommissioningJob::Owner::KeyCapture,0xFF,millis(),lTimeoutMs);
                 logInfoP("Key extract armed (%lu ms timeout)", static_cast<unsigned long>(lTimeoutMs));
                 if (iDebugKo)
                     openknx.console.writeDiagnoseKo("Extract on");
@@ -6665,6 +6697,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 
     if (lSub.substr(0, 4) == "scan")
     {
+        if(!commissioningCanStart()){logInfoP("Pairing blocked by active commissioning/diagnostic/RF owner");return true;}
         if (lSub.length() > 5)
         {
             std::string lScanCmd = lSub.substr(5);
