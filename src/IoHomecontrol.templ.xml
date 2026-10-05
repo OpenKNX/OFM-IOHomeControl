@@ -143,10 +143,10 @@
               <ParameterRef Id="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" RefId="%AID%_UP-%TT%%CC%020" />
               <!-- Scene slot ParameterRefs 1..10 are generated from IoHomecontrol.scene.part.xml. -->
               <op:usePart name="IOHCScene" xpath="//ParameterRefs/*" />
-              <ParameterRef Id="%AID%_P-%TT%%CC%110_R-%TT%%CC%10601" RefId="%AID%_P-%TT%%CC%110" />
-              <ParameterRef Id="%AID%_P-%TT%%CC%111_R-%TT%%CC%10701" RefId="%AID%_P-%TT%%CC%111" />
-              <ParameterRef Id="%AID%_P-%TT%%CC%112_R-%TT%%CC%10801" RefId="%AID%_P-%TT%%CC%112" />
-              <ParameterRef Id="%AID%_P-%TT%%CC%113_R-%TT%%CC%10901" RefId="%AID%_P-%TT%%CC%113" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%110_R-%TT%%CC%11001" RefId="%AID%_P-%TT%%CC%110" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%111_R-%TT%%CC%11101" RefId="%AID%_P-%TT%%CC%111" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%112_R-%TT%%CC%11201" RefId="%AID%_P-%TT%%CC%112" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%113_R-%TT%%CC%11301" RefId="%AID%_P-%TT%%CC%113" />
             </ParameterRefs>
 
             <ParameterCalculations>
@@ -545,10 +545,10 @@
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%013_R-%TT%%CC%01301" IndentLevel="1" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%014_R-%TT%%CC%01401" IndentLevel="1" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%015_R-%TT%%CC%01501" IndentLevel="1" />
-                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%110_R-%TT%%CC%10601" />
-                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%111_R-%TT%%CC%10701" />
-                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%112_R-%TT%%CC%10801" />
-                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%113_R-%TT%%CC%10901" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%110_R-%TT%%CC%11001" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%111_R-%TT%%CC%11101" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%112_R-%TT%%CC%11201" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%113_R-%TT%%CC%11301" />
                         <Button Id="%AID%_B-%TT%%CC%006" Text="Erkannten Gerätetyp übernehmen" EventHandler="IOHC_applyRecognizedType" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <ParameterSeparator Id="%AID%_PS-nnn" Text="Nach erfolgreichem 2W-Pairing Status lesen und Gerätetyp übernehmen. Manuelles Profil und Expertenwerte bleiben erhalten. Danach die Applikation programmieren. Unbekannte Profile und 1W erfordern manuelle Auswahl." UIHint="Information" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%103_R-%TT%%CC%10301" IndentLevel="1" />

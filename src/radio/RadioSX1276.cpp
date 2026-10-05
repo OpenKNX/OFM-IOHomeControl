@@ -518,8 +518,8 @@ uint8_t RadioSX1276::readPacket(uint8_t *oBuffer, uint8_t iMaxLen)
     e.hardwareCrcChecked = (readRegister(REG_PACKETCONFIG1) & 0x10) != 0 &&
                            (lIrqStatus & RF_IRQFLAGS2_PAYLOADREADY) != 0;
     e.hardwareCrcValid = e.hardwareCrcChecked && (lIrqStatus & RF_IRQFLAGS2_CRCOK) != 0;
-    e.hardwareCrcConsumed = (readRegister(REG_PACKETCONFIG1) & 0x10) != 0;
-    e.fifoLengthByteRemoved = true;
+    e.hardwareCrcEnabled = (readRegister(REG_PACKETCONFIG1) & 0x10) != 0;
+    e.controllerProtocolByteContract = true;
     e.fifoOverrun = (lIrqStatus & RF_IRQFLAGS2_FIFOOVERRUN) != 0;
     e.afcRaw = static_cast<int16_t>((readRegister(REG_AFCMSB) << 8) | readRegister(REG_AFCLSB));
     e.feiRaw = static_cast<int16_t>((readRegister(REG_FEIMSB) << 8) | readRegister(REG_FEILSB));

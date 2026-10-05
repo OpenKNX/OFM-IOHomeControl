@@ -3591,6 +3591,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc 2wdiag discovery FIELD VALUE", "Override discovery command/dest/ACK/LOW_POWER/preamble independently");
     openknx.console.printHelpLine("iohc 2wdiag status|reset", "Show or clear runtime-only 2W overrides");
 #if defined(RADIO_SX1276)
+    openknx.console.printHelpLine("iohc radio evidence", "Last FIFO-read timestamp/CRC/overflow/frequency evidence; no peer acceptance claim");
     openknx.console.printHelpLine("iohc radio fskbw RX_HZ AFC_HZ", "Runtime only: 41667|50000|62500|83333|100000; defaults 41667/41667");
 #endif
 #if defined(RADIO_SX1262)
@@ -3779,6 +3780,13 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     }
 
 #if defined(RADIO_SX1276)
+    if (lSub=="radio evidence") {
+        const auto &e=mController.radio().lastReceiveEvidence();
+        logInfoP("RX evidence: read_us=%lu timestamp_valid=%u freq=%lu len=%u RSSI=%d IRQ=%04X CRC_enabled=%u checked=%u valid=%u overrun=%u truncated=%u AFC_raw=%d FEI_raw=%d register_snapshot=%u",
+            static_cast<unsigned long>(e.readTimestampUs),e.timestampValid,static_cast<unsigned long>(e.frequencyHz),
+            e.length,e.rssiDbm,e.irq,e.hardwareCrcEnabled,e.hardwareCrcChecked,e.hardwareCrcValid,e.fifoOverrun,e.truncated,e.afcRaw,e.feiRaw,e.frequencyErrorRegistersPresent);
+        return true;
+    }
     if (lSub.rfind("radio fskbw",0)==0) {
         unsigned long rx=0,afc=0; char extra=0;
         if (sscanf(lSub.c_str(),"radio fskbw %lu %lu %c",&rx,&afc,&extra)!=2) {

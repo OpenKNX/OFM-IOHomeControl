@@ -30,11 +30,12 @@ struct RadioReceiveEvidence {
   uint16_t irq = 0;
   uint8_t length = 0;
   bool hardwareCrcChecked = false, hardwareCrcValid = false;
-  bool hardwareCrcConsumed = false, fifoOverrun = false, truncated = false;
+  bool hardwareCrcEnabled = false, fifoOverrun = false, truncated = false;
   bool timestampValid = false, frequencyErrorRegistersPresent = false;
-  // SX1276 IoHome mode removes the length byte; controller reconstructs it for
-  // the common controller frame path. Evidence refers to FIFO bytes.
-  bool fifoLengthByteRemoved = false;
+  // The existing controller contract expects CTRL0 first, optional protocol
+  // authentication trailer and optional transport CRC. No synthetic length
+  // byte is inserted. Hardware CRC consumption still needs a captured fixture.
+  bool controllerProtocolByteContract = false;
   bool admissible() const {
     return length != 0 && !fifoOverrun && !truncated &&
            (!hardwareCrcChecked || hardwareCrcValid);
