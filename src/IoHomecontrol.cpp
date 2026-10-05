@@ -2411,6 +2411,13 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
         return;
     }
 
+#ifdef PVX_KoBlockOffset
+    const int8_t valueChannel=PVX_KoCalcChannel(lAsap);
+    if(valueChannel>=0&&valueChannel<mNumChannels){
+        updateCommissioningJob();if(!managementRequestsAllowed())return;
+        mChannels[valueChannel]->processProductValueInputKo((lAsap-PVX_KoBlockOffset)%PVX_KoBlockSize,iKo);return;
+    }
+#endif
 #ifdef PIC_KoBlockOffset
     const int8_t productChannel=PIC_KoCalcChannel(lAsap);
     if(productChannel>=0&&productChannel<mNumChannels) {

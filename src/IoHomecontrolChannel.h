@@ -27,6 +27,7 @@ public:
   void setup() override;
   void loop() override;
 
+  void processProductValueInputKo(uint8_t index,GroupObject &ko);
   void processProductInputKo(uint8_t index,GroupObject &ko);
   void publishProductState();
   uint32_t mProductPublishedGeneration=0;

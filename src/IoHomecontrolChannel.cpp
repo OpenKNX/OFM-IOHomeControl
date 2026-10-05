@@ -2386,6 +2386,9 @@ void IoHomecontrolChannel::processProductInputKo(uint8_t index,GroupObject &ko)
 }
 void IoHomecontrolChannel::publishProductState()
 {
+#ifdef PVX_KoBlockOffset
+    if(ParamBASE_ModuleEnabled_PVX){auto &valid=knx.getGroupObject(PVX_KoCalcNumber(PVX_KocValid));if(!valid.initialized()||bool(valid.value(Dpt(1,2))))valid.value(false,Dpt(1,2));}
+#endif
 #ifdef PIC_KoBlockOffset
     const auto family=ioHomeBindProductFamily(mProtocolIdentity,mProductIdentityEvidence);
     if(!ParamBASE_ModuleEnabled_PIC)return;
@@ -2404,5 +2407,21 @@ void IoHomecontrolChannel::publishProductState()
         mProductPublishedGeneration=generation;
     }
     mProductPublishedValid=valid;
+#endif
+}
+
+void IoHomecontrolChannel::processProductValueInputKo(uint8_t index,GroupObject &ko)
+{
+#ifdef PVX_KoBlockOffset
+    if(!ParamBASE_ModuleEnabled_PVX||!isOperational()||is1W()||!ParamIOHC_cActive||ParamIOHC_cSuspend||mLocked)return;
+    // Explicit selection grants diagnostic reads only. All value writes remain gated.
+    if(index!=PVX_KocRead||!bool(ko.value(DPT_Switch)))return;
+    const uint8_t product=ParamPVX_cProductDefinition,fp=ParamPVX_cValueIndex;
+    if(product<1||product>9||fp>16)return;
+    uint16_t mask=fp?uint16_t(1)<<(fp-1):0;
+    if(product==3&&fp==13)mask|=uint16_t(1)<<11;
+    if(product==7&&fp>=9&&fp<=14)mask|=uint16_t(1)<<((fp%2?fp+1:fp-1)-1);
+    if((product==8||product==9)&&(fp==15||fp==16))mask|=0xC000;
+    if(!mController.requestMpFpMaskRead(this,mask))logInfoP("Selected product diagnostic GET blocked");
 #endif
 }
