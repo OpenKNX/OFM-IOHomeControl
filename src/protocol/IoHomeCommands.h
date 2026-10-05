@@ -148,6 +148,8 @@ enum class IoHomeCommandExchangeResult : uint8_t
     AuthenticatedUnconfirmed = 2,
     Unknown = 3,
     ExplicitlyRejected = 4,
+    SessionExhausted = 5, // no response after operation-specific state budget
+    MediaAccessFailed = 6, // RF producer failed before any accepted transmission
 };
 
 // Experimental low-power wake estimate.  It is intentionally a runtime-only

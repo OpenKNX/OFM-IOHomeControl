@@ -4,6 +4,7 @@
 #pragma once
 #include "../protocol/IoHomeRadioPolicy.h"
 #include "../protocol/IoHomeTransactionTiming.h"
+#include "../protocol/IoHomeSessionPolicy.h"
 #include "../radio/Radio.h"
 #include "../protocol/IoHomeFrame.h"
 #include "../protocol/IoHomeCrypto.h"
@@ -181,6 +182,8 @@ struct IoHomeQueueEntry
   uint16_t twoWayFpRaw;
   uint8_t retries;
   uint8_t maxAttempts;
+  uint8_t mediaAttempts;
+  IoHomeSessionPolicy sessionPolicy;
   uint8_t authenticatedUnconfirmedTries;
   bool hadAuthenticatedAccept;
   TwoWayRetryReason retryReason;
@@ -404,6 +407,7 @@ public:
     uint16_t selectedTimeoutMs = 0;
     uint8_t timeoutGroup = 0;
     bool timeoutFallback = true;
+    uint8_t sessionMode = 0, stateRetries = 0, wholeSessionRetries = 0, mediaRetries = 0;
     uint32_t txEndToFirstResponseUs = 0;
     uint32_t txEndToFinalResponseUs = 0;
   };
@@ -500,7 +504,7 @@ public:
   bool sendBackgroundCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
                              IoHomeCommand iCmd, uint8_t iParam,
                              uint16_t iParam2 = 0xFF, uint8_t iParam3 = 0xFF,
-                             uint8_t iMaxAttempts = IOHC_EXCHANGE_MAX_ATTEMPTS);
+                             uint8_t iMaxAttempts = 0);
   bool verifyKnownNetworkNode(uint32_t iNodeId, const uint8_t *iKey,
                               uint8_t iFrequencyIndex);
   uint16_t normal2WStartPreamble() const;

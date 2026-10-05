@@ -1884,7 +1884,7 @@ bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                    IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2, uint8_t iParam3)
 {
     return sendCommand(iDestNodeId, iEncKey, iCmd, iParam, iParam2, iParam3,
-                       IOHC_EXCHANGE_MAX_ATTEMPTS);
+                       0);
 }
 
 bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
@@ -1984,10 +1984,10 @@ bool IoHomeController::sendCommandInternal(uint32_t iDestNodeId, const uint8_t *
     lEntry.sourceChannelIndex = 0xFF;
     lEntry.twoWayTxFreqIdx = iFrequencyIndex;
     lEntry.retries = 0;
-    lEntry.maxAttempts = iMaxAttempts == 0 ? 1 : iMaxAttempts;
+    lEntry.maxAttempts = iMaxAttempts;
     // A favourite/special Execute is not repeatable: a second "My" can undo
     // the first action. Repeatable movement and STOP commands keep the normal
-    // three-attempt budget while there has been no response at all. Once a
+    // operation-specific budget while there has been no response at all. Once a
     // challenge proves reception, the timeout state machine applies the much
     // stricter authenticated-but-unconfirmed resend policy below.
     if (iCmd == IoHomeCommand::Execute && iParam == 0xD8)
@@ -2228,7 +2228,7 @@ bool IoHomeController::sendRawTwoWayExecute(IoHomecontrolChannel *iChannel,
     lEntry.sourceChannelIndex = channelIndexFor(iChannel);
     lEntry.retries = 0;
     lEntry.maxAttempts = (iSingleAttempt || iPayload[2] == 0xD8)
-                             ? 1 : IOHC_EXCHANGE_MAX_ATTEMPTS;
+                             ? 1 : 0;
     lEntry.retryReason = TwoWayRetryReason::Initial;
     lEntry.background = false;
     lEntry.active = true;
@@ -2773,7 +2773,7 @@ bool IoHomeController::sendProfileParameterCommand(uint32_t iDestNodeId,
     lEntry.twoWayFpIndex = lIndex;
     lEntry.twoWayFpRaw = lRaw;
     lEntry.retries = 0;
-    lEntry.maxAttempts = IOHC_EXCHANGE_MAX_ATTEMPTS;
+    lEntry.maxAttempts = 0;
     lEntry.retryReason = TwoWayRetryReason::Initial;
     lEntry.active = true;
     return queuePush(lEntry);
@@ -2809,8 +2809,11 @@ bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
     if(mNextObservationGeneration==0xFFFFFFFF)return false;
     mCmdQueue[mQueueHead] = iEntry;
     mCmdQueue[mQueueHead].observationGeneration=++mNextObservationGeneration;
-    if (mCmdQueue[mQueueHead].maxAttempts == 0)
-        mCmdQueue[mQueueHead].maxAttempts = IOHC_EXCHANGE_MAX_ATTEMPTS;
+    auto &queued=mCmdQueue[mQueueHead];
+    queued.sessionPolicy=ioHomeSessionPolicy(queued.command,queued.param);
+    if (!queued.maxAttempts) queued.maxAttempts=queued.sessionPolicy.stateAttempts;
+    queued.sessionPolicy.stateAttempts=queued.maxAttempts; // explicit caller caps stay independent.
+    queued.mediaAttempts=0;
     mQueueHead = lNext;
     return true;
 }
@@ -3693,6 +3696,13 @@ void IoHomeController::beginResponseTimingAttempt()
     mLastResponseTimingSample = ResponseTimingSample{};
     mLastResponseTimingSample.ioAddress = mCurrentCmd.destNodeId & 0x00FFFFFF;
     mLastResponseTimingSample.command = mCurrentCmd.command;
+    mLastResponseTimingSample.sessionMode=mCurrentCmd.sessionPolicy.mode;
+    mLastResponseTimingSample.stateRetries=mCurrentCmd.retries;
+    mLastResponseTimingSample.mediaRetries=mCurrentCmd.mediaAttempts;
+    logDebugP("Session mode=%u stateRetry=%u/%u wholeRetry=0/%u RFretry=%u/%u selector=%s",
+        mCurrentCmd.sessionPolicy.mode,mCurrentCmd.retries,mCurrentCmd.maxAttempts,
+        mCurrentCmd.sessionPolicy.wholeSessionAttempts,mCurrentCmd.mediaAttempts,mCurrentCmd.sessionPolicy.rfAttempts,
+        mCurrentCmd.sessionPolicy.unresolvedExecuteSelector?"unresolved-use-five":"known-host-policy");
 
     const IoHomecontrolChannel *lChannel = channelForQueueEntry(mCurrentCmd);
     const IoHomeProtocolIdentity *lIdentity =
@@ -4070,7 +4080,9 @@ void IoHomeController::recordExchangeFailure(const IoHomeQueueEntry &iEntry,
 
     if (mExchangeDiagnostics.timeoutCount != UINT16_MAX)
         ++mExchangeDiagnostics.timeoutCount;
-    notifyCommandExchangeResult(iEntry, IoHomeCommandExchangeResult::Unknown);
+    notifyCommandExchangeResult(iEntry,
+        iEntry.maxAttempts>1 && (iEntry.retries+1>=iEntry.maxAttempts || uint32_t(millis()-mExchangeStartMs)>=iEntry.sessionPolicy.totalBudgetMs)
+            ? IoHomeCommandExchangeResult::SessionExhausted : IoHomeCommandExchangeResult::Unknown);
 }
 
 void IoHomeController::startDiscovery(bool iEncrypted)
@@ -6723,6 +6735,9 @@ void IoHomeController::processIdle()
 
 void IoHomeController::processTxPending()
 {
+    if (mRetryAtMs && uint32_t(millis()-mRetryAtMs)>=0x80000000UL) return;
+    mRetryAtMs=0;
+
     const bool lIs1WFrame = ((mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) != 0);
     if (lIs1WFrame)
     {
@@ -6857,7 +6872,14 @@ void IoHomeController::processTxPending()
         if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
             logInfoP("KeyImport directed failure: candidate=%06X stage=tx_failed reason=radio_transmit err=%d",
                      mCurrentCmd.destNodeId, static_cast<int>(lErr));
-        notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+        if (!lIs1WFrame && ++mCurrentCmd.mediaAttempts < mCurrentCmd.sessionPolicy.rfAttempts &&
+            uint32_t(millis()-mExchangeStartMs)<mCurrentCmd.sessionPolicy.totalBudgetMs) {
+            mRetryAtMs=millis()+IOHC_RETRY_GAP_MS;
+            logInfoP("Session media access failed; RF retry=%u/%u mode=%u stateRetry=%u wholeRetry=0",
+                mCurrentCmd.mediaAttempts,mCurrentCmd.sessionPolicy.rfAttempts,mCurrentCmd.sessionPolicy.mode,mCurrentCmd.retries);
+            return;
+        }
+        notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::MediaAccessFailed);
         mCurrentCmd.active = false;
         mState = ControllerState::Idle;
     }
@@ -7017,7 +7039,7 @@ void IoHomeController::processWaitResponse()
     }
     // A persistent preamble may extend one RX window, never the complete
     // exchange budget. Otherwise a stuck/noisy preamble can hold this state forever.
-    const bool budgetExpired=uint32_t(millis()-mExchangeStartMs)>=IOHC_EXCHANGE_TOTAL_BUDGET_MS;
+    const bool budgetExpired=uint32_t(millis()-mExchangeStartMs)>=mCurrentCmd.sessionPolicy.totalBudgetMs;
     if(budgetExpired)mStateTimer=millis()-mResponseTimeoutMs;
     if (mRadio.isPreambleDetected()&&!budgetExpired)
     {
@@ -7094,7 +7116,7 @@ void IoHomeController::processWaitResponse()
                                         mCurrentCmd.authenticatedUnconfirmedTries <= 1U &&
                                         mCurrentCmd.retries < lMaxRetries &&
                                         millis() - mExchangeStartMs + IOHC_UNCONFIRMED_EXECUTE_RETRY_GAP_MS <
-                                            IOHC_EXCHANGE_TOTAL_BUDGET_MS;
+                                            mCurrentCmd.sessionPolicy.totalBudgetMs;
                 if (!lRetrySafe)
                 {
                     logInfoP("Command: Execute to 0x%06X accepted without final response; no resend (confirms=%s repeatable=%s)",
@@ -7132,7 +7154,7 @@ void IoHomeController::processWaitResponse()
         // EXCHANGE_MAX_ATTEMPTS counts the initial transmission. Do not add a
         // trailing retry gap when the last permitted attempt has timed out.
         if (!mCurrentCmd.active || mCurrentCmd.retries >= lMaxRetries ||
-            millis() - mExchangeStartMs >= IOHC_EXCHANGE_TOTAL_BUDGET_MS)
+            millis() - mExchangeStartMs >= mCurrentCmd.sessionPolicy.totalBudgetMs)
         {
             failExchange();
             return;
@@ -7156,7 +7178,7 @@ void IoHomeController::processWaitResponse()
 
         // A long response window may consume the remaining wall-clock budget
         // while the retry gap is pending. In that case, do not start a new TX.
-        if (millis() - mExchangeStartMs >= IOHC_EXCHANGE_TOTAL_BUDGET_MS)
+        if (millis() - mExchangeStartMs >= mCurrentCmd.sessionPolicy.totalBudgetMs)
         {
             failExchange();
             return;

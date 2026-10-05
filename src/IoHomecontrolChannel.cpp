@@ -1906,6 +1906,7 @@ void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8
         mStopSettlePollPending = true;
         clearStopTravelSnapshot();
         break;
+    case IoHomeCommandExchangeResult::MediaAccessFailed:
     case IoHomeCommandExchangeResult::FailedBeforeAuthentication:
         restoreStopTravelSnapshot();
         break;
@@ -1917,6 +1918,7 @@ void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8
         scheduleStatusPoll(defaultTrackedStatusPollDelayMs());
         logInfoP("STOP exchange authenticated but unconfirmed; waiting for status verification");
         break;
+    case IoHomeCommandExchangeResult::SessionExhausted:
     case IoHomeCommandExchangeResult::Unknown:
         // Silence is not proof that the motor missed STOP. Preserve the
         // pre-STOP trajectory only as a snapshot until a real status resolves

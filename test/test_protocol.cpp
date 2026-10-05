@@ -16794,7 +16794,7 @@ TEST(controller_non_execute_exchange_uses_three_total_attempts_without_trailing_
     ASSERT_EQ(lChannel.unconfirmedExchangeCount(), 0U);
     ASSERT_TRUE(lChannel.testHasCommandExchangeResult());
     ASSERT_EQ(lChannel.testLastCommandExchangeResult(),
-              IoHomeCommandExchangeResult::Unknown);
+              IoHomeCommandExchangeResult::SessionExhausted);
 }
 
 TEST(controller_exchange_uses_per_request_attempt_budget)
@@ -16873,7 +16873,7 @@ TEST(controller_2w_exchange_budget_prevents_late_retry)
     ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
     lController.loop(); // first TX completes -> WaitResponse
 
-    ioHomeTestAdvanceMillis(IOHC_EXCHANGE_TOTAL_BUDGET_MS);
+    ioHomeTestAdvanceMillis(ioHomeSessionPolicy(IoHomeCommand::Execute).totalBudgetMs);
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::Idle);
     ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
@@ -17201,7 +17201,7 @@ TEST(controller_2w_final_response_wait_and_sx1262_dwell)
     ASSERT_EQ(lSnapshot.rssi, -83);
 }
 
-TEST(controller_execute_without_response_uses_three_attempts_and_remains_unknown)
+TEST(controller_execute_without_response_uses_five_attempts_and_reports_exhaustion)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -17218,28 +17218,16 @@ TEST(controller_execute_without_response_uses_three_attempts_and_remains_unknown
     ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
     lController.loop();
 
-    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
-    lController.loop();
-    ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
-    lController.loop();
-    ASSERT_EQ(lController.state(), ControllerState::TxPending);
-    lController.loop();
-    lController.loop();
-
-    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
-    lController.loop();
-    ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
-    lController.loop();
-    ASSERT_EQ(lController.state(), ControllerState::TxPending);
-    lController.loop();
-    lController.loop();
-
-    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
-    lController.loop();
+    for(uint8_t attempt=1;attempt<5;++attempt) {
+        ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);lController.loop();
+        ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);lController.loop();
+        ASSERT_EQ(lController.state(),ControllerState::TxPending);lController.loop();lController.loop();
+    }
+    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::Idle);
-    ASSERT_EQ(lController.radio().testTransmitCount(), 3U);
+    ASSERT_EQ(lController.radio().testTransmitCount(), 5U);
     ASSERT_EQ(lChannel.testLastCommandExchangeResult(),
-              IoHomeCommandExchangeResult::Unknown);
+              IoHomeCommandExchangeResult::SessionExhausted);
 }
 
 TEST(controller_execute_can_complete_on_third_fully_silent_attempt)
@@ -17442,12 +17430,19 @@ TEST(controller_stop_tx_failure_notifies_channel_for_state_rollback)
     lController.loop();
     lController.loop();
 
+    ASSERT_EQ(lController.state(), ControllerState::TxPending);
+    ASSERT_TRUE(!lChannel.testHasCommandExchangeResult());
+    for(uint8_t attempt=1;attempt<5;++attempt) {
+        ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
+        lController.radio().testSetNextTransmitError(RadioError::HardwareError);lController.loop();
+    }
+    ASSERT_EQ(lController.radio().testTransmitCount(),0U);
     ASSERT_EQ(lController.state(), ControllerState::Idle);
     ASSERT_TRUE(lChannel.testHasCommandExchangeResult());
     ASSERT_EQ(lChannel.testLastCommandExchangeCommand(), IoHomeCommand::Execute);
     ASSERT_EQ(lChannel.testLastCommandExchangeParam(), 0xD2U);
     ASSERT_EQ(lChannel.testLastCommandExchangeResult(),
-              IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+              IoHomeCommandExchangeResult::MediaAccessFailed);
 }
 
 TEST(controller_successful_exchange_does_not_increment_failure_diagnostics)
@@ -19777,4 +19772,14 @@ TEST(controller_low_power_deadline_starts_after_transmit_completion)
         ioHomeTestAdvanceMillis(deadline-1);c.loop();ASSERT_EQ(c.state(),ControllerState::WaitResponse);
         ioHomeTestAdvanceMillis(1);c.loop();ASSERT_EQ(c.state(),ControllerState::Idle);
     }
+}
+
+TEST(protocol_operation_session_policy_separates_retry_layers)
+{
+    const auto execute=ioHomeSessionPolicy(IoHomeCommand::Execute,50);
+    ASSERT_EQ(execute.mode,3);ASSERT_EQ(execute.stateAttempts,5);ASSERT_EQ(execute.wholeSessionAttempts,1);
+    ASSERT_TRUE(execute.unresolvedExecuteSelector);ASSERT_EQ(execute.rfAttempts,5);
+    ASSERT_EQ(ioHomeSessionPolicy(IoHomeCommand::Execute,0xD8).stateAttempts,1);
+    ASSERT_EQ(ioHomeSessionPolicy(IoHomeCommand::Private).stateAttempts,3);
+    ASSERT_EQ(ioHomeSessionPolicy(IoHomeCommand::DiscoverRequest).stateAttempts,1);
 }
