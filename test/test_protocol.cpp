@@ -21,6 +21,7 @@
 #include "protocol/IoHomeCommands.h"
 #include "protocol/IoHomeProfileRegistry.h"
 #include "protocol/IoHomeProductCodecs.h"
+#include "protocol/IoHomeProductModes.h"
 #include "protocol/IoHomeProductBinding.h"
 #include "protocol/IoHomeCommissioningJob.h"
 #include "protocol/IoHomeAssignmentReceipt.h"
@@ -19150,3 +19151,36 @@ int main()
     return sTestsFailed > 0 ? 1 : 0;
 }
 #endif
+
+TEST(product_heating_levels_reject_unknown_without_off_fallback) {
+    IoHomeHeatingLevel level=IoHomeHeatingLevel::Comfort;uint16_t raw=0x1234;
+    const uint16_t known[]={0xFC00,0xFC01,0xFC02,0xFC03,0xFC04,0xFC05,0xFC07,0xFC3F};
+    for(auto value:known){ASSERT_TRUE(ioHomeDecodeHeatingLevel(value,level));ASSERT_TRUE(ioHomeEncodeHeatingLevel(level,raw));ASSERT_EQ(raw,value);}
+    level=IoHomeHeatingLevel::Comfort;ASSERT_TRUE(!ioHomeDecodeHeatingLevel(0xFC06,level));ASSERT_EQ(level,IoHomeHeatingLevel::Comfort);
+    raw=0x1234;ASSERT_TRUE(!ioHomeEncodeHeatingLevel(static_cast<IoHomeHeatingLevel>(0xFFFF),raw));ASSERT_EQ(raw,0x1234);
+    IoHomeAtlanticRate rate=IoHomeAtlanticRate::No;ASSERT_TRUE(ioHomeDecodeAtlanticRate(0xFC04,rate));ASSERT_EQ(rate,IoHomeAtlanticRate::Unsuitable);
+    ASSERT_TRUE(!ioHomeDecodeAtlanticRate(0xFC03,rate));ASSERT_EQ(rate,IoHomeAtlanticRate::Unsuitable);
+}
+TEST(product_mode_namespaces_preserve_unhandled_fields) {
+    auto hp=ioHomeDecodeHeatPumpModes(0xFFFF,0xFFFF);ASSERT_EQ(hp.uninterpretedCapabilities,0xFFE0);ASSERT_EQ(hp.uninterpretedModes,0x3C00);
+    ASSERT_EQ(hp.global,IoHomeHeatPumpPair::Unhandled11);ASSERT_EQ(hp.modes[4],IoHomeHeatPumpPair::Unhandled11);
+    hp=ioHomeDecodeHeatPumpModes(31,0x4155);ASSERT_EQ(hp.global,IoHomeHeatPumpPair::On);for(auto m:hp.modes)ASSERT_EQ(m,IoHomeHeatPumpPair::On);
+    auto dhw=ioHomeDecodeAtlanticDhwModes(0x800D,0x4600);ASSERT_EQ(dhw.relaunchMode,IoHomeAtlanticPair::Off);ASSERT_EQ(dhw.absenceMode,IoHomeAtlanticPair::On);
+    ASSERT_EQ(dhw.uninterpretedModes,0x4000);dhw=ioHomeDecodeAtlanticDhwModes(0,0x0F00);
+    ASSERT_EQ(dhw.relaunchMode,IoHomeAtlanticPair::NotUsed);ASSERT_EQ(dhw.absenceMode,IoHomeAtlanticPair::NotUsed);
+}
+TEST(product_siren_sequences_pack_source_fields_and_zero_unused_slots) {
+    IoHomeSirenSequence sequence;sequence.durationUnits=10;sequence.dutyCycleRaw=31;sequence.repetitions=2;sequence.volume=3;sequence.visual=2;
+    uint16_t sound=0,options=0;ASSERT_TRUE(ioHomeEncodeSirenSequence(sequence,sound,options));ASSERT_EQ(sound,0xF80A);ASSERT_EQ(options,0x4C02);
+    const auto decoded=ioHomeDecodeSirenSequence(sound,options);ASSERT_EQ(decoded.durationUnits,10);ASSERT_EQ(decoded.dutyCycleRaw,31);
+    ASSERT_TRUE(decoded.knownVolume&&decoded.knownVisual&&!decoded.defaultDuration);
+    uint8_t out[16];std::memset(out,0xA5,sizeof(out));uint8_t length=99;
+    ASSERT_TRUE(ioHomeBuildSirenRepresentation(&sequence,1,out,sizeof(out),length));ASSERT_EQ(length,16);
+    const uint8_t expected[]={0,0,0,0xFC,0xF8,0x0A,0x4C,2,0,0,0,0,0,0,0,0};ASSERT_MEM_EQ(out,expected,16);
+    sequence.volume=1;length=99;out[0]=0xA5;ASSERT_TRUE(!ioHomeBuildSirenRepresentation(&sequence,1,out,sizeof(out),length));ASSERT_EQ(out[0],0xA5);ASSERT_EQ(length,99);
+    sequence.volume=3;sequence.durationUnits=0;ASSERT_TRUE(!ioHomeEncodeSirenSequence(sequence,sound,options));
+    uint16_t duration=99;ASSERT_TRUE(ioHomeSirenDurationFromMs(150,duration));ASSERT_EQ(duration,2);
+    ASSERT_TRUE(!ioHomeSirenDurationFromMs(204700,duration));ASSERT_EQ(duration,2);
+    uint8_t duty=99;ASSERT_TRUE(ioHomeSirenDutyFromPercent(50,duty));ASSERT_EQ(duty,15);ASSERT_TRUE(!ioHomeSirenDutyFromPercent(101,duty));ASSERT_EQ(duty,15);
+    const auto reserved=ioHomeDecodeSirenSequence(0x7FF,0x2800);ASSERT_TRUE(reserved.defaultDuration&&!reserved.knownVolume);
+}

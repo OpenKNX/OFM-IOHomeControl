@@ -7,6 +7,7 @@
 #include "protocol/IoHomeLogRedaction.h"
 #include "protocol/IoHomeProfileRegistry.h"
 #include "protocol/IoHomeProductCodecs.h"
+#include "protocol/IoHomeProductModes.h"
 #include "protocol/IoHomeProductBinding.h"
 #include "protocol/IoHomePresentation.h"
 #include "protocol/IoHomeProductPresentation.h"
@@ -3791,6 +3792,9 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc keyimport status|candidates|trace", "Show import evidence and verification state");
     openknx.console.printHelpLine("iohc discovery trace", "Show discovery reliability counters");
     openknx.console.printHelpLine("iohc discovery listen [MS|default]", "Runtime-only discovery listen window (default 2000 ms)");
+    openknx.console.printHelpLine("iohc codec heating RAW16", "Offline heating level; unknown enum rejected");
+    openknx.console.printHelpLine("iohc codec siren SOUND16 OPTIONS16", "Offline sequence fields; retain reserved option codes");
+    openknx.console.printHelpLine("iohc codec modes heatpump|atlantic-dhw FP15 FP16", "Offline product-specific mode pairs, unknown bits retained");
     openknx.console.printHelpLine("iohc codec temp PRODUCT INDEX RAW16 [MIN_CK MAX_CK [COMFORT_RAW]]", "Offline product conversion; explicit product, index0=MP, no RF TX");
     openknx.console.printHelpLine("iohc fp read NODE 1[,2,3]", "Raw FP diagnostic; only single FP1-FP3 transmits");
     openknx.console.printHelpLine("iohc fp raw NODE INDEX RAW16", "Expert single-attempt FP write; only FP1-FP3 transmits");
@@ -4269,6 +4273,36 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                  mController.oneWayRecoveryRequired(), static_cast<unsigned>(mController.oneWayRecovery()));
         logInfoP("On a journal fault: preserve backup/evidence, repair storage and restart; do not roll back counters or erase the journal.");
         logInfoP("For peer desynchronization: use the documented original-peer reenrollment procedure; no universal rolling-window reset is assumed.");
+        return true;
+    }
+
+    if(lSub.rfind("codec heating ",0)==0) {
+        unsigned raw=0;char extra=0;IoHomeHeatingLevel level;
+        if(sscanf(lSub.c_str(),"codec heating %x %c",&raw,&extra)!=1||raw>0xFFFF||!ioHomeDecodeHeatingLevel(raw,level)) {
+            logInfoP("Unknown heating-level value; no off fallback and no TX");return true;
+        }
+        logInfoP("Heating MP / maximum-level FP10: raw=%04X level=%s (explicit product interpretation; no TX)",raw,ioHomeHeatingLevelName(level));return true;
+    }
+    if(lSub.rfind("codec siren ",0)==0) {
+        unsigned sound=0,options=0;char extra=0;
+        if(sscanf(lSub.c_str(),"codec siren %x %x %c",&sound,&options,&extra)!=2||sound>0xFFFF||options>0xFFFF) {
+            logInfoP("Usage: iohc codec siren SOUND16 OPTIONS16 (offline only)");return true;
+        }
+        const auto value=ioHomeDecodeSirenSequence(sound,options);
+        logInfoP("Siren: durationUnits=%u defaultDuration=%u defaultPattern=%u dutyRaw=%u repetitions=%u unlimited=%u volume=%u knownVolume=%u visual=%u knownVisual=%u; no TX",value.durationUnits,value.defaultDuration,value.defaultPattern,value.dutyCycleRaw,value.repetitions,value.unlimited,value.volume,value.knownVolume,value.visual,value.knownVisual);return true;
+    }
+    if(lSub.rfind("codec modes ",0)==0) {
+        char product[16]{};unsigned caps=0,modes=0;char extra=0;
+        if(sscanf(lSub.c_str(),"codec modes %15s %x %x %c",product,&caps,&modes,&extra)!=3||caps>0xFFFF||modes>0xFFFF) {
+            logInfoP("Usage: iohc codec modes heatpump|atlantic-dhw FP15 FP16 (offline only)");return true;
+        }
+        if(!strcmp(product,"heatpump")) {
+            const auto value=ioHomeDecodeHeatPumpModes(caps,modes);
+            logInfoP("Heat-pump pairs: global=%u heating=%u cooling=%u away=%u pool=%u dhw=%u (0/3 unnamed,1 on,2 off); unknownCaps=%04X unknownModes=%04X; no TX",unsigned(value.global),unsigned(value.modes[0]),unsigned(value.modes[1]),unsigned(value.modes[2]),unsigned(value.modes[3]),unsigned(value.modes[4]),value.uninterpretedCapabilities,value.uninterpretedModes);
+        } else if(!strcmp(product,"atlantic-dhw")) {
+            const auto value=ioHomeDecodeAtlanticDhwModes(caps,modes);
+            logInfoP("Atlantic DHW pairs: relaunch=%u absence=%u (0 keep,1 on,2 off,3 unused); unknownCaps=%04X unknownModes=%04X; no TX",unsigned(value.relaunchMode),unsigned(value.absenceMode),value.uninterpretedCapabilities,value.uninterpretedModes);
+        } else logInfoP("Unknown explicit product; no inferred mode decoder");
         return true;
     }
 
