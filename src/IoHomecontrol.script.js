@@ -142,6 +142,22 @@ function IOHC_setExtractionResult(device, statusText, nodeIds) {
     }
 }
 
+// Bounded project history: the last two distinct explicit recognition adoptions.
+// It is not a device-persistence receipt or cryptographic authentication claim.
+function IOHC_recordRecognitionAdoption(device,prefix,field,value,discovery) {
+    var numbers=[discovery.nodeId,discovery.protocolType,discovery.subtype,discovery.manufacturer],limits=[0xFFFFFF,0xFFFF,255,255];
+    for(var n=0;n<numbers.length;n++)if(typeof numbers[n]!=="number"||Math.floor(numbers[n])!==numbers[n]||numbers[n]<0||numbers[n]>limits[n])return;
+    if(!discovery.nodeId)return;
+    var names=["Type","Orientation","Binary","Dimmable"];
+    var lastName=prefix+"Recognition"+names[field]+"Last",previousName=prefix+"Recognition"+names[field]+"Previous";
+    var last=IOHC_getParameter(device,lastName);
+    if(!last)return; // older ETS products have no history parameters
+    var record="v="+value+" n="+IOHC_formatNodeId(discovery.nodeId)+" p="+discovery.protocolType+"/"+discovery.subtype+" m="+discovery.manufacturer;
+    if(record.length>40)return; // never store a truncated identity/provenance record
+    if(String(last.value)===record)return;
+    if(String(last.value).indexOf("v=")===0)IOHC_setParameterValue(device,previousName,String(last.value));
+    IOHC_setParameterValue(device,lastName,record);
+}
 // Apply only documented ETS categories. Expert overrides and power policy stay intact.
 function IOHC_applyRecognitionSettings(device, prefix, discovery) {
     var override = IOHC_getParameter(device, prefix + "ProfileOverride");
@@ -160,6 +176,7 @@ function IOHC_applyRecognitionSettings(device, prefix, discovery) {
         var permission=IOHC_getParameter(device,prefix+fields[i][0]);
         if (!permission || Number(permission.value)!==1) continue;
         IOHC_setParameterValue(device,prefix+fields[i][1],fields[i][2]);
+        IOHC_recordRecognitionAdoption(device,prefix,i,fields[i][2],discovery);
         if (i===0) IOHC_setParameterValue(device,prefix+"ChannelSelection",etsType+1);
         changed=true;
     }
@@ -766,6 +783,15 @@ function IOHC_effectiveSettingsText(device,context) {
         details+=fields[i][2]+": "+(setting?String(setting.value):"nicht verfügbar")+
             (automatic?" (Übernahme erlaubt)":" (ETS-Vorgabe bleibt erhalten)")+". ";
     }
+    var historyNames=["Type","Orientation","Binary","Dimmable"];
+    for(var h=0;h<historyNames.length;h++) {
+        var last=IOHC_getParameter(device,prefix+"Recognition"+historyNames[h]+"Last");
+        var previous=IOHC_getParameter(device,prefix+"Recognition"+historyNames[h]+"Previous");
+        if(last&&String(last.value).indexOf("v=")===0) {
+            details+=fields[h][2]+" zuletzt übernommen: "+last.value+". ";
+            if(previous&&String(previous.value).indexOf("v=")===0)details+="Davor: "+previous.value+". ";
+        }
+    }
     var text="Kanal "+channel+": "+retained+" von 4 Erkennungsfeldern behalten ihre ETS-Vorgabe. "+details;
     if(forced)text+="Profil-Override "+override.value+" sperrt automatische Übernahme. ";
     var expert=[["ProtocolMode","Protokollmodus"],["TwoWayPowerClass","2W-Energieklasse"],
@@ -815,7 +841,7 @@ function IOHC_readChannelEvidence(device,online,progress,context) {
         } else text+="Produktbindung von dieser Firmware nicht verfügbar. ";
         var current=IOHC_invokeFunctionProperty(online,[0x1D,channel]);
         if(!current||current.length!==12||current[0]!==0||current[1]!==1||current[2]!==channel||IOHC_readNodeId(current,3)!==node) throw new Error("Kanal während des Lesens geändert; erneut lesen");
-        text+="Nur aktuelle Evidenz, keine Historie. Keine Einstellungen übernommen und keine RF-Abfrage ausgelöst.";
+        text+="Aktuelle Geräteevidenz; gespeicherte ETS-Übernahmen stehen im Vorgabenbericht. Keine Einstellungen übernommen und keine RF-Abfrage ausgelöst.";
         progress.setText(text);
     } finally {online.disconnect();}
 }

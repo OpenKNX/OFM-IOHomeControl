@@ -45,6 +45,14 @@
               <Parameter Id="%AID%_P-%TT%%CC%111" Name="c%C%RecognitionOrientationAuto" ParameterType="%AID%_PT-IOHCCheckBox" Text="Orientierung aus Erkennung übernehmen" Value="0" op:configTransfer="never" />
               <Parameter Id="%AID%_P-%TT%%CC%112" Name="c%C%RecognitionBinaryAuto" ParameterType="%AID%_PT-IOHCCheckBox" Text="Ein/Aus-Modus aus Erkennung übernehmen" Value="0" op:configTransfer="never" />
               <Parameter Id="%AID%_P-%TT%%CC%113" Name="c%C%RecognitionDimmableAuto" ParameterType="%AID%_PT-IOHCCheckBox" Text="Dimmbar aus Erkennung übernehmen" Value="0" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%114" Name="c%C%RecognitionTypeLast" ParameterType="%AID%_PT-IOHCText40Byte" Text="Type: Last Erkennungsübernahme" Value="keine dokumentierte Übernahme" Access="Read" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%115" Name="c%C%RecognitionTypePrevious" ParameterType="%AID%_PT-IOHCText40Byte" Text="Type: Previous Erkennungsübernahme" Value="keine dokumentierte Übernahme" Access="Read" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%116" Name="c%C%RecognitionOrientationLast" ParameterType="%AID%_PT-IOHCText40Byte" Text="Orientation: Last Erkennungsübernahme" Value="keine dokumentierte Übernahme" Access="Read" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%117" Name="c%C%RecognitionOrientationPrevious" ParameterType="%AID%_PT-IOHCText40Byte" Text="Orientation: Previous Erkennungsübernahme" Value="keine dokumentierte Übernahme" Access="Read" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%118" Name="c%C%RecognitionBinaryLast" ParameterType="%AID%_PT-IOHCText40Byte" Text="Binary: Last Erkennungsübernahme" Value="keine dokumentierte Übernahme" Access="Read" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%119" Name="c%C%RecognitionBinaryPrevious" ParameterType="%AID%_PT-IOHCText40Byte" Text="Binary: Previous Erkennungsübernahme" Value="keine dokumentierte Übernahme" Access="Read" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%120" Name="c%C%RecognitionDimmableLast" ParameterType="%AID%_PT-IOHCText40Byte" Text="Dimmable: Last Erkennungsübernahme" Value="keine dokumentierte Übernahme" Access="Read" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%121" Name="c%C%RecognitionDimmablePrevious" ParameterType="%AID%_PT-IOHCText40Byte" Text="Dimmable: Previous Erkennungsübernahme" Value="keine dokumentierte Übernahme" Access="Read" op:configTransfer="never" />
               <!-- Main configuration Union including 10 ETS-backed scene slots -->
               <Union SizeInBit="544">
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
@@ -147,6 +155,14 @@
               <ParameterRef Id="%AID%_P-%TT%%CC%111_R-%TT%%CC%11101" RefId="%AID%_P-%TT%%CC%111" />
               <ParameterRef Id="%AID%_P-%TT%%CC%112_R-%TT%%CC%11201" RefId="%AID%_P-%TT%%CC%112" />
               <ParameterRef Id="%AID%_P-%TT%%CC%113_R-%TT%%CC%11301" RefId="%AID%_P-%TT%%CC%113" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%114_R-%TT%%CC%11401" RefId="%AID%_P-%TT%%CC%114" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%115_R-%TT%%CC%11501" RefId="%AID%_P-%TT%%CC%115" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%116_R-%TT%%CC%11601" RefId="%AID%_P-%TT%%CC%116" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%117_R-%TT%%CC%11701" RefId="%AID%_P-%TT%%CC%117" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%118_R-%TT%%CC%11801" RefId="%AID%_P-%TT%%CC%118" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%119_R-%TT%%CC%11901" RefId="%AID%_P-%TT%%CC%119" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%120_R-%TT%%CC%12001" RefId="%AID%_P-%TT%%CC%120" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%121_R-%TT%%CC%12101" RefId="%AID%_P-%TT%%CC%121" />
             </ParameterRefs>
 
             <ParameterCalculations>

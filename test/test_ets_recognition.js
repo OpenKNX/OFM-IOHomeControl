@@ -145,7 +145,7 @@ test("channel evidence preserves manual fields and labels correlated samples",fu
         return [0,1,0,data[2],0x12,0x34,0x56,2,0x12,0x34,0,0,0,7,0,0,0,8,1,1];
     }};
     IOHC_readChannelEvidence(d,online,{setText:function(v){text=v;}},{channelIndex:1});
-    check(text.indexOf("Gerätetyp: manuell")>=0&&text.indexOf("korreliert")>=0&&text.indexOf("keine Historie")>=0,"authority/trust omitted");
+    check(text.indexOf("Gerätetyp: manuell")>=0&&text.indexOf("korreliert")>=0&&text.indexOf("Aktuelle Geräteevidenz")>=0,"authority/trust omitted");
     check(disconnected&&JSON.stringify(d.params)===before,"evidence mutated project");
 });
 test("channel evidence refuses changed identity and closes connection",function() {
@@ -218,4 +218,20 @@ test("offline effective settings disclose overrides without changing project",fu
     check(text.indexOf("auch wenn ausgeblendet")>=0&&JSON.stringify(d.params)===before,"expert visibility or mutation");
     d.params.IOHC_c1ProfileOverride.value=0;d.params.IOHC_c1RecognitionTypeAuto.value=0;
     check(IOHC_effectiveSettingsText(d,{channelIndex:1}).indexOf("1 von 4")>=0,"independent manual ownership");
+});
+
+test("recognition history retains two distinct adoptions and manual ownership",function() {
+    var d=deviceWith({RecognitionOrientationAuto:0});
+    var names=["Type","Orientation","Binary","Dimmable"];
+    for(var i=0;i<names.length;i++)for(var j=0;j<2;j++)d.params["IOHC_c1Recognition"+names[i]+(j?"Previous":"Last")]={value:"keine dokumentierte Übernahme"};
+    var discovery={nodeId:0x123456,metadataValid:true,protocolType:6,subtype:1,manufacturer:2,presentationType:6,presentationFlags:4};
+    check(IOHC_applyRecognitionSettings(d,"IOHC_c1",discovery),"first adoption");
+    var first=value(d,"RecognitionTypeLast");check(first.indexOf("n=123456")>=0,"identity missing");
+    check(value(d,"RecognitionOrientationLast")==="keine dokumentierte Übernahme","manual field acquired history");
+    IOHC_applyRecognitionSettings(d,"IOHC_c1",discovery);check(value(d,"RecognitionTypePrevious")==="keine dokumentierte Übernahme","duplicate advanced history");
+    discovery.nodeId=0x654321;IOHC_applyRecognitionSettings(d,"IOHC_c1",discovery);
+    check(value(d,"RecognitionTypePrevious")===first,"previous adoption lost");
+    var before=JSON.stringify(d.params);d.params.IOHC_c1ProfileOverride.value=448;before=JSON.stringify(d.params);
+    check(!IOHC_applyRecognitionSettings(d,"IOHC_c1",discovery)&&JSON.stringify(d.params)===before,"override changed history");
+    check(IOHC_effectiveSettingsText(d,{channelIndex:1}).indexOf("Davor:")>=0,"history absent from summary");
 });

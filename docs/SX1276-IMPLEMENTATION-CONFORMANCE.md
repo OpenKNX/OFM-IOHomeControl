@@ -89,3 +89,16 @@ it does not retract an already queued read. `sensor monitor-status NODE`
 reports host session state. Responses remain raw, correlated and unit-unknown.
 This supplies bounded read monitoring, not unsolicited event subscriptions,
 product physical units, automatic wake policy or accepted peer qualification.
+
+## Bounded per-field ETS recognition history — 2026-10-05
+
+Eight ETS-only read-only text parameters retain the last two distinct explicit
+adoptions for each of type/orientation/binary/dimming. Each record contains the
+adopted value, node, profile/subprofile and manufacturer. Manual fields and
+profile overrides never acquire adoption records; repeated identical evidence
+does not evict the previous record. Invalid/incomplete provenance is not stored,
+and old ETS products without the optional parameters remain compatible.
+The offline summary exposes the records. They persist with the ETS project,
+not in device flash. This is bounded adoption history, not a complete audit log,
+authenticated metadata claim, current-source inference or download receipt.
+Actual ETS save/reopen/migration remains unqualified.
