@@ -11832,13 +11832,11 @@ static void buildDiscoverResponseFrame(IoHomeFrame &oFrame,
     oFrame.setDestNode(iRemoteNodeId);
     oFrame.commandId = iEncrypted ? IoHomeCommand::DiscoverSPEResponse
                                   : IoHomeCommand::DiscoverResponse;
-    oFrame.dataLen = 0;
-    if (iPowerSave <= IOHC_DISCOVERY_POWER_SAVE_MASK)
-    {
-        memset(oFrame.data, 0, 9);
-        oFrame.data[IOHC_DISCOVERY_FLAGS_OFFSET] = iPowerSave;
-        oFrame.dataLen = 9;
-    }
+    memset(oFrame.data,0,9);
+    oFrame.data[1]=0x80; // Known roller-shutter profile, consistent with GI enrichment fixtures.
+    oFrame.data[5]=static_cast<uint8_t>(IoHomeManufacturer::Velux);
+    oFrame.data[IOHC_DISCOVERY_FLAGS_OFFSET]=iPowerSave;
+    oFrame.dataLen=9; // Native discovery acceptance requires a complete record.
     oFrame.hasHmac = false;
 }
 

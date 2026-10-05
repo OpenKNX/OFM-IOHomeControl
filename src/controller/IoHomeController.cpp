@@ -6160,9 +6160,9 @@ void IoHomeController::loop()
                         // backbone reference, including the valid value zero.
                         IoHomecontrolChannel *lPairChannel =
                             mModule ? mModule->getChannel(mPairingChannel) : nullptr;
-                        captureProtocolIdentity(lPairChannel, mRxFrame,
+                        if(!captureProtocolIdentity(lPairChannel, mRxFrame,
                                                  "pairing discovery",
-                                                 &mPairProtocolIdentity);
+                                                 &mPairProtocolIdentity)) return;
                         mDiscoveredNodeId = lSource;
                         // Cap subsequent directed START preambles to the exact
                         // discovery request that produced this correlated 0x29.
