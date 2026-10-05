@@ -1341,7 +1341,7 @@ function IOHC_showSemanticHelp(device,online,progress,context){
 
 function IOHC_readSelectedProduct(device,online,progress,context){
  return IOHC_boundDiagnostic(device,online,progress,context,function(c,id){
-  var prefix=IOHC_getChannelPrefix(context),names=["none","heatpump","heating-interface","generic-heater","atlantic-heater","atlantic-dhw-v2","atlantic-dhw-ck","siren","heatpump-modes","atlantic-dhw-modes","pergola"],product=names.indexOf(String(IOHC_getParameter(device,prefix+"SemanticProduct").value)),index=Number(IOHC_getParameter(device,prefix+"SemanticIndex").value);
+  var prefix=IOHC_getChannelPrefix(context),names=["none","heatpump","heating-interface","generic-heater","atlantic-heater","atlantic-dhw-v2","atlantic-dhw-ck","siren","heatpump-modes","atlantic-dhw-modes","pergola","alarm","sliding-lock"],product=names.indexOf(String(IOHC_getParameter(device,prefix+"SemanticProduct").value)),index=Number(IOHC_getParameter(device,prefix+"SemanticIndex").value);
   if(product<1||index<0||index>16||Math.floor(index)!==index)throw new Error("Explizite bekannte Produktdefinition / MP-FP erforderlich");
   var low=String(IOHC_getParameter(device,prefix+"ContextMinimumCK").value),high=String(IOHC_getParameter(device,prefix+"ContextMaximumCK").value),has=low!==""||high!=="";
   if(has&&(!/^[0-9a-fA-F]{4}$/.test(low)||! /^[0-9a-fA-F]{4}$/.test(high)||parseInt(low,16)>=parseInt(high,16)))throw new Error("Nur bestätigte Centikelvin-Grenzen als vierstellige Hex-Werte eingeben");
@@ -1350,6 +1350,6 @@ function IOHC_readSelectedProduct(device,online,progress,context){
   if(!r||r.length!==22||r[0]!==0||r[1]!==1||r[2]!==c||r[3]!==product||r[4]!==index)throw new Error("Produktdiagnose nicht unterstützt");
   if(!IOHC_sameRecognitionSnapshot(id,IOHC_invokeFunctionProperty(online,[0x1D,c])))throw new Error("Kanal geändert");
   var v=IOHC_read32(r,18);if(v>=2147483648)v-=4294967296;
-  progress.setText("Explizite Definition "+names[product]+", raw="+IOHC_hexBytes(r.slice(8,10))+", vorhanden="+r[5]+", frisch="+r[6]+", dekodierbar="+r[7]+", Vertrauen="+r[10]+", Alter="+IOHC_read32(r,14)+" ms"+(r[7]?", Wert="+(v/1000)+" "+["unbekannt","°C","numerisch (Einheit unqualifiziert)","packed","%"][r[11]]:"")+". Grenzen sind Benutzerkontext; keine automatische Produktbindung, Schreibfreigabe oder KNX-Publikation.");
+  progress.setText("Explizite Definition "+names[product]+", raw="+IOHC_hexBytes(r.slice(8,10))+", vorhanden="+r[5]+", frisch="+r[6]+", dekodierbar="+r[7]+", Vertrauen="+r[10]+", Alter="+IOHC_read32(r,14)+" ms"+(r[7]?", Wert="+(v/1000)+" "+["unbekannt","°C","numerisch (Einheit unqualifiziert)","packed","%","zone mask A=1 B=2 C=4","locked boolean"][r[11]]:"")+". Grenzen sind Benutzerkontext; keine automatische Produktbindung, Schreibfreigabe oder KNX-Publikation.");
  });
 }
