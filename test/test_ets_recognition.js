@@ -122,3 +122,34 @@ test("frozen assignment carries identity and stops on stale token",function() {
     var rejected=false;try{IOHC_assignFrozenCandidates(online,job,[{index:0,nodeId:0x123456}],2);}catch(e){rejected=true;}
     check(rejected&&seen===1,"stale assignment retried");
 });
+
+test("commissioning status displays frozen candidates without project mutation",function() {
+    var d=deviceWith({Name:"Office",ProfileOverride:448}),before=JSON.stringify(d.params),text="",disconnected=false;
+    var caps=[0,1,0,0,0,15,0,0,0,9],job=new Array(26).fill(0);job[1]=1;job[2]=2;job[3]=4;job[7]=2;job[8]=255;job[15]=1;job[23]=9;job[25]=3;
+    var online={connect:function(){},disconnect:function(){disconnected=true;},invokeFunctionProperty:function(o,p,data){return data[0]===0x23?caps:job;}};
+    IOHC_readCommissioningStatus(d,online,{setText:function(v){text=v;}},{});
+    check(text.indexOf("Kandidaten 3")>=0&&text.indexOf("Ergebnisrevision 1")>=0,"job details missing");
+    check(disconnected&&JSON.stringify(d.params)===before,"status mutated project or leaked connection");
+});
+test("channel evidence preserves manual fields and labels correlated samples",function() {
+    var d=deviceWith({Name:"Office",RecognitionTypeAuto:0,ProfileOverride:448}),before=JSON.stringify(d.params),text="",disconnected=false;
+    var identity=snapshot(0x1C,6,1);
+    var online={connect:function(){},disconnect:function(){disconnected=true;},invokeFunctionProperty:function(o,p,data){
+        if(data[0]===0x1D)return identity;
+        if(data[0]===0x22)return [0,1,0,1,0,0];
+        check(data[0]===0x28&&[0,10,11].indexOf(data[2])>=0,"unexpected request");
+        return [0,1,0,data[2],0x12,0x34,0x56,2,0x12,0x34,0,0,0,7,0,0,0,8,1,1];
+    }};
+    IOHC_readChannelEvidence(d,online,{setText:function(v){text=v;}},{channelIndex:1});
+    check(text.indexOf("Gerätetyp: manuell")>=0&&text.indexOf("korreliert")>=0&&text.indexOf("keine Historie")>=0,"authority/trust omitted");
+    check(disconnected&&JSON.stringify(d.params)===before,"evidence mutated project");
+});
+test("channel evidence refuses changed identity and closes connection",function() {
+    var count=0,disconnected=false,text="",d=deviceWith({}),before=JSON.stringify(d.params);
+    var online={connect:function(){},disconnect:function(){disconnected=true;},invokeFunctionProperty:function(o,p,data){
+        if(data[0]===0x22)return [3];
+        var result=snapshot(0x1C,6,1);if(++count===2)result[5]=0x57;return result;
+    }};
+    var rejected=false;try{IOHC_readChannelEvidence(d,online,{setText:function(v){text=v;}},{channelIndex:1});}catch(e){rejected=true;}
+    check(rejected&&disconnected&&text===""&&JSON.stringify(d.params)===before,"stale evidence displayed or applied");
+});

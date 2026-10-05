@@ -709,8 +709,66 @@ function IOHC_jobSnapshot(online) {
     var job=IOHC_invokeFunctionProperty(online,[0x24]);
     if(!job || job.length!==26 || job[0]!==0 || job[1]!==1 || IOHC_read32(job,20)!==IOHC_read32(caps,6))
         throw new Error("Job-Status hat sich geändert; erneut lesen");
-    return {owner:job[2],stage:job[3],generation:IOHC_read32(job,4),revision:IOHC_read32(job,12),
+    return {owner:job[2],stage:job[3],channel:job[8],node:IOHC_readNodeId(job,9),generation:IOHC_read32(job,4),revision:IOHC_read32(job,12),
             remainingMs:IOHC_read32(job,16),error:job[24],count:job[25],token:job.slice(20,24).concat(job.slice(4,8),job.slice(12,16))};
+}
+function IOHC_readCommissioningStatus(device,online,progress,context) {
+    online.connect();
+    try {
+        var job=IOHC_jobSnapshot(online);
+        if(!job) throw new Error("Firmware unterstützt keinen erweiterten Einrichtungsstatus");
+        var owners=["Keine Einrichtung","Pairing","Schlüsselimport"];
+        var stages=["Inaktiv","Vorbereitung","Suche","Prüfung","Ergebnis bereit","Speichern","Abgeschlossen","Abgebrochen","Fehlgeschlagen","Unbestätigt"];
+        var errors=["kein Fehler","Zeitlimit","Peer/Transport","Speicherfehler","Veraltetes Ergebnis"];
+        if(job.owner>=owners.length||job.stage>=stages.length||job.error>=errors.length) throw new Error("Unbekanntes Job-Statusschema");
+        var text=owners[job.owner]+": "+stages[job.stage]+"; "+errors[job.error]+". Generation "+job.generation+", Ergebnisrevision "+job.revision;
+        if(job.channel<16) text+="; Kanal "+(job.channel+1);
+        if(job.node) text+="; Node "+IOHC_formatNodeId(job.node);
+        if(job.stage>=1&&job.stage<=3) text+="; Restzeit "+Math.ceil(job.remainingMs/1000)+" s";
+        if(job.owner===2&&job.stage===4) text+="; Kandidaten "+job.count+"; Ergebnis übernehmen";
+        text+=". Statuslesen ändert keine ETS-Einstellungen und bestätigt keinen Geräte-Download.";
+        progress.setText(text);
+    } finally {online.disconnect();}
+}
+function IOHC_readChannelEvidence(device,online,progress,context) {
+    var channel=Number(context.channelIndex)-1;
+    if(channel<0||channel>=16||Math.floor(channel)!==channel) throw new Error("Ungültiger Kanal");
+    online.connect();
+    try {
+        var identity=IOHC_invokeFunctionProperty(online,[0x1D,channel]);
+        if(!identity||identity.length!==12||identity[0]!==0||identity[1]!==1||identity[2]!==channel) throw new Error("Ungültiger Erkennungsstatus");
+        var node=IOHC_readNodeId(identity,3),prefix=IOHC_getChannelPrefix(context);
+        var text="Kanal "+(channel+1)+", Node "+IOHC_formatNodeId(node)+". ";
+        if((identity[11]&4)!==0) text+="Profil "+(identity[6]|identity[7]<<8)+"/"+identity[8]+", Hersteller "+identity[9]+", "+((identity[11]&8)!==0?"vollständige":"teilweise")+" Metadaten. ";
+        else text+="Keine bestätigten Profilmetadaten. ";
+        var override=IOHC_getParameter(device,prefix+"ProfileOverride");
+        if(override&&Number(override.value)!==0) text+="Manueller Profil-Override aktiv. ";
+        var fields=[["RecognitionTypeAuto","Gerätetyp"],["RecognitionOrientationAuto","Orientierung"],["RecognitionBinaryAuto","Binärmodus"],["RecognitionDimmableAuto","Dimmen"]];
+        for(var i=0;i<fields.length;i++) {
+            var permission=IOHC_getParameter(device,prefix+fields[i][0]);
+            text+=fields[i][1]+": "+(permission&&Number(permission.value)===1?"Übernahme erlaubt":"manuell")+". ";
+        }
+        var binding=IOHC_invokeFunctionProperty(online,[0x22,channel]);
+        if(binding&&binding[0]===0) {
+            if(binding.length!==6||binding[1]!==1||binding[2]!==channel||binding[3]>4||binding[4]>4||binding[5]!==0) throw new Error("Unbekanntes Produkt-Bindungsschema");
+            var families=["unbekannt","RGB-Licht","Tunable White","Atlantic PassAPC Wärmepumpe","Atlantic PassAPC Hybrid"];
+            var reasons=["Familie erkannt","Identität fehlt","Aktor-Klasse fehlt","Widersprüchliche Metadaten","Keine belegte Produktdefinition"];
+            text+="Produktfamilie: "+families[binding[3]]+" ("+reasons[binding[4]]+"). Modell/Generation und RF-Schreibqualifikation unbekannt. ";
+            var indexes=binding[3]===1?[0,10,11]:binding[3]===2?[0,14]:[];
+            var trusts=["keine","passiv","korreliert","authentifiziert"];
+            for(var j=0;j<indexes.length;j++) {
+                var sample=IOHC_invokeFunctionProperty(online,[0x28,channel,indexes[j]]);
+                if(!sample||sample.length!==20||sample[0]!==0||sample[1]!==1||sample[2]!==channel||sample[3]!==indexes[j]||IOHC_readNodeId(sample,4)!==node||sample[7]>3||sample[18]>1||sample[19]>1) throw new Error("Produktbeobachtung geändert/ungültig");
+                text+=(indexes[j]===0?"MP":"FP"+indexes[j])+": ";
+                text+=sample[18]?"raw "+((sample[8]<<8)|sample[9])+", "+trusts[sample[7]]+", Generation "+IOHC_read32(sample,10)+", Alter "+IOHC_read32(sample,14)+" ms, "+(sample[19]?"frisch":"veraltet"):"keine Beobachtung";
+                text+=". ";
+            }
+        } else text+="Produktbindung von dieser Firmware nicht verfügbar. ";
+        var current=IOHC_invokeFunctionProperty(online,[0x1D,channel]);
+        if(!current||current.length!==12||current[0]!==0||current[1]!==1||current[2]!==channel||IOHC_readNodeId(current,3)!==node) throw new Error("Kanal während des Lesens geändert; erneut lesen");
+        text+="Nur aktuelle Evidenz, keine Historie. Keine Einstellungen übernommen und keine RF-Abfrage ausgelöst.";
+        progress.setText(text);
+    } finally {online.disconnect();}
 }
 function IOHC_cancelCommissioning(device,online,progress,context) {
     online.connect();
