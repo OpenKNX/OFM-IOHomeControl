@@ -100,6 +100,20 @@
         "edges_after_restart": "not_run"
       },
       "artifacts": []
+    },
+    {
+      "id": "semtech_prefix_mapping",
+      "kind": "physical",
+      "outcome": "not_run",
+      "cases": {
+        "short_2w": "not_run",
+        "long_2w": "not_run",
+        "oneway_wake": "not_run",
+        "sync": "not_run",
+        "no_double_framing": "not_run",
+        "trailer": "not_run"
+      },
+      "artifacts": []
     }
   ]
 }
