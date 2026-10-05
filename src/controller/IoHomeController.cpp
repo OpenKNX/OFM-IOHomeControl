@@ -5364,6 +5364,10 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
 {
     if (iData && iLength && (iData[0] & IOHC_CTRL0_MODE_1W) && mReservationFailed)
         return RadioError::HardwareError;
+#ifndef TEST_NATIVE
+    if(iData&&iLength&&!(iData[0]&IOHC_CTRL0_MODE_1W)&&mModule&&!mModule->prepareTwoWayPersistence())
+        return RadioError::HardwareError;
+#endif
     return mRadio.startTransmit(iData, iLength);
 }
 
@@ -8293,6 +8297,14 @@ void IoHomeController::finalize2WPairingKey()
         IoHomecontrolChannel *lCh = mModule->getChannel(mPairingChannel);
         if (lCh)
         {
+#ifndef TEST_NATIVE
+            if(!mModule->persistTwoWayBinding(mPairingChannel,mDiscoveredNodeId,mSystemKey)) {
+                // Peer key acknowledgement cannot be rolled back. Record the
+                // local persistence failure; do not advertise durable pairing.
+                completePairingTelemetry(PairingOutcome::ConfigurationFailure);
+                mState=ControllerState::PairFailed;return;
+            }
+#endif
             lCh->setNodeId(mDiscoveredNodeId);
             lCh->setEncryptionKey(mSystemKey);
             openknx.flash.save(true);

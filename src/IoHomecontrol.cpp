@@ -1101,6 +1101,7 @@ bool IoHomecontrol::applyKeyImportDeviceToChannel(const KeyImportDevice &iDevice
     receipt.power=iDevice.protocolIdentity.powerSaveModeRaw;
     receipt.metadataValid=iDevice.protocolIdentity.valid; receipt.metadataComplete=iDevice.protocolIdentity.fullMetadata;
     if (!mAssignmentReceipts.save(iChannelIndex,receipt)) return false;
+    if (!persistTwoWayBinding(iChannelIndex,iDevice.nodeId,mKeyImportKey.key)) return false;
     IoHomecontrolChannel *lChannel = mChannels[iChannelIndex];
     lChannel->setIs1W(false);
     lChannel->setNodeId(iDevice.nodeId);
@@ -2337,7 +2338,9 @@ void IoHomecontrol::processAfterStartupDelay()
     if (!mIdentityRestoreInitDone)
     {
         mIdentityRestoreInitDone = true;
+        restoreNetwork();
         initSystemKey();
+        restoreAssignmentReceipts();
         initOneWayControllerProfiles();
         applyOneWayControllerConfiguration();
     }
@@ -2415,6 +2418,57 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
     }
 }
 
+IoHomeNetworkStore::State IoHomecontrol::networkSnapshot() const
+{
+    auto state=mCommittedNetwork; // retain bindings above a reduced ETS channel count
+    state.controller=mController.getOwnNodeId();std::memcpy(state.key,mController.getSystemKey(),16);
+    for(uint8_t c=0;c<mNumChannels;c++) {
+        auto &b=state.channels[c];b={};
+        if(mChannels[c]&&!mChannels[c]->is1W()) {
+            b.managed=true;b.node=mChannels[c]->getNodeId();std::memcpy(b.key,mChannels[c]->getEncryptionKey(),16);
+        }
+    }
+    return state;
+}
+
+bool IoHomecontrol::commitNetwork(const IoHomeNetworkStore::State &state)
+{
+    if(!mNetworkStoreReady||mNetworkStoreFailed)return false;
+    if(mNetworkHasCommit&&IoHomeNetworkStore::equal(state,mCommittedNetwork))return true;
+    if(!mNetworkStore.commit(state)){mNetworkStoreFailed=true;logInfoP("2W identity persistence failed; TX blocked");return false;}
+    mCommittedNetwork=state;mNetworkHasCommit=true;return true;
+}
+
+bool IoHomecontrol::prepareTwoWayPersistence(){return commitNetwork(networkSnapshot());}
+
+bool IoHomecontrol::persistTwoWayBinding(uint8_t channel,uint32_t node,const uint8_t *key)
+{
+    if(channel>=mNumChannels||!key)return false;
+    auto state=networkSnapshot();auto &b=state.channels[channel];b.managed=true;b.node=node;std::memcpy(b.key,key,16);
+    return commitNetwork(state);
+}
+
+void IoHomecontrol::restoreNetwork()
+{
+    IoHomeNetworkStore::State restored;
+    const auto result=mNetworkStore.load(restored);
+    if(result==IoHomeNetworkStore::Result::Corrupt||result==IoHomeNetworkStore::Result::Unavailable)
+    {mNetworkStoreFailed=true;logInfoP("2W identity store unavailable/corrupt; TX blocked");return;}
+    mNetworkStoreReady=true;
+    if(result!=IoHomeNetworkStore::Result::Found)return; // legacy migration before first TX
+    mCommittedNetwork=restored;mNetworkHasCommit=true;
+    mController.setOwnNodeId(restored.controller);mController.setSystemKey(restored.key);
+    for(uint8_t c=0;c<mNumChannels;c++) {
+        auto *ch=mChannels[c];const auto &b=restored.channels[c];
+        if(!ch||ch->is1W()||!b.managed)continue;
+        if(ch->getNodeId()!=b.node||std::memcmp(ch->getEncryptionKey(),b.key,16)) {
+            ch->setNodeId(b.node);ch->setEncryptionKey(b.key);ch->clearLearnedLowPower2W();
+            // Do not retain semantic evidence for a replaced identity.
+            ch->clearProtocolIdentity();ch->clearProductIdentityEvidence();
+        }
+    }
+}
+
 void IoHomecontrol::restoreAssignmentReceipts()
 {
     for(uint8_t i=0;i<mNumChannels;i++)
@@ -2422,6 +2476,10 @@ void IoHomecontrol::restoreAssignmentReceipts()
         IoHomeAssignmentReceipt::Value receipt;
         if(mAssignmentReceipts.load(i,receipt)!=IoHomeAssignmentReceipt::Result::Found) continue;
         auto *ch=mChannels[i]; if(!ch || ch->is1W()) continue;
+        if(!mNetworkStoreReady||mNetworkStoreFailed||!mNetworkHasCommit)continue;
+        if(mNetworkHasCommit && (!mCommittedNetwork.channels[i].managed ||
+            mCommittedNetwork.channels[i].node!=receipt.node ||
+            std::memcmp(mCommittedNetwork.channels[i].key,receipt.key,16))) continue;
         if(ch->getNodeId()!=0 && ch->getNodeId()!=receipt.node)
         { logInfoP("Assignment recovery conflict channel=%u; no overwrite",i+1);continue; }
         if(ch->getNodeId()==receipt.node && std::memcmp(ch->getEncryptionKey(),receipt.key,16))
@@ -2713,6 +2771,8 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         {
             mController.cancelPairing();
             if (!mAssignmentReceipts.erase(lChannel)) { resultData[0]=4;resultLength=1;return true; }
+            const uint8_t emptyKey[16]{};
+            if(!mChannels[lChannel]->is1W()&&!persistTwoWayBinding(lChannel,0,emptyKey)) {resultData[0]=4;resultLength=1;return true;}
             mChannels[lChannel]->setNodeId(0);
             mChannels[lChannel]->clearLearnedLowPower2W();
             mChannels[lChannel]->setOneWayEnrolled(false);
@@ -3010,6 +3070,7 @@ uint16_t IoHomecontrol::flashSize()
 
 void IoHomecontrol::writeFlash()
 {
+    if(mNetworkStoreReady&&!mNetworkStoreFailed) prepareTwoWayPersistence();
     openknx.flash.writeByte(18); // enriched metadata; v9-v17 remain readable
 
     // Write system key
@@ -3560,7 +3621,6 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
         logDebugP("Unknown flash version %d", lVersion);
     }
 
-    restoreAssignmentReceipts();
     applyOneWayControllerConfiguration();
 }
 
@@ -3572,6 +3632,7 @@ void IoHomecontrol::showHelp()
     // available IOHC commands on all builds.
 
     openknx.console.printHelpLine("iohc help", "Show io-homecontrol commands");
+    openknx.console.printHelpLine("iohc 2wrecovery status", "Checked network identity/bindings persistence status; failure blocks 2W TX");
     openknx.console.printHelpLine("iohc 1wrecovery status", "Durable sequence fault; never rolls counters back");
     openknx.console.printHelpLine("iohc status", "Show all channel status");
     openknx.console.printHelpLine("iohcNN status", "Show channel NN detail");
@@ -4055,6 +4116,10 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         return true;
     }
 
+    if(lSub=="2wrecovery status") {
+        logInfoP("2W persistence: ready=%u failed=%u committed=%u; restore/storage repair required on failure; no automatic erase",mNetworkStoreReady,mNetworkStoreFailed,mNetworkHasCommit);
+        return true;
+    }
     if (lSub == "1wrecovery status")
     {
         logInfoP("1W recovery: required=%u reason=%u; delivery/peer counter is unconfirmed",
@@ -5534,6 +5599,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             if (parseChannelIndex(lSub.substr(7, 2), mNumChannels, lIdx))
             {
                 mController.cancelPairing();
+                const uint8_t emptyKey[16]{};
+                if(!mAssignmentReceipts.erase(lIdx)||(!mChannels[lIdx]->is1W()&&!persistTwoWayBinding(lIdx,0,emptyKey)))
+                {logInfoP("Unpair persistence failed; channel retained");return true;}
                 mChannels[lIdx]->setNodeId(0);
                 mChannels[lIdx]->clearLearnedLowPower2W();
                 memset(const_cast<uint8_t *>(mChannels[lIdx]->getEncryptionKey()), 0, 16);

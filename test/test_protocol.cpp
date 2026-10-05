@@ -24,6 +24,7 @@
 #include "protocol/IoHomeProductBinding.h"
 #include "protocol/IoHomeCommissioningJob.h"
 #include "protocol/IoHomeAssignmentReceipt.h"
+#include "protocol/IoHomeNetworkStore.h"
 #include "protocol/IoHomeProductActivation.h"
 #include "protocol/IoHomeProductPresentation.h"
 #include <limits>
@@ -3666,6 +3667,21 @@ TEST(durable_reservation_survives_identity_moves_and_reassignment) {
     ASSERT_EQ(j.load(7,0x123456,key,w),IoHomeDurableReservation::Load::Found);ASSERT_EQ(w,134);
     ASSERT_TRUE(j.commit(0,0x654321,key,50));
     ASSERT_EQ(j.load(0,0x123456,key,w),IoHomeDurableReservation::Load::Found);ASSERT_EQ(w,134);
+}
+
+TEST(network_store_commits_identity_and_assignment_as_one_record) {
+    IoHomeNetworkStore store;IoHomeNetworkStore::State state,restored;
+    ASSERT_EQ(store.load(restored),IoHomeNetworkStore::Result::Missing);
+    state.controller=0x123456;state.key[0]=9;state.channels[3].managed=true;state.channels[3].node=0x654321;state.channels[3].key[0]=7;
+    ASSERT_TRUE(store.commit(state));ASSERT_EQ(store.load(restored),IoHomeNetworkStore::Result::Found);
+    ASSERT_TRUE(IoHomeNetworkStore::equal(state,restored));
+    store.failWrites=true;state.controller=0x112233;state.channels[3].node=0;
+    ASSERT_TRUE(!store.commit(state));ASSERT_EQ(store.load(restored),IoHomeNetworkStore::Result::Found);
+    ASSERT_EQ(restored.controller,0x123456);ASSERT_EQ(restored.channels[3].node,0x654321);
+    store.failWrites=false;ASSERT_TRUE(store.commit(state));ASSERT_EQ(store.load(restored),IoHomeNetworkStore::Result::Found);
+    ASSERT_EQ(restored.controller,0x112233);ASSERT_EQ(restored.channels[3].node,0);
+    store.corrupt(1);ASSERT_EQ(store.load(restored),IoHomeNetworkStore::Result::Corrupt);
+    ASSERT_TRUE(!store.commit(state));
 }
 
 TEST(commissioning_job_rejects_concurrent_owner_and_stale_cancel)

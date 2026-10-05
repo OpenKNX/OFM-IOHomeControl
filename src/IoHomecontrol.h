@@ -6,6 +6,7 @@
 #include "protocol/IoHomePassiveAuth.h"
 #include "protocol/IoHomeCommissioningJob.h"
 #include "protocol/IoHomeAssignmentReceipt.h"
+#include "protocol/IoHomeNetworkStore.h"
 #include "knxprod.h"
 
 class IoHomecontrol : public OpenKNX::Module
@@ -51,6 +52,8 @@ public:
   bool restorePower() override;
 
   IoHomeController &controller();
+  bool prepareTwoWayPersistence();
+  bool persistTwoWayBinding(uint8_t channel,uint32_t node,const uint8_t *key);
   IoHomecontrolChannel *getChannel(uint8_t iIndex);
   // Make sure the (possibly linked) 1W controller profile for a channel owns a
   // remote node id + key, generating one on demand if it is still empty. The
@@ -117,6 +120,12 @@ private:
   bool mMetadataRefreshHasRun[IOHC_ChannelCount] = {};
   void processMetadataRefresh();
 
+  IoHomeNetworkStore mNetworkStore;
+  IoHomeNetworkStore::State mCommittedNetwork;
+  bool mNetworkStoreReady=false,mNetworkStoreFailed=false,mNetworkHasCommit=false;
+  IoHomeNetworkStore::State networkSnapshot() const;
+  bool commitNetwork(const IoHomeNetworkStore::State &state);
+  void restoreNetwork();
   IoHomeAssignmentReceipt mAssignmentReceipts;
   void restoreAssignmentReceipts();
   IoHomeCommissioningJob mCommissioningJob;
