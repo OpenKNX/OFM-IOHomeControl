@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "records": [
+    {
+      "id": "sx1276_waveform_crc_fifo",
+      "kind": "physical",
+      "outcome": "not_run",
+      "artifacts": []
+    },
+    {
+      "id": "sx1276_timing_discovery_low_power",
+      "kind": "physical",
+      "outcome": "not_run",
+      "artifacts": []
+    },
+    {
+      "id": "peer_authentication_retry_stop",
+      "kind": "physical",
+      "outcome": "not_run",
+      "artifacts": []
+    },
+    {
+      "id": "controller_version3",
+      "kind": "physical",
+      "outcome": "not_run",
+      "artifacts": []
+    },
+    {
+      "id": "oneway_peer_recovery",
+      "kind": "physical",
+      "outcome": "not_run",
+      "artifacts": []
+    },
+    {
+      "id": "oneway_powercut_corruption_exhaustion",
+      "kind": "physical",
+      "outcome": "not_run",
+      "artifacts": []
+    },
+    {
+      "id": "network_assignment_powercut",
+      "kind": "physical",
+      "outcome": "not_run",
+      "artifacts": []
+    },
+    {
+      "id": "ets_import_reopen_download_resume_upgrade",
+      "kind": "ets",
+      "outcome": "not_run",
+      "artifacts": []
+    },
+    {
+      "id": "rgb_binding_read_write_state",
+      "kind": "physical",
+      "outcome": "not_run",
+      "artifacts": []
+    },
+    {
+      "id": "white_binding_read_write_state",
+      "kind": "physical",
+      "outcome": "not_run",
+      "artifacts": []
+    }
+  ]
+}
