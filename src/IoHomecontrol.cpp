@@ -2778,6 +2778,25 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         for(uint8_t i=0;i<4;i++)resultData[13+i]=uint32_t(millis()-sample->receivedMs)>>(24-8*i);
         resultLength=17;return true;
     }
+    case 0x2F: // Read-only persistence evidence; never returns keys or repairs storage
+    {
+        if(length!=2||data[1]>=mNumChannels)break;
+        const auto *channel=mChannels[data[1]];const auto &binding=mCommittedNetwork.channels[data[1]];
+        const bool globalLive=mNetworkHasCommit&&mCommittedNetwork.controller==mController.getOwnNodeId()&&
+            !std::memcmp(mCommittedNetwork.key,mController.getSystemKey(),16);
+        const bool bindingLive=mNetworkHasCommit&&binding.managed&&!channel->is1W()&&binding.node==channel->getNodeId()&&
+            !std::memcmp(binding.key,channel->getEncryptionKey(),16);
+        IoHomeAssignmentReceipt::Value receipt;const auto stored=mAssignmentReceipts.load(data[1],receipt);
+        const bool receiptLive=stored==IoHomeAssignmentReceipt::Result::Found&&bindingLive&&receipt.node==binding.node&&
+            !std::memcmp(receipt.key,binding.key,16);
+        resultData[0]=0;resultData[1]=1;resultData[2]=data[1];
+        resultData[3]=(mNetworkStoreReady?1:0)|(mNetworkStoreFailed?2:0)|(mNetworkHasCommit?4:0)|(globalLive?8:0)|
+            (binding.managed?16:0)|(bindingLive?32:0)|(channel->is1W()?64:0)|(channel->isOperational()?128:0);
+        for(uint8_t i=0;i<3;i++){resultData[4+i]=mController.getOwnNodeId()>>(16-8*i);resultData[7+i]=channel->getNodeId()>>(16-8*i);}
+        resultData[10]=static_cast<uint8_t>(stored);resultData[11]=receiptLive;
+        for(uint8_t i=0;i<4;i++){resultData[12+i]=receipt.generation>>(24-8*i);resultData[16+i]=mCommissioningBootId>>(24-8*i);}
+        resultData[20]=static_cast<uint8_t>(mController.oneWayRecovery());resultLength=21;return true;
+    }
     case 0x30: // Default min/max or current-via-alias GET; distinct from RF command30
     {
         if(length!=6||data[1]>=mNumChannels||(data[2]!=6&&data[2]!=7&&data[2]!=9))break;
@@ -2819,7 +2838,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
     {
         if(length!=1)break;
         resultData[0]=0;resultData[1]=1;
-        const uint32_t flags=31; // bit4: source-backed individual MP/FP read API
+        const uint32_t flags=63; // bit4: individual MP/FP GET, bit5: persistence evidence API
         for(uint8_t i=0;i<4;i++){resultData[2+i]=flags>>(24-8*i);resultData[6+i]=mCommissioningBootId>>(24-8*i);}
         resultLength=10;return true;
     }

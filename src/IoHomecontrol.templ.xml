@@ -549,6 +549,7 @@
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%111_R-%TT%%CC%11101" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%112_R-%TT%%CC%11201" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%113_R-%TT%%CC%11301" />
+                        <Button Id="%AID%_B-%TT%%CC%009" Text="Speicher / Zuordnungsbeleg prüfen" EventHandler="IOHC_readPersistenceEvidence" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%008" Text="Produktwerte abfragen (RF lesen)" EventHandler="IOHC_requestProductObservations" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%007" Text="Erkennung / manuelle Vorgaben / Produktevidenz lesen" EventHandler="IOHC_readChannelEvidence" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%006" Text="Erkannten Gerätetyp übernehmen" EventHandler="IOHC_applyRecognizedType" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />

@@ -1039,3 +1039,24 @@ function IOHC_requestProductObservations(device,online,progress,context) {
         progress.setText(queued+" Einzelabfragen gestartet. Anschließend Produktevidenz lesen. Separate Antworten bilden keine atomare RGB-Messung; keine Schreibfreigabe oder ETS-Änderung.");
     } finally {online.disconnect();}
 }
+
+function IOHC_readPersistenceEvidence(device,online,progress,context) {
+    var channel=Number(context.channelIndex)-1;
+    if(channel<0||channel>=16||Math.floor(channel)!==channel) throw new Error("Ungültiger Kanal");
+    online.connect();
+    try {
+        var caps=IOHC_invokeFunctionProperty(online,[0x23]);
+        if(!caps||caps.length!==10||caps[0]!==0||caps[1]!==1||(IOHC_read32(caps,2)&32)===0) throw new Error("Firmware unterstützt diese Speicherprüfung nicht");
+        var record=IOHC_invokeFunctionProperty(online,[0x2F,channel]);
+        if(!record||record.length!==21||record[0]!==0||record[1]!==1||record[2]!==channel||record[10]>4||record[11]>1||record[20]>4||IOHC_read32(record,16)!==IOHC_read32(caps,6))
+            throw new Error("Ungültiger oder veralteter Speicherstatus");
+        var receipts=["fehlt","vorhanden","beschädigt","Backend nicht verfügbar","entfernte Zuordnung"],f=record[3];
+        var text="2W-Journal: "+((f&1)?"Backend bereit":"Backend nicht bereit")+", "+((f&2)?"TX-Sperre nach Fehler":"keine gespeicherte Fehlersperre")+", "+((f&4)?"Commit vorhanden":"noch kein Commit")+". ";
+        text+="Controlleridentität "+((f&8)?"entspricht Commit":"nicht als aktueller Commit bestätigt")+". Kanalbindung "+((f&32)?"entspricht Commit":"nicht als aktueller 2W-Commit bestätigt")+". ";
+        text+="Zuordnungsbeleg: "+receipts[record[10]]+", Revision "+IOHC_read32(record,12)+", "+(record[11]?"aktuell":"nicht aktuell")+". Globaler 1W-Wiederherstellungsstatus "+record[20]+". ";
+        text+="Nur Statusprüfung: kein Löschen oder Reparieren, kein Download- oder Stromausfallnachweis.";
+        var current=IOHC_invokeFunctionProperty(online,[0x2F,channel]);
+        if(!current||current.length!==21||JSON.stringify(current)!==JSON.stringify(record))throw new Error("Speicherstatus während des Lesens geändert; erneut lesen");
+        progress.setText(text);
+    } finally {online.disconnect();}
+}

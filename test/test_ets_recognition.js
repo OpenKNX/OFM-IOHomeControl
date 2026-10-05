@@ -189,3 +189,11 @@ test("commissioning candidate view rejects stale snapshot without displaying res
     try{IOHC_readCommissioningStatus(deviceWith({}),online,{setText:function(v){text=v;}},{});}catch(e){rejected=true;}
     check(rejected&&closed&&text==="","stale candidates displayed");
 });
+
+test("persistence evidence remains read only and checks boot and live receipt",function() {
+    var d=deviceWith({Name:"Office"}),before=JSON.stringify(d.params),text="",closed=false;
+    var caps=[0,1,0,0,0,63,0,0,0,9],record=[0,1,0,189,0x83,0x1F,0x2A,0x12,0x34,0x56,1,1,0,0,0,2,0,0,0,9,0];
+    var online={connect:function(){},disconnect:function(){closed=true;},invokeFunctionProperty:function(o,p,data){return data[0]===0x23?caps:record;}};
+    IOHC_readPersistenceEvidence(d,online,{setText:function(v){text=v;}},{channelIndex:1});
+    check(closed&&JSON.stringify(d.params)===before&&text.indexOf("Revision 2")>=0&&text.indexOf("kein Löschen")>=0,"unsafe persistence UI");
+});
