@@ -11377,6 +11377,23 @@ TEST(controller_object_read_authenticates_opening_and_closes_countdown) {
     ASSERT_EQ(c.objectReadToken(),token);ASSERT_TRUE(c.objectReadIdentityValid());
     const uint8_t replacement[16]={2};ch.setEncryptionKey(replacement);ASSERT_TRUE(!c.objectReadIdentityValid());
 }
+TEST(controller_persistent_preamble_cannot_extend_exchange_budget) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ASSERT_TRUE(c.requestPriority(&ch,1));c.loop();c.loop();c.loop();
+    ASSERT_EQ(c.state(),ControllerState::WaitResponse);
+    c.radio().testInjectRxDiagnostics(true,false,false,0,0,-80);
+    ioHomeTestAdvanceMillis(IOHC_EXCHANGE_TOTAL_BUDGET_MS);c.loop();
+    ASSERT_EQ(c.state(),ControllerState::Idle);ASSERT_TRUE(!c.prioritySample(0,1)->valid);
+}
+TEST(controller_object_read_deadline_cancels_even_during_preamble) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ASSERT_TRUE(c.requestObjectRead(&ch,0,1,0,10));c.loop();c.loop();c.loop();
+    c.radio().testInjectRxDiagnostics(true,false,false,0,0,-80);
+    ioHomeTestAdvanceMillis(30000);c.loop();
+    ASSERT_EQ(c.objectRead().stage(),IoHomeObjectTransfer::Stage::Timeout);ASSERT_EQ(c.state(),ControllerState::Idle);
+}
 TEST(controller_object_read_cancel_and_key_change_stop_pending_tx) {
     IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1},replacement[16]={2};
     initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);

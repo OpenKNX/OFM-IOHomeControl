@@ -6810,8 +6810,11 @@ void IoHomeController::processWaitResponse()
         if (mRadio.isSyncDetected() && mDirectedFirstSyncUs == 0)
             mDirectedFirstSyncUs = micros();
     }
-    // Extend timeout if preamble detected (device is responding, packet not complete)
-    if (mRadio.isPreambleDetected())
+    // A persistent preamble may extend one RX window, never the complete
+    // exchange budget. Otherwise a stuck/noisy preamble can hold this state forever.
+    const bool budgetExpired=uint32_t(millis()-mExchangeStartMs)>=IOHC_EXCHANGE_TOTAL_BUDGET_MS;
+    if(budgetExpired)mStateTimer=millis()-mResponseTimeoutMs;
+    if (mRadio.isPreambleDetected()&&!budgetExpired)
     {
         mStateTimer = millis();
         return;
