@@ -1072,6 +1072,8 @@ uint8_t IoHomecontrol::assignKeyImportDevice(uint8_t iResultIndex,
     {
         if (mChannels[i] != nullptr && mChannels[i]->getNodeId() == lDevice.nodeId)
         {
+            if(mChannels[i]->is1W()||std::memcmp(mChannels[i]->getEncryptionKey(),mKeyImportKey.key,16))
+                return 0x04; // same node with different network identity is a conflict
             oExistingChannel = i;
             return 0x01;
         }
@@ -2687,6 +2689,30 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         }
         break;
     }
+    case 0x29: // Correlated priority sample; no authenticated-state claim
+    {
+        if(length!=3||data[1]>=mNumChannels||data[2]>7)break;
+        const auto *sample=mController.prioritySample(data[1],data[2]);
+        resultData[0]=0;resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];
+        for(uint8_t i=0;i<3;i++)resultData[4+i]=sample->node>>(16-8*i);
+        resultData[7]=sample->state.rawTime;resultData[8]=sample->state.originator;resultData[9]=sample->state.uninterpretedByte0;
+        resultData[10]=sample->valid&&sample->node==mChannels[data[1]]->getNodeId();
+        for(uint8_t i=0;i<4;i++)resultData[11+i]=uint32_t(millis()-sample->receivedMs)>>(24-8*i);
+        resultLength=15;return true;
+    }
+    case 0x2A: // Correlated sensor status with raw scaling, physical unit unknown
+    {
+        if(length!=2||data[1]>=mNumChannels)break;
+        const auto *sample=mController.sensorSample(data[1]);
+        resultData[0]=0;resultData[1]=1;resultData[2]=data[1];
+        for(uint8_t i=0;i<3;i++)resultData[3+i]=sample->node>>(16-8*i);
+        resultData[6]=sample->state.status;resultData[7]=sample->state.scaleCode;
+        resultData[8]=sample->state.raw>>8;resultData[9]=sample->state.raw;
+        resultData[10]=sample->state.uninterpretedByte0;resultData[11]=sample->state.uninterpretedByte2;
+        resultData[12]=sample->valid&&sample->node==mChannels[data[1]]->getNodeId();
+        for(uint8_t i=0;i<4;i++)resultData[13+i]=uint32_t(millis()-sample->receivedMs)>>(24-8*i);
+        resultLength=17;return true;
+    }
     case 0x28: // Raw product observation, no inferred units/publication
     {
         if(length!=3||data[1]>=mNumChannels||data[2]>16)break;
@@ -3711,6 +3737,8 @@ void IoHomecontrol::showHelp()
     // available IOHC commands on all builds.
 
     openknx.console.printHelpLine("iohc help", "Show io-homecontrol commands");
+    openknx.console.printHelpLine("iohc priority read NODE LEVEL", "Read priority 0..7; bounded expiry refresh; no lock write");
+    openknx.console.printHelpLine("iohc sensor read NODE", "Read paired sensor status; preserve unknown physical units");
     openknx.console.printHelpLine("iohc 2wrecovery status", "Checked network identity/bindings persistence status; failure blocks 2W TX");
     openknx.console.printHelpLine("iohc 1wrecovery status", "Durable sequence fault; never rolls counters back");
     openknx.console.printHelpLine("iohc status", "Show all channel status");
@@ -4195,6 +4223,16 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         return true;
     }
 
+    if(lSub.rfind("priority read ",0)==0 || lSub.rfind("sensor read ",0)==0) {
+        const bool priority=lSub.rfind("priority read ",0)==0;
+        unsigned node=0,level=0;char extra=0;
+        const int count=priority?sscanf(lSub.c_str(),"priority read %x %u %c",&node,&level,&extra):sscanf(lSub.c_str(),"sensor read %x %c",&node,&extra);
+        if(count!=(priority?2:1)||node>0xFFFFFF||level>7){logInfoP("Usage: iohc priority read NODE LEVEL(0..7) | iohc sensor read NODE");return true;}
+        IoHomecontrolChannel *channel=nullptr;
+        for(uint8_t c=0;c<mNumChannels;c++)if(mChannels[c]&&mChannels[c]->getNodeId()==node)channel=mChannels[c];
+        const bool queued=priority?mController.requestPriority(channel,level):mController.requestSensorStatus(channel);
+        logInfoP("Read request queued=%u; responses are correlated observations, sensor physical units remain unknown",queued);return true;
+    }
     if(lSub=="2wrecovery status") {
         logInfoP("2W persistence: ready=%u failed=%u committed=%u; restore/storage repair required on failure; no automatic erase",mNetworkStoreReady,mNetworkStoreFailed,mNetworkHasCommit);
         return true;

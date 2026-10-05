@@ -28,6 +28,7 @@
 #include "protocol/IoHomeProductActivation.h"
 #include "protocol/IoHomeProductPresentation.h"
 #include "protocol/IoHomeProductRuntime.h"
+#include "protocol/IoHomeManagementCodecs.h"
 #include <limits>
 #include "protocol/IoHomeLogRedaction.h"
 #include "protocol/IoHomePassiveAuth.h"
@@ -3710,6 +3711,22 @@ TEST(product_runtime_binds_identity_and_rejects_stale_or_uncorrelated_color) {
     ASSERT_TRUE(!rt.rgb(F::RgbLight,101,100,r,g,b));
     ASSERT_TRUE(!rt.observe(0x123456,11,20000,1,102,T::Authenticated));
     key[0]=2;rt.bind(0x123456,key);ASSERT_TRUE(!rt.sample(0)->present);
+}
+
+TEST(priority_decoder_preserves_unknown_byte_and_timer_sentinel) {
+    const uint8_t p[]={9,0,7};IoHomePriorityState state;
+    ASSERT_TRUE(!ioHomeDecodePriority(p,2,3,state));ASSERT_TRUE(ioHomeDecodePriority(p,3,3,state));
+    ASSERT_EQ(state.seconds,30);ASSERT_EQ(state.originator,7);ASSERT_EQ(state.uninterpretedByte0,9);ASSERT_TRUE(state.refreshEnabled);
+    const uint8_t sentinel[]={9,255,7};ASSERT_TRUE(ioHomeDecodePriority(sentinel,3,3,state));ASSERT_TRUE(!state.refreshEnabled);
+}
+TEST(sensor_decoders_require_exact_fields_and_preserve_unknown_units) {
+    const uint8_t p[]={9,0xFE,8,2,0x04,0xD2};IoHomeSensorStatus state;
+    ASSERT_TRUE(ioHomeDecodeSensorStatus(p,6,state));ASSERT_EQ(state.status,2);ASSERT_TRUE(std::fabs(state.value-12.34)<1e-9);
+    uint8_t negative[]={0,0,0,0xFF,0,10};ASSERT_TRUE(ioHomeDecodeSensorStatus(negative,6,state));ASSERT_TRUE(std::fabs(state.value-100)<1e-9);
+    negative[3]=8;ASSERT_TRUE(!ioHomeDecodeSensorStatus(negative,6,state));
+    uint8_t info[17]{};info[12]=1;info[13]=2;info[14]=0x12;info[15]=0x34;info[16]=0x56;IoHomeSensorInformation decoded;
+    ASSERT_TRUE(!ioHomeDecodeSensorInformation(info,16,decoded));ASSERT_TRUE(ioHomeDecodeSensorInformation(info,17,decoded));
+    ASSERT_EQ(decoded.minRefresh,258);ASSERT_EQ(decoded.backbone,0x123456);
 }
 
 TEST(commissioning_job_rejects_concurrent_owner_and_stale_cancel)
@@ -11276,6 +11293,36 @@ static void buildDirectedDiscoveryResponse(IoHomeFrame &oFrame,
     oFrame.data[0] = iSelector;
     oFrame.dataLen = 1;
     oFrame.hasHmac = false;
+}
+
+TEST(controller_sensor_status_request_rejects_unknown_role_and_bad_scale) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ASSERT_TRUE(!c.requestSensorStatus(&ch));
+    IoHomeProtocolIdentity identity;identity.valid=true;identity.nodeClass=IoHomeNodeClass::Sensor;identity.ioAddress=0x654321;
+    ch.onProtocolIdentity(0x654321,identity);ASSERT_TRUE(c.requestSensorStatus(&ch));c.loop();c.loop();c.loop();
+    IoHomeFrame tx;ASSERT_TRUE(lastTransmittedFrameForTest(c,tx));ASSERT_EQ(tx.commandId,IoHomeCommand::SensorStatusRequest);ASSERT_EQ(tx.dataLen,0);
+    IoHomeFrame reply;reply.init();reply.setSrcNode(0x654321);reply.setDestNode(0x123456);reply.commandId=IoHomeCommand::SensorStatusResponse;
+    reply.dataLen=6;reply.data[1]=2;reply.data[3]=8;reply.data[4]=4;reply.data[5]=0xD2;
+    uint8_t bytes[IOHC_FRAME_BUFFER_SIZE];uint8_t size=serializeFrameForTest(reply,bytes,sizeof(bytes));
+    c.radio().testQueueReceivedPacket(bytes,size);c.loop();ASSERT_TRUE(!c.sensorSample(0)->valid);
+    reply.data[3]=2;size=serializeFrameForTest(reply,bytes,sizeof(bytes));c.radio().testQueueReceivedPacket(bytes,size);c.loop();
+    ASSERT_TRUE(c.sensorSample(0)->valid);ASSERT_TRUE(std::fabs(c.sensorSample(0)->state.value-12.34)<1e-9);
+}
+
+TEST(controller_priority_request_and_short_reply_correlation) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ASSERT_TRUE(c.requestPriority(&ch,3));c.loop();c.loop();c.loop();
+    IoHomeFrame tx;ASSERT_TRUE(lastTransmittedFrameForTest(c,tx));ASSERT_EQ(tx.commandId,IoHomeCommand::PriorityLevelRequest);
+    ASSERT_EQ(tx.dataLen,1);ASSERT_EQ(tx.data[0],3);
+    IoHomeFrame reply;reply.init();reply.setSrcNode(0x654321);reply.setDestNode(0x123456);reply.commandId=IoHomeCommand::PriorityLevelResponse;
+    reply.data[0]=9;reply.dataLen=1;uint8_t bytes[IOHC_FRAME_BUFFER_SIZE];uint8_t size=serializeFrameForTest(reply,bytes,sizeof(bytes));
+    c.radio().testQueueReceivedPacket(bytes,size);c.loop();ASSERT_TRUE(!c.prioritySample(0,3)->valid);
+    reply.data[1]=0;reply.data[2]=7;reply.dataLen=3;size=serializeFrameForTest(reply,bytes,sizeof(bytes));
+    c.radio().testQueueReceivedPacket(bytes,size);c.loop();
+    ASSERT_TRUE(c.prioritySample(0,3)->valid);ASSERT_EQ(c.prioritySample(0,3)->state.seconds,30);
+    ASSERT_EQ(c.prioritySample(0,3)->state.originator,7);
 }
 
 TEST(controller_post_import_spe_retry_enriches_assigned_channel_and_defers_flash)

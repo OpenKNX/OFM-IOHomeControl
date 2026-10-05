@@ -21,8 +21,7 @@ enum class IoHomeCommand : uint8_t
                              // Unknown0E = 0x0E,  // not used — observed in rspaargaren scan list only
                              // Unknown14 = 0x14,  // not used — observed in rspaargaren scan list only
                              // Unknown16 = 0x16,  // not used — observed in rspaargaren scan list only
-    // Capture-derived priority/lock arbitration levels; semantics remain
-    // unconfirmed and no 0x1A reply has been captured. No active handler.
+    // Recovered Priority Management: request ACEI level; reply time/originator.
     PriorityLevelRequest = 0x19,
     PriorityLevelResponse = 0x1A,
     Identify = 0x1E,         // Authenticated - make device identify itself
@@ -107,7 +106,10 @@ enum class IoHomeCommand : uint8_t
     // May be a parallel set for a different device class or protocol version
     // Unknown80 = 0x80,  // not used
     // Unknown82 = 0x82,  // not used
-    // Unknown84 = 0x84,  // not used
+    SensorStatusRequest = 0x84,
+    SensorStatusResponse = 0x85,
+    SensorSubscribeRequest = 0x8B,
+    SensorInformationResponse = 0x8C,
     // Observed on real 2W START frames (CTRL0=0x50) with an 8-byte payload.
     // CyrilOpenSource/iown-homecontrol-esp32sx1276 lists it among the valid 2W
     // opcodes, but no public source names it or decodes its payload. Keep the

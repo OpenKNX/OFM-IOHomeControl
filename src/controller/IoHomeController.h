@@ -1,3 +1,4 @@
+#include "../protocol/IoHomeManagementCodecs.h"
 #include "../protocol/IoHomeDurableReservation.h"
 #pragma once
 #include "../radio/Radio.h"
@@ -554,6 +555,12 @@ public:
   bool sendBatteryStateQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
   bool sendTiltStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
   bool sendDiagnosticFpRead(IoHomecontrolChannel *iChannel, uint8_t iFpIndex);
+  bool requestPriority(IoHomecontrolChannel *channel,uint8_t priority);
+  bool requestSensorStatus(IoHomecontrolChannel *channel);
+  struct PrioritySample {bool valid=false,refreshArmed=false;uint32_t node=0,receivedMs=0;IoHomePriorityState state;};
+  struct SensorSample {bool valid=false;uint32_t node=0,receivedMs=0;IoHomeSensorStatus state;};
+  const PrioritySample *prioritySample(uint8_t channel,uint8_t priority) const {return channel<16&&priority<8?&mPrioritySamples[channel][priority]:nullptr;}
+  const SensorSample *sensorSample(uint8_t channel) const {return channel<16?&mSensorSamples[channel]:nullptr;}
   bool sendPrivateProbe(uint32_t iDestNodeId, const uint8_t *iEncKey,
                         PrivateProbeShape iShape, uint8_t iFunctionId,
                         uint8_t iSelectorOrBlock = 0);
@@ -1027,6 +1034,9 @@ private:
   ControllerState mState;
   uint32_t mStateTimer;
   uint32_t mNextObservationGeneration=0;
+  PrioritySample mPrioritySamples[16][8]{};
+  SensorSample mSensorSamples[16]{};
+  void servicePriorityRefresh();
   uint8_t mCurrentFreqIdx;
 
   // Command queue (circular buffer)
