@@ -52,7 +52,7 @@ public:
   bool restorePower() override;
 
   IoHomeController &controller();
-  bool managementRequestsAllowed() const {return !mCommissioningJob.active()&&!mMetadataQuery.active()&&!mPendingDiagnostic.active;}
+  bool managementRequestsAllowed() const {return !mCommissioningJob.active()&&!mMetadataRefreshActive&&!mRadioDiagnostic.active;}
   bool prepareTwoWayPersistence();
   bool persistTwoWayAssignment(uint8_t channel,uint32_t node,const uint8_t *key,const IoHomeProtocolIdentity &identity);
   bool persistTwoWayBinding(uint8_t channel,uint32_t node,const uint8_t *key);

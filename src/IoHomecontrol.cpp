@@ -2823,7 +2823,8 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         const uint32_t node=uint32_t(data[4])<<16|uint32_t(data[5])<<8|data[6];
         if(!node||node!=mChannels[data[1]]->getNodeId())break;
         const uint16_t selected=uint16_t(data[2])<<8|data[3];
-        const bool idle=!mCommissioningJob.active()&&!mMetadataQuery.active()&&!mPendingDiagnostic.active;
+        updateCommissioningJob();
+        const bool idle=!mCommissioningJob.active()&&!mMetadataRefreshActive&&!mRadioDiagnostic.active;
         resultData[0]=idle&&mController.requestMpFpMaskRead(mChannels[data[1]],selected)?0:1;
         resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultData[4]=data[3];resultLength=5;return true;
     }
@@ -4418,7 +4419,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         }
         IoHomecontrolChannel *channel=nullptr;
         for(uint8_t c=0;c<mNumChannels;c++)if(mChannels[c]&&mChannels[c]->getNodeId()==node)channel=mChannels[c];
-        const bool idle=!mCommissioningJob.active()&&!mMetadataQuery.active()&&!mPendingDiagnostic.active;
+        const bool idle=!mCommissioningJob.active()&&!mMetadataRefreshActive&&!mRadioDiagnostic.active;
         logInfoP("Default sensor subscription queued=%u; explicit configuration write, one attempt; peer acceptance unqualified",idle&&mController.requestDefaultSensorSubscription(channel,backbone));return true;
     }
     if(lSub.rfind("sensor info ",0)==0) {
