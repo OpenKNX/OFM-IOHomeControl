@@ -132,3 +132,10 @@ inline bool ioHomeBuildAtlanticDhwMode(bool absence,bool relaunch,uint8_t *out,u
  const IoHomeFpValue value{16,mode}; // common 4000 remains opaque, preserved exactly
  return ioHomeBuildActivationRepresentation(0xD400,&value,1,out,capacity,length);
 }
+
+enum class IoHomeAtlanticVentilation:uint16_t {Standard=0xFC00,Comfort=0xFC01,Eco=0xFC02};
+inline bool ioHomeDecodeAtlanticVentilation(uint16_t raw,IoHomeAtlanticVentilation &out){if(raw<0xFC00||raw>0xFC02)return false;out=IoHomeAtlanticVentilation(raw);return true;}
+inline bool ioHomeBuildAtlanticVentilation(IoHomeAtlanticVentilation mode,uint8_t *out,uint8_t capacity,uint8_t &length){
+ IoHomeAtlanticVentilation checked;if(!ioHomeDecodeAtlanticVentilation(uint16_t(mode),checked))return false;
+ const IoHomeFpValue value{16,uint16_t(mode)};return ioHomeBuildActivationRepresentation(0xD400,&value,1,out,capacity,length);
+}

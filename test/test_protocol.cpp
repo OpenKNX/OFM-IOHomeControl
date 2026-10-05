@@ -19560,3 +19560,7 @@ TEST(protocol_atlantic_dhw_producer_preserves_opaque_common_bits) {
  ASSERT_TRUE(ioHomeBuildAtlanticDhwMode(false,false,bytes,sizeof(bytes),length));ASSERT_EQ(bytes[4],0x4A);ASSERT_TRUE(!ioHomeBuildAtlanticDhwMode(true,true,bytes,sizeof(bytes),length));
  const auto decoded=ioHomeDecodeAtlanticDhwModes(0x800D,0x4600);ASSERT_EQ(decoded.uninterpretedModes,0x4000);
 }
+TEST(protocol_atlantic_ventilation_enum_does_not_alias_heating_modes) {
+ IoHomeAtlanticVentilation mode;ASSERT_TRUE(ioHomeDecodeAtlanticVentilation(0xFC01,mode));ASSERT_EQ(uint16_t(mode),0xFC01);ASSERT_TRUE(!ioHomeDecodeAtlanticVentilation(0xFC03,mode));
+ uint8_t bytes[8]{};uint8_t length=0;ASSERT_TRUE(ioHomeBuildAtlanticVentilation(IoHomeAtlanticVentilation::Eco,bytes,sizeof(bytes),length));ASSERT_EQ(bytes[0],0xD4);ASSERT_EQ(bytes[4],0xFC);ASSERT_EQ(bytes[5],2);
+}
