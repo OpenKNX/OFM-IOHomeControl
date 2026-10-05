@@ -1,3 +1,4 @@
+#include "RadioSX1276Bandwidth.h"
 #include "RadioSX1276.h"
 #include "sx1276Regs-Fsk.h"
 #include "../protocol/IoHomeCommands.h"
@@ -262,6 +263,9 @@ void RadioSX1276::logConfigDump()
     const uint16_t lFdev = (static_cast<uint16_t>(readRegister(REG_FDEVMSB)) << 8) |
                            readRegister(REG_FDEVLSB);
     const uint8_t lRxBw = readRegister(REG_RXBW);
+    logInfoP("SX1276 tuning: afcBw=%02X preamble=%02X%02X detector=%02X afcFei=%02X rxConfig=%02X shaping=%02X",
+             readRegister(REG_AFCBW),readRegister(REG_PREAMBLEMSB),readRegister(REG_PREAMBLELSB),
+             readRegister(REG_PREAMBLEDETECT),readRegister(REG_AFCFEI),readRegister(REG_RXCONFIG),readRegister(REG_PARAMP));
 
     logInfoP("SX1276 cfg: op=0x%02X pc1=0x%02X pc2=0x%02X sync=%02X/%02X/%02X/%02X dio=%02X/%02X br=%04X fdev=%04X rxBw=%02X freq=%lu",
              lOpMode,
@@ -277,6 +281,21 @@ void RadioSX1276::logConfigDump()
              lFdev,
              lRxBw,
              static_cast<unsigned long>(mCurrentFreq));
+}
+
+RadioError RadioSX1276::setReceiveBandwidths(uint32_t rxHz, uint32_t afcHz)
+{
+    if (!mInitialized) return RadioError::NotInitialized;
+    if (mState == RadioState::Transmitting) return RadioError::Busy;
+    uint8_t rx, afc;
+    if (!radioSX1276Bandwidth(rxHz,rx) || !radioSX1276Bandwidth(afcHz,afc)) return RadioError::InvalidParam;
+    const bool wasReceiving = mState == RadioState::Receiving;
+    standby();
+    writeRegister(REG_RXBW,rx); writeRegister(REG_AFCBW,afc);
+    const bool verified = readRegister(REG_RXBW)==rx && readRegister(REG_AFCBW)==afc;
+    if (wasReceiving) startReceive();
+    logConfigDump();
+    return verified ? RadioError::None : RadioError::HardwareError;
 }
 
 RadioError RadioSX1276::setFrequency(uint32_t iFreqHz)

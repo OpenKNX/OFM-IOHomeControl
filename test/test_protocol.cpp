@@ -16,6 +16,7 @@
 
 // Pull in the modules under test
 #include "protocol/IoHomeCrypto.h"
+#include "radio/RadioSX1276Bandwidth.h"
 #include "protocol/IoHomeFrame.h"
 #include "protocol/IoHomeCommands.h"
 #include "protocol/IoHomeProfileRegistry.h"
@@ -112,6 +113,16 @@ static void observePassiveExchange(IoHomePassiveAuthEvidence &ioEvidence,
         ioEvidence.observe(passiveAuthFrame(IoHomeCommand::Discover2EResponse,
                                             iDevice, iHub, &lSelector, 1, IOHC_CTRL0_END),
                            iHub, iDevice, 2, iStartMs + 30);
+}
+
+TEST(sx1276_bandwidth_register_formula) {
+    for (uint32_t hz : {41667u,50000u,62500u,83333u,100000u}) {
+        uint8_t r=0; ASSERT_TRUE(radioSX1276Bandwidth(hz,r));
+        const uint32_t mant=16+4*((r>>3)&3);
+        const uint32_t actual=(32000000u+mant*(1u<<((r&7)+2))/2)/(mant*(1u<<((r&7)+2)));
+        ASSERT_TRUE(actual==hz);
+    }
+    uint8_t r=0; ASSERT_TRUE(!radioSX1276Bandwidth(58600,r));
 }
 
 TEST(radio_receive_evidence_rejects_incomplete_or_failed_crc) {

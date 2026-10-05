@@ -3582,6 +3582,9 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc 2wdiag wake on|off", "Experimental per-attempt low-power wake preamble belief");
     openknx.console.printHelpLine("iohc 2wdiag discovery FIELD VALUE", "Override discovery command/dest/ACK/LOW_POWER/preamble independently");
     openknx.console.printHelpLine("iohc 2wdiag status|reset", "Show or clear runtime-only 2W overrides");
+#if defined(RADIO_SX1276)
+    openknx.console.printHelpLine("iohc radio fskbw RX_HZ AFC_HZ", "Runtime only: 41667|50000|62500|83333|100000; defaults 41667/41667");
+#endif
 #if defined(RADIO_SX1262)
     openknx.console.printHelpLine("iohc radio rxbw KHZ", "Runtime SX1262 RX bandwidth: 39.0..187.2; default 58.6");
 #endif
@@ -3767,6 +3770,22 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         return true;
     }
 
+#if defined(RADIO_SX1276)
+    if (lSub.rfind("radio fskbw",0)==0) {
+        unsigned long rx=0,afc=0; char extra=0;
+        if (sscanf(lSub.c_str(),"radio fskbw %lu %lu %c",&rx,&afc,&extra)!=2) {
+            logInfoP("Usage: iohc radio fskbw RX_HZ AFC_HZ (41667|50000|62500|83333|100000)"); return true;
+        }
+        updateCommissioningJob();
+        if (mController.state()!=ControllerState::Idle || mRadioDiagnostic.active ||
+            mMetadataRefreshActive || mCommissioningJob.active() || mKeyImportPhase!=KeyImportPhase::Idle) {
+            logInfoP("Radio bandwidth change blocked by active work"); return true;
+        }
+        const auto err=mController.radio().setReceiveBandwidths(rx,afc);
+        logInfoP("SX1276 runtime bandwidth request RX=%lu AFC=%lu result=%d; no default or RF qualification changed",rx,afc,static_cast<int>(err));
+        return true;
+    }
+#endif
 #if defined(RADIO_SX1262)
     if (lSub.rfind("radio rxbw", 0) == 0)
     {

@@ -40,6 +40,7 @@ public:
   void init(uint8_t iCsPin, uint8_t iResetPin, uint8_t iDio0Pin, uint8_t iDio4Pin = PIN_NOT_CONNECTED);
   RadioError configure();
   RadioError setFrequency(uint32_t iFreqHz);
+  RadioError setReceiveBandwidths(uint32_t rxHz, uint32_t afcHz);
   RadioError setOutputPower(uint8_t iPower);
   // RegPreambleMsb/Lsb count FSK bytes, not bits or UART-framed software bytes.
   RadioError setPreambleLength(uint16_t iPreambleBytes);
