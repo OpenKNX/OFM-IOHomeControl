@@ -83,3 +83,7 @@ Added a case-complete procedure and evidence gate in `docs/qualification/todo-26
 ## 27 — 2W journal physical power-cut campaign
 
 Added a case-complete procedure and evidence gate in `docs/qualification/todo-27.md`. Actual qualification remains pending; the evidence template deliberately records every case as not run.
+
+## 28 — 1W reservation physical power-cut campaign
+
+Added a case-complete procedure and evidence gate in `docs/qualification/todo-28.md`. Actual qualification remains pending; the evidence template deliberately records every case as not run.

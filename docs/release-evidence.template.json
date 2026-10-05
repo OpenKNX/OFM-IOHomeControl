@@ -130,6 +130,22 @@
         "wrap": "not_run"
       },
       "artifacts": []
+    },
+    {
+      "id": "reservation_journal_powercut_campaign",
+      "kind": "physical",
+      "outcome": "not_run",
+      "cases": {
+        "before_commit": "not_run",
+        "inactive_write": "not_run",
+        "lost_ack": "not_run",
+        "before_rf": "not_run",
+        "no_reuse": "not_run",
+        "identity_mismatch": "not_run",
+        "wrap": "not_run",
+        "repeated_reboots": "not_run"
+      },
+      "artifacts": []
     }
   ]
 }

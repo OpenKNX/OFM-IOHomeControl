@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 CORE = {
+    'reservation_journal_powercut_campaign': 'physical',
     'network_journal_powercut_campaign': 'physical',
     'semtech_prefix_mapping': 'physical',
     'sx1276_edge_wiring': 'physical',
@@ -22,6 +23,7 @@ CORE = {
     'ets_import_reopen_download_resume_upgrade': 'ets',
 }
 QUALIFICATION_CASES = {
+    'reservation_journal_powercut_campaign': ('before_commit', 'inactive_write', 'lost_ack', 'before_rf', 'no_reuse', 'identity_mismatch', 'wrap', 'repeated_reboots'),
     'network_journal_powercut_campaign': ('each_write_phase', 'old_record', 'lost_ack', 'equal_generation_conflict', 'corruption', 'binding_mismatch', 'tombstone', 'wrap'),
     'semtech_prefix_mapping': ('short_2w', 'long_2w', 'oneway_wake', 'sync', 'no_double_framing', 'trailer'),
     'sx1276_edge_wiring': ('dio4_present', 'dio2_present', 'dio4_absent', 'dio2_absent', 'edges_after_restart'),
