@@ -3436,6 +3436,7 @@ void IoHomecontrol::showHelp()
     // available IOHC commands on all builds.
 
     openknx.console.printHelpLine("iohc help", "Show io-homecontrol commands");
+    openknx.console.printHelpLine("iohc 1wrecovery status", "Durable sequence fault; never rolls counters back");
     openknx.console.printHelpLine("iohc status", "Show all channel status");
     openknx.console.printHelpLine("iohcNN status", "Show channel NN detail");
     openknx.console.printHelpLine("iohcNN pair [ADDR]", "Start pairing; 1W ADDR is optional/binding only");
@@ -3888,6 +3889,15 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         logInfoP("FP read: captured native Private selector, raw reply only; no KO publication");
         logInfoP("FP read: %s", mController.sendDiagnosticFpRead(lChannel, lIndices[0])
                               ? "queued" : "queue failed");
+        return true;
+    }
+
+    if (lSub == "1wrecovery status")
+    {
+        logInfoP("1W recovery: required=%u reason=%u; delivery/peer counter is unconfirmed",
+                 mController.oneWayRecoveryRequired(), static_cast<unsigned>(mController.oneWayRecovery()));
+        logInfoP("On a journal fault: preserve backup/evidence, repair storage and restart; do not roll back counters or erase the journal.");
+        logInfoP("For peer desynchronization: use the documented original-peer reenrollment procedure; no universal rolling-window reset is assumed.");
         return true;
     }
 

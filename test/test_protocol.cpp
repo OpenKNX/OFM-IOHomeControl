@@ -9273,6 +9273,19 @@ static void initOneWayPairingModeControllerForTest(IoHomeController &oController
     oChannel.setEncryptionKey(iKey);
 }
 
+TEST(controller_failed_durable_reservation_blocks_first_oneway_transmission)
+{
+    IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch; const uint8_t key[16]={1,2,3};
+    initOneWayPairingModeControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ch.setNodeId(0x654321);
+    c.testFailReservationWrites(true);
+    ASSERT_TRUE(c.sendCommand(0x654321,key,IoHomeCommand::Execute,50));
+    c.radio().testClearTransmittedPacket(); c.loop(); c.loop(); c.loop();
+    ASSERT_TRUE(c.radio().testLastTransmittedPacket().empty());
+    ASSERT_TRUE(c.oneWayRecoveryRequired());
+    ASSERT_EQ(c.oneWayRecovery(),IoHomeController::OneWayRecovery::CommitFailed);
+}
+
 static void finishCurrentBlind1WPairingTxForTest(IoHomeController &iController)
 {
     // Finish the long-preamble first TX and the manufacturer-selected repeats.

@@ -5373,7 +5373,7 @@ uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool i
         return 0;
 
     const uint8_t lOwner = channelIndexFor(iProfile);
-    if (lOwner >= 16) { mReservationFailed = true; return 0; }
+    if (lOwner >= 16) { mReservationFailed = true; mOneWayRecovery=OneWayRecovery::OwnerUnavailable; return 0; }
     const uint32_t lNode = iProfile->getOneWayControllerNodeId();
     const uint8_t *lKey = iProfile->getOneWayControllerKey();
     if (!mReservationLoaded[lOwner] || mReservationNodes[lOwner] != lNode ||
@@ -5383,7 +5383,10 @@ uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool i
         const auto lLoad=mReservationJournal.load(lOwner,lNode,lKey,lWatermark);
         if (lLoad==IoHomeDurableReservation::Load::Corrupt ||
             lLoad==IoHomeDurableReservation::Load::Unavailable)
-        { mReservationFailed=true; return 0; }
+        { mReservationFailed=true;
+          mOneWayRecovery=lLoad==IoHomeDurableReservation::Load::Corrupt ?
+              OneWayRecovery::JournalCorrupt : OneWayRecovery::StoreUnavailable;
+          return 0; }
         if (lLoad==IoHomeDurableReservation::Load::Found) iProfile->setSequence1W(lWatermark);
         mReservationNodes[lOwner]=lNode; std::memcpy(mReservationKeys[lOwner],lKey,16);
         mReservationLoaded[lOwner]=true;
@@ -5394,7 +5397,8 @@ uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool i
     const uint16_t lReservedSequence = iProfile->getReservedSequence1W();
 
     if (lFlashSaveRequired && !mReservationJournal.commit(lOwner,lNode,lKey,lReservedSequence))
-        mReservationFailed=true; // sticky fail-closed; never transmit a RAM-only reservation
+    { mReservationFailed=true; mOneWayRecovery=OneWayRecovery::CommitFailed; }
+    // Sticky fail-closed; never transmit a RAM-only reservation.
     if (lFlashSaveRequired)
         // A suppressed save would make the new reservation RAM-only and allow
         // counter reuse after restart. Window renewal must bypass the throttle.

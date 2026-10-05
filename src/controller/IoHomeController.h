@@ -733,8 +733,12 @@ public:
   const ResponseTimingSample &lastResponseTimingSample() const;
   const DiagnosticFpSample &lastDiagnosticFpSample() const { return mLastDiagnosticFpSample; }
 #ifdef TEST_NATIVE
+  void testFailReservationWrites(bool iFail) { mReservationJournal.failWrites=iFail; }
   void testSetTrustRxPosition(bool iTrust) { mTrustRxPosition = iTrust; }
 #endif
+  enum class OneWayRecovery : uint8_t { Ready, OwnerUnavailable, JournalCorrupt, StoreUnavailable, CommitFailed };
+  OneWayRecovery oneWayRecovery() const { return mOneWayRecovery; }
+  bool oneWayRecoveryRequired() const { return mReservationFailed; }
   void logPairDiagnosticStatus() const;
   const OneWayEnrollmentTraceEntry *oneWayEnrollmentTrace() const;
   uint8_t oneWayEnrollmentTraceCount() const;
@@ -1037,6 +1041,7 @@ private:
   uint32_t mReservationNodes[16]{};
   uint8_t mReservationKeys[16][16]{};
   bool mReservationFailed = false;
+  OneWayRecovery mOneWayRecovery = OneWayRecovery::Ready;
   RadioError startControllerTransmit(const uint8_t *iData, uint8_t iLength);
   IoHomeFrame mTxFrame;
   IoHomeFrame mRxFrame;
