@@ -20,6 +20,7 @@
 #include "protocol/IoHomeFrame.h"
 #include "protocol/IoHomeCommands.h"
 #include "protocol/IoHomeProfileRegistry.h"
+#include "protocol/IoHomeProfileObjects.h"
 #include "protocol/IoHomeProductCodecs.h"
 #include "protocol/IoHomeProductModes.h"
 #include "protocol/IoHomeProductBinding.h"
@@ -19438,10 +19439,14 @@ TEST(controller_combined_product_read_requires_complete_tuple) {
     uint8_t incomplete[]={0,0,0,0,0x32,0,0,0,0,0,0,0,0,0x40,0x12,0x34};IoHomeFrame reply;
     buildSimpleResponseFrame(reply,0x831F2A,0x7E9E6E,IoHomeCommand::PrivateResponse,incomplete,sizeof(incomplete));
     ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_TRUE(!ch.productRuntime().sample(0)->present);
+    ASSERT_EQ(ch.profileFeedbackCount[0],0);ASSERT_EQ(ch.profileFeedbackCount[10],0);
     uint8_t complete[]={0,0,0,0,0x32,0,0,0,0,0,0,0,0,0x60,0x12,0x34,0x56,0x78};
     buildSimpleResponseFrame(reply,0x831F2A,0x7E9E6E,IoHomeCommand::PrivateResponse,complete,sizeof(complete));
     ASSERT_TRUE(queueControllerResponse(c,reply));
     ASSERT_EQ(ch.productRuntime().sample(10)->raw,0x1234);ASSERT_EQ(ch.productRuntime().sample(11)->raw,0x5678);
+    ASSERT_EQ(ch.profileFeedbackCount[0],1);ASSERT_EQ(ch.profileRaw[0],0x3200);
+    ASSERT_EQ(ch.profileFeedbackCount[10],1);ASSERT_EQ(ch.profileRaw[10],0x1234);
+    ASSERT_EQ(ch.profileFeedbackCount[11],1);ASSERT_EQ(ch.profileRaw[11],0x5678);
     ASSERT_EQ(ch.productRuntime().sample(0)->generation,ch.productRuntime().sample(11)->generation);
     ASSERT_EQ(ch.productRuntime().sample(10)->trust,IoHomeProductRuntime::Trust::Correlated);
     ASSERT_TRUE(!ch.testHasPositionFeedback());
@@ -19621,4 +19626,119 @@ TEST(protocol_platform_storage_adapter_keeps_all_journals_checked_and_namespaced
  IoHomeCheckedJournal<4> journal("custom");uint8_t payload[4]{1,2,3,4},out[4]{};ASSERT_TRUE(journal.commit(payload));ASSERT_EQ(journal.load(out),IoHomeCheckedJournal<4>::Result::Found);ASSERT_TRUE(!std::memcmp(out,payload,4));
  Backend::records()["custom/a"]={1};ASSERT_EQ(journal.load(out),IoHomeCheckedJournal<4>::Result::Corrupt);ASSERT_TRUE(!journal.commit(payload));
  IoHomeStorageBackend::install(nullptr,nullptr);
+}
+
+TEST(protocol_profile_objects_decode_slots_and_reject_special_words)
+{
+    const uint16_t codes[]={0x0040,0x0080,0x0081,0x0082,0x00C0,0x0100,0x0101,0x0140,0x017A,0x0180,0x01BA,0x01C0,0x01FA,0x0240,0x0241,0x0280,0x0340,0x03C0,0x0400,0x0440,0x0480,0x04C0,0x0500,0x0501,0x0502,0x0503,0x0540,0x057A,0x0600,0x0601};
+    for(const auto code:codes) {
+        const auto *profile=ioHomeProfileDescriptor(code>>6,code&63);
+        ASSERT_TRUE(profile!=nullptr);
+        for(uint8_t slot=0;slot<5;++slot) {
+            const uint8_t index=ioHomeProfileObjectIndex(slot);
+            ASSERT_EQ(ioHomeProfileObjectSlot(index),slot);
+            const auto semantic=ioHomeResolvedParameterSemantic(profile,index);
+            IoHomeProfileObjectValue decoded;
+            ASSERT_TRUE(!ioHomeDecodeProfileObject(profile,index,IOHC_NO_FEEDBACK_VALUE,decoded));
+            const bool known=semantic!=ParameterSemantic::Unsupported && semantic!=ParameterSemantic::Unknown;
+            ASSERT_EQ(ioHomeDecodeProfileObject(profile,index,0,decoded),known);
+            if(!known) continue;
+            if(semantic==ParameterSemantic::ProjectionAngle) {ASSERT_TRUE(ioHomeDecodeProfileObject(profile,index,0xE123,decoded));ASSERT_EQ(decoded.raw,0xE123);}
+            else if(semantic==ParameterSemantic::WindowSecurityMode) {ASSERT_TRUE(ioHomeDecodeProfileObject(profile,index,2,decoded));ASSERT_TRUE(!ioHomeDecodeProfileObject(profile,index,3,decoded));}
+            else {
+                ASSERT_TRUE(!ioHomeDecodeProfileObject(profile,index,IOHC_PARAMETER_CURRENT,decoded));
+                if(index==0 && ioHomeProfileObjectBinary(profile)) ASSERT_TRUE(!ioHomeDecodeProfileObject(profile,index,0x6400,decoded));
+                else {ASSERT_TRUE(ioHomeDecodeProfileObject(profile,index,0x3200,decoded));const bool inverse=index==0?profile->mpPolarity==ParameterPolarity::Reversed:ioHomeIsOrientationSemantic(semantic);ASSERT_FLOAT_EQ(decoded.percent,inverse?75.0f:25.0f,0.01f);}
+            }
+            if(index) ASSERT_TRUE(ioHomeProfileObjectReadMask(profile)&(uint16_t(1)<<(index-1)));
+        }
+    }
+    IoHomeProfileObjectValue value;
+    ASSERT_TRUE(!ioHomeDecodeProfileObject(nullptr,0,0,value));
+    ASSERT_EQ(ioHomeProfileObjectSlot(16),0xFF);
+    ASSERT_EQ(ioHomeProfileObjectReadMask(ioHomeProfileDescriptor(2,2)),0x101);
+    ASSERT_EQ(ioHomeProfileObjectReadMask(ioHomeProfileDescriptor(9,1)),1);
+}
+
+TEST(controller_profile_objects_send_every_relative_fp_independently)
+{
+    const uint16_t codes[]={0x0040,0x0080,0x0081,0x0082,0x00C0,0x0100,0x0101,0x0140,0x017A,0x0180,0x01BA,0x01C0,0x01FA,0x0240,0x0241,0x0280,0x0340,0x03C0,0x0400,0x0440,0x0480,0x04C0,0x0500,0x0501,0x0502,0x0503,0x0540,0x057A,0x0600,0x0601};
+    const uint8_t key[16]={1};
+    for(const auto code:codes) {
+        const auto *profile=ioHomeProfileDescriptor(code>>6,code&63);
+        for(uint8_t index=1;index<=3;++index) {
+            const auto descriptor=ioHomeParameterDescriptor(profile,index);
+            if(!descriptor.writable) continue;
+            IoHomeController controller;IoHomecontrol module;IoHomecontrolChannel channel;
+            initPaired2WControllerForTest(controller,module,channel,0x831F2A,0x7E9E6E,key);
+            channel.setManualProfileOverride(code);
+            ASSERT_TRUE(controller.sendProfileParameterCommand(0x7E9E6E,key,descriptor.semantic,25));
+            IoHomeFrame frame;ASSERT_TRUE(transmitQueuedControllerFrame(controller,frame));
+            ASSERT_EQ(frame.dataLen,8);ASSERT_EQ(frame.data[2],0xD4); // Preserve MP.
+            ASSERT_EQ(frame.data[4],0x80>>(index-1));
+            const uint16_t expected=ioHomeIsOrientationSemantic(descriptor.semantic)?0x9600:0x3200;
+            ASSERT_EQ((uint16_t(frame.data[5])<<8)|frame.data[6],expected);
+        }
+    }
+}
+
+TEST(controller_profile_objects_main_commands_keep_speed_and_gradient)
+{
+    struct Case {uint16_t code;uint8_t fp,position;uint16_t raw;};
+    const Case cases[]={{0x0040,3,25,0x3200},{0x0080,1,50,0x6400},{0x0440,1,0xD8,0xD805},{0x0180,1,25,0x3200},{0x0540,1,50,0x6400}};
+    const uint8_t key[16]={1};
+    for(const auto &c:cases) {
+        IoHomeController controller;IoHomecontrol module;IoHomecontrolChannel channel;
+        initPaired2WControllerForTest(controller,module,channel,0x831F2A,0x7E9E6E,key);
+        channel.setManualProfileOverride(c.code);
+        ASSERT_TRUE(controller.sendProfileMovementCommand(0x7E9E6E,key,c.position,c.fp,c.raw));
+        IoHomeFrame frame;ASSERT_TRUE(transmitQueuedControllerFrame(controller,frame));
+        ASSERT_EQ(frame.dataLen,8);ASSERT_EQ(frame.data[2],c.position==0xD8?0xD8:c.position*2);
+        ASSERT_EQ(frame.data[4],0x80>>(c.fp-1));ASSERT_EQ((uint16_t(frame.data[5])<<8)|frame.data[6],c.raw);
+    }
+    IoHomeController controller;IoHomecontrol module;IoHomecontrolChannel channel;
+    initPaired2WControllerForTest(controller,module,channel,0x831F2A,0x7E9E6E,key);
+    channel.setManualProfileOverride(0x0040);
+    ASSERT_TRUE(!controller.sendProfileMovementCommand(0x7E9E6E,key,25,1,0x3200)); // FP1 is orientation, not travel speed.
+    ASSERT_TRUE(!controller.sendProfileMovementCommand(0x7E9E6E,key,25,3,0xF7FF));
+    channel.setIs1W(true);
+    ASSERT_TRUE(!controller.sendProfileMovementCommand(0x7E9E6E,key,25,3,0x3200));
+}
+
+TEST(controller_profile_objects_read_manual_profile_with_correlated_feedback)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x831F2A,0x7E9E6E,key);
+    ch.setManualProfileOverride(0x0040);
+    ASSERT_TRUE(c.requestProfileParameterRead(&ch));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ASSERT_EQ(tx.data[0],3);ASSERT_EQ(tx.data[1],0xE0);ASSERT_EQ(tx.data[2],0);
+    const uint8_t data[]={0,0,0,0,0x32,0,0,0,0,0,0,0,0xE0,0x64,0,0x32,0,0x96,0,0};IoHomeFrame reply;
+    buildSimpleResponseFrame(reply,0x831F2A,0x7E9E6E,IoHomeCommand::PrivateResponse,data,sizeof(data));
+    ASSERT_TRUE(queueControllerResponse(c,reply));
+    ASSERT_EQ(ch.profileRaw[0],0x3200);ASSERT_EQ(ch.profileRaw[1],0x6400);ASSERT_EQ(ch.profileRaw[2],0x3200);ASSERT_EQ(ch.profileRaw[3],0x9600);
+    for(uint8_t index=0;index<4;++index) ASSERT_EQ(ch.profileFeedbackCount[index],1);
+}
+
+TEST(controller_profile_objects_reject_reads_and_writes_after_profile_change)
+{
+    const uint8_t key[16]={1};
+    {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0x831F2A,0x7E9E6E,key);
+        ch.setManualProfileOverride(0x0040);ASSERT_TRUE(c.sendProfileParameterCommand(0x7E9E6E,key,ParameterSemantic::SlatOrientation,50));
+        ch.setManualProfileOverride(0x0080);IoHomeFrame tx;ASSERT_TRUE(!transmitQueuedControllerFrame(c,tx));
+    }
+    {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0x831F2A,0x7E9E6E,key);
+        ch.setManualProfileOverride(0x0040);ASSERT_TRUE(c.requestProfileParameterRead(&ch));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+        ch.setManualProfileOverride(0x0080);
+        const uint8_t data[]={0,0,0,0,0x32,0,0,0,0,0,0,0,0xE0,0x64,0,0x32,0,0x96,0,0};IoHomeFrame reply;
+        buildSimpleResponseFrame(reply,0x831F2A,0x7E9E6E,IoHomeCommand::PrivateResponse,data,sizeof(data));
+        ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_EQ(ch.profileFeedbackCount[0],0);ASSERT_EQ(ch.profileFeedbackCount[1],0);
+    }
+    {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0x831F2A,0x7E9E6E,key);
+        ch.setManualProfileOverride(0x0040);IoHomeProtocolIdentity identity;identity.valid=true;identity.profile=1;identity.nodeClass=IoHomeNodeClass::Controller;
+        ch.onProtocolIdentity(0x7E9E6E,identity);ASSERT_TRUE(!c.requestProfileParameterRead(&ch));
+        ASSERT_TRUE(!c.sendProfileParameterCommand(0x7E9E6E,key,ParameterSemantic::SlatOrientation,25));
+    }
 }

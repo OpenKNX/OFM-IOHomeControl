@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns="http://knx.org/xml/project/20" xmlns:op="http://github.com/OpenKNX/OpenKNXproducer"><ParameterCalculations><op:include href="IoHomeProfileObjects.ui.xml" xpath="//ParameterCalculations/*" prefix="PRF" IsInner="true"/></ParameterCalculations><Dynamic><op:include href="IoHomeProfileObjects.ui.xml" xpath="//Dynamic/*" prefix="PRF" IsInner="true"/></Dynamic></KNX>

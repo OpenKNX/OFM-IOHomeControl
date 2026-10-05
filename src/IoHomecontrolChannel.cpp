@@ -1,3 +1,4 @@
+#include "protocol/IoHomeProfileObjects.h"
 #include "IoHomecontrolChannel.h"
 #include "IoHomecontrol.h"
 #include "controller/IoHomeController.h"
@@ -366,6 +367,7 @@ void IoHomecontrolChannel::setup()
 
 void IoHomecontrolChannel::loop()
 {
+    updateProfileParameterValidity();
     publishProductState();
     if (!isOperational())
         return;
@@ -1047,6 +1049,7 @@ void IoHomecontrolChannel::setManualProfileOverride(uint16_t iPackedType)
         logInfoP("Ignoring unsupported manual profile 0x%04X", iPackedType);
         iPackedType = 0;
     }
+    if (mManualPackedProfile != iPackedType) invalidateProductContext();
     mManualPackedProfile = iPackedType;
     if (mProtocolIdentity.valid && iPackedType != 0 &&
         iPackedType != ((mProtocolIdentity.profile << 6) | mProtocolIdentity.subProfile))
@@ -1411,8 +1414,7 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
     uint8_t lParam = static_cast<uint8_t>(lWirePercent + 0.5f);
     const bool lQueued = mIs1W
                              ? mController.sendChannelCommand(this, IoHomeCommand::Execute, lParam, iSlatPercent)
-                             : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lParam,
-                                                       0xFF, movementExecuteProfile());
+                             : sendTwoWayMovement(lParam);
     if (!lQueued)
         return;
 
@@ -1472,8 +1474,7 @@ void IoHomecontrolChannel::sendFavorite()
     logDebugP("Send FAVORITE");
     const bool lQueued = mIs1W
                              ? mController.sendChannelCommand(this, IoHomeCommand::Execute, 0xD8)
-                             : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD8,
-                                                       0xFF, movementExecuteProfile());
+                             : sendTwoWayMovement(0xD8);
     if (!lQueued)
         return;
 
@@ -1604,6 +1605,7 @@ void IoHomecontrolChannel::scheduleStatusPoll(uint32_t iDelayMs)
 
 void IoHomecontrolChannel::requestStatusPrivate()
 {
+    requestProfileParameterStatus();
     logDebugP("Request status (Private 0x03)");
     mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Private, 0x03);
 }
@@ -2459,6 +2461,122 @@ void IoHomecontrolChannel::processMovementModeInputKo(GroupObject &ko)
         return;
     }
     mMovementMode = mode;
+    mRequestedSpeedIndex = 0;
     ko.value(mMovementMode, Dpt(5, 10));
 #endif
+}
+
+
+bool IoHomecontrolChannel::profileObjectsActive() const
+{
+#ifdef PRF_ParamBlockOffset
+    const auto *profile = getEffectiveProfileDescriptor();
+    return mProductContextRevision && ParamBASE_ModuleEnabled_PRF && ParamPRF_cEnabled && isOperational() && !mIs1W &&
+           ParamIOHC_cActive && !ParamIOHC_cSuspend && allowsActuatorControls() && profile &&
+           ParamPRF_cProfileCode == ((profile->profile << 6) | profile->subProfile);
+#else
+    return false;
+#endif
+}
+
+void IoHomecontrolChannel::requestProfileParameterStatus()
+{
+    if (!profileObjectsActive() || mLocked) return;
+    mController.requestProfileParameterRead(this);
+}
+
+void IoHomecontrolChannel::processProfileInputKo(uint8_t object, GroupObject &ko)
+{
+    if (!profileObjectsActive() || mLocked) return;
+    const auto *profile = getEffectiveProfileDescriptor();
+    if (object == 15) {if (bool(ko.value(DPT_Switch))) requestProfileParameterStatus();return;}
+    if (object == 16) {
+        if (ioHomeProfileObjectBinary(profile)) {sendPositionCommand(bool(ko.value(DPT_Switch))?100.0f:0.0f);requestProfileParameterStatus();}
+        return;
+    }
+    if (object >= 15 || object % 3) return; // feedback / validity telegrams are never writes.
+    const uint8_t index = ioHomeProfileObjectIndex(object / 3);
+    const auto descriptor = ioHomeParameterDescriptor(profile,index);
+    if (descriptor.encoding != ParameterEncoding::Relative) return;
+    float value = ko.value(DPT_Scaling);
+    if (index == 0) {
+        if (ParamIOHC_cInvertDir && ioHomeIsPositionSemantic(profile->mp)) value=100-value;
+        sendPositionCommand(value);
+    } else if (descriptor.writable) {
+        const uint8_t percent = static_cast<uint8_t>(value + 0.5f);
+        if (!mController.sendProfileParameterCommand(mNodeId,mEncKey,descriptor.semantic,percent)) return;
+        if (ioHomeIsPositionSemantic(descriptor.semantic) || ioHomeIsOrientationSemantic(descriptor.semantic))
+            startStatusPollTracking(defaultTrackedStatusPollDelayMs());
+        // Preserve explicitly selected travel speed on subsequent movement commands.
+        if (descriptor.semantic == ParameterSemantic::LinearSpeed || descriptor.semantic == ParameterSemantic::AngularSpeed ||
+            descriptor.semantic == ParameterSemantic::LightIntensityGradient || descriptor.semantic == ParameterSemantic::EnergyGradient) {
+            mRequestedSpeedIndex=index;mRequestedSpeedRaw=ioHomePercentToRaw(percent,ParameterPolarity::Normal);
+        }
+    } else return;
+    requestProfileParameterStatus();
+}
+
+void IoHomecontrolChannel::onProfileParameterFeedback(uint8_t index, uint16_t raw)
+{
+#ifdef PRF_KoBlockOffset
+    const uint8_t slot=ioHomeProfileObjectSlot(index);
+    if (slot==0xFF) return;
+    IoHomeProfileObjectValue value;
+    const auto *profile=getEffectiveProfileDescriptor();
+    if (!profileObjectsActive() || !ioHomeDecodeProfileObject(profile,index,raw,value)) {
+        mProfileReceivedMask &= ~(1U<<slot);
+        updateProfileParameterValidity();return;
+    }
+    auto &feedback=knx.getGroupObject(PRF_KoCalcNumber(slot*3+1));
+    const auto semantic=ioHomeResolvedParameterSemantic(profile,index);
+    if (index==0 && ioHomeProfileObjectBinary(profile))
+        knx.getGroupObject(PRF_KoCalcNumber(17)).value(value.binary,DPT_Switch);
+    else if (semantic==ParameterSemantic::ProjectionAngle) feedback.value(raw,Dpt(7,1));
+    else if (semantic==ParameterSemantic::WindowSecurityMode) feedback.value(static_cast<uint8_t>(raw),Dpt(5,10));
+    else {
+        if (index==0 && ParamIOHC_cInvertDir && ioHomeIsPositionSemantic(profile->mp)) value.percent=100-value.percent;
+        feedback.value(static_cast<uint8_t>(value.percent+0.5f),DPT_Scaling);
+    }
+    mProfileReceivedAt[slot]=millis();mProfileReceivedMask |= 1U<<slot;
+    updateProfileParameterValidity();
+#endif
+}
+
+void IoHomecontrolChannel::updateProfileParameterValidity()
+{
+#ifdef PRF_KoBlockOffset
+    if (!ParamBASE_ModuleEnabled_PRF) return;
+    const bool active=profileObjectsActive();
+    const uint32_t ttl=std::max<uint32_t>(30000UL,static_cast<uint32_t>(ParamIOHC_cPollInterval)*3000UL);
+    for (uint8_t slot=0;slot<5;++slot) {
+        const uint8_t bit=1U<<slot;
+        const bool valid=active && (mProfileReceivedMask&bit) && uint32_t(millis()-mProfileReceivedAt[slot])<=ttl;
+        auto &ko=knx.getGroupObject(PRF_KoCalcNumber(slot*3+2));
+        if (!ko.initialized() || valid!=bool(mProfilePublishedMask&bit)) ko.value(valid,Dpt(1,2));
+        if (valid) mProfilePublishedMask|=bit;else mProfilePublishedMask&=~bit;
+    }
+#endif
+}
+
+bool IoHomecontrolChannel::sendTwoWayMovement(uint8_t position)
+{
+    const auto *profile=getEffectiveProfileDescriptor();
+    uint8_t index=mRequestedSpeedIndex;
+    uint16_t speed=mRequestedSpeedRaw;
+#ifdef MVS_ParamBlockOffset
+    if (!index && ParamBASE_ModuleEnabled_MVS && profile) {
+        index=ioHomeParameterIndex(profile,ParameterSemantic::LinearSpeed);
+        if (index>3) index=0;
+        speed=mMovementMode==1?0xD805:mMovementMode==2?IOHC_POSITION_MAX:IOHC_PARAMETER_DEFAULT;
+    }
+#endif
+    if (!index && profile) {
+        index=ioHomeParameterIndex(profile,ParameterSemantic::LightIntensityGradient);
+        if (index>3) index=ioHomeParameterIndex(profile,ParameterSemantic::EnergyGradient);
+        if (index>3) index=0;
+        speed=IOHC_PARAMETER_DEFAULT;
+    }
+    if (index && profile && !(profile->capabilityFlags&IoHomeCapabilityBinaryOnly))
+        return mController.sendProfileMovementCommand(mNodeId,mEncKey,position,index,speed);
+    return mController.sendCommand(mNodeId,mEncKey,IoHomeCommand::Execute,position,0xFF,movementExecuteProfile());
 }

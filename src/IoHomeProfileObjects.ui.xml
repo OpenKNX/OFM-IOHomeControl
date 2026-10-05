@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns="http://knx.org/xml/project/20"><ParameterCalculations>
+<ParameterCalculation Id="%AID%_PC-%TT%%PRODUCT_CC%0100" Language="JavaScript" Name="ProfileObjects%PRODUCT_CC%" LRTransformationFunc="IOHC_profileObjectsProfile" RLTransformationFunc="BASE_Nop">
+<LParameters><ParameterRefRef RefId="%AID%_UP-%IOHC_TT%%PRODUCT_CC%101_R-%IOHC_TT%%PRODUCT_CC%10101" AliasName="Override"/><ParameterRefRef RefId="%AID%_P-%IOHC_TT%%PRODUCT_CC%103_R-%IOHC_TT%%PRODUCT_CC%10301" AliasName="Detected"/></LParameters>
+<RParameters><ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101" AliasName="Profile"/></RParameters>
+</ParameterCalculation></ParameterCalculations><Dynamic>
+<ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00201" HelpContext="IOHC-Profilobjekte"/>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00201"><when test="1">
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101">
+<when test="0"><ParameterSeparator Id="%AID%_PS-nnn" Text="Für separate Profilfunktionen Status / Erkennung lesen oder ein bekanntes manuelles Profil wählen. Danach die Applikation programmieren." UIHint="Information"/></when>
+<when test="64">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Position"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00001"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00201"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Lamellenposition"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00301"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00401"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00501"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP2: Lamellen-Drehgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%006_R-%TT%%PRODUCT_CC%00601"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%007_R-%TT%%PRODUCT_CC%00701"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%008_R-%TT%%PRODUCT_CC%00801"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP3: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%009_R-%TT%%PRODUCT_CC%00901"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%010_R-%TT%%PRODUCT_CC%01001"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%011_R-%TT%%PRODUCT_CC%01101"/>
+</when>
+<when test="128">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Position"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00002"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00102"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00202"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00302"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00402"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00502"/>
+</when>
+<when test="129">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Position"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00003"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00103"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00203"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00303"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00403"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00503"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP2: Lamellen-Drehgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%006_R-%TT%%PRODUCT_CC%00603"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%007_R-%TT%%PRODUCT_CC%00703"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%008_R-%TT%%PRODUCT_CC%00803"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP3: Lamellenposition"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%009_R-%TT%%PRODUCT_CC%00903"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%010_R-%TT%%PRODUCT_CC%01003"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%011_R-%TT%%PRODUCT_CC%01103"/>
+</when>
+<when test="130">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Position"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00004"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00104"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00204"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00304"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00404"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00504"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP9: Ausstellwert (roh)"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%013_R-%TT%%PRODUCT_CC%01304"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%014_R-%TT%%PRODUCT_CC%01404"/>
+</when>
+<when test="192">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Position"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00005"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00105"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00205"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00305"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00405"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00505"/>
+</when>
+<when test="256">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Position"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00006"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00106"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00206"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00306"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00406"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00506"/>
+</when>
+<when test="257">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Position"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00007"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00107"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00207"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00307"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00407"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00507"/>
+</when>
+<when test="320">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Position"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00008"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00108"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00208"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00308"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00408"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00508"/>
+</when>
+<when test="378">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Position"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%016_R-%TT%%PRODUCT_CC%01609"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%017_R-%TT%%PRODUCT_CC%01709"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00209"/>
+</when>
+<when test="384">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Helligkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00010"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00110"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00210"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Dimmübergang"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00310"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00410"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00510"/>
+</when>
+<when test="442">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Helligkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%016_R-%TT%%PRODUCT_CC%01611"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%017_R-%TT%%PRODUCT_CC%01711"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00211"/>
+</when>
+<when test="448">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Position"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00012"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00112"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00212"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00312"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00412"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00512"/>
+</when>
+<when test="506">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Position"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%016_R-%TT%%PRODUCT_CC%01613"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%017_R-%TT%%PRODUCT_CC%01713"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00213"/>
+</when>
+<when test="576">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Verriegelung"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%016_R-%TT%%PRODUCT_CC%01614"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%017_R-%TT%%PRODUCT_CC%01714"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00214"/>
+</when>
+<when test="577">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Verriegelung"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%016_R-%TT%%PRODUCT_CC%01615"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%017_R-%TT%%PRODUCT_CC%01715"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00215"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Fenster-Sicherheitsmodus"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00415"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00515"/>
+</when>
+<when test="640">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Position"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00016"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00116"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00216"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00316"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00416"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00516"/>
+</when>
+<when test="832">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Position"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00017"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00117"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00217"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Oberer Behang"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00317"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00417"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00517"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP2: Unterer Behang"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%006_R-%TT%%PRODUCT_CC%00617"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%007_R-%TT%%PRODUCT_CC%00717"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%008_R-%TT%%PRODUCT_CC%00817"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP3: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%009_R-%TT%%PRODUCT_CC%00917"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%010_R-%TT%%PRODUCT_CC%01017"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%011_R-%TT%%PRODUCT_CC%01117"/>
+</when>
+<when test="960">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Schaltzustand"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%016_R-%TT%%PRODUCT_CC%01618"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%017_R-%TT%%PRODUCT_CC%01718"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00218"/>
+</when>
+<when test="1024">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Position"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00019"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00119"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00219"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00319"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00419"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00519"/>
+</when>
+<when test="1088">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Position"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00020"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00120"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00220"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00320"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00420"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00520"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP2: Lamellen-Drehgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%006_R-%TT%%PRODUCT_CC%00620"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%007_R-%TT%%PRODUCT_CC%00720"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%008_R-%TT%%PRODUCT_CC%00820"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP3: Lamellenposition"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%009_R-%TT%%PRODUCT_CC%00920"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%010_R-%TT%%PRODUCT_CC%01020"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%011_R-%TT%%PRODUCT_CC%01120"/>
+</when>
+<when test="1152">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Behangposition"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00021"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00121"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00221"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00321"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00421"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00521"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP2: Drehgeschwindigkeit der Aufhängung"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%006_R-%TT%%PRODUCT_CC%00621"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%007_R-%TT%%PRODUCT_CC%00721"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%008_R-%TT%%PRODUCT_CC%00821"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP3: Orientierung der Aufhängung"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%009_R-%TT%%PRODUCT_CC%00921"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%010_R-%TT%%PRODUCT_CC%01021"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%011_R-%TT%%PRODUCT_CC%01121"/>
+</when>
+<when test="1216">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Behangposition"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00022"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00122"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00222"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00322"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00422"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00522"/>
+</when>
+<when test="1280">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Luftbedarf"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00023"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00123"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00223"/>
+</when>
+<when test="1281">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Luftbedarf"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00024"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00124"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00224"/>
+</when>
+<when test="1282">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Luftbedarf"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00025"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00125"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00225"/>
+</when>
+<when test="1283">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Luftbedarf"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00026"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00126"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00226"/>
+</when>
+<when test="1344">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Heizleistungsbedarf"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00027"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00127"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00227"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Änderung der Heizleistung"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00327"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00427"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00527"/>
+</when>
+<when test="1402">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Heizleistungsbedarf"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%016_R-%TT%%PRODUCT_CC%01628"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%017_R-%TT%%PRODUCT_CC%01728"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00228"/>
+</when>
+<when test="1536">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Schließgrad"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00029"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00129"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00229"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00329"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00429"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00529"/>
+</when>
+<when test="1537">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Schließgrad"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00030"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00130"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00230"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="FP1: Fahrgeschwindigkeit"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00330"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00430"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00530"/>
+</when></choose><choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"><when test="&gt;0"><ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%015_R-%TT%%PRODUCT_CC%01501"/></when></choose>
+</when></choose></Dynamic></KNX>

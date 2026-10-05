@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns="http://knx.org/xml/project/20" xmlns:op="http://github.com/OpenKNX/OpenKNXproducer">
+<ManufacturerData><Manufacturer RefId="M-00FA"><ApplicationPrograms>
+<ApplicationProgram Id="%AID%" ProgramType="ApplicationProgram" MaskVersion="MV-07B0" Name="IOHCProfileObjects" LoadProcedureStyle="MergedProcedure" PeiType="0" DefaultLanguage="de" DynamicTableManagement="false" Linkable="true" MinEtsVersion="4.0" ApplicationNumber="0" ApplicationVersion="0">
+<Static><Parameters><Union SizeInBit="24"><Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0"/>
+<Parameter Id="%AID%_UP-%TT%%CC%001" Name="c%C%ProfileCode" ParameterType="%AID%_PT-IOHCProfileOverride" Offset="0" BitOffset="0" Text="Profilzuordnung für Objekte" Value="0" Access="Read"/>
+<Parameter Id="%AID%_UP-%TT%%CC%002" Name="c%C%Enabled" ParameterType="%AID%_PT-IOHCCheckBox" Offset="2" BitOffset="0" Text="Separate Profilfunktionen verwenden" Value="1"/>
+</Union></Parameters><ParameterRefs>
+<ParameterRef Id="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101" RefId="%AID%_UP-%TT%%CC%001"/>
+<ParameterRef Id="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201" RefId="%AID%_UP-%TT%%CC%002"/>
+</ParameterRefs><ComObjectTable>
+<ComObject Id="%AID%_O-%TT%%CC%000" Name="c%C%Parameter0Set" Text="Kanal %C% MP setzen" FunctionText="setzen" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K0%"/>
+<ComObject Id="%AID%_O-%TT%%CC%001" Name="c%C%Parameter0Feedback" Text="Kanal %C% MP Rückmeldung" FunctionText="Rückmeldung" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K1%"/>
+<ComObject Id="%AID%_O-%TT%%CC%002" Name="c%C%Parameter0Valid" Text="Kanal %C% MP gültig" FunctionText="gültig" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-2" Number="%K2%"/>
+<ComObject Id="%AID%_O-%TT%%CC%003" Name="c%C%Parameter1Set" Text="Kanal %C% FP1 setzen" FunctionText="setzen" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K3%"/>
+<ComObject Id="%AID%_O-%TT%%CC%004" Name="c%C%Parameter1Feedback" Text="Kanal %C% FP1 Rückmeldung" FunctionText="Rückmeldung" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K4%"/>
+<ComObject Id="%AID%_O-%TT%%CC%005" Name="c%C%Parameter1Valid" Text="Kanal %C% FP1 gültig" FunctionText="gültig" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-2" Number="%K5%"/>
+<ComObject Id="%AID%_O-%TT%%CC%006" Name="c%C%Parameter2Set" Text="Kanal %C% FP2 setzen" FunctionText="setzen" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K6%"/>
+<ComObject Id="%AID%_O-%TT%%CC%007" Name="c%C%Parameter2Feedback" Text="Kanal %C% FP2 Rückmeldung" FunctionText="Rückmeldung" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K7%"/>
+<ComObject Id="%AID%_O-%TT%%CC%008" Name="c%C%Parameter2Valid" Text="Kanal %C% FP2 gültig" FunctionText="gültig" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-2" Number="%K8%"/>
+<ComObject Id="%AID%_O-%TT%%CC%009" Name="c%C%Parameter3Set" Text="Kanal %C% FP3 setzen" FunctionText="setzen" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K9%"/>
+<ComObject Id="%AID%_O-%TT%%CC%010" Name="c%C%Parameter3Feedback" Text="Kanal %C% FP3 Rückmeldung" FunctionText="Rückmeldung" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-1" Number="%K10%"/>
+<ComObject Id="%AID%_O-%TT%%CC%011" Name="c%C%Parameter3Valid" Text="Kanal %C% FP3 gültig" FunctionText="gültig" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-2" Number="%K11%"/>
+<ComObject Id="%AID%_O-%TT%%CC%012" Name="c%C%Parameter9Set" Text="Kanal %C% FP9 setzen" FunctionText="setzen" ObjectSize="2 Bytes" ReadFlag="Disabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-7-1" Number="%K12%"/>
+<ComObject Id="%AID%_O-%TT%%CC%013" Name="c%C%Parameter9Feedback" Text="Kanal %C% FP9 Rückmeldung" FunctionText="Rückmeldung" ObjectSize="2 Bytes" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-7-1" Number="%K13%"/>
+<ComObject Id="%AID%_O-%TT%%CC%014" Name="c%C%Parameter9Valid" Text="Kanal %C% FP9 gültig" FunctionText="gültig" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-2" Number="%K14%"/>
+<ComObject Id="%AID%_O-%TT%%CC%015" Name="c%C%Read" Text="Kanal %C% Profilwerte lesen" FunctionText="Profilwerte lesen" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-17" Number="%K15%"/>
+<ComObject Id="%AID%_O-%TT%%CC%016" Name="c%C%BinarySet" Text="Kanal %C% MP Schaltwert setzen" FunctionText="MP Schaltwert setzen" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K16%"/>
+<ComObject Id="%AID%_O-%TT%%CC%017" Name="c%C%BinaryFeedback" Text="Kanal %C% MP Schaltwert Rückmeldung" FunctionText="MP Schaltwert Rückmeldung" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K17%"/></ComObjectTable><ComObjectRefs>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Position setzen" FunctionText="Position setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Position gültig" FunctionText="Position gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Lamellenposition setzen" FunctionText="Lamellenposition setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Lamellenposition Rückmeldung" FunctionText="Lamellenposition Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Lamellenposition gültig" FunctionText="Lamellenposition gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" RefId="%AID%_O-%TT%%CC%006" Text="Kanal %C% Lamellen-Drehgeschwindigkeit setzen" FunctionText="Lamellen-Drehgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" RefId="%AID%_O-%TT%%CC%007" Text="Kanal %C% Lamellen-Drehgeschwindigkeit Rückmeldung" FunctionText="Lamellen-Drehgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" RefId="%AID%_O-%TT%%CC%008" Text="Kanal %C% Lamellen-Drehgeschwindigkeit gültig" FunctionText="Lamellen-Drehgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" RefId="%AID%_O-%TT%%CC%009" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" RefId="%AID%_O-%TT%%CC%010" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" RefId="%AID%_O-%TT%%CC%011" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00002" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Position setzen" FunctionText="Position setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00102" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00202" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Position gültig" FunctionText="Position gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00302" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00402" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00502" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00003" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Position setzen" FunctionText="Position setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00103" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00203" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Position gültig" FunctionText="Position gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00303" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00403" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00503" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%006_R-%TT%%CC%00603" RefId="%AID%_O-%TT%%CC%006" Text="Kanal %C% Lamellen-Drehgeschwindigkeit setzen" FunctionText="Lamellen-Drehgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%007_R-%TT%%CC%00703" RefId="%AID%_O-%TT%%CC%007" Text="Kanal %C% Lamellen-Drehgeschwindigkeit Rückmeldung" FunctionText="Lamellen-Drehgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%008_R-%TT%%CC%00803" RefId="%AID%_O-%TT%%CC%008" Text="Kanal %C% Lamellen-Drehgeschwindigkeit gültig" FunctionText="Lamellen-Drehgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%009_R-%TT%%CC%00903" RefId="%AID%_O-%TT%%CC%009" Text="Kanal %C% Lamellenposition setzen" FunctionText="Lamellenposition setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%010_R-%TT%%CC%01003" RefId="%AID%_O-%TT%%CC%010" Text="Kanal %C% Lamellenposition Rückmeldung" FunctionText="Lamellenposition Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%011_R-%TT%%CC%01103" RefId="%AID%_O-%TT%%CC%011" Text="Kanal %C% Lamellenposition gültig" FunctionText="Lamellenposition gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00004" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Position setzen" FunctionText="Position setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00104" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00204" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Position gültig" FunctionText="Position gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00304" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00404" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00504" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%013_R-%TT%%CC%01304" RefId="%AID%_O-%TT%%CC%013" Text="Kanal %C% Ausstellwert (roh) Rückmeldung" FunctionText="Ausstellwert (roh) Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%014_R-%TT%%CC%01404" RefId="%AID%_O-%TT%%CC%014" Text="Kanal %C% Ausstellwert (roh) gültig" FunctionText="Ausstellwert (roh) gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00005" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Position setzen" FunctionText="Position setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00105" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00205" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Position gültig" FunctionText="Position gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00305" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00405" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00505" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00006" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Position setzen" FunctionText="Position setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00106" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00206" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Position gültig" FunctionText="Position gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00306" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00406" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00506" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00007" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Position setzen" FunctionText="Position setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00107" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00207" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Position gültig" FunctionText="Position gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00307" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00407" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00507" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00008" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Position setzen" FunctionText="Position setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00108" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00208" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Position gültig" FunctionText="Position gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00308" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00408" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00508" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%016_R-%TT%%CC%01609" RefId="%AID%_O-%TT%%CC%016" Text="Kanal %C% Position setzen" FunctionText="Position setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%017_R-%TT%%CC%01709" RefId="%AID%_O-%TT%%CC%017" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00209" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Position gültig" FunctionText="Position gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00010" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Helligkeit setzen" FunctionText="Helligkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00110" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Helligkeit Rückmeldung" FunctionText="Helligkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00210" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Helligkeit gültig" FunctionText="Helligkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00310" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Dimmübergang setzen" FunctionText="Dimmübergang setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00410" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Dimmübergang Rückmeldung" FunctionText="Dimmübergang Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00510" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Dimmübergang gültig" FunctionText="Dimmübergang gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%016_R-%TT%%CC%01611" RefId="%AID%_O-%TT%%CC%016" Text="Kanal %C% Helligkeit setzen" FunctionText="Helligkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%017_R-%TT%%CC%01711" RefId="%AID%_O-%TT%%CC%017" Text="Kanal %C% Helligkeit Rückmeldung" FunctionText="Helligkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00211" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Helligkeit gültig" FunctionText="Helligkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00012" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Position setzen" FunctionText="Position setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00112" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00212" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Position gültig" FunctionText="Position gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00312" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00412" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00512" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%016_R-%TT%%CC%01613" RefId="%AID%_O-%TT%%CC%016" Text="Kanal %C% Position setzen" FunctionText="Position setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%017_R-%TT%%CC%01713" RefId="%AID%_O-%TT%%CC%017" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00213" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Position gültig" FunctionText="Position gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%016_R-%TT%%CC%01614" RefId="%AID%_O-%TT%%CC%016" Text="Kanal %C% Verriegelung setzen" FunctionText="Verriegelung setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%017_R-%TT%%CC%01714" RefId="%AID%_O-%TT%%CC%017" Text="Kanal %C% Verriegelung Rückmeldung" FunctionText="Verriegelung Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00214" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Verriegelung gültig" FunctionText="Verriegelung gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%016_R-%TT%%CC%01615" RefId="%AID%_O-%TT%%CC%016" Text="Kanal %C% Verriegelung setzen" FunctionText="Verriegelung setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%017_R-%TT%%CC%01715" RefId="%AID%_O-%TT%%CC%017" Text="Kanal %C% Verriegelung Rückmeldung" FunctionText="Verriegelung Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00215" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Verriegelung gültig" FunctionText="Verriegelung gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00415" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fenster-Sicherheitsmodus Rückmeldung" FunctionText="Fenster-Sicherheitsmodus Rückmeldung" DatapointType="DPST-5-10"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00515" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fenster-Sicherheitsmodus gültig" FunctionText="Fenster-Sicherheitsmodus gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00016" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Position setzen" FunctionText="Position setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00116" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00216" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Position gültig" FunctionText="Position gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00316" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00416" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00516" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00017" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Position setzen" FunctionText="Position setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00117" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00217" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Position gültig" FunctionText="Position gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00317" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Oberer Behang setzen" FunctionText="Oberer Behang setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00417" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Oberer Behang Rückmeldung" FunctionText="Oberer Behang Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00517" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Oberer Behang gültig" FunctionText="Oberer Behang gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%006_R-%TT%%CC%00617" RefId="%AID%_O-%TT%%CC%006" Text="Kanal %C% Unterer Behang setzen" FunctionText="Unterer Behang setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%007_R-%TT%%CC%00717" RefId="%AID%_O-%TT%%CC%007" Text="Kanal %C% Unterer Behang Rückmeldung" FunctionText="Unterer Behang Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%008_R-%TT%%CC%00817" RefId="%AID%_O-%TT%%CC%008" Text="Kanal %C% Unterer Behang gültig" FunctionText="Unterer Behang gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%009_R-%TT%%CC%00917" RefId="%AID%_O-%TT%%CC%009" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%010_R-%TT%%CC%01017" RefId="%AID%_O-%TT%%CC%010" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%011_R-%TT%%CC%01117" RefId="%AID%_O-%TT%%CC%011" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%016_R-%TT%%CC%01618" RefId="%AID%_O-%TT%%CC%016" Text="Kanal %C% Schaltzustand setzen" FunctionText="Schaltzustand setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%017_R-%TT%%CC%01718" RefId="%AID%_O-%TT%%CC%017" Text="Kanal %C% Schaltzustand Rückmeldung" FunctionText="Schaltzustand Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00218" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Schaltzustand gültig" FunctionText="Schaltzustand gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00019" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Position setzen" FunctionText="Position setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00119" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00219" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Position gültig" FunctionText="Position gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00319" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00419" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00519" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00020" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Position setzen" FunctionText="Position setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00120" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00220" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Position gültig" FunctionText="Position gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00320" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00420" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00520" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%006_R-%TT%%CC%00620" RefId="%AID%_O-%TT%%CC%006" Text="Kanal %C% Lamellen-Drehgeschwindigkeit setzen" FunctionText="Lamellen-Drehgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%007_R-%TT%%CC%00720" RefId="%AID%_O-%TT%%CC%007" Text="Kanal %C% Lamellen-Drehgeschwindigkeit Rückmeldung" FunctionText="Lamellen-Drehgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%008_R-%TT%%CC%00820" RefId="%AID%_O-%TT%%CC%008" Text="Kanal %C% Lamellen-Drehgeschwindigkeit gültig" FunctionText="Lamellen-Drehgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%009_R-%TT%%CC%00920" RefId="%AID%_O-%TT%%CC%009" Text="Kanal %C% Lamellenposition setzen" FunctionText="Lamellenposition setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%010_R-%TT%%CC%01020" RefId="%AID%_O-%TT%%CC%010" Text="Kanal %C% Lamellenposition Rückmeldung" FunctionText="Lamellenposition Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%011_R-%TT%%CC%01120" RefId="%AID%_O-%TT%%CC%011" Text="Kanal %C% Lamellenposition gültig" FunctionText="Lamellenposition gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00021" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Behangposition setzen" FunctionText="Behangposition setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00121" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Behangposition Rückmeldung" FunctionText="Behangposition Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00221" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Behangposition gültig" FunctionText="Behangposition gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00321" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00421" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00521" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%006_R-%TT%%CC%00621" RefId="%AID%_O-%TT%%CC%006" Text="Kanal %C% Drehgeschwindigkeit der Aufhängung setzen" FunctionText="Drehgeschwindigkeit der Aufhängung setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%007_R-%TT%%CC%00721" RefId="%AID%_O-%TT%%CC%007" Text="Kanal %C% Drehgeschwindigkeit der Aufhängung Rückmeldung" FunctionText="Drehgeschwindigkeit der Aufhängung Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%008_R-%TT%%CC%00821" RefId="%AID%_O-%TT%%CC%008" Text="Kanal %C% Drehgeschwindigkeit der Aufhängung gültig" FunctionText="Drehgeschwindigkeit der Aufhängung gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%009_R-%TT%%CC%00921" RefId="%AID%_O-%TT%%CC%009" Text="Kanal %C% Orientierung der Aufhängung setzen" FunctionText="Orientierung der Aufhängung setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%010_R-%TT%%CC%01021" RefId="%AID%_O-%TT%%CC%010" Text="Kanal %C% Orientierung der Aufhängung Rückmeldung" FunctionText="Orientierung der Aufhängung Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%011_R-%TT%%CC%01121" RefId="%AID%_O-%TT%%CC%011" Text="Kanal %C% Orientierung der Aufhängung gültig" FunctionText="Orientierung der Aufhängung gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00022" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Behangposition setzen" FunctionText="Behangposition setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00122" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Behangposition Rückmeldung" FunctionText="Behangposition Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00222" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Behangposition gültig" FunctionText="Behangposition gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00322" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00422" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00522" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00023" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Luftbedarf setzen" FunctionText="Luftbedarf setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00123" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Luftbedarf Rückmeldung" FunctionText="Luftbedarf Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00223" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Luftbedarf gültig" FunctionText="Luftbedarf gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00024" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Luftbedarf setzen" FunctionText="Luftbedarf setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00124" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Luftbedarf Rückmeldung" FunctionText="Luftbedarf Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00224" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Luftbedarf gültig" FunctionText="Luftbedarf gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00025" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Luftbedarf setzen" FunctionText="Luftbedarf setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00125" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Luftbedarf Rückmeldung" FunctionText="Luftbedarf Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00225" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Luftbedarf gültig" FunctionText="Luftbedarf gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00026" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Luftbedarf setzen" FunctionText="Luftbedarf setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00126" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Luftbedarf Rückmeldung" FunctionText="Luftbedarf Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00226" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Luftbedarf gültig" FunctionText="Luftbedarf gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00027" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Heizleistungsbedarf setzen" FunctionText="Heizleistungsbedarf setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00127" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Heizleistungsbedarf Rückmeldung" FunctionText="Heizleistungsbedarf Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00227" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Heizleistungsbedarf gültig" FunctionText="Heizleistungsbedarf gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00327" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Änderung der Heizleistung setzen" FunctionText="Änderung der Heizleistung setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00427" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Änderung der Heizleistung Rückmeldung" FunctionText="Änderung der Heizleistung Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00527" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Änderung der Heizleistung gültig" FunctionText="Änderung der Heizleistung gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%016_R-%TT%%CC%01628" RefId="%AID%_O-%TT%%CC%016" Text="Kanal %C% Heizleistungsbedarf setzen" FunctionText="Heizleistungsbedarf setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%017_R-%TT%%CC%01728" RefId="%AID%_O-%TT%%CC%017" Text="Kanal %C% Heizleistungsbedarf Rückmeldung" FunctionText="Heizleistungsbedarf Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00228" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Heizleistungsbedarf gültig" FunctionText="Heizleistungsbedarf gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00029" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Schließgrad setzen" FunctionText="Schließgrad setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00129" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Schließgrad Rückmeldung" FunctionText="Schließgrad Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00229" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Schließgrad gültig" FunctionText="Schließgrad gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00329" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00429" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00529" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00030" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Schließgrad setzen" FunctionText="Schließgrad setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00130" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Schließgrad Rückmeldung" FunctionText="Schließgrad Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00230" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Schließgrad gültig" FunctionText="Schließgrad gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00330" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00430" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00530" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" RefId="%AID%_O-%TT%%CC%015" Text="Kanal %C% Profilwerte lesen" FunctionText="Profilwerte lesen"/></ComObjectRefs></Static><Dynamic/></ApplicationProgram></ApplicationPrograms></Manufacturer></ManufacturerData></KNX>

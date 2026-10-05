@@ -108,6 +108,9 @@ inline void ioHomeTestAdvanceMicros(uint32_t iMicros)
 class IoHomecontrolChannel
 {
 public:
+  uint16_t profileRaw[17] = {};
+  uint32_t profileFeedbackCount[17] = {};
+  void onProfileParameterFeedback(uint8_t index,uint16_t raw) {if(index<17){profileRaw[index]=raw;++profileFeedbackCount[index];}}
   uint32_t productContextRevision() const {return mProductContextRevision;}
   void invalidateProductContext() {mProductRuntime.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
   IoHomeProductRuntime &productRuntime() {mProductRuntime.bind(mIoAddress,mEncKey);return mProductRuntime;}
@@ -449,10 +452,9 @@ public:
   }
   void setManualProfileOverride(uint16_t iPackedType)
   {
-    mManualPackedProfile = iPackedType != 0 &&
-                                   ioHomeProfileDescriptor(iPackedType >> 6,
-                                                           iPackedType & 0x3F)
-                               ? iPackedType : 0;
+    const uint16_t next=iPackedType != 0 && ioHomeProfileDescriptor(iPackedType >> 6,iPackedType & 0x3F) ? iPackedType : 0;
+    if (next!=mManualPackedProfile) invalidateProductContext();
+    mManualPackedProfile=next;
   }
   bool allowsActuatorControls() const
   {

@@ -13,7 +13,7 @@ Die folgenden Kennungen sind das gepackte Profil einschließlich Subprofil, in H
 - Innenjalousie (0x0040): MP = Behangposition; FP1 = Lamellenwinkel; FP2 = Geschwindigkeit der Lamellendrehung; FP3 = Fahrgeschwindigkeit.
 - Rollladen (0x0080): MP = Rollladenposition; FP1 = Fahrgeschwindigkeit.
 - Rollladen mit verstellbaren Lamellen (0x0081): MP = Rollladenposition; FP1 = Fahrgeschwindigkeit; FP2 = Drehgeschwindigkeit; FP3 = Lamellenwinkel.
-- Rollladen mit Ausstellfunktion (0x0082): MP = Position; FP1 = Fahrgeschwindigkeit. Ein eigener FP für die Ausstellfunktion ist nicht zugeordnet.
+- Rollladen mit Ausstellfunktion (0x0082): MP = Position; FP1 = Fahrgeschwindigkeit. FP9 = Ausstellwert, nur als Rohwert lesbar; Winkelumrechnung und Schreiben sind nicht bestätigt.
 - Doppelrollladen (0x0340): MP = Hauptposition; FP1 = oberer Behang; FP2 = unterer Behang; FP3 = Fahrgeschwindigkeit.
 - Außenjalousie (0x0440): MP = Behangposition; FP1 = Fahrgeschwindigkeit; FP2 = Drehgeschwindigkeit; FP3 = Lamellenwinkel.
 - Lamellenbehang (0x0480): MP = Behangposition; FP1 = Fahrgeschwindigkeit; FP2 = Drehgeschwindigkeit der Aufhängung; FP3 = deren Orientierung.
@@ -31,7 +31,7 @@ Die folgenden Kennungen sind das gepackte Profil einschließlich Subprofil, in H
 
 - Licht (0x0180): MP = Helligkeit; FP1 = Helligkeitsänderung, also Übergang beim Dimmen.
 - Licht nur Ein/Aus (0x01BA): MP = Ein/Aus-Endzustand; keine zugeordneten FP.
-- Türschloss (0x0240), Fensterschloss (0x0241): MP = Verriegelungszustand; keine zugeordneten FP.
+- Türschloss (0x0240), Fensterschloss (0x0241): MP = Verriegelungszustand. Beim Fensterschloss ist zusätzlich FP1 = Sicherheitsmodus, nur lesbar (0 = daylocked, 1 = homesecure, 2 = secured).
 - Schalter (0x03C0): MP = Schaltzustand; keine zugeordneten FP.
 - Lüftungspunkt (0x0500), Lufteinlass (0x0501), Luftüberleitung (0x0502), Luftauslass (0x0503): MP = Luftbedarf; keine zugeordneten FP. Das ist keine gemessene Luftmenge.
 - Außenheizung (0x0540): MP = Heizleistungsbedarf; FP1 = Änderung der Heizleistung.

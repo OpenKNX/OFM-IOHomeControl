@@ -1,3 +1,4 @@
+#include "../protocol/IoHomeProfileObjects.h"
 #include "../protocol/IoHomeProductActivation.h"
 #include "IoHomeController.h"
 #include "../protocol/IoHomeLogRedaction.h"
@@ -2618,6 +2619,22 @@ bool IoHomeController::requestMpFpRead(IoHomecontrolChannel *channel,uint8_t ind
     return requestMpFpMaskRead(channel,index?uint16_t(1)<<(index-1):0);
 }
 
+bool IoHomeController::requestProfileParameterRead(IoHomecontrolChannel *channel)
+{
+    // Standard profile reads need a paired, permitted actuator context and an
+    // exact documented mapping, not a commercial product-family binding.
+    if (!channel || !channel->productContextRevision() || !channel->isPaired() || channel->is1W() ||
+        !channel->allowsActuatorControls() || !channel->getEffectiveProfileDescriptor() ||
+        mPassiveMode || mGatewayMode || mOneWayKeyReceiveActive || isKeyExtractionActive() || isNetworkScanActive()) return false;
+    IoHomeQueueEntry entry{};
+    entry.productContextRevision=channel->productContextRevision();entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
+    entry.managementRead=true;std::memcpy(entry.managementKey,entry.encKey,16);
+    entry.command=IoHomeCommand::Private;entry.mpFpRead=true;
+    entry.mpFpReadSelected=ioHomeProfileObjectReadMask(channel->getEffectiveProfileDescriptor());entry.mpFpReadMode=3;
+    entry.sourceChannelIndex=channelIndexFor(channel);entry.maxAttempts=1;entry.background=true;entry.active=true;
+    return queuePush(entry);
+}
+
 bool IoHomeController::requestMpFpMaskRead(IoHomecontrolChannel *channel,uint16_t selected)
 {
     if(!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||!channel->getProtocolIdentity().valid||
@@ -2750,6 +2767,8 @@ bool IoHomeController::sendProfileParameterCommand(uint32_t iDestNodeId,
     lEntry.oneWayBroadcastTypeExplicit = false;
     lEntry.oneWayDestinationMode = OneWayDestinationMode::ProfileTyped;
     lEntry.oneWayExactDestination = 0;
+    lEntry.sourceChannelIndex=channelIndexFor(lCh);
+    lEntry.productContextRevision=lCh?lCh->productContextRevision():0;
     lEntry.twoWayFp = true;
     lEntry.twoWayFpIndex = lIndex;
     lEntry.twoWayFpRaw = lRaw;
@@ -2758,6 +2777,27 @@ bool IoHomeController::sendProfileParameterCommand(uint32_t iDestNodeId,
     lEntry.retryReason = TwoWayRetryReason::Initial;
     lEntry.active = true;
     return queuePush(lEntry);
+}
+
+bool IoHomeController::sendProfileMovementCommand(uint32_t node,const uint8_t *key,uint8_t position,uint8_t speedIndex,uint16_t raw)
+{
+    auto *channel=channelForNode(node);
+    if (!channel || !channel->isPaired() || channel->is1W() || !channel->allowsActuatorControls() ||
+        (position>100 && position!=0xD8)) return false;
+    const auto *profile=channel->getEffectiveProfileDescriptor();
+    if (!profile || (profile->capabilityFlags&IoHomeCapabilityBinaryOnly) || speedIndex<1 || speedIndex>3 ||
+        ioHomeParameterDescriptor(profile,0).encoding!=ParameterEncoding::Relative ||
+        (position==0xD8 && !ioHomeIsPositionSemantic(profile->mp))) return false;
+    const auto semantic=ioHomeParameterSemantic(profile,speedIndex);
+    if (semantic!=ParameterSemantic::LinearSpeed && semantic!=ParameterSemantic::AngularSpeed &&
+        semantic!=ParameterSemantic::LightIntensityGradient && semantic!=ParameterSemantic::EnergyGradient) return false;
+    if (raw>IOHC_POSITION_MAX && raw!=IOHC_PARAMETER_DEFAULT && raw!=0xD805) return false;
+    IoHomeQueueEntry entry{};
+    entry.destNodeId=node;entry.encKey=key;entry.command=IoHomeCommand::Execute;
+    entry.param=position;entry.param2=0xFF;entry.param3=0xFF;
+    entry.twoWayMovementFp=true;entry.twoWayFpIndex=speedIndex;entry.twoWayFpRaw=raw;
+    entry.sourceChannelIndex=channelIndexFor(channel);entry.productContextRevision=channel->productContextRevision();entry.active=true;
+    return queuePush(entry);
 }
 
 bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
@@ -9881,6 +9921,14 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                                                 iEntry.twoWayRawLen))
                     return false;
             }
+            else if (iEntry.twoWayMovementFp)
+            {
+                if (!build2WExecutePositionPayload(iEntry.param<=100?iEntry.param:0,0xFF,lTwoWayAcei,mTxFrame.data,mTxFrame.dataLen)) return false;
+                if (iEntry.param==0xD8) mTxFrame.data[2]=0xD8;
+                mTxFrame.data[4]=static_cast<uint8_t>(0x80U>>(iEntry.twoWayFpIndex-1));
+                mTxFrame.data[5]=static_cast<uint8_t>(iEntry.twoWayFpRaw>>8);
+                mTxFrame.data[6]=static_cast<uint8_t>(iEntry.twoWayFpRaw);
+            }
             else if (iEntry.twoWayFp)
             {
                 if (!build2WExecuteFpPayload(iEntry.twoWayFpIndex,
@@ -10393,6 +10441,9 @@ void IoHomeController::dispatchRxFrame()
                        ((reply.present&mCurrentCmd.mpFpReadSelected)==mCurrentCmd.mpFpReadSelected)) {
                         lCh->productRuntime().observeReply(lSrcNode,reply,mCurrentCmd.observationGeneration,millis(),
                             lVerifiedReplyMac?IoHomeProductRuntime::Trust::Authenticated:IoHomeProductRuntime::Trust::Correlated);
+                        lCh->onProfileParameterFeedback(0,reply.current);
+                        for(uint8_t index=1;index<=16;++index)
+                            if(reply.present&(uint16_t(1)<<(index-1))) lCh->onProfileParameterFeedback(index,reply.values[index-1]);
                     }
                     break; // standard product reads never enter legacy position publication
                 }

@@ -323,3 +323,12 @@ test("normal status read preserves explicit manual choices", function() {
     IOHC_refreshPairingInfo(d,online,{setText:function(){},setProgress:function(){}},{channelIndex:1});
     check(value(d,"DeviceType")===7 && value(d,"ProfileOverride")===448,"manual override overwritten");
 });
+
+test("profile objects use exact detection or a known manual override",function(){
+ var out={};IOHC_profileObjectsProfile({Override:0,Detected:"Profil 17/0"},out,{});check(out.Profile===1088,"exterior blind mapping missing");
+ IOHC_profileObjectsProfile({Override:129,Detected:"Profil 17/0"},out,{});check(out.Profile===129,"manual subtype lost");
+ IOHC_profileObjectsProfile({Override:0,Detected:"Profil 2/2"},out,{});check(out.Profile===130,"projection subtype lost");
+ IOHC_profileObjectsProfile({Override:0,Detected:"Profil 1/1"},out,{});check(out.Profile===0,"unknown subtype borrowed another profile");
+ IOHC_profileObjectsProfile({Override:65535,Detected:"Profil 17/0"},out,{});check(out.Profile===0,"unsupported manual profile exposed objects");
+ IOHC_profileObjectsProfile({Override:0,Detected:"1W: keine bestätigte Aktor-Erkennung"},out,{});check(out.Profile===0,"1W inferred an actuator profile");
+});

@@ -28,6 +28,12 @@ public:
   void loop() override;
 
   void processProductValueInputKo(uint8_t index,GroupObject &ko);
+  void processProfileInputKo(uint8_t index, GroupObject &ko);
+  void onProfileParameterFeedback(uint8_t index, uint16_t raw);
+  void updateProfileParameterValidity();
+  void requestProfileParameterStatus();
+  bool profileObjectsActive() const;
+  bool sendTwoWayMovement(uint8_t position);
   void processMovementModeInputKo(GroupObject &ko);
   uint8_t movementExecuteProfile() const;
   void processProductInputKo(uint8_t index,GroupObject &ko);
@@ -40,7 +46,7 @@ public:
   // Callbacks from controller when radio responses arrive
   void onPositionFeedback(float iPositionPercent);
   uint32_t productContextRevision() const {return mProductContextRevision;}
-  void invalidateProductContext() {mProductRuntime.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
+  void invalidateProductContext() {mProfileReceivedMask=0;mRequestedSpeedIndex=0;mProductRuntime.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
   IoHomeProductRuntime &productRuntime() {return mProductRuntime;}
   const IoHomeProductRuntime &productRuntime() const {return mProductRuntime;}
   void onTargetPositionFeedback(float iTargetPositionPercent);
@@ -191,6 +197,11 @@ private:
   uint16_t mConfigured2WKeyInitDelay = 300;
   TwoWayDiscoverySettings mConfigured2WDiscoverySettings{};
   bool mOneWayEnrolled = false;     // 1W enrollment burst was transmitted successfully
+  uint8_t mProfileReceivedMask = 0;
+  uint8_t mProfilePublishedMask = 0;
+  uint32_t mProfileReceivedAt[5] = {};
+  uint8_t mRequestedSpeedIndex = 0;
+  uint16_t mRequestedSpeedRaw = 0;
   uint8_t mMovementMode = 0;        // 0=normal, 1=slow/silent, 2=fast
   uint16_t mSequence1W = 0;         // 1W last used sequence counter
   uint16_t mReservedSequence1W = 0; // highest sequence persisted/reserved ahead in flash

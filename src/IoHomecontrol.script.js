@@ -1356,3 +1356,10 @@ function IOHC_readSelectedProduct(device,online,progress,context){
   progress.setText("Explizite Definition "+names[product]+", raw="+IOHC_hexBytes(r.slice(8,10))+", vorhanden="+r[5]+", frisch="+r[6]+", dekodierbar="+r[7]+", Vertrauen="+r[10]+", Alter="+IOHC_read32(r,14)+" ms"+(r[7]?", Wert="+(v/1000)+" "+["unbekannt","°C","numerisch (Einheit unqualifiziert)","packed","%","zone mask A=1 B=2 C=4","locked boolean"][r[11]]:"")+". Grenzen sind Benutzerkontext; keine automatische Produktbindung, Schreibfreigabe oder KNX-Publikation.");
  });
 }
+
+// The same exact-profile catalogue drives named objects and runtime routing.
+function IOHC_profileObjectsProfile(input, output, context) {
+    var manual=Number(input.Override), match=/^Profil (\d+)\/(\d+)$/.exec(String(input.Detected));
+    var code=manual || (match ? Number(match[1])*64+Number(match[2]) : 0);
+    output.Profile=Object.prototype.hasOwnProperty.call(IOHC_PRESENTATIONS,code) ? code : 0;
+}

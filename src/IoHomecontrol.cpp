@@ -2414,6 +2414,15 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
         return;
     }
 
+#ifdef PRF_KoBlockOffset
+    const int8_t profileChannel = PRF_KoCalcChannel(lAsap);
+    if (profileChannel >= 0 && profileChannel < mNumChannels) {
+        updateCommissioningJob();
+        if (!managementRequestsAllowed()) return;
+        mChannels[profileChannel]->processProfileInputKo((lAsap-PRF_KoBlockOffset)%PRF_KoBlockSize,iKo);
+        return;
+    }
+#endif
 #ifdef MVS_KoBlockOffset
     const int8_t movementChannel = MVS_KoCalcChannel(lAsap);
     if (movementChannel >= 0 && movementChannel < mNumChannels) {

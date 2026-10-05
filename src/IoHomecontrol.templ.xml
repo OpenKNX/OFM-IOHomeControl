@@ -16,6 +16,9 @@
             <op:param name="PRODUCT_CC" value="%CC%" />
           </op:part>
           <op:part name="IOHCMovement" href="IoHomeMovement.dynamic.part.xml" instances="1"><op:param name="PRODUCT_CC" value="%CC%"/></op:part>
+          <op:part name="IOHCProfileObjects" href="IoHomeProfileObjects.dynamic.part.xml" instances="1">
+            <op:param name="PRODUCT_CC" value="%CC%"/><op:param name="IOHC_TT" value="%TT%"/>
+          </op:part>
           <Static>
             <Parameters>
               <!-- Per-channel parameters -->
@@ -204,6 +207,7 @@
             </ParameterRefs>
 
             <ParameterCalculations>
+              <op:usePart name="IOHCProfileObjects" xpath="//ParameterCalculations/*"/>
               <!-- Prepend an inactive/suspend marker to the channel name shown in the tree when the
                    channel is suspended, using the shared BASE_MarkInactiveChannel helper (like the Logic module). -->
               <ParameterCalculation Id="%AID%_PC-%TT%%CC%0111" Language="JavaScript" Name="MarkInactive%CC%" RLTransformationFunc="BASE_MarkInactiveChannel" RLTransformationParameters="{&quot;InactiveValue&quot;:1}" LRTransformationFunc="BASE_Nop">
@@ -438,6 +442,9 @@
                           <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"><when test="1 2">
                             <op:usePart name="IOHCMovement" xpath="//Dynamic/*"/>
                           </when></choose>
+                        </when></choose>
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901"><when test="0">
+                          <op:usePart name="IOHCProfileObjects" xpath="//Dynamic/*"/>
                         </when></choose>
                         <op:usePart name="IOHCProducts" xpath="//Dynamic/*" />
                       </ParameterBlock>

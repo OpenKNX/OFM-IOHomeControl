@@ -166,6 +166,7 @@ struct IoHomeQueueEntry
   uint8_t productActivation[10];
   uint8_t productActivationLength;
   uint8_t productActivationFamily;
+  bool twoWayMovementFp;                       // MP movement with the selected speed FP
   bool twoWayFp;                               // profile-selected functional parameter
   bool managementRead;                        // key snapshot for correlated management reads
   uint8_t managementKey[16];
@@ -573,6 +574,7 @@ public:
   bool requestProductWhite(IoHomecontrolChannel *channel,uint16_t kelvin);
   bool requestMpFpContext(IoHomecontrolChannel *channel,uint8_t mode);
   bool requestMpFpRead(IoHomecontrolChannel *channel,uint8_t index);
+  bool requestProfileParameterRead(IoHomecontrolChannel *channel);
   bool requestMpFpMaskRead(IoHomecontrolChannel *channel,uint16_t selected);
   bool sendDiagnosticFpRead(IoHomecontrolChannel *iChannel, uint8_t iFpIndex);
   bool requestObjectRead(IoHomecontrolChannel *channel,uint8_t provider,uint16_t key,uint16_t offset,uint16_t span);
@@ -608,6 +610,7 @@ public:
                                              uint8_t iSelectorOrBlock);
   static bool decodeStatusUpdateOriginator(const IoHomeFrame &iFrame, uint8_t &oOriginator);
   bool sendTiltCommand(uint32_t iDestNodeId, const uint8_t *iEncKey, uint8_t iTiltPercent);
+  bool sendProfileMovementCommand(uint32_t node, const uint8_t *key, uint8_t position, uint8_t speedIndex, uint16_t raw);
   bool sendProfileParameterCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                    ParameterSemantic iSemantic, uint8_t iPercent);
 
