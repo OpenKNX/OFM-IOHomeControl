@@ -2871,7 +2871,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
     }
     case 0x3A: // Explicit codec diagnostic; supplied bounds are never learned identity
     {
-        if(length!=12||data[1]>=mNumChannels||!data[2]||data[2]>9||data[3]>16||data[4]>1)break;
+        if(length!=12||data[1]>=mNumChannels||!data[2]||data[2]>10||data[3]>16||data[4]>1)break;
         const uint32_t node=uint32_t(data[9])<<16|uint32_t(data[10])<<8|data[11];auto *ch=mChannels[data[1]];
         if(!node||ch->getNodeId()!=node||ch->is1W())break;
         IoHomeTemperatureContext context;context.hasBounds=data[4];context.minimumCentikelvin=uint16_t(data[5])<<8|data[6];context.maximumCentikelvin=uint16_t(data[7])<<8|data[8];

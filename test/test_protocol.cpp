@@ -19564,3 +19564,7 @@ TEST(protocol_atlantic_ventilation_enum_does_not_alias_heating_modes) {
  IoHomeAtlanticVentilation mode;ASSERT_TRUE(ioHomeDecodeAtlanticVentilation(0xFC01,mode));ASSERT_EQ(uint16_t(mode),0xFC01);ASSERT_TRUE(!ioHomeDecodeAtlanticVentilation(0xFC03,mode));
  uint8_t bytes[8]{};uint8_t length=0;ASSERT_TRUE(ioHomeBuildAtlanticVentilation(IoHomeAtlanticVentilation::Eco,bytes,sizeof(bytes),length));ASSERT_EQ(bytes[0],0xD4);ASSERT_EQ(bytes[4],0xFC);ASSERT_EQ(bytes[5],2);
 }
+TEST(protocol_pergola_uses_mp_orientation_and_fp1_speed) {
+ uint8_t bytes[8]{};uint8_t length=0;ASSERT_TRUE(ioHomeBuildPergola(25,50,bytes,sizeof(bytes),length));const uint8_t expected[]={0x32,0,0x80,0x64,0,0};ASSERT_EQ(length,6);ASSERT_TRUE(!std::memcmp(bytes,expected,6));
+ double percent=0;ASSERT_TRUE(ioHomeDecodePergola(0,0x3200,percent));ASSERT_TRUE(percent==25);ASSERT_TRUE(!ioHomeDecodePergola(2,0x3200,percent));ASSERT_TRUE(!ioHomeDecodePergola(0,0xD400,percent));ASSERT_TRUE(!ioHomeBuildPergola(-1,50,bytes,sizeof(bytes),length));
+}
