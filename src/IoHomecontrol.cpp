@@ -2869,6 +2869,13 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         resultData[0]=idle&&mController.requestMpFpRead(mChannels[data[1]],data[2])?0:1;
         resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultLength=4;return true;
     }
+    case 0x3B: // Optional receive activity edge evidence, never calibrated timing
+    {
+        if(length!=1)break;const auto &e=mController.radio().lastReceiveEvidence();
+        resultData[0]=0;resultData[1]=1;resultData[2]=(e.timestampValid?1:0)|(e.preambleTimestampValid?2:0)|(e.syncTimestampValid?4:0);resultData[3]=e.activityTimestampSource;
+        for(uint8_t i=0;i<4;i++){resultData[4+i]=e.frequencyHz>>(24-i*8);resultData[8+i]=e.readTimestampUs>>(24-i*8);resultData[12+i]=e.preambleTimestampUs>>(24-i*8);resultData[16+i]=e.syncTimestampUs>>(24-i*8);}
+        resultData[20]=0;resultData[21]=e.admissible();resultLength=22;return true;
+    }
     case 0x3A: // Explicit codec diagnostic; supplied bounds are never learned identity
     {
         if(length!=12||data[1]>=mNumChannels||!data[2]||data[2]>14||data[3]>16||data[4]>1)break;

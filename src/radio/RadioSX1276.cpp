@@ -33,6 +33,8 @@ static constexpr uint8_t kMaxSx1276PayloadLen = IOHC_FRAME_BUFFER_SIZE + IOHC_CR
 // DIO0 remains mapped to PacketSent in TX and PayloadReady in RX.
 // DIO4 is mapped to PreambleDetect via RegDioMapping2/MapPreambleDetect,
 // matching the working SX1276 reference instead of the earlier minimal DIO0-only map.
+// Optional DIO2=11 SyncAddress: Semtech Rev5 Table30 (page69).
+// https://cdn.sparkfun.com/assets/a/a/0/b/5/DS_SX1276-7-8-9_W_APP_V5.pdf
 static constexpr uint8_t kDioMapping1IohcReference = 0x39;
 static constexpr uint8_t kDioMapping2IohcReference = 0xF1;
 
@@ -73,8 +75,14 @@ void IRAM_ATTR RadioSX1276::dio0Isr(void *arg)
 }
 #endif
 
-void RadioSX1276::init(uint8_t iCsPin, uint8_t iResetPin, uint8_t iDio0Pin, uint8_t iDio4Pin)
+#ifdef ESP32
+void IRAM_ATTR RadioSX1276::preambleIsr(void *arg){auto *self=static_cast<RadioSX1276*>(arg);if(self->mState==RadioState::Receiving&&!self->mPreambleEdgeValid){self->mPreambleEdgeUs=micros();self->mPreambleEdgeValid=true;}}
+void IRAM_ATTR RadioSX1276::syncIsr(void *arg){auto *self=static_cast<RadioSX1276*>(arg);if(self->mState==RadioState::Receiving&&!self->mSyncEdgeValid){self->mSyncEdgeUs=micros();self->mSyncEdgeValid=true;}}
+#endif
+
+void RadioSX1276::init(uint8_t iCsPin, uint8_t iResetPin, uint8_t iDio0Pin, uint8_t iDio4Pin,uint8_t iDio2Pin,bool captureEdges)
 {
+    mDio2Pin=iDio2Pin;mCaptureEdges=captureEdges;
     mCsPin = iCsPin;
     mResetPin = iResetPin;
     mDio0Pin = iDio0Pin;
@@ -96,6 +104,10 @@ void RadioSX1276::init(uint8_t iCsPin, uint8_t iResetPin, uint8_t iDio0Pin, uint
     attachInterruptArg(digitalPinToInterrupt(mDio0Pin), dio0Isr, this, RISING);
 #endif
 
+#ifdef ESP32
+    if(mCaptureEdges&&mDio4Pin!=PIN_NOT_CONNECTED)attachInterruptArg(digitalPinToInterrupt(mDio4Pin),preambleIsr,this,RISING);
+    if(mCaptureEdges&&mDio2Pin!=PIN_NOT_CONNECTED){pinMode(mDio2Pin,INPUT);attachInterruptArg(digitalPinToInterrupt(mDio2Pin),syncIsr,this,RISING);}
+#endif
     // Hardware reset
     resetChip();
 
@@ -234,7 +246,7 @@ RadioError RadioSX1276::configure()
     // DIO0 still provides PacketSent in TX and PayloadReady in RX.
     // DIO4, when wired, provides PreambleDetect. We program the full reference
     // mapping even if DIO4 is not connected so register dumps match captures.
-    writeRegister(REG_DIOMAPPING1, kDioMapping1IohcReference);
+    writeRegister(REG_DIOMAPPING1,mCaptureEdges&&mDio2Pin!=PIN_NOT_CONNECTED?0x3D:kDioMapping1IohcReference);
     writeRegister(REG_DIOMAPPING2, kDioMapping2IohcReference);
 
     // Set default frequency (CH2 = 868.95 MHz, the shared 1W/2W channel)
@@ -408,6 +420,7 @@ RadioError RadioSX1276::startReceive()
     // Restore the variable-length RX ceiling after TX-specific payload lengths.
     writeRegister(REG_PAYLOADLENGTH, 0xFF);
 
+    mPreambleEdgeValid=false;mSyncEdgeValid=false;
     mDio0Fired = false; // clear stale interrupt before RX
     setMode(RF_OPMODE_RX);
     mState = RadioState::Receiving;
@@ -523,6 +536,9 @@ uint8_t RadioSX1276::readPacket(uint8_t *oBuffer, uint8_t iMaxLen)
     e.readTimestampUs = micros();
     e.timestampValid = true;
 #endif
+    e.preambleTimestampValid=mCaptureEdges&&mPreambleEdgeValid;e.syncTimestampValid=mCaptureEdges&&mSyncEdgeValid;
+    e.preambleTimestampUs=e.preambleTimestampValid?mPreambleEdgeUs:0;e.syncTimestampUs=e.syncTimestampValid?mSyncEdgeUs:0;
+    e.activityTimestampSource=(e.preambleTimestampValid||e.syncTimestampValid)?1:0;
     e.frequencyHz = mCurrentFreq;
     e.irq = lIrqStatus;
     e.hardwareCrcChecked = (readRegister(REG_PACKETCONFIG1) & 0x10) != 0 &&
@@ -738,7 +754,7 @@ void RadioSX1276::configureStandardMode()
     writeRegister(REG_SYNCVALUE3, IOHC_SYNC_WORD[2]);
 
     // Restore reference-compatible DIO mapping after any diagnostic/EMS2 mode.
-    writeRegister(REG_DIOMAPPING1, kDioMapping1IohcReference);
+    writeRegister(REG_DIOMAPPING1,mCaptureEdges&&mDio2Pin!=PIN_NOT_CONNECTED?0x3D:kDioMapping1IohcReference);
     writeRegister(REG_DIOMAPPING2, kDioMapping2IohcReference);
 
     // Restore the standard io-homecontrol channel that was active before EMS2.

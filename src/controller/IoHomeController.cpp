@@ -1503,7 +1503,14 @@ void IoHomeController::init()
     logInfoP("SX1276 GPIOs: SCK=%d MISO=%d MOSI=%d NSS=%d RST=%d DIO0=%d DIO4=%d",
              IOHC_SPI_SCK, IOHC_SPI_MISO, IOHC_SPI_MOSI,
              IOHC_SPI_CS, IOHC_RADIO_RST, IOHC_RADIO_DIO0, IOHC_RADIO_DIO4);
+#if defined(IOHC_RX_EDGE_TIMESTAMPS) && IOHC_RX_EDGE_TIMESTAMPS
+#ifndef IOHC_RADIO_DIO2
+#define IOHC_RADIO_DIO2 Radio::PIN_NOT_CONNECTED
+#endif
+    mRadio.init(IOHC_SPI_CS,IOHC_RADIO_RST,IOHC_RADIO_DIO0,IOHC_RADIO_DIO4,IOHC_RADIO_DIO2,true);
+#else
     mRadio.init(IOHC_SPI_CS, IOHC_RADIO_RST, IOHC_RADIO_DIO0, IOHC_RADIO_DIO4);
+#endif
 #endif
     mState = ControllerState::Idle;
     mWaitingFinalResponse = false;

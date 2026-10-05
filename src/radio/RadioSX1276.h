@@ -34,6 +34,7 @@ public:
 
   RadioSX1276();
 #ifdef TEST_NATIVE
+  void nativeReceiveEdge(bool sync,uint32_t time){if(!mCaptureEdges||mState!=RadioState::Receiving)return;if(sync){mSyncEdgeUs=time;mSyncEdgeValid=true;}else{mPreambleEdgeUs=time;mPreambleEdgeValid=true;}}
   using ReadRegister = uint8_t (*)(void *,uint8_t);
   using WriteRegister = void (*)(void *,uint8_t,uint8_t);
   void setNativeTransport(void *context,ReadRegister read,WriteRegister write){mNativeContext=context;mNativeRead=read;mNativeWrite=write;}
@@ -42,7 +43,7 @@ public:
   // Logging prefix required by log*P macros used in this class
   std::string logPrefix();
 
-  void init(uint8_t iCsPin, uint8_t iResetPin, uint8_t iDio0Pin, uint8_t iDio4Pin = PIN_NOT_CONNECTED);
+  void init(uint8_t iCsPin, uint8_t iResetPin, uint8_t iDio0Pin, uint8_t iDio4Pin = PIN_NOT_CONNECTED,uint8_t iDio2Pin=PIN_NOT_CONNECTED,bool captureEdges=false);
   RadioError configure();
   RadioError setFrequency(uint32_t iFreqHz);
   RadioError setReceiveBandwidths(uint32_t rxHz, uint32_t afcHz);
@@ -102,12 +103,16 @@ private:
 #endif
   uint32_t mHealthCheckedMs=0;uint8_t mRecoveryAttempts=0;
   uint32_t mRequestedRxHz=41667,mRequestedAfcHz=41667;uint8_t mRequestedPower=14;
+  uint8_t mDio2Pin=PIN_NOT_CONNECTED;bool mCaptureEdges=false;
+  volatile uint32_t mPreambleEdgeUs=0,mSyncEdgeUs=0;volatile bool mPreambleEdgeValid=false,mSyncEdgeValid=false;
+  static void IRAM_ATTR preambleIsr(void *arg);
+  static void IRAM_ATTR syncIsr(void *arg);
   uint8_t mCsPin;
   uint8_t mResetPin;
   uint8_t mDio0Pin;
   uint8_t mDio4Pin;
   bool mInitialized;
-  RadioState mState;
+  volatile RadioState mState;
   int16_t mLastRssi;
   RadioReceiveEvidence mLastReceiveEvidence;
   uint32_t mCurrentFreq;

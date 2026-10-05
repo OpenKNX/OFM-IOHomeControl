@@ -26,6 +26,9 @@ enum class RadioError : int8_t
 // protocol authentication or proof that a peer accepted a command.
 struct RadioReceiveEvidence {
   uint32_t readTimestampUs = 0, frequencyHz = 0;
+  uint32_t preambleTimestampUs=0,syncTimestampUs=0;
+  bool preambleTimestampValid=false,syncTimestampValid=false;
+  uint8_t activityTimestampSource=0; // 0 absent, 1 MCU rising-edge ISR; latency unqualified
   int16_t rssiDbm = 0, afcRaw = 0, feiRaw = 0;
   uint16_t irq = 0;
   uint8_t length = 0;
