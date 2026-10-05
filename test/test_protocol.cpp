@@ -11351,6 +11351,41 @@ static void buildDirectedDiscoveryResponse(IoHomeFrame &oFrame,
     oFrame.hasHmac = false;
 }
 
+TEST(controller_object_read_authenticates_opening_and_closes_countdown) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ASSERT_TRUE(!c.requestObjectRead(&ch,0,0xA607,0,19));
+    ASSERT_TRUE(c.requestObjectRead(&ch,0,0x8100,0,19));const auto token=c.objectReadToken();
+    ASSERT_TRUE(!c.requestPriority(&ch,1));ASSERT_TRUE(!c.startPairing(0,0x654321));
+    c.loop();c.loop();c.loop();IoHomeFrame tx;ASSERT_TRUE(lastTransmittedFrameForTest(c,tx));ASSERT_EQ(tx.commandId,IoHomeCommand::Unknown46Request);
+    ASSERT_EQ(tx.dataLen,9);ASSERT_EQ(tx.data[3],0x81);ASSERT_EQ(tx.data[8],19);
+    IoHomeFrame reply;reply.init();reply.setSrcNode(0x654321);reply.setDestNode(0x123456);reply.commandId=IoHomeCommand::Unknown46Response;
+    reply.dataLen=4;reply.data[0]=1;reply.data[3]=19;ASSERT_TRUE(queueControllerResponse(c,reply));
+    ASSERT_EQ(c.objectRead().stage(),IoHomeObjectTransfer::Stage::Opening);
+    reply.commandId=IoHomeCommand::ChallengeRequest;reply.dataLen=6;for(int i=0;i<6;i++)reply.data[i]=i+1;
+    ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_TRUE(lastTransmittedFrameForTest(c,tx));ASSERT_EQ(tx.commandId,IoHomeCommand::ChallengeResponse);
+    reply.commandId=IoHomeCommand::Unknown46Response;reply.dataLen=4;reply.data[0]=1;reply.data[1]=0;reply.data[2]=0;reply.data[3]=19;
+    ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_EQ(c.objectRead().stage(),IoHomeObjectTransfer::Stage::Ready);
+    for(uint8_t sequence=1;sequence<=3;sequence++) {
+        c.loop();c.loop();c.loop();ASSERT_TRUE(lastTransmittedFrameForTest(c,tx));ASSERT_EQ(tx.commandId,IoHomeCommand::Unknown4ARequest);
+        ASSERT_EQ(tx.dataLen,3);ASSERT_EQ(tx.data[0],sequence);ASSERT_EQ(tx.data[2],3-sequence);
+        reply.commandId=IoHomeCommand::Unknown4AResponse;reply.data[0]=sequence;reply.data[1]=0;reply.data[2]=3-sequence;
+        reply.dataLen=sequence==1?21:sequence==2?4:3;for(int i=3;i<reply.dataLen;i++)reply.data[i]=i;
+        ASSERT_TRUE(queueControllerResponse(c,reply));
+    }
+    ASSERT_EQ(c.objectRead().stage(),IoHomeObjectTransfer::Stage::Done);ASSERT_EQ(c.objectRead().transferred(),19);ASSERT_EQ(c.objectRead().data()[18],3);
+    ASSERT_EQ(c.objectReadToken(),token);ASSERT_TRUE(c.objectReadIdentityValid());
+    const uint8_t replacement[16]={2};ch.setEncryptionKey(replacement);ASSERT_TRUE(!c.objectReadIdentityValid());
+}
+TEST(controller_object_read_cancel_and_key_change_stop_pending_tx) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1},replacement[16]={2};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ASSERT_TRUE(c.requestObjectRead(&ch,0,1,0,10));ASSERT_TRUE(!c.cancelObjectRead(c.objectReadToken()+1));
+    ASSERT_TRUE(c.cancelObjectRead(c.objectReadToken()));c.loop();c.loop();ASSERT_TRUE(c.radio().testLastTransmittedPacket().empty());
+    ASSERT_TRUE(c.requestObjectRead(&ch,0,1,0,10));ch.setEncryptionKey(replacement);c.loop();c.loop();
+    ASSERT_EQ(c.objectRead().stage(),IoHomeObjectTransfer::Stage::IdentityChanged);ASSERT_TRUE(c.radio().testLastTransmittedPacket().empty());
+}
+
 TEST(controller_sensor_information_read_is_ff_and_identity_bound) {
     IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1},replacement[16]={2};
     initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);

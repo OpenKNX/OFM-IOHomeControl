@@ -2384,6 +2384,55 @@ bool IoHomeController::sendTiltStatusQuery(uint32_t iDestNodeId, const uint8_t *
     return sendCommand(iDestNodeId, iEncKey, IoHomeCommand::Private, 0x03, 0x20, 0x01);
 }
 
+bool IoHomeController::objectReadIdentityValid() const
+{
+    return sampleIdentityMatches(mObjectReadChannel,mObjectReadPeer,mObjectReadKey);
+}
+bool IoHomeController::enqueueObjectReadPart(bool opening)
+{
+    IoHomeQueueEntry entry{};entry.destNodeId=mObjectReadPeer;entry.encKey=mObjectReadKey;
+    entry.managementRead=true;std::memcpy(entry.managementKey,mObjectReadKey,16);
+    entry.objectReadToken=mObjectReadToken;entry.sourceChannelIndex=mObjectReadChannel;
+    entry.command=opening?IoHomeCommand::Unknown46Request:IoHomeCommand::Unknown4ARequest;
+    entry.objectReadLength=opening?9:mObjectRead.pendingSize();
+    std::memcpy(entry.objectReadData,opening?mObjectRead.openingData():mObjectRead.pendingData(),entry.objectReadLength);
+    entry.maxAttempts=1;entry.active=true;return queuePush(entry);
+}
+bool IoHomeController::requestObjectRead(IoHomecontrolChannel *channel,uint8_t provider,uint16_t key,uint16_t offset,uint16_t span)
+{
+    if(!channel||!channel->isPaired()||channel->is1W()||mState!=ControllerState::Idle||!queueEmpty()||
+        mPassiveMode||mKeyExtractArmed||mNetworkScanActive||mObjectRead.active()||mObjectReadToken==0xFFFFFFFF||!span)return false;
+    // Metadata/database views only. Key/counter objects and arbitrary providers
+    // are not exposed through the raw diagnostic readback API.
+    const bool allowed=(provider==0&&(key<=3||key==0x030A||key==0x8100||key==0x8103||key==0x4300||key==0x4302))||(provider==0x0B&&key==0xC000);
+    if(!allowed)return false;
+    const uint8_t index=channelIndexFor(channel);if(index>=16)return false;
+    if(!mObjectRead.begin(IoHomeObjectTransfer::Direction::Read,channel->getNodeId(),mObjectReadToken+1,provider,key,offset,span,millis(),30000))return false;
+    ++mObjectReadToken;mObjectReadPeer=channel->getNodeId();mObjectReadChannel=index;std::memcpy(mObjectReadKey,channel->getEncryptionKey(),16);
+    if(!enqueueObjectReadPart(true)){mObjectRead.fail();return false;}return true;
+}
+bool IoHomeController::cancelObjectRead(uint32_t token){return mObjectRead.cancel(token);}
+void IoHomeController::serviceObjectRead()
+{
+    if(mObjectRead.active()) {
+        if(!objectReadIdentityValid())mObjectRead.fail(true);
+        mObjectRead.tick(millis());
+    }
+    if(!mObjectRead.active()) {
+        if(!mObjectReadToken)return;
+        // A local cancel/deadline cannot retract bytes already on air.
+        if(mCurrentCmd.active&&mCurrentCmd.objectReadToken==mObjectReadToken) {
+            if(mRadio.state()==RadioState::Transmitting&&!mRadio.isTxDone())return;
+            mCurrentCmd.active=false;mState=ControllerState::Idle;
+        }
+        if(!queueEmpty()&&mCmdQueue[mQueueTail].objectReadToken==mObjectReadToken)mQueueTail=mQueueHead;
+        return;
+    }
+    if(mObjectRead.stage()==IoHomeObjectTransfer::Stage::Ready&&mState==ControllerState::Idle&&queueEmpty()) {
+        if(!mObjectRead.nextRead()||!enqueueObjectReadPart(false))mObjectRead.fail();
+    }
+}
+
 bool IoHomeController::requestPriority(IoHomecontrolChannel *channel,uint8_t priority)
 {
     if(!channel||!channel->isPaired()||channel->is1W()||priority>7)return false;
@@ -2575,6 +2624,7 @@ bool IoHomeController::sendProfileParameterCommand(uint32_t iDestNodeId,
 
 bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
 {
+    if(mObjectRead.active()&&iEntry.objectReadToken!=mObjectReadToken)return false;
     uint8_t lNext = (mQueueHead + 1) % IOHC_CMD_QUEUE_SIZE;
     if (lNext == mQueueTail)
         return false; // queue full
@@ -3109,7 +3159,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mLastPairStartBlockedState = mState;
     mPairing2WMode = Pairing2WMode::Normal;
 
-    if (mKeyExtractArmed)
+    if (mKeyExtractArmed||mObjectRead.active())
     {
         mLastPairStartStatus = PairStartStatus::Busy;
         mPairingTelemetry = {PairingOutcome::StartRejected, PairingOutcome::StartRejected,
@@ -3761,6 +3811,8 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
         // authenticated by the actuator.
         iResult = IoHomeCommandExchangeResult::AuthenticatedUnconfirmed;
     }
+    if(iEntry.objectReadToken==mObjectReadToken&&iEntry.objectReadToken&&iResult!=IoHomeCommandExchangeResult::Completed)
+        mObjectRead.fail();
     IoHomecontrolChannel *lChannel = channelForQueueEntry(iEntry);
     if (lChannel)
         lChannel->onCommandExchangeResult(iEntry.command, iEntry.param, iResult);
@@ -3769,6 +3821,7 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
 void IoHomeController::recordExchangeFailure(const IoHomeQueueEntry &iEntry,
                                              bool iAuthenticatedUnconfirmed)
 {
+    if(iEntry.objectReadToken==mObjectReadToken&&iEntry.objectReadToken)mObjectRead.fail();
     const bool lAuthenticatedUnconfirmed = iAuthenticatedUnconfirmed || iEntry.hadAuthenticatedAccept;
     IoHomecontrolChannel *lChannel = channelForQueueEntry(iEntry);
     if (lChannel)
@@ -3829,6 +3882,7 @@ void IoHomeController::recordExchangeFailure(const IoHomeQueueEntry &iEntry,
 
 void IoHomeController::startDiscovery(bool iEncrypted)
 {
+    if(mObjectRead.active())return;
     if (mKeyExtractArmed)
         return;
 
@@ -3879,6 +3933,7 @@ void IoHomeController::startDiscovery(bool iEncrypted)
 
 void IoHomeController::startCommandScan(uint32_t iNodeId)
 {
+    if(mObjectRead.active())return;
     if (mKeyExtractArmed)
         return;
 
@@ -3896,6 +3951,7 @@ void IoHomeController::startCommandScan(uint32_t iNodeId)
 
 void IoHomeController::setPassiveMode(bool iEnabled)
 {
+    if(mObjectRead.active())return;
     mPassiveMode = iEnabled;
     if (iEnabled)
     {
@@ -3920,6 +3976,7 @@ bool IoHomeController::isPassiveMode() const
 
 bool IoHomeController::startPassiveKeySniff(uint32_t iTimeoutMs)
 {
+    if(mObjectRead.active())return false;
     if (mState != ControllerState::Idle && mState != ControllerState::PassiveListening)
         return false;
 
@@ -3972,6 +4029,7 @@ const IoHomeController::PassiveKeyResult &IoHomeController::passiveKeyResult() c
 
 bool IoHomeController::startKeyExtraction(uint32_t iTimeoutMs)
 {
+    if(mObjectRead.active())return false;
     if (mState != ControllerState::Idle)
         return false;
 
@@ -4117,6 +4175,7 @@ uint16_t IoHomeController::keyExtractResponsePreamble() const
 
 bool IoHomeController::startOneWayKeyReceive(uint8_t iChannelIndex, uint32_t iTimeoutMs)
 {
+    if(mObjectRead.active())return false;
     if (mState != ControllerState::Idle && mState != ControllerState::PassiveListening)
         return false;
 
@@ -4258,6 +4317,7 @@ void IoHomeController::handleOneWayKeyReceiveFrame()
 
 void IoHomeController::setGatewayMode(bool iEnabled)
 {
+    if(mObjectRead.active())return;
     mGatewayMode = iEnabled;
     resetGatewaySessionState();
 
@@ -4463,6 +4523,7 @@ void IoHomeController::logCommandScanResults() const
 
 void IoHomeController::startNetworkScan()
 {
+    if(mObjectRead.active())return;
     if (mKeyExtractArmed)
         return;
 
@@ -5703,6 +5764,7 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
 
 void IoHomeController::loop()
 {
+    serviceObjectRead();
     if (!mRadio.isInitialized())
         return;
 
@@ -6969,7 +7031,7 @@ void IoHomeController::processResponse()
 
     // These recovered read services cannot complete on an unrelated opcode
     // or the legacy descriptor's too-short Priority ACK.
-    if(mCurrentCmd.managementRead) {
+    if(mCurrentCmd.managementRead&&!mCurrentCmd.objectReadToken) {
         if(!managementIdentityMatches(mCurrentCmd)) {
             const auto failed=mCurrentCmd;
             mCurrentCmd.active=false;mState=ControllerState::Idle;
@@ -6983,6 +7045,21 @@ void IoHomeController::processResponse()
         if(mRxFrame.commandId==IoHomeCommand::SensorStatusResponse) {
             IoHomeSensorStatus decoded;if(!ioHomeDecodeSensorStatus(mRxFrame.data,mRxFrame.dataLen,decoded)){mState=ControllerState::WaitResponse;return;}
         }
+    }
+    if(mCurrentCmd.objectReadToken) {
+        if(mCurrentCmd.objectReadToken!=mObjectReadToken||!mObjectRead.active()||!managementIdentityMatches(mCurrentCmd)) {
+            mObjectRead.fail(true);mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+        }
+        bool accepted=false;
+        if(mRxFrame.commandId==IoHomeCommand::ChallengeRequest) {
+            if(mCurrentCmd.command!=IoHomeCommand::Unknown46Request||mRxFrame.dataLen<6){mState=ControllerState::WaitResponse;return;}
+            accepted=true;
+        } else if(mRxFrame.commandId==IoHomeCommand::ErrorResponse) accepted=mObjectRead.peerError(mCurrentCmd.destNodeId,mObjectReadToken,mRxFrame.data,mRxFrame.dataLen);
+        else if(mCurrentCmd.command==IoHomeCommand::Unknown46Request&&mRxFrame.commandId==IoHomeCommand::Unknown46Response&&mSawChallenge&&mAuthResponseSent)
+            accepted=mObjectRead.acceptOpening(mCurrentCmd.destNodeId,mObjectReadToken,0x47,mRxFrame.data,mRxFrame.dataLen);
+        else if(mCurrentCmd.command==IoHomeCommand::Unknown4ARequest&&mRxFrame.commandId==IoHomeCommand::Unknown4AResponse)
+            accepted=mObjectRead.acceptReadChunk(mCurrentCmd.destNodeId,mObjectReadToken,mRxFrame.data,mRxFrame.dataLen);
+        if(!accepted){mState=ControllerState::WaitResponse;return;}
     }
     recordResponseTiming(mRxFrame.commandId != IoHomeCommand::ChallengeRequest);
 
@@ -9790,6 +9867,11 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         break;
     }
 
+    case IoHomeCommand::Unknown46Request:
+    case IoHomeCommand::Unknown4ARequest:
+        if(!iEntry.objectReadToken||iEntry.objectReadToken!=mObjectReadToken||!mObjectRead.active()||
+            iEntry.objectReadLength!=(iEntry.command==IoHomeCommand::Unknown46Request?9:3))return false;
+        std::memcpy(mTxFrame.data,iEntry.objectReadData,iEntry.objectReadLength);mTxFrame.dataLen=iEntry.objectReadLength;mTxFrame.hasHmac=false;break;
     case IoHomeCommand::PriorityLevelRequest:
         if(iEntry.param>7)return false;
         mTxFrame.data[0]=iEntry.param;mTxFrame.dataLen=1;mTxFrame.hasHmac=false;break;

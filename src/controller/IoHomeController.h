@@ -1,4 +1,5 @@
 #include "../protocol/IoHomeManagementCodecs.h"
+#include "../protocol/IoHomeObjectTransfer.h"
 #include "../protocol/IoHomeDurableReservation.h"
 #pragma once
 #include "../radio/Radio.h"
@@ -129,6 +130,9 @@ struct IoHomeQueueEntry
 {
   uint32_t destNodeId;
   uint32_t observationGeneration;
+  uint32_t objectReadToken;
+  uint8_t objectReadData[9];
+  uint8_t objectReadLength;
   const uint8_t *encKey; // pointer to channel's key (valid as long as channel exists)
   IoHomeCommand command;
   uint8_t param;
@@ -557,6 +561,13 @@ public:
   bool sendBatteryStateQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
   bool sendTiltStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
   bool sendDiagnosticFpRead(IoHomecontrolChannel *iChannel, uint8_t iFpIndex);
+  bool requestObjectRead(IoHomecontrolChannel *channel,uint8_t provider,uint16_t key,uint16_t offset,uint16_t span);
+  bool cancelObjectRead(uint32_t token);
+  const IoHomeObjectTransfer &objectRead() const {return mObjectRead;}
+  uint32_t objectReadToken() const {return mObjectReadToken;}
+  uint32_t objectReadPeer() const {return mObjectReadPeer;}
+  uint8_t objectReadChannel() const {return mObjectReadChannel;}
+  bool objectReadIdentityValid() const;
   bool requestPriority(IoHomecontrolChannel *channel,uint8_t priority);
   bool requestSensorStatus(IoHomecontrolChannel *channel);
   bool requestSensorInformation(IoHomecontrolChannel *channel);
@@ -1039,6 +1050,11 @@ private:
   ControllerState mState;
   uint32_t mStateTimer;
   uint32_t mNextObservationGeneration=0;
+  IoHomeObjectTransfer mObjectRead;
+  uint32_t mObjectReadToken=0,mObjectReadPeer=0;
+  uint8_t mObjectReadChannel=0xFF,mObjectReadKey[16]{};
+  void serviceObjectRead();
+  bool enqueueObjectReadPart(bool opening);
   PrioritySample mPrioritySamples[16][8]{};
   SensorInformationSample mSensorInformationSamples[16]{};
   SensorSample mSensorSamples[16]{};

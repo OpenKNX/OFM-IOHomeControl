@@ -2690,6 +2690,31 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         }
         break;
     }
+    case 0x2C: // Read-only object transport summary
+    {
+        if(length!=1)break;
+        const auto &read=mController.objectRead();const auto token=mController.objectReadToken();
+        resultData[0]=0;resultData[1]=1;resultData[2]=static_cast<uint8_t>(read.stage());resultData[3]=mController.objectReadChannel();
+        for(uint8_t i=0;i<4;i++)resultData[4+i]=token>>(24-8*i);
+        for(uint8_t i=0;i<3;i++)resultData[8+i]=mController.objectReadPeer()>>(16-8*i);
+        resultData[11]=read.disposition();resultData[12]=read.negotiated()>>8;resultData[13]=read.negotiated();
+        resultData[14]=read.transferred()>>8;resultData[15]=read.transferred();resultData[16]=mController.objectReadIdentityValid();
+        resultData[17]=read.stage()==IoHomeObjectTransfer::Stage::Done&&resultData[16]?2:0; // raw correlated bytes, no semantic/authentication claim
+        for(uint8_t i=0;i<4;i++)resultData[18+i]=mCommissioningBootId>>(24-8*i);
+        resultLength=22;return true;
+    }
+    case 0x2D: // Completed metadata read slice; token BE32, offset BE16, count 1..16
+    {
+        if(length!=12||!data[11]||data[11]>16)break;
+        const uint32_t boot=uint32_t(data[1])<<24|uint32_t(data[2])<<16|uint32_t(data[3])<<8|data[4];
+        const uint32_t token=uint32_t(data[5])<<24|uint32_t(data[6])<<16|uint32_t(data[7])<<8|data[8];
+        const uint16_t offset=uint16_t(data[9])<<8|data[10];const auto &read=mController.objectRead();
+        if(boot!=mCommissioningBootId||!token||token!=mController.objectReadToken()||read.stage()!=IoHomeObjectTransfer::Stage::Done||!mController.objectReadIdentityValid()||offset>read.transferred())
+        {resultData[0]=4;resultLength=1;return true;}
+        const uint8_t count=read.transferred()-offset<data[11]?read.transferred()-offset:data[11];
+        resultData[0]=0;resultData[1]=1;std::memcpy(resultData+2,data+5,6);resultData[8]=count;resultData[9]=2;
+        std::memcpy(resultData+10,read.data()+offset,count);resultLength=10+count;return true;
+    }
     case 0x2B: // Read-only sensor-information observation; raw response, never subscription request
     {
         if(length!=2||data[1]>=mNumChannels)break;
@@ -3757,6 +3782,9 @@ void IoHomecontrol::showHelp()
 
     openknx.console.printHelpLine("iohc help", "Show io-homecontrol commands");
     openknx.console.printHelpLine("iohc priority read NODE LEVEL", "Read priority 0..7; bounded expiry refresh; no lock write");
+    openknx.console.printHelpLine("iohc object read NODE PROVIDER KEY OFFSET SPAN", "Read allowlisted metadata; hex IDs, decimal offset/span; 30 s host budget");
+    openknx.console.printHelpLine("iohc object status", "Raw transfer stage/token; no publication claim");
+    openknx.console.printHelpLine("iohc object cancel TOKEN", "Cancel matching object read token");
     openknx.console.printHelpLine("iohc sensor info NODE", "Read paired sensor information with 8B FF; no subscription write");
     openknx.console.printHelpLine("iohc sensor read NODE", "Read paired sensor status; preserve unknown physical units");
     openknx.console.printHelpLine("iohc 2wrecovery status", "Checked network identity/bindings persistence status; failure blocks 2W TX");
@@ -4246,6 +4274,23 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         return true;
     }
 
+    if(lSub.rfind("object read ",0)==0) {
+        unsigned node=0,provider=0,key=0,offset=0,span=0;char extra=0;
+        if(sscanf(lSub.c_str(),"object read %x %x %x %u %u %c",&node,&provider,&key,&offset,&span,&extra)!=5||!node||node>0xFFFFFF||provider>255||key>65535||offset>65535||!span||span>1024) {
+            logInfoP("Usage: iohc object read NODE PROVIDER KEY OFFSET SPAN; first three hex, offset/span decimal");return true;
+        }
+        updateCommissioningJob();if(mCommissioningJob.active()){logInfoP("Finish/cancel commissioning before object read");return true;}
+        IoHomecontrolChannel *channel=nullptr;for(uint8_t c=0;c<mNumChannels;c++)if(mChannels[c]&&mChannels[c]->getNodeId()==node)channel=mChannels[c];
+        const bool queued=mController.requestObjectRead(channel,provider,key,offset,span);
+        logInfoP("Metadata object read queued=%u token=%lu; raw bytes only, no object write",queued,static_cast<unsigned long>(mController.objectReadToken()));return true;
+    }
+    if(lSub=="object status") {
+        const auto &read=mController.objectRead();logInfoP("Object read token=%lu stage=%u disposition=%u negotiated=%u transferred=%u identityValid=%u; readback API 2C/2D, correlated only",static_cast<unsigned long>(mController.objectReadToken()),unsigned(read.stage()),read.disposition(),read.negotiated(),read.transferred(),mController.objectReadIdentityValid());return true;
+    }
+    if(lSub.rfind("object cancel ",0)==0) {
+        unsigned token=0;char extra=0;if(sscanf(lSub.c_str(),"object cancel %u %c",&token,&extra)!=1||!token){logInfoP("Usage: iohc object cancel TOKEN (decimal)");return true;}
+        logInfoP("Object read cancelled=%u; bytes already on air cannot be retracted",mController.cancelObjectRead(token));return true;
+    }
     if(lSub.rfind("sensor info ",0)==0) {
         unsigned node=0;char extra=0;
         if(sscanf(lSub.c_str(),"sensor info %x %c",&node,&extra)!=1||!node||node>0xFFFFFF){logInfoP("Usage: iohc sensor info NODE");return true;}
