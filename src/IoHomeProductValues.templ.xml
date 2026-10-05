@@ -3,9 +3,9 @@
 <ManufacturerData><Manufacturer RefId="M-00FA"><ApplicationPrograms>
 <ApplicationProgram Id="%AID%" ProgramType="ApplicationProgram" MaskVersion="MV-07B0" Name="IOHCProductValues" LoadProcedureStyle="MergedProcedure" PeiType="0" DefaultLanguage="de" DynamicTableManagement="false" Linkable="true" MinEtsVersion="4.0" ApplicationNumber="0" ApplicationVersion="0">
 <Static><Parameters>
-<Union SizeInBit="16"><Memory CodeSegment="%MID%" Offset="0" />
-<Parameter Id="%AID%_UP-%TT%%CC%001" Name="c%C%ProductDefinition" ParameterType="%AID%_PT-IOHCProductSelection" Offset="0" Text="Explizite Produktdefinition" Value="0" />
-<Parameter Id="%AID%_UP-%TT%%CC%002" Name="c%C%ValueIndex" ParameterType="%AID%_PT-IOHCSemanticIndex" Offset="1" Text="MP=0 / FP=1..16" Value="0" />
+<Union SizeInBit="16"><Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
+<Parameter Id="%AID%_UP-%TT%%CC%001" Name="c%C%ProductDefinition" ParameterType="%AID%_PT-IOHCProductSelection" Offset="0" BitOffset="0" Text="Explizite Produktdefinition" Value="0" />
+<Parameter Id="%AID%_UP-%TT%%CC%002" Name="c%C%ValueIndex" ParameterType="%AID%_PT-IOHCSemanticIndex" Offset="1" BitOffset="0" Text="MP=0 / FP=1..16" Value="0" />
 </Union>
 
 <Parameter Id="%AID%_P-%TT%%CC%000" Name="c%C%ShowValueObjects" ParameterType="%AID%_PT-IOHCCheckBox" Text="Produktobjekte anzeigen" Value="0" />
