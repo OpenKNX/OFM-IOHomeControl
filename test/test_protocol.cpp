@@ -3763,6 +3763,17 @@ TEST(object_transfer_bounded_read_sequences_and_completion) {
     chunk[0]=1;ASSERT_TRUE(transfer.acceptChunk(0x123456,7,chunk,21));ASSERT_EQ(transfer.transferred(),36);
     ASSERT_TRUE(transfer.next(0));uint8_t end[]={2,0,0};ASSERT_TRUE(transfer.acceptChunk(0x123456,7,end,3));ASSERT_EQ(transfer.stage(),S::Done);
 }
+TEST(object_read_countdown_requires_full_chunks_and_zero_closure) {
+    IoHomeObjectTransfer transfer;ASSERT_TRUE(transfer.begin(IoHomeObjectTransfer::Direction::Read,1,1,0,1,0,19,0,1000));
+    uint8_t opening[]={1,0,0,19};ASSERT_TRUE(transfer.acceptOpening(1,1,0x47,opening,4));
+    ASSERT_TRUE(transfer.nextRead());ASSERT_EQ(transfer.pendingData()[2],2);
+    uint8_t chunk[21]={1,0,2};ASSERT_TRUE(!transfer.acceptReadChunk(1,1,chunk,3));
+    chunk[2]=3;ASSERT_TRUE(!transfer.acceptReadChunk(1,1,chunk,21));chunk[2]=2;
+    ASSERT_TRUE(transfer.acceptReadChunk(1,1,chunk,21));ASSERT_TRUE(transfer.nextRead());ASSERT_EQ(transfer.pendingData()[2],1);
+    chunk[0]=2;chunk[2]=1;chunk[3]=0xA5;ASSERT_TRUE(transfer.acceptReadChunk(1,1,chunk,4));ASSERT_EQ(transfer.transferred(),19);
+    ASSERT_TRUE(transfer.nextRead());ASSERT_EQ(transfer.pendingData()[2],0);chunk[0]=3;chunk[2]=0;
+    ASSERT_TRUE(transfer.acceptReadChunk(1,1,chunk,3));ASSERT_EQ(transfer.stage(),IoHomeObjectTransfer::Stage::Done);
+}
 TEST(object_transfer_rejects_write_alignment_and_retains_abort_timeout) {
     IoHomeObjectTransfer transfer;using D=IoHomeObjectTransfer::Direction;using S=IoHomeObjectTransfer::Stage;
     ASSERT_TRUE(!transfer.begin(D::Write,1,1,0,0x030A,1,20,0,100));

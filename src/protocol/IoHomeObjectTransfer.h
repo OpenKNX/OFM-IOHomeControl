@@ -8,7 +8,7 @@
 class IoHomeObjectTransfer {
 public:
     enum class Direction:uint8_t { Read,Write };
-    enum class Stage:uint8_t { Idle,Opening,Ready,Waiting,Done,Rejected,Aborted,Cancelled,Timeout,Invalid };
+    enum class Stage:uint8_t { Idle,Opening,Ready,Waiting,Done,Rejected,Aborted,Cancelled,Timeout,Invalid,TransportFailure,IdentityChanged };
     static constexpr uint16_t Capacity=1024;
     bool begin(Direction direction,uint32_t peer,uint32_t token,uint8_t provider,uint16_t key,
                uint16_t offset,uint16_t span,uint32_t now,uint32_t budget,uint8_t compatibility0=0,uint8_t compatibility2=0) {
@@ -44,6 +44,21 @@ public:
         mPending[0]=mControl;put16(mPending+1,transportWord);if(size)std::memcpy(mPending+3,payload,size);
         mPendingSize=3+size;mRequestWord=transportWord;mStage=Stage::Waiting;return true;
     }
+    // Recovered callback-mode-1 read policy: ceil(remaining / 18), then 0 to close.
+    // Other original callback modes (repeat/abort) are not selected here.
+    bool nextRead() {
+        if(mDirection!=Direction::Read)return false;
+        return next(uint16_t((mNegotiated-mTransferred+17)/18));
+    }
+    bool acceptReadChunk(uint32_t peer,uint32_t token,const uint8_t *p,uint8_t size) {
+        if(mDirection!=Direction::Read||mStage!=Stage::Waiting||!p||size<3)return false;
+        const uint16_t remaining=mNegotiated-mTransferred;
+        if(get16(p+1)!=mRequestWord && get16(p+1)!=0)return false;
+        if(mRequestWord && get16(p+1) && size!=uint8_t(3+(remaining>18?18:remaining)))return false;
+        if(!mRequestWord&&size!=3)return false;
+        return acceptChunk(peer,token,p,size);
+    }
+    void fail(bool identityChanged=false){if(active())mStage=identityChanged?Stage::IdentityChanged:Stage::TransportFailure;}
     const uint8_t *pendingData() const {return mPending;}
     uint8_t pendingSize() const {return mPendingSize;}
     bool acceptChunk(uint32_t peer,uint32_t token,const uint8_t *p,uint8_t size) {
