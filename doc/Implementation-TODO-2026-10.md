@@ -134,3 +134,7 @@ provider/key write or guessed terminal closure is introduced.
 ## 16 — 8100/8103 member serialization
 
 Reviewed the full dated reports; they explicitly retain this gap. Evidence requirements and current gates are recorded in `docs/qualification/todo-16.md`. No speculative schema/meaning/model binding was added.
+
+## 17 — 4300/4302 writable schemas
+
+Reviewed the full dated reports; they explicitly retain this gap. Evidence requirements and current gates are recorded in `docs/qualification/todo-17.md`. No speculative schema/meaning/model binding was added.
