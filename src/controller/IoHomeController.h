@@ -127,6 +127,7 @@ enum class TwoWayRetryReason : uint8_t
 struct IoHomeQueueEntry
 {
   uint32_t destNodeId;
+  uint32_t observationGeneration;
   const uint8_t *encKey; // pointer to channel's key (valid as long as channel exists)
   IoHomeCommand command;
   uint8_t param;
@@ -1025,6 +1026,7 @@ private:
   // State machine
   ControllerState mState;
   uint32_t mStateTimer;
+  uint32_t mNextObservationGeneration=0;
   uint8_t mCurrentFreqIdx;
 
   // Command queue (circular buffer)

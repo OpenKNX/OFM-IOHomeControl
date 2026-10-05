@@ -2504,7 +2504,9 @@ bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
     uint8_t lNext = (mQueueHead + 1) % IOHC_CMD_QUEUE_SIZE;
     if (lNext == mQueueTail)
         return false; // queue full
+    if(mNextObservationGeneration==0xFFFFFFFF)return false;
     mCmdQueue[mQueueHead] = iEntry;
+    mCmdQueue[mQueueHead].observationGeneration=++mNextObservationGeneration;
     if (mCmdQueue[mQueueHead].maxAttempts == 0)
         mCmdQueue[mQueueHead].maxAttempts = IOHC_EXCHANGE_MAX_ATTEMPTS;
     mQueueHead = lNext;
@@ -9996,6 +9998,11 @@ void IoHomeController::dispatchRxFrame()
             }
             case IoHomeCommand::PrivateResponse:
             {
+#ifndef TEST_NATIVE
+                if(mRxFrame.dataLen>=8&&mCurrentCmd.active&&mCurrentCmd.command==IoHomeCommand::Private&&mCurrentCmd.destNodeId==lSrcNode)
+                    lCh->productRuntime().observe(lSrcNode,0,readU16BE(mRxFrame.data,4),
+                        mCurrentCmd.observationGeneration,millis(),IoHomeProductRuntime::Trust::Correlated);
+#endif
                 if (mCurrentCmd.diagnosticFpRead)
                 {
                     const std::string lRawPayload = hexDump(mRxFrame.data, mRxFrame.dataLen);
@@ -10016,6 +10023,10 @@ void IoHomeController::dispatchRxFrame()
                     if (mRxFrame.dataLen >= 15)
                     {
                         lSample.raw = readU16BE(mRxFrame.data, 13);
+#ifndef TEST_NATIVE
+                        if(mCurrentCmd.active&&mCurrentCmd.destNodeId==lSrcNode) lCh->productRuntime().observe(lSrcNode,lSample.fpIndex,lSample.raw,
+                            mCurrentCmd.observationGeneration,millis(),IoHomeProductRuntime::Trust::Correlated);
+#endif
                         lSample.kind = ioHomeClassifyRawParameterValue(
                             lSample.raw, lSample.packedProfile, lSample.fpIndex);
                     }

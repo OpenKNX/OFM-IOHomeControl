@@ -2687,6 +2687,19 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         }
         break;
     }
+    case 0x28: // Raw product observation, no inferred units/publication
+    {
+        if(length!=3||data[1]>=mNumChannels||data[2]>16)break;
+        const auto *sample=mChannels[data[1]]->productRuntime().sample(data[2]);
+        resultData[0]=0;resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];
+        const uint32_t node=mChannels[data[1]]->getNodeId();
+        for(uint8_t i=0;i<3;i++)resultData[4+i]=node>>(16-8*i);
+        resultData[7]=static_cast<uint8_t>(sample->trust);resultData[8]=sample->raw>>8;resultData[9]=sample->raw;
+        const uint32_t age=sample->present?uint32_t(millis()-sample->receivedMs):0;
+        for(uint8_t i=0;i<4;i++){resultData[10+i]=sample->generation>>(24-8*i);resultData[14+i]=age>>(24-8*i);}
+        resultData[18]=sample->present;resultData[19]=IoHomeProductRuntime::fresh(*sample,millis(),5000);
+        resultLength=20;return true;
+    }
     case 0x23: // Capabilities, schema and boot identity; no secrets
     {
         if(length!=1)break;

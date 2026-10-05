@@ -1,3 +1,4 @@
+#include "protocol/IoHomeProductRuntime.h"
 #pragma once
 #include "OpenKNX.h"
 #include "knxprod.h"
@@ -31,6 +32,8 @@ public:
 
   // Callbacks from controller when radio responses arrive
   void onPositionFeedback(float iPositionPercent);
+  IoHomeProductRuntime &productRuntime() {return mProductRuntime;}
+  const IoHomeProductRuntime &productRuntime() const {return mProductRuntime;}
   void onTargetPositionFeedback(float iTargetPositionPercent);
   void onStatusUpdate(bool iIsMoving);
   void onSlatFeedback(float iSlatPercent);
@@ -244,6 +247,7 @@ private:
   uint8_t mSubProfile = 0;
   uint32_t mIoAddress = 0;
   IoHomeProtocolIdentity mProtocolIdentity{};
+  IoHomeProductRuntime mProductRuntime;
   uint16_t mManualPackedProfile = 0;
   IoHomeProductIdentityEvidence mProductIdentityEvidence{};
 

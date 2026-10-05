@@ -1184,6 +1184,7 @@ void IoHomecontrolChannel::setNodeId(uint32_t iNodeId)
 {
     mNodeId = iNodeId & 0x00FFFFFF; // 24-bit
     mPaired = (mNodeId != 0);
+    mProductRuntime.bind(mNodeId,mEncKey);
 }
 
 uint32_t IoHomecontrolChannel::getNodeId() const
@@ -1194,6 +1195,7 @@ uint32_t IoHomecontrolChannel::getNodeId() const
 void IoHomecontrolChannel::setEncryptionKey(const uint8_t *iKey)
 {
     memcpy(mEncKey, iKey, 16);
+    mProductRuntime.bind(mNodeId,mEncKey);
 }
 
 const uint8_t *IoHomecontrolChannel::getEncryptionKey() const

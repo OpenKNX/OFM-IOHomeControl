@@ -27,6 +27,7 @@
 #include "protocol/IoHomeNetworkStore.h"
 #include "protocol/IoHomeProductActivation.h"
 #include "protocol/IoHomeProductPresentation.h"
+#include "protocol/IoHomeProductRuntime.h"
 #include <limits>
 #include "protocol/IoHomeLogRedaction.h"
 #include "protocol/IoHomePassiveAuth.h"
@@ -3692,6 +3693,23 @@ TEST(commissioning_deadline_wrap_and_frozen_revision) {
     ASSERT_TRUE(!job.expired(100));ASSERT_TRUE(job.matches(1,1));ASSERT_TRUE(!job.matches(1,2));
     ASSERT_TRUE(job.cancel(1));ASSERT_TRUE(job.begin(IoHomeCommissioningJob::Owner::Pairing));
     ASSERT_TRUE(!job.matches(1,1));
+}
+
+TEST(product_runtime_binds_identity_and_rejects_stale_or_uncorrelated_color) {
+    IoHomeProductRuntime rt;uint8_t key[16]={1};rt.bind(0x123456,key);
+    using T=IoHomeProductRuntime::Trust;using F=IoHomeBoundProductFamily;
+    ASSERT_TRUE(!rt.observe(0x654321,10,1,1,100,T::Authenticated));
+    ASSERT_TRUE(rt.observe(0x123456,0,51200,1,100,T::Authenticated));
+    ASSERT_TRUE(rt.observe(0x123456,10,10000,1,100,T::Correlated));
+    ASSERT_TRUE(rt.observe(0x123456,11,20000,1,100,T::Authenticated));
+    uint8_t r=9,g=9,b=9;ASSERT_TRUE(!rt.rgb(F::RgbLight,101,100,r,g,b));
+    ASSERT_TRUE(rt.observe(0x123456,10,10000,1,100,T::Authenticated));
+    ASSERT_TRUE(rt.rgb(F::RgbLight,101,100,r,g,b));ASSERT_EQ(r,0);
+    ASSERT_TRUE(!rt.rgb(F::RgbLight,201,100,r,g,b));
+    ASSERT_TRUE(rt.observe(0x123456,11,20000,2,101,T::Authenticated));
+    ASSERT_TRUE(!rt.rgb(F::RgbLight,101,100,r,g,b));
+    ASSERT_TRUE(!rt.observe(0x123456,11,20000,1,102,T::Authenticated));
+    key[0]=2;rt.bind(0x123456,key);ASSERT_TRUE(!rt.sample(0)->present);
 }
 
 TEST(commissioning_job_rejects_concurrent_owner_and_stale_cancel)
