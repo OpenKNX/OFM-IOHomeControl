@@ -19542,3 +19542,11 @@ TEST(protocol_selected_codec_rejects_stale_and_incoherent_setback_context) {
  runtime.observe(0x123456,12,40000,3,100,IoHomeProductRuntime::Trust::Correlated);ASSERT_TRUE(ioHomeDecodeSelectedProductValue(runtime,IoHomeDiagnosticProduct::GenericHeater,13,101,context).known);
  runtime.bind(0x123457,key);ASSERT_TRUE(!ioHomeDecodeSelectedProductValue(runtime,IoHomeDiagnosticProduct::GenericHeater,13,101,context).known);
 }
+TEST(protocol_generic_heater_producer_orders_timer_before_coupled_setpoint) {
+ IoHomeTemperatureContext context;context.hasBounds=true;context.minimumCentikelvin=28015;context.maximumCentikelvin=30115;context.hasComfort=true;context.comfortRaw=25600;
+ uint8_t bytes[12]{};uint8_t length=0;
+ ASSERT_TRUE(ioHomeBuildGenericHeaterTemperature(true,15.4,context,bytes,sizeof(bytes),length));
+ ASSERT_EQ(bytes[0],0xD4);ASSERT_EQ(bytes[2],0);ASSERT_EQ(bytes[3],0x28);ASSERT_EQ(bytes[4],0xFF);ASSERT_EQ(bytes[5],0xFF);
+ const uint16_t raw=uint16_t(bytes[6])<<8|bytes[7];double value=0;ASSERT_TRUE(ioHomeDecodeProductTemperature(IoHomeTemperatureProduct::GenericAdjustableHeater,13,raw,context,value));ASSERT_TRUE(value==15.4);
+ ASSERT_TRUE(!ioHomeBuildGenericHeaterTemperature(true,28,context,bytes,sizeof(bytes),length));context.hasBounds=false;ASSERT_TRUE(!ioHomeBuildGenericHeaterTemperature(false,20,context,bytes,sizeof(bytes),length));
+}

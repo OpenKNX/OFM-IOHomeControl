@@ -41,3 +41,14 @@ inline bool ioHomeBuildBoundWhiteRepresentation(const IoHomeProtocolIdentity &iI
     std::memcpy(oData, lData, lLength); oLength = lLength;
     return true;
 }
+
+// Generic heater 0x340100 only; caller supplies independently validated bounds.
+// Canonical ascending FP11 precedes FP12/13 despite retained Lua caller order.
+inline bool ioHomeBuildGenericHeaterTemperature(bool setback,double celsius,
+ const IoHomeTemperatureContext &context,uint8_t *out,uint8_t capacity,uint8_t &length) {
+ uint16_t absolute=0;if(!ioHomeEncodeProductTemperature(IoHomeTemperatureProduct::GenericAdjustableHeater,12,celsius,context,absolute))return false;
+ uint16_t raw=absolute;
+ if(setback){if(!context.hasComfort||context.comfortRaw>IOHC_POSITION_MAX||absolute>context.comfortRaw)return false;raw=context.comfortRaw-absolute;}
+ const IoHomeFpValue values[]={{11,0xFFFF},{uint8_t(setback?13:12),raw}};
+ return ioHomeBuildActivationRepresentation(0xD400,values,2,out,capacity,length);
+}
