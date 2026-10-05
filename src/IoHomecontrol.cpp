@@ -7,6 +7,7 @@
 #include "protocol/IoHomeLogRedaction.h"
 #include "protocol/IoHomeProfileRegistry.h"
 #include "protocol/IoHomeProductCodecs.h"
+#include "protocol/IoHomeProductBinding.h"
 #if defined(RADIO_SX1262)
 #include "radio/SX1262DeviceErrors.h"
 #include "radio/sx1262Regs-Fsk.h"
@@ -4351,6 +4352,8 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                     }
                     const IoHomeProductIdentityEvidence &lEnrichment =
                         lCh->getProductIdentityEvidence();
+                    logInfoP("  retained-source semantic family: %s (no write authorization)",
+                             ioHomeBoundProductFamilyName(ioHomeBindProductFamily(lMetadata, lEnrichment)));
                     logInfoP("  Product identification: manufacturerSubType=%u productFamily=%s confidence=%s manufacturerConflict=%u",
                              static_cast<unsigned>(lEnrichment.manufacturerSubType),
                              lEnrichment.productFamilyLabel[0] ? lEnrichment.productFamilyLabel : "unmatched",

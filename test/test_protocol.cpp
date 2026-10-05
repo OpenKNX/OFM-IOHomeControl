@@ -20,6 +20,7 @@
 #include "protocol/IoHomeCommands.h"
 #include "protocol/IoHomeProfileRegistry.h"
 #include "protocol/IoHomeProductCodecs.h"
+#include "protocol/IoHomeProductBinding.h"
 #include <limits>
 #include "protocol/IoHomeLogRedaction.h"
 #include "protocol/IoHomePassiveAuth.h"
@@ -3584,6 +3585,41 @@ TEST(profile_window_security_enum_preserves_unknown_values)
     ASSERT_TRUE(!ioHomeDecodeWindowSecurityMode(ioHomeProfileDescriptor(9, 0), 1, lMode));
     ASSERT_TRUE(!ioHomeDecodeWindowSecurityMode(nullptr, 1, lMode));
     ASSERT_EQ(lMode, IoHomeWindowSecurityMode::Secured);
+}
+
+TEST(product_binding_requires_exact_identity_and_consistent_evidence)
+{
+    using F = IoHomeBoundProductFamily;
+    IoHomeProtocolIdentity lId;
+    IoHomeProductIdentityEvidence lEvidence;
+    lId.valid = true; lId.fullMetadata = true;
+    lId.nodeClass = IoHomeNodeClass::Actuator;
+    lId.profile = 6; lId.subProfile = 1; lId.manufacturerId = 2;
+    ASSERT_EQ(ioHomeBindProductFamily(lId, lEvidence), F::RgbLight);
+    lId.subProfile = 2;
+    ASSERT_EQ(ioHomeBindProductFamily(lId, lEvidence), F::TunableWhiteLight);
+    lId.subProfile = 58;
+    ASSERT_EQ(ioHomeBindProductFamily(lId, lEvidence), F::Unknown);
+    lId.subProfile = 1; lId.manufacturerId = 12;
+    ASSERT_EQ(ioHomeBindProductFamily(lId, lEvidence), F::Unknown);
+    lId.profile = 22; lEvidence.generalInfo2Len = 10;
+    lEvidence.generalInfo2[7] = 0x62;
+    ASSERT_EQ(ioHomeBindProductFamily(lId, lEvidence), F::AtlanticPassApcHeatPump);
+    lEvidence.generalInfo2[7] = 0x52; lEvidence.generalInfo2[9] = 1;
+    ASSERT_EQ(ioHomeBindProductFamily(lId, lEvidence), F::AtlanticPassApcHybrid);
+    lEvidence.generalInfo2Len = 9;
+    ASSERT_EQ(ioHomeBindProductFamily(lId, lEvidence), F::Unknown);
+    lEvidence.generalInfo2Len = 10; lEvidence.manufacturerSignatureInconsistent = true;
+    ASSERT_EQ(ioHomeBindProductFamily(lId, lEvidence), F::Unknown);
+    lEvidence.manufacturerSignatureInconsistent = false; lEvidence.generalInfo2TypeValid = true;
+    lEvidence.generalInfo2Profile = 6; lEvidence.generalInfo2SubProfile = 1;
+    ASSERT_EQ(ioHomeBindProductFamily(lId, lEvidence), F::Unknown);
+    lEvidence.generalInfo2Profile = 22;
+    ASSERT_EQ(ioHomeBindProductFamily(lId, lEvidence), F::AtlanticPassApcHybrid);
+    lId.nodeClass = IoHomeNodeClass::Unknown;
+    ASSERT_EQ(ioHomeBindProductFamily(lId, lEvidence), F::Unknown);
+    lId.nodeClass = IoHomeNodeClass::Actuator; lId.fullMetadata = false;
+    ASSERT_EQ(ioHomeBindProductFamily(lId, lEvidence), F::Unknown);
 }
 
 TEST(product_lighting_codecs_use_reference_matrix_and_safe_black)
