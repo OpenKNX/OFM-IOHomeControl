@@ -117,3 +117,11 @@ inline bool ioHomeBuildSirenRepresentation(const IoHomeSirenSequence *sequences,
     }
     return ioHomeBuildActivationRepresentation(0,values,6,out,capacity,length);
 }
+
+// Retained HeatPump mode activation only; not RF permission.
+enum class IoHomeHeatPumpTarget:uint8_t {Comfort,Setback,Eco,Halted,Off};
+inline bool ioHomeBuildHeatPumpMode(IoHomeHeatPumpTarget target,uint8_t *out,uint8_t capacity,uint8_t &length){
+ uint16_t mp=0,mode=0x4000;
+ switch(target){case IoHomeHeatPumpTarget::Comfort:mp=0xD80F;break;case IoHomeHeatPumpTarget::Setback:mp=0xD80E;break;case IoHomeHeatPumpTarget::Eco:mp=0xD812;break;case IoHomeHeatPumpTarget::Halted:mp=0xD813;break;case IoHomeHeatPumpTarget::Off:mp=0xD400;mode=0x8000;break;default:return false;}
+ const IoHomeFpValue value{16,mode};return ioHomeBuildActivationRepresentation(mp,&value,1,out,capacity,length);
+}

@@ -19550,3 +19550,7 @@ TEST(protocol_generic_heater_producer_orders_timer_before_coupled_setpoint) {
  const uint16_t raw=uint16_t(bytes[6])<<8|bytes[7];double value=0;ASSERT_TRUE(ioHomeDecodeProductTemperature(IoHomeTemperatureProduct::GenericAdjustableHeater,13,raw,context,value));ASSERT_TRUE(value==15.4);
  ASSERT_TRUE(!ioHomeBuildGenericHeaterTemperature(true,28,context,bytes,sizeof(bytes),length));context.hasBounds=false;ASSERT_TRUE(!ioHomeBuildGenericHeaterTemperature(false,20,context,bytes,sizeof(bytes),length));
 }
+TEST(protocol_heatpump_mode_preserves_special_mp_and_global_pair) {
+ uint8_t data[8]{};uint8_t length=0;ASSERT_TRUE(ioHomeBuildHeatPumpMode(IoHomeHeatPumpTarget::Eco,data,sizeof(data),length));ASSERT_EQ(data[0],0xD8);ASSERT_EQ(data[1],0x12);ASSERT_EQ(data[3],1);ASSERT_EQ(data[4],0x40);ASSERT_EQ(data[5],0);
+ ASSERT_TRUE(ioHomeBuildHeatPumpMode(IoHomeHeatPumpTarget::Off,data,sizeof(data),length));ASSERT_EQ(data[0],0xD4);ASSERT_EQ(data[4],0x80);ASSERT_TRUE(!ioHomeBuildHeatPumpMode(IoHomeHeatPumpTarget(255),data,sizeof(data),length));
+}
