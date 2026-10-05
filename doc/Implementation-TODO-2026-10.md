@@ -54,3 +54,16 @@ marks possible desynchronization; it never implies a known receiver watermark.
 No rollback, range scan, key replacement or automatic re-pair is introduced.
 Actuator-specific recovery remains blocked on a captured, proven peer procedure.
 A successful RF send cannot clear this warning because 1W provides no peer ACK.
+
+## 32 — Unified queued 2W exchange diagnostics
+
+Extended the existing response timing record with actual CTRL0/CTRL1, version,
+attempt, selected preamble/frequency, absolute TX-end/first/final response times,
+RSSI, IRQ and terminal exchange result. Existing fields retain MIB classes,
+timeout selector/fallback, session/retry counters and raw peer FE result.
+SX1276 snapshots include CRC/FIFO and optional edge timestamp validity from the
+radio evidence record. SX1262/native explicitly mark that evidence unavailable;
+missing edge wiring never becomes an invented timestamp. This record describes
+queued controller exchanges; standalone pairing/discovery retain their separate
+telemetry. A complete common diagnostic history across those workflows remains
+open. No key or authentication payload is added to this record.

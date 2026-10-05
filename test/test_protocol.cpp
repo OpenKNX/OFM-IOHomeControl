@@ -19780,6 +19780,11 @@ TEST(controller_low_power_deadline_starts_after_transmit_completion)
         IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
         const uint16_t deadline=cls==2?811:1011;
         ASSERT_EQ(c.lastResponseTimingSample().selectedTimeoutMs,deadline);
+        ASSERT_EQ(c.lastResponseTimingSample().ctrl0,request.ctrlByte0);
+        ASSERT_EQ(c.lastResponseTimingSample().ctrl1,request.ctrlByte1);
+        ASSERT_EQ(c.lastResponseTimingSample().attempt,1);
+        ASSERT_TRUE(c.lastResponseTimingSample().preambleBytes>0);
+        ASSERT_TRUE(!c.lastResponseTimingSample().rxEvidenceAvailable);
         ioHomeTestAdvanceMillis(1500);c.loop(); // TX completes now, even though queued long ago.
         ASSERT_EQ(c.state(),ControllerState::WaitResponse);
         ioHomeTestAdvanceMillis(deadline-1);c.loop();ASSERT_EQ(c.state(),ControllerState::WaitResponse);

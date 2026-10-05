@@ -3730,6 +3730,12 @@ void IoHomeController::beginResponseTimingAttempt()
     mLastResponseTimingSample = ResponseTimingSample{};
     mLastResponseTimingSample.ioAddress = mCurrentCmd.destNodeId & 0x00FFFFFF;
     mLastResponseTimingSample.command = mCurrentCmd.command;
+    mLastResponseTimingSample.ctrl0=mTxBuffer[0];
+    mLastResponseTimingSample.ctrl1=mTxBuffer[1];
+    mLastResponseTimingSample.version=mTxFrame.ctrlByte1 & IOHC_CTRL1_VER_MASK;
+    mLastResponseTimingSample.attempt=mCurrentCmd.retries+1;
+    mLastResponseTimingSample.preambleBytes=preambleForQueued2WAttempt(mTxFrame,mCurrentCmd);
+    mLastResponseTimingSample.frequencyHz=mCurrentFreqIdx<IOHC_NUM_FREQUENCIES?IOHC_FREQUENCIES[mCurrentFreqIdx]:0;
     mLastResponseTimingSample.sessionMode=mCurrentCmd.sessionPolicy.mode;
     mLastResponseTimingSample.stateRetries=mCurrentCmd.retries;
     mLastResponseTimingSample.mediaRetries=mCurrentCmd.mediaAttempts;
@@ -3767,6 +3773,7 @@ void IoHomeController::markResponseTimingTxEnd()
         mExchangeRequestTxEndUs = lNowUs;
         mExchangeRequestTxEndValid = true;
         mLastResponseTimingSample.valid = true;
+        mLastResponseTimingSample.txEndUs=lNowUs;
     }
 }
 
@@ -3776,9 +3783,16 @@ void IoHomeController::recordResponseTiming(bool iFinalResponse)
         return;
 
     const uint32_t lNowUs = micros();
+    mLastResponseTimingSample.rssiDbm=mRadio.lastRssi();
+    mLastResponseTimingSample.rxIrq=radioHealth().lastRxIrqStatus;
+#if defined(RADIO_SX1276) && !defined(TEST_NATIVE)
+    mLastResponseTimingSample.receiveEvidence=mRadio.lastReceiveEvidence();
+    mLastResponseTimingSample.rxEvidenceAvailable=true;
+#endif
     if (!mLastResponseTimingSample.hasFirstResponse)
     {
         mLastResponseTimingSample.hasFirstResponse = true;
+        mLastResponseTimingSample.firstResponseUs=lNowUs;
         mLastResponseTimingSample.txEndToFirstResponseUs =
             lNowUs - mExchangeRequestTxEndUs;
         if (mPairDiagnosticTraceEnabled)
@@ -3795,6 +3809,7 @@ void IoHomeController::recordResponseTiming(bool iFinalResponse)
     if (iFinalResponse)
     {
         mLastResponseTimingSample.hasFinalResponse = true;
+        mLastResponseTimingSample.finalResponseUs=lNowUs;
         mLastResponseTimingSample.txEndToFinalResponseUs =
             lNowUs - mExchangeRequestTxEndUs;
         if (mPairDiagnosticTraceEnabled)
@@ -4055,6 +4070,9 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
     }
     if(iEntry.objectReadToken==mObjectReadToken&&iEntry.objectReadToken&&iResult!=IoHomeCommandExchangeResult::Completed)
         mObjectRead.fail();
+    if(mLastResponseTimingSample.ioAddress==iEntry.destNodeId && mLastResponseTimingSample.command==iEntry.command) {
+        mLastResponseTimingSample.result=iResult;mLastResponseTimingSample.resultValid=true;
+    }
     IoHomecontrolChannel *lChannel = channelForQueueEntry(iEntry);
     if (lChannel)
         lChannel->onCommandExchangeResult(iEntry.command, iEntry.param, iResult);

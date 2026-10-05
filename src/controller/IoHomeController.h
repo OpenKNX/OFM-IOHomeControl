@@ -403,6 +403,14 @@ public:
     bool hasFinalResponse = false;
     uint32_t ioAddress = 0;
     IoHomeCommand command = IoHomeCommand::Execute;
+    uint8_t ctrl0=0,ctrl1=0,version=0,attempt=0;
+    uint16_t preambleBytes=0;
+    uint32_t frequencyHz=0,txEndUs=0,firstResponseUs=0,finalResponseUs=0;
+    int16_t rssiDbm=0;
+    uint16_t rxIrq=0;
+    bool rxEvidenceAvailable=false,resultValid=false;
+    RadioReceiveEvidence receiveEvidence{};
+    IoHomeCommandExchangeResult result=IoHomeCommandExchangeResult::Unknown;
     uint8_t manufacturerId = 0;
     uint16_t profile = 0;
     uint8_t subProfile = 0;
