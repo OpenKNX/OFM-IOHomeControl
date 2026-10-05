@@ -138,6 +138,7 @@ struct IoHomeQueueEntry
   uint32_t observationGeneration;
   uint32_t productContextRevision;
   uint32_t objectReadToken;
+  uint32_t keyPrimitiveToken;
   uint8_t objectReadData[9];
   uint8_t objectReadLength;
   const uint8_t *encKey; // pointer to channel's key (valid as long as channel exists)
@@ -624,6 +625,16 @@ public:
                                              uint8_t iSelectorOrBlock);
   static bool decodeStatusUpdateOriginator(const IoHomeFrame &iFrame, uint8_t &oOriginator);
   bool sendTiltCommand(uint32_t iDestNodeId, const uint8_t *iEncKey, uint8_t iTiltPercent);
+  enum class GetKeyStage : uint8_t {Idle,Waiting,Committed,Failed,Cancelled};
+  enum class GetKeyAuthentication : uint8_t {NotRequested,Pending,Passed,Failed,Cancelled};
+  struct GetKeyOfNodeResult {
+    GetKeyStage stage=GetKeyStage::Idle;GetKeyAuthentication authentication=GetKeyAuthentication::NotRequested;
+    uint32_t peer=0,token=0,revision=0;bool durable=false,authenticate=false;
+    uint8_t oldKey[16]{},importedKey[16]{},challenge[6]{},authChallenge[6]{},encryptedKey[16]{};
+  };
+  bool startGetKeyOfNode(IoHomecontrolChannel *channel,bool optionalAuthentication=false);
+  bool cancelGetKeyOfNode();
+  const GetKeyOfNodeResult &getKeyOfNodeResult()const{return mGetKeyOfNode;}
   bool sendProfileMovementCommand(uint32_t node, const uint8_t *key, uint8_t position, uint8_t speedIndex, uint16_t raw);
   bool sendProfileParameterCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                    ParameterSemantic iSemantic, uint8_t iPercent);
@@ -1228,6 +1239,8 @@ private:
   IoHomeDiscoveryFamily mDiscoveryFamily=IoHomeDiscoveryFamily::Actuator;
   bool mPrivateDiscoveryF8=false;
   PrivateDiscoveryReply mPrivateDiscoveryReply{};
+  GetKeyOfNodeResult mGetKeyOfNode{};
+  uint32_t mNextKeyPrimitiveToken=0;
   RxScanMeasurements mRxScanMeasurements{};
   IoHomeRadioDiversity mRadioDiversity{};
   DiscoverySession mDiscoverySession{};

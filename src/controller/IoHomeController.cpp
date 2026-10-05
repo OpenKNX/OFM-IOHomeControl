@@ -2781,6 +2781,34 @@ bool IoHomeController::sendProfileParameterCommand(uint32_t iDestNodeId,
     return queuePush(lEntry);
 }
 
+bool IoHomeController::startGetKeyOfNode(IoHomecontrolChannel *channel,bool authenticate)
+{
+    // Internal exact action 0x0A. ETS extraction/adoption remains a separate workflow.
+    if(!channel||!channel->isPaired()||channel->is1W()||!channel->productContextRevision()||
+       !channel->getProtocolIdentity().fullMetadata||!mModule||!mModule->managementRequestsAllowed()||
+       !idleForManagedOperation()||mNextKeyPrimitiveToken==0xFFFFFFFF)return false;
+    GetKeyOfNodeResult result;result.peer=channel->getNodeId();result.token=++mNextKeyPrimitiveToken;
+    result.revision=channel->productContextRevision();result.authenticate=authenticate;result.stage=GetKeyStage::Waiting;
+    std::memcpy(result.oldKey,mSystemKey,16);IoHomeCrypto::generateChallenge(result.challenge);
+    IoHomeQueueEntry entry{};entry.command=IoHomeCommand::LaunchKeyTransfer;entry.destNodeId=result.peer;
+    entry.encKey=channel->getEncryptionKey();entry.productContextRevision=result.revision;
+    entry.sourceChannelIndex=channelIndexFor(channel);entry.keyPrimitiveToken=result.token;entry.maxAttempts=1;entry.active=true;
+    mGetKeyOfNode=result;
+    if(!queuePush(entry)){mGetKeyOfNode.stage=GetKeyStage::Failed;return false;}
+    return true;
+}
+
+bool IoHomeController::cancelGetKeyOfNode()
+{
+    const bool waiting=mGetKeyOfNode.stage==GetKeyStage::Waiting;
+    const bool authenticating=mGetKeyOfNode.authentication==GetKeyAuthentication::Pending;
+    if(!waiting&&!authenticating)return false;
+    if(waiting)mGetKeyOfNode.stage=GetKeyStage::Cancelled;
+    if(authenticating)mGetKeyOfNode.authentication=GetKeyAuthentication::Cancelled;
+    // Token remains for stale queued-entry rejection; imported key is never rolled back.
+    return true;
+}
+
 bool IoHomeController::sendProfileMovementCommand(uint32_t node,const uint8_t *key,uint8_t position,uint8_t speedIndex,uint16_t raw)
 {
     auto *channel=channelForNode(node);
@@ -4020,6 +4048,10 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
         // A later local failure cannot erase evidence that an earlier copy was
         // authenticated by the actuator.
         iResult = IoHomeCommandExchangeResult::AuthenticatedUnconfirmed;
+    }
+    if(iEntry.keyPrimitiveToken && iEntry.keyPrimitiveToken==mGetKeyOfNode.token && iResult!=IoHomeCommandExchangeResult::Completed) {
+        if(mGetKeyOfNode.stage==GetKeyStage::Waiting)mGetKeyOfNode.stage=GetKeyStage::Failed;
+        if(mGetKeyOfNode.authentication==GetKeyAuthentication::Pending)mGetKeyOfNode.authentication=GetKeyAuthentication::Failed;
     }
     if(iEntry.objectReadToken==mObjectReadToken&&iEntry.objectReadToken&&iResult!=IoHomeCommandExchangeResult::Completed)
         mObjectRead.fail();
@@ -7291,6 +7323,51 @@ void IoHomeController::processResponse()
         return;
     }
 
+    if(mCurrentCmd.keyPrimitiveToken && mCurrentCmd.keyPrimitiveToken==mGetKeyOfNode.token) {
+        auto *channel=channelForQueueEntry(mCurrentCmd);
+        const bool current=channel && channel->productContextRevision()==mGetKeyOfNode.revision &&
+            channel->getNodeId()==mGetKeyOfNode.peer &&
+            (mGetKeyOfNode.stage==GetKeyStage::Waiting ? !std::memcmp(mSystemKey,mGetKeyOfNode.oldKey,16) :
+             !std::memcmp(mSystemKey,mGetKeyOfNode.importedKey,16));
+        if(!current || (mGetKeyOfNode.stage!=GetKeyStage::Waiting && mGetKeyOfNode.authentication!=GetKeyAuthentication::Pending)) {
+            notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+            mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+        }
+        if(mCurrentCmd.command==IoHomeCommand::LaunchKeyTransfer && mRxFrame.commandId==IoHomeCommand::KeyTransfer && mRxFrame.dataLen==16) {
+            uint8_t transcript[7]={0x38};std::memcpy(transcript+1,mGetKeyOfNode.challenge,6);
+            if(!IoHomeCrypto::crypt2WKeyXor(transcript,7,mGetKeyOfNode.challenge,mRxFrame.data,IOHC_TRANSFER_KEY,mGetKeyOfNode.importedKey)) {
+                notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+                mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+            }
+            std::memcpy(mGetKeyOfNode.encryptedKey,mRxFrame.data,16);
+            // Exact primitive commits before optional authentication. Never roll
+            // back this imported key if later auth is absent, invalid or cancelled.
+            setSystemKey(mGetKeyOfNode.importedKey);mGetKeyOfNode.stage=GetKeyStage::Committed;
+#ifndef TEST_NATIVE
+            mGetKeyOfNode.durable=mModule->prepareTwoWayPersistence();
+#else
+            mGetKeyOfNode.durable=true; // Durable journal is independently fault-tested.
+#endif
+            mCurrentCmd.active=false;mState=ControllerState::Idle;
+            if(mGetKeyOfNode.authenticate && !mGetKeyOfNode.durable)mGetKeyOfNode.authentication=GetKeyAuthentication::Failed;
+            if(mGetKeyOfNode.authenticate && mGetKeyOfNode.durable) {
+                IoHomeCrypto::generateChallenge(mGetKeyOfNode.authChallenge);mGetKeyOfNode.authentication=GetKeyAuthentication::Pending;
+                IoHomeQueueEntry entry{};entry.command=IoHomeCommand::ChallengeRequest;entry.destNodeId=mGetKeyOfNode.peer;
+                entry.encKey=mGetKeyOfNode.importedKey;entry.sourceChannelIndex=channelIndexFor(channel);
+                entry.keyPrimitiveToken=mGetKeyOfNode.token;entry.productContextRevision=mGetKeyOfNode.revision;entry.maxAttempts=1;entry.active=true;
+                if(!queuePush(entry))mGetKeyOfNode.authentication=GetKeyAuthentication::Failed;
+            }
+            return;
+        }
+        if(mCurrentCmd.command==IoHomeCommand::ChallengeRequest && mRxFrame.commandId==IoHomeCommand::ChallengeResponse && mRxFrame.dataLen==6) {
+            uint8_t transcript[17]={0x32},expected[6]{};std::memcpy(transcript+1,mGetKeyOfNode.encryptedKey,16);
+            bool valid=IoHomeCrypto::createHmac2W(transcript,17,mGetKeyOfNode.authChallenge,mGetKeyOfNode.importedKey,expected);
+            uint8_t diff=0;for(uint8_t i=0;i<6;++i)diff|=expected[i]^mRxFrame.data[i];
+            mGetKeyOfNode.authentication=valid&&!diff?GetKeyAuthentication::Passed:GetKeyAuthentication::Failed;
+            mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+        }
+    }
+
     if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
     {
         const bool lChallenge = mRxFrame.commandId == IoHomeCommand::ChallengeRequest &&
@@ -9862,6 +9939,8 @@ void IoHomeController::updateCurrentFrequencyIndex(uint32_t iFrequencyHz)
 bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 {
     if(!managementIdentityMatches(iEntry))return false;
+    if(iEntry.keyPrimitiveToken && (iEntry.keyPrimitiveToken!=mGetKeyOfNode.token ||
+       (mGetKeyOfNode.stage!=GetKeyStage::Waiting && mGetKeyOfNode.authentication!=GetKeyAuthentication::Pending)))return false;
     mTxFrame.init();
     // A retry after no 2W response is a fresh attempt at the same request,
     // not the next frame in a multi-frame exchange. Keep the original
@@ -10363,11 +10442,16 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         mTxFrame.hasHmac = false;
         break;
 
+    case IoHomeCommand::ChallengeRequest:
+        if(!iEntry.keyPrimitiveToken || mGetKeyOfNode.authentication!=GetKeyAuthentication::Pending)return false;
+        std::memcpy(mTxFrame.data,mGetKeyOfNode.authChallenge,6);mTxFrame.dataLen=6;mTxFrame.hasHmac=false;break;
+
     case IoHomeCommand::LaunchKeyTransfer:
     {
         // Launch key transfer: 6-byte challenge payload, no HMAC
         uint8_t lChallengeLKT[6];
-        IoHomeCrypto::generateChallenge(lChallengeLKT);
+        if(iEntry.keyPrimitiveToken)std::memcpy(lChallengeLKT,mGetKeyOfNode.challenge,6);
+        else IoHomeCrypto::generateChallenge(lChallengeLKT);
         memcpy(mTxFrame.data, lChallengeLKT, 6);
         mTxFrame.dataLen = 6;
         mTxFrame.hasHmac = false;

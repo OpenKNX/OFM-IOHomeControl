@@ -19,7 +19,7 @@ inline IoHomeResponseDisposition ioHomeResponseDisposition(IoHomeCommand request
         {IoHomeCommand::DiscoverRequest,0x29,false},{IoHomeCommand::DiscoverSPERequest,0x2B,false},
         {IoHomeCommand::Confirmation,0x2D,false},{IoHomeCommand::Discover2ERequest,0x2F,true},
         {IoHomeCommand::KeyInitTransfer,0x3C,true},{IoHomeCommand::KeyTransfer,0x33,true},
-        {IoHomeCommand::NodeVerifyRequest,0x37,true},{IoHomeCommand::LaunchKeyTransfer,0x32,false},
+        {IoHomeCommand::ChallengeRequest,0x3D,false},{IoHomeCommand::NodeVerifyRequest,0x37,true},{IoHomeCommand::LaunchKeyTransfer,0x32,false},
         {IoHomeCommand::Unknown46Request,0x47,true},{IoHomeCommand::Unknown4ARequest,0x4B,false},
         {IoHomeCommand::GetName,0x51,true},{IoHomeCommand::SetName,0x53,true},
         {IoHomeCommand::GetGeneralInfo1,0x55,true},{IoHomeCommand::GetGeneralInfo2,0x57,true},

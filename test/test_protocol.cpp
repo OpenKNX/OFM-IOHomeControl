@@ -19920,3 +19920,22 @@ TEST(controller_runtime_scan_cadence_holds_sync_and_rejects_active_changes)
     ASSERT_TRUE(c.sendCommand(0x7E9E6E,key,IoHomeCommand::Execute,50));c.loop();
     ASSERT_TRUE(!c.setDiagnosticScanCadenceMs(3));
 }
+
+TEST(controller_exact_get_key_commits_before_optional_auth_and_never_rolls_back)
+{
+    const uint8_t oldKey[16]={1},peerKey[16]={2};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x831F2A,0x7E9E6E,oldKey);c.setSystemKey(oldKey);
+    const uint8_t body[9]={0,0x80,0,0,0,1,0,0,1};ch.onProtocolIdentity(0x7E9E6E,decodeAcceptedDiscoveryIdentity(body,9));
+    ASSERT_TRUE(c.startGetKeyOfNode(&ch,true));IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    ASSERT_EQ(request.commandId,IoHomeCommand::LaunchKeyTransfer);ASSERT_EQ(request.dataLen,6);
+    uint8_t transcript[7]={0x38};std::memcpy(transcript+1,request.data,6);
+    IoHomeFrame reply;reply.init();reply.setSrcNode(0x7E9E6E);reply.setDestNode(0x831F2A);reply.ctrlByte0=IOHC_CTRL0_END;
+    reply.commandId=IoHomeCommand::KeyTransfer;reply.dataLen=16;
+    ASSERT_TRUE(IoHomeCrypto::crypt2WKeyXor(transcript,7,request.data,peerKey,IOHC_TRANSFER_KEY,reply.data));
+    ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_TRUE(!std::memcmp(c.getSystemKey(),peerKey,16));
+    ASSERT_EQ(c.getKeyOfNodeResult().stage,IoHomeController::GetKeyStage::Committed);
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,request));ASSERT_EQ(request.commandId,IoHomeCommand::ChallengeRequest);
+    reply.commandId=IoHomeCommand::ChallengeResponse;reply.dataLen=6;std::memset(reply.data,0,6);
+    ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_EQ(c.getKeyOfNodeResult().authentication,IoHomeController::GetKeyAuthentication::Failed);
+    ASSERT_EQ(c.getKeyOfNodeResult().stage,IoHomeController::GetKeyStage::Committed);ASSERT_TRUE(!std::memcmp(c.getSystemKey(),peerKey,16));
+}

@@ -41,3 +41,7 @@ Runtime `iohc radio scan-cadence [3..20]` permits 3/4/5 ms SX1276 trials and res
 ## 10. Radio self-healing qualification
 
 Retained the intentional idle-only 5 s health supervision and three resets per boot; the recovered periodic scanner reinitialization is not treated as a Semtech requirement. Runtime `iohc radio supervision [3000|5000]` supports physical comparison. New counters expose watchdog triggers, failure reason, reset attempts, successful restores and exhausted budget. Native actual-driver register tests confirm selected frequency, RX/AFC bandwidth and RX mode survive reset; sleep is ignored. The driver does not own keys/sequence state or replay queued commands, and controller recovery only runs while idle. Original-peer tests and deciding whether to replace the three-per-boot cap with a rate limit remain pending hardware evidence.
+
+## 11. Exact GetKeyOfNode primitive
+
+Added an internal explicitly invoked peer/revision/token-bound 0x38 challenge -> 0x32 fixed-transfer-key AES/XOR primitive. It commits the imported global SystemKey immediately and attempts checked network persistence before optional authentication. Authentication outcome is separate and never rolls back the imported key. Cancellation/stale context rejects pending work. The ETS extraction/candidate/adoption workflow is unchanged and does not invoke this primitive. Native vectors cover commit-before-authentication and failed optional authentication retaining the key. Hardware qualification remains pending.
