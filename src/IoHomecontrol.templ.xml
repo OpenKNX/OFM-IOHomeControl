@@ -102,6 +102,8 @@
               <Parameter Id="%AID%_P-%TT%%CC%124" Name="c%C%SensorBackbone" ParameterType="%AID%_PT-IOHCText40Byte" Text="Sensor-Backbone (explizit, Hex)" Value="000000" op:configTransfer="never" />
               <Parameter Id="%AID%_P-%TT%%CC%125" Name="c%C%SensorPollInterval" ParameterType="%AID%_PT-IOHCDiagnosticSeconds" Text="Abfrageintervall Sekunden (1..600)" Value="30" op:configTransfer="never" />
               <Parameter Id="%AID%_P-%TT%%CC%126" Name="c%C%SensorPollDuration" ParameterType="%AID%_PT-IOHCDiagnosticSeconds" Text="Abfragedauer Sekunden (1..3600)" Value="300" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%127" Name="c%C%PriorityLevel" ParameterType="%AID%_PT-IOHCPriorityDiagnostic" Text="Prioritätsstufe (0..7)" Value="0" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%128" Name="c%C%DiagnosticEvidence" ParameterType="%AID%_PT-IOHCText40Byte" Text="Rohwerte / Alter / Gültigkeit" Value="Noch nicht gelesen" op:configTransfer="never" />
             </Parameters>
 
             <ParameterRefs>
@@ -173,6 +175,8 @@
               <ParameterRef Id="%AID%_P-%TT%%CC%124_R-%TT%%CC%12401" RefId="%AID%_P-%TT%%CC%124" />
               <ParameterRef Id="%AID%_P-%TT%%CC%125_R-%TT%%CC%12501" RefId="%AID%_P-%TT%%CC%125" />
               <ParameterRef Id="%AID%_P-%TT%%CC%126_R-%TT%%CC%12601" RefId="%AID%_P-%TT%%CC%126" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%127_R-%TT%%CC%12701" RefId="%AID%_P-%TT%%CC%127" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%128_R-%TT%%CC%12801" RefId="%AID%_P-%TT%%CC%128" />
             </ParameterRefs>
 
             <ParameterCalculations>
@@ -594,6 +598,11 @@
                         <Button Id="%AID%_B-%TT%%CC%016" Text="Default-Sensorabonnement schreiben (explizites Backbone)" EventHandler="IOHC_sensorSubscribe" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%017" Text="Zeitlich begrenzte Rohwertabfrage starten" EventHandler="IOHC_sensorPoll" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%018" Text="Rohwertabfrage stoppen" EventHandler="IOHC_sensorStop" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%127_R-%TT%%CC%12701" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%128_R-%TT%%CC%12801" />
+                        <Button Id="%AID%_B-%TT%%CC%019" Text="Priorität anfragen" EventHandler="IOHC_requestPriorityEvidence" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                        <Button Id="%AID%_B-%TT%%CC%020" Text="Sensorstatus anfragen" EventHandler="IOHC_requestSensorStatus" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                        <Button Id="%AID%_B-%TT%%CC%021" Text="Prioritäts- / Sensorevidenz lesen" EventHandler="IOHC_readSensorEvidence" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%010" Text="Wirksame ETS-Vorgaben anzeigen" EventHandler="IOHC_showEffectiveSettings" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%009" Text="Speicher / Zuordnungsbeleg prüfen" EventHandler="IOHC_readPersistenceEvidence" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%008" Text="Produktwerte abfragen (RF lesen)" EventHandler="IOHC_requestProductObservations" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />

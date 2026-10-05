@@ -289,3 +289,9 @@ test("sensor controls require explicit backbone and bound 2W node",function(){
  d.params.IOHC_c1SensorBackbone.value="123456";IOHC_sensorSubscribe(d,online,{setText:function(){}},{channelIndex:1});
  check(calls[2].join(",")==="53,0,2,18,52,86,18,52,86","subscription node/backbone ABI");
 });
+test("sensor evidence reports invalid and raw states without project type changes",function(){
+ var d=deviceWith({DeviceType:7});d.params.IOHC_c1PriorityLevel={value:2};d.params.IOHC_c1DiagnosticEvidence={value:""};var text="";
+ var online={connect:function(){},disconnect:function(){},invokeFunctionProperty:function(o,p,a){if(a[0]===0x1D)return snapshot(0x1C,1,0);if(a[0]===0x29)return [0,1,0,2,0x12,0x34,0x56,0,1,0,0,0,0,0,0];if(a[0]===0x2A)return [0,1,0,0x12,0x34,0x56,0,3,0x12,0x34,9,8,1,0,0,0,2];return [0,1,0,0,0,0,0,0].concat(new Array(17).fill(0),[0]);}};
+ IOHC_readSensorEvidence(d,online,{setText:function(t){text=t;}},{channelIndex:1});
+ check(text.indexOf("raw=1234")>=0&&text.indexOf("Einheit unbekannt")>=0&&value(d,"DeviceType")===7,"sensor semantics invented");
+});

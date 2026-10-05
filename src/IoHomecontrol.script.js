@@ -1268,3 +1268,29 @@ function IOHC_sensorInfo(d,o,p,c){return IOHC_sensorAction(d,o,p,c,1);}
 function IOHC_sensorSubscribe(d,o,p,c){return IOHC_sensorAction(d,o,p,c,2);}
 function IOHC_sensorPoll(d,o,p,c){return IOHC_sensorAction(d,o,p,c,3);}
 function IOHC_sensorStop(d,o,p,c){return IOHC_sensorAction(d,o,p,c,4);}
+
+function IOHC_priorityAction(device,online,progress,context,action){
+ return IOHC_boundDiagnostic(device,online,progress,context,function(c,id){
+  var level=Number(IOHC_getParameter(device,IOHC_getChannelPrefix(context)+"PriorityLevel").value);
+  if(level<0||level>7||Math.floor(level)!==level)throw new Error("Prioritätsstufe 0..7 erforderlich");
+  var r=IOHC_invokeFunctionProperty(online,[0x36,c,action,level].concat(id.slice(3,6)));
+  if(!r||r.length!==4||r[0]!==0||r[1]!==1||r[2]!==c||r[3]!==action)throw new Error("Anfrage blockiert");
+  progress.setText("Rohwertanfrage gestartet; anschließend Evidenz lesen. Antwortkorrelation ist keine Authentifizierung.");
+ });
+}
+function IOHC_requestPriorityEvidence(d,o,p,c){return IOHC_priorityAction(d,o,p,c,1);}
+function IOHC_requestSensorStatus(d,o,p,c){return IOHC_priorityAction(d,o,p,c,2);}
+function IOHC_hexBytes(bytes){return bytes.map(function(v){return (v<16?"0":"")+v.toString(16).toUpperCase();}).join("");}
+function IOHC_readSensorEvidence(device,online,progress,context){
+ return IOHC_boundDiagnostic(device,online,progress,context,function(c,id){
+  var level=Number(IOHC_getParameter(device,IOHC_getChannelPrefix(context)+"PriorityLevel").value);
+  if(level<0||level>7||Math.floor(level)!==level)throw new Error("Prioritätsstufe 0..7 erforderlich");
+  var priority=IOHC_invokeFunctionProperty(online,[0x29,c,level]),status=IOHC_invokeFunctionProperty(online,[0x2A,c]),info=IOHC_invokeFunctionProperty(online,[0x2B,c]);
+  if(!priority||priority.length!==15||!status||status.length!==17||!info||info.length!==26||priority[0]||status[0]||info[0]||priority[1]!==1||status[1]!==1||info[1]!==1||priority[2]!==c||status[2]!==c||info[2]!==c||priority[3]!==level)throw new Error("Ungültige Evidenzantwort");
+  var after=IOHC_invokeFunctionProperty(online,[0x1D,c]);if(!IOHC_sameRecognitionSnapshot(id,after))throw new Error("Kanal während Lesen geändert");
+  var pvalid=priority[10]===1&&IOHC_readNodeId(priority,4)===IOHC_readNodeId(id,3),svalid=status[12]===1&&IOHC_readNodeId(status,3)===IOHC_readNodeId(id,3);
+  var text="Priorität "+level+": gültig="+pvalid+", Alter="+IOHC_read32(priority,11)+" ms, Zeitcode="+priority[7]+", Originator="+priority[8]+", opaque="+priority[9]+". Sensor: gültig="+svalid+", Alter="+IOHC_read32(status,13)+" ms, Status="+status[6]+", Skalierungscode="+status[7]+", raw="+IOHC_hexBytes(status.slice(8,10))+", opaque="+status[10]+"/"+status[11]+". Sensorinfo: gültig="+(info[3]===1)+", Alter="+IOHC_read32(info,4)+" ms, raw="+IOHC_hexBytes(info.slice(8,25))+". Physikalische Einheit unbekannt; korrelierte Rohdaten.";
+  IOHC_setParameterValue(device,IOHC_getChannelPrefix(context)+"DiagnosticEvidence","P="+pvalid+" S="+svalid+" raw="+IOHC_hexBytes(status.slice(8,10)));
+  progress.setText(text);
+ });
+}

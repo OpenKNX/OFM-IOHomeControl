@@ -2861,6 +2861,18 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         resultData[0]=idle&&mController.requestMpFpRead(mChannels[data[1]],data[2])?0:1;
         resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultLength=4;return true;
     }
+    case 0x36: // Explicit priority/status request; read-only device operation
+    {
+        if(length!=7||data[1]>=mNumChannels||data[3]>7)break;
+        auto *ch=mChannels[data[1]];const uint32_t node=uint32_t(data[4])<<16|uint32_t(data[5])<<8|data[6];
+        if(!node||ch->getNodeId()!=node)break;
+        updateCommissioningJob();bool ok=false;
+        if(managementRequestsAllowed()&&!mCommissioningJob.active()&&!mRadioDiagnostic.active&&!mMetadataRefreshActive){
+            if(data[2]==1)ok=mController.requestPriority(ch,data[3]);
+            else if(data[2]==2)ok=mController.requestSensorStatus(ch);
+        }
+        resultData[0]=ok?0:1;resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultLength=4;return true;
+    }
     case 0x35: // Explicit sensor management; identity bound, no persisted poll replay
     {
         if(length<6||data[1]>=mNumChannels)break;
