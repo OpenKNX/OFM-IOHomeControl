@@ -438,7 +438,7 @@
                         <!-- Scene support: available for the selected actuator categories.
                              The complete per-scene UI selection is generated from IoHomecontrol.scene.part.xml. -->
                         <ParameterRefRef RefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001" IndentLevel="1" HelpContext="IOHC-Anzahl-Szenen" />
-                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Die gewählte Kategorie ist keine Produktqualifikation. Lamellen erfordern ein passendes Profil; 2W-Lüftung bleibt gesperrt. Szenenlernen ist nur für Positionsszenen vorgesehen. Bei Cozy, Licht, Schloss und Schalter kann das Szenensteuerungsobjekt Szenen abrufen, aber nicht speichern." UIHint="Information" />
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Lamellen erfordern ein passendes Profil; 2W-Lüftung bleibt gesperrt. Szenenlernen gilt nur für Positionsszenen. Cozy, Licht, Schloss und Schalter unterstützen nur Abruf. Die Kategorie erteilt keine Produktqualifikation." UIHint="Information" />
                         <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001">
                           <when test="&gt;=1">
                             <op:usePart name="IOHCScene" xpath="//Dynamic/*" />
