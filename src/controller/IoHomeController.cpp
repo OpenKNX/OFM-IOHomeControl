@@ -3119,7 +3119,7 @@ bool IoHomeController::captureProtocolIdentity(
         return false;
 
     IoHomeProtocolIdentity lMetadata =
-        decodeProtocolIdentity(iFrame.data, iFrame.dataLen);
+        decodeAcceptedDiscoveryIdentity(iFrame.data, iFrame.dataLen);
     lMetadata.ioAddress = iFrame.getSrcNodeId();
     if (iChannel)
     {

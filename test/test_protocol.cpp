@@ -19825,3 +19825,27 @@ TEST(controller_key_transfer_folded_fe_preserves_raw_without_claiming_installed_
     ASSERT_EQ(c.lastResponseTimingSample().peerResultLength,2);ASSERT_EQ(c.lastResponseTimingSample().peerResult[1],0x19);
     ASSERT_TRUE(!ch.isPaired());
 }
+
+TEST(protocol_discovery_acceptance_requires_complete_nine_byte_body)
+{
+    const uint8_t body[12]={0,0x80,1,2,3,1,0x81,0x12,0x34,0xAA,0xBB,0xCC};
+    for(uint8_t length=0;length<=12;++length) {
+        const auto diagnostic=decodeProtocolIdentity(body,length);
+        const auto accepted=decodeAcceptedDiscoveryIdentity(body,length);
+        ASSERT_EQ(diagnostic.valid,length>=2);ASSERT_EQ(accepted.valid,length>=9);
+        ASSERT_EQ(accepted.rawDataLen,length);ASSERT_EQ(accepted.fullMetadata,length>=9);
+        if(length>=9) {ASSERT_EQ(accepted.discoveryTimestamp,0x1234);ASSERT_EQ(accepted.ioBackboneAddress,0x010203);}
+    }
+    ASSERT_TRUE(!decodeAcceptedDiscoveryIdentity(nullptr,9).valid);
+}
+
+TEST(controller_truncated_discovery_cannot_advance_pairing_or_replace_identity)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x831F2A,0,key);c.setSystemKey(key);
+    ASSERT_TRUE(c.startPairing(0));IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    IoHomeFrame reply;buildDiscoverResponseFrame(reply,0x831F2A,0x7E9E6E);reply.dataLen=2;
+    ASSERT_TRUE(queueControllerResponse(c,reply));
+    ASSERT_EQ(c.state(),ControllerState::PairWaitDiscoveryResponse);
+    ASSERT_TRUE(!ch.isPaired());ASSERT_TRUE(c.protocolIdentityForIoAddress(0x7E9E6E)==nullptr);
+}

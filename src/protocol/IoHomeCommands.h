@@ -1319,6 +1319,14 @@ inline IoHomeProtocolIdentity decodeProtocolIdentity(const uint8_t *iData, uint8
     return lResult;
 }
 
+// Permissive decoder above is for diagnostics; only this decoder accepts a
+// discovery/session identity. All nine recovered bytes are mandatory.
+inline IoHomeProtocolIdentity decodeAcceptedDiscoveryIdentity(const uint8_t *data,uint8_t length) {
+    auto identity=decodeProtocolIdentity(data,length);
+    identity.valid=identity.valid&&identity.fullMetadata;
+    return identity;
+}
+
 inline uint8_t encodeProtocolIdentity(const IoHomeProtocolIdentity &iIdentity,
                                       uint8_t *oData, uint8_t iCapacity)
 {

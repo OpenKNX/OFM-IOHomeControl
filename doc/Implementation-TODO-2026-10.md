@@ -17,3 +17,7 @@ Implemented all four destination rows in normal/LOW_POWER modes. Default windows
 ## 4. Response descriptors
 
 Added command descriptors and separated opcode acceptance from application rejection. Confirmation accepts 0xFE; 0x32 folds it without claiming key installation; opening 0x31 still requires the challenge path. Pairing retains foldable raw payload and waits for actual key proof. Normal/management 0xFE remains an explicit application rejection. Raw payload/disposition are retained in timing diagnostics.
+
+## 6. Strict discovery records
+
+Split the permissive diagnostic decoder from accepted discovery records. All authoritative controller discovery ingestion now requires the complete nine-byte body. Source RF address remains ioAddress, raw bytes remain intact, and truncated frames cannot overwrite stored metadata or advance pairing. Length tests cover 0 through 12 and null input.
