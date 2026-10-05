@@ -54,3 +54,30 @@ inline const char *ioHomeBoundProductFamilyName(IoHomeBoundProductFamily iFamily
     default: return "unmatched";
     }
 }
+
+struct IoHomeProductBindingResult
+{
+    enum class Reason:uint8_t { MatchedFamily, MissingIdentity, MissingClass, ConflictingEvidence, UnsupportedDefinition };
+    IoHomeBoundProductFamily family=IoHomeBoundProductFamily::Unknown;
+    Reason reason=Reason::MissingIdentity;
+    // No retained RF evidence resolves commercial identity or generation bits.
+    bool commercialModelKnown=false;
+    bool generationKnown=false;
+    bool rfWriteQualified=false;
+};
+
+inline IoHomeProductBindingResult ioHomeProductBindingResult(
+    const IoHomeProtocolIdentity &identity,const IoHomeProductIdentityEvidence &evidence)
+{
+    IoHomeProductBindingResult result;
+    if(!identity.valid || !identity.fullMetadata) return result;
+    if(identity.nodeClass!=IoHomeNodeClass::Actuator)
+    { result.reason=IoHomeProductBindingResult::Reason::MissingClass;return result; }
+    if(evidence.manufacturerSignatureInconsistent ||
+       (evidence.generalInfo2TypeValid && (evidence.generalInfo2Profile!=identity.profile || evidence.generalInfo2SubProfile!=identity.subProfile)))
+    { result.reason=IoHomeProductBindingResult::Reason::ConflictingEvidence;return result; }
+    result.family=ioHomeBindProductFamily(identity,evidence);
+    result.reason=result.family==IoHomeBoundProductFamily::Unknown ?
+        IoHomeProductBindingResult::Reason::UnsupportedDefinition:IoHomeProductBindingResult::Reason::MatchedFamily;
+    return result;
+}

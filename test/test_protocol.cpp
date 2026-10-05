@@ -3662,6 +3662,18 @@ TEST(assignment_receipt_preserves_saved_identity_after_failed_project_ack)
     ASSERT_TRUE(j.erase(0));ASSERT_EQ(j.load(0,r),IoHomeAssignmentReceipt::Result::Missing);
 }
 
+TEST(product_family_match_never_claims_commercial_generation_or_write_qualification)
+{
+    IoHomeProtocolIdentity id;IoHomeProductIdentityEvidence e;
+    id.valid=true;id.fullMetadata=true;id.nodeClass=IoHomeNodeClass::Actuator;
+    id.profile=22;id.subProfile=1;id.manufacturerId=12;e.generalInfo2Len=10;e.generalInfo2[7]=0x62;
+    auto r=ioHomeProductBindingResult(id,e);
+    ASSERT_EQ(r.family,IoHomeBoundProductFamily::AtlanticPassApcHeatPump);
+    ASSERT_TRUE(!r.commercialModelKnown && !r.generationKnown && !r.rfWriteQualified);
+    e.manufacturerSignatureInconsistent=true;r=ioHomeProductBindingResult(id,e);
+    ASSERT_EQ(r.reason,IoHomeProductBindingResult::Reason::ConflictingEvidence);
+}
+
 TEST(product_binding_requires_exact_identity_and_consistent_evidence)
 {
     using F = IoHomeBoundProductFamily;

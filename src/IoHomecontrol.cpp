@@ -2609,6 +2609,16 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         }
         break;
     }
+    case 0x22: // Product-family evidence; never a commercial-model claim
+    {
+        if(length!=2 || data[1]>=mNumChannels) break;
+        const auto &channel=*mChannels[data[1]];
+        const auto binding=ioHomeProductBindingResult(channel.getProtocolIdentity(),channel.getProductIdentityEvidence());
+        resultData[0]=0;resultData[1]=1;resultData[2]=data[1];
+        resultData[3]=static_cast<uint8_t>(binding.family);resultData[4]=static_cast<uint8_t>(binding.reason);
+        resultData[5]=0; // commercial/generation/write flags remain unknown/unqualified
+        resultLength=6;return true;
+    }
     case 0x21: // Read/resume or acknowledge an identity-bound assignment receipt
     {
         if((length!=2 && length!=9) || data[1]>=mNumChannels) break;
