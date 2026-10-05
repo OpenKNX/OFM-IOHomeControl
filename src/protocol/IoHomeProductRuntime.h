@@ -14,7 +14,7 @@ public:
         if(node!=mNode||std::memcmp(key,mKey,16)){mNode=node;std::memcpy(mKey,key,16);for(auto &s:mSamples)s={};}
     }
     bool observe(uint32_t peer,uint8_t index,uint16_t raw,uint32_t generation,uint32_t now,Trust trust) {
-        if(!mNode||peer!=mNode||index>16||!generation||trust==Trust::None)return false;
+        if(!mNode||peer!=mNode||index>19||!generation||trust==Trust::None)return false;
         auto &s=mSamples[index];
         if(s.present&&generation<s.generation)return false; // generations never wrap in controller
         s={raw,generation,now,trust,true};return true;
@@ -28,7 +28,7 @@ public:
             if(!next.observe(peer,index,reply.values[index-1],generation,now,trust))return false;
         *this=next;return true;
     }
-    const Sample *sample(uint8_t index) const {return index<=16?&mSamples[index]:nullptr;}
+    const Sample *sample(uint8_t index) const {return index<=19?&mSamples[index]:nullptr;}
     static bool fresh(const Sample &s,uint32_t now,uint32_t maxAge){return s.present&&maxAge&&uint32_t(now-s.receivedMs)<=maxAge;}
     bool rgb(IoHomeBoundProductFamily family,uint32_t now,uint32_t maxAge,uint8_t &r,uint8_t &g,uint8_t &b) const {
         if(family!=IoHomeBoundProductFamily::RgbLight)return false;
@@ -41,5 +41,5 @@ public:
         return family==IoHomeBoundProductFamily::TunableWhiteLight&&s.trust==Trust::Authenticated&&fresh(s,now,maxAge)&&ioHomeDecodeWhiteTemperature(s.raw,kelvin);
     }
 private:
-    uint32_t mNode=0;uint8_t mKey[16]{};Sample mSamples[17]{};
+    uint32_t mNode=0;uint8_t mKey[16]{};Sample mSamples[20]{};
 };

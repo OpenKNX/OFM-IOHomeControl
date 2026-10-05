@@ -2752,6 +2752,16 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         for(uint8_t i=0;i<4;i++)resultData[13+i]=uint32_t(millis()-sample->receivedMs)>>(24-8*i);
         resultLength=17;return true;
     }
+    case 0x30: // Default min/max or current-via-alias GET; distinct from RF command30
+    {
+        if(length!=6||data[1]>=mNumChannels||(data[2]!=6&&data[2]!=7&&data[2]!=9))break;
+        const uint32_t node=uint32_t(data[3])<<16|uint32_t(data[4])<<8|data[5];
+        if(!node||mChannels[data[1]]->getNodeId()!=node)break;
+        updateCommissioningJob();
+        const bool idle=!mCommissioningJob.active()&&!mRadioDiagnostic.active&&!mMetadataRefreshActive;
+        resultData[0]=idle&&mController.requestMpFpContext(mChannels[data[1]],data[2])?0:1;
+        resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultLength=4;return true;
+    }
     case 0x2E: // Explicit individual MP/FP GET; no writes or legacy KO publication
     {
         if(length!=6||data[1]>=mNumChannels||data[2]>16)break;
@@ -2762,10 +2772,14 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         resultData[0]=idle&&mController.requestMpFpRead(mChannels[data[1]],data[2])?0:1;
         resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultLength=4;return true;
     }
+    case 0x31: // Raw default min/max/current-alias context, same shape as API28
     case 0x28: // Raw product observation, no inferred units/publication
     {
-        if(length!=3||data[1]>=mNumChannels||data[2]>16)break;
-        const auto *sample=mChannels[data[1]]->productRuntime().sample(data[2]);
+        if(length!=3||data[1]>=mNumChannels)break;
+        const bool context=data[0]==0x31;
+        if(context?(data[2]!=6&&data[2]!=7&&data[2]!=9):data[2]>16)break;
+        const uint8_t index=context?(data[2]==6?17:data[2]==7?18:19):data[2];
+        const auto *sample=mChannels[data[1]]->productRuntime().sample(index);
         resultData[0]=0;resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];
         const uint32_t node=mChannels[data[1]]->getNodeId();
         for(uint8_t i=0;i<3;i++)resultData[4+i]=node>>(16-8*i);
@@ -3795,6 +3809,7 @@ void IoHomecontrol::showHelp()
 
     openknx.console.printHelpLine("iohc help", "Show io-homecontrol commands");
     openknx.console.printHelpLine("iohc priority read NODE LEVEL", "Read priority 0..7; bounded expiry refresh; no lock write");
+    openknx.console.printHelpLine("iohc product context NODE MODE", "Read defaults min(6)/max(7)/current alias(9); no physical-unit inference");
     openknx.console.printHelpLine("iohc product read NODE INDEX", "Source-backed individual MP/FP GET, index 0..16; raw observations only");
     openknx.console.printHelpLine("iohc object read NODE PROVIDER KEY OFFSET SPAN", "Read allowlisted metadata; hex IDs, decimal offset/span; 30 s host budget");
     openknx.console.printHelpLine("iohc object status", "Raw transfer stage/token; no publication claim");
@@ -4288,6 +4303,15 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         return true;
     }
 
+    if(lSub.rfind("product context ",0)==0) {
+        unsigned node=0,mode=0;char extra=0;
+        if(sscanf(lSub.c_str(),"product context %x %u %c",&node,&mode,&extra)!=2||!node||node>0xFFFFFF||(mode!=6&&mode!=7&&mode!=9)) {
+            logInfoP("Usage: iohc product context NODE MODE; 6=DefaultValueMin, 7=DefaultValueMax, 9=current alias");return true;
+        }
+        updateCommissioningJob();if(mCommissioningJob.active()||mRadioDiagnostic.active||mMetadataRefreshActive){logInfoP("Finish commissioning/diagnostics/metadata refresh first");return true;}
+        IoHomecontrolChannel *channel=nullptr;for(uint8_t c=0;c<mNumChannels;c++)if(mChannels[c]&&mChannels[c]->getNodeId()==node)channel=mChannels[c];
+        logInfoP("Product context GET queued=%u; raw API31 observations, not physical temperature bounds",mController.requestMpFpContext(channel,mode));return true;
+    }
     if(lSub.rfind("product read ",0)==0) {
         unsigned node=0,index=0;char extra=0;
         if(sscanf(lSub.c_str(),"product read %x %u %c",&node,&index,&extra)!=2||!node||node>0xFFFFFF||index>16) {

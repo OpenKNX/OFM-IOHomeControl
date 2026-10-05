@@ -19353,3 +19353,18 @@ TEST(assignment_receipt_unpair_retains_revision_and_erases_private_key) {
     ASSERT_TRUE(store.prepare(0,0x123456,key,identity));ASSERT_EQ(store.load(0,retired),IoHomeAssignmentReceipt::Result::Found);
     ASSERT_EQ(retired.generation,2);
 }
+
+TEST(controller_product_default_context_reads_target_not_current_mp) {
+    for(uint8_t mode:{6,7,9}) {
+        const uint8_t key[16]={1};IoHomeController controller;IoHomecontrol module;IoHomecontrolChannel channel;
+        initPaired2WControllerForTest(controller,module,channel,0x831F2A,0x7E9E6E,key);
+        IoHomeProtocolIdentity identity;identity.valid=true;identity.nodeClass=IoHomeNodeClass::Actuator;channel.onProtocolIdentity(0x7E9E6E,identity);
+        ASSERT_TRUE(controller.requestMpFpContext(&channel,mode));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(controller,tx));
+        ASSERT_EQ(tx.dataLen,3);ASSERT_EQ(tx.data[0],mode);ASSERT_EQ(tx.data[1],0);ASSERT_EQ(tx.data[2],0);
+        uint8_t data[]={0,0,0x12,0x34,0x56,0x78};IoHomeFrame reply;
+        buildSimpleResponseFrame(reply,0x831F2A,0x7E9E6E,IoHomeCommand::PrivateResponse,data,sizeof(data));
+        ASSERT_TRUE(queueControllerResponse(controller,reply));
+        ASSERT_EQ(channel.productRuntime().sample(mode==6?17:mode==7?18:19)->raw,0x1234);
+        ASSERT_TRUE(!channel.productRuntime().sample(0)->present);ASSERT_TRUE(!channel.testHasPositionFeedback());
+    }
+}
