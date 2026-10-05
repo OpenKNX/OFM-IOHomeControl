@@ -3669,6 +3669,21 @@ const IoHomeController::ResponseTimingSample &IoHomeController::lastResponseTimi
     return mLastResponseTimingSample;
 }
 
+void IoHomeController::selectDirectedResponseTimeout(uint8_t ctrl1)
+{
+    const auto *channel = channelForQueueEntry(mCurrentCmd);
+    const auto *identity = channel && channel->getProtocolIdentity().valid
+        ? &channel->getProtocolIdentity() : protocolIdentityForIoAddress(mCurrentCmd.destNodeId);
+    const auto selected = ioHomeDirectedTimeout(ctrl1, identity);
+    mResponseTimeoutMs = selected.milliseconds;
+    mLastResponseTimingSample.selectedTimeoutMs = selected.milliseconds;
+    mLastResponseTimingSample.timeoutGroup = selected.group;
+    mLastResponseTimingSample.timeoutFallback = selected.fallback;
+    logDebugP("2W deadline=%ums MIBclass=%u CTRL1group=%u fallback=%s",
+        selected.milliseconds, selected.responseClass, selected.group,
+        selected.fallback ? "missing-or-incomplete-discovery-MIB" : "none");
+}
+
 void IoHomeController::beginResponseTimingAttempt()
 {
     mExchangeRequestTxEndUs = 0;
@@ -6770,14 +6785,13 @@ void IoHomeController::processTxPending()
     // 1W has its own proven first-frame/repeat behaviour. For 2W, a START
     // frame needs a wake-up preamble only when its target is low-power.
     // Normal 2W controller-originated TX is always sent on CH2; RX scanning remains separate.
-    bool lIsStartFrame = (mTxFrame.ctrlByte0 & IOHC_CTRL0_START);
     const uint16_t lPreamble = lIs1WFrame ? lOneWayFirstShape.preamble
                                           : preambleForQueued2WAttempt(mTxFrame, mCurrentCmd);
     if (!lIs1WFrame)
     {
         mWaitingFinalResponse = false;
         mSawChallenge = false;
-        mResponseTimeoutMs = lIsStartFrame ? IOHC_RX_TIMEOUT_MS : IOHC_RX_FINAL_TIMEOUT_MS;
+        selectDirectedResponseTimeout(mTxFrame.ctrlByte1);
         mRetryAtMs = 0;
     }
     const uint32_t l1WTxFreqHz = IOHC_FREQUENCIES[mCurrentFreqIdx];
@@ -6827,8 +6841,10 @@ void IoHomeController::processTxPending()
                      static_cast<unsigned>(lPreamble),
                      static_cast<unsigned long>(mDirectedRequestTxStartUs));
         }
-        if (!lIs1WFrame)
+        if (!lIs1WFrame) {
             beginResponseTimingAttempt();
+            selectDirectedResponseTimeout(mTxFrame.ctrlByte1);
+        }
         mStateTimer = millis();
         mState = ControllerState::TxInProgress;
     }
@@ -7332,7 +7348,7 @@ void IoHomeController::processResponse()
                 mAuthResponseSent = true;
                 mWaitingFinalResponse = true;
                 mSawChallenge = true;
-                mResponseTimeoutMs = IOHC_RX_FINAL_TIMEOUT_MS;
+                selectDirectedResponseTimeout(lFrame.ctrlByte1);
                 mRetryAtMs = 0;
                 mStateTimer = millis();
                 mState = ControllerState::TxInProgress; // will transition to WaitResponse when TX done

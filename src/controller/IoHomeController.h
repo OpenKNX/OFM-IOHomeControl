@@ -3,6 +3,7 @@
 #include "../protocol/IoHomeDurableReservation.h"
 #pragma once
 #include "../protocol/IoHomeRadioPolicy.h"
+#include "../protocol/IoHomeTransactionTiming.h"
 #include "../radio/Radio.h"
 #include "../protocol/IoHomeFrame.h"
 #include "../protocol/IoHomeCrypto.h"
@@ -19,7 +20,7 @@
 #define IOHC_RX_FINAL_TIMEOUT_MS 500
 #define IOHC_RETRY_GAP_MS 250
 #define IOHC_UNCONFIRMED_EXECUTE_RETRY_GAP_MS 750
-#define IOHC_EXCHANGE_TOTAL_BUDGET_MS 2500
+#define IOHC_EXCHANGE_TOTAL_BUDGET_MS 5000
 #ifndef IOHC_PAIR_KEY_EXCHANGE_MAX_ATTEMPTS
 #define IOHC_PAIR_KEY_EXCHANGE_MAX_ATTEMPTS 3
 #endif
@@ -400,6 +401,9 @@ public:
     uint8_t subProfile = 0;
     uint8_t powerSaveModeRaw = 0xFF;
     uint8_t responseTimeClass = 0xFF;
+    uint16_t selectedTimeoutMs = 0;
+    uint8_t timeoutGroup = 0;
+    bool timeoutFallback = true;
     uint32_t txEndToFirstResponseUs = 0;
     uint32_t txEndToFinalResponseUs = 0;
   };
@@ -1431,6 +1435,7 @@ private:
   uint16_t pairingStartPreamble(const IoHomeFrame &iFrame) const;
   void resetPairingPreambleState();
   void beginExchangeDiagnosticsWindow();
+  void selectDirectedResponseTimeout(uint8_t ctrl1);
   void beginResponseTimingAttempt();
   void markResponseTimingTxEnd();
   void recordResponseTiming(bool iFinalResponse);

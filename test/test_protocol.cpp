@@ -11697,7 +11697,7 @@ static bool retryKeepsStartForQueued2WCommand(IoHomeCommand iCommand, uint8_t iP
         return false;
 
     lController.loop(); // TxInProgress -> WaitResponse
-    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
     lController.loop(); // timeout reached: arm retry gap
     ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
     lController.loop(); // retry gap elapsed: rebuild frame and enter TxPending
@@ -11752,7 +11752,7 @@ static bool retryKeepsStartForQueued2WSetName()
         return false;
 
     lController.loop(); // TxInProgress -> WaitResponse
-    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
     lController.loop(); // timeout reached: arm retry gap
     ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
     lController.loop(); // retry gap elapsed: rebuild frame and enter TxPending
@@ -16721,7 +16721,7 @@ TEST(controller_2w_initial_response_wait_uses_retry_gap)
     ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
     ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
 
-    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS - 1);
+    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs - 1);
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
     ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
@@ -16771,7 +16771,7 @@ TEST(controller_non_execute_exchange_uses_three_total_attempts_without_trailing_
 
     for (uint8_t lRetry = 0; lRetry < IOHC_MAX_RETRIES; ++lRetry)
     {
-        ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+        ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
         lController.loop(); // arm retry gap
         ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
         ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
@@ -16783,7 +16783,7 @@ TEST(controller_non_execute_exchange_uses_three_total_attempts_without_trailing_
 
     ASSERT_EQ(lController.radio().testTransmitCount(),
               static_cast<size_t>(IOHC_EXCHANGE_MAX_ATTEMPTS));
-    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::Idle);
     ASSERT_EQ(lController.radio().testTransmitCount(),
@@ -16810,7 +16810,7 @@ TEST(controller_exchange_uses_per_request_attempt_budget)
     IoHomeFrame lFrame;
     ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
     lController.loop();
-    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::Idle);
     ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
@@ -16835,7 +16835,7 @@ TEST(controller_wake_belief_is_snapshotted_for_all_retries)
     ASSERT_EQ(lController.radio().testLastPreambleLength(), 48);
     lController.loop();
 
-    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
     lController.loop();
     ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
     lController.loop();
@@ -16843,7 +16843,7 @@ TEST(controller_wake_belief_is_snapshotted_for_all_retries)
     ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
     lController.loop();
 
-    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
     lController.loop();
     ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
     lController.loop();
@@ -16954,7 +16954,7 @@ TEST(byte_vector_controller_2w_execute_payloads_and_retry_start)
         ASSERT_MEM_EQ(lFirstFrame.data, v.expectedPayload, v.expectedLen);
 
         lController.loop(); // TxInProgress -> WaitResponse
-        ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+        ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
         lController.loop(); // timeout reached: arm retry gap
         if (v.param == 0xD8)
         {
@@ -17171,7 +17171,7 @@ TEST(controller_2w_final_response_wait_and_sx1262_dwell)
     // At dwell expiry RX scanning may restart immediately; before expiry it must not.
     ASSERT_TRUE(lController.radio().rxStartCount() >= lRxStartsBeforeDwell + 1);
 
-    ioHomeTestAdvanceMillis(IOHC_RX_FINAL_TIMEOUT_MS - IOHC_AUTH_DWELL_MS_SX1262 - 1);
+    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs - IOHC_AUTH_DWELL_MS_SX1262 - 1);
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
     ASSERT_EQ(lController.radio().testTransmitCount(), 2U);
@@ -17218,7 +17218,7 @@ TEST(controller_execute_without_response_uses_three_attempts_and_remains_unknown
     ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
     lController.loop();
 
-    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
     lController.loop();
     ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
     lController.loop();
@@ -17226,7 +17226,7 @@ TEST(controller_execute_without_response_uses_three_attempts_and_remains_unknown
     lController.loop();
     lController.loop();
 
-    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
     lController.loop();
     ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
     lController.loop();
@@ -17234,7 +17234,7 @@ TEST(controller_execute_without_response_uses_three_attempts_and_remains_unknown
     lController.loop();
     lController.loop();
 
-    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::Idle);
     ASSERT_EQ(lController.radio().testTransmitCount(), 3U);
@@ -17262,7 +17262,7 @@ TEST(controller_execute_can_complete_on_third_fully_silent_attempt)
 
     for (uint8_t lSilentAttempt = 0; lSilentAttempt < 2; ++lSilentAttempt)
     {
-        ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+        ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
         lController.loop();
         ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);
         lController.loop();
@@ -17304,7 +17304,7 @@ TEST(controller_favorite_execute_is_never_replayed_after_silence)
     IoHomeFrame lFrame;
     ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
     lController.loop();
-    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
     lController.loop();
 
     ASSERT_EQ(lController.state(), ControllerState::Idle);
@@ -17339,7 +17339,7 @@ TEST(controller_known_execute_confirmer_gets_one_delayed_authenticated_retry)
     ASSERT_TRUE(queueControllerResponse(lController, lChallenge));
     lController.loop(); // auth TX completes -> WaitResponse
 
-    ioHomeTestAdvanceMillis(IOHC_RX_FINAL_TIMEOUT_MS);
+    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::WaitResponse);
     ASSERT_EQ(lController.radio().testTransmitCount(), 2U); // request + auth response
@@ -17354,7 +17354,7 @@ TEST(controller_known_execute_confirmer_gets_one_delayed_authenticated_retry)
     lController.loop();
     ASSERT_EQ(lController.radio().testTransmitCount(), 3U); // exactly two Execute copies
 
-    ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS);
+    ioHomeTestAdvanceMillis(lController.lastResponseTimingSample().selectedTimeoutMs);
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::Idle);
     ASSERT_EQ(lController.radio().testTransmitCount(), 3U);
@@ -19740,5 +19740,41 @@ TEST(controller_profile_objects_reject_reads_and_writes_after_profile_change)
         ch.setManualProfileOverride(0x0040);IoHomeProtocolIdentity identity;identity.valid=true;identity.profile=1;identity.nodeClass=IoHomeNodeClass::Controller;
         ch.onProtocolIdentity(0x7E9E6E,identity);ASSERT_TRUE(!c.requestProfileParameterRead(&ch));
         ASSERT_TRUE(!c.sendProfileParameterCommand(0x7E9E6E,key,ParameterSemantic::SlatOrientation,25));
+    }
+}
+
+TEST(protocol_directed_timeout_all_ctrl1_groups_and_mib_classes)
+{
+    const uint16_t rows[16][4] = {
+        {116,121,131,151},{161,211,311,511},{161,166,176,196},{100,100,100,100},
+        {116,121,131,151},{161,211,311,511},{161,166,176,196},{100,100,100,100},
+        {534,711,811,1011},{534,711,811,1011},{534,711,811,1011},{534,711,811,1011},
+        {534,711,811,1011},{534,711,811,1011},{534,711,811,1011},{534,711,811,1011}};
+    IoHomeProtocolIdentity identity;identity.valid=identity.fullMetadata=identity.hasMib=true;
+    for(uint8_t group=0;group<16;++group) for(uint8_t cls=0;cls<4;++cls) {
+        identity.responseTimeClass=cls;
+        const uint8_t ctrl1=((group&1)<<4)|((group&2)<<2)|((group&4)<<5)|((group&8)<<2);
+        const auto result=ioHomeDirectedTimeout(ctrl1,&identity);
+        ASSERT_EQ(result.group,group);ASSERT_EQ(result.milliseconds,rows[group][cls]);ASSERT_TRUE(!result.fallback);
+    }
+    ASSERT_EQ(ioHomeDirectedTimeout(0,nullptr).milliseconds,1011);
+    identity.fullMetadata=false;ASSERT_TRUE(ioHomeDirectedTimeout(0,&identity).fallback);
+}
+
+TEST(controller_low_power_deadline_starts_after_transmit_completion)
+{
+    for(uint8_t cls=2;cls<=3;++cls) {
+        const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+        const uint8_t body[9]={0,0x80,0,0,0,1,uint8_t((cls<<6)|IOHC_POWER_SAVE_LOW_POWER),0,1};
+        ch.onProtocolIdentity(0x654321,decodeProtocolIdentity(body,9));
+        ASSERT_TRUE(c.sendBackgroundCommand(0x654321,key,IoHomeCommand::Private,3,0xFF,0xFF,1));
+        IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+        const uint16_t deadline=cls==2?811:1011;
+        ASSERT_EQ(c.lastResponseTimingSample().selectedTimeoutMs,deadline);
+        ioHomeTestAdvanceMillis(1500);c.loop(); // TX completes now, even though queued long ago.
+        ASSERT_EQ(c.state(),ControllerState::WaitResponse);
+        ioHomeTestAdvanceMillis(deadline-1);c.loop();ASSERT_EQ(c.state(),ControllerState::WaitResponse);
+        ioHomeTestAdvanceMillis(1);c.loop();ASSERT_EQ(c.state(),ControllerState::Idle);
     }
 }
