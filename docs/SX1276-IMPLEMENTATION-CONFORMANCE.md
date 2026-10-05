@@ -36,3 +36,20 @@ ETS uses one combined request when supported and retains the individual-read
 fallback for older firmware. The RGB KNX read trigger also queues one request.
 Native tests exercise selector mapping, incomplete-tuple rejection, atomic
 complete-tuple ingestion and absence of legacy position publication.
+
+## Explicit default sensor subscription — 2026-10-05
+
+`iohc sensor subscribe-default NODE BACKBONE` builds only the recovered canonical
+`8B` write: zeroed 17-byte body, byte3=1, bytes13..15=the explicitly supplied
+established target backbone, byte16=CC. Both addresses are hex. It rejects
+zero/oversized backbone addresses, non-Sensor identities, 1W/unpaired channels,
+RF ownership conflicts and concurrent queued work. Key and semantic-context
+snapshots invalidate a stale queued write. The exchange has one attempt and
+retains the existing 8C >=17-byte response decoder as correlated evidence.
+
+This is an expert configuration operation, not automatic subscription or a
+physical acceptance result. No unknown bytes0..12 are exposed as settings, no
+SensorInformation reply layout is reused as a write, and no sensor units/KNX
+publication or event-monitoring policy are inferred. `sensor info` remains the
+separate read-only `8B FF` operation. Source: OVPd serializer
+0x0018C698..0x0018C900, documented in the 2W report.

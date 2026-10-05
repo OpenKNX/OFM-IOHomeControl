@@ -2461,6 +2461,20 @@ bool IoHomeController::requestSensorInformation(IoHomecontrolChannel *channel)
     entry.maxAttempts=1;entry.background=true;entry.active=true;return queuePush(entry);
 }
 
+bool IoHomeController::requestDefaultSensorSubscription(IoHomecontrolChannel *channel,uint32_t backbone)
+{
+    // Explicit expert operation only: no guessed backbone, auto-subscription,
+    // arbitrary pre-tail settings, retries or inferred physical units.
+    if(!idleForManagedOperation()||!backbone||backbone>0xFFFFFF||!channel||!channel->isPaired()||channel->is1W()||
+       !channel->productContextRevision()||!channel->getProtocolIdentity().valid||
+       channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Sensor)return false;
+    IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
+    entry.managementRead=true;std::memcpy(entry.managementKey,entry.encKey,16);
+    entry.productContextRevision=channel->productContextRevision();entry.sensorSubscriptionBackbone=backbone;
+    entry.command=IoHomeCommand::SensorSubscribeRequest;entry.sourceChannelIndex=channelIndexFor(channel);
+    entry.maxAttempts=1;entry.active=true;return queuePush(entry);
+}
+
 bool IoHomeController::sampleIdentityMatches(uint8_t channel,uint32_t node,const uint8_t *key) const
 {
     if(!mModule||channel>=16)return false;
@@ -9978,8 +9992,14 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
     case IoHomeCommand::SensorStatusRequest:
         mTxFrame.dataLen=0;mTxFrame.hasHmac=false;break;
     case IoHomeCommand::SensorSubscribeRequest:
-        if(!iEntry.managementRead||iEntry.param!=0xFF)return false; // read-only query, never the 17-byte write form
-        mTxFrame.data[0]=0xFF;mTxFrame.dataLen=1;mTxFrame.hasHmac=false;break;
+        if(!iEntry.managementRead)return false;
+        if(iEntry.sensorSubscriptionBackbone) {
+            if(!ioHomeBuildDefaultSensorSubscription(iEntry.sensorSubscriptionBackbone,mTxFrame.data,mTxFrame.dataLen))return false;
+        } else {
+            if(iEntry.param!=0xFF)return false;
+            mTxFrame.data[0]=0xFF;mTxFrame.dataLen=1;
+        }
+        mTxFrame.hasHmac=false;break;
     case IoHomeCommand::GetName:
     case IoHomeCommand::GetGeneralInfo1:
     case IoHomeCommand::GetGeneralInfo2:

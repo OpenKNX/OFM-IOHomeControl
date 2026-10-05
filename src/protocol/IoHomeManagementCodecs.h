@@ -37,3 +37,13 @@ inline bool ioHomeDecodeSensorInformation(const uint8_t *p,uint8_t size,IoHomeSe
     s.resolutionScale=p[9];s.mode=p[10];s.maxEvents=p[11];s.minRefresh=uint16_t(p[12])<<8|p[13];
     s.backbone=uint32_t(p[14])<<16|uint32_t(p[15])<<8|p[16];out=s;return true;
 }
+
+// IoSubscribeSensorEvent::putSubscribeSensorEvent default template.
+// Request bytes 13..16 are node-owned, not SensorInformation reply fields.
+// Caller must supply the independently established target backbone address.
+inline bool ioHomeBuildDefaultSensorSubscription(uint32_t backbone,uint8_t *data,uint8_t &length) {
+    length=0;if(!data||!backbone||backbone>0xFFFFFF)return false;
+    std::memset(data,0,17);data[3]=1;
+    data[13]=backbone>>16;data[14]=backbone>>8;data[15]=backbone;data[16]=0xCC;
+    length=17;return true;
+}

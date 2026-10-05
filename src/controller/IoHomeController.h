@@ -168,6 +168,7 @@ struct IoHomeQueueEntry
   bool twoWayFp;                               // profile-selected functional parameter
   bool managementRead;                        // key snapshot for correlated management reads
   uint8_t managementKey[16];
+  uint32_t sensorSubscriptionBackbone;        // nonzero only for explicit default write
   bool mpFpRead;                              // source-backed individual standard GET
   uint8_t mpFpReadIndex;
   uint16_t mpFpReadSelected;                  // logical FP mask; all requested fields required
@@ -584,6 +585,7 @@ public:
   bool requestPriority(IoHomecontrolChannel *channel,uint8_t priority);
   bool requestSensorStatus(IoHomecontrolChannel *channel);
   bool requestSensorInformation(IoHomecontrolChannel *channel);
+  bool requestDefaultSensorSubscription(IoHomecontrolChannel *channel,uint32_t backbone);
   struct PrioritySample {bool valid=false,refreshArmed=false;uint32_t node=0,receivedMs=0;IoHomePriorityState state;uint8_t key[16]{};};
   struct SensorSample {bool valid=false;uint32_t node=0,receivedMs=0;IoHomeSensorStatus state;uint8_t key[16]{};};
   struct SensorInformationSample {bool valid=false;uint32_t node=0,receivedMs=0;IoHomeSensorInformation state;uint8_t key[16]{},raw[17]{};};

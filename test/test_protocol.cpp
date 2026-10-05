@@ -19439,3 +19439,31 @@ TEST(controller_combined_product_read_requires_complete_tuple) {
     ASSERT_EQ(ch.productRuntime().sample(10)->trust,IoHomeProductRuntime::Trust::Correlated);
     ASSERT_TRUE(!ch.testHasPositionFeedback());
 }
+
+TEST(protocol_sensor_subscription_default_is_not_reply_layout) {
+    uint8_t data[17];std::memset(data,0xFF,sizeof(data));uint8_t length=99;
+    ASSERT_TRUE(!ioHomeBuildDefaultSensorSubscription(0,data,length));ASSERT_EQ(length,0);
+    ASSERT_TRUE(!ioHomeBuildDefaultSensorSubscription(0x1000000,data,length));
+    ASSERT_TRUE(ioHomeBuildDefaultSensorSubscription(0x123456,data,length));ASSERT_EQ(length,17);
+    for(int i=0;i<13;i++)ASSERT_EQ(data[i],i==3?1:0);
+    ASSERT_EQ(data[13],0x12);ASSERT_EQ(data[14],0x34);ASSERT_EQ(data[15],0x56);ASSERT_EQ(data[16],0xCC);
+}
+TEST(controller_sensor_subscription_is_explicit_identity_bound_and_single_attempt) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ASSERT_TRUE(!c.requestDefaultSensorSubscription(&ch,0x111222));
+    IoHomeProtocolIdentity identity;identity.valid=true;identity.nodeClass=IoHomeNodeClass::Sensor;ch.onProtocolIdentity(0x654321,identity);
+    ASSERT_TRUE(!c.requestDefaultSensorSubscription(&ch,0));ASSERT_TRUE(c.requestDefaultSensorSubscription(&ch,0x111222));
+    ASSERT_TRUE(!c.requestDefaultSensorSubscription(&ch,0x111222));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ASSERT_EQ(tx.commandId,IoHomeCommand::SensorSubscribeRequest);ASSERT_EQ(tx.dataLen,17);ASSERT_EQ(tx.data[3],1);
+    ASSERT_EQ(tx.data[13],0x11);ASSERT_EQ(tx.data[14],0x12);ASSERT_EQ(tx.data[15],0x22);ASSERT_EQ(tx.data[16],0xCC);
+    uint8_t data[17]={};IoHomeFrame reply;buildSimpleResponseFrame(reply,0x123456,0x654321,IoHomeCommand::SensorInformationResponse,data,sizeof(data));
+    ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_TRUE(c.sensorInformationSample(0)->valid);
+}
+TEST(controller_sensor_subscription_rejects_reclassified_queued_target) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    IoHomeProtocolIdentity identity;identity.valid=true;identity.nodeClass=IoHomeNodeClass::Sensor;ch.onProtocolIdentity(0x654321,identity);
+    ASSERT_TRUE(c.requestDefaultSensorSubscription(&ch,0x111222));identity.nodeClass=IoHomeNodeClass::Actuator;ch.onProtocolIdentity(0x654321,identity);
+    IoHomeFrame tx;ASSERT_TRUE(!transmitQueuedControllerFrame(c,tx));
+}

@@ -3870,6 +3870,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc object read NODE PROVIDER KEY OFFSET SPAN", "Read allowlisted metadata; hex IDs, decimal offset/span; 30 s host budget");
     openknx.console.printHelpLine("iohc object status", "Raw transfer stage/token; no publication claim");
     openknx.console.printHelpLine("iohc object cancel TOKEN", "Cancel matching object read token");
+    openknx.console.printHelpLine("iohc sensor subscribe-default NODE BACKBONE", "Expert: write recovered default subscription; both addresses hex, peer acceptance unqualified");
     openknx.console.printHelpLine("iohc sensor info NODE", "Read paired sensor information with 8B FF; no subscription write");
     openknx.console.printHelpLine("iohc sensor read NODE", "Read paired sensor status; preserve unknown physical units");
     openknx.console.printHelpLine("iohc 2wrecovery status", "Checked network identity/bindings persistence status; failure blocks 2W TX");
@@ -4394,6 +4395,16 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     if(lSub.rfind("object cancel ",0)==0) {
         unsigned token=0;char extra=0;if(sscanf(lSub.c_str(),"object cancel %u %c",&token,&extra)!=1||!token){logInfoP("Usage: iohc object cancel TOKEN (decimal)");return true;}
         logInfoP("Object read cancelled=%u; bytes already on air cannot be retracted",mController.cancelObjectRead(token));return true;
+    }
+    if(lSub.rfind("sensor subscribe-default ",0)==0) {
+        unsigned node=0,backbone=0;char extra=0;
+        if(sscanf(lSub.c_str(),"sensor subscribe-default %x %x %c",&node,&backbone,&extra)!=2||!node||node>0xFFFFFF||!backbone||backbone>0xFFFFFF) {
+            logInfoP("Usage: iohc sensor subscribe-default NODE BACKBONE (hex; established target backbone required)");return true;
+        }
+        IoHomecontrolChannel *channel=nullptr;
+        for(uint8_t c=0;c<mNumChannels;c++)if(mChannels[c]&&mChannels[c]->getNodeId()==node)channel=mChannels[c];
+        const bool idle=!mCommissioningJob.active()&&!mMetadataQuery.active()&&!mPendingDiagnostic.active;
+        logInfoP("Default sensor subscription queued=%u; explicit configuration write, one attempt; peer acceptance unqualified",idle&&mController.requestDefaultSensorSubscription(channel,backbone));return true;
     }
     if(lSub.rfind("sensor info ",0)==0) {
         unsigned node=0;char extra=0;
