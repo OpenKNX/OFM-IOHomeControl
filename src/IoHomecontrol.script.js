@@ -70,83 +70,44 @@ function IOHC_appendNodeId(data, nodeId) {
     data.push(normalizedNodeId & 0xFF);
 }
 
-function IOHC_etsDeviceType(protocolType, subProfile) {
-    // Match complete Appendix-2 identifiers; an unknown subprofile is not a
-    // wildcard match for another product's ETS control presentation.
-    switch ((protocolType << 6) | subProfile) {
-    case 0x0040: // Interior Venetian blind
-    case 0x0080: // Roller shutter
-    case 0x0081: // Adjustable-slats roller shutter
-    case 0x0082: // Roller shutter with projection
-    case 0x0280: // Vertical interior blind
-    case 0x0340: // Dual roller shutter
-    case 0x0440: // Exterior Venetian blind
-    case 0x0480: // Louvre blind
-    case 0x0600: // Swinging shutter
-    case 0x0601: // Independent-leaf swinging shutter
-        return 1;
-    case 0x0100:
-    case 0x0101:
-        return 2;
-    case 0x00C0:
-        return 3;
-    case 0x0140:
-    case 0x017A:
-        return 4;
-    case 0x0380: // Legacy Atlantic Cozy; distinct from energy-demand heating
-        return 5;
-    case 0x0180:
-    case 0x01BA:
-        return 6;
-    case 0x01C0:
-    case 0x01FA:
-        return 7;
-    case 0x0240:
-    case 0x0241:
-        return 8;
-    case 0x0400:
-        return 9;
-    case 0x04C0:
-        return 10;
-    case 0x0500:
-    case 0x0501:
-    case 0x0502:
-    case 0x0503:
-        return 11;
-    case 0x03C0:
-        return 12;
-    case 0x0540:
-        return 13;
-    case 0x057A:
-        return 14;
-    default:
-        return 0;
-    }
-}
-
-function IOHC_hasOrientationObjects(protocolType, subProfile) {
-    switch ((protocolType << 6) | subProfile) {
-    case 0x0040:
-    case 0x0081:
-    case 0x0440:
-    case 0x0480:
-        return 1;
-    default:
-        return 0;
-    }
-}
-
-function IOHC_isBinaryOnly(protocolType, subProfile) {
-    switch ((protocolType << 6) | subProfile) {
-    case 0x017A: // Garage Door On/Off
-    case 0x01BA: // Light On/Off
-    case 0x01FA: // Gate On/Off
-    case 0x057A: // Exterior Heating On/Off
-        return 1;
-    default:
-        return 0;
-    }
-}
+// BEGIN GENERATED RECOGNITION
+var IOHC_PRESENTATIONS = {
+    64: [1, 1],
+    128: [1, 0],
+    129: [1, 1],
+    130: [1, 0],
+    192: [3, 0],
+    256: [2, 0],
+    257: [2, 0],
+    320: [4, 0],
+    378: [4, 2],
+    384: [6, 4],
+    442: [6, 2],
+    448: [7, 0],
+    506: [7, 2],
+    576: [8, 0],
+    577: [8, 0],
+    640: [1, 0],
+    832: [1, 0],
+    896: [5, 0],
+    960: [12, 0],
+    1024: [9, 0],
+    1088: [1, 1],
+    1152: [1, 1],
+    1216: [10, 0],
+    1280: [11, 0],
+    1281: [11, 0],
+    1282: [11, 0],
+    1283: [11, 0],
+    1344: [13, 0],
+    1402: [14, 2],
+    1536: [1, 0],
+    1537: [1, 0]
+};
+function IOHC_etsDeviceType(p,s) { return (IOHC_PRESENTATIONS[(p<<6)|s] || [0,0])[0]; }
+function IOHC_hasOrientationObjects(p,s) { return (IOHC_PRESENTATIONS[(p<<6)|s] || [0,0])[1]&1; }
+function IOHC_isBinaryOnly(p,s) { return ((IOHC_PRESENTATIONS[(p<<6)|s] || [0,0])[1]>>1)&1; }
+// END GENERATED RECOGNITION
 
 function IOHC_importDeviceLabel(etsType) {
     switch (etsType) {
@@ -185,15 +146,19 @@ function IOHC_setExtractionResult(device, statusText, nodeIds) {
 function IOHC_applyRecognitionSettings(device, prefix, discovery) {
     var override = IOHC_getParameter(device, prefix + "ProfileOverride");
     if ((override && Number(override.value) != 0) || !discovery.metadataValid) return false;
-    var etsType = IOHC_etsDeviceType(discovery.protocolType, discovery.subtype);
+    var etsType = discovery.presentationType !== undefined ? discovery.presentationType :
+                  IOHC_etsDeviceType(discovery.protocolType, discovery.subtype);
     if (!etsType) return false;
     IOHC_setParameterValue(device, prefix + "DeviceType", etsType);
     IOHC_setParameterValue(device, prefix + "ChannelSelection", etsType + 1);
     IOHC_setParameterValue(device, prefix + "OrientationObjects",
+                           discovery.presentationFlags !== undefined ? discovery.presentationFlags&1 :
                            IOHC_hasOrientationObjects(discovery.protocolType, discovery.subtype));
     IOHC_setParameterValue(device, prefix + "BinaryOnly",
+                           discovery.presentationFlags !== undefined ? (discovery.presentationFlags>>1)&1 :
                            IOHC_isBinaryOnly(discovery.protocolType, discovery.subtype));
     IOHC_setParameterValue(device, prefix + "Dimmable",
+                           discovery.presentationFlags !== undefined ? (discovery.presentationFlags>>2)&1 :
                            discovery.protocolType == 0x06 && discovery.subtype == 0 ? 1 : 0);
     return true;
 }
@@ -201,7 +166,9 @@ function IOHC_applyRecognitionSettings(device, prefix, discovery) {
 function IOHC_queryRecognition(device, online, context, applySettings) {
     var channel = context.channelIndex - 1;
     var prefix = "IOHC_c" + context.channelIndex;
-    var response = IOHC_invokeFunctionProperty(online, [0x1D, channel]);
+    var extended = IOHC_invokeFunctionProperty(online, [0x1E, channel]);
+    var hasPresentation = extended && extended.length === 14 && extended[0] === 0 && extended[1] === 1 && extended[2] === channel;
+    var response = hasPresentation ? extended.slice(0,12) : IOHC_invokeFunctionProperty(online, [0x1D, channel]);
     // Older firmware has no snapshot API. Keep the existing status workflow usable.
     if (!response || response.length != 12 || response[0] != 0 ||
         response[1] != 1 || response[2] != channel) {
@@ -216,6 +183,7 @@ function IOHC_queryRecognition(device, online, context, applySettings) {
         metadataValid: (response[11] & 0x04) != 0,
         metadataComplete: (response[11] & 0x08) != 0
     };
+    if (hasPresentation) { discovery.presentationType=extended[12]; discovery.presentationFlags=extended[13]; }
     var oneWay = (response[11] & 0x20) != 0;
     var ready = (response[11] & 0x10) != 0;
     IOHC_setParameterValue(device, prefix + "ImportedProfile",

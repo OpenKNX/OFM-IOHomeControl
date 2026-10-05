@@ -20,7 +20,8 @@ function snapshot(flags, profile, subtype) {
 }
 function onlineWith(response) {
     return {invokeFunctionProperty: function(object, property, data) {
-        check(object === 160 && property === 10 && data[0] === 0x1D && data[1] === 0, "snapshot request ABI");
+        check(object === 160 && property === 10 && (data[0] === 0x1D || data[0] === 0x1E) && data[1] === 0, "snapshot request ABI");
+        if (data[0] === 0x1E) return [3];
         return response;
     }};
 }
@@ -73,4 +74,12 @@ test("binary-only profile has no percentage mode", function() {
     var d = deviceWith({});
     check(IOHC_queryRecognition(d, onlineWith(snapshot(0x1C, 6, 58)), {channelIndex: 1}, true), "binary profile");
     check(value(d, "BinaryOnly") === 1 && value(d, "Dimmable") === 0 && value(d, "OrientationObjects") === 0, "binary controls");
+});
+
+test("firmware presentation takes precedence over legacy fallback", function() {
+    var d=deviceWith({});
+    var response=snapshot(0x1C,999,0).concat([6,4]);
+    var online={invokeFunctionProperty:function(o,p,data) { check(data[0]===0x1E,"extended snapshot");return response; }};
+    check(IOHC_queryRecognition(d,online,{channelIndex:1},true),"firmware resolver ignored");
+    check(value(d,"DeviceType")===6 && value(d,"Dimmable")===1,"firmware hints");
 });

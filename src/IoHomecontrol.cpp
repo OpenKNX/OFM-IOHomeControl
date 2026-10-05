@@ -8,6 +8,7 @@
 #include "protocol/IoHomeProfileRegistry.h"
 #include "protocol/IoHomeProductCodecs.h"
 #include "protocol/IoHomeProductBinding.h"
+#include "protocol/IoHomePresentation.h"
 #if defined(RADIO_SX1262)
 #include "radio/SX1262DeviceErrors.h"
 #include "radio/sx1262Regs-Fsk.h"
@@ -2543,6 +2544,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         }
         break;
     }
+    case 0x1E: // Extended presentation snapshot; legacy 1D stays byte-exact
     case 0x1D: // Versioned recognition snapshot for an assigned channel (no RF TX)
     {
         if (length != 2 || data[1] >= mNumChannels)
@@ -2569,6 +2571,13 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
                          (lChannel.isOperational() ? 0x10 : 0) |
                          (lChannel.is1W() ? 0x20 : 0);
         resultLength = 12;
+        if (data[0] == 0x1E)
+        {
+            const auto lPresentation=ioHomePresentation((lIdentity.profile<<6)|lIdentity.subProfile);
+            resultData[12]=lIdentity.valid ? lPresentation.type:0;
+            resultData[13]=lIdentity.valid ? lPresentation.flags:0;
+            resultLength=14;
+        }
         return true;
     }
     case 0x13: // Unpair channel

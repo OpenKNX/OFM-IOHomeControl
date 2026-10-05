@@ -1,3 +1,4 @@
+import json
 #!/usr/bin/env python3
 """Regression checks for the shared OpenKNX channel-selection convention."""
 
@@ -889,9 +890,9 @@ class ChannelUiTest(unittest.TestCase):
 
     def test_import_uses_exact_profile_and_subprofile_for_ets_presentation(self) -> None:
         script = (ROOT / "src" / "IoHomecontrol.script.js").read_text()
-        self.assertIn("switch ((protocolType << 6) | subProfile)", script)
-        self.assertIn("case 0x0540:", script)
-        self.assertIn("case 0x057A:", script)
+        self.assertIn("IOHC_PRESENTATIONS[(p<<6)|s]", script)
+        manifest = json.loads((ROOT / "src/protocol/recognition.json").read_text())
+        self.assertTrue({0x0540,0x057A} <= {r["packed"] for r in manifest})
         self.assertIn('prefix + "OrientationObjects"', script)
         self.assertIn('prefix + "Dimmable"', script)
         self.assertIn('prefix + "ImportedProfile"', script)
@@ -900,20 +901,15 @@ class ChannelUiTest(unittest.TestCase):
         registry = (ROOT / "src" / "protocol" / "IoHomeProfileRegistry.cpp").read_text()
         registry_rows = registry.split("constexpr IoHomeProfileDescriptor kProfiles[] = {", 1)[1].split("};", 1)[0]
         registry_ids = {int(value, 16) for value in re.findall(r"profile\(0x([0-9A-Fa-f]{4})", registry_rows)}
-        import_cases = script.split("function IOHC_etsDeviceType", 1)[1].split(
-            "function IOHC_hasOrientationObjects", 1
-        )[0]
-        imported_ids = {int(value, 16) for value in re.findall(r"case 0x([0-9A-Fa-f]{4}):", import_cases)}
+        imported_ids = {r["packed"] for r in manifest}
         self.assertTrue(registry_ids <= imported_ids)
         self.assertIn(0x0380, imported_ids)  # Legacy Atlantic Cozy presentation.
 
     def test_on_off_subprofiles_show_binary_kos_without_position_kos(self) -> None:
         script = (ROOT / "src" / "IoHomecontrol.script.js").read_text()
-        binary = script.split("function IOHC_isBinaryOnly", 1)[1].split(
-            "function IOHC_configureImportedChannel", 1
-        )[0]
-        for packed in (0x017A, 0x01BA, 0x01FA, 0x057A):
-            self.assertIn(f"case 0x{packed:04X}:", binary)
+        manifest = json.loads((ROOT / "src/protocol/recognition.json").read_text())
+        binary_ids={r["packed"] for r in manifest if r["flags"]&2}
+        self.assertTrue({0x017A,0x01BA,0x01FA,0x057A} <= binary_ids)
         ref = "%AID%_P-%TT%%CC%105_R-%TT%%CC%10501"
         for selection in ("5", "7", "8"):
             device = next(node for node in self.template.findall(".//k:choose/k:when", NS)
