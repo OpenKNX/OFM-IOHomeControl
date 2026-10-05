@@ -488,6 +488,23 @@ uint8_t RadioSX1276::readPacket(uint8_t *oBuffer, uint8_t iMaxLen)
     mLastRxIrqStatus = lIrqStatus;
     mLastIrqStatus = lIrqStatus;
 
+    mLastReceiveEvidence = {};
+    auto &e = mLastReceiveEvidence;
+#ifdef ESP32
+    e.readTimestampUs = micros();
+    e.timestampValid = true;
+#endif
+    e.frequencyHz = mCurrentFreq;
+    e.irq = lIrqStatus;
+    e.hardwareCrcChecked = (readRegister(REG_PACKETCONFIG1) & 0x10) != 0 &&
+                           (lIrqStatus & RF_IRQFLAGS2_PAYLOADREADY) != 0;
+    e.hardwareCrcValid = e.hardwareCrcChecked && (lIrqStatus & RF_IRQFLAGS2_CRCOK) != 0;
+    e.hardwareCrcConsumed = (readRegister(REG_PACKETCONFIG1) & 0x10) != 0;
+    e.fifoLengthByteRemoved = true;
+    e.fifoOverrun = (lIrqStatus & RF_IRQFLAGS2_FIFOOVERRUN) != 0;
+    e.afcRaw = static_cast<int16_t>((readRegister(REG_AFCMSB) << 8) | readRegister(REG_AFCLSB));
+    e.feiRaw = static_cast<int16_t>((readRegister(REG_FEIMSB) << 8) | readRegister(REG_FEILSB));
+    e.frequencyErrorRegistersPresent = true; // register snapshot, not a calibrated measurement
     // Record RSSI at packet-read time for diagnostics.
     mLastRssi = -(readRegister(REG_RSSIVALUE) / 2);
 
@@ -499,6 +516,15 @@ uint8_t RadioSX1276::readPacket(uint8_t *oBuffer, uint8_t iMaxLen)
 
     // Read packet from FIFO (with IoHomeOn=1, read until FIFO empty).
     uint8_t lLen = readFifo(oBuffer, iMaxLen);
+    e.rssiDbm = mLastRssi;
+    e.length = lLen;
+    e.truncated = (readRegister(REG_IRQFLAGS2) & RF_IRQFLAGS2_FIFOEMPTY) == 0;
+    // Drain a bounded hardware FIFO after a short caller buffer; never pass
+    // a prefix to the protocol parser as a complete frame.
+    if (e.truncated) {
+        for (uint8_t n = 0; n < 64 && !(readRegister(REG_IRQFLAGS2) & RF_IRQFLAGS2_FIFOEMPTY); ++n)
+            (void)readRegister(REG_FIFO);
+    }
     mLastRxLen = lLen;
     if (lLen == 0)
         mRxFifoEmptyCount++;
@@ -513,7 +539,7 @@ uint8_t RadioSX1276::readPacket(uint8_t *oBuffer, uint8_t iMaxLen)
     // Restart RX
     startReceive();
 
-    return lLen;
+    return e.admissible() ? lLen : 0;
 }
 
 int16_t RadioSX1276::lastRssi() const

@@ -53,6 +53,7 @@ public:
   bool isSyncDetected() const;
   uint8_t readPacket(uint8_t *oBuffer, uint8_t iMaxLen);
   int16_t lastRssi() const;
+  const RadioReceiveEvidence &lastReceiveEvidence() const { return mLastReceiveEvidence; }
   bool currentRssi(int16_t &oRssi);
   void sleep();
   void standby();
@@ -92,6 +93,7 @@ private:
   bool mInitialized;
   RadioState mState;
   int16_t mLastRssi;
+  RadioReceiveEvidence mLastReceiveEvidence;
   uint32_t mCurrentFreq;
   uint32_t mPreviousStandardFrequency;
   bool mEms2Mode;

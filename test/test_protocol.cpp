@@ -114,6 +114,16 @@ static void observePassiveExchange(IoHomePassiveAuthEvidence &ioEvidence,
                            iHub, iDevice, 2, iStartMs + 30);
 }
 
+TEST(radio_receive_evidence_rejects_incomplete_or_failed_crc) {
+    RadioReceiveEvidence e;
+    ASSERT_TRUE(!e.admissible());
+    e.length=12; ASSERT_TRUE(e.admissible()); // CRC unknown, not claimed valid
+    e.hardwareCrcChecked=true; ASSERT_TRUE(!e.admissible());
+    e.hardwareCrcValid=true; ASSERT_TRUE(e.admissible());
+    e.truncated=true; ASSERT_TRUE(!e.admissible());
+    e.truncated=false; e.fifoOverrun=true; ASSERT_TRUE(!e.admissible());
+}
+
 TEST(log_redaction_extended_headers_use_the_actual_command_offset)
 {
     uint8_t lFrame[27] = {0x5A, 3, 0x0B, 1, 0x12, 0x34, 0x56, 0xAB, 0xCD, 0xEF, 0x32};
