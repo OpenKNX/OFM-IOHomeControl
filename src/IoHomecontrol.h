@@ -7,6 +7,7 @@
 #include "protocol/IoHomeCommissioningJob.h"
 #include "protocol/IoHomeAssignmentReceipt.h"
 #include "protocol/IoHomeNetworkStore.h"
+#include "protocol/IoHomeCommissioningHistory.h"
 #include "knxprod.h"
 
 class IoHomecontrol : public OpenKNX::Module
@@ -133,6 +134,10 @@ private:
   void restoreAssignmentReceipts();
   uint32_t mCommissioningBootId=1;
   IoHomeCommissioningJob mCommissioningJob;
+  IoHomeCommissioningHistory mCommissioningHistory;
+  uint32_t mHistoryRecordedGeneration=0;
+  bool mHistoryFailed=false;
+  void recordCommissioningOutcome();
   void updateCommissioningJob();
   enum class KeyImportPhase : uint8_t
   {

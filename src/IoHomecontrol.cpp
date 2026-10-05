@@ -1615,6 +1615,7 @@ void IoHomecontrol::loop()
     if (!mRadioDiagnostic.active)
         processKeyImportWorkflow();
     updateCommissioningJob();
+    recordCommissioningOutcome();
 
     if (!mRadioDiagnostic.active)
         processMetadataRefresh();
@@ -2511,6 +2512,14 @@ void IoHomecontrol::restoreAssignmentReceipts()
     }
 }
 
+void IoHomecontrol::recordCommissioningOutcome()
+{
+    if(mHistoryFailed||!mCommissioningJob.generation||mCommissioningJob.active()||mCommissioningJob.stage==IoHomeCommissioningJob::Stage::Idle||mHistoryRecordedGeneration==mCommissioningJob.generation)return;
+    IoHomeCommissioningHistory::Entry e;e.boot=mCommissioningBootId;e.generation=mCommissioningJob.generation;e.node=mCommissioningJob.node;
+    e.owner=uint8_t(mCommissioningJob.owner);e.stage=uint8_t(mCommissioningJob.stage);e.error=uint8_t(mCommissioningJob.error);e.channel=mCommissioningJob.channel;
+    if(mCommissioningHistory.append(e))mHistoryRecordedGeneration=e.generation;else mHistoryFailed=true;
+}
+
 bool IoHomecontrol::commissioningCanStart()
 {
     updateCommissioningJob();
@@ -2817,6 +2826,15 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         resultData[0]=idle&&mController.requestMpFpRead(mChannels[data[1]],data[2])?0:1;
         resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultLength=4;return true;
     }
+    case 0x33: // Key-free durable terminal history, newest index first
+    {
+        if(length!=2||data[1]>=8)break;
+        IoHomeCommissioningHistory::Entry e;uint8_t count=0;const bool found=mCommissioningHistory.read(data[1],e,count);
+        resultData[0]=found?0:3;resultData[1]=1;resultData[2]=data[1];resultData[3]=count;resultData[4]=mHistoryFailed;
+        for(uint8_t i=0;i<4;i++){resultData[5+i]=e.boot>>(24-i*8);resultData[9+i]=e.generation>>(24-i*8);}
+        for(uint8_t i=0;i<3;i++)resultData[13+i]=e.node>>(16-i*8);
+        resultData[16]=e.owner;resultData[17]=e.stage;resultData[18]=e.error;resultData[19]=e.channel;resultData[20]=e.projectApplied;resultLength=21;return true;
+    }
     case 0x32: // Combined MP/FP GET: channel, logical mask BE16, expected node BE24
     {
         if(length!=7||data[1]>=mNumChannels)break;
@@ -2849,7 +2867,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
     {
         if(length!=1)break;
         resultData[0]=0;resultData[1]=1;
-        const uint32_t flags=127; // bit4: individual MP/FP GET, bit5: persistence evidence API, bit6: combined MP/FP GET
+        const uint32_t flags=255; // bit4: individual MP/FP GET, bit5: persistence evidence API, bit6: combined MP/FP GET
         for(uint8_t i=0;i<4;i++){resultData[2+i]=flags>>(24-8*i);resultData[6+i]=mCommissioningBootId>>(24-8*i);}
         resultLength=10;return true;
     }
@@ -2929,8 +2947,15 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
             const uint32_t node=uint32_t(data[6])<<16|uint32_t(data[7])<<8|data[8];
             if(generation!=receipt.generation || node!=receipt.node || mChannels[data[1]]->getNodeId()!=node)
             { resultData[0]=4;resultLength=1;return true; }
+            const bool newlyApplied=!receipt.projectApplied;
             receipt.projectApplied=true;
             if(!mAssignmentReceipts.save(data[1],receipt)) { resultData[0]=4;resultLength=1;return true; }
+            if(newlyApplied&&!mHistoryFailed) {
+                IoHomeCommissioningHistory::Entry e;e.boot=mCommissioningBootId;e.generation=receipt.generation;e.node=receipt.node;e.channel=data[1];
+                e.owner=mCommissioningJob.owner==IoHomeCommissioningJob::Owner::Import?2:1;e.stage=6;e.projectApplied=1;
+                if(!mCommissioningHistory.append(e))mHistoryFailed=true;
+            }
+
         }
         resultData[0]=0;resultData[1]=1;resultData[2]=data[1];
         for(uint8_t i=0;i<4;i++) resultData[3+i]=receipt.generation>>(24-8*i);

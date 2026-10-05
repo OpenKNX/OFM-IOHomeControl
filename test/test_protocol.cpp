@@ -19512,3 +19512,12 @@ TEST(controller_sensor_monitor_stops_on_identity_change_and_wraps_clock) {
     m.managementAllowed=true;ASSERT_TRUE(c.startSensorMonitor(&ch,1,2));identity.profile=2;ch.onProtocolIdentity(0x654321,identity);
     c.loop();ASSERT_TRUE(!c.sensorMonitor(0)->active);
 }
+
+#include "protocol/IoHomeCommissioningHistory.h"
+TEST(protocol_terminal_history_is_bounded_checked_and_key_free) {
+ IoHomeCommissioningHistory h;IoHomeCommissioningHistory::Entry e;e.boot=1;e.owner=1;e.stage=6;e.node=0x123456;e.channel=0;
+ for(uint32_t i=1;i<=10;i++){e.generation=i;ASSERT_TRUE(h.append(e));}
+ uint8_t count;IoHomeCommissioningHistory::Entry last;ASSERT_TRUE(h.read(0,last,count));ASSERT_EQ(count,8);ASSERT_EQ(last.generation,10);
+ ASSERT_TRUE(h.read(7,last,count));ASSERT_EQ(last.generation,3);h.journal.failWrites=true;e.generation=11;ASSERT_TRUE(!h.append(e));
+ ASSERT_TRUE(h.read(0,last,count));ASSERT_EQ(last.generation,10);h.journal.corrupt(0);ASSERT_TRUE(!h.read(0,last,count));
+}
