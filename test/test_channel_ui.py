@@ -575,7 +575,7 @@ class ChannelUiTest(unittest.TestCase):
         self.assertNotIn('[0x12, channelIndex]', workflow)
         self.assertNotIn('[0x1A, discoveries[d].index, targetChannel]', workflow)
         self.assertIn('prefix + "Active", 1', script)
-        self.assertIn('prefix + "DeviceType", etsType', script)
+        self.assertIn('["RecognitionTypeAuto", "DeviceType", etsType]', script)
         self.assertIn("function IOHC_syncChannelSelection", script)
         self.assertIn("neu programmiert werden", workflow)
         self.assertLess(workflow.index("[0x18]"), workflow.index("[0x17]"))
@@ -893,11 +893,11 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn("IOHC_PRESENTATIONS[(p<<6)|s]", script)
         manifest = json.loads((ROOT / "src/protocol/recognition.json").read_text())
         self.assertTrue({0x0540,0x057A} <= {r["packed"] for r in manifest})
-        self.assertIn('prefix + "OrientationObjects"', script)
-        self.assertIn('prefix + "Dimmable"', script)
+        self.assertIn('"OrientationObjects"', script)
+        self.assertIn('"Dimmable"', script)
         self.assertIn('prefix + "ImportedProfile"', script)
         self.assertIn('prefix + "ImportedManufacturer"', script)
-        self.assertIn('prefix + "BinaryOnly"', script)
+        self.assertIn('"BinaryOnly"', script)
         registry = (ROOT / "src" / "protocol" / "IoHomeProfileRegistry.cpp").read_text()
         registry_rows = registry.split("constexpr IoHomeProfileDescriptor kProfiles[] = {", 1)[1].split("};", 1)[0]
         registry_ids = {int(value, 16) for value in re.findall(r"profile\(0x([0-9A-Fa-f]{4})", registry_rows)}

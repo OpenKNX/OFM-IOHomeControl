@@ -149,18 +149,21 @@ function IOHC_applyRecognitionSettings(device, prefix, discovery) {
     var etsType = discovery.presentationType !== undefined ? discovery.presentationType :
                   IOHC_etsDeviceType(discovery.protocolType, discovery.subtype);
     if (!etsType) return false;
-    IOHC_setParameterValue(device, prefix + "DeviceType", etsType);
-    IOHC_setParameterValue(device, prefix + "ChannelSelection", etsType + 1);
-    IOHC_setParameterValue(device, prefix + "OrientationObjects",
-                           discovery.presentationFlags !== undefined ? discovery.presentationFlags&1 :
-                           IOHC_hasOrientationObjects(discovery.protocolType, discovery.subtype));
-    IOHC_setParameterValue(device, prefix + "BinaryOnly",
-                           discovery.presentationFlags !== undefined ? (discovery.presentationFlags>>1)&1 :
-                           IOHC_isBinaryOnly(discovery.protocolType, discovery.subtype));
-    IOHC_setParameterValue(device, prefix + "Dimmable",
-                           discovery.presentationFlags !== undefined ? (discovery.presentationFlags>>2)&1 :
-                           discovery.protocolType == 0x06 && discovery.subtype == 0 ? 1 : 0);
-    return true;
+    var fields = [
+        ["RecognitionTypeAuto", "DeviceType", etsType],
+        ["RecognitionOrientationAuto", "OrientationObjects", discovery.presentationFlags !== undefined ? discovery.presentationFlags&1 : IOHC_hasOrientationObjects(discovery.protocolType,discovery.subtype)],
+        ["RecognitionBinaryAuto", "BinaryOnly", discovery.presentationFlags !== undefined ? (discovery.presentationFlags>>1)&1 : IOHC_isBinaryOnly(discovery.protocolType,discovery.subtype)],
+        ["RecognitionDimmableAuto", "Dimmable", discovery.presentationFlags !== undefined ? (discovery.presentationFlags>>2)&1 : discovery.protocolType===6 && discovery.subtype===0 ? 1:0]
+    ];
+    var changed=false;
+    for (var i=0;i<fields.length;i++) {
+        var permission=IOHC_getParameter(device,prefix+fields[i][0]);
+        if (!permission || Number(permission.value)!==1) continue;
+        IOHC_setParameterValue(device,prefix+fields[i][1],fields[i][2]);
+        if (i===0) IOHC_setParameterValue(device,prefix+"ChannelSelection",etsType+1);
+        changed=true;
+    }
+    return changed;
 }
 
 function IOHC_queryRecognition(device, online, context, applySettings) {

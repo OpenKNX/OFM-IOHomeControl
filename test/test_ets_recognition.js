@@ -7,10 +7,10 @@ function deviceWith(values) {
     var params = {};
     var names = ["Name", "Active", "DeviceType", "ChannelSelection", "OrientationObjects",
                  "BinaryOnly", "Dimmable", "ProfileOverride", "TwoWayPowerClass", "Suspend",
-                 "ProtocolMode", "PairingLastResult", "PairedNodeIdDisplay", "OneWaySummary",
+                 "RecognitionTypeAuto", "RecognitionOrientationAuto", "RecognitionBinaryAuto", "RecognitionDimmableAuto", "ProtocolMode", "PairingLastResult", "PairedNodeIdDisplay", "OneWaySummary",
                  "PairingDiag", "ImportedProfile", "ImportedManufacturer", "TwoWayDiscoveryCommand"];
     for (var i = 0; i < names.length; i++) {
-        params["IOHC_c1" + names[i]] = {value: values[names[i]] === undefined ? 0 : values[names[i]]};
+        params["IOHC_c1" + names[i]] = {value: values[names[i]] === undefined ? (names[i].indexOf("Recognition")===0 ? 1:0) : values[names[i]]};
     }
     return {params: params, getParameterByName: function(name) { return params[name]; }};
 }
@@ -82,4 +82,11 @@ test("firmware presentation takes precedence over legacy fallback", function() {
     var online={invokeFunctionProperty:function(o,p,data) { check(data[0]===0x1E,"extended snapshot");return response; }};
     check(IOHC_queryRecognition(d,online,{channelIndex:1},true),"firmware resolver ignored");
     check(value(d,"DeviceType")===6 && value(d,"Dimmable")===1,"firmware hints");
+});
+
+test("per-field manual choices survive recognition", function() {
+    var d=deviceWith({RecognitionOrientationAuto:0,RecognitionDimmableAuto:0,OrientationObjects:1,Dimmable:1});
+    check(IOHC_queryRecognition(d,onlineWith(snapshot(0x1C,6,58)),{channelIndex:1},true),"allowed fields");
+    check(value(d,"OrientationObjects")===1 && value(d,"Dimmable")===1,"manual fields overwritten");
+    check(value(d,"BinaryOnly")===1,"allowed binary field not applied");
 });
