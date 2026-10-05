@@ -1134,3 +1134,17 @@ function IOHC_readPersistenceEvidence(device,online,progress,context) {
         progress.setText(text);
     } finally {online.disconnect();}
 }
+
+// Bounded explicit continuation; no background ETS polling/dialog API assumed.
+function IOHC_continueCommissioning(device,online,progress,context) {
+    var job=null;
+    online.connect();try{job=IOHC_jobSnapshot(online);}finally{online.disconnect();}
+    if(!job)throw new Error("Firmware unterstützt diese Einrichtung nicht");
+    if(job.owner===2||job.owner===3) {
+        IOHC_startKeyExtract(device,online,progress,{channelCount:context&&context.channelCount?context.channelCount:16});return;
+    }
+    if(job.owner===1&&job.channel<16&&job.stage>=6) {
+        IOHC_refreshPairingInfo(device,online,progress,{channelIndex:job.channel+1});return;
+    }
+    IOHC_readCommissioningStatus(device,online,progress,context);
+}

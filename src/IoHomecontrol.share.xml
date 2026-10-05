@@ -427,7 +427,9 @@
 
               <ParameterBlock Id="%AID%_PB-nnn" Name="CommissioningGlobal" Text="Inbetriebnahme">
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="2W-Schlüsselextraktion" UIHint="Headline" />
-                <ParameterSeparator Id="%AID%_PS-nnn" Text="1. Extraktion starten. 2. Am Fremd-Gateway 'Gerät hinzufügen' auslösen. 3. Status wird automatisch aktualisiert; danach Ergebnis übernehmen. Das Gerät wartet bis zu 60 s auf die Abschlussprüfung und startet dann die authentifizierte Gerätesuche." UIHint="Information" />
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="1. Extraktion starten. 2. Am Fremd-Gateway 'Gerät hinzufügen' auslösen. 3. Aktualisieren / Weiter drücken; danach Zuordnung prüfen und Ergebnis übernehmen. Das Gerät wartet bis zu 60 s auf die Abschlussprüfung und startet dann die authentifizierte Gerätesuche." UIHint="Information" />
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="Geräte einrichten: am Kanal verbinden oder global übernehmen. Suche und Prüfung sind eigene Schritte; anschließend Zuordnung prüfen, ETS-Vorgaben übernehmen und Applikation programmieren. 1W-Senden bestätigt keine Aktor-Anmeldung." UIHint="Information" />
+                <Button Id="%AID%_B-%TT%00032" Text="Einrichtung aktualisieren / weiter" EventHandler="IOHC_continueCommissioning" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelCount&quot;: %N% }" />
                 <Button Id="%AID%_B-%TT%00031" Text="Einrichtungsstatus lesen" EventHandler="IOHC_readCommissioningStatus" EventHandlerOnline="ConnectionOriented" />
                 <Button Id="%AID%_B-%TT%00030" Text="Aktive Einrichtung abbrechen" EventHandler="IOHC_cancelCommissioning" EventHandlerOnline="ConnectionOriented" />
                 <Button Id="%AID%_B-%TT%00011" Text="2W-Extraktion starten / Ergebnis übernehmen" EventHandler="IOHC_startKeyExtract" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelCount&quot;: %N% }" />

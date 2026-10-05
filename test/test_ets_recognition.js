@@ -246,3 +246,9 @@ test("channel evidence refuses same-node profile change during reads",function()
     check(failed&&closed&&text==="","mixed semantic evidence displayed");
     check(!IOHC_sameRecognitionSnapshot(snapshot(0x1C,6,1),snapshot(0x0C,6,1)),"pairing change ignored");
 });
+
+test("guided continuation reads active job without starting another operation",function(){
+ var calls=[],closed=0,online={connect:function(){},disconnect:function(){closed++;},invokeFunctionProperty:function(o,p,d){calls.push(d[0]);if(d[0]===0x23)return [0,1,0,0,0,127,0,0,0,1];var a=[0,1,1,2,0,0,0,1,0,0x12,0x34,0x56,0,0,0,0,0,0,1,0,0,0,0,1,0,0];return a;}};
+ var text="";IOHC_continueCommissioning(deviceWith({}),online,{setText:function(t){text=t;}},{});
+ check(calls.join(",")==="35,36,35,36"&&closed===2&&text.indexOf("Suche")>=0,"continuation restarted RF");
+});
