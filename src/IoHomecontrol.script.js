@@ -1244,3 +1244,27 @@ function IOHC_restoreAutomatic(device,online,progress,context) {
  parameters[0].value=0;for(var j=1;j<parameters.length;j++)parameters[j].value=1;preview.value="";
  progress.setText("Automatische Übernahme vorbereitet. Erkennung bewusst übernehmen, danach Applikation programmieren. Pairing, Schlüssel und Zähler unverändert.");
 }
+
+// Diagnostic controls are ETS-only inputs: no automatic subscription on download.
+function IOHC_boundDiagnostic(device,online,progress,context,operation) {
+ var c=Number(context.channelIndex)-1;if(c<0||c>=16||Math.floor(c)!==c)throw new Error("Ungültiger Kanal");
+ online.connect();try {
+  var id=IOHC_invokeFunctionProperty(online,[0x1D,c]);
+  if(!id||id.length!==12||id[0]!==0||id[1]!==1||id[2]!==c||(id[11]&0x14)!==0x14||(id[11]&0x20))throw new Error("Gepaarter 2W-Kanal erforderlich");
+  return operation(c,id);
+ }finally{online.disconnect();}
+}
+function IOHC_sensorAction(device,online,progress,context,action) {
+ return IOHC_boundDiagnostic(device,online,progress,context,function(c,id){
+  var prefix=IOHC_getChannelPrefix(context),tail=[];
+  if(action===2){var text=String(IOHC_getParameter(device,prefix+"SensorBackbone").value);if(!/^[0-9a-fA-F]{6}$/.test(text)||parseInt(text,16)===0)throw new Error("Explizites sechsstelligen Backbone erforderlich");var b=parseInt(text,16);tail=[b>>16,(b>>8)&255,b&255];}
+  if(action===3){var i=Number(IOHC_getParameter(device,prefix+"SensorPollInterval").value),d=Number(IOHC_getParameter(device,prefix+"SensorPollDuration").value);if(i<1||i>600||d<1||d>3600||Math.floor(i)!==i||Math.floor(d)!==d)throw new Error("Intervall 1..600, Dauer 1..3600 Sekunden");tail=[i>>8,i&255,d>>8,d&255];}
+  var r=IOHC_invokeFunctionProperty(online,[0x35,c,action].concat(id.slice(3,6),tail));
+  if(!r||r.length!==4||r[0]!==0||r[1]!==1||r[2]!==c||r[3]!==action)throw new Error("Aktion blockiert; laufende Einrichtung / Diagnose prüfen");
+  progress.setText(action===2?"Default-Abonnement einmalig gestartet; Geräteakzeptanz noch zu prüfen. Physikalische Rohwerteinheit unbekannt.":action===4?"Abfrageplan gestoppt; bereits gesendete Anfrage bleibt bestehen.":"Anfrage gestartet; anschließend Evidenz lesen. Keine automatische Subscription / KNX-Publikation.");
+ });
+}
+function IOHC_sensorInfo(d,o,p,c){return IOHC_sensorAction(d,o,p,c,1);}
+function IOHC_sensorSubscribe(d,o,p,c){return IOHC_sensorAction(d,o,p,c,2);}
+function IOHC_sensorPoll(d,o,p,c){return IOHC_sensorAction(d,o,p,c,3);}
+function IOHC_sensorStop(d,o,p,c){return IOHC_sensorAction(d,o,p,c,4);}

@@ -342,6 +342,7 @@
                   <Enumeration Text="Priorität 7 (Komfort 4 / Automatik)" Value="231" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCDiagnosticSeconds" Name="IOHCDiagnosticSeconds"><TypeNumber SizeInBit="16" Type="unsignedInt" minInclusive="1" maxInclusive="3600" /></ParameterType>
               <ParameterType Id="%AID%_PT-IOHCImportChoice" Name="IOHCImportChoice"><TypeNumber SizeInBit="8" Type="unsignedInt" minInclusive="0" maxInclusive="24" /></ParameterType>
             </ParameterTypes>
 

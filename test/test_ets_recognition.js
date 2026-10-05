@@ -281,3 +281,11 @@ test("restore automatic requires unchanged preview and preserves unrelated setti
  IOHC_restoreAutomatic(d,null,progress,{channelIndex:1});check(value(d,"ProfileOverride")===0&&value(d,"RecognitionTypeAuto")===1,"confirmed ownership unchanged");
  check(value(d,"TwoWayPowerClass")===2&&value(d,"Name")==="Office","expert settings reset");
 });
+test("sensor controls require explicit backbone and bound 2W node",function(){
+ var d=deviceWith({});d.params.IOHC_c1SensorBackbone={value:"000000"};var calls=[],closed=0;
+ var online={connect:function(){},disconnect:function(){closed++;},invokeFunctionProperty:function(o,p,a){calls.push(a);if(a[0]===0x1D)return snapshot(0x1C,1,0);return [0,1,0,a[2]];}};
+ var failed=false;try{IOHC_sensorSubscribe(d,online,{setText:function(){}},{channelIndex:1});}catch(e){failed=true;}
+ check(failed&&calls.length===1&&closed===1,"missing backbone queued a write");
+ d.params.IOHC_c1SensorBackbone.value="123456";IOHC_sensorSubscribe(d,online,{setText:function(){}},{channelIndex:1});
+ check(calls[2].join(",")==="53,0,2,18,52,86,18,52,86","subscription node/backbone ABI");
+});

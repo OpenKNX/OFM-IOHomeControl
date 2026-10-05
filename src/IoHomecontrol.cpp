@@ -2861,6 +2861,20 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         resultData[0]=idle&&mController.requestMpFpRead(mChannels[data[1]],data[2])?0:1;
         resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultLength=4;return true;
     }
+    case 0x35: // Explicit sensor management; identity bound, no persisted poll replay
+    {
+        if(length<6||data[1]>=mNumChannels)break;
+        auto *ch=mChannels[data[1]];const uint32_t node=uint32_t(data[3])<<16|uint32_t(data[4])<<8|data[5];
+        if(!node||ch->getNodeId()!=node)break;
+        updateCommissioningJob();bool ok=false;
+        if(data[2]==4&&length==6)ok=mController.stopSensorMonitor(data[1]);
+        else if(managementRequestsAllowed()&&!mCommissioningJob.active()&&!mRadioDiagnostic.active&&!mMetadataRefreshActive) {
+            if(data[2]==1&&length==6)ok=mController.requestSensorInformation(ch);
+            else if(data[2]==2&&length==9)ok=mController.requestDefaultSensorSubscription(ch,uint32_t(data[6])<<16|uint32_t(data[7])<<8|data[8]);
+            else if(data[2]==3&&length==10)ok=mController.startSensorMonitor(ch,uint16_t(data[6])<<8|data[7],uint16_t(data[8])<<8|data[9]);
+        }
+        resultData[0]=ok?0:1;resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultLength=4;return true;
+    }
     case 0x34: // Metadata persistence health; key-free, no repair side effect
     {
         if(length!=2||data[1]>=mNumChannels)break;
