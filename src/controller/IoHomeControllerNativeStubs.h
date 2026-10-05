@@ -659,6 +659,9 @@ private:
 class IoHomecontrol
 {
 public:
+  bool managementRequestsAllowed() const {return managementAllowed;}
+  bool managementAllowed=true;
+
   IoHomecontrolChannel *getChannel(uint8_t iIndex)
   {
     return (iIndex < IOHC_ChannelCount) ? mChannels[iIndex] : nullptr;

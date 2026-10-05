@@ -74,3 +74,18 @@ node/key. Current samples are hidden on any revision change; old priority
 refreshes are retired rather than querying a reclassified node. This prevents
 same-address/key metadata changes from preserving stale sensor meanings. The
 existing raw schemas, correlated trust and unknown physical units are intact.
+
+## Bounded host sensor polling — 2026-10-05
+
+`iohc sensor monitor NODE INTERVAL_S DURATION_S` starts a volatile, opt-in raw
+84/85 polling session. Interval1..600 seconds and duration<=3600 seconds are
+chosen host limits, not recovered sensor minRefresh units or subscription
+periods. No session starts automatically. The scheduler queues at most one
+one-attempt read while RF is idle; it pauses during module commissioning,
+metadata work and diagnostics, skips missed-poll catch-up, rotates channels,
+and stops on duration expiry or node/key/semantic-context change. Clock
+subtraction is wrap-safe. `sensor monitor-stop NODE` stops future scheduling;
+it does not retract an already queued read. `sensor monitor-status NODE`
+reports host session state. Responses remain raw, correlated and unit-unknown.
+This supplies bounded read monitoring, not unsolicited event subscriptions,
+product physical units, automatic wake policy or accepted peer qualification.

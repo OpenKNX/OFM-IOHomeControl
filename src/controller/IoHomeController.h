@@ -585,6 +585,13 @@ public:
   bool requestSensorStatus(IoHomecontrolChannel *channel);
   bool requestSensorInformation(IoHomecontrolChannel *channel);
   bool requestDefaultSensorSubscription(IoHomecontrolChannel *channel,uint32_t backbone);
+  struct SensorMonitor {
+    bool active=false;uint32_t node=0,contextRevision=0,startedMs=0,lastQueuedMs=0,intervalMs=0,durationMs=0,requests=0;
+    uint8_t key[16]{};
+  };
+  bool startSensorMonitor(IoHomecontrolChannel *channel,uint32_t intervalSeconds,uint32_t durationSeconds);
+  bool stopSensorMonitor(uint8_t channel);
+  const SensorMonitor *sensorMonitor(uint8_t channel) const;
   struct PrioritySample {bool valid=false,refreshArmed=false;uint32_t node=0,receivedMs=0;IoHomePriorityState state;uint8_t key[16]{};uint32_t contextRevision=0;};
   struct SensorSample {bool valid=false;uint32_t node=0,receivedMs=0;IoHomeSensorStatus state;uint8_t key[16]{};uint32_t contextRevision=0;};
   struct SensorInformationSample {bool valid=false;uint32_t node=0,receivedMs=0;IoHomeSensorInformation state;uint8_t key[16]{},raw[17]{};uint32_t contextRevision=0;};
@@ -1077,6 +1084,9 @@ private:
   SensorInformationSample mSensorInformationSamples[16]{};
   SensorSample mSensorSamples[16]{};
   void servicePriorityRefresh();
+  void serviceSensorMonitors();
+  SensorMonitor mSensorMonitors[16]{};
+  uint8_t mNextSensorMonitor=0;
   uint8_t mCurrentFreqIdx;
 
   // Command queue (circular buffer)

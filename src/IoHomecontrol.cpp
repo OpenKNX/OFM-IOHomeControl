@@ -3870,6 +3870,8 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc object read NODE PROVIDER KEY OFFSET SPAN", "Read allowlisted metadata; hex IDs, decimal offset/span; 30 s host budget");
     openknx.console.printHelpLine("iohc object status", "Raw transfer stage/token; no publication claim");
     openknx.console.printHelpLine("iohc object cancel TOKEN", "Cancel matching object read token");
+    openknx.console.printHelpLine("iohc sensor monitor NODE INTERVAL_S DURATION_S", "Bounded raw sensor polling; interval 1..600 s, duration <=3600 s, disabled by default");
+    openknx.console.printHelpLine("iohc sensor monitor-stop NODE | monitor-status NODE", "Stop future polls / inspect host session; no subscription or physical units");
     openknx.console.printHelpLine("iohc sensor subscribe-default NODE BACKBONE", "Expert: write recovered default subscription; both addresses hex, peer acceptance unqualified");
     openknx.console.printHelpLine("iohc sensor info NODE", "Read paired sensor information with 8B FF; no subscription write");
     openknx.console.printHelpLine("iohc sensor read NODE", "Read paired sensor status; preserve unknown physical units");
@@ -4395,6 +4397,19 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     if(lSub.rfind("object cancel ",0)==0) {
         unsigned token=0;char extra=0;if(sscanf(lSub.c_str(),"object cancel %u %c",&token,&extra)!=1||!token){logInfoP("Usage: iohc object cancel TOKEN (decimal)");return true;}
         logInfoP("Object read cancelled=%u; bytes already on air cannot be retracted",mController.cancelObjectRead(token));return true;
+    }
+    if(lSub.rfind("sensor monitor ",0)==0||lSub.rfind("sensor monitor-stop ",0)==0||lSub.rfind("sensor monitor-status ",0)==0) {
+        const bool start=lSub.rfind("sensor monitor ",0)==0,stop=lSub.rfind("sensor monitor-stop ",0)==0;
+        unsigned node=0,interval=0,duration=0;char extra=0;
+        const int count=start?sscanf(lSub.c_str(),"sensor monitor %x %u %u %c",&node,&interval,&duration,&extra):
+            stop?sscanf(lSub.c_str(),"sensor monitor-stop %x %c",&node,&extra):sscanf(lSub.c_str(),"sensor monitor-status %x %c",&node,&extra);
+        if(count!=(start?3:1)||!node||node>0xFFFFFF){logInfoP("Usage: iohc sensor monitor NODE INTERVAL_S DURATION_S | monitor-stop NODE | monitor-status NODE");return true;}
+        uint8_t c=16;for(uint8_t i=0;i<mNumChannels;i++)if(mChannels[i]&&mChannels[i]->getNodeId()==node)c=i;
+        if(c>=16){logInfoP("Sensor monitor: node is not assigned");return true;}
+        if(start)logInfoP("Raw sensor monitor started=%u; chosen host timing, no auto-subscription",mController.startSensorMonitor(mChannels[c],interval,duration));
+        else if(stop)logInfoP("Sensor monitor stopped=%u; an already queued read remains active",mController.stopSensorMonitor(c));
+        else {const auto *monitor=mController.sensorMonitor(c);logInfoP("Sensor monitor active=%u node=%06lX intervalMs=%lu durationMs=%lu queued=%lu; correlated raw observations only",monitor->active,static_cast<unsigned long>(monitor->node),static_cast<unsigned long>(monitor->intervalMs),static_cast<unsigned long>(monitor->durationMs),static_cast<unsigned long>(monitor->requests));}
+        return true;
     }
     if(lSub.rfind("sensor subscribe-default ",0)==0) {
         unsigned node=0,backbone=0;char extra=0;

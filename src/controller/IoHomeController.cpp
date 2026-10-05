@@ -2436,7 +2436,7 @@ void IoHomeController::serviceObjectRead()
 
 bool IoHomeController::requestPriority(IoHomecontrolChannel *channel,uint8_t priority)
 {
-    if(!idleForManagedOperation()||!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||priority>7)return false;
+    if(!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||priority>7)return false;
     IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
     entry.productContextRevision=channel->productContextRevision();entry.managementRead=true;std::memcpy(entry.managementKey,channel->getEncryptionKey(),16);
     entry.command=IoHomeCommand::PriorityLevelRequest;entry.param=priority;entry.sourceChannelIndex=channelIndexFor(channel);
@@ -2445,7 +2445,7 @@ bool IoHomeController::requestPriority(IoHomecontrolChannel *channel,uint8_t pri
 
 bool IoHomeController::requestSensorStatus(IoHomecontrolChannel *channel)
 {
-    if(!idleForManagedOperation()||!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||!channel->getProtocolIdentity().valid||channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Sensor)return false;
+    if(!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||!channel->getProtocolIdentity().valid||channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Sensor)return false;
     IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
     entry.productContextRevision=channel->productContextRevision();entry.managementRead=true;std::memcpy(entry.managementKey,channel->getEncryptionKey(),16);
     entry.command=IoHomeCommand::SensorStatusRequest;entry.sourceChannelIndex=channelIndexFor(channel);
@@ -2454,7 +2454,7 @@ bool IoHomeController::requestSensorStatus(IoHomecontrolChannel *channel)
 
 bool IoHomeController::requestSensorInformation(IoHomecontrolChannel *channel)
 {
-    if(!idleForManagedOperation()||!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||!channel->getProtocolIdentity().valid||channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Sensor)return false;
+    if(!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||!channel->getProtocolIdentity().valid||channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Sensor)return false;
     IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
     entry.productContextRevision=channel->productContextRevision();entry.managementRead=true;std::memcpy(entry.managementKey,channel->getEncryptionKey(),16);
     entry.command=IoHomeCommand::SensorSubscribeRequest;entry.param=0xFF;entry.sourceChannelIndex=channelIndexFor(channel);
@@ -2465,7 +2465,7 @@ bool IoHomeController::requestDefaultSensorSubscription(IoHomecontrolChannel *ch
 {
     // Explicit expert operation only: no guessed backbone, auto-subscription,
     // arbitrary pre-tail settings, retries or inferred physical units.
-    if(!idleForManagedOperation()||!backbone||backbone>0xFFFFFF||!channel||!channel->isPaired()||channel->is1W()||
+    if(!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||!backbone||backbone>0xFFFFFF||!channel||!channel->isPaired()||channel->is1W()||
        !channel->productContextRevision()||!channel->getProtocolIdentity().valid||
        channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Sensor)return false;
     IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
@@ -2473,6 +2473,47 @@ bool IoHomeController::requestDefaultSensorSubscription(IoHomecontrolChannel *ch
     entry.productContextRevision=channel->productContextRevision();entry.sensorSubscriptionBackbone=backbone;
     entry.command=IoHomeCommand::SensorSubscribeRequest;entry.sourceChannelIndex=channelIndexFor(channel);
     entry.maxAttempts=1;entry.active=true;return queuePush(entry);
+}
+
+bool IoHomeController::startSensorMonitor(IoHomecontrolChannel *channel,uint32_t intervalSeconds,uint32_t durationSeconds)
+{
+    // Host-selected limits, not inferred sensor timing or subscription semantics.
+    const uint8_t c=channelIndexFor(channel);
+    if(!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||!channel||c>=16||
+       intervalSeconds<1||intervalSeconds>600||durationSeconds<intervalSeconds||durationSeconds>3600||
+       !channel->isPaired()||channel->is1W()||!channel->productContextRevision()||!channel->getProtocolIdentity().valid||
+       channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Sensor)return false;
+    auto &monitor=mSensorMonitors[c];monitor={};monitor.active=true;monitor.node=channel->getNodeId();
+    monitor.contextRevision=channel->productContextRevision();monitor.startedMs=millis();
+    monitor.intervalMs=intervalSeconds*1000;monitor.durationMs=durationSeconds*1000;
+    monitor.lastQueuedMs=monitor.startedMs-monitor.intervalMs;std::memcpy(monitor.key,channel->getEncryptionKey(),16);return true;
+}
+bool IoHomeController::stopSensorMonitor(uint8_t channel)
+{
+    if(channel>=16)return false;
+    mSensorMonitors[channel].active=false;return true; // an already queued read is not retracted
+}
+const IoHomeController::SensorMonitor *IoHomeController::sensorMonitor(uint8_t channel) const
+{
+    static const SensorMonitor empty{};return channel<16?&mSensorMonitors[channel]:&empty;
+}
+void IoHomeController::serviceSensorMonitors()
+{
+    const uint32_t now=millis();
+    for(uint8_t c=0;c<16;c++) {
+        auto &monitor=mSensorMonitors[c];if(!monitor.active)continue;
+        if(uint32_t(now-monitor.startedMs)>=monitor.durationMs||
+           !sampleIdentityMatches(c,monitor.node,monitor.key,monitor.contextRevision))monitor.active=false;
+    }
+    if(!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation())return;
+    for(uint8_t offset=0;offset<16;offset++) {
+        const uint8_t c=(mNextSensorMonitor+offset)%16;auto &monitor=mSensorMonitors[c];
+        if(!monitor.active||uint32_t(now-monitor.lastQueuedMs)<monitor.intervalMs)continue;
+        if(requestSensorStatus(mModule->getChannel(c))) {
+            monitor.lastQueuedMs=now;monitor.requests++;mNextSensorMonitor=(c+1)%16;
+        }
+        return; // no burst catch-up and only one pending monitor read
+    }
 }
 
 bool IoHomeController::sampleIdentityMatches(uint8_t channel,uint32_t node,const uint8_t *key,uint32_t contextRevision) const
@@ -6565,6 +6606,7 @@ void IoHomeController::processIdle()
         return;
 
     servicePriorityRefresh();
+    serviceSensorMonitors();
 
     if (!queueEmpty())
     {

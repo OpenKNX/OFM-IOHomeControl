@@ -19485,3 +19485,30 @@ TEST(controller_management_samples_and_queued_reads_expire_on_semantic_change) {
     c.loop();ASSERT_TRUE(c.requestSensorInformation(&ch));identity.nodeClass=IoHomeNodeClass::Actuator;ch.onProtocolIdentity(0x654321,identity);
     c.radio().testClearTransmittedPacket();ASSERT_TRUE(!transmitQueuedControllerFrame(c,tx));
 }
+
+TEST(controller_sensor_monitor_is_bounded_and_pauses_for_commissioning) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ASSERT_TRUE(!c.sensorMonitor(0)->active);ASSERT_TRUE(!c.startSensorMonitor(&ch,1,3));
+    IoHomeProtocolIdentity identity;identity.valid=true;identity.nodeClass=IoHomeNodeClass::Sensor;ch.onProtocolIdentity(0x654321,identity);
+    ASSERT_TRUE(!c.startSensorMonitor(&ch,0,3));ASSERT_TRUE(!c.startSensorMonitor(&ch,2,1));ASSERT_TRUE(!c.startSensorMonitor(&ch,1,3601));
+    ASSERT_TRUE(c.startSensorMonitor(&ch,1,3));m.managementAllowed=false;IoHomeFrame tx;
+    ASSERT_TRUE(!transmitQueuedControllerFrame(c,tx));ASSERT_EQ(c.sensorMonitor(0)->requests,0);
+    m.managementAllowed=true;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_EQ(tx.commandId,IoHomeCommand::SensorStatusRequest);
+    ASSERT_EQ(c.sensorMonitor(0)->requests,1);
+    uint8_t data[]={0,1,0,0,0,7};IoHomeFrame reply;buildSimpleResponseFrame(reply,0x123456,0x654321,IoHomeCommand::SensorStatusResponse,data,sizeof(data));ASSERT_TRUE(queueControllerResponse(c,reply));
+    ioHomeTestSetMillis(500);ASSERT_TRUE(!transmitQueuedControllerFrame(c,tx));
+    ioHomeTestSetMillis(1000);ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_EQ(c.sensorMonitor(0)->requests,2);
+    ASSERT_TRUE(queueControllerResponse(c,reply));ioHomeTestSetMillis(3000);ASSERT_TRUE(!transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(!c.sensorMonitor(0)->active);
+}
+TEST(controller_sensor_monitor_stops_on_identity_change_and_wraps_clock) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    IoHomeProtocolIdentity identity;identity.valid=true;identity.nodeClass=IoHomeNodeClass::Sensor;ch.onProtocolIdentity(0x654321,identity);
+    ioHomeTestSetMillis(0xFFFFFF00);ASSERT_TRUE(c.startSensorMonitor(&ch,1,2));m.managementAllowed=false;
+    ioHomeTestSetMillis(0x100);c.loop();ASSERT_TRUE(c.sensorMonitor(0)->active);
+    ioHomeTestSetMillis(0x700);c.loop();ASSERT_TRUE(!c.sensorMonitor(0)->active);
+    ASSERT_TRUE(c.stopSensorMonitor(0));ASSERT_TRUE(!c.stopSensorMonitor(16));
+    m.managementAllowed=true;ASSERT_TRUE(c.startSensorMonitor(&ch,1,2));identity.profile=2;ch.onProtocolIdentity(0x654321,identity);
+    c.loop();ASSERT_TRUE(!c.sensorMonitor(0)->active);
+}
