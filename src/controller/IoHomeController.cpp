@@ -5360,16 +5360,41 @@ void IoHomeController::processPendingDiscoveryResponses()
     mPendingDiscoveryCount = 0;
 }
 
+RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8_t iLength)
+{
+    if (iData && iLength && (iData[0] & IOHC_CTRL0_MODE_1W) && mReservationFailed)
+        return RadioError::HardwareError;
+    return mRadio.startTransmit(iData, iLength);
+}
+
 uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool iForceFlashSave)
 {
     if (!iProfile)
         return 0;
 
+    const uint8_t lOwner = channelIndexFor(iProfile);
+    if (lOwner >= 16) { mReservationFailed = true; return 0; }
+    const uint32_t lNode = iProfile->getOneWayControllerNodeId();
+    const uint8_t *lKey = iProfile->getOneWayControllerKey();
+    if (!mReservationLoaded[lOwner] || mReservationNodes[lOwner] != lNode ||
+        std::memcmp(mReservationKeys[lOwner], lKey, 16))
+    {
+        uint16_t lWatermark=0;
+        const auto lLoad=mReservationJournal.load(lOwner,lNode,lKey,lWatermark);
+        if (lLoad==IoHomeDurableReservation::Load::Corrupt ||
+            lLoad==IoHomeDurableReservation::Load::Unavailable)
+        { mReservationFailed=true; return 0; }
+        if (lLoad==IoHomeDurableReservation::Load::Found) iProfile->setSequence1W(lWatermark);
+        mReservationNodes[lOwner]=lNode; std::memcpy(mReservationKeys[lOwner],lKey,16);
+        mReservationLoaded[lOwner]=true;
+    }
     bool lFlashSaveRequired = false;
     const uint16_t lUsedSequence = iProfile->incrementSequence1W(iForceFlashSave, lFlashSaveRequired);
     const uint16_t lNextSequence = static_cast<uint16_t>(lUsedSequence + 1U);
     const uint16_t lReservedSequence = iProfile->getReservedSequence1W();
 
+    if (lFlashSaveRequired && !mReservationJournal.commit(lOwner,lNode,lKey,lReservedSequence))
+        mReservationFailed=true; // sticky fail-closed; never transmit a RAM-only reservation
     if (lFlashSaveRequired)
         // A suppressed save would make the new reservation RAM-only and allow
         // counter reuse after restart. Window renewal must bypass the throttle.
@@ -6430,7 +6455,7 @@ void IoHomeController::processTxPending()
     if (!lIs1WFrame)
         tracePairDiagnosticTx2W(mTxFrame, lPreamble);
 
-    RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
     if (lErr == RadioError::None)
     {
         if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
@@ -6901,7 +6926,7 @@ void IoHomeController::processResponse()
                 return;
             }
             tracePairDiagnosticTx2W(lFrame, lPreamble);
-            const RadioError lErr = mRadio.startTransmit(mTxBuffer, lLen);
+            const RadioError lErr = startControllerTransmit(mTxBuffer, lLen);
             if (lErr == RadioError::None)
             {
                 if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
@@ -7040,7 +7065,7 @@ void IoHomeController::processPairSendDiscovery()
 #if defined(RADIO_SX1262)
         const RadioError lErr = mRadio.startTransmitBlocking(mTxBuffer, mTxLen);
 #else
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
 #endif
         if (lErr == RadioError::None)
         {
@@ -7143,7 +7168,7 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
 #if defined(RADIO_SX1262)
         const RadioError lErr = mRadio.startTransmitBlocking(mTxBuffer, mTxLen);
 #else
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
 #endif
         if (lErr == RadioError::None)
         {
@@ -7264,7 +7289,7 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
     if (mTxLen > 0)
     {
         tracePairDiagnosticTx2W(mPairLaunchKeyTransferFrame, lPreamble);
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -7334,7 +7359,7 @@ void IoHomeController::processPairSendPullKeyChallenge()
             return;
         }
         tracePairDiagnosticTx2W(lFrame, lPreamble);
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, lLen);
+        const RadioError lErr = startControllerTransmit(mTxBuffer, lLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -7449,7 +7474,7 @@ void IoHomeController::processPairSend1WAnnounce()
         trace1WRepeatPlan("1w announce", pairingOneWayPowerClass(), pairingOneWayManufacturer());
     }
 
-    const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
     if (lErr == RadioError::None)
     {
         mStateTimer = millis();
@@ -7572,7 +7597,7 @@ void IoHomeController::processPairSend1WRemove()
         trace1WRepeatPlan("1w remove", pairingOneWayPowerClass(), pairingOneWayManufacturer());
     }
 
-    const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
     if (lErr == RadioError::None)
     {
         mStateTimer = millis();
@@ -7730,7 +7755,7 @@ void IoHomeController::processPairSend1WKeyTransfer()
         recordOneWayEnrollmentPhase(OneWayEnrollPhase::Add, lSeq,
                                     mTxFrame.getDestNodeId());
 
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             // VELUX opens its enrollment window with the first 0x30. The
@@ -7861,7 +7886,7 @@ void IoHomeController::processPairSend1WFinalizerStop()
         return;
     }
 
-    const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
     if (lErr != RadioError::None)
     {
         failOneWayEnrollment("radio rejected finalizer STOP; DOWN was suppressed");
@@ -7938,7 +7963,7 @@ void IoHomeController::processPairSend1WFinalizerDown()
         return;
     }
 
-    const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
     if (lErr != RadioError::None)
     {
         failOneWayEnrollment("radio rejected finalizer DOWN");
@@ -8202,7 +8227,7 @@ void IoHomeController::processPairSendKeyInit()
     if (mTxLen > 0)
     {
         tracePairDiagnosticTx2W(mTxFrame, lPreamble);
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             if (mPairKeyExchangeAttempts == 0)
@@ -8311,7 +8336,7 @@ void IoHomeController::processPairSendKeyTransfer()
             return;
         }
         tracePairDiagnosticTx2W(mTxFrame, lPreamble);
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -8361,7 +8386,7 @@ void IoHomeController::processPairSendKeyTransferAuthResponse()
             return;
         }
         tracePairDiagnosticTx2W(lFrame, lPreamble);
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -8502,7 +8527,7 @@ void IoHomeController::processPairSendEnrichment()
     }
 
     tracePairDiagnosticTx2W(mTxFrame, lPreamble);
-    const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
     if (lErr == RadioError::None)
     {
         if (mPairEnrichmentStep == PairEnrichmentStep::GeneralInfo3)
@@ -8583,7 +8608,7 @@ void IoHomeController::processPairSendSetConfig1()
     }
 
     tracePairDiagnosticTx2W(mPairSetConfigRequest, lPreamble);
-    const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
     if (lErr == RadioError::None)
     {
         mStateTimer = millis();
@@ -8694,7 +8719,7 @@ void IoHomeController::processPairSendSetConfig1AuthResponse()
     if (mTxLen > 0)
     {
         tracePairDiagnosticTx2W(lFrame, lPreamble);
-        const RadioError lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+        const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
@@ -8821,7 +8846,7 @@ void IoHomeController::processDiscovery()
 #if defined(RADIO_SX1262)
             lErr = mRadio.startTransmitBlocking(mTxBuffer, mTxLen);
 #else
-            lErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+            lErr = startControllerTransmit(mTxBuffer, mTxLen);
 #endif
             if (lErr == RadioError::None)
             {
@@ -9201,7 +9226,7 @@ RadioError IoHomeController::startRadioTransmit(const uint8_t *iBuffer, uint8_t 
     if (!waitForLbtClear(iLbtContext))
         return RadioError::Busy;
 
-    return mRadio.startTransmit(iBuffer, iLen);
+    return startControllerTransmit(iBuffer, iLen);
 }
 
 RadioError IoHomeController::startShortPreambleTransmit(const uint8_t *iBuffer, uint8_t iLen,
@@ -10193,7 +10218,7 @@ void IoHomeController::processStatusAckSend()
         return;
     }
 
-    const RadioError lTxErr = mRadio.startTransmit(mTxBuffer, mTxLen);
+    const RadioError lTxErr = startControllerTransmit(mTxBuffer, mTxLen);
     if (lTxErr == RadioError::None)
     {
         mStateTimer = millis();
@@ -10796,7 +10821,7 @@ void IoHomeController::serviceKeyExtractReply()
         return;
     }
 
-    if (mRadio.startTransmit(mKeyExtractReplyBuffer, mKeyExtractReplyLen) == RadioError::None)
+    if (startControllerTransmit(mKeyExtractReplyBuffer, mKeyExtractReplyLen) == RadioError::None)
     {
         mKeyExtractReplyPhase++;
         return;

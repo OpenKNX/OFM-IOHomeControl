@@ -3617,6 +3617,25 @@ TEST(bound_high_fp_representations_are_ordered_atomic_and_product_scoped)
     ASSERT_EQ(lLength, 6); ASSERT_TRUE(memcmp(lData, lWhite, 6) == 0);
 }
 
+TEST(durable_reservation_journal_reports_commit_and_blocks_corrupt_rollback)
+{
+    IoHomeDurableReservation j; const uint8_t key[16]={1,2,3}; uint16_t w=999;
+    using L=IoHomeDurableReservation::Load;
+    ASSERT_EQ(j.load(0,0x123456,key,w),L::Empty);
+    ASSERT_TRUE(j.commit(0,0x123456,key,117));
+    ASSERT_TRUE(j.commit(0,0x123456,key,134));
+    ASSERT_EQ(j.load(0,0x123456,key,w),L::Found); ASSERT_EQ(w,134);
+    j.corrupt(0,1);
+    ASSERT_EQ(j.load(0,0x123456,key,w),L::Corrupt); ASSERT_EQ(w,134);
+    ASSERT_TRUE(!j.commit(0,0x123456,key,151));
+    IoHomeDurableReservation k;
+    ASSERT_TRUE(k.commit(0,0x123456,key,117)); k.failWrites=true;
+    ASSERT_TRUE(!k.commit(0,0x123456,key,151));
+    ASSERT_EQ(k.load(0,0x654321,key,w),L::DifferentIdentity);
+    j.corrupt(0,0); ASSERT_EQ(j.load(0,0x123456,key,w),L::Corrupt);
+    ASSERT_TRUE(!j.commit(0,0x123456,key,151));
+}
+
 TEST(product_binding_requires_exact_identity_and_consistent_evidence)
 {
     using F = IoHomeBoundProductFamily;

@@ -1,3 +1,4 @@
+#include "../protocol/IoHomeDurableReservation.h"
 #pragma once
 #include "../radio/Radio.h"
 #include "../protocol/IoHomeFrame.h"
@@ -1031,6 +1032,12 @@ private:
   IoHomeQueueEntry mCurrentCmd;
 
   // Current TX frame
+  IoHomeDurableReservation mReservationJournal;
+  bool mReservationLoaded[16]{};
+  uint32_t mReservationNodes[16]{};
+  uint8_t mReservationKeys[16][16]{};
+  bool mReservationFailed = false;
+  RadioError startControllerTransmit(const uint8_t *iData, uint8_t iLength);
   IoHomeFrame mTxFrame;
   IoHomeFrame mRxFrame;
   IoHomeFrame mPairSetConfigRequest;
