@@ -45,3 +45,12 @@ Retained the intentional idle-only 5 s health supervision and three resets per b
 ## 11. Exact GetKeyOfNode primitive
 
 Added an internal explicitly invoked peer/revision/token-bound 0x38 challenge -> 0x32 fixed-transfer-key AES/XOR primitive. It commits the imported global SystemKey immediately and attempts checked network persistence before optional authentication. Authentication outcome is separate and never rolls back the imported key. Cancellation/stale context rejects pending work. The ETS extraction/candidate/adoption workflow is unchanged and does not invoke this primitive. Native vectors cover commit-before-authentication and failed optional authentication retaining the key. Hardware qualification remains pending.
+
+## 12 — 1W recovery visibility
+
+Added per-channel current sequence, durable high-water, unused reservation count,
+identity revision and skipped-on-restore diagnostics. Advancing to a durable floor
+marks possible desynchronization; it never implies a known receiver watermark.
+No rollback, range scan, key replacement or automatic re-pair is introduced.
+Actuator-specific recovery remains blocked on a captured, proven peer procedure.
+A successful RF send cannot clear this warning because 1W provides no peer ACK.

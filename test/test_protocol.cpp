@@ -18402,6 +18402,15 @@ TEST(controller_1w_shared_profile_uses_owner_sequence_and_identity)
     ASSERT_TRUE(deserializeFrameForTest(lFrame, lPacket.data(), static_cast<uint8_t>(lPacket.size())));
     ASSERT_EQ(lFrame.getSrcNodeId(), 0x810001);
     ASSERT_EQ(lOwner.getSequence1W(), 11);
+    const auto sequenceDiagnostics=lController.oneWaySequenceDiagnostics(0);
+    ASSERT_TRUE(sequenceDiagnostics.valid);
+    ASSERT_TRUE(sequenceDiagnostics.durableKnown);
+    ASSERT_TRUE(!sequenceDiagnostics.peerSequenceKnown);
+    ASSERT_EQ(sequenceDiagnostics.current,11);
+    ASSERT_EQ(sequenceDiagnostics.durableHighWater,lOwner.getReservedSequence1W());
+    ASSERT_EQ(sequenceDiagnostics.reservedUnused,static_cast<uint16_t>(lOwner.getReservedSequence1W()-11));
+    ASSERT_TRUE(!lController.oneWaySequenceDiagnostics(16).valid);
+
     ASSERT_EQ(lShared.getSequence1W(), 0);
     ASSERT_EQ(lFrame.data[6], 0x00);
     ASSERT_EQ(lFrame.data[7], 0x0B);

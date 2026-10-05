@@ -825,6 +825,15 @@ public:
   enum class OneWayRecovery : uint8_t { Ready, OwnerUnavailable, JournalCorrupt, StoreUnavailable, CommitFailed };
   OneWayRecovery oneWayRecovery() const { return mOneWayRecovery; }
   bool oneWayRecoveryRequired() const { return mReservationFailed; }
+  struct OneWaySequenceDiagnostics {
+    bool valid=false, durableKnown=false, possibleDesynchronization=false;
+    uint32_t node=0, identityRevision=0, skippedOnRestore=0;
+    uint16_t current=0, durableHighWater=0, reservedUnused=0;
+    // 1W has no acknowledged receiver watermark. Never infer one from TX.
+    bool peerSequenceKnown=false;
+  };
+  OneWaySequenceDiagnostics oneWaySequenceDiagnostics(uint8_t channel) const;
+
   void logPairDiagnosticStatus() const;
   const OneWayEnrollmentTraceEntry *oneWayEnrollmentTrace() const;
   uint8_t oneWayEnrollmentTraceCount() const;
@@ -1146,6 +1155,8 @@ private:
   uint32_t mReservationNodes[16]{};
   uint16_t mReservationWatermarks[16]{};
   uint8_t mReservationKeys[16][16]{};
+  uint32_t mReservationSkipped[16]{};
+  bool mReservationPossibleDesync[16]{};
   bool mReservationFailed = false;
   OneWayRecovery mOneWayRecovery = OneWayRecovery::Ready;
   RadioError startControllerTransmit(const uint8_t *iData, uint8_t iLength);

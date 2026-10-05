@@ -5794,6 +5794,22 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
     return mRadio.startTransmit(iData, iLength);
 }
 
+IoHomeController::OneWaySequenceDiagnostics IoHomeController::oneWaySequenceDiagnostics(uint8_t channel) const
+{
+    OneWaySequenceDiagnostics d{};
+    if(channel>=16 || !mModule) return d;
+    const auto *profile=mModule->getChannel(channel);
+    if(!profile) return d;
+    d.valid=true;d.node=profile->getOneWayControllerNodeId();
+    d.identityRevision=profile->productContextRevision();d.current=profile->getSequence1W();
+    d.durableKnown=mReservationLoaded[channel];
+    d.durableHighWater=mReservationWatermarks[channel];
+    d.reservedUnused=static_cast<uint16_t>(d.durableHighWater-d.current);
+    d.skippedOnRestore=mReservationSkipped[channel];
+    d.possibleDesynchronization=mReservationPossibleDesync[channel];
+    return d;
+}
+
 uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool iForceFlashSave)
 {
     if (!iProfile)
@@ -5817,10 +5833,16 @@ uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool i
               OneWayRecovery::JournalCorrupt : OneWayRecovery::StoreUnavailable;
           return 0; }
         if (lLoad==IoHomeDurableReservation::Load::Found) {
+            mReservationPossibleDesync[lOwner]=true;
             // A same-key reimport/reset cannot move below the durable floor.
             const uint16_t current=iProfile->getSequence1W();
-            if (static_cast<uint16_t>(current-lWatermark)>=0x8000)
+            if (static_cast<uint16_t>(current-lWatermark)>=0x8000) {
+                const uint16_t skipped=static_cast<uint16_t>(lWatermark-current);
+                mReservationSkipped[lOwner]+=skipped;
+                // Even a smaller gap can exceed an unknown receiver watermark.
+                mReservationPossibleDesync[lOwner]=true;
                 iProfile->setSequence1W(lWatermark);
+            }
         }
         mReservationNodes[lOwner]=lNode; std::memcpy(mReservationKeys[lOwner],lKey,16);
         mReservationLoaded[lOwner]=true;
