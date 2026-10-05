@@ -164,6 +164,8 @@ struct IoHomeQueueEntry
   bool twoWayFp;                               // profile-selected functional parameter
   bool managementRead;                        // key snapshot for correlated management reads
   uint8_t managementKey[16];
+  bool mpFpRead;                              // source-backed individual standard GET
+  uint8_t mpFpReadIndex;
   bool diagnosticFpRead;                       // raw-only, no KO publication
   uint8_t diagnosticFpReadIndex;
   uint8_t twoWayFpIndex;
@@ -560,6 +562,7 @@ public:
   bool sendBatteryStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
   bool sendBatteryStateQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
   bool sendTiltStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
+  bool requestMpFpRead(IoHomecontrolChannel *channel,uint8_t index);
   bool sendDiagnosticFpRead(IoHomecontrolChannel *iChannel, uint8_t iFpIndex);
   bool requestObjectRead(IoHomecontrolChannel *channel,uint8_t provider,uint16_t key,uint16_t offset,uint16_t span);
   bool cancelObjectRead(uint32_t token);

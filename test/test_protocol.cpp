@@ -19300,3 +19300,29 @@ TEST(product_runtime_reply_is_atomic_and_does_not_promote_correlation) {
     ASSERT_EQ(runtime.sample(0)->generation,1);ASSERT_EQ(runtime.sample(10)->raw,123);
     ASSERT_TRUE(!runtime.observeReply(0x654321,reply,4,10,IoHomeProductRuntime::Trust::Authenticated));
 }
+
+TEST(controller_standard_high_fp_read_ingests_sparse_reply_without_position_publication) {
+    const uint8_t key[16]={1};IoHomeController controller;IoHomecontrol module;IoHomecontrolChannel channel;
+    initPaired2WControllerForTest(controller,module,channel,0x831F2A,0x7E9E6E,key);
+    IoHomeProtocolIdentity identity;identity.valid=true;identity.nodeClass=IoHomeNodeClass::Actuator;channel.onProtocolIdentity(0x7E9E6E,identity);
+    ASSERT_TRUE(controller.requestMpFpRead(&channel,14));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(controller,tx));
+    ASSERT_EQ(tx.dataLen,3);ASSERT_EQ(tx.data[0],3);ASSERT_EQ(tx.data[1],0);ASSERT_EQ(tx.data[2],4);
+    const uint8_t data[]={0,0,0,0,0x32,0,0,0,0,0,0,0,0,4,0x64,0};IoHomeFrame response;
+    buildSimpleResponseFrame(response,0x831F2A,0x7E9E6E,IoHomeCommand::PrivateResponse,data,sizeof(data));
+    ASSERT_TRUE(queueControllerResponse(controller,response));
+    ASSERT_EQ(channel.productRuntime().sample(14)->raw,0x6400);
+    ASSERT_EQ(channel.productRuntime().sample(14)->trust,IoHomeProductRuntime::Trust::Correlated);
+    ASSERT_EQ(channel.productRuntime().sample(0)->generation,channel.productRuntime().sample(14)->generation);
+    ASSERT_TRUE(!channel.testHasPositionFeedback());ASSERT_TRUE(!channel.testHasTargetPositionFeedback());
+}
+TEST(controller_product_read_rejects_missing_selected_fp_and_key_change) {
+    const uint8_t key[16]={1};IoHomeController controller;IoHomecontrol module;IoHomecontrolChannel channel;
+    initPaired2WControllerForTest(controller,module,channel,0x831F2A,0x7E9E6E,key);
+    IoHomeProtocolIdentity identity;identity.valid=true;identity.nodeClass=IoHomeNodeClass::Actuator;channel.onProtocolIdentity(0x7E9E6E,identity);
+    ASSERT_TRUE(!controller.requestMpFpRead(&channel,17));ASSERT_TRUE(controller.requestMpFpRead(&channel,10));
+    IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(controller,tx));
+    uint8_t data[14]={};IoHomeFrame response;buildSimpleResponseFrame(response,0x831F2A,0x7E9E6E,IoHomeCommand::PrivateResponse,data,sizeof(data));
+    ASSERT_TRUE(queueControllerResponse(controller,response));ASSERT_TRUE(!channel.productRuntime().sample(0)->present);
+    uint8_t replacement[16]={2};channel.setEncryptionKey(replacement);controller.loop();
+    ASSERT_TRUE(!channel.productRuntime().sample(10)->present);
+}

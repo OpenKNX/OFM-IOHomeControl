@@ -2507,6 +2507,18 @@ void IoHomeController::servicePriorityRefresh()
     }
 }
 
+bool IoHomeController::requestMpFpRead(IoHomecontrolChannel *channel,uint8_t index)
+{
+    if(!channel||!channel->isPaired()||channel->is1W()||index>16||!channel->getProtocolIdentity().valid||
+       channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Actuator||mPassiveMode||mGatewayMode||
+       mOneWayKeyReceiveActive||isKeyExtractionActive()||isNetworkScanActive())return false;
+    IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
+    entry.managementRead=true;std::memcpy(entry.managementKey,entry.encKey,16);
+    entry.command=IoHomeCommand::Private;entry.mpFpRead=true;entry.mpFpReadIndex=index;
+    entry.sourceChannelIndex=channelIndexFor(channel);entry.maxAttempts=1;entry.background=true;entry.active=true;
+    return queuePush(entry);
+}
+
 bool IoHomeController::sendDiagnosticFpRead(IoHomecontrolChannel *iChannel,
                                             uint8_t iFpIndex)
 {
@@ -7038,7 +7050,7 @@ void IoHomeController::processResponse()
 
     // These recovered read services cannot complete on an unrelated opcode
     // or the legacy descriptor's too-short Priority ACK.
-    if(mCurrentCmd.managementRead&&!mCurrentCmd.objectReadToken) {
+    if(mCurrentCmd.managementRead&&!mCurrentCmd.objectReadToken&&!mCurrentCmd.mpFpRead) {
         if(!managementIdentityMatches(mCurrentCmd)) {
             const auto failed=mCurrentCmd;
             mCurrentCmd.active=false;mState=ControllerState::Idle;
@@ -7052,6 +7064,18 @@ void IoHomeController::processResponse()
         if(mRxFrame.commandId==IoHomeCommand::SensorStatusResponse) {
             IoHomeSensorStatus decoded;if(!ioHomeDecodeSensorStatus(mRxFrame.data,mRxFrame.dataLen,decoded)){mState=ControllerState::WaitResponse;return;}
         }
+    }
+    if(mCurrentCmd.mpFpRead) {
+        if(!managementIdentityMatches(mCurrentCmd)) {mCurrentCmd.active=false;mState=ControllerState::Idle;return;}
+        if(mRxFrame.commandId!=IoHomeCommand::ChallengeRequest&&mRxFrame.commandId!=IoHomeCommand::ErrorResponse) {
+            IoHomeMpFpReply reply;
+            if(mRxFrame.commandId!=IoHomeCommand::PrivateResponse||
+               !ioHomeDecodeMpFpReply(mRxFrame.data,mRxFrame.dataLen,reply)||
+               (mCurrentCmd.mpFpReadIndex&&!(reply.present&(uint16_t(1)<<(mCurrentCmd.mpFpReadIndex-1))))) {
+                mState=ControllerState::WaitResponse;return;
+            }
+        }
+        if(mRxFrame.commandId==IoHomeCommand::ChallengeRequest&&mRxFrame.dataLen<6){mState=ControllerState::WaitResponse;return;}
     }
     if(mCurrentCmd.objectReadToken) {
         if(mCurrentCmd.objectReadToken!=mObjectReadToken||!mObjectRead.active()||!managementIdentityMatches(mCurrentCmd)) {
@@ -9758,7 +9782,10 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         // build2WPrivatePayload(). Known reference forms:
         //   03 00 00       = status
         //   03 20 01 00    = tilt status
-        if (iEntry.privateProbe)
+        if(iEntry.mpFpRead) {
+            if(!ioHomeBuildMpFpRead(iEntry.mpFpReadIndex,mTxFrame.data,mTxFrame.dataLen))return false;
+        }
+        else if (iEntry.privateProbe)
         {
             if (!buildTwoWayPrivateProbePayload(mTxFrame.data, mTxFrame.dataLen,
                                                 iEntry.privateProbeShape,
@@ -10106,6 +10133,7 @@ void IoHomeController::dispatchRxFrame()
             // frames are self-authenticated via their embedded sequence number, not
             // via a controller-issued challenge. Never apply the 2W challenge/HMAC
             // gate to a 1W channel; only 2W frames addressed to us reach this block.
+            bool lVerifiedReplyMac=false;
             // Verify HMAC on authenticated frames before trusting data.
             if (mRxFrame.hasHmac && !lCh->is1W())
             {
@@ -10140,6 +10168,7 @@ void IoHomeController::dispatchRxFrame()
                     break;
                 }
 
+                lVerifiedReplyMac=true;
                 // Clear challenge after successful verification to prevent replay
                 static const uint8_t sZeroChallenge[6] = {};
                 lCh->setLastChallenge(sZeroChallenge);
@@ -10191,6 +10220,16 @@ void IoHomeController::dispatchRxFrame()
             }
             case IoHomeCommand::PrivateResponse:
             {
+                if(mCurrentCmd.mpFpRead) {
+                    IoHomeMpFpReply reply;
+                    if(mCurrentCmd.active&&mCurrentCmd.destNodeId==lSrcNode&&lDestNode==mOwnNodeId&&
+                       managementIdentityMatches(mCurrentCmd)&&ioHomeDecodeMpFpReply(mRxFrame.data,mRxFrame.dataLen,reply)&&
+                       (!mCurrentCmd.mpFpReadIndex||(reply.present&(uint16_t(1)<<(mCurrentCmd.mpFpReadIndex-1))))) {
+                        lCh->productRuntime().observeReply(lSrcNode,reply,mCurrentCmd.observationGeneration,millis(),
+                            lVerifiedReplyMac?IoHomeProductRuntime::Trust::Authenticated:IoHomeProductRuntime::Trust::Correlated);
+                    }
+                    break; // standard product reads never enter legacy position publication
+                }
 #ifndef TEST_NATIVE
                 if(mRxFrame.dataLen>=8&&mCurrentCmd.active&&mCurrentCmd.command==IoHomeCommand::Private&&mCurrentCmd.destNodeId==lSrcNode)
                     lCh->productRuntime().observe(lSrcNode,0,readU16BE(mRxFrame.data,4),

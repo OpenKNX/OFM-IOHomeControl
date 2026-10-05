@@ -11,6 +11,7 @@
 #endif
 
 #include "../protocol/IoHomeSequence.h"
+#include "../protocol/IoHomeProductRuntime.h"
 
 #ifndef logInfoP
 #define logInfoP(...) \
@@ -106,6 +107,7 @@ inline void ioHomeTestAdvanceMicros(uint32_t iMicros)
 class IoHomecontrolChannel
 {
 public:
+  IoHomeProductRuntime &productRuntime() {mProductRuntime.bind(mIoAddress,mEncKey);return mProductRuntime;}
   bool is1W() const { return mIs1W; }
   void setIs1W(bool iIs1W) { mIs1W = iIs1W; }
   bool isPaired() const { return mPaired; }
@@ -598,6 +600,7 @@ private:
   uint8_t mConfigured1WAcei = 0; // mirrors production automatic-by-manufacturer default
   uint8_t mConfigured2WAcei = IOHC_ACEI_DEFAULT;
   uint32_t mIoAddress = 0;
+  IoHomeProductRuntime mProductRuntime;
   IoHomeProtocolIdentity mProtocolIdentity{};
   uint16_t mManualPackedProfile = 0;
   IoHomeProductIdentityEvidence mProductIdentityEvidence{};

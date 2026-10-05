@@ -2750,6 +2750,14 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         for(uint8_t i=0;i<4;i++)resultData[13+i]=uint32_t(millis()-sample->receivedMs)>>(24-8*i);
         resultLength=17;return true;
     }
+    case 0x2E: // Explicit individual MP/FP GET; no writes or legacy KO publication
+    {
+        if(length!=3||data[1]>=mNumChannels||data[2]>16)break;
+        updateCommissioningJob();
+        const bool idle=!mCommissioningJob.active()&&!mRadioDiagnostic.active&&!mMetadataRefreshActive;
+        resultData[0]=idle&&mController.requestMpFpRead(mChannels[data[1]],data[2])?0:1;
+        resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultLength=4;return true;
+    }
     case 0x28: // Raw product observation, no inferred units/publication
     {
         if(length!=3||data[1]>=mNumChannels||data[2]>16)break;
@@ -2767,7 +2775,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
     {
         if(length!=1)break;
         resultData[0]=0;resultData[1]=1;
-        const uint32_t flags=15;
+        const uint32_t flags=31; // bit4: source-backed individual MP/FP read API
         for(uint8_t i=0;i<4;i++){resultData[2+i]=flags>>(24-8*i);resultData[6+i]=mCommissioningBootId>>(24-8*i);}
         resultLength=10;return true;
     }
@@ -3783,6 +3791,7 @@ void IoHomecontrol::showHelp()
 
     openknx.console.printHelpLine("iohc help", "Show io-homecontrol commands");
     openknx.console.printHelpLine("iohc priority read NODE LEVEL", "Read priority 0..7; bounded expiry refresh; no lock write");
+    openknx.console.printHelpLine("iohc product read NODE INDEX", "Source-backed individual MP/FP GET, index 0..16; raw observations only");
     openknx.console.printHelpLine("iohc object read NODE PROVIDER KEY OFFSET SPAN", "Read allowlisted metadata; hex IDs, decimal offset/span; 30 s host budget");
     openknx.console.printHelpLine("iohc object status", "Raw transfer stage/token; no publication claim");
     openknx.console.printHelpLine("iohc object cancel TOKEN", "Cancel matching object read token");
@@ -4275,6 +4284,16 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         return true;
     }
 
+    if(lSub.rfind("product read ",0)==0) {
+        unsigned node=0,index=0;char extra=0;
+        if(sscanf(lSub.c_str(),"product read %x %u %c",&node,&index,&extra)!=2||!node||node>0xFFFFFF||index>16) {
+            logInfoP("Usage: iohc product read NODE INDEX; hex node, decimal index 0=MP/1..16=FP");return true;
+        }
+        updateCommissioningJob();
+        if(mCommissioningJob.active()||mRadioDiagnostic.active||mMetadataRefreshActive){logInfoP("Finish commissioning/diagnostics/metadata refresh first");return true;}
+        IoHomecontrolChannel *channel=nullptr;for(uint8_t c=0;c<mNumChannels;c++)if(mChannels[c]&&mChannels[c]->getNodeId()==node)channel=mChannels[c];
+        logInfoP("Individual product GET queued=%u; observations via API28, no KNX publication",mController.requestMpFpRead(channel,index));return true;
+    }
     if(lSub.rfind("object read ",0)==0) {
         unsigned node=0,provider=0,key=0,offset=0,span=0;char extra=0;
         if(sscanf(lSub.c_str(),"object read %x %x %x %u %u %c",&node,&provider,&key,&offset,&span,&extra)!=5||!node||node>0xFFFFFF||provider>255||key>65535||offset>65535||!span||span>1024) {
