@@ -2869,6 +2869,20 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         resultData[0]=idle&&mController.requestMpFpRead(mChannels[data[1]],data[2])?0:1;
         resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultLength=4;return true;
     }
+    case 0x3C: // Explicit host policy, volatile; cadence is chosen, not firmware parity
+    {
+        if(length!=4||data[1]>2)break;updateCommissioningJob();
+        const bool ok=managementRequestsAllowed()&&mController.idleForManagedOperation()&&mController.hostRadioPolicy().configure(IoHomeRadioPolicy::Tx(data[1]),uint16_t(data[2])<<8|data[3]);
+        resultData[0]=ok?0:1;resultLength=1;return true;
+    }
+    case 0x3D: // Disturbance and per-operation forced/bypassed TX counts
+    {
+        if(length!=2)break;const auto &policy=mController.hostRadioPolicy();resultData[0]=0;resultData[1]=1;resultData[2]=uint8_t(policy.tx());
+        resultData[3]=policy.cadenceMs()>>8;resultData[4]=policy.cadenceMs();
+        for(uint8_t i=0;i<3;i++)resultData[5+i]=policy.counter(i);resultData[8]=policy.aggregate();resultData[9]=data[1];resultData[10]=policy.forcedCount(data[1]);
+        for(uint8_t i=0;i<4;i++){resultData[11+i]=policy.forcedTotal()>>(24-i*8);resultData[15+i]=policy.aggregateReports()>>(24-i*8);}
+        resultLength=19;return true;
+    }
     case 0x3B: // Optional receive activity edge evidence, never calibrated timing
     {
         if(length!=1)break;const auto &e=mController.radio().lastReceiveEvidence();

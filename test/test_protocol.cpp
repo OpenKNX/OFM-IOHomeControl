@@ -19596,3 +19596,9 @@ TEST(protocol_rcm_outer_and_inner_lifetimes_are_distinct_from_discovery) {
  ASSERT_TRUE(model.begin(2,0x123456,key,1,0xFFFFFF00));ASSERT_EQ(model.prerequisiteVariant(),3);model.tick(0x1400);ASSERT_EQ(model.stage(),IoHomeReceiveConfiguration::Stage::Timeout);
  ASSERT_TRUE(model.begin(0,0x123456,key,1,0));ASSERT_TRUE(!model.bound(0x123456,key,2));ASSERT_EQ(model.stage(),IoHomeReceiveConfiguration::Stage::IdentityChanged);
 }
+TEST(protocol_disturbance_policy_keeps_chosen_cadence_separate_from_lbt) {
+ IoHomeRadioPolicy policy;ASSERT_EQ(policy.cadenceMs(),0);ASSERT_TRUE(!policy.due(10000));ASSERT_TRUE(policy.configure(IoHomeRadioPolicy::Tx::Strict,1000));ASSERT_TRUE(!policy.due(999));ASSERT_TRUE(policy.due(1000));
+ for(unsigned i=0;i<15;i++)policy.sample(0,-81,true);ASSERT_EQ(policy.reports(0),1);policy.sample(0,-82,true);ASSERT_EQ(policy.counter(0),0);
+ for(unsigned c=0;c<3;c++)for(unsigned n=0;n<6;n++)policy.sample(c,-80,true);ASSERT_TRUE(policy.aggregate());ASSERT_EQ(policy.counter(1),255);policy.sample(2,-100,true);ASSERT_TRUE(!policy.aggregate());ASSERT_EQ(policy.counter(0),0);
+ for(unsigned n=0;n<300;n++)policy.forced(0x3D);ASSERT_EQ(policy.forcedCount(0x3D),255);ASSERT_EQ(policy.forcedTotal(),300);ASSERT_TRUE(!policy.configure(IoHomeRadioPolicy::Tx::Forced,1));
+}

@@ -2,6 +2,7 @@
 #include "../protocol/IoHomeObjectTransfer.h"
 #include "../protocol/IoHomeDurableReservation.h"
 #pragma once
+#include "../protocol/IoHomeRadioPolicy.h"
 #include "../radio/Radio.h"
 #include "../protocol/IoHomeFrame.h"
 #include "../protocol/IoHomeCrypto.h"
@@ -929,6 +930,7 @@ public:
   void setModule(IoHomecontrol *iModule);
 
   // Get current state
+  IoHomeRadioPolicy &hostRadioPolicy(){return mHostRadioPolicy;}
   bool idleForManagedOperation() const {
     return mState==ControllerState::Idle&&queueEmpty()&&!mCurrentCmd.active&&!mPassiveMode&&!mGatewayMode&&
         !mOneWayKeyReceiveActive&&!mKeyExtractArmed&&!mNetworkScanActive&&!mObjectRead.active();
@@ -1326,6 +1328,7 @@ private:
   // Duty cycle tracking (per sub-band per hour)
   uint32_t mTxTimeAccum[IOHC_NUM_FREQUENCIES]; // accumulated TX time in ms
   uint32_t mDutyCycleWindowStart;
+  IoHomeRadioPolicy mHostRadioPolicy;
   uint32_t mLbtBusyCount;
   uint32_t mLbtBypassCount;
   uint32_t mLbtClearCount;

@@ -5899,6 +5899,7 @@ void IoHomeController::loop()
         mRxScanLastSwitch=micros();
     }
 #endif
+    if(idleForManagedOperation()&&mRadio.state()==RadioState::Receiving&&mHostRadioPolicy.due(millis())){int16_t rssi=0;bool valid=mRadio.currentRssi(rssi);mHostRadioPolicy.sample(mCurrentFreqIdx,rssi,valid);}
     serviceObjectRead();
     if (!mRadio.isInitialized())
         return;
@@ -9518,7 +9519,7 @@ bool IoHomeController::waitForLbtClear(LbtContext iContext)
     mLastLbtBypassed = false;
     mLastLbtAuthResponse = (iContext == LbtContext::AuthResponse);
 
-    if (iContext == LbtContext::Bypass)
+    if (iContext == LbtContext::Bypass || mHostRadioPolicy.tx()==IoHomeRadioPolicy::Tx::Forced)
     {
         mLbtBypassCount++;
         mLastLbtBypassed = true;
@@ -9537,7 +9538,7 @@ bool IoHomeController::waitForLbtClear(LbtContext iContext)
             mLbtInvalidRssiCount++;
             if (mPairDiagnosticTraceEnabled)
                 logInfoP("PairDiag: LBT RSSI unavailable before TX, bypassing carrier-sense");
-            return true;
+            return mHostRadioPolicy.tx()!=IoHomeRadioPolicy::Tx::Strict;
         }
 
         mLastLbtRssi = lRssi;
@@ -9554,6 +9555,7 @@ bool IoHomeController::waitForLbtClear(LbtContext iContext)
             delay(5);
     }
 
+    if(mHostRadioPolicy.tx()==IoHomeRadioPolicy::Tx::Strict)return false;
     // IOHC timing is tight, especially for 0x3D auth responses.  Treat LBT as
     // diagnostic/best-effort here: record the busy channel but do not deadlock
     // the protocol state machine or native tests when RSSI is high/stubbed.
@@ -9574,7 +9576,9 @@ RadioError IoHomeController::startRadioTransmit(const uint8_t *iBuffer, uint8_t 
     if (!waitForLbtClear(iLbtContext))
         return RadioError::Busy;
 
-    return startControllerTransmit(iBuffer, iLen);
+    const auto result=startControllerTransmit(iBuffer,iLen);
+    if(result==RadioError::None&&mLastLbtBypassed){IoHomeFrame frame;if(frame.deserializeRawWithOptionalCrc(iBuffer,iLen))mHostRadioPolicy.forced(uint8_t(frame.commandId));}
+    return result;
 }
 
 RadioError IoHomeController::startShortPreambleTransmit(const uint8_t *iBuffer, uint8_t iLen,
