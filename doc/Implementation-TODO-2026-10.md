@@ -130,3 +130,7 @@ bound, bounded and cancellable; it grants no production write permission.
 The dated reports explicitly leave writable 4300/4302 and 8100/8103 schemas,
 product authorization and peer result semantics unresolved. No generic arbitrary
 provider/key write or guessed terminal closure is introduced.
+
+## 16 — 8100/8103 member serialization
+
+Reviewed the full dated reports; they explicitly retain this gap. Evidence requirements and current gates are recorded in `docs/qualification/todo-16.md`. No speculative schema/meaning/model binding was added.
