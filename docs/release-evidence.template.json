@@ -114,6 +114,22 @@
         "trailer": "not_run"
       },
       "artifacts": []
+    },
+    {
+      "id": "network_journal_powercut_campaign",
+      "kind": "physical",
+      "outcome": "not_run",
+      "cases": {
+        "each_write_phase": "not_run",
+        "old_record": "not_run",
+        "lost_ack": "not_run",
+        "equal_generation_conflict": "not_run",
+        "corruption": "not_run",
+        "binding_mismatch": "not_run",
+        "tombstone": "not_run",
+        "wrap": "not_run"
+      },
+      "artifacts": []
     }
   ]
 }

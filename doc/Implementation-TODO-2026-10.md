@@ -79,3 +79,7 @@ Added a case-complete procedure and evidence gate in `docs/qualification/todo-25
 ## 26 — Semtech prefix and framing qualification
 
 Added a case-complete procedure and evidence gate in `docs/qualification/todo-26.md`. Actual qualification remains pending; the evidence template deliberately records every case as not run.
+
+## 27 — 2W journal physical power-cut campaign
+
+Added a case-complete procedure and evidence gate in `docs/qualification/todo-27.md`. Actual qualification remains pending; the evidence template deliberately records every case as not run.

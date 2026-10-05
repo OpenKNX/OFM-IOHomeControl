@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 CORE = {
+    'network_journal_powercut_campaign': 'physical',
     'semtech_prefix_mapping': 'physical',
     'sx1276_edge_wiring': 'physical',
     'sx1276_peer_campaign': 'physical',
@@ -21,6 +22,7 @@ CORE = {
     'ets_import_reopen_download_resume_upgrade': 'ets',
 }
 QUALIFICATION_CASES = {
+    'network_journal_powercut_campaign': ('each_write_phase', 'old_record', 'lost_ack', 'equal_generation_conflict', 'corruption', 'binding_mismatch', 'tombstone', 'wrap'),
     'semtech_prefix_mapping': ('short_2w', 'long_2w', 'oneway_wake', 'sync', 'no_double_framing', 'trailer'),
     'sx1276_edge_wiring': ('dio4_present', 'dio2_present', 'dio4_absent', 'dio2_absent', 'edges_after_restart'),
     'sx1276_peer_campaign': ('normal_2w', 'low_power_wake', 'actuator_discovery', 'spe_discovery', 'group_timing', 'directed_timing', 'challenge_key', 'version3', 'oneway', 'crc_fifo', 'scan_hold', 'interference_lbt', 'fault_restore'),}
