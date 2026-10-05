@@ -877,7 +877,8 @@ class ChannelUiTest(unittest.TestCase):
         enabled = channel.find("k:choose/k:when[@test='>0']", NS)
         page = enabled.find("k:ParameterBlock[@Name='IOHCChannel%C%Page']", NS)
         self.assertIsNone(page.find("k:ParameterBlock[@Name='ProductFunctions']", NS))
-        products = page.find("k:ParameterBlock[@Name='Functions']/k:ParameterBlock[@Name='ProductFunctions']", NS)
+        products = page.find("k:ParameterBlock[@Name='Functions']", NS)
+        self.assertEqual(products.findall(".//k:ParameterBlock", NS), [])
         self.assertIsNotNone(products.find("op:usePart[@name='IOHCProducts']", NS))
         wrapper = parse('IoHomeProduct.dynamic.part.xml')
         includes = wrapper.findall('.//op:include', NS)
@@ -888,6 +889,7 @@ class ChannelUiTest(unittest.TestCase):
         count = 0
         for name in ('IoHomeProductPIC.ui.xml','IoHomeProductPVX.ui.xml'):
             fragment = parse(name)
+            self.assertEqual(fragment.findall('.//k:ParameterBlock', NS), [])
             refs = fragment.findall('.//k:ComObjectRefRef', NS)
             count += len(refs)
             self.assertTrue(all('%TT%%PRODUCT_CC%' in ref.get('RefId') for ref in refs))

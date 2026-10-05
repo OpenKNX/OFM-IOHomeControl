@@ -439,9 +439,7 @@
                             <op:usePart name="IOHCMovement" xpath="//Dynamic/*"/>
                           </when></choose>
                         </when></choose>
-                        <ParameterBlock Id="%AID%_PB-nnn" Name="ProductFunctions" Text="Produktfunktionen" HelpContext="IOHC-Produktfunktionen">
-                          <op:usePart name="IOHCProducts" xpath="//Dynamic/*" />
-                        </ParameterBlock>
+                        <op:usePart name="IOHCProducts" xpath="//Dynamic/*" />
                       </ParameterBlock>
                       <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"><when test="2 3 4 5 6 7 8 9 10 11 12 13">
                       <ParameterBlock Id="%AID%_PB-nnn" Name="Scenes" Text="Szenen">

@@ -3,7 +3,7 @@
 <!-- Resolve TT using the owning module prefix. PRODUCT_CC is supplied
      by the outer channel part after this single include is expanded. -->
 <Dynamic>
-<ParameterBlock Id="%AID%_PB-nnn" Name="IOHCProductObjects" Text="RGB und Farbtemperatur">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="RGB und Farbtemperatur" />
 <ParameterRefRef RefId="%AID%_P-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00001" HelpContext="IOHC-Produktobjekte-Farbe" />
 <choose ParamRefId="%AID%_P-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00001"><when test="1">
 <ParameterSeparator Id="%AID%_PS-nnn" Text="RGB / Tunable White benötigen eine passende erkannte Familie. Schreibfunktionen und Rückmeldungen bleiben bis zur Produktqualifikation gesperrt; Gültigkeit bleibt Aus. Abfragen liefern Diagnosewerte." UIHint="Information" />
@@ -13,6 +13,6 @@
 <ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00301" />
 <ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00401" />
 <ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00501" />
-</when></choose></ParameterBlock>
+</when></choose>
 </Dynamic>
 </KNX>

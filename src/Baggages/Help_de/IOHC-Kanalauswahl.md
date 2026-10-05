@@ -1,12 +1,7 @@
-### Kanalauswahl
+# Kanalauswahl
 
-Auf dieser Seite werden alle Kanäle in einer Tabelle aufgelistet.
+Hier werden Gerätetyp und Beschreibung jedes Kanals gewählt. Deaktiviert ist der Standard und blendet die Kanalseite aus; die Beschreibung bleibt editierbar.
 
-Für jeden Kanal können hier direkt der Gerätetyp und die Beschreibung gesetzt werden. Die Beschreibung bleibt auch bei deaktivierten Kanälen editierbar. Sobald ein Gerätetyp gewählt wird, erhält der Kanal eine eigene Seite mit den weiteren Einstellungen.
+Automatisch (Discovery): Nach 2W-Pairing „Status / Erkennung lesen“. Bekannte Gerätetypen und Funktionen werden übernommen, soweit die Erkennungsautomatik dies erlaubt. Der ETS-Schlüsselimport verwendet ebenfalls erkannte Geräteinformationen. Danach die Applikation programmieren, damit die angezeigten Objekte zum Gerätestand passen.
 
-**Deaktiviert** ist für alle Kanäle der Standardwert, auch für Kanal 1.
-
-Für ein per ETS-Schlüsselimport erkanntes Gerät setzt das Skript den passenden
-Gerätetyp und, falls vorhanden, Lamellen- bzw. Dimmobjekte. Bei normalem Pairing
-bleibt die ETS-Auswahl manuell: Das im Gerät erkannte Profil ändert die
-ETS-Objektliste nicht von selbst.
+Für unbekannte Profile und 1W manuell wählen. Die Kategorie fasst mehrere Varianten zusammen: Innenjalousie hat Lamellenwinkel in FP1, Außenjalousie in FP3; ein normaler Rollladen verwendet FP1 für Fahrgeschwindigkeit. Die vollständige MP/FP-Zuordnung steht in der Hilfe zur Gerätetypauswahl im Kanal.
