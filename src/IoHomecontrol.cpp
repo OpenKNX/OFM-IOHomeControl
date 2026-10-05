@@ -2904,7 +2904,14 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
     }
     case 0x3B: // Optional receive activity edge evidence, never calibrated timing
     {
-        if(length!=1)break;const auto &e=mController.radio().lastReceiveEvidence();
+        if(length!=1)break;
+#if defined(RADIO_SX1276) && !defined(TEST_NATIVE)
+        const auto &e=mController.radio().lastReceiveEvidence();
+#else
+        // Other drivers do not capture this evidence. Keep the response layout
+        // with all validity flags clear instead of fabricating observations.
+        const RadioReceiveEvidence e{};
+#endif
         resultData[0]=0;resultData[1]=1;resultData[2]=(e.timestampValid?1:0)|(e.preambleTimestampValid?2:0)|(e.syncTimestampValid?4:0);resultData[3]=e.activityTimestampSource;
         for(uint8_t i=0;i<4;i++){resultData[4+i]=e.frequencyHz>>(24-i*8);resultData[8+i]=e.readTimestampUs>>(24-i*8);resultData[12+i]=e.preambleTimestampUs>>(24-i*8);resultData[16+i]=e.syncTimestampUs>>(24-i*8);}
         resultData[20]=0;resultData[21]=e.admissible();resultLength=22;return true;
