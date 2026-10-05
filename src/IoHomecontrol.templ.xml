@@ -565,6 +565,17 @@
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%111_R-%TT%%CC%11101" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%112_R-%TT%%CC%11201" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%113_R-%TT%%CC%11301" />
+                        <choose ParamRefId="%AID%_P-%TT%%CC%094_R-%TT%%CC%09401"><when test="1">
+                          <ParameterSeparator Id="%AID%_PS-nnn" Text="Letzte zwei unterschiedliche Erkennungsübernahmen je Feld (ETS-Projekt; kein Download-Nachweis)" UIHint="Information" />
+                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%114_R-%TT%%CC%11401" />
+                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%115_R-%TT%%CC%11501" />
+                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%116_R-%TT%%CC%11601" />
+                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%117_R-%TT%%CC%11701" />
+                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%118_R-%TT%%CC%11801" />
+                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%119_R-%TT%%CC%11901" />
+                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%120_R-%TT%%CC%12001" />
+                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%121_R-%TT%%CC%12101" />
+                        </when></choose>
                         <Button Id="%AID%_B-%TT%%CC%010" Text="Wirksame ETS-Vorgaben anzeigen" EventHandler="IOHC_showEffectiveSettings" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%009" Text="Speicher / Zuordnungsbeleg prüfen" EventHandler="IOHC_readPersistenceEvidence" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%008" Text="Produktwerte abfragen (RF lesen)" EventHandler="IOHC_requestProductObservations" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />

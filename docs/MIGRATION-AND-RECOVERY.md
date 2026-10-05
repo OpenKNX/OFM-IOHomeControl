@@ -1,4 +1,4 @@
-# Upgrade and recovery contract — OFM 0.6 / ETS application 3.10
+# Upgrade and recovery contract — OFM 0.7 / ETS application 3.11
 
 This is the implementation's supported policy and an unexecuted acceptance procedure.
 It is not a report of a successful ETS download, power-cut test or peer resynchronization.
@@ -68,3 +68,18 @@ Exit 2 means required records are incomplete; exit 1 means invalid input. The ch
 verifies record completeness and artifact integrity. It cannot establish the truth of
 operator observations and never enables firmware permissions. Review actual captures,
 measurements and peer state against `SX1276-PEER-QUALIFICATION.md`.
+
+
+## Application 3.11 additions
+
+The eight new recognition-history values are ETS-only and excluded from device
+memory/configuration transfer. Old projects start with unknown adoption history;
+no past source, timestamp or authenticated receipt is synthesized. The expert
+view exposes the records; the normal offline summary shows ownership and the
+last two distinct records. Preserve existing parameters, names and group
+addresses on upgrade. Module0.7 introduces additive combined-read capability
+bit6/API32 plus explicit expert sensor subscription and opt-in volatile polling.
+Legacy channel stride68, KOs600..999 and product KOs1000..1095 are unchanged.
+All physical/ETS migration acceptance gates remain unrun. Optional sensor
+qualification is checked with `--product sensor`; neither evidence checker nor
+expert visibility enables high-FP writes or product KNX publication.
