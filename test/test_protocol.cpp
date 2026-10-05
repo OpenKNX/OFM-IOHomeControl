@@ -19554,3 +19554,9 @@ TEST(protocol_heatpump_mode_preserves_special_mp_and_global_pair) {
  uint8_t data[8]{};uint8_t length=0;ASSERT_TRUE(ioHomeBuildHeatPumpMode(IoHomeHeatPumpTarget::Eco,data,sizeof(data),length));ASSERT_EQ(data[0],0xD8);ASSERT_EQ(data[1],0x12);ASSERT_EQ(data[3],1);ASSERT_EQ(data[4],0x40);ASSERT_EQ(data[5],0);
  ASSERT_TRUE(ioHomeBuildHeatPumpMode(IoHomeHeatPumpTarget::Off,data,sizeof(data),length));ASSERT_EQ(data[0],0xD4);ASSERT_EQ(data[4],0x80);ASSERT_TRUE(!ioHomeBuildHeatPumpMode(IoHomeHeatPumpTarget(255),data,sizeof(data),length));
 }
+TEST(protocol_atlantic_dhw_producer_preserves_opaque_common_bits) {
+ uint8_t bytes[8]{};uint8_t length=0;ASSERT_TRUE(ioHomeBuildAtlanticDhwMode(true,false,bytes,sizeof(bytes),length));ASSERT_EQ(bytes[4],0x46);ASSERT_EQ(bytes[5],0);
+ ASSERT_TRUE(ioHomeBuildAtlanticDhwMode(false,true,bytes,sizeof(bytes),length));ASSERT_EQ(bytes[4],0x49);
+ ASSERT_TRUE(ioHomeBuildAtlanticDhwMode(false,false,bytes,sizeof(bytes),length));ASSERT_EQ(bytes[4],0x4A);ASSERT_TRUE(!ioHomeBuildAtlanticDhwMode(true,true,bytes,sizeof(bytes),length));
+ const auto decoded=ioHomeDecodeAtlanticDhwModes(0x800D,0x4600);ASSERT_EQ(decoded.uninterpretedModes,0x4000);
+}
