@@ -146,6 +146,23 @@
         "repeated_reboots": "not_run"
       },
       "artifacts": []
+    },
+    {
+      "id": "storage_wear_filesystem_campaign",
+      "kind": "physical",
+      "outcome": "not_run",
+      "cases": {
+        "esp_network_rate": "not_run",
+        "esp_receipt_rate": "not_run",
+        "esp_metadata_rate": "not_run",
+        "esp_reservation_rate": "not_run",
+        "nvs_margin": "not_run",
+        "littlefs_partitions": "not_run",
+        "littlefs_mount": "not_run",
+        "littlefs_atomicity": "not_run",
+        "littlefs_wear": "not_run"
+      },
+      "artifacts": []
     }
   ]
 }

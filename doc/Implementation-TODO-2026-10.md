@@ -87,3 +87,7 @@ Added a case-complete procedure and evidence gate in `docs/qualification/todo-27
 ## 28 — 1W reservation physical power-cut campaign
 
 Added a case-complete procedure and evidence gate in `docs/qualification/todo-28.md`. Actual qualification remains pending; the evidence template deliberately records every case as not run.
+
+## 29 — Storage wear and filesystem qualification
+
+Added a case-complete procedure and evidence gate in `docs/qualification/todo-29.md`. Actual qualification remains pending; the evidence template deliberately records every case as not run.
