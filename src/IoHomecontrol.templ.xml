@@ -54,6 +54,7 @@
               <Parameter Id="%AID%_P-%TT%%CC%120" Name="c%C%RecognitionDimmableLast" ParameterType="%AID%_PT-IOHCText40Byte" Text="Dimmable: Last Erkennungsübernahme" Value="keine dokumentierte Übernahme" Access="Read" op:configTransfer="never" />
               <Parameter Id="%AID%_P-%TT%%CC%121" Name="c%C%RecognitionDimmablePrevious" ParameterType="%AID%_PT-IOHCText40Byte" Text="Dimmable: Previous Erkennungsübernahme" Value="keine dokumentierte Übernahme" Access="Read" op:configTransfer="never" />
               <Parameter Id="%AID%_P-%TT%%CC%122" Name="c%C%SyncStatus" ParameterType="%AID%_PT-IOHCText40Byte" Text="Gerät / ETS / Download" Value="Synchronisierung nicht geprüft" Access="Read" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%123" Name="c%C%AutomaticResetPreview" ParameterType="%AID%_PT-IOHCText40Byte" Text="Automatik-Vorschau" Value="" Access="Read" op:configTransfer="never" />
               <!-- Main configuration Union including 10 ETS-backed scene slots -->
               <Union SizeInBit="544">
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
@@ -165,6 +166,7 @@
               <ParameterRef Id="%AID%_P-%TT%%CC%120_R-%TT%%CC%12001" RefId="%AID%_P-%TT%%CC%120" />
               <ParameterRef Id="%AID%_P-%TT%%CC%121_R-%TT%%CC%12101" RefId="%AID%_P-%TT%%CC%121" />
               <ParameterRef Id="%AID%_P-%TT%%CC%122_R-%TT%%CC%12201" RefId="%AID%_P-%TT%%CC%122" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%123_R-%TT%%CC%12301" RefId="%AID%_P-%TT%%CC%123" />
             </ParameterRefs>
 
             <ParameterCalculations>
@@ -583,6 +585,7 @@
                         <Button Id="%AID%_B-%TT%%CC%009" Text="Speicher / Zuordnungsbeleg prüfen" EventHandler="IOHC_readPersistenceEvidence" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%008" Text="Produktwerte abfragen (RF lesen)" EventHandler="IOHC_requestProductObservations" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%007" Text="Erkennung / manuelle Vorgaben / Produktevidenz lesen" EventHandler="IOHC_readChannelEvidence" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                        <Button Id="%AID%_B-%TT%%CC%014" Text="Automatische Übernahme vorbereiten (Vorschau / bestätigen)" EventHandler="IOHC_restoreAutomatic" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%012" Text="Erkennungskonflikte prüfen" EventHandler="IOHC_showRecognitionConflicts" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%013" Text="ETS-Vorgaben beibehalten" EventHandler="IOHC_keepRecognitionSettings" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%011" Text="Abgeschlossenes 2W-Pairing in ETS übernehmen" EventHandler="IOHC_applyPairingResult" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />

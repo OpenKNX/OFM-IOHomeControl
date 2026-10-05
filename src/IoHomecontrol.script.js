@@ -1235,3 +1235,12 @@ function IOHC_showRecognitionConflicts(device,online,progress,context) {
 function IOHC_keepRecognitionSettings(device,online,progress,context) {
  progress.setText("ETS-Vorgaben beibehalten. "+IOHC_effectiveSettingsText(device,context));
 }
+function IOHC_restoreAutomatic(device,online,progress,context) {
+ var prefix=IOHC_getChannelPrefix(context),names=["ProfileOverride","RecognitionTypeAuto","RecognitionOrientationAuto","RecognitionBinaryAuto","RecognitionDimmableAuto"],parameters=[],values=[];
+ for(var i=0;i<names.length;i++){var p=IOHC_getParameter(device,prefix+names[i]);if(!p)throw new Error("Automatische Vorgaben nicht verfügbar");parameters.push(p);values.push(Number(p.value));}
+ var preview=IOHC_getParameter(device,prefix+"AutomaticResetPreview");if(!preview)throw new Error("Vorschaufunktion nicht verfügbar");
+ var token=JSON.stringify(values);
+ if(String(preview.value)!==token){preview.value=token;progress.setText("Vorschau: Profil-Override "+values[0]+" → 0; automatische Übernahme für Gerätetyp, Orientierung, Binärmodus und Dimmen erlauben. Erneut drücken zum Bestätigen. Pairing, Schlüssel, Zähler und übrige Expertenwerte bleiben erhalten.");return;}
+ parameters[0].value=0;for(var j=1;j<parameters.length;j++)parameters[j].value=1;preview.value="";
+ progress.setText("Automatische Übernahme vorbereitet. Erkennung bewusst übernehmen, danach Applikation programmieren. Pairing, Schlüssel und Zähler unverändert.");
+}

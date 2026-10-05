@@ -274,3 +274,10 @@ test("recognition conflict report preserves manual values and rejects 1W",functi
  check(IOHC_recognitionConflicts(d,{channelIndex:1},response).length>=2,"conflicts omitted");check(JSON.stringify(d.params)===before,"conflict report mutated values");
  response[11]|=32;var failed=false;try{IOHC_recognitionConflicts(d,{channelIndex:1},response);}catch(e){failed=true;}check(failed,"1W recognition invented");
 });
+test("restore automatic requires unchanged preview and preserves unrelated settings",function(){
+ var d=deviceWith({ProfileOverride:448,RecognitionTypeAuto:0,TwoWayPowerClass:2,Name:"Office"});d.params.IOHC_c1AutomaticResetPreview={value:""};var progress={setText:function(){}};
+ IOHC_restoreAutomatic(d,null,progress,{channelIndex:1});check(value(d,"ProfileOverride")===448&&value(d,"RecognitionTypeAuto")===0,"preview mutated ownership");
+ d.params.IOHC_c1ProfileOverride.value=449;IOHC_restoreAutomatic(d,null,progress,{channelIndex:1});check(value(d,"ProfileOverride")===449,"stale preview applied");
+ IOHC_restoreAutomatic(d,null,progress,{channelIndex:1});check(value(d,"ProfileOverride")===0&&value(d,"RecognitionTypeAuto")===1,"confirmed ownership unchanged");
+ check(value(d,"TwoWayPowerClass")===2&&value(d,"Name")==="Office","expert settings reset");
+});
