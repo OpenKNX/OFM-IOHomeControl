@@ -19589,3 +19589,10 @@ TEST(protocol_sensor_subscription_blob_copies_opaque_prefix_and_owns_tail) {
  ASSERT_TRUE(ioHomeBuildSensorSubscriptionBlob(blob,18,0x123456,out,17,length));ASSERT_EQ(out[0],0);ASSERT_EQ(out[3],1);
  ASSERT_TRUE(!ioHomeBuildSensorSubscriptionBlob(blob,0,0x123456,out,17,length));ASSERT_TRUE(!ioHomeBuildSensorSubscriptionBlob(blob,1,0,out,17,length));
 }
+
+#include "protocol/IoHomeReceiveConfiguration.h"
+TEST(protocol_rcm_outer_and_inner_lifetimes_are_distinct_from_discovery) {
+ IoHomeReceiveConfiguration model;uint8_t key[16]{};ASSERT_TRUE(model.begin(1,0x123456,key,1,0));ASSERT_EQ(model.prerequisiteVariant(),0);ASSERT_TRUE(!model.prerequisite(0x123456,key,1,0xFE,1));ASSERT_TRUE(model.prerequisite(0x123456,key,1,0x37,10));ASSERT_TRUE(model.event10(100));model.tick(300100);ASSERT_EQ(model.stage(),IoHomeReceiveConfiguration::Stage::Base);model.tick(600010);ASSERT_EQ(model.stage(),IoHomeReceiveConfiguration::Stage::Done);
+ ASSERT_TRUE(model.begin(2,0x123456,key,1,0xFFFFFF00));ASSERT_EQ(model.prerequisiteVariant(),3);model.tick(0x1400);ASSERT_EQ(model.stage(),IoHomeReceiveConfiguration::Stage::Timeout);
+ ASSERT_TRUE(model.begin(0,0x123456,key,1,0));ASSERT_TRUE(!model.bound(0x123456,key,2));ASSERT_EQ(model.stage(),IoHomeReceiveConfiguration::Stage::IdentityChanged);
+}
