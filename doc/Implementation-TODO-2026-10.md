@@ -142,3 +142,7 @@ Reviewed the full dated reports; they explicitly retain this gap. Evidence requi
 ## 18 — A607 key/state bridge
 
 Reviewed the full dated reports; they explicitly retain this gap. Evidence requirements and current gates are recorded in `docs/qualification/todo-18.md`. No speculative schema/meaning/model binding was added.
+
+## 19 — Unknown FP/alias/GI meaning
+
+Reviewed the full dated reports; they explicitly retain this gap. Evidence requirements and current gates are recorded in `docs/qualification/todo-19.md`. No speculative schema/meaning/model binding was added.
