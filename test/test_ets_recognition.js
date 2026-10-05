@@ -262,3 +262,10 @@ test("assignment preview does not write and detects occupied target",function(){
   d.params.IOHC_c1Active.value=1;var failed=false;try{IOHC_assignmentPreview(online,d,job,found,1,1,1);}catch(e){failed=true;}check(failed,"occupied target accepted");
  } finally {IOHC_jobSnapshot=old;}
 });
+
+test("receipt synchronization never claims a completed download",function(){
+ var d=deviceWith({});d.params.IOHC_c1SyncStatus={value:"ungeprüft"};
+ var receipt=[0,1,0,0,0,0,8,0x12,0x34,0x56,1,0,0,1,2,0];
+ var online={invokeFunctionProperty:function(o,p,data){if(data[0]===0x1D)return snapshot(0x1C,1,0);if(data.length===2)return receipt;return [0];}};
+ check(IOHC_resumeAssignment(d,online,0)&&value(d,"SyncStatus")==="Gerät+ETS gespeichert; Download offen","download conflated with ACK");
+});

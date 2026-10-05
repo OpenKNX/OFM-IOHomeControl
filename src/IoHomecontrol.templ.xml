@@ -53,6 +53,7 @@
               <Parameter Id="%AID%_P-%TT%%CC%119" Name="c%C%RecognitionBinaryPrevious" ParameterType="%AID%_PT-IOHCText40Byte" Text="Binary: Previous Erkennungsübernahme" Value="keine dokumentierte Übernahme" Access="Read" op:configTransfer="never" />
               <Parameter Id="%AID%_P-%TT%%CC%120" Name="c%C%RecognitionDimmableLast" ParameterType="%AID%_PT-IOHCText40Byte" Text="Dimmable: Last Erkennungsübernahme" Value="keine dokumentierte Übernahme" Access="Read" op:configTransfer="never" />
               <Parameter Id="%AID%_P-%TT%%CC%121" Name="c%C%RecognitionDimmablePrevious" ParameterType="%AID%_PT-IOHCText40Byte" Text="Dimmable: Previous Erkennungsübernahme" Value="keine dokumentierte Übernahme" Access="Read" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%122" Name="c%C%SyncStatus" ParameterType="%AID%_PT-IOHCText40Byte" Text="Gerät / ETS / Download" Value="Synchronisierung nicht geprüft" Access="Read" op:configTransfer="never" />
               <!-- Main configuration Union including 10 ETS-backed scene slots -->
               <Union SizeInBit="544">
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0" />
@@ -163,6 +164,7 @@
               <ParameterRef Id="%AID%_P-%TT%%CC%119_R-%TT%%CC%11901" RefId="%AID%_P-%TT%%CC%119" />
               <ParameterRef Id="%AID%_P-%TT%%CC%120_R-%TT%%CC%12001" RefId="%AID%_P-%TT%%CC%120" />
               <ParameterRef Id="%AID%_P-%TT%%CC%121_R-%TT%%CC%12101" RefId="%AID%_P-%TT%%CC%121" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%122_R-%TT%%CC%12201" RefId="%AID%_P-%TT%%CC%122" />
             </ParameterRefs>
 
             <ParameterCalculations>
@@ -576,6 +578,7 @@
                           <ParameterRefRef RefId="%AID%_P-%TT%%CC%120_R-%TT%%CC%12001" />
                           <ParameterRefRef RefId="%AID%_P-%TT%%CC%121_R-%TT%%CC%12101" />
                         </when></choose>
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%122_R-%TT%%CC%12201" />
                         <Button Id="%AID%_B-%TT%%CC%010" Text="Wirksame ETS-Vorgaben anzeigen" EventHandler="IOHC_showEffectiveSettings" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%009" Text="Speicher / Zuordnungsbeleg prüfen" EventHandler="IOHC_readPersistenceEvidence" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%008" Text="Produktwerte abfragen (RF lesen)" EventHandler="IOHC_requestProductObservations" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />

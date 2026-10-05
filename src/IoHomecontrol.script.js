@@ -232,9 +232,11 @@ function IOHC_resumeAssignment(device,online,channel) {
     if(!current || current.length!==12 || current[0]!==0 || current[1]!==1 || current[2]!==channel ||
        IOHC_readNodeId(current,3)!==discovery.nodeId || (current[11]&0x20)!==0) return false;
     IOHC_configureImportedChannel(device,channel+1,discovery);
+    IOHC_setParameterValue(device,"IOHC_c"+(channel+1)+"SyncStatus","ETS gesetzt; Gerätebeleg offen");
     var ack=[0x21,channel].concat(receipt.slice(3,10));
     var response=IOHC_invokeFunctionProperty(online,ack);
     if(!response || response[0]!==0) throw new Error("Zuordnung im Gerät gespeichert; ETS-Abgleich erneut ausführen.");
+    IOHC_setParameterValue(device,"IOHC_c"+(channel+1)+"SyncStatus","Gerät+ETS gespeichert; Download offen");
     return true;
 }
 
