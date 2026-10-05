@@ -4349,7 +4349,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         {
             uint32_t lMilliseconds = 0;
             if (lArg == "default")
-                lMilliseconds = IOHC_DISCOVERY_LISTEN_MS;
+                lMilliseconds = 0;
             else if (!parseUnsignedDecimal(lArg, lMilliseconds))
                 lMilliseconds = 0;
             if (lMilliseconds > 10000 ||

@@ -36,8 +36,9 @@
 // frequency sweeps a single discovery broadcast performs before giving up.
 // The extended window adds a short grace period so a frame already arriving at
 // the window boundary is not truncated by hopping to the next frequency.
-#define IOHC_DISCOVERY_LISTEN_MS 2000
-#define IOHC_DISCOVERY_LISTEN_EXTENDED_MS 2050
+#define IOHC_DISCOVERY_LISTEN_MS 1353
+#define IOHC_DISCOVERY_LISTEN_EXTENDED_MS 1403
+#define IOHC_DISCOVERY_ARRIVAL_GRACE_MS 50
 #define IOHC_DISCOVERY_MAX_SWEEPS 3
 #define IOHC_DUTY_CYCLE_WINDOW_MS 3600000 // 1 hour
 #define IOHC_LBT_RSSI_THRESHOLD_DBM -90   // clear channel threshold before TX
@@ -1039,6 +1040,7 @@ private:
     uint32_t syncHolds;
     uint32_t firstPreambleUs;
     uint32_t firstSyncUs;
+    uint32_t firstPacketUs;
     uint32_t lastPacketUs;
     uint32_t maxLoopUs;
     uint32_t maxRxHotPathUs;
@@ -1203,7 +1205,9 @@ private:
   uint8_t mPairingFreqIdx;
   uint8_t mDiscoveryLastTxFreqIdx = 0xFF;
   uint8_t mDiscoverySweep; // diagnostic discovery: current full-sweep attempt (0-based)
-  uint16_t mDiagnosticDiscoveryListenMs = IOHC_DISCOVERY_LISTEN_MS;
+  uint16_t mDiagnosticDiscoveryListenMs = 0; // zero selects recovered destination/CTRL1 timing
+  uint16_t mDiscoveryBudgetMs = IOHC_DISCOVERY_LISTEN_MS;
+  bool mDiscoveryRxWindowStarted = false;
   uint32_t mPairingStartTime;
   DiscoverySendPhase mDiscoverySendPhase;
   DiscoveryTimingTrace mDiscoveryTimingTrace;

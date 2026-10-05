@@ -4637,7 +4637,7 @@ const TwoWayDiscoverySettings &IoHomeController::diagnosticDiscoverySettings() c
 
 bool IoHomeController::setDiagnosticDiscoveryListenMs(uint16_t iMilliseconds)
 {
-    if (iMilliseconds < 100 || iMilliseconds > 10000 ||
+    if ((iMilliseconds && iMilliseconds < 100) || iMilliseconds > 20000 ||
         mState == ControllerState::DiscoverySending ||
         mState == ControllerState::DiscoveryListening)
         return false;
@@ -4647,7 +4647,7 @@ bool IoHomeController::setDiagnosticDiscoveryListenMs(uint16_t iMilliseconds)
 
 uint16_t IoHomeController::diagnosticDiscoveryListenMs() const
 {
-    return mDiagnosticDiscoveryListenMs;
+    return mDiagnosticDiscoveryListenMs ? mDiagnosticDiscoveryListenMs : mDiscoveryBudgetMs;
 }
 
 void IoHomeController::setRxScanEnabled(bool iEnabled)
@@ -5603,6 +5603,7 @@ void IoHomeController::enqueueDiscoveryResponse()
         return;
 
     ++mDiscoveryResponsesReceived;
+    if (!mDiscoveryTimingTrace.packets) mDiscoveryTimingTrace.firstPacketUs=lStartedUs;
     ++mDiscoveryTimingTrace.packets;
     mDiscoveryTimingTrace.lastPacketUs = lStartedUs;
     // Duplicate responses must not consume slots needed by distinct devices.
@@ -9321,6 +9322,9 @@ void IoHomeController::processDiscovery()
                 {
                     mDiscoveryAltFrame = false;
                     mDiscoveryTimingTrace.txStartUs = micros();
+                    mDiscoveryBudgetMs=mDiagnosticDiscoveryListenMs ? mDiagnosticDiscoveryListenMs :
+                        ioHomeGroupTimeout(mTxFrame.getDestNodeId(),mTxFrame.ctrlByte1);
+                    mDiscoveryRxWindowStarted=false;
                     mStateTimer = millis();
                     mState = ControllerState::DiscoveryListening;
                     mDiscoveryLoopStartedUs = 0;
@@ -9392,6 +9396,11 @@ void IoHomeController::processDiscovery()
             return;
         }
 
+        if (!mDiscoveryRxWindowStarted) {
+            // Budget begins only after RF TX completion and successful RX restore.
+            mStateTimer=millis();mDiscoveryRxWindowStarted=true;
+        }
+
         if (mDiscoverySPE)
         {
             const uint8_t lRequestFreqIdx = speDiscoveryFrequencyIndex(mPairingFreqIdx);
@@ -9411,8 +9420,8 @@ void IoHomeController::processDiscovery()
         // sync word matched), extend the listen window by a short grace period
         // so the in-flight response is not truncated by switching frequency.
         const bool lFrameArriving = mRadio.isPreambleDetected() || mRadio.isSyncDetected();
-        const unsigned long lListenLimitMs = mDiagnosticDiscoveryListenMs +
-            (lFrameArriving ? (IOHC_DISCOVERY_LISTEN_EXTENDED_MS - IOHC_DISCOVERY_LISTEN_MS) : 0UL);
+        const unsigned long lListenLimitMs = mDiscoveryBudgetMs +
+            (lFrameArriving ? IOHC_DISCOVERY_ARRIVAL_GRACE_MS : 0UL);
         if (lListenElapsedMs > lListenLimitMs)
         {
             processPendingDiscoveryResponses();
@@ -9423,6 +9432,11 @@ void IoHomeController::processDiscovery()
             const bool lMoreSweeps = (mDiscoverySweep + 1 < lSweepCount) || lExtraSpeSweep;
             if (!lMoreFreqs && lExtraSpeSweep)
                 logInfoP("KeyImport scan: authenticated device metadata still pending; one extra SPE sweep");
+            logInfoP("Discovery window TXendUs=%lu firstReplyUs=%lu lastReplyUs=%lu closeUs=%lu budgetMs=%u graceMs=%u",
+                static_cast<unsigned long>(mDiscoveryTimingTrace.txDoneUs),
+                static_cast<unsigned long>(mDiscoveryTimingTrace.firstPacketUs),
+                static_cast<unsigned long>(mDiscoveryTimingTrace.lastPacketUs),
+                static_cast<unsigned long>(micros()),mDiscoveryBudgetMs,IOHC_DISCOVERY_ARRIVAL_GRACE_MS);
             logDiscoveryTimingTrace((lMoreFreqs || lMoreSweeps) ? "next" : "done", lListenElapsedMs);
             // Next frequency, next sweep, or done
             mPairingFreqIdx++;

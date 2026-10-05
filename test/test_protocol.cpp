@@ -10504,8 +10504,9 @@ TEST(controller_spe_discovery_scans_both_power_classes_on_all_channels)
                   i < 3 ? IOHC_PREAMBLE_LONG : lController.normal2WStartPreamble());
         if (i + 1 < 6)
         {
-            ioHomeTestAdvanceMillis(IOHC_DISCOVERY_LISTEN_MS + 1);
-            ioHomeTestAdvanceMicros((IOHC_DISCOVERY_LISTEN_MS + 1) * 1000UL);
+            lController.loop(); // observe TX completion before the discovery deadline starts
+        ioHomeTestAdvanceMillis(lController.diagnosticDiscoveryListenMs() + 1);
+            ioHomeTestAdvanceMicros((lController.diagnosticDiscoveryListenMs() + 1) * 1000UL);
             lController.loop();
             ASSERT_EQ(lController.state(), ControllerState::DiscoverySending);
         }
@@ -10530,10 +10531,11 @@ TEST(controller_spe_discovery_listen_override_is_runtime_only)
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
     ASSERT_TRUE(!lController.setDiagnosticDiscoveryListenMs(3000));
-    ioHomeTestAdvanceMillis(IOHC_DISCOVERY_LISTEN_MS + 1);
+    lController.loop(); // observe TX completion before the discovery deadline starts
+        ioHomeTestAdvanceMillis(IOHC_DISCOVERY_LISTEN_MS + 1);
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
-    ioHomeTestAdvanceMillis(2000);
+    ioHomeTestAdvanceMillis(3000);
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::DiscoverySending);
 }
@@ -10565,8 +10567,9 @@ TEST(controller_spe_discovery_extra_sweep_only_for_missing_import_metadata)
                                             static_cast<uint8_t>(lPacket.size())));
         ASSERT_EQ(lFrame.ctrlByte1,
                   (i < 3 || i >= 6) ? static_cast<uint8_t>(IOHC_CTRL1_ACK | IOHC_CTRL1_LOW_POWER) : 0);
-        ioHomeTestAdvanceMillis(IOHC_DISCOVERY_LISTEN_MS + 1);
-        ioHomeTestAdvanceMicros((IOHC_DISCOVERY_LISTEN_MS + 1) * 1000UL);
+        lController.loop(); // observe TX completion before the discovery deadline starts
+        ioHomeTestAdvanceMillis(lController.diagnosticDiscoveryListenMs() + 1);
+        ioHomeTestAdvanceMicros((lController.diagnosticDiscoveryListenMs() + 1) * 1000UL);
         lController.loop();
         ASSERT_EQ(lController.state(), i < 8 ? ControllerState::DiscoverySending
                                               : ControllerState::Idle);
@@ -11497,7 +11500,8 @@ TEST(controller_post_import_spe_retry_enriches_assigned_channel_and_defers_flash
     ASSERT_TRUE(!lChannel.hasProtocolIdentity());
     ASSERT_EQ(openknx.flash.saveCount, lSavesBefore);
 
-    ioHomeTestAdvanceMillis(IOHC_DISCOVERY_LISTEN_MS + 1);
+    lController.loop(); // observe TX completion before the discovery deadline starts
+        ioHomeTestAdvanceMillis(lController.diagnosticDiscoveryListenMs() + 1);
     lController.loop();
     ASSERT_TRUE(lChannel.getProtocolIdentity().fullMetadata);
     ASSERT_TRUE(lChannel.hasLearnedLowPower2W());
@@ -11508,7 +11512,8 @@ TEST(controller_post_import_spe_retry_enriches_assigned_channel_and_defers_flash
     for (uint8_t i = 1; i < 6; ++i)
     {
         lController.loop();
-        ioHomeTestAdvanceMillis(IOHC_DISCOVERY_LISTEN_MS + 1);
+        lController.loop(); // observe TX completion before the discovery deadline starts
+        ioHomeTestAdvanceMillis(lController.diagnosticDiscoveryListenMs() + 1);
         lController.loop();
     }
     ASSERT_EQ(lController.state(), ControllerState::Idle);
@@ -12562,7 +12567,7 @@ TEST(controller_spe_discovery_registers_same_complete_metadata_model)
     lResponse.data[8] = 0x35;
     lResponse.dataLen = sizeof(kPayload);
     ASSERT_TRUE(queueControllerResponse(lController, lResponse));
-    ioHomeTestSetMillis(ioHomeTestMillis() + IOHC_DISCOVERY_LISTEN_MS + 1);
+    ioHomeTestSetMillis(ioHomeTestMillis() + lController.diagnosticDiscoveryListenMs() + 1);
     lController.loop();
     const IoHomeProtocolIdentity *lMetadata =
         lController.protocolIdentityForIoAddress(lDeviceNodeId);
@@ -12627,7 +12632,7 @@ TEST(controller_spe_discovery_defers_three_close_responses)
         ASSERT_EQ(lModule.testDiscoveryResponseCount(), 0);
     }
 
-    ioHomeTestSetMillis(ioHomeTestMillis() + IOHC_DISCOVERY_LISTEN_MS + 1);
+    ioHomeTestSetMillis(ioHomeTestMillis() + lController.diagnosticDiscoveryListenMs() + 1);
     lController.loop();
     ASSERT_EQ(lModule.testDiscoveryResponseCount(), 3);
     for (uint8_t i = 0; i < 3; ++i)
@@ -12675,7 +12680,7 @@ TEST(controller_spe_discovery_pending_queue_has_bounded_overflow)
         lController.loop();
     }
     ASSERT_EQ(lModule.testDiscoveryResponseCount(), 0);
-    ioHomeTestSetMillis(ioHomeTestMillis() + IOHC_DISCOVERY_LISTEN_MS + 1);
+    ioHomeTestSetMillis(ioHomeTestMillis() + lController.diagnosticDiscoveryListenMs() + 1);
     lController.loop();
     ASSERT_EQ(lModule.testDiscoveryResponseCount(), 24);
     ASSERT_EQ(lModule.testDiscoveryResponseNode(0), 0x562200U);
@@ -12715,7 +12720,8 @@ TEST(controller_spe_discovery_duplicates_cannot_starve_unique_devices)
         lController.radio().testQueueReceivedPacket(lRaw, lLength);
         lController.loop();
     }
-    ioHomeTestAdvanceMillis(IOHC_DISCOVERY_LISTEN_MS + 1);
+    lController.loop(); // observe TX completion before the discovery deadline starts
+        ioHomeTestAdvanceMillis(lController.diagnosticDiscoveryListenMs() + 1);
     lController.loop();
     ASSERT_EQ(lModule.testDiscoveryResponseCount(), 2);
     ASSERT_EQ(lModule.testDiscoveryResponseNode(0), 0x562292U);
@@ -12762,7 +12768,7 @@ TEST(controller_spe_discovery_pairdiag_does_not_change_response_count)
             lController.loop();
         }
         ASSERT_EQ(lModule.testDiscoveryResponseCount(), 0);
-        ioHomeTestSetMillis(ioHomeTestMillis() + IOHC_DISCOVERY_LISTEN_MS + 1);
+        ioHomeTestSetMillis(ioHomeTestMillis() + lController.diagnosticDiscoveryListenMs() + 1);
         lController.loop();
         ASSERT_EQ(lModule.testDiscoveryResponseCount(), 2);
     }
@@ -19782,4 +19788,14 @@ TEST(protocol_operation_session_policy_separates_retry_layers)
     ASSERT_EQ(ioHomeSessionPolicy(IoHomeCommand::Execute,0xD8).stateAttempts,1);
     ASSERT_EQ(ioHomeSessionPolicy(IoHomeCommand::Private).stateAttempts,3);
     ASSERT_EQ(ioHomeSessionPolicy(IoHomeCommand::DiscoverRequest).stateAttempts,1);
+}
+
+TEST(protocol_group_timeout_destination_and_low_power_rows)
+{
+    const uint16_t normal[]={1353,2665,5289,10537},low[]={3000,5000,9000,20000};
+    for(uint8_t i=0;i<4;++i) {
+        ASSERT_EQ(ioHomeGroupTimeout(0x3B+i,0),normal[i]);
+        ASSERT_EQ(ioHomeGroupTimeout(0x3B+i,IOHC_CTRL1_LOW_POWER),low[i]);
+    }
+    ASSERT_EQ(ioHomeGroupTimeout(0x3F,0),20000);
 }

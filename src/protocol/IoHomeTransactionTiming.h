@@ -1,5 +1,6 @@
 #pragma once
 #include "IoHomeCommands.h"
+#include "IoHomeFrame.h"
 
 struct IoHomeDirectedTimeout {
     uint16_t milliseconds;
@@ -21,4 +22,12 @@ inline IoHomeDirectedTimeout ioHomeDirectedTimeout(uint8_t ctrl1, const IoHomePr
     // absent class as class zero or borrow a KLF turnaround number as a deadline.
     const uint8_t cls = known ? identity->responseTimeClass : 0xFF;
     return {known ? rows[group][cls] : uint16_t(1011), group, cls, !known};
+}
+
+inline uint16_t ioHomeGroupTimeout(uint32_t destination, uint8_t ctrl1) {
+    static constexpr uint16_t normal[4]={1353,2665,5289,10537};
+    static constexpr uint16_t lowPower[4]={3000,5000,9000,20000};
+    // Unrecognized group: bounded conservative host guard, not a guessed row.
+    if(destination<0x3B || destination>0x3E) return 20000;
+    return (ctrl1&IOHC_CTRL1_LOW_POWER)?lowPower[destination-0x3B]:normal[destination-0x3B];
 }

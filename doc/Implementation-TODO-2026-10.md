@@ -9,3 +9,7 @@ Implemented all 64 CTRL1/MIB deadline entries. Complete discovered MIB selects c
 ## 2. Operation-specific session policy
 
 EXECUTE uses mode 3 and the conservative recovered five-attempt budget; the 9-versus-5 database discriminator remains explicitly unresolved. Favourite commands remain single-attempt. PRIVATE has a separate three-state-attempt host policy; modes 3/4 require producer-specific evidence. RF media failures have a separate five-attempt cap, independent of state retries. Whole-session replay is disabled (one session), particularly after authentication. Pairing/key-exchange state machines remain independent. Callback outcomes distinguish media failure, unanswered transaction, authenticated/no-close, explicit rejection and exhausted state budget. Diagnostics expose session mode and counts.
+
+## 3. Broadcast discovery budgets
+
+Implemented all four destination rows in normal/LOW_POWER modes. Default windows derive from the transmitted destination and CTRL1. A runtime diagnostic override is explicit; zero restores protocol timing. Each window starts after TX completes and RX is restored. The separate bounded 50 ms packet-arrival grace prevents immediate retuning at a detected boundary. Traces show TX end, first/last packet and window close. Physical discovery timing qualification remains pending.
