@@ -87,6 +87,19 @@
         "fault_restore": "not_run"
       },
       "artifacts": []
+    },
+    {
+      "id": "sx1276_edge_wiring",
+      "kind": "physical",
+      "outcome": "not_run",
+      "cases": {
+        "dio4_present": "not_run",
+        "dio2_present": "not_run",
+        "dio4_absent": "not_run",
+        "dio2_absent": "not_run",
+        "edges_after_restart": "not_run"
+      },
+      "artifacts": []
     }
   ]
 }

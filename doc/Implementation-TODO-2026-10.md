@@ -71,3 +71,7 @@ open. No key or authentication payload is added to this record.
 ## 24 — SX1276 peer and waveform qualification
 
 Added a case-complete procedure and evidence gate in `docs/qualification/todo-24.md`. Actual qualification remains pending; the evidence template deliberately records every case as not run.
+
+## 25 — Optional DIO timestamp qualification
+
+Added a case-complete procedure and evidence gate in `docs/qualification/todo-25.md`. Actual qualification remains pending; the evidence template deliberately records every case as not run.

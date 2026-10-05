@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 CORE = {
+    'sx1276_edge_wiring': 'physical',
     'sx1276_peer_campaign': 'physical',
     'sx1276_waveform_crc_fifo': 'physical',
     'sx1276_timing_discovery_low_power': 'physical',
@@ -19,6 +20,7 @@ CORE = {
     'ets_import_reopen_download_resume_upgrade': 'ets',
 }
 QUALIFICATION_CASES = {
+    'sx1276_edge_wiring': ('dio4_present', 'dio2_present', 'dio4_absent', 'dio2_absent', 'edges_after_restart'),
     'sx1276_peer_campaign': ('normal_2w', 'low_power_wake', 'actuator_discovery', 'spe_discovery', 'group_timing', 'directed_timing', 'challenge_key', 'version3', 'oneway', 'crc_fifo', 'scan_hold', 'interference_lbt', 'fault_restore'),}
 
 PRODUCT = {'rgb': 'rgb_binding_read_write_state', 'white': 'white_binding_read_write_state',
