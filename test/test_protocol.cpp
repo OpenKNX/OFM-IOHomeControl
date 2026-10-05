@@ -20003,3 +20003,13 @@ TEST(controller_unqualified_object_writes_fail_before_enqueue)
     ASSERT_TRUE(c.idleForManagedOperation());
     for(uint16_t object:{0x4300,0x4302,0x8100,0x8103})ASSERT_TRUE(!IoHomeObjectWriteSession::allowed(0,object));
 }
+
+TEST(protocol_mode3_budget_uses_systemid_beacon_count_not_mib)
+{
+    ASSERT_EQ(ioHomeSessionPolicy(IoHomeCommand::Execute,50,0).stateAttempts,9);
+    ASSERT_EQ(ioHomeSessionPolicy(IoHomeCommand::Execute,50,1).stateAttempts,5);
+    ASSERT_EQ(ioHomeSessionPolicy(IoHomeCommand::Execute,50,2).stateAttempts,5);
+    ASSERT_TRUE(!ioHomeSessionPolicy(IoHomeCommand::Execute,50,0).unresolvedExecuteSelector);
+    ASSERT_TRUE(ioHomeSessionPolicy(IoHomeCommand::Execute,50,-1).unresolvedExecuteSelector);
+    ASSERT_EQ(ioHomeSessionPolicy(IoHomeCommand::Execute,0xD8,0).stateAttempts,1);
+}

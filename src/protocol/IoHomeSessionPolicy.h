@@ -6,11 +6,12 @@ struct IoHomeSessionPolicy {
     uint16_t totalBudgetMs;
     bool unresolvedExecuteSelector;
 };
-inline IoHomeSessionPolicy ioHomeSessionPolicy(IoHomeCommand command, uint8_t main = 0) {
-    // The database discriminator selecting 9 versus 5 is not recovered here.
-    // Use the smaller recovered EXECUTE budget, never invent that discriminator.
+inline IoHomeSessionPolicy ioHomeSessionPolicy(IoHomeCommand command, uint8_t main = 0, int16_t matchingBeaconNodes = -1) {
+    // Mode 3 counts SetBeacon-marked BasicNodes for the current SystemId.
+    // -1 means inventory/SystemId evidence unavailable: conservative five.
     if (command == IoHomeCommand::Execute)
-        return {3,5,uint8_t(main==0xD8 ? 1 : 5),1,9000,true};
+        return {3,5,uint8_t(main==0xD8 ? 1 : matchingBeaconNodes==0 ? 9 : 5),1,
+            uint16_t(matchingBeaconNodes==0?20000:9000),matchingBeaconNodes<0};
     if (command == IoHomeCommand::Private || command == IoHomeCommand::WritePrivate)
         return {0,5,3,1,5000,false}; // Host policy; PRIVATE modes 3/4 need explicit producer context.
     if (command == IoHomeCommand::DiscoverRequest || command == IoHomeCommand::DiscoverSPERequest)

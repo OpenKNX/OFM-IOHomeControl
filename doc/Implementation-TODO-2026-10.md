@@ -150,3 +150,13 @@ Reviewed the full dated reports; they explicitly retain this gap. Evidence requi
 ## 20 — Exact commercial/generation binding
 
 Reviewed the full dated reports; they explicitly retain this gap. Evidence requirements and current gates are recorded in `docs/qualification/todo-20.md`. No speculative schema/meaning/model binding was added.
+
+## 2 follow-up — Recovered SetBeacon/SystemId selector
+
+The newly readable dated report closes the discriminator: mode 3 uses nine when
+no SetBeacon-marked BasicNode matches current SystemId, five otherwise. Added
+explicit current-SystemId import and database query; incomplete marker inventory
+or changed global key falls back to five. No SystemId is invented from a key hash
+or MIB. Nine-attempt mode has a separate 20-second OFM host ceiling; this is not a
+recovered reference duration. Favorite/authenticated repeat safeguards stay intact.
+Automatic acquisition of the reference BasicNode marker inventory remains open.

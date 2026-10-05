@@ -2781,6 +2781,23 @@ bool IoHomeController::sendProfileParameterCommand(uint32_t iDestNodeId,
     return queuePush(lEntry);
 }
 
+bool IoHomeController::setSessionSystemId(uint8_t systemId)
+{
+    if(!idleForManagedOperation())return false;
+    mSessionSystemId=systemId;mSessionSystemIdKnown=true;std::memcpy(mSessionSystemKey,mSystemKey,16);return true;
+}
+int16_t IoHomeController::matchingBeaconNodeCount()const
+{
+    if(!mSessionSystemIdKnown || std::memcmp(mSessionSystemKey,mSystemKey,16))return -1;
+    int16_t count=0;
+    for(const auto &node:mNodeStats) {
+        if(!node.active)continue;
+        if(!node.beaconMarkerKnown)return -1;
+        if(node.beaconMarked&&node.systemId==mSessionSystemId)++count;
+    }
+    return count;
+}
+
 bool IoHomeController::receiveConfigurationTemporaryEvent(){return mReceiveConfiguration.event10(millis());}
 
 bool IoHomeController::setBeaconDatabaseEntry(uint32_t node,uint8_t systemId,bool marked)
@@ -2883,7 +2900,7 @@ bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
     mCmdQueue[mQueueHead] = iEntry;
     mCmdQueue[mQueueHead].observationGeneration=++mNextObservationGeneration;
     auto &queued=mCmdQueue[mQueueHead];
-    queued.sessionPolicy=ioHomeSessionPolicy(queued.command,queued.param);
+    queued.sessionPolicy=ioHomeSessionPolicy(queued.command,queued.param,matchingBeaconNodeCount());
     if (!queued.maxAttempts) queued.maxAttempts=queued.sessionPolicy.stateAttempts;
     queued.sessionPolicy.stateAttempts=queued.maxAttempts; // explicit caller caps stay independent.
     queued.mediaAttempts=0;
@@ -3785,7 +3802,7 @@ void IoHomeController::beginResponseTimingAttempt()
     logDebugP("Session mode=%u stateRetry=%u/%u wholeRetry=0/%u RFretry=%u/%u selector=%s",
         mCurrentCmd.sessionPolicy.mode,mCurrentCmd.retries,mCurrentCmd.maxAttempts,
         mCurrentCmd.sessionPolicy.wholeSessionAttempts,mCurrentCmd.mediaAttempts,mCurrentCmd.sessionPolicy.rfAttempts,
-        mCurrentCmd.sessionPolicy.unresolvedExecuteSelector?"unresolved-use-five":"known-host-policy");
+        mCurrentCmd.sessionPolicy.unresolvedExecuteSelector?"missing-topology-use-five":"known-selector-or-host-policy");
 
     const IoHomecontrolChannel *lChannel = channelForQueueEntry(mCurrentCmd);
     const IoHomeProtocolIdentity *lIdentity =

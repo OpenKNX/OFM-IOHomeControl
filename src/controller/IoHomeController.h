@@ -646,6 +646,8 @@ public:
   bool cancelGetKeyOfNode();
   const GetKeyOfNodeResult &getKeyOfNodeResult()const{return mGetKeyOfNode;}
   // Imported BasicNode marker/SystemId evidence, never inferred from name/MIB.
+  bool setSessionSystemId(uint8_t systemId);
+  int16_t matchingBeaconNodeCount()const;
   bool setBeaconDatabaseEntry(uint32_t node,uint8_t systemId,bool marked);
   bool startReceiveConfiguration(IoHomecontrolChannel *channel,uint8_t systemId);
   bool cancelReceiveConfiguration(){return mReceiveConfiguration.cancel();}
@@ -1269,6 +1271,8 @@ private:
   IoHomeDiscoveryFamily mDiscoveryFamily=IoHomeDiscoveryFamily::Actuator;
   bool mPrivateDiscoveryF8=false;
   PrivateDiscoveryReply mPrivateDiscoveryReply{};
+  bool mSessionSystemIdKnown=false;
+  uint8_t mSessionSystemId=0,mSessionSystemKey[16]{};
   IoHomeReceiveConfiguration mReceiveConfiguration;
   uint32_t mRcmPeer=0,mRcmRevision=0,mRcmToken=0;
   uint8_t mRcmChannel=0xFF,mRcmKey[16]{};
