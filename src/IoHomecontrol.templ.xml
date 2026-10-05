@@ -104,6 +104,12 @@
               <Parameter Id="%AID%_P-%TT%%CC%126" Name="c%C%SensorPollDuration" ParameterType="%AID%_PT-IOHCDiagnosticSeconds" Text="Abfragedauer Sekunden (1..3600)" Value="300" op:configTransfer="never" />
               <Parameter Id="%AID%_P-%TT%%CC%127" Name="c%C%PriorityLevel" ParameterType="%AID%_PT-IOHCPriorityDiagnostic" Text="Prioritätsstufe (0..7)" Value="0" op:configTransfer="never" />
               <Parameter Id="%AID%_P-%TT%%CC%128" Name="c%C%DiagnosticEvidence" ParameterType="%AID%_PT-IOHCText40Byte" Text="Rohwerte / Alter / Gültigkeit" Value="Noch nicht gelesen" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%129" Name="c%C%ObjectProvider" ParameterType="%AID%_PT-IOHCText40Byte" Text="Objektprovider (2 Hex-Ziffern)" Value="00" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%130" Name="c%C%ObjectKey" ParameterType="%AID%_PT-IOHCText40Byte" Text="Erlaubter Objektkey (4 Hex-Ziffern)" Value="8100" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%131" Name="c%C%ObjectOffset" ParameterType="%AID%_PT-IOHCObjectOffset" Text="Leseoffset" Value="0" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%132" Name="c%C%ObjectSpan" ParameterType="%AID%_PT-IOHCObjectSpan" Text="Lesespanne (1..1024)" Value="64" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%133" Name="c%C%ObjectReadToken" ParameterType="%AID%_PT-IOHCText40Byte" Text="Lesevorgang (Boot / Token / Node)" Value="" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%%CC%134" Name="c%C%ObjectSliceOffset" ParameterType="%AID%_PT-IOHCObjectOffset" Text="Rückleseoffset (16 Bytes)" Value="0" op:configTransfer="never" />
             </Parameters>
 
             <ParameterRefs>
@@ -177,6 +183,12 @@
               <ParameterRef Id="%AID%_P-%TT%%CC%126_R-%TT%%CC%12601" RefId="%AID%_P-%TT%%CC%126" />
               <ParameterRef Id="%AID%_P-%TT%%CC%127_R-%TT%%CC%12701" RefId="%AID%_P-%TT%%CC%127" />
               <ParameterRef Id="%AID%_P-%TT%%CC%128_R-%TT%%CC%12801" RefId="%AID%_P-%TT%%CC%128" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%129_R-%TT%%CC%12901" RefId="%AID%_P-%TT%%CC%129" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%130_R-%TT%%CC%13001" RefId="%AID%_P-%TT%%CC%130" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%131_R-%TT%%CC%13101" RefId="%AID%_P-%TT%%CC%131" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%132_R-%TT%%CC%13201" RefId="%AID%_P-%TT%%CC%132" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%133_R-%TT%%CC%13301" RefId="%AID%_P-%TT%%CC%133" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%134_R-%TT%%CC%13401" RefId="%AID%_P-%TT%%CC%134" />
             </ParameterRefs>
 
             <ParameterCalculations>
@@ -603,6 +615,16 @@
                         <Button Id="%AID%_B-%TT%%CC%019" Text="Priorität anfragen" EventHandler="IOHC_requestPriorityEvidence" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%020" Text="Sensorstatus anfragen" EventHandler="IOHC_requestSensorStatus" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%021" Text="Prioritäts- / Sensorevidenz lesen" EventHandler="IOHC_readSensorEvidence" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%129_R-%TT%%CC%12901" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%130_R-%TT%%CC%13001" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%131_R-%TT%%CC%13101" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%132_R-%TT%%CC%13201" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%133_R-%TT%%CC%13301" />
+                        <ParameterRefRef RefId="%AID%_P-%TT%%CC%134_R-%TT%%CC%13401" />
+                        <Button Id="%AID%_B-%TT%%CC%022" Text="Metadatenobjekt lesen (Allowlist)" EventHandler="IOHC_objectStart" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                        <Button Id="%AID%_B-%TT%%CC%023" Text="Objektstatus lesen" EventHandler="IOHC_objectStatus" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                        <Button Id="%AID%_B-%TT%%CC%024" Text="Objektlesen abbrechen" EventHandler="IOHC_objectCancel" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                        <Button Id="%AID%_B-%TT%%CC%025" Text="Objektbytes lesen (max. 16 Bytes)" EventHandler="IOHC_objectSlice" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%010" Text="Wirksame ETS-Vorgaben anzeigen" EventHandler="IOHC_showEffectiveSettings" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%009" Text="Speicher / Zuordnungsbeleg prüfen" EventHandler="IOHC_readPersistenceEvidence" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%008" Text="Produktwerte abfragen (RF lesen)" EventHandler="IOHC_requestProductObservations" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />

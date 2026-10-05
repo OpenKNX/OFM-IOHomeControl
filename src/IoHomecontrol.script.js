@@ -1294,3 +1294,37 @@ function IOHC_readSensorEvidence(device,online,progress,context){
   progress.setText(text);
  });
 }
+
+function IOHC_objectSummary(online,c,id){
+ var s=IOHC_invokeFunctionProperty(online,[0x2C]);
+ if(!s||s.length!==22||s[0]!==0||s[1]!==1||s[3]!==c||IOHC_readNodeId(s,8)!==IOHC_readNodeId(id,3)||IOHC_read32(s,4)===0)throw new Error("Kein passender Objektlesevorgang");
+ return s;
+}
+function IOHC_objectToken(s){return IOHC_hexBytes(s.slice(18,22).concat(s.slice(4,8),s.slice(8,11)));}
+function IOHC_objectAction(device,online,progress,context,action){
+ return IOHC_boundDiagnostic(device,online,progress,context,function(c,id){
+  var prefix=IOHC_getChannelPrefix(context),summary,r;
+  if(action===1){
+   var p=String(IOHC_getParameter(device,prefix+"ObjectProvider").value),k=String(IOHC_getParameter(device,prefix+"ObjectKey").value),offset=Number(IOHC_getParameter(device,prefix+"ObjectOffset").value),span=Number(IOHC_getParameter(device,prefix+"ObjectSpan").value);
+   if(!/^[0-9a-fA-F]{2}$/.test(p)||! /^[0-9a-fA-F]{4}$/.test(k)||offset<0||offset>65535||span<1||span>1024||offset+span>65536||Math.floor(offset)!==offset||Math.floor(span)!==span)throw new Error("Ungültige Objektparameter");
+   p=parseInt(p,16);k=parseInt(k,16);
+   r=IOHC_invokeFunctionProperty(online,[0x37,c,p,k>>8,k&255,offset>>8,offset&255,span>>8,span&255].concat(id.slice(3,6)));
+   if(!r||r.length!==3||r[0]!==0||r[1]!==1||r[2]!==c)throw new Error("Objektlesen blockiert / Key nicht erlaubt");
+   summary=IOHC_objectSummary(online,c,id);IOHC_setParameterValue(device,prefix+"ObjectReadToken",IOHC_objectToken(summary));
+  }else{
+   summary=IOHC_objectSummary(online,c,id);
+   if(IOHC_getParameter(device,prefix+"ObjectReadToken").value!==IOHC_objectToken(summary))throw new Error("Vorgang geändert; zuerst passenden Lesevorgang starten");
+   if(action===3){r=IOHC_invokeFunctionProperty(online,[0x38].concat(summary.slice(18,22),summary.slice(4,8)));if(!r||r[0]!==0)throw new Error("Abbruch blockiert");progress.setText("Objektlesen abgebrochen; bereits übertragene Bytes bleiben gesendet.");return;}
+   if(action===4){var at=Number(IOHC_getParameter(device,prefix+"ObjectSliceOffset").value);if(at<0||at>65535||Math.floor(at)!==at)throw new Error("Ungültiger Rückleseoffset");
+    r=IOHC_invokeFunctionProperty(online,[0x2D].concat(summary.slice(18,22),summary.slice(4,8),[at>>8,at&255,16]));
+    if(!r||r.length<10||r[0]!==0||r[1]!==1||r[8]>16||r.length!==10+r[8]||r[9]!==2||IOHC_hexBytes(r.slice(2,6))!==IOHC_hexBytes(summary.slice(4,8))||r[6]!==at>>8||r[7]!==(at&255))throw new Error("Bytes noch nicht abgeschlossen / Identität ungültig");
+    progress.setText("Offset "+at+": "+IOHC_hexBytes(r.slice(10))+"; opake korrelierte Metadatenbytes, keine Schreibfreigabe.");return;
+   }
+  }
+  progress.setText("Objektlesen: Stufe="+summary[2]+", Disposition="+summary[11]+", übertragen="+((summary[14]<<8)|summary[15])+", Identität gültig="+summary[16]+". Status erneut lesen; keine automatische Fortsetzung nach Neustart.");
+ });
+}
+function IOHC_objectStart(d,o,p,c){return IOHC_objectAction(d,o,p,c,1);}
+function IOHC_objectStatus(d,o,p,c){return IOHC_objectAction(d,o,p,c,2);}
+function IOHC_objectCancel(d,o,p,c){return IOHC_objectAction(d,o,p,c,3);}
+function IOHC_objectSlice(d,o,p,c){return IOHC_objectAction(d,o,p,c,4);}

@@ -295,3 +295,9 @@ test("sensor evidence reports invalid and raw states without project type change
  IOHC_readSensorEvidence(d,online,{setText:function(t){text=t;}},{channelIndex:1});
  check(text.indexOf("raw=1234")>=0&&text.indexOf("Einheit unbekannt")>=0&&value(d,"DeviceType")===7,"sensor semantics invented");
 });
+test("object cancellation refuses a stale boot-token binding",function(){
+ var d=deviceWith({});d.params.IOHC_c1ObjectReadToken={value:"old"};var calls=[];
+ var online={connect:function(){},disconnect:function(){},invokeFunctionProperty:function(o,p,a){calls.push(a[0]);if(a[0]===0x1D)return snapshot(0x1C,1,0);return [0,1,1,0,0,0,0,9,0x12,0x34,0x56,0,0,0,0,0,1,0,0,0,0,1];}};
+ var failed=false;try{IOHC_objectCancel(d,online,{setText:function(){}},{channelIndex:1});}catch(e){failed=true;}
+ check(failed&&calls.join(",")==="29,44","stale object cancellation sent");
+});

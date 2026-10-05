@@ -2861,6 +2861,22 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         resultData[0]=idle&&mController.requestMpFpRead(mChannels[data[1]],data[2])?0:1;
         resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultLength=4;return true;
     }
+    case 0x37: // Allowlisted object read; provider/key/offset/span/node, all bounded
+    {
+        if(length!=12||data[1]>=mNumChannels)break;
+        auto *ch=mChannels[data[1]];const uint32_t node=uint32_t(data[9])<<16|uint32_t(data[10])<<8|data[11];
+        if(!node||ch->getNodeId()!=node)break;
+        updateCommissioningJob();const bool idle=managementRequestsAllowed()&&!mCommissioningJob.active()&&!mRadioDiagnostic.active&&!mMetadataRefreshActive;
+        resultData[0]=idle&&mController.requestObjectRead(ch,data[2],uint16_t(data[3])<<8|data[4],uint16_t(data[5])<<8|data[6],uint16_t(data[7])<<8|data[8])?0:1;
+        resultData[1]=1;resultData[2]=data[1];resultLength=3;return true;
+    }
+    case 0x38: // Boot/token-bound object cancellation
+    {
+        if(length!=9)break;
+        const uint32_t boot=uint32_t(data[1])<<24|uint32_t(data[2])<<16|uint32_t(data[3])<<8|data[4];
+        const uint32_t token=uint32_t(data[5])<<24|uint32_t(data[6])<<16|uint32_t(data[7])<<8|data[8];
+        resultData[0]=boot==mCommissioningBootId&&token&&mController.cancelObjectRead(token)?0:1;resultLength=1;return true;
+    }
     case 0x36: // Explicit priority/status request; read-only device operation
     {
         if(length!=7||data[1]>=mNumChannels||data[3]>7)break;
