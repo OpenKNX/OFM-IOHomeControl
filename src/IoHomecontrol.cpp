@@ -9,6 +9,7 @@
 #include "protocol/IoHomeProductCodecs.h"
 #include "protocol/IoHomeProductBinding.h"
 #include "protocol/IoHomePresentation.h"
+#include "protocol/IoHomeProductPresentation.h"
 #if defined(RADIO_SX1262)
 #include "radio/SX1262DeviceErrors.h"
 #include "radio/sx1262Regs-Fsk.h"
@@ -4063,7 +4064,10 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             logInfoP("Usage: iohc codec temp PRODUCT INDEX RAW16 [MIN_CK MAX_CK [COMFORT_RAW]]");
             return true;
         }
-        logInfoP("Temperature codec %s index=%u raw=0x%04X Celsius=%.3f (explicit product; no TX)",
+        const auto presentation=ioHomeTemperaturePresentation(lProduct,static_cast<uint8_t>(lIndex));
+        logInfoP("Physical presentation: %s; no qualified KO publication",
+                 presentation.quantity==IoHomeQuantity::Celsius ? "Celsius DPT9.001" : "unknown physical quantity");
+        logInfoP("Temperature codec %s index=%u raw=0x%04X numeric=%.3f (explicit product; no TX)",
                  lProductText.c_str(), static_cast<unsigned>(lIndex), static_cast<unsigned>(lRaw), lTemperature);
         return true;
     }

@@ -24,6 +24,7 @@
 #include "protocol/IoHomeCommissioningJob.h"
 #include "protocol/IoHomeAssignmentReceipt.h"
 #include "protocol/IoHomeProductActivation.h"
+#include "protocol/IoHomeProductPresentation.h"
 #include <limits>
 #include "protocol/IoHomeLogRedaction.h"
 #include "protocol/IoHomePassiveAuth.h"
@@ -3685,6 +3686,17 @@ TEST(product_operation_policy_keeps_conversion_transport_and_trust_separate)
     v.generation=2;ASSERT_TRUE(!ioHomeCoherentRgbObservations(mp,u,v));
     v.generation=1;u.authenticated=false;ASSERT_TRUE(!ioHomeCoherentRgbObservations(mp,u,v));
     u.authenticated=true;mp.fresh=false;ASSERT_TRUE(!ioHomeCoherentRgbObservations(mp,u,v));
+}
+
+TEST(product_presentation_does_not_relabel_unknown_quantities_as_temperature_or_percent)
+{
+    auto t=ioHomeTemperaturePresentation(IoHomeTemperatureProduct::HeatPump,8);
+    ASSERT_EQ(t.quantity,IoHomeQuantity::Celsius);ASSERT_EQ(t.dptMain,9);ASSERT_EQ(t.dptSub,1);
+    ASSERT_TRUE(!t.publicationQualified);
+    ASSERT_EQ(ioHomeTemperaturePresentation(IoHomeTemperatureProduct::AtlanticAdjustableHeater,13).quantity,IoHomeQuantity::Unknown);
+    ASSERT_EQ(ioHomeTemperaturePresentation(IoHomeTemperatureProduct::HeatPump,11).quantity,IoHomeQuantity::Unknown);
+    ASSERT_EQ(ioHomeLightingPresentation(IoHomeBoundProductFamily::RgbLight,10).quantity,IoHomeQuantity::Rgb);
+    ASSERT_EQ(ioHomeLightingPresentation(IoHomeBoundProductFamily::TunableWhiteLight,14).quantity,IoHomeQuantity::Kelvin);
 }
 
 TEST(product_binding_requires_exact_identity_and_consistent_evidence)
