@@ -1100,15 +1100,7 @@ bool IoHomecontrol::applyKeyImportDeviceToChannel(const KeyImportDevice &iDevice
         mChannels[iChannelIndex]->isOperational())
         return false;
 
-    IoHomeAssignmentReceipt::Value receipt;
-    receipt.generation=mCommissioningJob.generation; receipt.node=iDevice.nodeId;
-    std::memcpy(receipt.key,mKeyImportKey.key,16);
-    receipt.profile=iDevice.protocolIdentity.profile; receipt.subProfile=iDevice.protocolIdentity.subProfile;
-    receipt.manufacturer=iDevice.protocolIdentity.manufacturerId;
-    receipt.power=iDevice.protocolIdentity.powerSaveModeRaw;
-    receipt.metadataValid=iDevice.protocolIdentity.valid; receipt.metadataComplete=iDevice.protocolIdentity.fullMetadata;
-    if (!mAssignmentReceipts.save(iChannelIndex,receipt)) return false;
-    if (!persistTwoWayBinding(iChannelIndex,iDevice.nodeId,mKeyImportKey.key)) return false;
+    if(!persistTwoWayAssignment(iChannelIndex,iDevice.nodeId,mKeyImportKey.key,iDevice.protocolIdentity))return false;
     IoHomecontrolChannel *lChannel = mChannels[iChannelIndex];
     lChannel->setIs1W(false);
     lChannel->setNodeId(iDevice.nodeId);
@@ -2448,6 +2440,16 @@ bool IoHomecontrol::commitNetwork(const IoHomeNetworkStore::State &state)
 }
 
 bool IoHomecontrol::prepareTwoWayPersistence(){return commitNetwork(networkSnapshot());}
+
+bool IoHomecontrol::persistTwoWayAssignment(uint8_t channel,uint32_t node,const uint8_t *key,const IoHomeProtocolIdentity &identity)
+{
+    if(channel>=mNumChannels||!mChannels[channel]||!key||!node)return false;
+    if(!mAssignmentReceipts.prepare(channel,node,key,identity)) {
+        mCommissioningJob.error=IoHomeCommissioningJob::Error::Persistence;
+        return false;
+    }
+    return persistTwoWayBinding(channel,node,key);
+}
 
 bool IoHomecontrol::persistTwoWayBinding(uint8_t channel,uint32_t node,const uint8_t *key)
 {

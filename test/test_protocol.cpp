@@ -3806,7 +3806,7 @@ TEST(assignment_receipt_preserves_saved_identity_after_failed_project_ack)
     ASSERT_EQ(r.node,0x123456);ASSERT_EQ(r.key[0],0xAB);ASSERT_EQ(r.generation,8);
     ASSERT_TRUE(!r.projectApplied);j.failWrites=false;ASSERT_TRUE(j.save(0,v));
     ASSERT_EQ(j.load(0,r),IoHomeAssignmentReceipt::Result::Found);ASSERT_TRUE(r.projectApplied);
-    ASSERT_TRUE(j.erase(0));ASSERT_EQ(j.load(0,r),IoHomeAssignmentReceipt::Result::Missing);
+    ASSERT_TRUE(j.erase(0));ASSERT_EQ(j.load(0,r),IoHomeAssignmentReceipt::Result::Retired);
 }
 
 TEST(product_family_match_never_claims_commercial_generation_or_write_qualification)
@@ -19325,4 +19325,31 @@ TEST(controller_product_read_rejects_missing_selected_fp_and_key_change) {
     ASSERT_TRUE(queueControllerResponse(controller,response));ASSERT_TRUE(!channel.productRuntime().sample(0)->present);
     uint8_t replacement[16]={2};channel.setEncryptionKey(replacement);controller.loop();
     ASSERT_TRUE(!channel.productRuntime().sample(10)->present);
+}
+
+TEST(assignment_receipt_revision_survives_new_boot_local_job_numbers) {
+    IoHomeAssignmentReceipt store;IoHomeProtocolIdentity identity;identity.valid=true;identity.profile=6;identity.subProfile=1;
+    uint8_t key[16]={1};ASSERT_TRUE(store.prepare(0,0x123456,key,identity));IoHomeAssignmentReceipt::Value first,next;
+    ASSERT_EQ(store.load(0,first),IoHomeAssignmentReceipt::Result::Found);ASSERT_EQ(first.generation,1);
+    first.projectApplied=true;ASSERT_TRUE(store.save(0,first));
+    ASSERT_TRUE(store.prepare(0,0x123456,key,identity));ASSERT_EQ(store.load(0,next),IoHomeAssignmentReceipt::Result::Found);
+    ASSERT_EQ(next.generation,2);ASSERT_TRUE(!next.projectApplied);
+    next.generation=0xFFFFFFFF;ASSERT_TRUE(store.save(0,next));ASSERT_TRUE(!store.prepare(0,0x123456,key,identity));
+}
+TEST(controller_pairing_does_not_advertise_success_when_assignment_persistence_fails) {
+    const uint8_t key[16]={1};IoHomeController controller;IoHomecontrol module;IoHomecontrolChannel channel;
+    initPaired2WControllerForTest(controller,module,channel,0x831F2A,0,key);controller.setSystemKey(key);
+    ASSERT_TRUE(advancePairingToWaitDeviceChallenge(controller,0x831F2A,0x7E9E6E));module.failAssignmentPersistence=true;
+    IoHomeFrame reply;buildKeyTransferConfirmationFrame(reply,0x831F2A,0x7E9E6E);
+    ASSERT_TRUE(queueControllerResponse(controller,reply));ASSERT_EQ(channel.getNodeId(),0);
+    ASSERT_EQ(controller.pairingTelemetry().outcome,IoHomeController::PairingOutcome::ConfigurationFailure);
+}
+
+TEST(assignment_receipt_unpair_retains_revision_and_erases_private_key) {
+    IoHomeAssignmentReceipt store;IoHomeProtocolIdentity identity;uint8_t key[16]={1};
+    ASSERT_TRUE(store.prepare(0,0x123456,key,identity));ASSERT_TRUE(store.erase(0));
+    IoHomeAssignmentReceipt::Value retired;ASSERT_EQ(store.load(0,retired),IoHomeAssignmentReceipt::Result::Retired);
+    ASSERT_EQ(retired.generation,1);ASSERT_EQ(retired.node,0);uint8_t zero[16]={};ASSERT_MEM_EQ(retired.key,zero,16);
+    ASSERT_TRUE(store.prepare(0,0x123456,key,identity));ASSERT_EQ(store.load(0,retired),IoHomeAssignmentReceipt::Result::Found);
+    ASSERT_EQ(retired.generation,2);
 }

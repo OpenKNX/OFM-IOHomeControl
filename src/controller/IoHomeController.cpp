@@ -8502,14 +8502,12 @@ void IoHomeController::finalize2WPairingKey()
         IoHomecontrolChannel *lCh = mModule->getChannel(mPairingChannel);
         if (lCh)
         {
-#ifndef TEST_NATIVE
-            if(!mModule->persistTwoWayBinding(mPairingChannel,mDiscoveredNodeId,mSystemKey)) {
+            if(!mModule->persistTwoWayAssignment(mPairingChannel,mDiscoveredNodeId,mSystemKey,lCh->getProtocolIdentity())) {
                 // Peer key acknowledgement cannot be rolled back. Record the
                 // local persistence failure; do not advertise durable pairing.
                 completePairingTelemetry(PairingOutcome::ConfigurationFailure);
                 mState=ControllerState::PairFailed;return;
             }
-#endif
             lCh->setNodeId(mDiscoveredNodeId);
             lCh->setEncryptionKey(mSystemKey);
             openknx.flash.save(true);

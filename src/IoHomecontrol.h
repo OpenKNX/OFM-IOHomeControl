@@ -53,6 +53,7 @@ public:
 
   IoHomeController &controller();
   bool prepareTwoWayPersistence();
+  bool persistTwoWayAssignment(uint8_t channel,uint32_t node,const uint8_t *key,const IoHomeProtocolIdentity &identity);
   bool persistTwoWayBinding(uint8_t channel,uint32_t node,const uint8_t *key);
   IoHomecontrolChannel *getChannel(uint8_t iIndex);
   // Make sure the (possibly linked) 1W controller profile for a channel owns a

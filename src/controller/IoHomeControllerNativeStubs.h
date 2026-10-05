@@ -12,6 +12,7 @@
 
 #include "../protocol/IoHomeSequence.h"
 #include "../protocol/IoHomeProductRuntime.h"
+#include "../protocol/IoHomeAssignmentReceipt.h"
 
 #ifndef logInfoP
 #define logInfoP(...) \
@@ -657,6 +658,12 @@ public:
   IoHomecontrolChannel *getChannel(uint8_t iIndex)
   {
     return (iIndex < IOHC_ChannelCount) ? mChannels[iIndex] : nullptr;
+  }
+
+  bool failAssignmentPersistence=false;
+  IoHomeAssignmentReceipt assignmentReceipts;
+  bool persistTwoWayAssignment(uint8_t channel,uint32_t node,const uint8_t *key,const IoHomeProtocolIdentity &identity) {
+    return !failAssignmentPersistence&&assignmentReceipts.prepare(channel,node,key,identity);
   }
 
   // Native test stub: the real module auto-provisions a missing 1W controller
