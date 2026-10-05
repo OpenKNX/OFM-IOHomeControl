@@ -29,3 +29,7 @@ Added named 0x94/95 and 0x96/97 sensor discovery producers and strict nine-byte 
 ## 7. Multi-return discovery lifecycle
 
 One session collects all returns across windows/sweeps and reports accepted, duplicate, malformed and silent-sweep counts. Final completion distinguishes empty discovery from successful returns, with post-processing through the existing enrichment/candidate handlers. Truncated bodies are diagnostics only and are no longer delivered as candidates. Cancellation retains already accepted metadata. Silent sweeps never erase prior nodes/passively authenticated candidates. Directed verification remains available after collection. Tests cover multiple peers, malformed records, cancellation and later empty sweeps retaining inventory.
+
+## 8. Recent-channel diversity
+
+Added wrap-safe per-channel successful TX/RX activity timestamps and a 250 ms reference-inspired experimental cooldown. Alternate selection prefers non-current/non-recent channels, with bounded fallback when all are recent. Broadcast response scanning no longer excludes the request channel for its entire window; ordinary background scanning still visits all three channels. Runtime console `iohc radio diversity [0..2000]` controls the experiment. Physical A/B qualification remains pending.

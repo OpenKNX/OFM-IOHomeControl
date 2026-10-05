@@ -3,6 +3,7 @@
 #include "../protocol/IoHomeDurableReservation.h"
 #pragma once
 #include "../protocol/IoHomeRadioPolicy.h"
+#include "../protocol/IoHomeRadioDiversity.h"
 #include "../protocol/IoHomeTransactionTiming.h"
 #include "../protocol/IoHomeSessionPolicy.h"
 #include "../protocol/IoHomeResponseDescriptor.h"
@@ -652,6 +653,7 @@ public:
   bool startDiscoveryFamily(IoHomeDiscoveryFamily family);
   enum class DiscoveryCompletion : uint8_t {Idle,Collecting,PostProcessing,Empty,WithReturns,Cancelled};
   struct DiscoverySession {DiscoveryCompletion completion=DiscoveryCompletion::Idle;uint32_t accepted=0,duplicates=0,malformed=0,silentSweeps=0;};
+  IoHomeRadioDiversity &radioDiversity() {return mRadioDiversity;}
   const DiscoverySession &discoverySession() const {return mDiscoverySession;}
   bool cancelDiscovery();
   struct PrivateDiscoveryReply {bool valid=false;uint32_t node=0;uint8_t selector=0,length=0,data[IOHC_FRAME_MAX_DATA]{};};
@@ -1222,6 +1224,7 @@ private:
   IoHomeDiscoveryFamily mDiscoveryFamily=IoHomeDiscoveryFamily::Actuator;
   bool mPrivateDiscoveryF8=false;
   PrivateDiscoveryReply mPrivateDiscoveryReply{};
+  IoHomeRadioDiversity mRadioDiversity{};
   DiscoverySession mDiscoverySession{};
   uint32_t mDiscoverySweepAccepted=0;
   uint32_t mPairingStartTime;

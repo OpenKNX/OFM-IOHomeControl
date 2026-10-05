@@ -19896,3 +19896,12 @@ TEST(controller_discovery_session_collects_multiple_returns_without_erasing_sile
     ASSERT_EQ(c.discoverySession().completion,IoHomeController::DiscoveryCompletion::Empty);
     ASSERT_EQ(c.discoverySession().silentSweeps,3U);ASSERT_TRUE(c.protocolIdentityForIoAddress(0x111111));
 }
+
+TEST(protocol_recent_channel_diversity_expires_and_handles_wrap_and_all_recent)
+{
+    IoHomeRadioDiversity d;d.activity(1,0);ASSERT_TRUE(d.recent(1,249));ASSERT_TRUE(!d.recent(1,250));
+    ASSERT_EQ(d.alternate(0,1),2);ASSERT_EQ(d.alternate(0,250),1);
+    d.activity(0,10);d.activity(1,10);d.activity(2,10);ASSERT_EQ(d.alternate(0,11),1);
+    d.activity(1,0xFFFFFFF0);ASSERT_TRUE(d.recent(1,0));ASSERT_TRUE(!d.recent(1,300));
+    ASSERT_TRUE(d.configure(0));ASSERT_TRUE(!d.recent(1,0));ASSERT_TRUE(!d.configure(2001));
+}

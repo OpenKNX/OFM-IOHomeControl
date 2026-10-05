@@ -4348,6 +4348,13 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         logInfoP("Discovery family start=%s",mController.startDiscoveryFamily(family)?"started":"blocked");return true;
     }
 
+    if(lSub.rfind("radio diversity",0)==0) {
+        const auto arg=trimSpaces(lSub.substr(strlen("radio diversity")));uint32_t ms=0;
+        if(!arg.empty() && (!parseUnsignedDecimal(arg,ms)||ms>2000||!managementRequestsAllowed()||!mController.idleForManagedOperation()||
+           !mController.radioDiversity().configure(ms))) {logInfoP("Usage: iohc radio diversity [0..2000] (idle only)");return true;}
+        logInfoP("Recent-channel cooldown=%ums runtime experiment; production RF qualification pending",mController.radioDiversity().cooldownMs());return true;
+    }
+
     if (lSub.rfind("discovery listen", 0) == 0)
     {
         const std::string lArg = trimSpaces(lSub.substr(strlen("discovery listen")));

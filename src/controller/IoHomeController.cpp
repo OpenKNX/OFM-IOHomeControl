@@ -3728,6 +3728,7 @@ void IoHomeController::beginResponseTimingAttempt()
 void IoHomeController::markResponseTimingTxEnd()
 {
     const uint32_t lNowUs = micros();
+    mRadioDiversity.activity(mCurrentFreqIdx,millis());
     if (mAuthResponseSent && mWaitingFinalResponse)
     {
         mExchangeAuthTxEndUs = lNowUs;
@@ -5461,15 +5462,15 @@ void IoHomeController::serviceBroadcastResponseScan(uint8_t iRequestFrequencyInd
         return;
 
     const uint32_t lNow = micros();
-    const bool lOnSkippedRequestChannel = iListenChannels != TwoWayDiscoveryListenChannels::All &&
-                                          mCurrentFreqIdx == iRequestFrequencyIndex;
+    const bool avoidRecent=iListenChannels!=TwoWayDiscoveryListenChannels::All;
+    const bool lOnSkippedRequestChannel = avoidRecent && mCurrentFreqIdx==iRequestFrequencyIndex &&
+        mRadioDiversity.recent(iRequestFrequencyIndex,millis());
     if (!lOnSkippedRequestChannel && lNow - mRxScanLastSwitch < mRxScanIntervalUs)
         return;
 
-    // Never retune while a frame is being demodulated. A broadcast response
-    // has no request-bound return channel, so the useful listen set is the two
-    // non-request channels; this mirrors the reference ListenPolicy::
-    // ROTATE_SKIPPING_REQUEST policy.
+    // Never retune during demodulation. Recent activity is a short-lived
+    // diversity preference, not permanent request-channel exclusion. Normal
+    // background scanning keeps all three channels eligible.
     if (mRadio.isPreambleDetected() || mRadio.isSyncDetected())
     {
         if (mRadio.isSyncDetected())
@@ -5487,12 +5488,8 @@ void IoHomeController::serviceBroadcastResponseScan(uint8_t iRequestFrequencyInd
         return;
     }
 
-    uint8_t lNextFreqIdx = mCurrentFreqIdx;
-    do
-    {
-        lNextFreqIdx = (lNextFreqIdx + 1) % IOHC_NUM_FREQUENCIES;
-    } while (iListenChannels != TwoWayDiscoveryListenChannels::All &&
-             lNextFreqIdx == iRequestFrequencyIndex);
+    const uint8_t lNextFreqIdx=avoidRecent?mRadioDiversity.alternate(mCurrentFreqIdx,millis()):
+        (mCurrentFreqIdx+1)%IOHC_NUM_FREQUENCIES;
 
     if (mRadio.setFrequency(IOHC_FREQUENCIES[lNextFreqIdx]) == RadioError::None)
     {
@@ -6126,6 +6123,7 @@ void IoHomeController::loop()
         }
         if (lParsed)
         {
+            mRadioDiversity.activity(mCurrentFreqIdx,millis());
             const ControllerState lPairingStateBeforeRx = mState;
             // Record which frequency the response came on
             mLastResponseFreqIdx = mCurrentFreqIdx;
@@ -9421,8 +9419,10 @@ void IoHomeController::processDiscovery()
                 mDiscoveryTimingTrace.rxBusyCount++;
                 return;
             }
-            if (mDiscoveryTimingTrace.txDoneUs == 0)
+            if (mDiscoveryTimingTrace.txDoneUs == 0) {
                 mDiscoveryTimingTrace.txDoneUs = micros();
+                mRadioDiversity.activity(mCurrentFreqIdx,millis());
+            }
         }
 
         if (mRadio.state() == RadioState::Receiving)
@@ -9818,8 +9818,10 @@ RadioError IoHomeController::startTransmitWithPreamble(const uint8_t *iBuffer, u
 
 RadioError IoHomeController::ensureReceiveAfterTransmit()
 {
-    if (mRadio.state() == RadioState::Transmitting && !mRadio.isTxDone())
-        return RadioError::Busy;
+    if (mRadio.state() == RadioState::Transmitting) {
+        if(!mRadio.isTxDone())return RadioError::Busy;
+        mRadioDiversity.activity(mCurrentFreqIdx,millis());
+    }
 
     if (mRadio.state() == RadioState::Receiving)
         return RadioError::None;
