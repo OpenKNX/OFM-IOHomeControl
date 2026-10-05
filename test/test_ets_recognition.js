@@ -110,3 +110,15 @@ test("stale assignment receipt does not mutate project",function() {
     check(!IOHC_resumeAssignment(d,online,0),"stale receipt accepted");
     check(value(d,"Active")===0,"stale receipt changed project");
 });
+
+test("job snapshot rejects changed boot identity",function() {
+    var caps=[0,1,0,0,0,15,0,0,0,9],job=new Array(26).fill(0);job[1]=1;job[23]=10;
+    var online={invokeFunctionProperty:function(o,p,data){return data[0]===0x23?caps:job;}};
+    var rejected=false;try{IOHC_jobSnapshot(online);}catch(e){rejected=true;}check(rejected,"changed boot accepted");
+});
+test("frozen assignment carries identity and stops on stale token",function() {
+    var seen=0;var job={token:[0,0,0,9,0,0,0,2,0,0,0,1]};
+    var online={invokeFunctionProperty:function(o,p,data){seen++;check(data.length===18&&data[0]===0x26&&data[13]===0&&data[15]===0x12,"frozen request");return [4];}};
+    var rejected=false;try{IOHC_assignFrozenCandidates(online,job,[{index:0,nodeId:0x123456}],2);}catch(e){rejected=true;}
+    check(rejected&&seen===1,"stale assignment retried");
+});

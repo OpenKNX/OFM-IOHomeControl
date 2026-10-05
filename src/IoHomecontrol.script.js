@@ -699,6 +699,44 @@ function IOHC_startOneWayClone(device, online, progress, context) {
     }
 }
 
+function IOHC_read32(data,offset) {
+    return data[offset]*16777216+data[offset+1]*65536+data[offset+2]*256+data[offset+3];
+}
+function IOHC_jobSnapshot(online) {
+    var caps=IOHC_invokeFunctionProperty(online,[0x23]);
+    if(!caps || caps[0]!==0) return null; // explicit legacy firmware fallback
+    if(caps.length!==10 || caps[1]!==1) throw new Error("Ungültige Job-Fähigkeiten");
+    var job=IOHC_invokeFunctionProperty(online,[0x24]);
+    if(!job || job.length!==26 || job[0]!==0 || job[1]!==1 || IOHC_read32(job,20)!==IOHC_read32(caps,6))
+        throw new Error("Job-Status hat sich geändert; erneut lesen");
+    return {owner:job[2],stage:job[3],generation:IOHC_read32(job,4),revision:IOHC_read32(job,12),
+            remainingMs:IOHC_read32(job,16),error:job[24],count:job[25],token:job.slice(20,24).concat(job.slice(4,8),job.slice(12,16))};
+}
+function IOHC_cancelCommissioning(device,online,progress,context) {
+    online.connect();
+    try {
+        var job=IOHC_jobSnapshot(online);
+        if(!job) throw new Error("Firmware unterstützt keinen sicheren Job-Abbruch");
+        var response=IOHC_invokeFunctionProperty(online,[0x27].concat(job.token.slice(0,8)));
+        if(!response || response[0]!==0) throw new Error("Job bereits beendet oder geändert; Status aktualisieren");
+        progress.setText("Einrichtung abgebrochen. Bereits übertragene Schlüssel und gespeicherte Zuordnungen bleiben bestehen.");
+    } finally {online.disconnect();}
+}
+function IOHC_assignFrozenCandidates(online,job,discoveries,channelCount) {
+    var result=[0,discoveries.length];
+    for(var d=0;d<discoveries.length;d++) {
+        var candidate=discoveries[d],response=null;
+        for(var c=0;c<channelCount;c++) {
+            var node=[(candidate.nodeId>>16)&255,(candidate.nodeId>>8)&255,candidate.nodeId&255];
+            response=IOHC_invokeFunctionProperty(online,[0x26].concat(job.token,[candidate.index,c],node));
+            if(!response || response.length!==2 || response[0]>2) throw new Error("Zuordnung veraltet/fehlgeschlagen; gespeicherte Ergebnisse erneut lesen");
+            if(response[0]!==2)break;
+        }
+        result.push(response?response[0]:2,response?response[1]:255);
+    }
+    return result;
+}
+
 function IOHC_startKeyExtract(device, online, progress, context) {
     progress.setText("2W-Schlüsselextraktion wird vorbereitet ...");
     progress.setProgress(5);
@@ -778,12 +816,18 @@ function IOHC_startKeyExtract(device, online, progress, context) {
             throw new Error("io-homecontrol: Unbekannter Status der 2W-Schlüsselübernahme");
         }
 
+        var job=IOHC_jobSnapshot(online);
+        if(job && (job.owner!==2 || job.stage!==4 || !job.revision || job.count!==(status[8]||0)))
+            throw new Error("Ergebnisliste geändert; erneut lesen");
         var resultCount = status[8] || 0;
         var overflow = (status[10] || 0) != 0;
         var discoveries = [];
         var nodeIds = [];
         for (var resultIndex = 0; resultIndex < resultCount; resultIndex++) {
-            var found = IOHC_invokeFunctionProperty(online, [0x19, resultIndex]);
+            var found = IOHC_invokeFunctionProperty(online, job ? [0x25].concat(job.token,[resultIndex]) : [0x19, resultIndex]);
+            if(job && (!found || found.length!==20 || found[1]!==1 || found[2]!==resultIndex ||
+                IOHC_read32(found,12)!==job.generation || IOHC_read32(found,16)!==job.revision))
+                throw new Error("Ergebnisgeneration geändert; erneut lesen");
             if (!found || found.length < 11 || found[0] != 0) {
                 throw new Error("io-homecontrol: Scan-Ergebnis " + (resultIndex + 1) + " konnte nicht gelesen werden");
             }
@@ -797,8 +841,8 @@ function IOHC_startKeyExtract(device, online, progress, context) {
                 passiveAuthVerified: found.length > 11 && (found[11] & 0x01) != 0,
                 speResponseSeen: found.length > 11 && (found[11] & 0x02) != 0,
                 directedVerified: found.length > 11 && (found[11] & 0x10) != 0,
-                metadataValid: found.length > 11 ? (found[11] & 0x04) != 0 : true,
-                metadataComplete: found.length > 11 ? (found[11] & 0x08) != 0 : true
+                metadataValid: found.length > 11 ? (found[11] & 0x04) != 0 : false,
+                metadataComplete: found.length > 11 ? (found[11] & 0x08) != 0 : false
             };
             discoveries.push(discovery);
             nodeIds.push(discovery.nodeId);
@@ -817,7 +861,7 @@ function IOHC_startKeyExtract(device, online, progress, context) {
         var configuredChannels = 0;
         var alreadyConfigured = 0;
         var unassigned = 0;
-        var assignmentResponse = IOHC_invokeFunctionProperty(online, assignmentRequest);
+        var assignmentResponse = job ? IOHC_assignFrozenCandidates(online,job,discoveries,channelCount) : IOHC_invokeFunctionProperty(online, assignmentRequest);
         if (!assignmentResponse || assignmentResponse.length < 2 || assignmentResponse[0] != 0 ||
             assignmentResponse[1] != discoveries.length ||
             assignmentResponse.length < 2 + (discoveries.length * 2)) {
@@ -827,7 +871,8 @@ function IOHC_startKeyExtract(device, online, progress, context) {
             var assignmentStatus = assignmentResponse[2 + (d * 2)];
             var assignedChannel = assignmentResponse[3 + (d * 2)];
             if (assignmentStatus == 0) {
-                IOHC_configureImportedChannel(device, assignedChannel + 1, discoveries[d]);
+                if(job) IOHC_resumeAssignment(device,online,assignedChannel);
+                else IOHC_configureImportedChannel(device, assignedChannel + 1, discoveries[d]);
                 channelActive[assignedChannel] = true;
                 configuredChannels++;
             } else if (assignmentStatus == 1) {

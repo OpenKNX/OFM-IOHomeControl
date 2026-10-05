@@ -128,6 +128,7 @@ private:
   void restoreNetwork();
   IoHomeAssignmentReceipt mAssignmentReceipts;
   void restoreAssignmentReceipts();
+  uint32_t mCommissioningBootId=1;
   IoHomeCommissioningJob mCommissioningJob;
   void updateCommissioningJob();
   enum class KeyImportPhase : uint8_t

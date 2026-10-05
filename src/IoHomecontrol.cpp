@@ -683,7 +683,11 @@ const std::string IoHomecontrol::version()
     return MODULE_IoHomecontrol_Version;
 }
 
-IoHomecontrol::IoHomecontrol() {}
+IoHomecontrol::IoHomecontrol() {
+#ifdef ESP32
+    mCommissioningBootId=esp_random();if(!mCommissioningBootId)mCommissioningBootId=1;
+#endif
+}
 
 IoHomecontrol::~IoHomecontrol()
 {
@@ -2499,9 +2503,13 @@ void IoHomecontrol::updateCommissioningJob()
     // Observe console-started work too; the controller remains the RF owner.
     if (!mCommissioningJob.active()) {
         if (isPairingState(mController.state()))
-            mCommissioningJob.begin(O::Pairing,mController.pairingTelemetry().channel);
+            mCommissioningJob.begin(O::Pairing,mController.pairingTelemetry().channel,millis(),120000);
         else if (mKeyImportPhase==KeyImportPhase::Extracting || mKeyImportPhase==KeyImportPhase::Verifying || mKeyImportPhase==KeyImportPhase::Scanning)
-            mCommissioningJob.begin(O::Import);
+            mCommissioningJob.begin(O::Import,0xFF,millis(),360000);
+    }
+    if(mCommissioningJob.expired(millis())) {
+        mController.cancelPairing();mController.stopKeyExtraction();resetKeyImportWorkflow();
+        mCommissioningJob.stage=S::Failed;mCommissioningJob.error=IoHomeCommissioningJob::Error::Deadline;
     }
     if (mCommissioningJob.owner==O::Import && mCommissioningJob.active())
     {
@@ -2509,7 +2517,7 @@ void IoHomecontrol::updateCommissioningJob()
         case KeyImportPhase::Extracting: mCommissioningJob.stage=S::Preparing; break;
         case KeyImportPhase::Verifying: mCommissioningJob.stage=S::Verifying; break;
         case KeyImportPhase::Scanning: mCommissioningJob.stage=S::Discovering; break;
-        case KeyImportPhase::Complete: mCommissioningJob.stage=S::CandidateReady; break;
+        case KeyImportPhase::Complete: mCommissioningJob.stage=S::CandidateReady;mCommissioningJob.freeze(); break;
         case KeyImportPhase::Failed: case KeyImportPhase::Timeout: mCommissioningJob.stage=S::Failed; break;
         case KeyImportPhase::Idle: mCommissioningJob.stage=S::Done; break;
         }
@@ -2531,6 +2539,9 @@ void IoHomecontrol::updateCommissioningJob()
             mCommissioningJob.stage=S::Discovering;
         else mCommissioningJob.stage=S::Verifying;
     }
+    if(mCommissioningJob.stage==S::Done&&mCommissioningJob.node)mCommissioningJob.freeze();
+    if(mCommissioningJob.stage==S::Failed&&mCommissioningJob.error==IoHomeCommissioningJob::Error::None)
+        mCommissioningJob.error=mNetworkStoreFailed?IoHomeCommissioningJob::Error::Persistence:IoHomeCommissioningJob::Error::PeerOrTransport;
 }
 
 bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propertyId,
@@ -2623,7 +2634,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
 
             if (lStarted)
             {
-                mCommissioningJob.begin(IoHomeCommissioningJob::Owner::Pairing,lChannel);
+                mCommissioningJob.begin(IoHomeCommissioningJob::Owner::Pairing,lChannel,millis(),120000);
                 if (mChannels[lChannel]->is1W())
                     logInfoP("ETS: 1W pairing started for channel %d mode=%s",
                              lChannel + 1, IoHomeController::pairing1WModeName(lOneWayMode));
@@ -2675,6 +2686,61 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
             return true;
         }
         break;
+    }
+    case 0x23: // Capabilities, schema and boot identity; no secrets
+    {
+        if(length!=1)break;
+        resultData[0]=0;resultData[1]=1;
+        const uint32_t flags=15;
+        for(uint8_t i=0;i<4;i++){resultData[2+i]=flags>>(24-8*i);resultData[6+i]=mCommissioningBootId>>(24-8*i);}
+        resultLength=10;return true;
+    }
+    case 0x24: // Extended job status, bounded to existing 26-byte API response
+    {
+        if(length!=1)break;
+        resultData[0]=0;resultData[1]=1;resultData[2]=static_cast<uint8_t>(mCommissioningJob.owner);resultData[3]=static_cast<uint8_t>(mCommissioningJob.stage);
+        resultData[8]=mCommissioningJob.channel;
+        for(uint8_t i=0;i<3;i++)resultData[9+i]=mCommissioningJob.node>>(16-8*i);
+        for(uint8_t i=0;i<4;i++) {
+            resultData[4+i]=mCommissioningJob.generation>>(24-8*i);
+            resultData[12+i]=mCommissioningJob.snapshotRevision>>(24-8*i);
+            resultData[16+i]=mCommissioningJob.remaining(millis())>>(24-8*i);
+            resultData[20+i]=mCommissioningBootId>>(24-8*i);
+        }
+        resultData[24]=static_cast<uint8_t>(mCommissioningJob.error);
+        resultData[25]=mCommissioningJob.owner==IoHomeCommissioningJob::Owner::Import?mKeyImportDeviceCount:0;
+        resultLength=26;return true;
+    }
+    case 0x25: // Frozen import candidate: boot/gen/revision/index
+    case 0x26: // Assign frozen candidate: same token + channel + node
+    case 0x27: // Cancel by boot/gen; old 0x11/0x1F retained for compatibility
+    {
+        const auto read32=[](const uint8_t *p){return uint32_t(p[0])<<24|uint32_t(p[1])<<16|uint32_t(p[2])<<8|p[3];};
+        if((lCmd==0x25&&length!=14)||(lCmd==0x26&&length!=18)||(lCmd==0x27&&length!=9))break;
+        if(read32(data+1)!=mCommissioningBootId||read32(data+5)!=mCommissioningJob.generation)
+        {resultData[0]=4;resultLength=1;return true;}
+        if(lCmd==0x27) {
+            if(!mCommissioningJob.cancel(read32(data+5))){resultData[0]=4;resultLength=1;return true;}
+            mController.cancelPairing();mController.stopKeyExtraction();resetKeyImportWorkflow();
+            resultData[0]=0;resultLength=1;return true;
+        }
+        if(!mCommissioningJob.matches(read32(data+5),read32(data+9))||mKeyImportPhase!=KeyImportPhase::Complete||
+            data[13]>=mKeyImportDeviceCount||!mKeyImportDevices[data[13]].valid)
+        {resultData[0]=4;resultLength=1;return true;}
+        const auto &candidate=mKeyImportDevices[data[13]];
+        if(lCmd==0x26) {
+            const uint32_t node=uint32_t(data[15])<<16|uint32_t(data[16])<<8|data[17];
+            if(node!=candidate.nodeId){resultData[0]=4;resultLength=1;return true;}
+            uint8_t existing=0xFF;resultData[0]=assignKeyImportDevice(data[13],data[14],existing);if(mNetworkStoreFailed)resultData[0]=5;resultData[1]=resultData[0]==0?data[14]:existing;resultLength=2;return true;
+        }
+        resultData[0]=0;resultData[1]=1;resultData[2]=data[13];
+        for(uint8_t i=0;i<3;i++)resultData[3+i]=candidate.nodeId>>(16-8*i);
+        const auto &id=candidate.protocolIdentity;
+        resultData[6]=id.profile;resultData[7]=id.profile>>8;resultData[8]=id.subProfile;resultData[9]=id.manufacturerId;
+        resultData[10]=id.powerSaveMode==IoHomePowerMode::LowPower?2:id.powerSaveMode==IoHomePowerMode::AlwaysAlive?1:0;
+        resultData[11]=(candidate.passiveAuthVerified?1:0)|(candidate.speResponseSeen?2:0)|(id.valid?4:0)|(id.fullMetadata?8:0)|(candidate.directedVerified?16:0);
+        for(uint8_t i=0;i<4;i++){resultData[12+i]=mCommissioningJob.generation>>(24-8*i);resultData[16+i]=mCommissioningJob.snapshotRevision>>(24-8*i);}
+        resultLength=20;return true;
     }
     case 0x22: // Product-family evidence; never a commercial-model claim
     {
@@ -2848,7 +2914,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         {
             resetKeyImportWorkflow();
             mKeyImportPhase = KeyImportPhase::Extracting;
-            mCommissioningJob.begin(IoHomeCommissioningJob::Owner::Import);
+            mCommissioningJob.begin(IoHomeCommissioningJob::Owner::Import,0xFF,millis(),360000);
             logInfoP("ETS: active 2W key extraction armed");
         }
         else

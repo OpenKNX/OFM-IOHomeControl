@@ -3684,6 +3684,16 @@ TEST(network_store_commits_identity_and_assignment_as_one_record) {
     ASSERT_TRUE(!store.commit(state));
 }
 
+TEST(commissioning_deadline_wrap_and_frozen_revision) {
+    IoHomeCommissioningJob job;
+    ASSERT_TRUE(job.begin(IoHomeCommissioningJob::Owner::Import,0xFF,0xFFFFFFF0,100));
+    ASSERT_TRUE(!job.expired(10));ASSERT_TRUE(job.expired(100));
+    job.stage=IoHomeCommissioningJob::Stage::CandidateReady;job.freeze();job.freeze();
+    ASSERT_TRUE(!job.expired(100));ASSERT_TRUE(job.matches(1,1));ASSERT_TRUE(!job.matches(1,2));
+    ASSERT_TRUE(job.cancel(1));ASSERT_TRUE(job.begin(IoHomeCommissioningJob::Owner::Pairing));
+    ASSERT_TRUE(!job.matches(1,1));
+}
+
 TEST(commissioning_job_rejects_concurrent_owner_and_stale_cancel)
 {
     IoHomeCommissioningJob j;
