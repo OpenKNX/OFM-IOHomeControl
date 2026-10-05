@@ -5,6 +5,7 @@
 #include "../protocol/IoHomeRadioPolicy.h"
 #include "../protocol/IoHomeTransactionTiming.h"
 #include "../protocol/IoHomeSessionPolicy.h"
+#include "../protocol/IoHomeResponseDescriptor.h"
 #include "../radio/Radio.h"
 #include "../protocol/IoHomeFrame.h"
 #include "../protocol/IoHomeCrypto.h"
@@ -409,6 +410,9 @@ public:
     uint8_t timeoutGroup = 0;
     bool timeoutFallback = true;
     uint8_t sessionMode = 0, stateRetries = 0, wholeSessionRetries = 0, mediaRetries = 0;
+    uint8_t peerResult[IOHC_FRAME_MAX_DATA]{};
+    uint8_t peerResultLength = 0;
+    IoHomeResponseDisposition disposition = IoHomeResponseDisposition::Ignore;
     uint32_t txEndToFirstResponseUs = 0;
     uint32_t txEndToFinalResponseUs = 0;
   };

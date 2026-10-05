@@ -6188,7 +6188,7 @@ void IoHomeController::loop()
                          mRxFrame.getSrcNodeId() == mDiscoveredNodeId &&
                          mRxFrame.getDestNodeId() == mOwnNodeId)
                 {
-                    logDebugP("Pairing: device 0x%06X rejected discovery confirmation; continuing with key-init", mDiscoveredNodeId);
+                    logDebugP("Pairing: descriptor-accepted 0xFE after confirmation from 0x%06X; continuing with key-init", mDiscoveredNodeId);
                     beginPairKeyInitDelay(PairingTelemetry::DiscoverConfirmResult::ErrorResponse);
                 }
             }
@@ -6284,6 +6284,15 @@ void IoHomeController::loop()
                 {
                     // Pairing successful — store system key as channel encryption key
                     finalize2WPairingKey();
+                }
+                else if (mRxFrame.commandId==IoHomeCommand::ErrorResponse &&
+                         mRxFrame.getSrcNodeId()==mDiscoveredNodeId && mRxFrame.getDestNodeId()==mOwnNodeId) {
+                    // Valid foldable response to 0x32, not proof of installed key.
+                    // Preserve it and keep waiting for 0x3C/0x33; never publish pairing success from 0xFE alone.
+                    mLastResponseTimingSample.disposition=IoHomeResponseDisposition::FoldedWithoutKeyProof;
+                    mLastResponseTimingSample.peerResultLength=mRxFrame.dataLen;
+                    std::memcpy(mLastResponseTimingSample.peerResult,mRxFrame.data,mRxFrame.dataLen);
+                    logDebugP("Pairing: accepted foldable 0xFE after key transfer; key proof pending");
                 }
             }
             else if (mState == ControllerState::PairWaitEnrichment)
@@ -7260,6 +7269,14 @@ void IoHomeController::processResponse()
         }
     }
 
+    const auto disposition=ioHomeResponseDisposition(mCurrentCmd.command,mRxFrame.commandId,mRxFrame.dataLen);
+    if(disposition==IoHomeResponseDisposition::Ignore) {mState=ControllerState::WaitResponse;return;}
+    mLastResponseTimingSample.disposition=disposition;
+    if(mRxFrame.commandId==IoHomeCommand::ErrorResponse) {
+        mLastResponseTimingSample.peerResultLength=mRxFrame.dataLen;
+        std::memcpy(mLastResponseTimingSample.peerResult,mRxFrame.data,mRxFrame.dataLen);
+    }
+
     // These recovered read services cannot complete on an unrelated opcode
     // or the legacy descriptor's too-short Priority ACK.
     if(mCurrentCmd.managementRead&&!mCurrentCmd.objectReadToken&&!mCurrentCmd.mpFpRead&&!mCurrentCmd.productActivationLength) {
@@ -7408,7 +7425,7 @@ void IoHomeController::processResponse()
         (mRxFrame.ctrlByte0 & IOHC_CTRL0_END) != 0 &&
         (mRxFrame.ctrlByte0 & IOHC_CTRL0_START) == 0 &&
         mSawChallenge && mWaitingFinalResponse;
-    const bool lExplicitFailure = mRxFrame.commandId == IoHomeCommand::ErrorResponse;
+    const bool lExplicitFailure = disposition == IoHomeResponseDisposition::Rejected;
     const bool lPreviousTrustRxPosition = mTrustRxPosition;
     if (lCompletedCmd.command == IoHomeCommand::Execute)
         mTrustRxPosition = false;

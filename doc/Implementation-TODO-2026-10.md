@@ -13,3 +13,7 @@ EXECUTE uses mode 3 and the conservative recovered five-attempt budget; the 9-ve
 ## 3. Broadcast discovery budgets
 
 Implemented all four destination rows in normal/LOW_POWER modes. Default windows derive from the transmitted destination and CTRL1. A runtime diagnostic override is explicit; zero restores protocol timing. Each window starts after TX completes and RX is restored. The separate bounded 50 ms packet-arrival grace prevents immediate retuning at a detected boundary. Traces show TX end, first/last packet and window close. Physical discovery timing qualification remains pending.
+
+## 4. Response descriptors
+
+Added command descriptors and separated opcode acceptance from application rejection. Confirmation accepts 0xFE; 0x32 folds it without claiming key installation; opening 0x31 still requires the challenge path. Pairing retains foldable raw payload and waits for actual key proof. Normal/management 0xFE remains an explicit application rejection. Raw payload/disposition are retained in timing diagnostics.

@@ -19799,3 +19799,29 @@ TEST(protocol_group_timeout_destination_and_low_power_rows)
     }
     ASSERT_EQ(ioHomeGroupTimeout(0x3F,0),20000);
 }
+
+TEST(protocol_response_descriptors_distinguish_folded_error_from_rejection)
+{
+    using D=IoHomeResponseDisposition;
+    ASSERT_EQ(ioHomeResponseDisposition(IoHomeCommand::Confirmation,IoHomeCommand::ErrorResponse,1),D::Accepted);
+    ASSERT_EQ(ioHomeResponseDisposition(IoHomeCommand::KeyTransfer,IoHomeCommand::ErrorResponse,1),D::FoldedWithoutKeyProof);
+    ASSERT_EQ(ioHomeResponseDisposition(IoHomeCommand::KeyInitTransfer,IoHomeCommand::ErrorResponse,1),D::Ignore);
+    ASSERT_EQ(ioHomeResponseDisposition(IoHomeCommand::KeyInitTransfer,IoHomeCommand::ChallengeRequest,6),D::Challenge);
+    ASSERT_EQ(ioHomeResponseDisposition(IoHomeCommand::Execute,IoHomeCommand::ErrorResponse,1),D::Rejected);
+    ASSERT_EQ(ioHomeResponseDisposition(IoHomeCommand::Private,IoHomeCommand::ErrorResponse,1),D::Rejected);
+    ASSERT_EQ(ioHomeResponseDisposition(IoHomeCommand::GetName,IoHomeCommand::GetGeneralInfo1Response,9),D::Ignore);
+}
+
+TEST(controller_key_transfer_folded_fe_preserves_raw_without_claiming_installed_key)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x831F2A,0,key);c.setSystemKey(key);
+    ASSERT_TRUE(advancePairingToWaitKeyTransferConfirmation(c,0x831F2A,0x7E9E6E));
+    IoHomeFrame reply;buildErrorResponseFrame(reply,0x831F2A,0x7E9E6E);
+    reply.data[0]=0x42;reply.data[1]=0x19;reply.dataLen=2;
+    ASSERT_TRUE(queueControllerResponse(c,reply));
+    ASSERT_EQ(c.state(),ControllerState::PairWaitKeyTransferConfirmation);
+    ASSERT_EQ(c.lastResponseTimingSample().disposition,IoHomeResponseDisposition::FoldedWithoutKeyProof);
+    ASSERT_EQ(c.lastResponseTimingSample().peerResultLength,2);ASSERT_EQ(c.lastResponseTimingSample().peerResult[1],0x19);
+    ASSERT_TRUE(!ch.isPaired());
+}
