@@ -3688,6 +3688,26 @@ TEST(network_store_commits_identity_and_assignment_as_one_record) {
     ASSERT_TRUE(!store.commit(state));
 }
 
+TEST(network_store_interrupted_record_fault_matrix_is_fail_closed) {
+    for(unsigned cut=0;cut<=IoHomeNetworkStore::Size;cut++) {
+        IoHomeNetworkStore store;IoHomeNetworkStore::State old,next,restored;
+        old.controller=0x123456;old.key[0]=1;old.channels[0].managed=true;old.channels[0].node=0x654321;old.channels[0].key[0]=3;
+        ASSERT_TRUE(store.commit(old));next=old;next.controller=0x112233;next.key[0]=2;next.channels[0].node=0x332211;next.channels[0].key[0]=4;
+        store.failAfterBytes=cut;ASSERT_TRUE(!store.commit(next));
+        const auto result=store.load(restored);
+        if(cut==0){ASSERT_EQ(result,IoHomeNetworkStore::Result::Found);ASSERT_TRUE(IoHomeNetworkStore::equal(restored,old));}
+        else if(cut==IoHomeNetworkStore::Size){ASSERT_EQ(result,IoHomeNetworkStore::Result::Found);ASSERT_TRUE(IoHomeNetworkStore::equal(restored,next));}
+        else {ASSERT_EQ(result,IoHomeNetworkStore::Result::Corrupt);ASSERT_TRUE(!store.commit(old));}
+    }
+}
+TEST(network_store_conflicting_equal_generation_records_are_rejected) {
+    IoHomeNetworkStore a,b;IoHomeNetworkStore::State first,second,out;
+    first.controller=0x123456;second.controller=0x654321;
+    ASSERT_TRUE(a.commit(first));ASSERT_TRUE(b.commit(second));
+    a.injectRecord(1,b.record(0),IoHomeNetworkStore::Size);
+    ASSERT_EQ(a.load(out),IoHomeNetworkStore::Result::Corrupt);ASSERT_TRUE(!a.commit(first));
+}
+
 TEST(commissioning_deadline_wrap_and_frozen_revision) {
     IoHomeCommissioningJob job;
     ASSERT_TRUE(job.begin(IoHomeCommissioningJob::Owner::Import,0xFF,0xFFFFFFF0,100));
