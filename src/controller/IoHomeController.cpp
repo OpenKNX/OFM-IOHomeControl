@@ -2781,6 +2781,46 @@ bool IoHomeController::sendProfileParameterCommand(uint32_t iDestNodeId,
     return queuePush(lEntry);
 }
 
+bool IoHomeController::receiveConfigurationTemporaryEvent(){return mReceiveConfiguration.event10(millis());}
+
+bool IoHomeController::setBeaconDatabaseEntry(uint32_t node,uint8_t systemId,bool marked)
+{
+    if(!idleForManagedOperation())return false;
+    auto *record=findOrAddNodeStats(node);
+    if(!record)return false;
+    if(!record->protocolIdentity.fullMetadata) {
+        const auto *channel=channelForNode(node);
+        if(!channel || !channel->getProtocolIdentity().fullMetadata)return false;
+        record->protocolIdentity=channel->getProtocolIdentity();
+    }
+    record->beaconMarkerKnown=true;record->beaconMarked=marked;record->systemId=systemId;
+    return true;
+}
+
+bool IoHomeController::startReceiveConfiguration(IoHomecontrolChannel *channel,uint8_t systemId)
+{
+    if(!channel || !channel->isPaired() || channel->is1W() || !mModule ||
+       !mModule->managementRequestsAllowed() || !idleForManagedOperation() || mRcmToken==0xFFFFFFFF)return false;
+    uint16_t count=0;
+    for(const auto &node:mNodeStats) {
+        if(!node.active)continue;
+        // A partial inventory cannot establish the zero-match branch.
+        if(!node.beaconMarkerKnown)return false;
+        if(node.beaconMarked && node.systemId==systemId)++count;
+    }
+    mRcmPeer=channel->getNodeId();mRcmRevision=channel->productContextRevision();
+    mRcmChannel=channelIndexFor(channel);std::memcpy(mRcmKey,channel->getEncryptionKey(),16);
+    if(!mReceiveConfiguration.begin(count,mRcmPeer,mRcmKey,mRcmRevision,millis()))return false;
+    ++mRcmToken;
+    if(!count)return true;
+    IoHomeQueueEntry entry{};entry.command=IoHomeCommand::NodeVerifyRequest;
+    entry.destNodeId=mRcmPeer;entry.encKey=mRcmKey;entry.managementRead=true;
+    std::memcpy(entry.managementKey,mRcmKey,16);entry.productContextRevision=mRcmRevision;
+    entry.sourceChannelIndex=mRcmChannel;entry.rcmToken=mRcmToken;entry.maxAttempts=1;entry.active=true;
+    if(!queuePush(entry)){mReceiveConfiguration.cancel();return false;}
+    return true;
+}
+
 bool IoHomeController::startGetKeyOfNode(IoHomecontrolChannel *channel,bool authenticate)
 {
     // Internal exact action 0x0A. ETS extraction/adoption remains a separate workflow.
@@ -2832,6 +2872,7 @@ bool IoHomeController::sendProfileMovementCommand(uint32_t node,const uint8_t *k
 
 bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
 {
+    if(mReceiveConfiguration.active()&&iEntry.rcmToken!=mRcmToken)return false;
     if(mObjectRead.active()&&iEntry.objectReadToken!=mObjectReadToken)return false;
     uint8_t lNext = (mQueueHead + 1) % IOHC_CMD_QUEUE_SIZE;
     if (lNext == mQueueTail)
@@ -4893,6 +4934,7 @@ void IoHomeController::rememberProtocolIdentity(
             return;
         const IoHomeNodeClass lPreviousClass =
             lStats->protocolIdentity.nodeClass;
+        if(ioHomeProductSemanticIdentityChanged(lStats->protocolIdentity,lIncoming))lStats->beaconMarkerKnown=false;
         lStats->protocolIdentity = lIncoming;
         if (lStats->protocolIdentity.nodeClass == IoHomeNodeClass::Unknown)
             lStats->protocolIdentity.nodeClass = lPreviousClass;
@@ -6094,6 +6136,12 @@ void IoHomeController::loop()
     }
 #endif
     if(idleForManagedOperation()&&mRadio.state()==RadioState::Receiving&&mHostRadioPolicy.due(millis())){int16_t rssi=0;bool valid=mRadio.currentRssi(rssi);mHostRadioPolicy.sample(mCurrentFreqIdx,rssi,valid);}
+    if(mReceiveConfiguration.active()) {
+        const auto *channel=mModule?mModule->getChannel(mRcmChannel):nullptr;
+        if(channel)mReceiveConfiguration.bound(channel->getNodeId(),channel->getEncryptionKey(),channel->productContextRevision());
+        else mReceiveConfiguration.cancel();
+        mReceiveConfiguration.tick(millis());
+    }
     serviceObjectRead();
     if (!mRadio.isInitialized())
         return;
@@ -7363,6 +7411,23 @@ void IoHomeController::processResponse()
         return;
     }
 
+    if(mCurrentCmd.rcmToken) {
+        if(mCurrentCmd.rcmToken!=mRcmToken || !mReceiveConfiguration.active()) {
+            mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+        }
+        if(mRxFrame.commandId==IoHomeCommand::NodeVerifyResponse && mRxFrame.dataLen>=3) {
+            mReceiveConfiguration.prerequisite(mRcmPeer,mRcmKey,mRcmRevision,0x37,millis());
+            recordResponseTiming(true);
+            notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::Completed);
+            mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+        }
+        if(mRxFrame.commandId==IoHomeCommand::ErrorResponse) {
+            mReceiveConfiguration.cancel();
+            notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::ExplicitlyRejected);
+            mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+        }
+        mState=ControllerState::WaitResponse;return;
+    }
     if(mCurrentCmd.keyPrimitiveToken && mCurrentCmd.keyPrimitiveToken==mGetKeyOfNode.token) {
         auto *channel=channelForQueueEntry(mCurrentCmd);
         const bool current=channel && channel->productContextRevision()==mGetKeyOfNode.revision &&
@@ -9979,6 +10044,9 @@ void IoHomeController::updateCurrentFrequencyIndex(uint32_t iFrequencyHz)
 bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 {
     if(!managementIdentityMatches(iEntry))return false;
+    if(iEntry.rcmToken && (iEntry.rcmToken!=mRcmToken ||
+       mReceiveConfiguration.stage()!=IoHomeReceiveConfiguration::Stage::Prerequisite ||
+       !sampleIdentityMatches(mRcmChannel,mRcmPeer,mRcmKey)))return false;
     if(iEntry.keyPrimitiveToken && (iEntry.keyPrimitiveToken!=mGetKeyOfNode.token ||
        (mGetKeyOfNode.stage!=GetKeyStage::Waiting && mGetKeyOfNode.authentication!=GetKeyAuthentication::Pending)))return false;
     mTxFrame.init();

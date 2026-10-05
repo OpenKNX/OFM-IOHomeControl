@@ -1,6 +1,7 @@
 #include "../protocol/IoHomeManagementCodecs.h"
 #include "../protocol/IoHomeObjectTransfer.h"
 #include "../protocol/IoHomeDurableReservation.h"
+#include "../protocol/IoHomeReceiveConfiguration.h"
 #pragma once
 #include "../protocol/IoHomeRadioPolicy.h"
 #include "../protocol/IoHomeRadioDiversity.h"
@@ -139,6 +140,7 @@ struct IoHomeQueueEntry
   uint32_t productContextRevision;
   uint32_t objectReadToken;
   uint32_t keyPrimitiveToken;
+  uint32_t rcmToken;
   uint8_t objectReadData[9];
   uint8_t objectReadLength;
   const uint8_t *encKey; // pointer to channel's key (valid as long as channel exists)
@@ -643,6 +645,13 @@ public:
   bool startGetKeyOfNode(IoHomecontrolChannel *channel,bool optionalAuthentication=false);
   bool cancelGetKeyOfNode();
   const GetKeyOfNodeResult &getKeyOfNodeResult()const{return mGetKeyOfNode;}
+  // Imported BasicNode marker/SystemId evidence, never inferred from name/MIB.
+  bool setBeaconDatabaseEntry(uint32_t node,uint8_t systemId,bool marked);
+  bool startReceiveConfiguration(IoHomecontrolChannel *channel,uint8_t systemId);
+  bool cancelReceiveConfiguration(){return mReceiveConfiguration.cancel();}
+  bool receiveConfigurationTemporaryEvent();
+  const IoHomeReceiveConfiguration &receiveConfiguration()const{return mReceiveConfiguration;}
+
   bool sendProfileMovementCommand(uint32_t node, const uint8_t *key, uint8_t position, uint8_t speedIndex, uint16_t raw);
   bool sendProfileParameterCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                    ParameterSemantic iSemantic, uint8_t iPercent);
@@ -878,6 +887,8 @@ public:
     // Source-keyed discovery inventory. Both normal 0x29 pairing and
     // layout-compatible 0x2B SPE responses populate this same model.
     IoHomeProtocolIdentity protocolIdentity;
+    bool beaconMarkerKnown=false,beaconMarked=false;
+    uint8_t systemId=0;
     bool active;
   };
 
@@ -990,7 +1001,7 @@ public:
   IoHomeRadioPolicy &hostRadioPolicy(){return mHostRadioPolicy;}
   bool idleForManagedOperation() const {
     return mState==ControllerState::Idle&&queueEmpty()&&!mCurrentCmd.active&&!mPassiveMode&&!mGatewayMode&&
-        !mOneWayKeyReceiveActive&&!mKeyExtractArmed&&!mNetworkScanActive&&!mObjectRead.active();
+        !mOneWayKeyReceiveActive&&!mKeyExtractArmed&&!mNetworkScanActive&&!mObjectRead.active()&&!mReceiveConfiguration.active();
   }
   ControllerState state() const;
 
@@ -1258,6 +1269,9 @@ private:
   IoHomeDiscoveryFamily mDiscoveryFamily=IoHomeDiscoveryFamily::Actuator;
   bool mPrivateDiscoveryF8=false;
   PrivateDiscoveryReply mPrivateDiscoveryReply{};
+  IoHomeReceiveConfiguration mReceiveConfiguration;
+  uint32_t mRcmPeer=0,mRcmRevision=0,mRcmToken=0;
+  uint8_t mRcmChannel=0xFF,mRcmKey[16]{};
   GetKeyOfNodeResult mGetKeyOfNode{};
   uint32_t mNextKeyPrimitiveToken=0;
   RxScanMeasurements mRxScanMeasurements{};

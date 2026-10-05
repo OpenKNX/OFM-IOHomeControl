@@ -19953,3 +19953,26 @@ TEST(controller_exact_get_key_commits_before_optional_auth_and_never_rolls_back)
     ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_EQ(c.getKeyOfNodeResult().authentication,IoHomeController::GetKeyAuthentication::Failed);
     ASSERT_EQ(c.getKeyOfNodeResult().stage,IoHomeController::GetKeyStage::Committed);ASSERT_TRUE(!std::memcmp(c.getSystemKey(),peerKey,16));
 }
+
+TEST(controller_rcm_sends_empty_prerequisite_and_requires_actual_37)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    const uint8_t body[9]={0,0x80,0,0,0,1,0,0,1};
+    ch.onProtocolIdentity(0x654321,decodeAcceptedDiscoveryIdentity(body,9));
+    ASSERT_TRUE(c.setBeaconDatabaseEntry(0x654321,4,true));
+    ASSERT_TRUE(c.startReceiveConfiguration(&ch,4));
+    ASSERT_EQ(c.receiveConfiguration().prerequisiteVariant(),0);
+    ASSERT_TRUE(!c.startDiscoveryFamily(IoHomeDiscoveryFamily::Sensor));
+    IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    ASSERT_EQ(request.commandId,IoHomeCommand::NodeVerifyRequest);ASSERT_EQ(request.dataLen,0);
+    c.loop();
+    IoHomeFrame reply;reply.init();reply.ctrlByte0=IOHC_CTRL0_END;reply.ctrlByte1=0;
+    reply.setSrcNode(0x654321);reply.setDestNode(0x123456);
+    reply.commandId=IoHomeCommand::NodeVerifyResponse;reply.dataLen=3;
+    ASSERT_TRUE(queueControllerResponse(c,reply));
+    ASSERT_EQ(c.receiveConfiguration().stage(),IoHomeReceiveConfiguration::Stage::Base);
+    ASSERT_TRUE(c.receiveConfigurationTemporaryEvent());
+    ASSERT_TRUE(c.cancelReceiveConfiguration());
+    ASSERT_EQ(c.receiveConfiguration().stage(),IoHomeReceiveConfiguration::Stage::Cancelled);
+}

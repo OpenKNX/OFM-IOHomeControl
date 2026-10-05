@@ -95,3 +95,18 @@ Added a case-complete procedure and evidence gate in `docs/qualification/todo-29
 ## 30 — Real ETS application migration qualification
 
 Added a case-complete procedure and evidence gate in `docs/qualification/todo-30.md`. Actual qualification remains pending; the evidence template deliberately records every case as not run.
+
+## 13 — Operational RCM prerequisite and ownership
+
+Connected the lifecycle to controller RF queuing and the tracked-node database.
+BasicNode SetBeacon marker/SystemId values require explicit evidence import; they
+are never inferred from discovery MIB, profile or display name. Unknown markers
+block entry. Zero matching marked records enters base mode directly; one/multiple
+select context variants 0/3 and send the recovered empty 36 request. Only actual
+37 with at least three bytes enters base mode; FE cannot enter it. The model owns
+600/300-second timers independently of discovery, with a chosen 5-second host
+prerequisite guard. Peer/key/revision changes, cancellation and stale tokens block
+queued work; other queued commands cannot take ownership while RCM is active.
+Automatic acquisition of SetBeacon database evidence and peer qualification remain
+pending. This does not emulate every reference recipient-side configuration event.
+Source: dated STM32-2W report, sections “RCM action 0x0B” and “SystemId 9/5 selector”.
