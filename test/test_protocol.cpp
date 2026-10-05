@@ -21,6 +21,7 @@
 #include "protocol/IoHomeProfileRegistry.h"
 #include "protocol/IoHomeProductCodecs.h"
 #include "protocol/IoHomeProductBinding.h"
+#include "protocol/IoHomeProductActivation.h"
 #include <limits>
 #include "protocol/IoHomeLogRedaction.h"
 #include "protocol/IoHomePassiveAuth.h"
@@ -3585,6 +3586,35 @@ TEST(profile_window_security_enum_preserves_unknown_values)
     ASSERT_TRUE(!ioHomeDecodeWindowSecurityMode(ioHomeProfileDescriptor(9, 0), 1, lMode));
     ASSERT_TRUE(!ioHomeDecodeWindowSecurityMode(nullptr, 1, lMode));
     ASSERT_EQ(lMode, IoHomeWindowSecurityMode::Secured);
+}
+
+TEST(bound_high_fp_representations_are_ordered_atomic_and_product_scoped)
+{
+    IoHomeProtocolIdentity lId;
+    IoHomeProductIdentityEvidence lEvidence;
+    lId.valid = true; lId.fullMetadata = true; lId.nodeClass = IoHomeNodeClass::Actuator;
+    lId.profile = 6; lId.subProfile = 1; lId.manufacturerId = 2;
+    uint8_t lData[8]; memset(lData, 0xA5, sizeof(lData)); uint8_t lLength = 99;
+    ASSERT_TRUE(!ioHomeBuildBoundRgbRepresentation(lId, lEvidence, 255, 0, 0, lData, 7, lLength));
+    ASSERT_EQ(lLength, 99); ASSERT_EQ(lData[0], 0xA5); ASSERT_EQ(lData[7], 0xA5);
+    ASSERT_TRUE(ioHomeBuildBoundRgbRepresentation(lId, lEvidence, 255, 0, 0, lData, 8, lLength));
+    const uint8_t lRed[] = {0,0,0,0x60,0x7C,0xA9,0x65,0x4C};
+    ASSERT_EQ(lLength, 8); ASSERT_TRUE(memcmp(lData, lRed, 8) == 0);
+    ASSERT_TRUE(ioHomeBuildBoundRgbRepresentation(lId, lEvidence, 0, 0, 0, lData, 8, lLength));
+    const uint8_t lBlack[] = {0xC8,0,0,0};
+    ASSERT_EQ(lLength, 4); ASSERT_TRUE(memcmp(lData, lBlack, 4) == 0);
+    ASSERT_TRUE(!ioHomeBuildBoundWhiteRepresentation(lId, lEvidence, 4250, 0xD400, lData, 8, lLength));
+    lId.subProfile = 2;
+    ASSERT_TRUE(ioHomeBuildBoundWhiteRepresentation(lId, lEvidence, 4250, 0xD400, lData, 8, lLength));
+    const uint8_t lWhite[] = {0xD4,0,0,4,0x64,0};
+    ASSERT_EQ(lLength, 6); ASSERT_TRUE(memcmp(lData, lWhite, 6) == 0);
+    ASSERT_TRUE(!ioHomeBuildBoundRgbRepresentation(lId, lEvidence, 255, 0, 0, lData, 8, lLength));
+    ASSERT_TRUE(!ioHomeBuildBoundWhiteRepresentation(lId, lEvidence, 4250, 0xFFFF, lData, 8, lLength));
+    ASSERT_TRUE(!ioHomeBuildBoundWhiteRepresentation(lId, lEvidence, 6501, 0xD400, lData, 8, lLength));
+    ASSERT_EQ(lLength, 6); ASSERT_TRUE(memcmp(lData, lWhite, 6) == 0);
+    lEvidence.manufacturerSignatureInconsistent = true;
+    ASSERT_TRUE(!ioHomeBuildBoundWhiteRepresentation(lId, lEvidence, 4250, 0xD400, lData, 8, lLength));
+    ASSERT_EQ(lLength, 6); ASSERT_TRUE(memcmp(lData, lWhite, 6) == 0);
 }
 
 TEST(product_binding_requires_exact_identity_and_consistent_evidence)
