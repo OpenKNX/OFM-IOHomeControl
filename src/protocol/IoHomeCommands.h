@@ -121,8 +121,10 @@ enum class IoHomeCommand : uint8_t
     // Unknown8E = 0x8E,  // not used
     // Unknown90 = 0x90,  // not used
     // Unknown92 = 0x92,  // not used
-    // Unknown94 = 0x94,  // not used
-    // Unknown96 = 0x96,  // not used
+    DiscoverSensorRequest = 0x94,
+    DiscoverSensorResponse = 0x95,
+    DiscoverSensorInSystemRequest = 0x96,
+    DiscoverSensorInSystemResponse = 0x97,
     // Unknown98 = 0x98,  // not used
 
     // Observed high command range. Public captures do not yet establish
@@ -204,6 +206,14 @@ inline const char *twoWayWakeBeliefName(TwoWayWakeBelief iBelief)
 // destination, CTRL1 flags and preamble independent: hardware captures show
 // different CTRL1 combinations for 0x28, 0x2E and 0x2A, while the wake-up
 // preamble is a separate receiver/power-class decision.
+enum class IoHomeDiscoveryFamily : uint8_t { Actuator, ActuatorInSystem, Sensor, SensorInSystem, PrivateSomfy };
+// Same wire opcode 0x20 has different producers. Never choose semantics by opcode alone.
+enum class IoHomePrivateProducer : uint8_t { ProductWrite, DiscoverySomfyF6, DiscoverySomfyF8 };
+inline bool ioHomeBuildPrivateDiscoveryPayload(IoHomePrivateProducer producer,uint8_t *data,uint8_t &length) {
+    length=0;if(!data||producer==IoHomePrivateProducer::ProductWrite)return false;
+    data[0]=2;data[1]=producer==IoHomePrivateProducer::DiscoverySomfyF6?0xF6:0xF8;length=2;return true;
+}
+
 enum class TwoWayDiscoveryCommandMode : uint8_t
 {
     Automatic = 0,

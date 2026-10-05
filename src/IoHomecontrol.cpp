@@ -4342,6 +4342,12 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         return true;
     }
 
+    if(lSub=="discovery sensor" || lSub=="discovery sensor-system" || lSub=="discovery somfy-private") {
+        const auto family=lSub=="discovery sensor"?IoHomeDiscoveryFamily::Sensor:
+            lSub=="discovery sensor-system"?IoHomeDiscoveryFamily::SensorInSystem:IoHomeDiscoveryFamily::PrivateSomfy;
+        logInfoP("Discovery family start=%s",mController.startDiscoveryFamily(family)?"started":"blocked");return true;
+    }
+
     if (lSub.rfind("discovery listen", 0) == 0)
     {
         const std::string lArg = trimSpaces(lSub.substr(strlen("discovery listen")));

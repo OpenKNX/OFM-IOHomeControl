@@ -649,6 +649,9 @@ public:
 
   // Start discovery scan (no pairing); encrypted mode only lets paired/known devices respond
   void startDiscovery(bool iEncrypted = false);
+  bool startDiscoveryFamily(IoHomeDiscoveryFamily family);
+  struct PrivateDiscoveryReply {bool valid=false;uint32_t node=0;uint8_t selector=0,length=0,data[IOHC_FRAME_MAX_DATA]{};};
+  const PrivateDiscoveryReply &lastPrivateDiscoveryReply() const {return mPrivateDiscoveryReply;}
 
   // Resolve and build discovery-family frames without coupling CTRL1 flags to
   // the preamble.  The defaults preserve generic cold-pairing behavior for
@@ -1212,6 +1215,9 @@ private:
   uint16_t mDiagnosticDiscoveryListenMs = 0; // zero selects recovered destination/CTRL1 timing
   uint16_t mDiscoveryBudgetMs = IOHC_DISCOVERY_LISTEN_MS;
   bool mDiscoveryRxWindowStarted = false;
+  IoHomeDiscoveryFamily mDiscoveryFamily=IoHomeDiscoveryFamily::Actuator;
+  bool mPrivateDiscoveryF8=false;
+  PrivateDiscoveryReply mPrivateDiscoveryReply{};
   uint32_t mPairingStartTime;
   DiscoverySendPhase mDiscoverySendPhase;
   DiscoveryTimingTrace mDiscoveryTimingTrace;

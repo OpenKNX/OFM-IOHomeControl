@@ -1019,7 +1019,7 @@ namespace
         oFrame.hasHmac = false;
         oFrame.commandId = iOptions.command;
 
-        if (iOptions.command == IoHomeCommand::DiscoverRequest)
+        if (iOptions.command == IoHomeCommand::DiscoverRequest || iOptions.command==IoHomeCommand::DiscoverSensorRequest)
         {
             oFrame.dataLen = 0;
             return true;
@@ -1032,7 +1032,7 @@ namespace
             return true;
         }
 
-        if (iOptions.command != IoHomeCommand::DiscoverSPERequest)
+        if (iOptions.command != IoHomeCommand::DiscoverSPERequest && iOptions.command!=IoHomeCommand::DiscoverSensorInSystemRequest)
             return false;
 
         if (iSystemKey == nullptr)
@@ -1045,7 +1045,7 @@ namespace
             IoHomeCrypto::generateChallenge(lChallenge);
         memcpy(oFrame.data, lChallenge, sizeof(lChallenge));
 
-        const uint8_t lTranscript[] = {static_cast<uint8_t>(IoHomeCommand::DiscoverSPERequest)};
+        const uint8_t lTranscript[] = {static_cast<uint8_t>(iOptions.command)};
         uint8_t lHmac[IOHC_HMAC_SIZE];
         if (!IoHomeCrypto::createHmac2W(lTranscript, sizeof(lTranscript),
                                         lChallenge, iSystemKey, lHmac))
@@ -1231,6 +1231,7 @@ TwoWayDiscoveryFrameOptions IoHomeController::referenceTwoWayDiscoveryOptions(Io
         lOptions.preamble = IOHC_PREAMBLE_LONG;
         break;
 
+    case IoHomeCommand::DiscoverSensorInSystemRequest:
     case IoHomeCommand::DiscoverSPERequest:
         // Authenticated post-extraction roll-call: 0x2A -> 0x00003B,
         // CTRL1=0x30.  Use the long wake-up preamble by default so one
@@ -1243,11 +1244,12 @@ TwoWayDiscoveryFrameOptions IoHomeController::referenceTwoWayDiscoveryOptions(Io
         lOptions.preamble = IOHC_PREAMBLE_LONG;
         break;
 
+    case IoHomeCommand::DiscoverSensorRequest:
     case IoHomeCommand::DiscoverRequest:
     default:
         // Generic cold pairing intentionally remains ACK-off until the
         // actuator-side requirement is hardware-proven.
-        lOptions.command = IoHomeCommand::DiscoverRequest;
+        lOptions.command = iCommand==IoHomeCommand::DiscoverSensorRequest ? iCommand : IoHomeCommand::DiscoverRequest;
         lOptions.destination = 0x00003B;
         lOptions.lowPower = false;
         lOptions.ackCapable = false;
@@ -3115,12 +3117,16 @@ bool IoHomeController::captureProtocolIdentity(
     uint8_t iFrequencyIndex, int16_t iRssi)
 {
     if (iFrame.commandId != IoHomeCommand::DiscoverResponse &&
-        iFrame.commandId != IoHomeCommand::DiscoverSPEResponse)
+        iFrame.commandId != IoHomeCommand::DiscoverSPEResponse &&
+        iFrame.commandId != IoHomeCommand::DiscoverSensorResponse &&
+        iFrame.commandId != IoHomeCommand::DiscoverSensorInSystemResponse)
         return false;
 
     IoHomeProtocolIdentity lMetadata =
         decodeAcceptedDiscoveryIdentity(iFrame.data, iFrame.dataLen);
     lMetadata.ioAddress = iFrame.getSrcNodeId();
+    if(iFrame.commandId==IoHomeCommand::DiscoverSensorResponse || iFrame.commandId==IoHomeCommand::DiscoverSensorInSystemResponse)
+        lMetadata.nodeClass=IoHomeNodeClass::Sensor;
     if (iChannel)
     {
         const IoHomeProtocolIdentity &lPrevious = iChannel->getProtocolIdentity();
@@ -3129,7 +3135,7 @@ bool IoHomeController::captureProtocolIdentity(
             lMetadata.nodeClass = lPrevious.nodeClass;
     }
     lMetadata.metadataSource =
-        iFrame.commandId == IoHomeCommand::DiscoverSPEResponse
+        (iFrame.commandId == IoHomeCommand::DiscoverSPEResponse || iFrame.commandId==IoHomeCommand::DiscoverSensorInSystemResponse)
             ? IoHomeMetadataSource::DiscoverSpeResponse
             : IoHomeMetadataSource::DiscoverResponse;
     if (oMetadata)
@@ -4085,6 +4091,15 @@ void IoHomeController::recordExchangeFailure(const IoHomeQueueEntry &iEntry,
             ? IoHomeCommandExchangeResult::SessionExhausted : IoHomeCommandExchangeResult::Unknown);
 }
 
+bool IoHomeController::startDiscoveryFamily(IoHomeDiscoveryFamily family)
+{
+    if(uint8_t(family)>uint8_t(IoHomeDiscoveryFamily::PrivateSomfy) || !idleForManagedOperation() ||
+       !mModule || !mModule->managementRequestsAllowed()) return false;
+    startDiscovery(family==IoHomeDiscoveryFamily::ActuatorInSystem || family==IoHomeDiscoveryFamily::SensorInSystem);
+    if(mState!=ControllerState::DiscoverySending)return false;
+    mDiscoveryFamily=family;return true;
+}
+
 void IoHomeController::startDiscovery(bool iEncrypted)
 {
     if(mObjectRead.active())return;
@@ -4125,6 +4140,8 @@ void IoHomeController::startDiscovery(bool iEncrypted)
     mPairingStartTime = millis();
     mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
     resetDiscoveryTimingTrace();
+    mDiscoveryFamily=iEncrypted?IoHomeDiscoveryFamily::ActuatorInSystem:IoHomeDiscoveryFamily::Actuator;
+    mPrivateDiscoveryF8=false;mPrivateDiscoveryReply={};
     mDiscoverySPE = iEncrypted;
     mDiscoveryAltFrame = false;
     mState = ControllerState::DiscoverySending;
@@ -4978,6 +4995,10 @@ const char *IoHomeController::commandName(IoHomeCommand iCmd)
         return "OBSERVED_F2";
     case IoHomeCommand::ObservedF3:
         return "OBSERVED_F3";
+    case IoHomeCommand::DiscoverSensorRequest:return "DiscoverSensorRequest";
+    case IoHomeCommand::DiscoverSensorResponse:return "DiscoverSensorResponse";
+    case IoHomeCommand::DiscoverSensorInSystemRequest:return "DiscoverSensorInSystemRequest";
+    case IoHomeCommand::DiscoverSensorInSystemResponse:return "DiscoverSensorInSystemResponse";
     case IoHomeCommand::ErrorResponse:
         return "ErrorResponse";
     default:
@@ -5680,6 +5701,16 @@ void IoHomeController::processPendingDiscoveryResponses()
         else if (mDiscoveryUniqueNodes < kPendingDiscoveryCapacity)
             mDiscoverySeenNodes[mDiscoveryUniqueNodes++] = lPending.source;
 
+        if(mDiscoveryFamily==IoHomeDiscoveryFamily::PrivateSomfy && lPending.frame.commandId==IoHomeCommand::WritePrivateResponse) {
+            mPrivateDiscoveryReply.valid=true;mPrivateDiscoveryReply.node=lPending.source;
+            mPrivateDiscoveryReply.selector=mPrivateDiscoveryF8?0xF8:0xF6;
+            mPrivateDiscoveryReply.length=lPending.frame.dataLen;
+            std::memcpy(mPrivateDiscoveryReply.data,lPending.frame.data,lPending.frame.dataLen);
+            // Only the producer/response bridge is recovered here. Preserve the
+            // body raw; do not treat unknown private fields as an identity.
+            recordScanFrame(lPending.frame,lPending.raw,lPending.rawLength,lPending.rssi,lPending.frequencyIndex);
+            continue;
+        }
         IoHomeProtocolIdentity lMetadata;
         captureProtocolIdentity(channelForNode(lPending.source), lPending.frame,
                                 "roll-call discovery", &lMetadata,
@@ -9228,11 +9259,14 @@ void IoHomeController::processDiscovery()
         if (mDiscoverySendPhase == DiscoverySendPhase::SetFrequency && mDiscoveryTimingTrace.hopStartUs == 0)
             mDiscoveryTimingTrace.hopStartUs = micros();
 
-        const IoHomeCommand lRequestedCommand = mDiscoveryAltFrame
+        IoHomeCommand lRequestedCommand = mDiscoveryAltFrame
                                                     ? IoHomeCommand::Discover2ERequest
                                                 : mDiscoverySPE
                                                     ? IoHomeCommand::DiscoverSPERequest
                                                     : IoHomeCommand::DiscoverRequest;
+        if(mDiscoveryFamily==IoHomeDiscoveryFamily::Sensor)lRequestedCommand=IoHomeCommand::DiscoverSensorRequest;
+        if(mDiscoveryFamily==IoHomeDiscoveryFamily::SensorInSystem)lRequestedCommand=IoHomeCommand::DiscoverSensorInSystemRequest;
+        if(mDiscoveryFamily==IoHomeDiscoveryFamily::PrivateSomfy)lRequestedCommand=IoHomeCommand::WritePrivate;
         const TwoWayDiscoveryFrameOptions lDiscoveryOptions =
             resolveTwoWayDiscoveryOptions(lRequestedCommand, mDiagnosticDiscoverySettings);
         TwoWayDiscoveryFrameOptions lEffectiveOptions = lDiscoveryOptions;
@@ -9242,7 +9276,14 @@ void IoHomeController::processDiscovery()
             lEffectiveOptions.ackCapable = false;
             lEffectiveOptions.preamble = normal2WStartPreamble();
         }
-        if (!buildTwoWayDiscoveryFrame(mTxFrame, mOwnNodeId, lEffectiveOptions, mSystemKey))
+        bool built=false;
+        if(mDiscoveryFamily==IoHomeDiscoveryFamily::PrivateSomfy) {
+            mTxFrame.init();mTxFrame.setStart2W();mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
+            mTxFrame.setSrcNode(mOwnNodeId);mTxFrame.setDestNode(0x3B);mTxFrame.commandId=IoHomeCommand::WritePrivate;
+            built=ioHomeBuildPrivateDiscoveryPayload(mPrivateDiscoveryF8?IoHomePrivateProducer::DiscoverySomfyF8:
+                IoHomePrivateProducer::DiscoverySomfyF6,mTxFrame.data,mTxFrame.dataLen);
+        } else built=buildTwoWayDiscoveryFrame(mTxFrame,mOwnNodeId,lEffectiveOptions,mSystemKey);
+        if (!built)
         {
             mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
             mDiscoveryAltFrame = false;
@@ -9327,7 +9368,7 @@ void IoHomeController::processDiscovery()
                 // like a TaHoma box, the alternative 0x2E frame on the same
                 // frequency before listening. SPE discovery keeps its single frame.
                 const bool lAutomaticClassicAndAlt =
-                    !mDiscoverySPE &&
+                    mDiscoveryFamily==IoHomeDiscoveryFamily::Actuator && !mDiscoverySPE &&
                     mDiagnosticDiscoverySettings.command == TwoWayDiscoveryCommandMode::Automatic;
                 if (lAutomaticClassicAndAlt && !mDiscoveryAltFrame)
                 {
@@ -9455,6 +9496,11 @@ void IoHomeController::processDiscovery()
                 static_cast<unsigned long>(mDiscoveryTimingTrace.lastPacketUs),
                 static_cast<unsigned long>(micros()),mDiscoveryBudgetMs,IOHC_DISCOVERY_ARRIVAL_GRACE_MS);
             logDiscoveryTimingTrace((lMoreFreqs || lMoreSweeps) ? "next" : "done", lListenElapsedMs);
+            if(mDiscoveryFamily==IoHomeDiscoveryFamily::PrivateSomfy && !mPrivateDiscoveryF8) {
+                mPrivateDiscoveryF8=true;mDiscoverySendPhase=DiscoverySendPhase::SetFrequency;
+                resetDiscoveryTimingTrace();mState=ControllerState::DiscoverySending;return;
+            }
+            mPrivateDiscoveryF8=false;
             // Next frequency, next sweep, or done
             mPairingFreqIdx++;
             if (mPairingFreqIdx < IOHC_NUM_FREQUENCIES)
@@ -10334,7 +10380,10 @@ void IoHomeController::dispatchRxFrame()
 
     if (mState == ControllerState::DiscoveryListening &&
         (mRxFrame.commandId == IoHomeCommand::DiscoverResponse ||
-         mRxFrame.commandId == IoHomeCommand::DiscoverSPEResponse))
+         mRxFrame.commandId == IoHomeCommand::DiscoverSPEResponse ||
+         mRxFrame.commandId == IoHomeCommand::DiscoverSensorResponse ||
+         mRxFrame.commandId == IoHomeCommand::DiscoverSensorInSystemResponse ||
+         (mDiscoveryFamily==IoHomeDiscoveryFamily::PrivateSomfy && mRxFrame.commandId==IoHomeCommand::WritePrivateResponse)))
     {
         enqueueDiscoveryResponse();
         return;

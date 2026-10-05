@@ -21,3 +21,7 @@ Added command descriptors and separated opcode acceptance from application rejec
 ## 6. Strict discovery records
 
 Split the permissive diagnostic decoder from accepted discovery records. All authoritative controller discovery ingestion now requires the complete nine-byte body. Source RF address remains ioAddress, raw bytes remain intact, and truncated frames cannot overwrite stored metadata or advance pairing. Length tests cover 0 through 12 and null input.
+
+## 5. Discovery families
+
+Added named 0x94/95 and 0x96/97 sensor discovery producers and strict nine-byte sensor identities, with independent runtime selection and recovered group budgets. In-system discovery signs its own opcode transcript. PrivateSomfy explicitly produces 0x20 `02 F6`, then `02 F8`, and captures correlated 0x21 responses without borrowing Atlantic WritePrivate semantics. Private response fields remain raw because the supplied TODO does not establish their exact body schema. Console: `iohc discovery sensor`, `sensor-system`, `somfy-private`. No version/family discriminator is guessed. Original-peer qualification remains pending.

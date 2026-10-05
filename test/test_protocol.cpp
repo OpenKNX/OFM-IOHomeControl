@@ -19849,3 +19849,27 @@ TEST(controller_truncated_discovery_cannot_advance_pairing_or_replace_identity)
     ASSERT_EQ(c.state(),ControllerState::PairWaitDiscoveryResponse);
     ASSERT_TRUE(!ch.isPaired());ASSERT_TRUE(c.protocolIdentityForIoAddress(0x7E9E6E)==nullptr);
 }
+
+TEST(controller_sensor_and_private_discovery_have_independent_producers)
+{
+    const uint8_t key[16]={1};
+    for(auto family:{IoHomeDiscoveryFamily::Sensor,IoHomeDiscoveryFamily::SensorInSystem,IoHomeDiscoveryFamily::PrivateSomfy}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x831F2A,0,key);c.setSystemKey(key);
+        ASSERT_TRUE(c.startDiscoveryFamily(family));IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+        ASSERT_EQ(request.getDestNodeId(),0x3B);
+        ASSERT_EQ(uint8_t(request.commandId),family==IoHomeDiscoveryFamily::Sensor?0x94:family==IoHomeDiscoveryFamily::SensorInSystem?0x96:0x20);
+        if(family==IoHomeDiscoveryFamily::PrivateSomfy) {
+            ASSERT_EQ(request.dataLen,2);ASSERT_EQ(request.data[0],2);ASSERT_EQ(request.data[1],0xF6);
+            c.loop();ioHomeTestAdvanceMillis(1354);c.loop();ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+            ASSERT_EQ(request.data[1],0xF8);
+        } else {
+            IoHomeFrame reply;buildDiscoverResponseFrame(reply,0x831F2A,0x7E9E6E,false,IOHC_POWER_SAVE_ALWAYS_ALIVE);
+            reply.commandId=family==IoHomeDiscoveryFamily::Sensor?IoHomeCommand::DiscoverSensorResponse:IoHomeCommand::DiscoverSensorInSystemResponse;
+            ASSERT_TRUE(queueControllerResponse(c,reply));
+            ioHomeTestAdvanceMillis(c.diagnosticDiscoveryListenMs()+1);c.loop();
+            const auto *identity=c.protocolIdentityForIoAddress(0x7E9E6E);
+            ASSERT_TRUE(identity&&identity->fullMetadata);ASSERT_EQ(identity->nodeClass,IoHomeNodeClass::Sensor);
+        }
+    }
+}
