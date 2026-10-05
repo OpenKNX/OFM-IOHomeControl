@@ -180,3 +180,7 @@ access now obtains write permission from this table rather than representation
 knowledge. Raw reads and offline encoders remain independent. Enable one row
 only with retained product-specific original-peer evidence; exact commercial
 binding and physical write acceptance are not yet qualified.
+
+## 23 — KNX publication gate review
+
+Reviewed existing product publication/trust/freshness and coherent RGB tuple guards. Advanced permissions remain false pending exact identity and original-peer physical qualification. Documented standard-profile availability versus authentication, and the enablement evidence checklist in `docs/qualification/todo-23.md`. No guessed units/DPTs or correlated-to-authenticated promotion is introduced.
