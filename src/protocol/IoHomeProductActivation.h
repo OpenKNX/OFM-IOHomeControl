@@ -1,5 +1,6 @@
 #pragma once
 #include "IoHomeProductBinding.h"
+#include "IoHomeProductPolicy.h"
 #include "IoHomeProductCodecs.h"
 
 // Source-qualified activation REPRESENTATIONS for bench preparation.
@@ -12,6 +13,7 @@ inline bool ioHomeBuildBoundRgbRepresentation(const IoHomeProtocolIdentity &iIde
 {
     if (ioHomeBindProductFamily(iIdentity, iEvidence) != IoHomeBoundProductFamily::RgbLight)
         return false;
+    if (!ioHomeProductAccess(IoHomeBoundProductFamily::RgbLight,10).encodeRepresentation) return false;
     IoHomeRgbRepresentation lRgb;
     if (!ioHomeEncodeRgb(iRed, iGreen, iBlue, lRgb)) return false;
     const IoHomeFpValue lValues[] = {{10, lRgb.u}, {11, lRgb.v}};
@@ -29,6 +31,7 @@ inline bool ioHomeBuildBoundWhiteRepresentation(const IoHomeProtocolIdentity &iI
 {
     if (ioHomeBindProductFamily(iIdentity, iEvidence) != IoHomeBoundProductFamily::TunableWhiteLight ||
         (iRawMp > IOHC_POSITION_MAX && iRawMp != IOHC_PARAMETER_IGNORE)) return false;
+    if (!ioHomeProductAccess(IoHomeBoundProductFamily::TunableWhiteLight,14).encodeRepresentation) return false;
     uint16_t lRaw;
     if (!ioHomeEncodeWhiteTemperature(iKelvin, lRaw)) return false;
     const IoHomeFpValue lValue{14, lRaw};

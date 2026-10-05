@@ -3674,6 +3674,19 @@ TEST(product_family_match_never_claims_commercial_generation_or_write_qualificat
     ASSERT_EQ(r.reason,IoHomeProductBindingResult::Reason::ConflictingEvidence);
 }
 
+TEST(product_operation_policy_keeps_conversion_transport_and_trust_separate)
+{
+    auto access=ioHomeProductAccess(IoHomeBoundProductFamily::RgbLight,10);
+    ASSERT_TRUE(access.decode && access.encodeRepresentation && access.requiresCoherentTuple);
+    ASSERT_TRUE(!access.rfRead && !access.rfWrite && !access.knxPublish);
+    ASSERT_TRUE(!ioHomeProductAccess(IoHomeBoundProductFamily::AtlanticPassApcHeatPump,8).decode);
+    IoHomeProductObservation mp{0,1,true,true,true},u{100,1,true,true,true},v{200,1,true,true,true};
+    ASSERT_TRUE(ioHomeCoherentRgbObservations(mp,u,v));
+    v.generation=2;ASSERT_TRUE(!ioHomeCoherentRgbObservations(mp,u,v));
+    v.generation=1;u.authenticated=false;ASSERT_TRUE(!ioHomeCoherentRgbObservations(mp,u,v));
+    u.authenticated=true;mp.fresh=false;ASSERT_TRUE(!ioHomeCoherentRgbObservations(mp,u,v));
+}
+
 TEST(product_binding_requires_exact_identity_and_consistent_evidence)
 {
     using F = IoHomeBoundProductFamily;
