@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 CORE = {
+    'ets_application_campaign': 'ets',
     'storage_wear_filesystem_campaign': 'physical',
     'reservation_journal_powercut_campaign': 'physical',
     'network_journal_powercut_campaign': 'physical',
@@ -24,6 +25,7 @@ CORE = {
     'ets_import_reopen_download_resume_upgrade': 'ets',
 }
 QUALIFICATION_CASES = {
+    'ets_application_campaign': ('signed_import', 'new_device', 'upgrade', 'reopen', 'download', 'reboot'),
     'storage_wear_filesystem_campaign': ('esp_network_rate', 'esp_receipt_rate', 'esp_metadata_rate', 'esp_reservation_rate', 'nvs_margin', 'littlefs_partitions', 'littlefs_mount', 'littlefs_atomicity', 'littlefs_wear'),
     'reservation_journal_powercut_campaign': ('before_commit', 'inactive_write', 'lost_ack', 'before_rf', 'no_reuse', 'identity_mismatch', 'wrap', 'repeated_reboots'),
     'network_journal_powercut_campaign': ('each_write_phase', 'old_record', 'lost_ack', 'equal_generation_conflict', 'corruption', 'binding_mismatch', 'tombstone', 'wrap'),

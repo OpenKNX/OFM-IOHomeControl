@@ -163,6 +163,20 @@
         "littlefs_wear": "not_run"
       },
       "artifacts": []
+    },
+    {
+      "id": "ets_application_campaign",
+      "kind": "ets",
+      "outcome": "not_run",
+      "cases": {
+        "signed_import": "not_run",
+        "new_device": "not_run",
+        "upgrade": "not_run",
+        "reopen": "not_run",
+        "download": "not_run",
+        "reboot": "not_run"
+      },
+      "artifacts": []
     }
   ]
 }
