@@ -5409,6 +5409,12 @@ RadioError IoHomeController::configureNormal2WTxRadio(uint16_t iPreambleSymbols)
     return configureTxRadio(iPreambleSymbols, &lTxFreq);
 }
 
+bool IoHomeController::setDiagnosticScanCadenceMs(uint8_t ms)
+{
+    if(ms<3 || ms>20 || !idleForManagedOperation())return false;
+    mRxScanIntervalUs=uint32_t(ms)*1000;mRxScanMeasurements={};return true;
+}
+
 void IoHomeController::serviceBackgroundRxScan()
 {
     if (!mRxScanEnabled || mRadio.state() != RadioState::Receiving)
@@ -5423,6 +5429,7 @@ void IoHomeController::serviceBackgroundRxScan()
     // switching now would truncate it. Stay put until reception completes.
     if (mRadio.isPreambleDetected() || mRadio.isSyncDetected())
     {
+        if(mRadio.isSyncDetected())++mRxScanMeasurements.syncHolds;else ++mRxScanMeasurements.preambleHolds;
         if (mState == ControllerState::DiscoveryListening)
         {
             if (mRadio.isSyncDetected())
@@ -5442,16 +5449,18 @@ void IoHomeController::serviceBackgroundRxScan()
     }
 
     const uint8_t lNextFreqIdx = (mCurrentFreqIdx + 1) % IOHC_NUM_FREQUENCIES;
+    const uint32_t retuneStart=micros();
     if (mRadio.setFrequency(IOHC_FREQUENCIES[lNextFreqIdx]) == RadioError::None)
     {
         mCurrentFreqIdx = lNextFreqIdx;
         if (mRadio.startReceive() == RadioError::None)
         {
-            mRxScanLastSwitch = lNow;
+            mRxScanLastSwitch = lNow;++mRxScanMeasurements.retunes;
+            mRxScanMeasurements.maxRetuneUs=std::max(mRxScanMeasurements.maxRetuneUs,uint32_t(micros()-retuneStart));
             if (mState == ControllerState::DiscoveryListening)
                 ++mDiscoveryTimingTrace.rotations;
-        }
-    }
+        } else ++mRxScanMeasurements.retuneFailures;
+    } else ++mRxScanMeasurements.retuneFailures;
 }
 
 void IoHomeController::serviceBroadcastResponseScan(uint8_t iRequestFrequencyIndex,
@@ -5473,6 +5482,7 @@ void IoHomeController::serviceBroadcastResponseScan(uint8_t iRequestFrequencyInd
     // background scanning keeps all three channels eligible.
     if (mRadio.isPreambleDetected() || mRadio.isSyncDetected())
     {
+        if(mRadio.isSyncDetected())++mRxScanMeasurements.syncHolds;else ++mRxScanMeasurements.preambleHolds;
         if (mRadio.isSyncDetected())
         {
             ++mDiscoveryTimingTrace.syncHolds;
@@ -5491,15 +5501,17 @@ void IoHomeController::serviceBroadcastResponseScan(uint8_t iRequestFrequencyInd
     const uint8_t lNextFreqIdx=avoidRecent?mRadioDiversity.alternate(mCurrentFreqIdx,millis()):
         (mCurrentFreqIdx+1)%IOHC_NUM_FREQUENCIES;
 
+    const uint32_t retuneStart=micros();
     if (mRadio.setFrequency(IOHC_FREQUENCIES[lNextFreqIdx]) == RadioError::None)
     {
         mCurrentFreqIdx = lNextFreqIdx;
         if (mRadio.startReceive() == RadioError::None)
         {
-            mRxScanLastSwitch = lNow;
+            mRxScanLastSwitch = lNow;++mRxScanMeasurements.retunes;
+            mRxScanMeasurements.maxRetuneUs=std::max(mRxScanMeasurements.maxRetuneUs,uint32_t(micros()-retuneStart));
             ++mDiscoveryTimingTrace.rotations;
-        }
-    }
+        } else ++mRxScanMeasurements.retuneFailures;
+    } else ++mRxScanMeasurements.retuneFailures;
 }
 
 void IoHomeController::logPairDiagnosticStatus() const
@@ -6117,12 +6129,13 @@ void IoHomeController::loop()
         bool lParsed = (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen));
         if (lLen > 0 && !lParsed)
         {
-            mRxParseFailCount++;
+            mRxParseFailCount++;++mRxScanMeasurements.parseFailures;
             if (mState == ControllerState::DiscoveryListening)
                 {++mDiscoveryParseFailures;++mDiscoverySession.malformed;}
         }
         if (lParsed)
         {
+            ++mRxScanMeasurements.captures;
             mRadioDiversity.activity(mCurrentFreqIdx,millis());
             const ControllerState lPairingStateBeforeRx = mState;
             // Record which frequency the response came on

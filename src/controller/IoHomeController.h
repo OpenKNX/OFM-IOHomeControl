@@ -653,6 +653,10 @@ public:
   bool startDiscoveryFamily(IoHomeDiscoveryFamily family);
   enum class DiscoveryCompletion : uint8_t {Idle,Collecting,PostProcessing,Empty,WithReturns,Cancelled};
   struct DiscoverySession {DiscoveryCompletion completion=DiscoveryCompletion::Idle;uint32_t accepted=0,duplicates=0,malformed=0,silentSweeps=0;};
+  bool setDiagnosticScanCadenceMs(uint8_t ms);
+  uint32_t diagnosticScanCadenceUs() const {return mRxScanIntervalUs;}
+  struct RxScanMeasurements {uint32_t retunes=0,retuneFailures=0,maxRetuneUs=0,captures=0,parseFailures=0,preambleHolds=0,syncHolds=0;};
+  const RxScanMeasurements &rxScanMeasurements()const{return mRxScanMeasurements;}
   IoHomeRadioDiversity &radioDiversity() {return mRadioDiversity;}
   const DiscoverySession &discoverySession() const {return mDiscoverySession;}
   bool cancelDiscovery();
@@ -1224,6 +1228,7 @@ private:
   IoHomeDiscoveryFamily mDiscoveryFamily=IoHomeDiscoveryFamily::Actuator;
   bool mPrivateDiscoveryF8=false;
   PrivateDiscoveryReply mPrivateDiscoveryReply{};
+  RxScanMeasurements mRxScanMeasurements{};
   IoHomeRadioDiversity mRadioDiversity{};
   DiscoverySession mDiscoverySession{};
   uint32_t mDiscoverySweepAccepted=0;

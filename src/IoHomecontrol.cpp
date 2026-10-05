@@ -4348,6 +4348,17 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         logInfoP("Discovery family start=%s",mController.startDiscoveryFamily(family)?"started":"blocked");return true;
     }
 
+    if(lSub.rfind("radio scan-cadence",0)==0) {
+        const auto arg=trimSpaces(lSub.substr(strlen("radio scan-cadence")));uint32_t ms=0;
+        if(!arg.empty() && (!parseUnsignedDecimal(arg,ms)||ms>20||!managementRequestsAllowed()||
+           !mController.setDiagnosticScanCadenceMs(ms))) {logInfoP("Usage: iohc radio scan-cadence [3..20] (idle only)");return true;}
+        const auto &s=mController.rxScanMeasurements();
+        logInfoP("RXscan cadenceUs=%lu retunes=%lu failures=%lu maxRetuneUs=%lu captures=%lu parseFailures=%lu preambleHolds=%lu syncHolds=%lu",
+            static_cast<unsigned long>(mController.diagnosticScanCadenceUs()),static_cast<unsigned long>(s.retunes),
+            static_cast<unsigned long>(s.retuneFailures),static_cast<unsigned long>(s.maxRetuneUs),static_cast<unsigned long>(s.captures),
+            static_cast<unsigned long>(s.parseFailures),static_cast<unsigned long>(s.preambleHolds),static_cast<unsigned long>(s.syncHolds));return true;
+    }
+
     if(lSub.rfind("radio diversity",0)==0) {
         const auto arg=trimSpaces(lSub.substr(strlen("radio diversity")));uint32_t ms=0;
         if(!arg.empty() && (!parseUnsignedDecimal(arg,ms)||ms>2000||!managementRequestsAllowed()||!mController.idleForManagedOperation()||

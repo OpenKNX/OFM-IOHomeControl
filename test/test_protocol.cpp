@@ -19905,3 +19905,18 @@ TEST(protocol_recent_channel_diversity_expires_and_handles_wrap_and_all_recent)
     d.activity(1,0xFFFFFFF0);ASSERT_TRUE(d.recent(1,0));ASSERT_TRUE(!d.recent(1,300));
     ASSERT_TRUE(d.configure(0));ASSERT_TRUE(!d.recent(1,0));ASSERT_TRUE(!d.configure(2001));
 }
+
+TEST(controller_runtime_scan_cadence_holds_sync_and_rejects_active_changes)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x831F2A,0x7E9E6E,key);
+    for(uint8_t ms:{3,4,5}) {ASSERT_TRUE(c.setDiagnosticScanCadenceMs(ms));ASSERT_EQ(c.diagnosticScanCadenceUs(),ms*1000U);}
+    ASSERT_TRUE(!c.setDiagnosticScanCadenceMs(2));ASSERT_TRUE(!c.setDiagnosticScanCadenceMs(21));
+    c.setRxScanEnabled(true);c.startReceive();
+    const auto frequency=c.radio().testCurrentFrequency();c.radio().testInjectRxDiagnostics(true,true,false,0,0,-80);
+    ioHomeTestAdvanceMicros(10000);c.loop();ASSERT_EQ(c.radio().testCurrentFrequency(),frequency);
+    ASSERT_TRUE(c.rxScanMeasurements().syncHolds>0);
+    c.radio().testInjectRxDiagnostics(false,false,false,0,0,-80);
+    ASSERT_TRUE(c.sendCommand(0x7E9E6E,key,IoHomeCommand::Execute,50));c.loop();
+    ASSERT_TRUE(!c.setDiagnosticScanCadenceMs(3));
+}

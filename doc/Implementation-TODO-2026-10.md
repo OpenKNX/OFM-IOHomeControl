@@ -33,3 +33,7 @@ One session collects all returns across windows/sweeps and reports accepted, dup
 ## 8. Recent-channel diversity
 
 Added wrap-safe per-channel successful TX/RX activity timestamps and a 250 ms reference-inspired experimental cooldown. Alternate selection prefers non-current/non-recent channels, with bounded fallback when all are recent. Broadcast response scanning no longer excludes the request channel for its entire window; ordinary background scanning still visits all three channels. Runtime console `iohc radio diversity [0..2000]` controls the experiment. Physical A/B qualification remains pending.
+
+## 9. Scan cadence controls and qualification
+
+Runtime `iohc radio scan-cadence [3..20]` permits 3/4/5 ms SX1276 trials and resets measurement counters. Reports successful retunes, retune failures, maximum retune latency, parsed captures, parse failures, and preamble/sync holds. Production defaults remain SX1276 5 ms / SX1262 7 ms until hardware evidence exists. Native tests verify cadence limits and no retune during sync. Physical CPU-load/missed-preamble/truncation measurements remain pending: replay the same timed peer sequence at 3, 4 and 5 ms, record generator sent-packet count, radio CRC/FIFO counters, logic-analyzer SPI/IRQ latency and external task-load measurements. Counters alone cannot prove how many preambles were missed.
