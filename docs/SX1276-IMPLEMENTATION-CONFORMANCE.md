@@ -53,3 +53,15 @@ SensorInformation reply layout is reused as a write, and no sensor units/KNX
 publication or event-monitoring policy are inferred. `sensor info` remains the
 separate read-only `8B FF` operation. Source: OVPd serializer
 0x0018C698..0x0018C900, documented in the 2W report.
+
+## ETS effective-setting summary — 2026-10-05
+
+The normal commissioning view now includes an offline project-setting summary.
+It displays the four independently controlled recognition values and ownership,
+counts fields whose ETS values are preserved, applies the profile-override veto
+and exposes retained protocol/power/suspend settings. Hiding expert controls
+never clears their values. This reports project configuration, not a claim that
+firmware has downloaded it or a fabricated history of how a value was adopted.
+The online evidence view includes the same summary. No parameter memory, KO
+number, saved permission or expert value changes. Executed ETS JavaScript tests
+verify independent ownership, override precedence and absence of mutations/RF.

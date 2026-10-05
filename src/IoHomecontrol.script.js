@@ -748,6 +748,37 @@ function IOHC_readCommissioningStatus(device,online,progress,context) {
         progress.setText(text);
     } finally {online.disconnect();}
 }
+// Project settings and permission ownership only; no fabricated adoption history.
+function IOHC_effectiveSettingsText(device,context) {
+    var channel=Number(context.channelIndex);
+    if(channel<1||channel>16||Math.floor(channel)!==channel) throw new Error("Ungültiger Kanal");
+    var prefix=IOHC_getChannelPrefix(context),override=IOHC_getParameter(device,prefix+"ProfileOverride");
+    var forced=override&&Number(override.value)!==0;
+    var fields=[["RecognitionTypeAuto","DeviceType","Gerätetyp"],
+                ["RecognitionOrientationAuto","OrientationObjects","Orientierung"],
+                ["RecognitionBinaryAuto","BinaryOnly","Binärmodus"],
+                ["RecognitionDimmableAuto","Dimmable","Dimmen"]];
+    var retained=0,details="";
+    for(var i=0;i<fields.length;i++) {
+        var permission=IOHC_getParameter(device,prefix+fields[i][0]),setting=IOHC_getParameter(device,prefix+fields[i][1]);
+        var automatic=!forced&&permission&&Number(permission.value)===1;
+        if(!automatic)retained++;
+        details+=fields[i][2]+": "+(setting?String(setting.value):"nicht verfügbar")+
+            (automatic?" (Übernahme erlaubt)":" (ETS-Vorgabe bleibt erhalten)")+". ";
+    }
+    var text="Kanal "+channel+": "+retained+" von 4 Erkennungsfeldern behalten ihre ETS-Vorgabe. "+details;
+    if(forced)text+="Profil-Override "+override.value+" sperrt automatische Übernahme. ";
+    var expert=[["ProtocolMode","Protokollmodus"],["TwoWayPowerClass","2W-Energieklasse"],
+                ["Suspend","Suspendiert"]];
+    for(var j=0;j<expert.length;j++) {
+        var value=IOHC_getParameter(device,prefix+expert[j][0]);
+        if(value)text+=expert[j][1]+": "+value.value+". ";
+    }
+    return text+"Experteneinstellungen bleiben wirksam, auch wenn ausgeblendet. Werte aus dem ETS-Projekt; Geräte-Download und Herkunft früherer Änderungen sind hier nicht bestätigt.";
+}
+function IOHC_showEffectiveSettings(device,online,progress,context) {
+    progress.setText(IOHC_effectiveSettingsText(device,context));
+}
 function IOHC_readChannelEvidence(device,online,progress,context) {
     var channel=Number(context.channelIndex)-1;
     if(channel<0||channel>=16||Math.floor(channel)!==channel) throw new Error("Ungültiger Kanal");
@@ -756,7 +787,7 @@ function IOHC_readChannelEvidence(device,online,progress,context) {
         var identity=IOHC_invokeFunctionProperty(online,[0x1D,channel]);
         if(!identity||identity.length!==12||identity[0]!==0||identity[1]!==1||identity[2]!==channel) throw new Error("Ungültiger Erkennungsstatus");
         var node=IOHC_readNodeId(identity,3),prefix=IOHC_getChannelPrefix(context);
-        var text="Kanal "+(channel+1)+", Node "+IOHC_formatNodeId(node)+". ";
+        var text=IOHC_effectiveSettingsText(device,context)+" Node "+IOHC_formatNodeId(node)+". ";
         if((identity[11]&4)!==0) text+="Profil "+(identity[6]|identity[7]<<8)+"/"+identity[8]+", Hersteller "+identity[9]+", "+((identity[11]&8)!==0?"vollständige":"teilweise")+" Metadaten. ";
         else text+="Keine bestätigten Profilmetadaten. ";
         var override=IOHC_getParameter(device,prefix+"ProfileOverride");

@@ -209,3 +209,13 @@ test("combined RGB read sends one identity-bound selector",function() {
     IOHC_requestProductObservations(d,online,{setText:function(t){text=t;}},{channelIndex:1});
     check(requests===1&&text.indexOf("gemeinsame")>=0,"one snapshot request");
 });
+
+test("offline effective settings disclose overrides without changing project",function() {
+    var d=deviceWith({ProfileOverride:448,RecognitionTypeAuto:1,RecognitionOrientationAuto:1,RecognitionBinaryAuto:1,RecognitionDimmableAuto:1,DeviceType:7,Suspend:1});
+    var before=JSON.stringify(d.params),text="";
+    IOHC_showEffectiveSettings(d,{connect:function(){throw new Error("unexpected connection");}}, {setText:function(t){text=t;}},{channelIndex:1});
+    check(text.indexOf("4 von 4")>=0&&text.indexOf("Gerätetyp: 7")>=0&&text.indexOf("Profil-Override 448")>=0,"override summary");
+    check(text.indexOf("auch wenn ausgeblendet")>=0&&JSON.stringify(d.params)===before,"expert visibility or mutation");
+    d.params.IOHC_c1ProfileOverride.value=0;d.params.IOHC_c1RecognitionTypeAuto.value=0;
+    check(IOHC_effectiveSettingsText(d,{channelIndex:1}).indexOf("1 von 4")>=0,"independent manual ownership");
+});
