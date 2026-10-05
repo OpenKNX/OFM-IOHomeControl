@@ -25,3 +25,7 @@ Split the permissive diagnostic decoder from accepted discovery records. All aut
 ## 5. Discovery families
 
 Added named 0x94/95 and 0x96/97 sensor discovery producers and strict nine-byte sensor identities, with independent runtime selection and recovered group budgets. In-system discovery signs its own opcode transcript. PrivateSomfy explicitly produces 0x20 `02 F6`, then `02 F8`, and captures correlated 0x21 responses without borrowing Atlantic WritePrivate semantics. Private response fields remain raw because the supplied TODO does not establish their exact body schema. Console: `iohc discovery sensor`, `sensor-system`, `somfy-private`. No version/family discriminator is guessed. Original-peer qualification remains pending.
+
+## 7. Multi-return discovery lifecycle
+
+One session collects all returns across windows/sweeps and reports accepted, duplicate, malformed and silent-sweep counts. Final completion distinguishes empty discovery from successful returns, with post-processing through the existing enrichment/candidate handlers. Truncated bodies are diagnostics only and are no longer delivered as candidates. Cancellation retains already accepted metadata. Silent sweeps never erase prior nodes/passively authenticated candidates. Directed verification remains available after collection. Tests cover multiple peers, malformed records, cancellation and later empty sweeps retaining inventory.

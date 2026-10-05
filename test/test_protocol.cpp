@@ -12670,7 +12670,7 @@ TEST(controller_spe_discovery_pending_queue_has_bounded_overflow)
         lFrame.commandId = IoHomeCommand::DiscoverSPEResponse;
         lFrame.data[0] = 0x00;
         lFrame.data[1] = 0x81;
-        lFrame.dataLen = 2;
+        lFrame.dataLen = 9;
         uint8_t lRaw[IOHC_FRAME_BUFFER_SIZE];
         const uint8_t lLength = serializeFrameForTest(lFrame, lRaw, sizeof(lRaw));
         ASSERT_TRUE(lLength > 0);
@@ -12711,7 +12711,7 @@ TEST(controller_spe_discovery_duplicates_cannot_starve_unique_devices)
         lFrame.commandId = IoHomeCommand::DiscoverSPEResponse;
         lFrame.data[0] = 0x00;
         lFrame.data[1] = 0x81;
-        lFrame.dataLen = 2;
+        lFrame.dataLen = 9;
         uint8_t lRaw[IOHC_FRAME_BUFFER_SIZE];
         const uint8_t lLength = serializeFrameForTest(lFrame, lRaw, sizeof(lRaw));
         ASSERT_TRUE(lLength > 0);
@@ -12758,7 +12758,7 @@ TEST(controller_spe_discovery_pairdiag_does_not_change_response_count)
             lFrame.commandId = IoHomeCommand::DiscoverSPEResponse;
             lFrame.data[0] = 0x00;
             lFrame.data[1] = 0x81;
-            lFrame.dataLen = 2;
+            lFrame.dataLen = 9;
             uint8_t lRaw[IOHC_FRAME_BUFFER_SIZE];
             const uint8_t lLength = serializeFrameForTest(lFrame, lRaw, sizeof(lRaw));
             ASSERT_TRUE(lLength > 0);
@@ -19870,4 +19870,29 @@ TEST(controller_sensor_and_private_discovery_have_independent_producers)
             ASSERT_TRUE(identity&&identity->fullMetadata);ASSERT_EQ(identity->nodeClass,IoHomeNodeClass::Sensor);
         }
     }
+}
+
+TEST(controller_discovery_session_collects_multiple_returns_without_erasing_silent_nodes)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x831F2A,0,key);c.setSystemKey(key);
+    ASSERT_TRUE(c.startDiscoveryFamily(IoHomeDiscoveryFamily::Sensor));IoHomeFrame request;
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    for(uint32_t node:{0x111111,0x222222}) {
+        IoHomeFrame reply;buildDiscoverResponseFrame(reply,0x831F2A,node,false,0);reply.commandId=IoHomeCommand::DiscoverSensorResponse;
+        ASSERT_TRUE(queueControllerResponse(c,reply));
+    }
+    IoHomeFrame bad;buildDiscoverResponseFrame(bad,0x831F2A,0x333333,false,0);bad.dataLen=2;bad.commandId=IoHomeCommand::DiscoverSensorResponse;
+    ASSERT_TRUE(queueControllerResponse(c,bad));
+    ioHomeTestAdvanceMillis(c.diagnosticDiscoveryListenMs()+1);c.loop();
+    ASSERT_EQ(c.discoverySession().accepted,2U);ASSERT_EQ(c.discoverySession().malformed,1U);
+    ASSERT_TRUE(c.protocolIdentityForIoAddress(0x111111));ASSERT_TRUE(!c.protocolIdentityForIoAddress(0x333333));
+    ASSERT_TRUE(c.cancelDiscovery());ASSERT_EQ(c.discoverySession().completion,IoHomeController::DiscoveryCompletion::Cancelled);
+    ASSERT_TRUE(c.protocolIdentityForIoAddress(0x222222));
+    ASSERT_TRUE(c.startDiscoveryFamily(IoHomeDiscoveryFamily::Sensor));
+    for(uint8_t window=0;window<9;++window) {
+        ASSERT_TRUE(transmitQueuedControllerFrame(c,request));ioHomeTestAdvanceMillis(c.diagnosticDiscoveryListenMs()+1);c.loop();
+    }
+    ASSERT_EQ(c.discoverySession().completion,IoHomeController::DiscoveryCompletion::Empty);
+    ASSERT_EQ(c.discoverySession().silentSweeps,3U);ASSERT_TRUE(c.protocolIdentityForIoAddress(0x111111));
 }

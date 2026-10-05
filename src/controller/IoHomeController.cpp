@@ -4091,6 +4091,14 @@ void IoHomeController::recordExchangeFailure(const IoHomeQueueEntry &iEntry,
             ? IoHomeCommandExchangeResult::SessionExhausted : IoHomeCommandExchangeResult::Unknown);
 }
 
+bool IoHomeController::cancelDiscovery()
+{
+    if(mState!=ControllerState::DiscoveryListening && mState!=ControllerState::DiscoverySending)return false;
+    processPendingDiscoveryResponses();
+    mDiscoverySession.completion=DiscoveryCompletion::Cancelled;
+    mState=ControllerState::Idle;startReceive();return true;
+}
+
 bool IoHomeController::startDiscoveryFamily(IoHomeDiscoveryFamily family)
 {
     if(uint8_t(family)>uint8_t(IoHomeDiscoveryFamily::PrivateSomfy) || !idleForManagedOperation() ||
@@ -4127,6 +4135,7 @@ void IoHomeController::startDiscovery(bool iEncrypted)
     mPendingDiscoveryHighWater = 0;
     mPendingDiscoveryOverflow = 0;
     mPendingDiscoveryOverflowReported = 0;
+    mDiscoverySession={};mDiscoverySession.completion=DiscoveryCompletion::Collecting;mDiscoverySweepAccepted=0;
     mDiscoveryResponsesReceived = 0;
     mDiscoveryBroadcastsSent = 0;
     mDiscoveryDuplicates = 0;
@@ -5635,7 +5644,7 @@ void IoHomeController::enqueueDiscoveryResponse()
         if (lPending.source != mRxFrame.getSrcNodeId() ||
             lPending.frame.commandId != mRxFrame.commandId)
             continue;
-        ++mDiscoveryDuplicates;
+        ++mDiscoveryDuplicates;++mDiscoverySession.duplicates;
         if (mRxFrame.dataLen >= lPending.frame.dataLen)
         {
             lPending.frame = mRxFrame;
@@ -5687,21 +5696,8 @@ void IoHomeController::processPendingDiscoveryResponses()
     {
         const PendingDiscoveryResponse &lPending = mPendingDiscovery[i];
         const uint32_t lStartedUs = micros();
-        bool lSeen = false;
-        for (uint32_t lNode : mDiscoverySeenNodes)
-        {
-            if (lNode == lPending.source)
-            {
-                lSeen = true;
-                break;
-            }
-        }
-        if (lSeen)
-            ++mDiscoveryDuplicates;
-        else if (mDiscoveryUniqueNodes < kPendingDiscoveryCapacity)
-            mDiscoverySeenNodes[mDiscoveryUniqueNodes++] = lPending.source;
-
         if(mDiscoveryFamily==IoHomeDiscoveryFamily::PrivateSomfy && lPending.frame.commandId==IoHomeCommand::WritePrivateResponse) {
+            ++mDiscoverySession.accepted;++mDiscoverySweepAccepted;
             mPrivateDiscoveryReply.valid=true;mPrivateDiscoveryReply.node=lPending.source;
             mPrivateDiscoveryReply.selector=mPrivateDiscoveryF8?0xF8:0xF6;
             mPrivateDiscoveryReply.length=lPending.frame.dataLen;
@@ -5712,10 +5708,16 @@ void IoHomeController::processPendingDiscoveryResponses()
             continue;
         }
         IoHomeProtocolIdentity lMetadata;
-        captureProtocolIdentity(channelForNode(lPending.source), lPending.frame,
+        const bool accepted=captureProtocolIdentity(channelForNode(lPending.source), lPending.frame,
                                 "roll-call discovery", &lMetadata,
                                 lPending.frequencyIndex, lPending.rssi);
-        if (mModule)
+        if(accepted) {
+            ++mDiscoverySession.accepted;++mDiscoverySweepAccepted;
+            bool seen=false;for(uint32_t node:mDiscoverySeenNodes)if(node==lPending.source){seen=true;break;}
+            if(seen){++mDiscoveryDuplicates;++mDiscoverySession.duplicates;}
+            else if(mDiscoveryUniqueNodes<kPendingDiscoveryCapacity)mDiscoverySeenNodes[mDiscoveryUniqueNodes++]=lPending.source;
+        } else {++mDiscoveryParseFailures;++mDiscoverySession.malformed;}
+        if (mModule && accepted)
         {
             mModule->onDiscoveryResponse(lPending.frame, lMetadata);
             mModule->remoteMap().observeAddress(lPending.source);
@@ -6120,7 +6122,7 @@ void IoHomeController::loop()
         {
             mRxParseFailCount++;
             if (mState == ControllerState::DiscoveryListening)
-                ++mDiscoveryParseFailures;
+                {++mDiscoveryParseFailures;++mDiscoverySession.malformed;}
         }
         if (lParsed)
         {
@@ -9484,6 +9486,8 @@ void IoHomeController::processDiscovery()
         {
             processPendingDiscoveryResponses();
             const bool lMoreFreqs = (mPairingFreqIdx + 1 < IOHC_NUM_FREQUENCIES);
+            if(!lMoreFreqs && !mDiscoverySweepAccepted)++mDiscoverySession.silentSweeps;
+            if(!lMoreFreqs)mDiscoverySweepAccepted=0;
             const uint8_t lSweepCount = mDiscoverySPE ? 2U : IOHC_DISCOVERY_MAX_SWEEPS;
             const bool lExtraSpeSweep = mDiscoverySPE && mDiscoverySweep == 1 &&
                 mModule && mModule->hasKeyImportDevicesMissingSpeMetadata();
@@ -9523,6 +9527,13 @@ void IoHomeController::processDiscovery()
             {
                 mDiscoverySendPhase = DiscoverySendPhase::SetFrequency;
                 resetDiscoveryTimingTrace();
+                mDiscoverySession.completion=DiscoveryCompletion::PostProcessing;
+                // Pending returns have been delivered; module handlers enrich the
+                // same candidate inventory. A silent sweep never removes peers.
+                mDiscoverySession.completion=mDiscoverySession.accepted?DiscoveryCompletion::WithReturns:DiscoveryCompletion::Empty;
+                logInfoP("Discovery complete returns=%lu duplicates=%lu malformed=%lu silentSweeps=%lu",
+                    static_cast<unsigned long>(mDiscoverySession.accepted),static_cast<unsigned long>(mDiscoverySession.duplicates),
+                    static_cast<unsigned long>(mDiscoverySession.malformed),static_cast<unsigned long>(mDiscoverySession.silentSweeps));
                 mState = ControllerState::Idle;
                 startReceive();
             }

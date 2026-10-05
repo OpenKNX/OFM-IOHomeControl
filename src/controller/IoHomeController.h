@@ -650,6 +650,10 @@ public:
   // Start discovery scan (no pairing); encrypted mode only lets paired/known devices respond
   void startDiscovery(bool iEncrypted = false);
   bool startDiscoveryFamily(IoHomeDiscoveryFamily family);
+  enum class DiscoveryCompletion : uint8_t {Idle,Collecting,PostProcessing,Empty,WithReturns,Cancelled};
+  struct DiscoverySession {DiscoveryCompletion completion=DiscoveryCompletion::Idle;uint32_t accepted=0,duplicates=0,malformed=0,silentSweeps=0;};
+  const DiscoverySession &discoverySession() const {return mDiscoverySession;}
+  bool cancelDiscovery();
   struct PrivateDiscoveryReply {bool valid=false;uint32_t node=0;uint8_t selector=0,length=0,data[IOHC_FRAME_MAX_DATA]{};};
   const PrivateDiscoveryReply &lastPrivateDiscoveryReply() const {return mPrivateDiscoveryReply;}
 
@@ -1218,6 +1222,8 @@ private:
   IoHomeDiscoveryFamily mDiscoveryFamily=IoHomeDiscoveryFamily::Actuator;
   bool mPrivateDiscoveryF8=false;
   PrivateDiscoveryReply mPrivateDiscoveryReply{};
+  DiscoverySession mDiscoverySession{};
+  uint32_t mDiscoverySweepAccepted=0;
   uint32_t mPairingStartTime;
   DiscoverySendPhase mDiscoverySendPhase;
   DiscoveryTimingTrace mDiscoveryTimingTrace;
