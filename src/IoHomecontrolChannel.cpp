@@ -2417,7 +2417,7 @@ void IoHomecontrolChannel::processProductValueInputKo(uint8_t index,GroupObject 
     // Explicit selection grants diagnostic reads only. All value writes remain gated.
     if(index!=PVX_KocRead||!bool(ko.value(DPT_Switch)))return;
     const uint8_t product=ParamPVX_cProductDefinition,fp=ParamPVX_cValueIndex;
-    if(product<1||product>12||fp>16)return;
+    if(product<1||product>14||fp>16)return;
     uint16_t mask=fp?uint16_t(1)<<(fp-1):0;
     if(product==3&&fp==13)mask|=uint16_t(1)<<11;
     if(product==7&&fp>=9&&fp<=14)mask|=uint16_t(1)<<((fp%2?fp+1:fp-1)-1);

@@ -19572,3 +19572,6 @@ TEST(protocol_alarm_zone_lookup_and_sliding_lock_are_product_scoped) {
  uint8_t zones=0;ASSERT_TRUE(ioHomeDecodeAlarmZones(0xF833,zones));ASSERT_EQ(zones,5);ASSERT_TRUE(ioHomeDecodeAlarmZones(0xC800,zones));ASSERT_EQ(zones,7);ASSERT_TRUE(!ioHomeDecodeAlarmZones(0xF801,zones));ASSERT_TRUE(!ioHomeDecodeAlarmZones(0xF800,zones));ASSERT_TRUE(!ioHomeDecodeAlarmZones(0x3200,zones));
  ASSERT_TRUE(ioHomeDecodeSlidingLock(0xC800).known&&ioHomeDecodeSlidingLock(0xC800).sourceSaysLocked);ASSERT_TRUE(!ioHomeDecodeSlidingLock(0xD400).known);ASSERT_TRUE(!ioHomeDecodeSlidingLock(0).sourceSaysLocked);
 }
+TEST(protocol_dual_shutter_neutral_half_is_d100_not_zero) {
+ uint8_t bytes[8]{};uint8_t length=0;ASSERT_TRUE(ioHomeBuildDualClosure(true,25,false,0,bytes,sizeof(bytes),length));const uint8_t expected[]={0xD8,8,0xC0,0x32,0,0xD1,0,0};ASSERT_EQ(length,8);ASSERT_TRUE(!std::memcmp(bytes,expected,8));double percent=0;ASSERT_TRUE(!ioHomeDecodeDualClosure(1,0xD100,percent));ASSERT_TRUE(ioHomeDecodeDualClosure(2,0xC800,percent));ASSERT_TRUE(percent==100);ASSERT_TRUE(!ioHomeBuildDualClosure(false,0,false,0,bytes,sizeof(bytes),length));
+}

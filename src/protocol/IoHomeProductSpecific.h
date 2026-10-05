@@ -18,3 +18,11 @@ inline IoHomeSlidingLock ioHomeDecodeSlidingLock(uint16_t raw){
  // Preserve that literal result, but qualify only the ordinary endpoints.
  return {raw,raw==0xC800,raw==0||raw==0xC800};
 }
+
+// Dual Roller Shutter 0x0D0000, independent upper/lower channels.
+inline bool ioHomeDecodeDualClosure(uint8_t index,uint16_t raw,double &percent){if(index>2||raw>IOHC_POSITION_MAX)return false;percent=std::round(raw/512.0);return true;}
+inline bool ioHomeBuildDualClosure(bool upperSelected,double upper,bool lowerSelected,double lower,uint8_t *out,uint8_t capacity,uint8_t &length){
+ if((!upperSelected&&!lowerSelected)||(upperSelected&&(!std::isfinite(upper)||upper<0||upper>100))||(lowerSelected&&(!std::isfinite(lower)||lower<0||lower>100)))return false;
+ const IoHomeFpValue values[]={{1,upperSelected?uint16_t(std::round(upper*512)):uint16_t(0xD100)},{2,lowerSelected?uint16_t(std::round(lower*512)):uint16_t(0xD100)}};
+ return ioHomeBuildActivationRepresentation(0xD808,values,2,out,capacity,length);
+}

@@ -3,7 +3,7 @@
 #include "IoHomeProductModes.h"
 #include "IoHomeProductSpecific.h"
 // Explicit diagnostic selection never identifies the commercial device variant.
-enum class IoHomeDiagnosticProduct:uint8_t {None,HeatPump,HeatingInterface,GenericHeater,AtlanticHeater,AtlanticDhwV2,AtlanticDhwCentikelvin,Siren,HeatPumpModes,AtlanticDhwModes,Pergola,Alarm,SlidingLock};
+enum class IoHomeDiagnosticProduct:uint8_t {None,HeatPump,HeatingInterface,GenericHeater,AtlanticHeater,AtlanticDhwV2,AtlanticDhwCentikelvin,Siren,HeatPumpModes,AtlanticDhwModes,Pergola,Alarm,SlidingLock,DualShutter,AtlanticVentilation};
 enum class IoHomeValueUnit:uint8_t {Unknown,Celsius,Numeric,Packed,Percent,ZoneMask,Boolean};
 struct IoHomeDecodedValue {uint16_t raw=0;double value=0;uint32_t generation=0,ageMs=0;IoHomeProductRuntime::Trust trust=IoHomeProductRuntime::Trust::None;IoHomeValueUnit unit=IoHomeValueUnit::Unknown;bool present=false,fresh=false,known=false;};
 inline IoHomeDecodedValue ioHomeDecodeSelectedProductValue(const IoHomeProductRuntime &runtime,IoHomeDiagnosticProduct product,uint8_t index,uint32_t now,const IoHomeTemperatureContext &supplied={}) {
@@ -15,6 +15,8 @@ inline IoHomeDecodedValue ioHomeDecodeSelectedProductValue(const IoHomeProductRu
   if(product==IoHomeDiagnosticProduct::GenericHeater&&index==13){const auto *comfort=runtime.sample(12);context.hasComfort=comfort->present&&comfort->generation==s->generation&&comfort->trust==s->trust&&IoHomeProductRuntime::fresh(*comfort,now,5000);context.comfortRaw=comfort->raw;}
   out.known=ioHomeDecodeProductTemperature(temp,index,s->raw,context,out.value);
   out.unit=product==IoHomeDiagnosticProduct::AtlanticHeater&&index==13?IoHomeValueUnit::Numeric:IoHomeValueUnit::Celsius;
+ }else if(product==IoHomeDiagnosticProduct::DualShutter){out.known=ioHomeDecodeDualClosure(index,s->raw,out.value);out.unit=IoHomeValueUnit::Percent;
+ }else if(product==IoHomeDiagnosticProduct::AtlanticVentilation&&index==16){IoHomeAtlanticVentilation mode;out.known=ioHomeDecodeAtlanticVentilation(s->raw,mode);out.value=s->raw;out.unit=IoHomeValueUnit::Packed;
  }else if(product==IoHomeDiagnosticProduct::Alarm&&index==0){uint8_t zones=0;out.known=ioHomeDecodeAlarmZones(s->raw,zones);out.value=zones;out.unit=IoHomeValueUnit::ZoneMask;
  }else if(product==IoHomeDiagnosticProduct::SlidingLock&&index==9){const auto lock=ioHomeDecodeSlidingLock(s->raw);out.known=lock.known;out.value=lock.sourceSaysLocked?1:0;out.unit=IoHomeValueUnit::Boolean;
  }else if(product==IoHomeDiagnosticProduct::Pergola){out.known=ioHomeDecodePergola(index,s->raw,out.value);out.unit=IoHomeValueUnit::Percent;

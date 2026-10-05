@@ -1341,7 +1341,7 @@ function IOHC_showSemanticHelp(device,online,progress,context){
 
 function IOHC_readSelectedProduct(device,online,progress,context){
  return IOHC_boundDiagnostic(device,online,progress,context,function(c,id){
-  var prefix=IOHC_getChannelPrefix(context),names=["none","heatpump","heating-interface","generic-heater","atlantic-heater","atlantic-dhw-v2","atlantic-dhw-ck","siren","heatpump-modes","atlantic-dhw-modes","pergola","alarm","sliding-lock"],product=names.indexOf(String(IOHC_getParameter(device,prefix+"SemanticProduct").value)),index=Number(IOHC_getParameter(device,prefix+"SemanticIndex").value);
+  var prefix=IOHC_getChannelPrefix(context),names=["none","heatpump","heating-interface","generic-heater","atlantic-heater","atlantic-dhw-v2","atlantic-dhw-ck","siren","heatpump-modes","atlantic-dhw-modes","pergola","alarm","sliding-lock","dual-shutter","atlantic-ventilation"],product=names.indexOf(String(IOHC_getParameter(device,prefix+"SemanticProduct").value)),index=Number(IOHC_getParameter(device,prefix+"SemanticIndex").value);
   if(product<1||index<0||index>16||Math.floor(index)!==index)throw new Error("Explizite bekannte Produktdefinition / MP-FP erforderlich");
   var low=String(IOHC_getParameter(device,prefix+"ContextMinimumCK").value),high=String(IOHC_getParameter(device,prefix+"ContextMaximumCK").value),has=low!==""||high!=="";
   if(has&&(!/^[0-9a-fA-F]{4}$/.test(low)||! /^[0-9a-fA-F]{4}$/.test(high)||parseInt(low,16)>=parseInt(high,16)))throw new Error("Nur bestätigte Centikelvin-Grenzen als vierstellige Hex-Werte eingeben");
