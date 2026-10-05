@@ -19529,3 +19529,16 @@ TEST(protocol_metadata_journal_restores_scoped_raw_evidence_only_for_same_key) {
  ASSERT_TRUE(store.save(s));IoHomeMetadataStore::Snapshot loaded;ASSERT_TRUE(store.load(s.node,s.key,loaded));ASSERT_EQ(loaded.identity.profile,6);ASSERT_EQ(loaded.identity.multiInfoByte,0x42);ASSERT_EQ(loaded.evidence.generalInfo3[0],0xAA);ASSERT_EQ(loaded.identity.metadataSource,IoHomeMetadataSource::Restored);
  uint8_t wrong[16]={2};ASSERT_TRUE(!store.load(s.node,wrong,loaded));store.journal.failWrites=true;s.evidence.generalInfo3[0]=0xBB;ASSERT_TRUE(!store.save(s));ASSERT_TRUE(store.load(s.node,s.key,loaded));ASSERT_EQ(loaded.evidence.generalInfo3[0],0xAA);
 }
+
+#include "protocol/IoHomeProductValues.h"
+TEST(protocol_selected_codec_rejects_stale_and_incoherent_setback_context) {
+ IoHomeProductRuntime runtime;uint8_t key[16]{};runtime.bind(0x123456,key);
+ runtime.observe(0x123456,0,25600,1,100,IoHomeProductRuntime::Trust::Correlated);
+ auto value=ioHomeDecodeSelectedProductValue(runtime,IoHomeDiagnosticProduct::HeatPump,0,101);
+ ASSERT_TRUE(value.known);ASSERT_TRUE(value.value==20.0);ASSERT_TRUE(!ioHomeDecodeSelectedProductValue(runtime,IoHomeDiagnosticProduct::HeatPump,0,6000).known);
+ IoHomeTemperatureContext context;context.hasBounds=true;context.minimumCentikelvin=28015;context.maximumCentikelvin=30115;
+ runtime.observe(0x123456,12,40000,2,100,IoHomeProductRuntime::Trust::Correlated);runtime.observe(0x123456,13,10000,3,100,IoHomeProductRuntime::Trust::Correlated);
+ ASSERT_TRUE(!ioHomeDecodeSelectedProductValue(runtime,IoHomeDiagnosticProduct::GenericHeater,13,101,context).known);
+ runtime.observe(0x123456,12,40000,3,100,IoHomeProductRuntime::Trust::Correlated);ASSERT_TRUE(ioHomeDecodeSelectedProductValue(runtime,IoHomeDiagnosticProduct::GenericHeater,13,101,context).known);
+ runtime.bind(0x123457,key);ASSERT_TRUE(!ioHomeDecodeSelectedProductValue(runtime,IoHomeDiagnosticProduct::GenericHeater,13,101,context).known);
+}

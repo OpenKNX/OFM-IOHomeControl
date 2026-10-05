@@ -1,4 +1,5 @@
 #include "IoHomecontrol.h"
+#include "protocol/IoHomeProductValues.h"
 #include "ModuleVersionCheck.h"
 #include "OpenKNX.h"
 #include "knxprod.h"
@@ -2860,6 +2861,21 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         const bool idle=!mCommissioningJob.active()&&!mRadioDiagnostic.active&&!mMetadataRefreshActive;
         resultData[0]=idle&&mController.requestMpFpRead(mChannels[data[1]],data[2])?0:1;
         resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultLength=4;return true;
+    }
+    case 0x3A: // Explicit codec diagnostic; supplied bounds are never learned identity
+    {
+        if(length!=12||data[1]>=mNumChannels||!data[2]||data[2]>9||data[3]>16||data[4]>1)break;
+        const uint32_t node=uint32_t(data[9])<<16|uint32_t(data[10])<<8|data[11];auto *ch=mChannels[data[1]];
+        if(!node||ch->getNodeId()!=node||ch->is1W())break;
+        IoHomeTemperatureContext context;context.hasBounds=data[4];context.minimumCentikelvin=uint16_t(data[5])<<8|data[6];context.maximumCentikelvin=uint16_t(data[7])<<8|data[8];
+        const auto value=ioHomeDecodeSelectedProductValue(ch->productRuntime(),IoHomeDiagnosticProduct(data[2]),data[3],millis(),context);
+        resultData[0]=0;resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultData[4]=data[3];resultData[5]=value.present;resultData[6]=value.fresh;resultData[7]=value.known;
+        resultData[8]=value.raw>>8;resultData[9]=value.raw;resultData[10]=uint8_t(value.trust);resultData[11]=uint8_t(value.unit);
+        const int32_t scaled=value.known?int32_t(std::round(value.value*1000)):0;
+        // Generation is BE16 diagnostic low bits only; full generation remains API28.
+        resultData[12]=value.generation>>8;resultData[13]=value.generation;
+        for(uint8_t i=0;i<4;i++){resultData[14+i]=value.ageMs>>(24-i*8);resultData[18+i]=uint32_t(scaled)>>(24-i*8);}
+        resultLength=22;return true;
     }
     case 0x39: // SX1276 idle RX recovery counters; never resumes a transaction
     {

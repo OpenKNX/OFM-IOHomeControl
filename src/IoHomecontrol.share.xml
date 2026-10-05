@@ -346,6 +346,7 @@
               <ParameterType Id="%AID%_PT-IOHCPriorityDiagnostic" Name="IOHCPriorityDiagnostic"><TypeNumber SizeInBit="8" Type="unsignedInt" minInclusive="0" maxInclusive="7" /></ParameterType>
               <ParameterType Id="%AID%_PT-IOHCObjectOffset" Name="IOHCObjectOffset"><TypeNumber SizeInBit="16" Type="unsignedInt" minInclusive="0" maxInclusive="65535" /></ParameterType>
               <ParameterType Id="%AID%_PT-IOHCObjectSpan" Name="IOHCObjectSpan"><TypeNumber SizeInBit="16" Type="unsignedInt" minInclusive="1" maxInclusive="1024" /></ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCSemanticIndex" Name="IOHCSemanticIndex"><TypeNumber SizeInBit="8" Type="unsignedInt" minInclusive="0" maxInclusive="16" /></ParameterType>
               <ParameterType Id="%AID%_PT-IOHCImportChoice" Name="IOHCImportChoice"><TypeNumber SizeInBit="8" Type="unsignedInt" minInclusive="0" maxInclusive="24" /></ParameterType>
             </ParameterTypes>
 

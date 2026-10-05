@@ -268,7 +268,7 @@
     "index": 14,
     "meaning": "white color temperature",
     "unit": "K",
-    "conversion": "2700..6500 K interpolation",
+    "conversion": "2000..6500 K interpolation",
     "specials": "Special/unknown words require product-specific handling",
     "source": "FIRMWARE-DUMP-ANALYSIS-2026-10-04.md: OVPd product definitions",
     "rfWrite": false,
