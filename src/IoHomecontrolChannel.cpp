@@ -832,6 +832,7 @@ void IoHomecontrolChannel::onPostPairEnrichmentResponse(
         break;
 
     case IoHomeCommand::GetGeneralInfo1Response:
+        invalidateProductContext();
         mProductIdentityEvidence.generalInfo1Len = copyEnrichmentPayload(
             mProductIdentityEvidence.generalInfo1, iData, iDataLen);
         logDebugP("GeneralInfo1 raw=%s ascii=%s",
@@ -842,6 +843,7 @@ void IoHomecontrolChannel::onPostPairEnrichmentResponse(
         break;
 
     case IoHomeCommand::GetGeneralInfo2Response:
+        invalidateProductContext();
         mProductIdentityEvidence.generalInfo2Len = copyEnrichmentPayload(
             mProductIdentityEvidence.generalInfo2, iData, iDataLen);
         mProductIdentityEvidence.generalInfo2TypeValid = iDataLen >= 12;
@@ -919,6 +921,7 @@ void IoHomecontrolChannel::onGeneralInfo3Failure(
 
 void IoHomecontrolChannel::clearProductIdentityEvidence()
 {
+    invalidateProductContext();
     memset(mDeviceName, 0, sizeof(mDeviceName));
     mProductIdentityEvidence = IoHomeProductIdentityEvidence{};
 }
@@ -978,6 +981,7 @@ void IoHomecontrolChannel::onProtocolIdentity(
     // Hardware protocol identity is immutable with respect to ETS choices.
     // ETS device-role and command-shape parameters remain separate and never
     // write back into this discovery-derived object.
+    if(ioHomeProductSemanticIdentityChanged(mProtocolIdentity,lIdentity))invalidateProductContext();
     mProtocolIdentity = lIdentity;
     ioHomeUpdateVendorProductEvidence(mProtocolIdentity, mProductIdentityEvidence);
     mProfile = lIdentity.profile;
@@ -996,6 +1000,7 @@ void IoHomecontrolChannel::onProtocolIdentity(
 
 void IoHomecontrolChannel::clearProtocolIdentity()
 {
+    invalidateProductContext();
     mIoAddress = 0;
     mProtocolIdentity = IoHomeProtocolIdentity{};
 }

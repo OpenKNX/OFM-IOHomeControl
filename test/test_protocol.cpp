@@ -19400,3 +19400,13 @@ TEST(commissioning_job_rejects_start_at_exhausted_generation_without_replacing_o
     ASSERT_TRUE(!job.canBegin());ASSERT_TRUE(!job.begin(IoHomeCommissioningJob::Owner::KeyCapture));
     ASSERT_EQ(job.owner,IoHomeCommissioningJob::Owner::None);
 }
+
+TEST(controller_product_context_change_discards_old_samples_and_pending_request) {
+    const uint8_t key[16]={1};IoHomeController controller;IoHomecontrol module;IoHomecontrolChannel channel;
+    initPaired2WControllerForTest(controller,module,channel,0x831F2A,0x7E9E6E,key);
+    IoHomeProtocolIdentity identity;identity.valid=true;identity.nodeClass=IoHomeNodeClass::Actuator;identity.profile=6;identity.subProfile=2;
+    channel.onProtocolIdentity(0x7E9E6E,identity);
+    ASSERT_TRUE(channel.productRuntime().observe(0x7E9E6E,14,123,1,0,IoHomeProductRuntime::Trust::Authenticated));
+    ASSERT_TRUE(controller.requestMpFpRead(&channel,14));identity.subProfile=1;channel.onProtocolIdentity(0x7E9E6E,identity);
+    ASSERT_TRUE(!channel.productRuntime().sample(14)->present);IoHomeFrame tx;ASSERT_TRUE(!transmitQueuedControllerFrame(controller,tx));
+}

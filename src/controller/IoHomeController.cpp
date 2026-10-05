@@ -2470,6 +2470,10 @@ bool IoHomeController::sampleIdentityMatches(uint8_t channel,uint32_t node,const
 
 bool IoHomeController::managementIdentityMatches(const IoHomeQueueEntry &entry) const
 {
+    if(entry.productContextRevision) {
+        const auto *channel=mModule?mModule->getChannel(entry.sourceChannelIndex):nullptr;
+        if(!channel||channel->productContextRevision()!=entry.productContextRevision)return false;
+    }
     return !entry.managementRead||sampleIdentityMatches(entry.sourceChannelIndex,entry.destNodeId,entry.managementKey);
 }
 
@@ -2510,10 +2514,10 @@ void IoHomeController::servicePriorityRefresh()
 
 bool IoHomeController::requestProductRgb(IoHomecontrolChannel *channel,uint8_t red,uint8_t green,uint8_t blue)
 {
-    if(!channel||!channel->isPaired()||channel->is1W()||mPassiveMode||mGatewayMode||mOneWayKeyReceiveActive||isKeyExtractionActive()||isNetworkScanActive())return false;
+    if(!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||mPassiveMode||mGatewayMode||mOneWayKeyReceiveActive||isKeyExtractionActive()||isNetworkScanActive())return false;
     const auto family=ioHomeBindProductFamily(channel->getProtocolIdentity(),channel->getProductIdentityEvidence());
     if(!ioHomeProductAccess(family,10).rfWrite||!ioHomeProductAccess(family,11).rfWrite)return false;
-    IoHomeQueueEntry entry{};uint8_t length=0;
+    IoHomeQueueEntry entry{};entry.productContextRevision=channel->productContextRevision();uint8_t length=0;
     if(!ioHomeBuildBoundRgbRepresentation(channel->getProtocolIdentity(),channel->getProductIdentityEvidence(),red,green,blue,
         entry.productActivation+2,sizeof(entry.productActivation)-2,length))return false;
     entry.productActivation[0]=IOHC_ORIGINATOR_USER;entry.productActivation[1]=channel->getConfigured2WAcei();entry.productActivationLength=length+2;entry.productActivationFamily=static_cast<uint8_t>(family);
@@ -2522,10 +2526,10 @@ bool IoHomeController::requestProductRgb(IoHomecontrolChannel *channel,uint8_t r
 }
 bool IoHomeController::requestProductWhite(IoHomecontrolChannel *channel,uint16_t kelvin)
 {
-    if(!channel||!channel->isPaired()||channel->is1W()||mPassiveMode||mGatewayMode||mOneWayKeyReceiveActive||isKeyExtractionActive()||isNetworkScanActive())return false;
+    if(!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||mPassiveMode||mGatewayMode||mOneWayKeyReceiveActive||isKeyExtractionActive()||isNetworkScanActive())return false;
     const auto family=ioHomeBindProductFamily(channel->getProtocolIdentity(),channel->getProductIdentityEvidence());
     if(!ioHomeProductAccess(family,14).rfWrite)return false;
-    IoHomeQueueEntry entry{};uint8_t length=0;
+    IoHomeQueueEntry entry{};entry.productContextRevision=channel->productContextRevision();uint8_t length=0;
     if(!ioHomeBuildBoundWhiteRepresentation(channel->getProtocolIdentity(),channel->getProductIdentityEvidence(),kelvin,IOHC_PARAMETER_IGNORE,
         entry.productActivation+2,sizeof(entry.productActivation)-2,length))return false;
     entry.productActivation[0]=IOHC_ORIGINATOR_USER;entry.productActivation[1]=channel->getConfigured2WAcei();entry.productActivationLength=length+2;entry.productActivationFamily=static_cast<uint8_t>(family);
@@ -2535,10 +2539,10 @@ bool IoHomeController::requestProductWhite(IoHomecontrolChannel *channel,uint16_
 
 bool IoHomeController::requestMpFpRead(IoHomecontrolChannel *channel,uint8_t index)
 {
-    if(!channel||!channel->isPaired()||channel->is1W()||index>16||!channel->getProtocolIdentity().valid||
+    if(!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||index>16||!channel->getProtocolIdentity().valid||
        channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Actuator||mPassiveMode||mGatewayMode||
        mOneWayKeyReceiveActive||isKeyExtractionActive()||isNetworkScanActive())return false;
-    IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
+    IoHomeQueueEntry entry{};entry.productContextRevision=channel->productContextRevision();entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
     entry.managementRead=true;std::memcpy(entry.managementKey,entry.encKey,16);
     entry.command=IoHomeCommand::Private;entry.mpFpRead=true;entry.mpFpReadIndex=index;entry.mpFpReadMode=3;
     entry.sourceChannelIndex=channelIndexFor(channel);entry.maxAttempts=1;entry.background=true;entry.active=true;
@@ -2550,10 +2554,10 @@ bool IoHomeController::requestMpFpContext(IoHomecontrolChannel *channel,uint8_t 
     if(mode!=6&&mode!=7&&mode!=9)return false;
     // Same identity/ownership guards as standard GET, without enqueuing an
     // intermediate request. Context values are not physical temperature bounds.
-    if(!channel||!channel->isPaired()||channel->is1W()||!channel->getProtocolIdentity().valid||
+    if(!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||!channel->getProtocolIdentity().valid||
        channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Actuator||mPassiveMode||mGatewayMode||
        mOneWayKeyReceiveActive||isKeyExtractionActive()||isNetworkScanActive())return false;
-    IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
+    IoHomeQueueEntry entry{};entry.productContextRevision=channel->productContextRevision();entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
     entry.managementRead=true;std::memcpy(entry.managementKey,entry.encKey,16);
     entry.command=IoHomeCommand::Private;entry.mpFpRead=true;entry.mpFpReadMode=mode;
     entry.sourceChannelIndex=channelIndexFor(channel);entry.maxAttempts=1;entry.background=true;entry.active=true;

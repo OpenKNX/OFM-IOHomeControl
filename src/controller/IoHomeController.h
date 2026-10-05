@@ -130,6 +130,7 @@ struct IoHomeQueueEntry
 {
   uint32_t destNodeId;
   uint32_t observationGeneration;
+  uint32_t productContextRevision;
   uint32_t objectReadToken;
   uint8_t objectReadData[9];
   uint8_t objectReadLength;

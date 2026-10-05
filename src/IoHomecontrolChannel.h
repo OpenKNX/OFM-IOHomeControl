@@ -36,6 +36,8 @@ public:
 
   // Callbacks from controller when radio responses arrive
   void onPositionFeedback(float iPositionPercent);
+  uint32_t productContextRevision() const {return mProductContextRevision;}
+  void invalidateProductContext() {mProductRuntime.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
   IoHomeProductRuntime &productRuntime() {return mProductRuntime;}
   const IoHomeProductRuntime &productRuntime() const {return mProductRuntime;}
   void onTargetPositionFeedback(float iTargetPositionPercent);
@@ -251,6 +253,7 @@ private:
   uint8_t mSubProfile = 0;
   uint32_t mIoAddress = 0;
   IoHomeProtocolIdentity mProtocolIdentity{};
+  uint32_t mProductContextRevision=1;
   IoHomeProductRuntime mProductRuntime;
   uint16_t mManualPackedProfile = 0;
   IoHomeProductIdentityEvidence mProductIdentityEvidence{};

@@ -108,6 +108,8 @@ inline void ioHomeTestAdvanceMicros(uint32_t iMicros)
 class IoHomecontrolChannel
 {
 public:
+  uint32_t productContextRevision() const {return mProductContextRevision;}
+  void invalidateProductContext() {mProductRuntime.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
   IoHomeProductRuntime &productRuntime() {mProductRuntime.bind(mIoAddress,mEncKey);return mProductRuntime;}
   bool is1W() const { return mIs1W; }
   void setIs1W(bool iIs1W) { mIs1W = iIs1W; }
@@ -423,6 +425,7 @@ public:
     if (lIdentity.nodeClass == IoHomeNodeClass::Unknown &&
         mProtocolIdentity.valid && mProtocolIdentity.ioAddress == mIoAddress)
       lIdentity.nodeClass = mProtocolIdentity.nodeClass;
+    if(ioHomeProductSemanticIdentityChanged(mProtocolIdentity,lIdentity))invalidateProductContext();
     mProtocolIdentity = lIdentity;
     ioHomeUpdateVendorProductEvidence(mProtocolIdentity, mProductIdentityEvidence);
   }
@@ -601,6 +604,7 @@ private:
   uint8_t mConfigured1WAcei = 0; // mirrors production automatic-by-manufacturer default
   uint8_t mConfigured2WAcei = IOHC_ACEI_DEFAULT;
   uint32_t mIoAddress = 0;
+  uint32_t mProductContextRevision=1;
   IoHomeProductRuntime mProductRuntime;
   IoHomeProtocolIdentity mProtocolIdentity{};
   uint16_t mManualPackedProfile = 0;

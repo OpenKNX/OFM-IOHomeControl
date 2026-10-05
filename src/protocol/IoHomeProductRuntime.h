@@ -9,9 +9,10 @@ class IoHomeProductRuntime {
 public:
     enum class Trust:uint8_t { None,Passive,Correlated,Authenticated };
     struct Sample {uint16_t raw=0;uint32_t generation=0,receivedMs=0;Trust trust=Trust::None;bool present=false;};
+    void invalidate() {for(auto &sample:mSamples)sample={};}
     void bind(uint32_t node,const uint8_t *key) {
         if(!key)return;
-        if(node!=mNode||std::memcmp(key,mKey,16)){mNode=node;std::memcpy(mKey,key,16);for(auto &s:mSamples)s={};}
+        if(node!=mNode||std::memcmp(key,mKey,16)){mNode=node;std::memcpy(mKey,key,16);invalidate();}
     }
     bool observe(uint32_t peer,uint8_t index,uint16_t raw,uint32_t generation,uint32_t now,Trust trust) {
         if(!mNode||peer!=mNode||index>19||!generation||trust==Trust::None)return false;

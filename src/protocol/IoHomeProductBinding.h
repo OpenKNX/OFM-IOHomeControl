@@ -81,3 +81,9 @@ inline IoHomeProductBindingResult ioHomeProductBindingResult(
         IoHomeProductBindingResult::Reason::UnsupportedDefinition:IoHomeProductBindingResult::Reason::MatchedFamily;
     return result;
 }
+
+inline bool ioHomeProductSemanticIdentityChanged(const IoHomeProtocolIdentity &a,const IoHomeProtocolIdentity &b)
+{
+    return a.valid!=b.valid||a.fullMetadata!=b.fullMetadata||a.ioAddress!=b.ioAddress||a.nodeClass!=b.nodeClass||
+        a.profile!=b.profile||a.subProfile!=b.subProfile||a.manufacturerId!=b.manufacturerId;
+}
