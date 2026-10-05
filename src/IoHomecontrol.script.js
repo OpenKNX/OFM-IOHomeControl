@@ -170,7 +170,7 @@ function IOHC_queryRecognition(device, online, context, applySettings) {
     var channel = context.channelIndex - 1;
     var prefix = "IOHC_c" + context.channelIndex;
     var extended = IOHC_invokeFunctionProperty(online, [0x1E, channel]);
-    var hasPresentation = extended && extended.length === 14 && extended[0] === 0 && extended[1] === 1 && extended[2] === channel;
+    var hasPresentation = extended && extended.length === 14 && extended[0] === 0 && extended[1] === 1 && extended[2] === channel && extended[12] >= 0 && extended[12] <= 14 && extended[13] >= 0 && extended[13] <= 7;
     var response = hasPresentation ? extended.slice(0,12) : IOHC_invokeFunctionProperty(online, [0x1D, channel]);
     // Older firmware has no snapshot API. Keep the existing status workflow usable.
     if (!response || response.length != 12 || response[0] != 0 ||
@@ -210,6 +210,10 @@ function IOHC_resumeAssignment(device,online,channel) {
     var discovery={nodeId:IOHC_readNodeId(receipt,7),protocolType:receipt[10]|receipt[11]<<8,
                    subtype:receipt[12],manufacturer:receipt[14],powerClass:receipt[15]===1?2:receipt[15]===0?1:0,
                    metadataValid:(receipt[13]&1)!==0};
+    // Refuse stale receipts before any ETS mutation, not only at ACK time.
+    var current=IOHC_invokeFunctionProperty(online,[0x1D,channel]);
+    if(!current || current.length!==12 || current[0]!==0 || current[1]!==1 || current[2]!==channel ||
+       IOHC_readNodeId(current,3)!==discovery.nodeId || (current[11]&0x20)!==0) return false;
     IOHC_configureImportedChannel(device,channel+1,discovery);
     var ack=[0x21,channel].concat(receipt.slice(3,10));
     var response=IOHC_invokeFunctionProperty(online,ack);

@@ -5381,10 +5381,11 @@ uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool i
     {
         uint16_t lWatermark=0;
         const auto lLoad=mReservationJournal.load(lOwner,lNode,lKey,lWatermark);
-        if (lLoad==IoHomeDurableReservation::Load::Corrupt ||
+        if (lLoad==IoHomeDurableReservation::Load::DifferentIdentity ||
+            lLoad==IoHomeDurableReservation::Load::Corrupt ||
             lLoad==IoHomeDurableReservation::Load::Unavailable)
         { mReservationFailed=true;
-          mOneWayRecovery=lLoad==IoHomeDurableReservation::Load::Corrupt ?
+          mOneWayRecovery=lLoad!=IoHomeDurableReservation::Load::Unavailable ?
               OneWayRecovery::JournalCorrupt : OneWayRecovery::StoreUnavailable;
           return 0; }
         if (lLoad==IoHomeDurableReservation::Load::Found) iProfile->setSequence1W(lWatermark);

@@ -49,6 +49,7 @@ public:
     }
     bool erase(uint8_t channel)
     {
+        if(channel>=16) return false;
 #ifdef ESP32
         Preferences p; if(!p.begin("iohcassign",false)) return false;
         char name[8]; snprintf(name,sizeof(name),"c%u",channel);
@@ -56,7 +57,7 @@ public:
 #elif defined(TEST_NATIVE)
         mPresent[channel]=false; return true;
 #else
-        return false;
+        return true; // no receipt backend exists on this target; legacy unpair remains available
 #endif
     }
 #ifdef TEST_NATIVE

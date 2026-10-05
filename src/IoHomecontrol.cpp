@@ -2438,6 +2438,13 @@ void IoHomecontrol::restoreAssignmentReceipts()
 void IoHomecontrol::updateCommissioningJob()
 {
     using O=IoHomeCommissioningJob::Owner; using S=IoHomeCommissioningJob::Stage;
+    // Observe console-started work too; the controller remains the RF owner.
+    if (!mCommissioningJob.active()) {
+        if (isPairingState(mController.state()))
+            mCommissioningJob.begin(O::Pairing,mController.pairingTelemetry().channel);
+        else if (mKeyImportPhase==KeyImportPhase::Extracting || mKeyImportPhase==KeyImportPhase::Verifying || mKeyImportPhase==KeyImportPhase::Scanning)
+            mCommissioningJob.begin(O::Import);
+    }
     if (mCommissioningJob.owner==O::Import && mCommissioningJob.active())
     {
         switch(mKeyImportPhase) {
@@ -2451,6 +2458,7 @@ void IoHomecontrol::updateCommissioningJob()
     }
     if (mCommissioningJob.owner==O::Pairing && mCommissioningJob.active())
     {
+        mCommissioningJob.node=mController.pairingTelemetry().peerNodeId;
         const auto state=mController.state();
         const auto outcome=mController.pairingTelemetry().outcome;
         if (outcome==IoHomeController::PairingOutcome::Cancelled) mCommissioningJob.stage=S::Cancelled;

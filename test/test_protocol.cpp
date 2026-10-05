@@ -3655,9 +3655,17 @@ TEST(durable_reservation_journal_reports_commit_and_blocks_corrupt_rollback)
     IoHomeDurableReservation k;
     ASSERT_TRUE(k.commit(0,0x123456,key,117)); k.failWrites=true;
     ASSERT_TRUE(!k.commit(0,0x123456,key,151));
-    ASSERT_EQ(k.load(0,0x654321,key,w),L::DifferentIdentity);
+    ASSERT_EQ(k.load(0,0x654321,key,w),L::Empty);
     j.corrupt(0,0); ASSERT_EQ(j.load(0,0x123456,key,w),L::Corrupt);
     ASSERT_TRUE(!j.commit(0,0x123456,key,151));
+}
+
+TEST(durable_reservation_survives_identity_moves_and_reassignment) {
+    IoHomeDurableReservation j;const uint8_t key[16]={1};uint16_t w=0;
+    ASSERT_TRUE(j.commit(0,0x123456,key,134));
+    ASSERT_EQ(j.load(7,0x123456,key,w),IoHomeDurableReservation::Load::Found);ASSERT_EQ(w,134);
+    ASSERT_TRUE(j.commit(0,0x654321,key,50));
+    ASSERT_EQ(j.load(0,0x123456,key,w),IoHomeDurableReservation::Load::Found);ASSERT_EQ(w,134);
 }
 
 TEST(commissioning_job_rejects_concurrent_owner_and_stale_cancel)

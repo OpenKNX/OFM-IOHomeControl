@@ -5,6 +5,9 @@
 #ifdef ESP32
 #include <Preferences.h>
 #endif
+#ifdef TEST_NATIVE
+#include <map>
+#endif
 
 // Independent two-record reservation journal. Never relies on void flash.save.
 // NVS putBytes completion + readback is the software commit boundary; target
@@ -27,7 +30,7 @@ public:
     }
     Load load(uint8_t channel, uint32_t node, const uint8_t *key, uint16_t &watermark)
     {
-        Record a,b; const int na=read(channel,0,a), nb=read(channel,1,b);
+        Record a,b; const int na=read(channel,0,a,node,key), nb=read(channel,1,b,node,key);
         if (na<0 || nb<0) return Load::Unavailable;
         const bool va=na==Size && valid(a), vb=nb==Size && valid(b);
         if ((na && !va) || (nb && !vb)) return Load::Corrupt;
@@ -42,11 +45,12 @@ public:
     bool commit(uint8_t channel, uint32_t node, const uint8_t *key, uint16_t watermark)
     {
         if (!key || !node) return false;
-        Record a,b; const int na=read(channel,0,a), nb=read(channel,1,b);
+        Record a,b; const int na=read(channel,0,a,node,key), nb=read(channel,1,b,node,key);
         if (na<0 || nb<0) return false;
         const bool va=na==Size && valid(a), vb=nb==Size && valid(b);
         if ((na && !va) || (nb && !vb)) return false;
         if (!va && !vb && (na || nb)) return false;
+        if ((va && !matches(a,node,key)) || (vb && !matches(b,node,key))) return false;
         const bool latestA=!vb || (va && generation(a)>=generation(b));
         const uint32_t gen=va || vb ? generation(latestA ? a:b):0;
         if (gen==0xFFFFFFFF) return false;
@@ -57,13 +61,13 @@ public:
         const uint16_t crc=checksum(r.bytes,Size-2);
         r.bytes[Size-2]=crc; r.bytes[Size-1]=crc>>8;
         const uint8_t slot=va || vb ? (latestA ? 1:0):0;
-        if (!write(channel,slot,r)) return false;
+        if (!write(channel,slot,r,node,key)) return false;
         Record verify;
-        return read(channel,slot,verify)==Size && !std::memcmp(r.bytes,verify.bytes,Size);
+        return read(channel,slot,verify,node,key)==Size && !std::memcmp(r.bytes,verify.bytes,Size);
     }
 #ifdef TEST_NATIVE
     bool failWrites=false;
-    void corrupt(uint8_t c,uint8_t s) { mRecords[c][s].bytes[0]=0; }
+    void corrupt(uint8_t c,uint8_t s) { mEntries[mLastIdentity[c]].records[s].bytes[0]=0; }
 #endif
 private:
     static uint16_t checksum(const uint8_t *p,uint8_t n)
@@ -72,37 +76,53 @@ private:
         for (uint8_t i=0;i<n;i++) { crc^=p[i]; for(uint8_t j=0;j<8;j++) crc=(crc>>1)^((crc&1)?0x8408:0); }
         return crc;
     }
-    int read(uint8_t c,uint8_t s,Record &r)
+    static bool matches(const Record &r,uint32_t node,const uint8_t *key) {
+        return key && r.bytes[5]==(node>>16&255) && r.bytes[6]==(node>>8&255) &&
+               r.bytes[7]==(node&255) && !std::memcmp(r.bytes+8,key,16);
+    }
+    // Identity-indexed records survive channel moves and temporary reassignment.
+    // The 48-bit name hash only selects storage; the complete identity is checked
+    // on load AND commit, so a hash collision fails closed.
+    static uint64_t identityHash(uint32_t node,const uint8_t *key) {
+        uint64_t h=14695981039346656037ULL;
+        for(uint8_t i=0;i<3;i++){h^=uint8_t(node>>(8*i));h*=1099511628211ULL;}
+        for(uint8_t i=0;i<16;i++){h^=key[i];h*=1099511628211ULL;}
+        return h&0xFFFFFFFFFFFFULL;
+    }
+    int read(uint8_t c,uint8_t s,Record &r,uint32_t node,const uint8_t *key)
     {
-        if (c>=16) return -1;
+        if (c>=16 || !key || !node) return -1;
 #ifdef ESP32
         Preferences p;
         if (!p.begin("iohcseq",false)) return -1;
-        char name[8]; snprintf(name,sizeof(name),"r%u%c",c,s?'b':'a');
+        char name[16]; snprintf(name,sizeof(name),"i%012llx%c",static_cast<unsigned long long>(identityHash(node,key)),s?'b':'a');
         const size_t n=p.getBytesLength(name);
         const int result=n==0 ? 0:n==Size && p.getBytes(name,r.bytes,Size)==Size ? Size:1;
         p.end(); return result;
 #elif defined(TEST_NATIVE)
-        r=mRecords[c][s]; return mPresent[c][s] ? Size:0;
+        const auto id=identityHash(node,key); mLastIdentity[c]=id;
+        auto &entry=mEntries[id];r=entry.records[s]; return entry.present[s] ? Size:0;
 #else
         return -1; // no unverified fallback to void save
 #endif
     }
-    bool write(uint8_t c,uint8_t s,const Record &r)
+    bool write(uint8_t c,uint8_t s,const Record &r,uint32_t node,const uint8_t *key)
     {
 #ifdef ESP32
         Preferences p; if (!p.begin("iohcseq",false)) return false;
-        char name[8]; snprintf(name,sizeof(name),"r%u%c",c,s?'b':'a');
+        char name[16]; snprintf(name,sizeof(name),"i%012llx%c",static_cast<unsigned long long>(identityHash(node,key)),s?'b':'a');
         const bool ok=p.putBytes(name,r.bytes,Size)==Size; p.end(); return ok;
 #elif defined(TEST_NATIVE)
         if (failWrites) return false;
-        mRecords[c][s]=r; mPresent[c][s]=true; return true;
+        const auto id=identityHash(node,key);mLastIdentity[c]=id;
+        auto &entry=mEntries[id];entry.records[s]=r;entry.present[s]=true;return true;
 #else
         return false;
 #endif
     }
 #ifdef TEST_NATIVE
-    Record mRecords[16][2]{};
-    bool mPresent[16][2]{};
+    struct Entry {Record records[2]{};bool present[2]{};};
+    std::map<uint64_t,Entry> mEntries;
+    uint64_t mLastIdentity[16]{};
 #endif
 };
