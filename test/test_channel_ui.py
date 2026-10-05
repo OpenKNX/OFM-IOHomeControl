@@ -389,7 +389,7 @@ class ChannelUiTest(unittest.TestCase):
         self.assertEqual(row.find("k:ParameterSeparator", NS).get("Text"), "Kanal %C%")
         refs = row.findall("k:ParameterRefRef", NS)
         self.assertEqual(refs[0].get("RefId"), "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601")
-        self.assertEqual(refs[1].get("HelpContext"), "BASE-ChannelName")
+        self.assertEqual(refs[1].get("HelpContext"), "IOHC-Beschreibung")
 
     def test_device_type_dynamics_follow_visible_selection_directly(self) -> None:
         selection_ref = "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"
@@ -487,9 +487,9 @@ class ChannelUiTest(unittest.TestCase):
         children = list(page)
         self.assertEqual(children[0].get("Text"), "Kanal %C%")
         self.assertEqual(children[1].get("RefId"), "%AID%_P-%TT%%CC%000_R-%TT%%CC%00001")
-        self.assertEqual(children[1].get("HelpContext"), "BASE-ChannelName")
+        self.assertEqual(children[1].get("HelpContext"), "IOHC-Beschreibung")
         self.assertEqual(children[2].get("RefId"), "%AID%_UP-%TT%%CC%008_R-%TT%%CC%00801")
-        self.assertEqual(children[2].get("HelpContext"), "BASE-ChannelSuspended")
+        self.assertEqual(children[2].get("HelpContext"), "IOHC-Suspendiert")
 
     def test_pairing_overview_only_shows_activated_channels(self) -> None:
         overview_include = next(
@@ -848,7 +848,7 @@ class ChannelUiTest(unittest.TestCase):
         self.assertEqual(parameter.get("Value"), "103")
 
         protocol_choice = self.template.find(
-            ".//k:choose[@ParamRefId='%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901']", NS
+            ".//k:ParameterBlock[@Name='ExpertSettings']/k:choose[@ParamRefId='%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901']", NS
         )
         two_way = protocol_choice.find("k:when[@test='0']", NS)
         self.assertIsNotNone(
@@ -863,9 +863,71 @@ class ChannelUiTest(unittest.TestCase):
         self.assertEqual(param.get("Value"), "0")
         self.assertIsNone(param.find("k:Memory", NS))
         self.assertIsNone(self.template.find(".//k:Union/k:Parameter[@Name='c%C%ExpertView']", NS))
-        gate = self.template.find(".//k:choose[@ParamRefId='%AID%_P-%TT%%CC%094_R-%TT%%CC%09401']", NS)
-        self.assertIsNotNone(gate.find("k:when[@test='1']/k:ParameterBlock[@Name='ExpertSettings']", NS))
-        self.assertEqual(gate.findall('.//k:Assign', NS), [])
+        page = self.template.find(".//k:ParameterBlock[@Name='IOHCChannel%C%Page']", NS)
+        expert = page.find("k:ParameterBlock[@Name='ExpertOptions']", NS)
+        self.assertEqual(expert.get("Text"), "Expertenoptionen")
+        self.assertIsNotNone(expert.find("k:ParameterBlock[@Name='ExpertSettings']", NS))
+        self.assertEqual(expert.findall('.//k:Assign', NS), [])
+        commissioning = page.find("k:ParameterBlock[@Name='Commissioning']", NS)
+        for ref in commissioning.findall('.//k:ParameterRefRef', NS):
+            self.assertFalse(any(f"%CC%{number:03d}_R-" in ref.get('RefId') for number in range(110,139)))
+
+    def test_product_functions_are_inside_enabled_channel(self) -> None:
+        channel = self.template.find(".//k:ParameterBlock[@Name='Channel']", NS)
+        enabled = channel.find("k:choose/k:when[@test='>0']", NS)
+        page = enabled.find("k:ParameterBlock[@Name='IOHCChannel%C%Page']", NS)
+        products = page.find("k:ParameterBlock[@Name='ProductFunctions']", NS)
+        self.assertIsNotNone(products.find("op:usePart[@name='IOHCProducts']", NS))
+        wrapper = parse('IoHomeProduct.dynamic.part.xml')
+        includes = wrapper.findall('.//op:include', NS)
+        self.assertEqual([i.get('prefix') for i in includes], ['PIC', 'PVX'])
+        self.assertTrue(all(i.get('IsInner') == 'true' and i.get('type') is None for i in includes))
+        part = self.template.find(".//op:part[@name='IOHCProducts']", NS)
+        self.assertEqual(part.find("op:param[@name='PRODUCT_CC']", NS).get('value'), '%CC%')
+        count = 0
+        for name in ('IoHomeProductPIC.ui.xml','IoHomeProductPVX.ui.xml'):
+            fragment = parse(name)
+            refs = fragment.findall('.//k:ComObjectRefRef', NS)
+            count += len(refs)
+            self.assertTrue(all('%TT%%PRODUCT_CC%' in ref.get('RefId') for ref in refs))
+            self.assertTrue(all('-25' not in ref.get('RefId') and '-27' not in ref.get('RefId') for ref in refs))
+        self.assertEqual(count, 12)
+
+    def test_diagnostics_are_grouped_outside_expert_configuration(self) -> None:
+        page = self.template.find(".//k:ParameterBlock[@Name='IOHCChannel%C%Page']", NS)
+        diagnostics = page.find("k:ParameterBlock[@Name='Diagnostics']", NS)
+        self.assertEqual(diagnostics.get('Text'), 'Diagnose')
+        expert = page.find("k:ParameterBlock[@Name='ExpertOptions']", NS)
+        self.assertIsNone(expert.find(".//k:ParameterBlock[@Name='Diagnostics']", NS))
+        for name in ('Overview','Sensors','Objects','Products'):
+            self.assertIsNotNone(diagnostics.find(f".//k:ParameterBlock[@Name='Diagnostic{name}']", NS))
+        diagnostic_refs = {ref.get('RefId') for ref in diagnostics.findall('.//k:ParameterRefRef', NS)}
+        for number in (14,15,103,104,*range(114,123),*range(124,139)):
+            self.assertIn(f'%AID%_P-%TT%%CC%{number:03d}_R-%TT%%CC%{number:03d}01',diagnostic_refs)
+        for number in range(110,114):
+            self.assertIsNotNone(expert.find(f".//k:ParameterRefRef[@RefId='%AID%_P-%TT%%CC%{number:03d}_R-%TT%%CC%{number:03d}01']", NS))
+        two_way = diagnostics.find("k:choose[@ParamRefId='%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901']/k:when[@test='0']", NS)
+        self.assertEqual(len(two_way.findall('k:ParameterBlock', NS)), 3)
+
+    def test_visible_settings_have_existing_contextual_help(self) -> None:
+        for filename in ('IoHomecontrol.templ.xml','IoHomecontrol.share.xml','IoHomecontrol.scene.part.xml','IoHomeProductPIC.ui.xml','IoHomeProductPVX.ui.xml'):
+            for ref in parse(filename).findall('.//k:Dynamic//k:ParameterRefRef', NS):
+                help_id = ref.get('HelpContext')
+                self.assertIsNotNone(help_id, (filename, ref.get('RefId')))
+                self.assertTrue((ROOT/'src/Baggages/Help_de'/f'{help_id}.md').is_file(), help_id)
+
+    def test_import_target_supports_automatic_free_channel_selection(self) -> None:
+        target = self.share.find(".//k:Parameter[@Name='ImportTargetChannel']", NS)
+        number = self.share.find(".//k:ParameterType[@Name='IOHCImportTargetChannel']/k:TypeNumber", NS)
+        self.assertEqual(target.get('Value'), '0')
+        self.assertEqual(number.get('minInclusive'), '0')
+        channels = self.share.find(".//k:ParameterType[@Name='IOHCNumChannels']/k:TypeNumber", NS)
+        self.assertEqual(channels.get('minInclusive'), '1')
+
+    def test_new_channels_allow_automatic_recognition(self) -> None:
+        for field in ('Type','Orientation','Binary','Dimmable'):
+            param = self.template.find(f".//k:Parameter[@Name='c%C%Recognition{field}Auto']", NS)
+            self.assertEqual(param.get('Value'), '1')
 
     def test_main_page_keeps_suspend_and_groups_configuration(self) -> None:
         page = self.template.find(".//k:ParameterBlock[@Name='IOHCChannel%C%Page']", NS)

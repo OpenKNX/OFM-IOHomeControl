@@ -1,6 +1,5 @@
-### Kanal
+# Kanal
 
-Auf dieser Seite wird ein einzelner io-homecontrol-Kanal konfiguriert.
+Ein Kanal verbindet ein io-homecontrol-Gerät mit seinen KNX-Objekten. In Kanalauswahl aktivieren, dann unter Inbetriebnahme verbinden und Status / Erkennung lesen. Nach der Übernahme die Applikation programmieren.
 
-Der Gerätetyp wird bereits in der **Kanalauswahl** festgelegt. Auf der Kanalseite folgen die Betriebsparameter und zuletzt das Pairing.
-So bleibt die Kanalstruktur nachvollziehbar und konsistent.
+Funktionen und Rückmeldung enthält die normalen Betriebswerte, Szenen die gespeicherten Aktionen, Produktfunktionen zusätzliche geräteabhängige Objekte. Expertenoptionen enthält manuelle Protokollvorgaben und die Erkennungsautomatik. Diagnose bündelt Status, Erkennungsverlauf, Sensorabfragen, Metadaten und Produktrohwerte. Deaktivierte Kanäle werden ausgeblendet; suspendierte bleiben sichtbar.

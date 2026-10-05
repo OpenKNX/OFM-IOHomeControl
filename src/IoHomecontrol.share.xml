@@ -25,6 +25,10 @@
               <ParameterType Id="%AID%_PT-IOHCNumChannels" Name="IOHCNumChannels">
                 <TypeNumber SizeInBit="8" Type="unsignedInt" minInclusive="1" maxInclusive="%N%" />
               </ParameterType>
+              <!-- Import target additionally permits 0: assign to free channels. -->
+              <ParameterType Id="%AID%_PT-IOHCImportTargetChannel" Name="IOHCImportTargetChannel">
+                <TypeNumber SizeInBit="8" Type="unsignedInt" minInclusive="0" maxInclusive="%N%" />
+              </ParameterType>
               <!-- Channel active toggle -->
               <ParameterType Id="%AID%_PT-IOHCCheckBox" Name="IOHCCheckBox">
                 <TypeRestriction Base="Value" SizeInBit="1">
@@ -369,7 +373,7 @@
               <Parameter Id="%AID%_P-%TT%00008" Name="ExtractionNodeIds4" ParameterType="%AID%_PT-IOHCText40Byte" Text="Gefundene Node-ID 16" Value="-" Access="Read" />
               <Parameter Id="%AID%_P-%TT%00009" Name="AssignmentPreviewToken" ParameterType="%AID%_PT-IOHCText40Byte" Text="Zuordnungsvorschau (Token)" Value="" Access="Read" op:configTransfer="never" />
               <Parameter Id="%AID%_P-%TT%00010" Name="ImportCandidate" ParameterType="%AID%_PT-IOHCImportChoice" Text="Kandidat: 0=alle unterstützten, sonst Nummer" Value="0" op:configTransfer="never" />
-              <Parameter Id="%AID%_P-%TT%00011" Name="ImportTargetChannel" ParameterType="%AID%_PT-IOHCNumChannels" Text="Zielkanal: 0=freie Kanäle, sonst Kanal" Value="0" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%00011" Name="ImportTargetChannel" ParameterType="%AID%_PT-IOHCImportTargetChannel" Text="Zielkanal: 0=freie Kanäle, sonst Kanal" Value="0" op:configTransfer="never" />
             </Parameters>
 
             <ParameterRefs>
@@ -415,7 +419,7 @@
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="Pairing-Übersicht" UIHint="Headline" />
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="Zuletzt online gelesener Stand; keine Live-Anzeige. Mit Aktualisieren werden die gespeicherten Gerätezuordnungen erneut ausgelesen." UIHint="Information" />
                 <Button Id="%AID%_B-%TT%00010" Text="Pairing-Übersicht aktualisieren" EventHandler="IOHC_refreshAllPairingInfo" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelCount&quot;: %N% }" />
-                <ParameterRefRef RefId="%AID%_P-%TT%00003_R-%TT%0000301" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00003_R-%TT%0000301" HelpContext="IOHC-Uebersicht-Zeit" />
                 <ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
                   <Rows>
                     <Row Id="%AID%_PB-nnn_R-1" />
@@ -445,14 +449,14 @@
                 <Button Id="%AID%_B-%TT%00032" Text="Einrichtung aktualisieren / weiter" EventHandler="IOHC_continueCommissioning" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelCount&quot;: %N% }" />
                 <Button Id="%AID%_B-%TT%00031" Text="Einrichtungsstatus lesen" EventHandler="IOHC_readCommissioningStatus" EventHandlerOnline="ConnectionOriented" />
                 <Button Id="%AID%_B-%TT%00030" Text="Aktive Einrichtung abbrechen" EventHandler="IOHC_cancelCommissioning" EventHandlerOnline="ConnectionOriented" />
-                <ParameterRefRef RefId="%AID%_P-%TT%00010_R-%TT%0001001" />
-                <ParameterRefRef RefId="%AID%_P-%TT%00011_R-%TT%0001101" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00010_R-%TT%0001001" HelpContext="IOHC-Import-Kandidat" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00011_R-%TT%0001101" HelpContext="IOHC-Import-Zielkanal" />
                 <Button Id="%AID%_B-%TT%00011" Text="2W-Extraktion starten / Ergebnis übernehmen" EventHandler="IOHC_startKeyExtract" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelCount&quot;: %N% }" />
-                <ParameterRefRef RefId="%AID%_P-%TT%00004_R-%TT%0000401" />
-                <ParameterRefRef RefId="%AID%_P-%TT%00005_R-%TT%0000501" />
-                <ParameterRefRef RefId="%AID%_P-%TT%00006_R-%TT%0000601" />
-                <ParameterRefRef RefId="%AID%_P-%TT%00007_R-%TT%0000701" />
-                <ParameterRefRef RefId="%AID%_P-%TT%00008_R-%TT%0000801" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00004_R-%TT%0000401" HelpContext="IOHC-Import-Ergebnis" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00005_R-%TT%0000501" HelpContext="IOHC-Import-Adressen" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00006_R-%TT%0000601" HelpContext="IOHC-Import-Adressen" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00007_R-%TT%0000701" HelpContext="IOHC-Import-Adressen" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00008_R-%TT%0000801" HelpContext="IOHC-Import-Adressen" />
 
               </ParameterBlock>
               <ParameterBlock Id="%AID%_PB-nnn" Name="DiagnosticsGlobal" Text="Diagnose und Funkmonitor">

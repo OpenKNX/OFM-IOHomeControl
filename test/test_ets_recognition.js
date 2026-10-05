@@ -301,3 +301,25 @@ test("object cancellation refuses a stale boot-token binding",function(){
  var failed=false;try{IOHC_objectCancel(d,online,{setText:function(){}},{channelIndex:1});}catch(e){failed=true;}
  check(failed&&calls.join(",")==="29,44","stale object cancellation sent");
 });
+
+
+test("normal status read adopts known functions and asks for download", function() {
+    var d=deviceWith({DeviceType:7}),closed=false,message="";
+    var online={connect:function(){},disconnect:function(){closed=true;},invokeFunctionProperty:function(o,p,data){
+        if(data[0]===0x12)return [1,0x12,0x34,0x56,0,0];
+        if(data[0]===0x1E)return [3];
+        check(data[0]===0x1D,"unexpected status request");return snapshot(0x1C,6,58);
+    }};
+    IOHC_refreshPairingInfo(d,online,{setText:function(t){message=t;},setProgress:function(){}},{channelIndex:1});
+    check(closed && value(d,"DeviceType")===6 && value(d,"BinaryOnly")===1,"normal setup did not adopt recognition");
+    check(message.indexOf("Applikation programmieren")>=0,"missing download instruction");
+});
+test("normal status read preserves explicit manual choices", function() {
+    var d=deviceWith({DeviceType:7,ProfileOverride:448});
+    var online={connect:function(){},disconnect:function(){},invokeFunctionProperty:function(o,p,data){
+        if(data[0]===0x12)return [1,0x12,0x34,0x56,0,0];
+        return data[0]===0x1E?[3]:snapshot(0x1C,6,58);
+    }};
+    IOHC_refreshPairingInfo(d,online,{setText:function(){},setProgress:function(){}},{channelIndex:1});
+    check(value(d,"DeviceType")===7 && value(d,"ProfileOverride")===448,"manual override overwritten");
+});

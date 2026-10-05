@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns="http://knx.org/xml/project/20" xmlns:op="http://github.com/OpenKNX/OpenKNXproducer">
+  <!-- Resolve each module namespace independently; defer the channel number
+       until the enclosing IOHC channel is expanded. No channel multiplication. -->
+  <Dynamic>
+    <op:include href="IoHomeProductPIC.ui.xml" xpath="//Dynamic/*" prefix="PIC" IsInner="true" />
+    <op:include href="IoHomeProductPVX.ui.xml" xpath="//Dynamic/*" prefix="PVX" IsInner="true" />
+  </Dynamic>
+</KNX>

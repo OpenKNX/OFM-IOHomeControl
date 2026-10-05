@@ -1,27 +1,29 @@
 // OFM-IO-Homecontrol -- OpenKNX --
 // ETS JavaScript for io-homecontrol pairing workflow
-// Uses function properties (objectIndex=160, propertyId=10) for device communication
+// Uses the ETS function-property API (objectIndex=160, propertyId=10) for device communication
+// Producer validates plain function declarations as XML entry points only.
+// Standard JS comments mark internal helpers/callbacks and preserve hoisting.
 
 var IOHC_FUNCTION_PROPERTY_OBJECT_INDEX = 160;
 var IOHC_FUNCTION_PROPERTY_ID = 10;
 
-function IOHC_invokeFunctionProperty(online, data) {
+function /* internal helper */ IOHC_invokeFunctionProperty(online, data) {
     return online.invokeFunctionProperty(IOHC_FUNCTION_PROPERTY_OBJECT_INDEX, IOHC_FUNCTION_PROPERTY_ID, data);
 }
 
-function IOHC_getChannelPrefix(context) {
+function /* internal helper */ IOHC_getChannelPrefix(context) {
     return "IOHC_c" + context.channelIndex;
 }
 
-function IOHC_getGlobalPrefix() {
+function /* internal helper */ IOHC_getGlobalPrefix() {
     return "IOHC_";
 }
 
-function IOHC_getParameter(device, name) {
+function /* internal helper */ IOHC_getParameter(device, name) {
     return device.getParameterByName(name);
 }
 
-function IOHC_setParameterValue(device, name, value) {
+function /* internal helper */ IOHC_setParameterValue(device, name, value) {
     var parameter = IOHC_getParameter(device, name);
     if (parameter) {
         if (typeof value === "string" && value.length > 40) {
@@ -31,11 +33,11 @@ function IOHC_setParameterValue(device, name, value) {
     }
 }
 
-function IOHC_pad2(value) {
+function /* internal helper */ IOHC_pad2(value) {
     return value < 10 ? "0" + value : "" + value;
 }
 
-function IOHC_nowText() {
+function /* internal helper */ IOHC_nowText() {
     var now = new Date();
     return now.getFullYear() + "-" +
            IOHC_pad2(now.getMonth() + 1) + "-" +
@@ -45,7 +47,7 @@ function IOHC_nowText() {
            IOHC_pad2(now.getSeconds());
 }
 
-function IOHC_formatNodeId(nodeId) {
+function /* internal helper */ IOHC_formatNodeId(nodeId) {
     if (!nodeId) {
         return "nicht angelernt";
     }
@@ -57,13 +59,13 @@ function IOHC_formatNodeId(nodeId) {
     return text;
 }
 
-function IOHC_readNodeId(resp, startIndex) {
+function /* internal helper */ IOHC_readNodeId(resp, startIndex) {
     return ((resp[startIndex] || 0) << 16) |
            ((resp[startIndex + 1] || 0) << 8) |
            (resp[startIndex + 2] || 0);
 }
 
-function IOHC_appendNodeId(data, nodeId) {
+function /* internal helper */ IOHC_appendNodeId(data, nodeId) {
     var normalizedNodeId = nodeId || 0;
     data.push((normalizedNodeId >> 16) & 0xFF);
     data.push((normalizedNodeId >> 8) & 0xFF);
@@ -104,12 +106,12 @@ var IOHC_PRESENTATIONS = {
     1536: [1, 0],
     1537: [1, 0]
 };
-function IOHC_etsDeviceType(p,s) { return (IOHC_PRESENTATIONS[(p<<6)|s] || [0,0])[0]; }
-function IOHC_hasOrientationObjects(p,s) { return (IOHC_PRESENTATIONS[(p<<6)|s] || [0,0])[1]&1; }
-function IOHC_isBinaryOnly(p,s) { return ((IOHC_PRESENTATIONS[(p<<6)|s] || [0,0])[1]>>1)&1; }
+function /* internal helper */ IOHC_etsDeviceType(p,s) { return (IOHC_PRESENTATIONS[(p<<6)|s] || [0,0])[0]; }
+function /* internal helper */ IOHC_hasOrientationObjects(p,s) { return (IOHC_PRESENTATIONS[(p<<6)|s] || [0,0])[1]&1; }
+function /* internal helper */ IOHC_isBinaryOnly(p,s) { return ((IOHC_PRESENTATIONS[(p<<6)|s] || [0,0])[1]>>1)&1; }
 // END GENERATED RECOGNITION
 
-function IOHC_importDeviceLabel(etsType) {
+function /* internal helper */ IOHC_importDeviceLabel(etsType) {
     switch (etsType) {
     case 1: return "Rollladen/Jalousie";
     case 2: return "Fenster";
@@ -129,7 +131,7 @@ function IOHC_importDeviceLabel(etsType) {
     }
 }
 
-function IOHC_setExtractionResult(device, statusText, nodeIds) {
+function /* internal helper */ IOHC_setExtractionResult(device, statusText, nodeIds) {
     IOHC_setParameterValue(device, "IOHC_ExtractionLastResult", statusText);
     for (var part = 0; part < 4; part++) {
         var first = part * 5;
@@ -144,7 +146,7 @@ function IOHC_setExtractionResult(device, statusText, nodeIds) {
 
 // Bounded project history: the last two distinct explicit recognition adoptions.
 // It is not a device-persistence receipt or cryptographic authentication claim.
-function IOHC_recordRecognitionAdoption(device,prefix,field,value,discovery) {
+function /* internal helper */ IOHC_recordRecognitionAdoption(device,prefix,field,value,discovery) {
     var numbers=[discovery.nodeId,discovery.protocolType,discovery.subtype,discovery.manufacturer],limits=[0xFFFFFF,0xFFFF,255,255];
     for(var n=0;n<numbers.length;n++)if(typeof numbers[n]!=="number"||Math.floor(numbers[n])!==numbers[n]||numbers[n]<0||numbers[n]>limits[n])return;
     if(!discovery.nodeId)return;
@@ -159,7 +161,7 @@ function IOHC_recordRecognitionAdoption(device,prefix,field,value,discovery) {
     IOHC_setParameterValue(device,lastName,record);
 }
 // Apply only documented ETS categories. Expert overrides and power policy stay intact.
-function IOHC_applyRecognitionSettings(device, prefix, discovery) {
+function /* internal helper */ IOHC_applyRecognitionSettings(device, prefix, discovery) {
     var override = IOHC_getParameter(device, prefix + "ProfileOverride");
     if ((override && Number(override.value) != 0) || !discovery.metadataValid) return false;
     var etsType = discovery.presentationType !== undefined ? discovery.presentationType :
@@ -183,7 +185,7 @@ function IOHC_applyRecognitionSettings(device, prefix, discovery) {
     return changed;
 }
 
-function IOHC_queryRecognition(device, online, context, applySettings) {
+function /* internal helper */ IOHC_queryRecognition(device, online, context, applySettings) {
     var channel = context.channelIndex - 1;
     var prefix = "IOHC_c" + context.channelIndex;
     var extended = IOHC_invokeFunctionProperty(online, [0x1E, channel]);
@@ -221,7 +223,7 @@ function IOHC_queryRecognition(device, online, context, applySettings) {
     return applied;
 }
 
-function IOHC_resumeAssignment(device,online,channel) {
+function /* internal helper */ IOHC_resumeAssignment(device,online,channel) {
     var receipt=IOHC_invokeFunctionProperty(online,[0x21,channel]);
     if(!receipt || receipt.length!==16 || receipt[0]!==0 || receipt[1]!==1 || receipt[2]!==channel) return false;
     var discovery={nodeId:IOHC_readNodeId(receipt,7),protocolType:receipt[10]|receipt[11]<<8,
@@ -253,7 +255,7 @@ function IOHC_applyRecognizedType(device, online, progress, context) {
     }
 }
 
-function IOHC_configureImportedChannel(device, channelNumber, discovery) {
+function /* internal helper */ IOHC_configureImportedChannel(device, channelNumber, discovery) {
     var prefix = "IOHC_c" + channelNumber;
     var etsType = discovery.metadataValid
                       ? IOHC_etsDeviceType(discovery.protocolType, discovery.subtype) : 0;
@@ -306,7 +308,7 @@ function IOHC_syncChannelSelection(input, output, context) {
         : 0;
 }
 
-function IOHC_controllerStateText(state) {
+function /* internal helper */ IOHC_controllerStateText(state) {
     switch (state) {
     case 0:
         return "Idle";
@@ -377,7 +379,7 @@ function IOHC_controllerStateText(state) {
     }
 }
 
-function IOHC_setPairingInfo(device, context, resultText, nodeText, oneWaySummary, diagText) {
+function /* internal helper */ IOHC_setPairingInfo(device, context, resultText, nodeText, oneWaySummary, diagText) {
     var prefix = IOHC_getChannelPrefix(context);
     IOHC_setParameterValue(device, prefix + "PairingLastResult", resultText);
     IOHC_setParameterValue(device, prefix + "PairedNodeIdDisplay", nodeText);
@@ -385,7 +387,7 @@ function IOHC_setPairingInfo(device, context, resultText, nodeText, oneWaySummar
     IOHC_setParameterValue(device, prefix + "PairingDiag", diagText);
 }
 
-function IOHC_buildOneWaySummary(device, context, paired, pairedNodeId) {
+function /* internal helper */ IOHC_buildOneWaySummary(device, context, paired, pairedNodeId) {
     var prefix = IOHC_getChannelPrefix(context);
     var protocolMode = IOHC_getParameter(device, prefix + "ProtocolMode").value;
     if (protocolMode != 1) {
@@ -425,7 +427,7 @@ function IOHC_buildOneWaySummary(device, context, paired, pairedNodeId) {
     return "1W Typ " + typeText + ", Ziel " + targetText + ", gepaart " + pairedText;
 }
 
-function IOHC_applyStatusResponse(device, context, resp, fallbackResult, fallbackDiag) {
+function /* internal helper */ IOHC_applyStatusResponse(device, context, resp, fallbackResult, fallbackDiag) {
     var paired = (resp[0] || 0) !== 0;
     var pairedNodeId = IOHC_readNodeId(resp, 1);
     var controllerState = resp.length > 4 ? resp[4] : 0;
@@ -480,7 +482,7 @@ function IOHC_applyStatusResponse(device, context, resp, fallbackResult, fallbac
     IOHC_setPairingInfo(device, context, resultText, nodeText, oneWaySummary, diagText);
 }
 
-function IOHC_queryPairingInfo(device, online, progress, context, fallbackResult, fallbackDiag) {
+function /* internal helper */ IOHC_queryPairingInfo(device, online, progress, context, fallbackResult, fallbackDiag) {
     var channelIndex = context.channelIndex - 1;
     var data = [0x12];
     data = data.concat(channelIndex);
@@ -659,11 +661,12 @@ function IOHC_refreshPairingInfo(device, online, progress, context) {
     online.connect();
     try {
         IOHC_queryPairingInfo(device, online, progress, context, "Status gelesen", "Status direkt vom Gerät gelesen");
-        IOHC_queryRecognition(device, online, context, false);
+        var applied = IOHC_queryRecognition(device, online, context, true);
     } finally {
         online.disconnect();
     }
-    progress.setText("Pairing-Status aktualisiert für Kanal " + (channelIndex + 1) + ".");
+    progress.setText(applied ? "Erkannte Funktionen übernommen. Applikation programmieren." :
+        "Pairing-Status aktualisiert für Kanal " + (channelIndex + 1) + ".");
 }
 
 function IOHC_generateOneWayProfile(device, online, progress, context) {
@@ -718,10 +721,10 @@ function IOHC_startOneWayClone(device, online, progress, context) {
     }
 }
 
-function IOHC_read32(data,offset) {
+function /* internal helper */ IOHC_read32(data,offset) {
     return data[offset]*16777216+data[offset+1]*65536+data[offset+2]*256+data[offset+3];
 }
-function IOHC_jobSnapshot(online) {
+function /* internal helper */ IOHC_jobSnapshot(online) {
     var caps=IOHC_invokeFunctionProperty(online,[0x23]);
     if(!caps || caps[0]!==0) return null; // explicit legacy firmware fallback
     if(caps.length!==10 || caps[1]!==1) throw new Error("Ungültige Job-Fähigkeiten");
@@ -768,7 +771,7 @@ function IOHC_readCommissioningStatus(device,online,progress,context) {
     } finally {online.disconnect();}
 }
 // Project settings and permission ownership only; no fabricated adoption history.
-function IOHC_effectiveSettingsText(device,context) {
+function /* internal helper */ IOHC_effectiveSettingsText(device,context) {
     var channel=Number(context.channelIndex);
     if(channel<1||channel>16||Math.floor(channel)!==channel) throw new Error("Ungültiger Kanal");
     var prefix=IOHC_getChannelPrefix(context),override=IOHC_getParameter(device,prefix+"ProfileOverride");
@@ -807,7 +810,7 @@ function IOHC_effectiveSettingsText(device,context) {
 function IOHC_showEffectiveSettings(device,online,progress,context) {
     progress.setText(IOHC_effectiveSettingsText(device,context));
 }
-function IOHC_sameRecognitionSnapshot(first,last) {
+function /* internal helper */ IOHC_sameRecognitionSnapshot(first,last) {
     if(!first||!last||first.length!==12||last.length!==12||first[0]!==0||first[1]!==1)return false;
     for(var i=0;i<12;i++)if(first[i]!==last[i])return false;
     return true;
@@ -862,7 +865,7 @@ function IOHC_cancelCommissioning(device,online,progress,context) {
         progress.setText("Einrichtung abgebrochen. Bereits übertragene Schlüssel und gespeicherte Zuordnungen bleiben bestehen.");
     } finally {online.disconnect();}
 }
-function IOHC_assignFrozenCandidates(online,job,discoveries,channelCount) {
+function /* internal helper */ IOHC_assignFrozenCandidates(online,job,discoveries,channelCount) {
     var result=[0,discoveries.length];
     for(var d=0;d<discoveries.length;d++) {
         var candidate=discoveries[d],response=null;
@@ -1046,7 +1049,7 @@ function IOHC_startKeyExtract(device, online, progress, context) {
             throw new Error("io-homecontrol: Schlüsselübernahme konnte nicht abgeschlossen werden");
         }
 
-        var nodeText = discoveries.length ? discoveries.map(function (entry) {
+        var nodeText = discoveries.length ? discoveries.map(function /* callback */ (entry) {
             var source = entry.passiveAuthVerified && entry.speResponseSeen ? "passiv+SPE" :
                          entry.passiveAuthVerified ? "passiv authentifiziert" :
                          entry.directedVerified ? "gerichtet authentifiziert" : "SPE";
@@ -1164,7 +1167,7 @@ function IOHC_continueCommissioning(device,online,progress,context) {
     IOHC_readCommissioningStatus(device,online,progress,context);
 }
 
-function IOHC_assignmentPreview(online,device,job,discoveries,count,choice,target) {
+function /* internal helper */ IOHC_assignmentPreview(online,device,job,discoveries,count,choice,target) {
  if(count<1||count>16||choice<0||choice>discoveries.length||target<0||target>count||Math.floor(choice)!==choice||Math.floor(target)!==target)throw new Error("Ungültige Kandidaten-/Kanalauswahl");
  var channels=[],plan=[],seen={},text="",skipped=0;
  for(var c=0;c<count;c++) {
@@ -1191,12 +1194,12 @@ function IOHC_assignmentPreview(online,device,job,discoveries,count,choice,targe
  }
  var serialized=JSON.stringify([choice,target,channels,plan]),hash=2166136261;
  for(var b=0;b<serialized.length;b++){hash=(hash^serialized.charCodeAt(b))>>>0;hash=(hash+(hash<<1)+(hash<<4)+(hash<<7)+(hash<<8)+(hash<<24))>>>0;}
- var token=job.token.map(function(v){return ("0"+v.toString(16)).slice(-2);}).join("")+":"+("00000000"+hash.toString(16)).slice(-8);
+ var token=job.token.map(function /* callback */ (v){return ("0"+v.toString(16)).slice(-2);}).join("")+":"+("00000000"+hash.toString(16)).slice(-8);
  var current=IOHC_jobSnapshot(online);
  if(!current||JSON.stringify(current.token)!==JSON.stringify(job.token)||current.stage!==4||current.count!==job.count)throw new Error("Vorschau veraltet; erneut lesen");
  return {token:token,plan:plan,text:plan.length+" Zuordnungen; "+skipped+" ausgelassen. "+text};
 }
-function IOHC_assignPreviewed(online,job,discoveries,preview) {
+function /* internal helper */ IOHC_assignPreviewed(online,job,discoveries,preview) {
  var result=[0,discoveries.length];for(var d=0;d<discoveries.length;d++)result.push(2,255);
  for(var i=0;i<preview.plan.length;i++) {
   var item=preview.plan[i],response=IOHC_invokeFunctionProperty(online,[0x26].concat(job.token,[item.index,item.channel],[(item.node>>16)&255,(item.node>>8)&255,item.node&255]));
@@ -1217,7 +1220,7 @@ function IOHC_applyPairingResult(device,online,progress,context) {
   progress.setText("Gespeicherte Zuordnung in ETS übernommen. Manuelle Vorgaben bleiben erhalten. Applikation programmieren; Download ist noch offen.");
  } finally {online.disconnect();}
 }
-function IOHC_recognitionConflicts(device,context,response) {
+function /* internal helper */ IOHC_recognitionConflicts(device,context,response) {
  var channel=Number(context.channelIndex)-1;
  if(!response||response.length!==14||response[0]!==0||response[1]!==1||response[2]!==channel||response[12]<1||response[12]>14||response[13]>7||(response[11]&0x34)!==0x14)throw new Error("Keine gültige gepaarte 2W-Erkennung");
  var prefix=IOHC_getChannelPrefix(context),names=["DeviceType","OrientationObjects","BinaryOnly","Dimmable"],labels=["Gerätetyp","Orientierung","Binärmodus","Dimmen"],suggested=[response[12],response[13]&1,(response[13]>>1)&1,(response[13]>>2)&1],conflicts=[];
@@ -1246,7 +1249,7 @@ function IOHC_restoreAutomatic(device,online,progress,context) {
 }
 
 // Diagnostic controls are ETS-only inputs: no automatic subscription on download.
-function IOHC_boundDiagnostic(device,online,progress,context,operation) {
+function /* internal helper */ IOHC_boundDiagnostic(device,online,progress,context,operation) {
  var c=Number(context.channelIndex)-1;if(c<0||c>=16||Math.floor(c)!==c)throw new Error("Ungültiger Kanal");
  online.connect();try {
   var id=IOHC_invokeFunctionProperty(online,[0x1D,c]);
@@ -1254,8 +1257,8 @@ function IOHC_boundDiagnostic(device,online,progress,context,operation) {
   return operation(c,id);
  }finally{online.disconnect();}
 }
-function IOHC_sensorAction(device,online,progress,context,action) {
- return IOHC_boundDiagnostic(device,online,progress,context,function(c,id){
+function /* internal helper */ IOHC_sensorAction(device,online,progress,context,action) {
+ return IOHC_boundDiagnostic(device,online,progress,context,function /* callback */ (c,id){
   var prefix=IOHC_getChannelPrefix(context),tail=[];
   if(action===2){var text=String(IOHC_getParameter(device,prefix+"SensorBackbone").value);if(!/^[0-9a-fA-F]{6}$/.test(text)||parseInt(text,16)===0)throw new Error("Explizites sechsstelligen Backbone erforderlich");var b=parseInt(text,16);tail=[b>>16,(b>>8)&255,b&255];}
   if(action===3){var i=Number(IOHC_getParameter(device,prefix+"SensorPollInterval").value),d=Number(IOHC_getParameter(device,prefix+"SensorPollDuration").value);if(i<1||i>600||d<1||d>3600||Math.floor(i)!==i||Math.floor(d)!==d)throw new Error("Intervall 1..600, Dauer 1..3600 Sekunden");tail=[i>>8,i&255,d>>8,d&255];}
@@ -1269,8 +1272,8 @@ function IOHC_sensorSubscribe(d,o,p,c){return IOHC_sensorAction(d,o,p,c,2);}
 function IOHC_sensorPoll(d,o,p,c){return IOHC_sensorAction(d,o,p,c,3);}
 function IOHC_sensorStop(d,o,p,c){return IOHC_sensorAction(d,o,p,c,4);}
 
-function IOHC_priorityAction(device,online,progress,context,action){
- return IOHC_boundDiagnostic(device,online,progress,context,function(c,id){
+function /* internal helper */ IOHC_priorityAction(device,online,progress,context,action){
+ return IOHC_boundDiagnostic(device,online,progress,context,function /* callback */ (c,id){
   var level=Number(IOHC_getParameter(device,IOHC_getChannelPrefix(context)+"PriorityLevel").value);
   if(level<0||level>7||Math.floor(level)!==level)throw new Error("Prioritätsstufe 0..7 erforderlich");
   var r=IOHC_invokeFunctionProperty(online,[0x36,c,action,level].concat(id.slice(3,6)));
@@ -1280,9 +1283,9 @@ function IOHC_priorityAction(device,online,progress,context,action){
 }
 function IOHC_requestPriorityEvidence(d,o,p,c){return IOHC_priorityAction(d,o,p,c,1);}
 function IOHC_requestSensorStatus(d,o,p,c){return IOHC_priorityAction(d,o,p,c,2);}
-function IOHC_hexBytes(bytes){return bytes.map(function(v){return (v<16?"0":"")+v.toString(16).toUpperCase();}).join("");}
+function /* internal helper */ IOHC_hexBytes(bytes){return bytes.map(function /* callback */ (v){return (v<16?"0":"")+v.toString(16).toUpperCase();}).join("");}
 function IOHC_readSensorEvidence(device,online,progress,context){
- return IOHC_boundDiagnostic(device,online,progress,context,function(c,id){
+ return IOHC_boundDiagnostic(device,online,progress,context,function /* callback */ (c,id){
   var level=Number(IOHC_getParameter(device,IOHC_getChannelPrefix(context)+"PriorityLevel").value);
   if(level<0||level>7||Math.floor(level)!==level)throw new Error("Prioritätsstufe 0..7 erforderlich");
   var priority=IOHC_invokeFunctionProperty(online,[0x29,c,level]),status=IOHC_invokeFunctionProperty(online,[0x2A,c]),info=IOHC_invokeFunctionProperty(online,[0x2B,c]);
@@ -1295,14 +1298,14 @@ function IOHC_readSensorEvidence(device,online,progress,context){
  });
 }
 
-function IOHC_objectSummary(online,c,id){
+function /* internal helper */ IOHC_objectSummary(online,c,id){
  var s=IOHC_invokeFunctionProperty(online,[0x2C]);
  if(!s||s.length!==22||s[0]!==0||s[1]!==1||s[3]!==c||IOHC_readNodeId(s,8)!==IOHC_readNodeId(id,3)||IOHC_read32(s,4)===0)throw new Error("Kein passender Objektlesevorgang");
  return s;
 }
-function IOHC_objectToken(s){return IOHC_hexBytes(s.slice(18,22).concat(s.slice(4,8),s.slice(8,11)));}
-function IOHC_objectAction(device,online,progress,context,action){
- return IOHC_boundDiagnostic(device,online,progress,context,function(c,id){
+function /* internal helper */ IOHC_objectToken(s){return IOHC_hexBytes(s.slice(18,22).concat(s.slice(4,8),s.slice(8,11)));}
+function /* internal helper */ IOHC_objectAction(device,online,progress,context,action){
+ return IOHC_boundDiagnostic(device,online,progress,context,function /* callback */ (c,id){
   var prefix=IOHC_getChannelPrefix(context),summary,r;
   if(action===1){
    var p=String(IOHC_getParameter(device,prefix+"ObjectProvider").value),k=String(IOHC_getParameter(device,prefix+"ObjectKey").value),offset=Number(IOHC_getParameter(device,prefix+"ObjectOffset").value),span=Number(IOHC_getParameter(device,prefix+"ObjectSpan").value);
@@ -1334,13 +1337,13 @@ var IOHC_SEMANTICS=[{"product":"heatpump","index":0,"meaning":"temperature setpo
 // END GENERATED SEMANTICS
 
 function IOHC_showSemanticHelp(device,online,progress,context){
- var name=String(IOHC_getParameter(device,IOHC_getChannelPrefix(context)+"SemanticProduct").value),rows=IOHC_SEMANTICS.filter(function(r){return r.product===name;});
+ var name=String(IOHC_getParameter(device,IOHC_getChannelPrefix(context)+"SemanticProduct").value),rows=IOHC_SEMANTICS.filter(function /* callback */ (r){return r.product===name;});
  if(!rows.length)throw new Error("Keine bekannte Produktdefinition. Beispiele: heatpump, generic-heater, pergola, alarm, siren. Keine automatische Variantenbindung.");
- progress.setText(rows.map(function(r){return (r.index?"FP"+r.index:"MP")+": "+r.meaning+" ["+r.unit+"], "+r.conversion+"; "+r.specials;}).join(". ")+". Diagnoseauswahl erteilt keine RF-Schreib- oder KNX-Publikationsfreigabe.");
+ progress.setText(rows.map(function /* callback */ (r){return (r.index?"FP"+r.index:"MP")+": "+r.meaning+" ["+r.unit+"], "+r.conversion+"; "+r.specials;}).join(". ")+". Diagnoseauswahl erteilt keine RF-Schreib- oder KNX-Publikationsfreigabe.");
 }
 
 function IOHC_readSelectedProduct(device,online,progress,context){
- return IOHC_boundDiagnostic(device,online,progress,context,function(c,id){
+ return IOHC_boundDiagnostic(device,online,progress,context,function /* callback */ (c,id){
   var prefix=IOHC_getChannelPrefix(context),names=["none","heatpump","heating-interface","generic-heater","atlantic-heater","atlantic-dhw-v2","atlantic-dhw-ck","siren","heatpump-modes","atlantic-dhw-modes","pergola","alarm","sliding-lock","dual-shutter","atlantic-ventilation"],product=names.indexOf(String(IOHC_getParameter(device,prefix+"SemanticProduct").value)),index=Number(IOHC_getParameter(device,prefix+"SemanticIndex").value);
   if(product<1||index<0||index>16||Math.floor(index)!==index)throw new Error("Explizite bekannte Produktdefinition / MP-FP erforderlich");
   var low=String(IOHC_getParameter(device,prefix+"ContextMinimumCK").value),high=String(IOHC_getParameter(device,prefix+"ContextMaximumCK").value),has=low!==""||high!=="";

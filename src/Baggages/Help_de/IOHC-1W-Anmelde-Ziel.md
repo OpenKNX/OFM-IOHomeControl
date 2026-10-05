@@ -12,7 +12,4 @@ fest. Normale Fahrbefehle verwenden weiterhin **1W Befehls-Ziel**.
   Klasse für REMOVE und ADD. Nur für bestätigte Sonderfälle verwenden, etwa
   wenn ein Empfänger die allgemeine Anmeldung nicht akzeptiert.
 
-Die automatische Somfy-Adressierung ist durch den Smoove-Testkorpus und die
-[Adressbeobachtung in Issue #147](https://github.com/laberning/home_io_control/issues/147)
-gestützt. Ein erfolgreicher lokaler 1W-Funkversand bestätigt noch nicht, dass
-der Aktor die Anmeldung angenommen hat.
+Ein erfolgreicher lokaler 1W-Funkversand bestätigt noch nicht, dass der Aktor die Anmeldung angenommen hat.
