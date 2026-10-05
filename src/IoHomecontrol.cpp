@@ -2689,6 +2689,16 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         }
         break;
     }
+    case 0x2B: // Read-only sensor-information observation; raw response, never subscription request
+    {
+        if(length!=2||data[1]>=mNumChannels)break;
+        const auto *sample=mController.sensorInformationSample(data[1]);
+        resultData[0]=0;resultData[1]=1;resultData[2]=data[1];resultData[3]=sample->valid;
+        const uint32_t age=sample->valid?uint32_t(millis()-sample->receivedMs):0;
+        for(uint8_t i=0;i<4;i++)resultData[4+i]=age>>(24-8*i);
+        std::memcpy(resultData+8,sample->raw,17);resultData[25]=sample->valid?2:0; // correlated, not authenticated
+        resultLength=26;return true;
+    }
     case 0x29: // Correlated priority sample; no authenticated-state claim
     {
         if(length!=3||data[1]>=mNumChannels||data[2]>7)break;
@@ -3746,6 +3756,7 @@ void IoHomecontrol::showHelp()
 
     openknx.console.printHelpLine("iohc help", "Show io-homecontrol commands");
     openknx.console.printHelpLine("iohc priority read NODE LEVEL", "Read priority 0..7; bounded expiry refresh; no lock write");
+    openknx.console.printHelpLine("iohc sensor info NODE", "Read paired sensor information with 8B FF; no subscription write");
     openknx.console.printHelpLine("iohc sensor read NODE", "Read paired sensor status; preserve unknown physical units");
     openknx.console.printHelpLine("iohc 2wrecovery status", "Checked network identity/bindings persistence status; failure blocks 2W TX");
     openknx.console.printHelpLine("iohc 1wrecovery status", "Durable sequence fault; never rolls counters back");
@@ -4231,6 +4242,13 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         return true;
     }
 
+    if(lSub.rfind("sensor info ",0)==0) {
+        unsigned node=0;char extra=0;
+        if(sscanf(lSub.c_str(),"sensor info %x %c",&node,&extra)!=1||!node||node>0xFFFFFF){logInfoP("Usage: iohc sensor info NODE");return true;}
+        IoHomecontrolChannel *channel=nullptr;
+        for(uint8_t c=0;c<mNumChannels;c++)if(mChannels[c]&&mChannels[c]->getNodeId()==node)channel=mChannels[c];
+        logInfoP("Sensor information query queued=%u; read-only FF form, no subscription write",mController.requestSensorInformation(channel));return true;
+    }
     if(lSub.rfind("priority read ",0)==0 || lSub.rfind("sensor read ",0)==0) {
         const bool priority=lSub.rfind("priority read ",0)==0;
         unsigned node=0,level=0;char extra=0;

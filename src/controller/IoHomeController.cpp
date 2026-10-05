@@ -2388,6 +2388,7 @@ bool IoHomeController::requestPriority(IoHomecontrolChannel *channel,uint8_t pri
 {
     if(!channel||!channel->isPaired()||channel->is1W()||priority>7)return false;
     IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
+    entry.managementRead=true;std::memcpy(entry.managementKey,channel->getEncryptionKey(),16);
     entry.command=IoHomeCommand::PriorityLevelRequest;entry.param=priority;entry.sourceChannelIndex=channelIndexFor(channel);
     entry.maxAttempts=1;entry.background=true;entry.active=true;return queuePush(entry);
 }
@@ -2396,8 +2397,52 @@ bool IoHomeController::requestSensorStatus(IoHomecontrolChannel *channel)
 {
     if(!channel||!channel->isPaired()||channel->is1W()||!channel->getProtocolIdentity().valid||channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Sensor)return false;
     IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
+    entry.managementRead=true;std::memcpy(entry.managementKey,channel->getEncryptionKey(),16);
     entry.command=IoHomeCommand::SensorStatusRequest;entry.sourceChannelIndex=channelIndexFor(channel);
     entry.maxAttempts=1;entry.background=true;entry.active=true;return queuePush(entry);
+}
+
+bool IoHomeController::requestSensorInformation(IoHomecontrolChannel *channel)
+{
+    if(!channel||!channel->isPaired()||channel->is1W()||!channel->getProtocolIdentity().valid||channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Sensor)return false;
+    IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
+    entry.managementRead=true;std::memcpy(entry.managementKey,channel->getEncryptionKey(),16);
+    entry.command=IoHomeCommand::SensorSubscribeRequest;entry.param=0xFF;entry.sourceChannelIndex=channelIndexFor(channel);
+    entry.maxAttempts=1;entry.background=true;entry.active=true;return queuePush(entry);
+}
+
+bool IoHomeController::sampleIdentityMatches(uint8_t channel,uint32_t node,const uint8_t *key) const
+{
+    if(!mModule||channel>=16)return false;
+    const auto *ch=mModule->getChannel(channel);
+    return ch&&ch->isPaired()&&!ch->is1W()&&ch->getNodeId()==node&&!std::memcmp(ch->getEncryptionKey(),key,16);
+}
+
+bool IoHomeController::managementIdentityMatches(const IoHomeQueueEntry &entry) const
+{
+    return !entry.managementRead||sampleIdentityMatches(entry.sourceChannelIndex,entry.destNodeId,entry.managementKey);
+}
+
+const IoHomeController::PrioritySample *IoHomeController::prioritySample(uint8_t channel,uint8_t priority) const
+{
+    static const PrioritySample empty{};
+    if(channel>=16||priority>=8)return &empty;
+    const auto &s=mPrioritySamples[channel][priority];
+    return s.valid&&sampleIdentityMatches(channel,s.node,s.key)?&s:&empty;
+}
+const IoHomeController::SensorSample *IoHomeController::sensorSample(uint8_t channel) const
+{
+    static const SensorSample empty{};
+    if(channel>=16)return &empty;
+    const auto &s=mSensorSamples[channel];
+    return s.valid&&sampleIdentityMatches(channel,s.node,s.key)?&s:&empty;
+}
+const IoHomeController::SensorInformationSample *IoHomeController::sensorInformationSample(uint8_t channel) const
+{
+    static const SensorInformationSample empty{};
+    if(channel>=16)return &empty;
+    const auto &s=mSensorInformationSamples[channel];
+    return s.valid&&sampleIdentityMatches(channel,s.node,s.key)?&s:&empty;
 }
 
 void IoHomeController::servicePriorityRefresh()
@@ -2407,7 +2452,7 @@ void IoHomeController::servicePriorityRefresh()
         auto &sample=mPrioritySamples[c][level];
         if(!sample.valid||!sample.refreshArmed||uint32_t(millis()-sample.receivedMs)<uint32_t(sample.state.seconds+20)*1000)continue;
         auto *ch=mModule->getChannel(c);
-        if(!ch||!ch->isPaired()||ch->is1W()||ch->getNodeId()!=sample.node){sample={};continue;}
+        if(!ch||!ch->isPaired()||ch->is1W()||ch->getNodeId()!=sample.node||std::memcmp(ch->getEncryptionKey(),sample.key,16)){sample={};continue;}
         if(requestPriority(ch,level))sample.refreshArmed=false; // one refresh; a new valid reply re-arms it
         return;
     }
@@ -5393,6 +5438,8 @@ void IoHomeController::processPendingDiscoveryResponses()
 
 RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8_t iLength)
 {
+    if(mCurrentCmd.active&&mCurrentCmd.managementRead&&!managementIdentityMatches(mCurrentCmd))
+        return RadioError::HardwareError;
     if (iData && iLength && (iData[0] & IOHC_CTRL0_MODE_1W) && mReservationFailed)
         return RadioError::HardwareError;
 #ifndef TEST_NATIVE
@@ -6922,9 +6969,14 @@ void IoHomeController::processResponse()
 
     // These recovered read services cannot complete on an unrelated opcode
     // or the legacy descriptor's too-short Priority ACK.
-    if(mCurrentCmd.command==IoHomeCommand::PriorityLevelRequest || mCurrentCmd.command==IoHomeCommand::SensorStatusRequest) {
-        const auto expected=mCurrentCmd.command==IoHomeCommand::PriorityLevelRequest?IoHomeCommand::PriorityLevelResponse:IoHomeCommand::SensorStatusResponse;
-        const uint8_t minimum=mCurrentCmd.command==IoHomeCommand::PriorityLevelRequest?3:6;
+    if(mCurrentCmd.managementRead) {
+        if(!managementIdentityMatches(mCurrentCmd)) {
+            const auto failed=mCurrentCmd;
+            mCurrentCmd.active=false;mState=ControllerState::Idle;
+            notifyCommandExchangeResult(failed,IoHomeCommandExchangeResult::FailedBeforeAuthentication);return;
+        }
+        const auto expected=mCurrentCmd.command==IoHomeCommand::PriorityLevelRequest?IoHomeCommand::PriorityLevelResponse:mCurrentCmd.command==IoHomeCommand::SensorStatusRequest?IoHomeCommand::SensorStatusResponse:IoHomeCommand::SensorInformationResponse;
+        const uint8_t minimum=mCurrentCmd.command==IoHomeCommand::PriorityLevelRequest?3:mCurrentCmd.command==IoHomeCommand::SensorStatusRequest?6:17;
         if(mRxFrame.commandId!=IoHomeCommand::ChallengeRequest&&mRxFrame.commandId!=IoHomeCommand::ErrorResponse&&
             (mRxFrame.commandId!=expected||mRxFrame.dataLen<minimum)) {mState=ControllerState::WaitResponse;return;}
         if(mRxFrame.commandId==IoHomeCommand::ChallengeRequest&&mRxFrame.dataLen<6){mState=ControllerState::WaitResponse;return;}
@@ -6954,7 +7006,7 @@ void IoHomeController::processResponse()
         IoHomeFrame lFrame;
         if (!build2WChallengeResponse(lFrame, mOwnNodeId, mCurrentCmd.destNodeId,
                                       TwoWaySenderRole::Controller,
-                                      mTxFrame, lChallenge, mCurrentCmd.encKey))
+                                      mTxFrame, lChallenge, mCurrentCmd.managementRead?mCurrentCmd.managementKey:mCurrentCmd.encKey))
         {
             const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
             notifyCommandExchangeResult(lFailedCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
@@ -9385,6 +9437,7 @@ void IoHomeController::updateCurrentFrequencyIndex(uint32_t iFrequencyHz)
 
 bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 {
+    if(!managementIdentityMatches(iEntry))return false;
     mTxFrame.init();
     // A retry after no 2W response is a fresh attempt at the same request,
     // not the next frame in a multi-frame exchange. Keep the original
@@ -9743,7 +9796,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
     case IoHomeCommand::SensorStatusRequest:
         mTxFrame.dataLen=0;mTxFrame.hasHmac=false;break;
     case IoHomeCommand::SensorSubscribeRequest:
-        return false; // subscription request form/policy is not yet enabled
+        if(!iEntry.managementRead||iEntry.param!=0xFF)return false; // read-only query, never the 17-byte write form
+        mTxFrame.data[0]=0xFF;mTxFrame.dataLen=1;mTxFrame.hasHmac=false;break;
     case IoHomeCommand::GetName:
     case IoHomeCommand::GetGeneralInfo1:
     case IoHomeCommand::GetGeneralInfo2:
@@ -10211,16 +10265,30 @@ void IoHomeController::dispatchRxFrame()
             {
                 if(!mCurrentCmd.active||mCurrentCmd.command!=IoHomeCommand::PriorityLevelRequest||mCurrentCmd.destNodeId!=lSrcNode||lDestNode!=mOwnNodeId)break;
                 const uint8_t c=channelIndexFor(lCh);IoHomePriorityState state;
-                if(c<16&&ioHomeDecodePriority(mRxFrame.data,mRxFrame.dataLen,mCurrentCmd.param,state))
-                    mPrioritySamples[c][state.priority]={true,state.refreshEnabled,lSrcNode,static_cast<uint32_t>(millis()),state};
+                if(c<16&&managementIdentityMatches(mCurrentCmd)&&ioHomeDecodePriority(mRxFrame.data,mRxFrame.dataLen,mCurrentCmd.param,state)) {
+                    auto &sample=mPrioritySamples[c][state.priority];sample={true,state.refreshEnabled,lSrcNode,static_cast<uint32_t>(millis()),state};
+                    std::memcpy(sample.key,mCurrentCmd.managementKey,16);
+                }
                 break;
             }
             case IoHomeCommand::SensorStatusResponse:
             {
                 if(!mCurrentCmd.active||mCurrentCmd.command!=IoHomeCommand::SensorStatusRequest||mCurrentCmd.destNodeId!=lSrcNode||lDestNode!=mOwnNodeId)break;
                 const uint8_t c=channelIndexFor(lCh);IoHomeSensorStatus state;
-                if(c<16&&ioHomeDecodeSensorStatus(mRxFrame.data,mRxFrame.dataLen,state))
-                    mSensorSamples[c]={true,lSrcNode,static_cast<uint32_t>(millis()),state};
+                if(c<16&&managementIdentityMatches(mCurrentCmd)&&ioHomeDecodeSensorStatus(mRxFrame.data,mRxFrame.dataLen,state)) {
+                    auto &sample=mSensorSamples[c];sample={true,lSrcNode,static_cast<uint32_t>(millis()),state};
+                    std::memcpy(sample.key,mCurrentCmd.managementKey,16);
+                }
+                break;
+            }
+            case IoHomeCommand::SensorInformationResponse:
+            {
+                if(!mCurrentCmd.active||mCurrentCmd.command!=IoHomeCommand::SensorSubscribeRequest||!mCurrentCmd.managementRead||mCurrentCmd.destNodeId!=lSrcNode||lDestNode!=mOwnNodeId||!managementIdentityMatches(mCurrentCmd))break;
+                const uint8_t c=channelIndexFor(lCh);IoHomeSensorInformation state;
+                if(c<16&&mRxFrame.dataLen>=17&&ioHomeDecodeSensorInformation(mRxFrame.data,17,state)) {
+                    auto &sample=mSensorInformationSamples[c];sample={true,lSrcNode,static_cast<uint32_t>(millis()),state};
+                    std::memcpy(sample.key,mCurrentCmd.managementKey,16);std::memcpy(sample.raw,mRxFrame.data,17);
+                }
                 break;
             }
             case IoHomeCommand::Private2Response:        // 0x0D — response to alternate private command (not used)

@@ -11319,6 +11319,36 @@ static void buildDirectedDiscoveryResponse(IoHomeFrame &oFrame,
     oFrame.hasHmac = false;
 }
 
+TEST(controller_sensor_information_read_is_ff_and_identity_bound) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1},replacement[16]={2};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ASSERT_TRUE(!c.requestSensorInformation(&ch));
+    IoHomeProtocolIdentity identity;identity.valid=true;identity.nodeClass=IoHomeNodeClass::Sensor;identity.ioAddress=0x654321;
+    ch.onProtocolIdentity(0x654321,identity);ASSERT_TRUE(c.requestSensorInformation(&ch));c.loop();c.loop();c.loop();
+    IoHomeFrame tx;ASSERT_TRUE(lastTransmittedFrameForTest(c,tx));ASSERT_EQ(tx.commandId,IoHomeCommand::SensorSubscribeRequest);
+    ASSERT_EQ(tx.dataLen,1);ASSERT_EQ(tx.data[0],0xFF);
+    IoHomeFrame reply;reply.init();reply.setSrcNode(0x654321);reply.setDestNode(0x123456);reply.commandId=IoHomeCommand::SensorInformationResponse;
+    reply.dataLen=16;uint8_t bytes[IOHC_FRAME_BUFFER_SIZE];uint8_t size=serializeFrameForTest(reply,bytes,sizeof(bytes));
+    c.radio().testQueueReceivedPacket(bytes,size);c.loop();ASSERT_TRUE(!c.sensorInformationSample(0)->valid);
+    reply.dataLen=17;for(int i=0;i<17;i++)reply.data[i]=i+1;
+    size=serializeFrameForTest(reply,bytes,sizeof(bytes));c.radio().testQueueReceivedPacket(bytes,size);c.loop();
+    ASSERT_TRUE(c.sensorInformationSample(0)->valid);ASSERT_EQ(c.sensorInformationSample(0)->state.minRefresh,0x0D0E);
+    ASSERT_EQ(c.sensorInformationSample(0)->state.backbone,0x0F1011);ASSERT_EQ(c.sensorInformationSample(0)->raw[16],17);
+    ch.setEncryptionKey(replacement);ASSERT_TRUE(!c.sensorInformationSample(0)->valid);
+}
+
+TEST(controller_management_read_rejects_key_change_before_tx_and_reply) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1},replacement[16]={2};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ASSERT_TRUE(c.requestPriority(&ch,3));ch.setEncryptionKey(replacement);c.radio().testClearTransmittedPacket();
+    c.loop();c.loop();c.loop();ASSERT_TRUE(c.radio().testLastTransmittedPacket().empty());
+    ch.setEncryptionKey(key);ASSERT_TRUE(c.requestPriority(&ch,3));c.loop();c.loop();c.loop();
+    ch.setEncryptionKey(replacement);
+    IoHomeFrame reply;reply.init();reply.setSrcNode(0x654321);reply.setDestNode(0x123456);reply.commandId=IoHomeCommand::PriorityLevelResponse;
+    reply.dataLen=3;reply.data[1]=1;uint8_t bytes[IOHC_FRAME_BUFFER_SIZE];uint8_t size=serializeFrameForTest(reply,bytes,sizeof(bytes));
+    c.radio().testQueueReceivedPacket(bytes,size);c.loop();ASSERT_TRUE(!c.prioritySample(0,3)->valid);
+}
+
 TEST(controller_sensor_status_request_rejects_unknown_role_and_bad_scale) {
     IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
     initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
@@ -11347,6 +11377,7 @@ TEST(controller_priority_request_and_short_reply_correlation) {
     c.radio().testQueueReceivedPacket(bytes,size);c.loop();
     ASSERT_TRUE(c.prioritySample(0,3)->valid);ASSERT_EQ(c.prioritySample(0,3)->state.seconds,30);
     ASSERT_EQ(c.prioritySample(0,3)->state.originator,7);
+    const uint8_t replacement[16]={2};ch.setEncryptionKey(replacement);ASSERT_TRUE(!c.prioritySample(0,3)->valid);
 }
 
 TEST(controller_post_import_spe_retry_enriches_assigned_channel_and_defers_flash)

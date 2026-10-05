@@ -158,6 +158,8 @@ struct IoHomeQueueEntry
   uint8_t sourceChannelIndex;                  // 0xFF when not queued from a concrete channel
   uint8_t twoWayTxFreqIdx;                     // 0xFF uses the normal 2W command channel
   bool twoWayFp;                               // profile-selected functional parameter
+  bool managementRead;                        // key snapshot for correlated management reads
+  uint8_t managementKey[16];
   bool diagnosticFpRead;                       // raw-only, no KO publication
   uint8_t diagnosticFpReadIndex;
   uint8_t twoWayFpIndex;
@@ -557,10 +559,13 @@ public:
   bool sendDiagnosticFpRead(IoHomecontrolChannel *iChannel, uint8_t iFpIndex);
   bool requestPriority(IoHomecontrolChannel *channel,uint8_t priority);
   bool requestSensorStatus(IoHomecontrolChannel *channel);
-  struct PrioritySample {bool valid=false,refreshArmed=false;uint32_t node=0,receivedMs=0;IoHomePriorityState state;};
-  struct SensorSample {bool valid=false;uint32_t node=0,receivedMs=0;IoHomeSensorStatus state;};
-  const PrioritySample *prioritySample(uint8_t channel,uint8_t priority) const {return channel<16&&priority<8?&mPrioritySamples[channel][priority]:nullptr;}
-  const SensorSample *sensorSample(uint8_t channel) const {return channel<16?&mSensorSamples[channel]:nullptr;}
+  bool requestSensorInformation(IoHomecontrolChannel *channel);
+  struct PrioritySample {bool valid=false,refreshArmed=false;uint32_t node=0,receivedMs=0;IoHomePriorityState state;uint8_t key[16]{};};
+  struct SensorSample {bool valid=false;uint32_t node=0,receivedMs=0;IoHomeSensorStatus state;uint8_t key[16]{};};
+  struct SensorInformationSample {bool valid=false;uint32_t node=0,receivedMs=0;IoHomeSensorInformation state;uint8_t key[16]{},raw[17]{};};
+  const PrioritySample *prioritySample(uint8_t channel,uint8_t priority) const;
+  const SensorSample *sensorSample(uint8_t channel) const;
+  const SensorInformationSample *sensorInformationSample(uint8_t channel) const;
   bool sendPrivateProbe(uint32_t iDestNodeId, const uint8_t *iEncKey,
                         PrivateProbeShape iShape, uint8_t iFunctionId,
                         uint8_t iSelectorOrBlock = 0);
@@ -1035,6 +1040,7 @@ private:
   uint32_t mStateTimer;
   uint32_t mNextObservationGeneration=0;
   PrioritySample mPrioritySamples[16][8]{};
+  SensorInformationSample mSensorInformationSamples[16]{};
   SensorSample mSensorSamples[16]{};
   void servicePriorityRefresh();
   uint8_t mCurrentFreqIdx;
@@ -1452,6 +1458,8 @@ private:
   void logCommandScanResults() const;
 
   // Build frame from queue entry
+  bool managementIdentityMatches(const IoHomeQueueEntry &entry) const;
+  bool sampleIdentityMatches(uint8_t channel,uint32_t node,const uint8_t *key) const;
   bool buildTxFrame(const IoHomeQueueEntry &iEntry);
 
   // Dispatch received frame to appropriate channel
