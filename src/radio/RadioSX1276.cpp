@@ -626,7 +626,7 @@ bool RadioSX1276::isInitialized() const
 
 bool RadioSX1276::superviseIdleReceive(uint32_t nowMs)
 {
-    if(mState==RadioState::Transmitting||mEms2Mode||uint32_t(nowMs-mHealthCheckedMs)<5000)return false;
+    if(mState==RadioState::Transmitting||mState==RadioState::Sleep||mEms2Mode||uint32_t(nowMs-mHealthCheckedMs)<5000)return false;
     mHealthCheckedMs=nowMs;
     uint8_t rx=0,afc=0;radioSX1276Bandwidth(mRequestedRxHz,rx);radioSX1276Bandwidth(mRequestedAfcHz,afc);
     const bool healthy=mInitialized&&readRegister(REG_VERSION)==0x12&&

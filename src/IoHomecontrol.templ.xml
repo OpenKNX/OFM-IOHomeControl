@@ -634,7 +634,7 @@
                         <Button Id="%AID%_B-%TT%%CC%024" Text="Objektlesen abbrechen" EventHandler="IOHC_objectCancel" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <Button Id="%AID%_B-%TT%%CC%025" Text="Objektbytes lesen (max. 16 Bytes)" EventHandler="IOHC_objectSlice" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%135_R-%TT%%CC%13501" />
-                        <Button Id="%AID%_B-%TT%%CC%026" Text="Bedeutungen der ausgewählten Produktdefinition anzeigen" EventHandler="IOHC_showSemanticHelp" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                        <Button Id="%AID%_B-%TT%%CC%026" Text="Bedeutungen der ausgewählten Produktdefinition anzeigen" EventHandler="IOHC_showSemanticHelp" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%136_R-%TT%%CC%13601" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%137_R-%TT%%CC%13701" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%138_R-%TT%%CC%13801" />
