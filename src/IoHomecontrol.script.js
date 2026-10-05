@@ -996,10 +996,20 @@ function IOHC_startKeyExtract(device, online, progress, context) {
             assignmentRequest.push(channelIndex);
         }
 
+        var preview=null,previewParameter=IOHC_getParameter(device,"IOHC_AssignmentPreviewToken");
+        if(job&&previewParameter) {
+            var chosen=IOHC_getParameter(device,"IOHC_ImportCandidate"),target=IOHC_getParameter(device,"IOHC_ImportTargetChannel");
+            preview=IOHC_assignmentPreview(online,device,job,discoveries,channelCount,Number(chosen?chosen.value:0),Number(target?target.value:0));
+            if(String(previewParameter.value)!==preview.token) {
+                IOHC_setParameterValue(device,"IOHC_AssignmentPreviewToken",preview.token);
+                progress.setText("Zuordnungsvorschau: "+preview.text+" Auswahl prüfen; erneut Weiter drücken, um genau diese Zuordnung zu speichern.");return;
+            }
+            if(!preview.plan.length){progress.setText("Keine Zuordnung: "+preview.text);return;}
+        }
         var configuredChannels = 0;
         var alreadyConfigured = 0;
         var unassigned = 0;
-        var assignmentResponse = job ? IOHC_assignFrozenCandidates(online,job,discoveries,channelCount) : IOHC_invokeFunctionProperty(online, assignmentRequest);
+        var assignmentResponse = preview ? IOHC_assignPreviewed(online,job,discoveries,preview) : job ? IOHC_assignFrozenCandidates(online,job,discoveries,channelCount) : IOHC_invokeFunctionProperty(online, assignmentRequest);
         if (!assignmentResponse || assignmentResponse.length < 2 || assignmentResponse[0] != 0 ||
             assignmentResponse[1] != discoveries.length ||
             assignmentResponse.length < 2 + (discoveries.length * 2)) {
@@ -1147,4 +1157,46 @@ function IOHC_continueCommissioning(device,online,progress,context) {
         IOHC_refreshPairingInfo(device,online,progress,{channelIndex:job.channel+1});return;
     }
     IOHC_readCommissioningStatus(device,online,progress,context);
+}
+
+function IOHC_assignmentPreview(online,device,job,discoveries,count,choice,target) {
+ if(count<1||count>16||choice<0||choice>discoveries.length||target<0||target>count||Math.floor(choice)!==choice||Math.floor(target)!==target)throw new Error("Ungültige Kandidaten-/Kanalauswahl");
+ var channels=[],plan=[],seen={},text="",skipped=0;
+ for(var c=0;c<count;c++) {
+  var id=IOHC_invokeFunctionProperty(online,[0x1D,c]);
+  if(!id||id.length!==12||id[0]!==0||id[1]!==1||id[2]!==c)throw new Error("Kanalzustand nicht verfügbar");
+  var active=IOHC_getParameter(device,"IOHC_c"+(c+1)+"Active");
+  channels.push({node:IOHC_readNodeId(id,3),used:!!(active&&Number(active.value)===1)});
+ }
+ var selected=choice?[discoveries[choice-1]]:discoveries;
+ if(target&&selected.length!==1)throw new Error("Ein Zielkanal erfordert genau einen gewählten Kandidaten");
+ for(var i=0;i<selected.length;i++) {
+  var d=selected[i],supported=d.metadataValid&&IOHC_etsDeviceType(d.protocolType,d.subtype)!==0;
+  if(!d.nodeId||seen[d.nodeId]){skipped++;continue;}seen[d.nodeId]=true;
+  if(!d.passiveAuthVerified&&!d.directedVerified){skipped++;text+="Node "+IOHC_formatNodeId(d.nodeId)+": nicht verifiziert. ";continue;}
+  if(!choice&&!supported){skipped++;text+="Node "+IOHC_formatNodeId(d.nodeId)+": manuelle Produktauswahl erforderlich. ";continue;}
+  var existing=-1,channel=-1;
+  for(var j=0;j<count;j++)if(channels[j].node===d.nodeId){existing=j;break;}
+  if(existing>=0){channel=existing;if(target&&target-1!==existing)throw new Error("Node ist bereits einem anderen Kanal zugeordnet");}
+  else if(target){channel=target-1;if(channels[channel].node||channels[channel].used)throw new Error("Gewählter Kanal ist belegt");}
+  else for(var k=0;k<count;k++)if(!channels[k].node&&!channels[k].used){channel=k;break;}
+  if(channel<0){skipped++;text+="Kein freier Kanal für "+IOHC_formatNodeId(d.nodeId)+". ";continue;}
+  channels[channel].used=true;plan.push({index:d.index,node:d.nodeId,channel:channel,existing:existing>=0});
+  text+=IOHC_formatNodeId(d.nodeId)+" → Kanal "+(channel+1)+(existing>=0?" (vorhanden)":" (neu)")+(!supported?" (manuelle Produktwahl)":"")+". ";
+ }
+ var serialized=JSON.stringify([choice,target,channels,plan]),hash=2166136261;
+ for(var b=0;b<serialized.length;b++)hash=Math.imul(hash^serialized.charCodeAt(b),16777619)>>>0;
+ var token=job.token.map(function(v){return ("0"+v.toString(16)).slice(-2);}).join("")+":"+("00000000"+hash.toString(16)).slice(-8);
+ var current=IOHC_jobSnapshot(online);
+ if(!current||JSON.stringify(current.token)!==JSON.stringify(job.token)||current.stage!==4||current.count!==job.count)throw new Error("Vorschau veraltet; erneut lesen");
+ return {token:token,plan:plan,text:plan.length+" Zuordnungen; "+skipped+" ausgelassen. "+text};
+}
+function IOHC_assignPreviewed(online,job,discoveries,preview) {
+ var result=[0,discoveries.length];for(var d=0;d<discoveries.length;d++)result.push(2,255);
+ for(var i=0;i<preview.plan.length;i++) {
+  var item=preview.plan[i],response=IOHC_invokeFunctionProperty(online,[0x26].concat(job.token,[item.index,item.channel],[(item.node>>16)&255,(item.node>>8)&255,item.node&255]));
+  if(!response||response.length!==2||response[0]>1||response[1]!==item.channel)throw new Error("Vorgeprüfter Kanal geändert; gespeicherte Ergebnisse erneut lesen");
+  result[2+item.index*2]=response[0];result[3+item.index*2]=response[1];
+ }
+ return result;
 }

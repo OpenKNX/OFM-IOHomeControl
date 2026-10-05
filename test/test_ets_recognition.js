@@ -252,3 +252,13 @@ test("guided continuation reads active job without starting another operation",f
  var text="";IOHC_continueCommissioning(deviceWith({}),online,{setText:function(t){text=t;}},{});
  check(calls.join(",")==="35,36,35,36"&&closed===2&&text.indexOf("Suche")>=0,"continuation restarted RF");
 });
+test("assignment preview does not write and detects occupied target",function(){
+ var d=deviceWith({Active:0}),job={token:[0,0,0,1,0,0,0,1,0,0,0,1],stage:4,count:1};
+ var online={invokeFunctionProperty:function(o,p,data){check(data[0]===0x1D,"preview wrote assignment");return snapshot(0,0,0).map(function(v,i){return i>=3&&i<=5?0:v;});}};
+ var old=IOHC_jobSnapshot;IOHC_jobSnapshot=function(){return job;};
+ try {
+  var found=[{index:0,nodeId:0x123456,metadataValid:true,protocolType:1,subtype:0,passiveAuthVerified:true}];
+  var preview=IOHC_assignmentPreview(online,d,job,found,1,0,0);check(preview.plan.length===1&&preview.plan[0].channel===0&&preview.token.length<=40,"preview identity");
+  d.params.IOHC_c1Active.value=1;var failed=false;try{IOHC_assignmentPreview(online,d,job,found,1,1,1);}catch(e){failed=true;}check(failed,"occupied target accepted");
+ } finally {IOHC_jobSnapshot=old;}
+});

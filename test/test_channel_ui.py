@@ -546,7 +546,7 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIsNotNone(information)
         information_text = information.get("Text", "")
         self.assertLessEqual(len(information_text), 255)
-        self.assertIn("Status wird automatisch aktualisiert", information_text)
+        self.assertIn("Weiter drücken, Zuordnung prüfen", information_text)
         self.assertIn("Ergebnis übernehmen", information_text)
         self.assertIn("60 s", information_text)
         self.assertIn("Abschlussprüfung", information.get("Text", ""))

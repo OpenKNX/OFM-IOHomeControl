@@ -342,6 +342,7 @@
                   <Enumeration Text="Priorität 7 (Komfort 4 / Automatik)" Value="231" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>
+              <ParameterType Id="%AID%_PT-IOHCImportChoice" Name="IOHCImportChoice"><TypeNumber SizeInBit="8" Type="unsignedInt" minInclusive="0" maxInclusive="24" /></ParameterType>
             </ParameterTypes>
 
 
@@ -360,6 +361,9 @@
               <Parameter Id="%AID%_P-%TT%00006" Name="ExtractionNodeIds2" ParameterType="%AID%_PT-IOHCText40Byte" Text="Gefundene Node-IDs 6–10" Value="-" Access="Read" />
               <Parameter Id="%AID%_P-%TT%00007" Name="ExtractionNodeIds3" ParameterType="%AID%_PT-IOHCText40Byte" Text="Gefundene Node-IDs 11–15" Value="-" Access="Read" />
               <Parameter Id="%AID%_P-%TT%00008" Name="ExtractionNodeIds4" ParameterType="%AID%_PT-IOHCText40Byte" Text="Gefundene Node-ID 16" Value="-" Access="Read" />
+              <Parameter Id="%AID%_P-%TT%00009" Name="AssignmentPreviewToken" ParameterType="%AID%_PT-IOHCText40Byte" Text="Zuordnungsvorschau (Token)" Value="" Access="Read" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%00010" Name="ImportCandidate" ParameterType="%AID%_PT-IOHCImportChoice" Text="Kandidat: 0=alle unterstützten, sonst Nummer" Value="0" op:configTransfer="never" />
+              <Parameter Id="%AID%_P-%TT%00011" Name="ImportTargetChannel" ParameterType="%AID%_PT-IOHCNumChannels" Text="Zielkanal: 0=freie Kanäle, sonst Kanal" Value="0" op:configTransfer="never" />
             </Parameters>
 
             <ParameterRefs>
@@ -370,6 +374,9 @@
               <ParameterRef Id="%AID%_P-%TT%00006_R-%TT%0000601" RefId="%AID%_P-%TT%00006" />
               <ParameterRef Id="%AID%_P-%TT%00007_R-%TT%0000701" RefId="%AID%_P-%TT%00007" />
               <ParameterRef Id="%AID%_P-%TT%00008_R-%TT%0000801" RefId="%AID%_P-%TT%00008" />
+              <ParameterRef Id="%AID%_P-%TT%00009_R-%TT%0000901" RefId="%AID%_P-%TT%00009" />
+              <ParameterRef Id="%AID%_P-%TT%00010_R-%TT%0001001" RefId="%AID%_P-%TT%00010" />
+              <ParameterRef Id="%AID%_P-%TT%00011_R-%TT%0001101" RefId="%AID%_P-%TT%00011" />
             </ParameterRefs>
 
             <ComObjectTable>
@@ -427,11 +434,13 @@
 
               <ParameterBlock Id="%AID%_PB-nnn" Name="CommissioningGlobal" Text="Inbetriebnahme">
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="2W-Schlüsselextraktion" UIHint="Headline" />
-                <ParameterSeparator Id="%AID%_PS-nnn" Text="1. Extraktion starten. 2. Am Fremd-Gateway 'Gerät hinzufügen' auslösen. 3. Aktualisieren / Weiter drücken; danach Zuordnung prüfen und Ergebnis übernehmen. Das Gerät wartet bis zu 60 s auf die Abschlussprüfung und startet dann die authentifizierte Gerätesuche." UIHint="Information" />
+                <ParameterSeparator Id="%AID%_PS-nnn" Text="1. Extraktion starten. 2. Am Fremd-Gateway 'Gerät hinzufügen' auslösen. 3. Weiter drücken, Zuordnung prüfen und Ergebnis übernehmen. Das Gerät wartet bis zu 60 s auf die Abschlussprüfung und startet dann die authentifizierte Gerätesuche." UIHint="Information" />
                 <ParameterSeparator Id="%AID%_PS-nnn" Text="Geräte einrichten: am Kanal verbinden oder global übernehmen. Suche und Prüfung sind eigene Schritte; anschließend Zuordnung prüfen, ETS-Vorgaben übernehmen und Applikation programmieren. 1W-Senden bestätigt keine Aktor-Anmeldung." UIHint="Information" />
                 <Button Id="%AID%_B-%TT%00032" Text="Einrichtung aktualisieren / weiter" EventHandler="IOHC_continueCommissioning" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelCount&quot;: %N% }" />
                 <Button Id="%AID%_B-%TT%00031" Text="Einrichtungsstatus lesen" EventHandler="IOHC_readCommissioningStatus" EventHandlerOnline="ConnectionOriented" />
                 <Button Id="%AID%_B-%TT%00030" Text="Aktive Einrichtung abbrechen" EventHandler="IOHC_cancelCommissioning" EventHandlerOnline="ConnectionOriented" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00010_R-%TT%0001001" />
+                <ParameterRefRef RefId="%AID%_P-%TT%00011_R-%TT%0001101" />
                 <Button Id="%AID%_B-%TT%00011" Text="2W-Extraktion starten / Ergebnis übernehmen" EventHandler="IOHC_startKeyExtract" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelCount&quot;: %N% }" />
                 <ParameterRefRef RefId="%AID%_P-%TT%00004_R-%TT%0000401" />
                 <ParameterRefRef RefId="%AID%_P-%TT%00005_R-%TT%0000501" />
