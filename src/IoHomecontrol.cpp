@@ -2414,6 +2414,13 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
         return;
     }
 
+#ifdef MVS_KoBlockOffset
+    const int8_t movementChannel = MVS_KoCalcChannel(lAsap);
+    if (movementChannel >= 0 && movementChannel < mNumChannels) {
+        mChannels[movementChannel]->processMovementModeInputKo(iKo);
+        return;
+    }
+#endif
 #ifdef PVX_KoBlockOffset
     const int8_t valueChannel=PVX_KoCalcChannel(lAsap);
     if(valueChannel>=0&&valueChannel<mNumChannels){

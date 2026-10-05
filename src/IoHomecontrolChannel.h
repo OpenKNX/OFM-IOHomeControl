@@ -28,6 +28,8 @@ public:
   void loop() override;
 
   void processProductValueInputKo(uint8_t index,GroupObject &ko);
+  void processMovementModeInputKo(GroupObject &ko);
+  uint8_t movementExecuteProfile() const;
   void processProductInputKo(uint8_t index,GroupObject &ko);
   void publishProductState();
   uint32_t mProductPublishedGeneration=0;
@@ -189,7 +191,7 @@ private:
   uint16_t mConfigured2WKeyInitDelay = 300;
   TwoWayDiscoverySettings mConfigured2WDiscoverySettings{};
   bool mOneWayEnrolled = false;     // 1W enrollment burst was transmitted successfully
-  bool mSilentOperation = false;    // Somfy RS100 2W Execute profile (0x05)
+  uint8_t mMovementMode = 0;        // 0=normal, 1=slow/silent, 2=fast
   uint16_t mSequence1W = 0;         // 1W last used sequence counter
   uint16_t mReservedSequence1W = 0; // highest sequence persisted/reserved ahead in flash
   uint32_t mOneWayControllerNodeId = 0;

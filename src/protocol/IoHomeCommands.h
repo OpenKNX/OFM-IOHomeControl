@@ -568,8 +568,11 @@ inline bool ioHomeBuildDiagnosticFpRawPayload(uint8_t iFpIndex, uint16_t iRaw,
 #define IOHC_ACEI_1W 0x43       // Somfy/default 1W remote profile
 #define IOHC_ACEI_1W_VELUX 0x61 // VELUX KLI 1W remote profile
 
-// 2W Execute extended profile byte. Somfy RS100 captures use the silent
-// profile for absolute-position and favourite commands.
+// Internal speed selectors for the 2W FP1 slot. These selectors are not RF bytes.
+// Normal requests FP1 default, slow uses the captured preset, fast requests 100%.
+// Unspecified (0xFF) preserves legacy payloads for existing controller callers.
+#define IOHC_EXECUTE_PROFILE_NORMAL 0x00 // FP1 default (0xD300)
+#define IOHC_EXECUTE_PROFILE_FAST 0x02   // FP1 maximum speed (0xC800)
 #define IOHC_EXECUTE_PROFILE_SILENT 0x05
 #define IOHC_EXECUTE_PROFILE_DEFAULT 0x06
 

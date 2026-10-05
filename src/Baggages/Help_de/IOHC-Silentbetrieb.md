@@ -1,3 +1,3 @@
-# Somfy RS100: leiser Betrieb
+# Leiser Betrieb
 
-Aktivieren Sie diese Option nur für Somfy-RS100-Antriebe im 2W-Modus. Positions- und Favoritbefehle verwenden dann den in Referenzmitschnitten beobachteten Execute-Profilwert `0x05` für leisen Betrieb. Stopp-, Lüftungs- und Lamellenbefehle bleiben unverändert.
+Die Auswahl wurde durch den Fahrmodus unter „Funktionen und Rückmeldung“ ersetzt. Dort stehen Normal, Silent (langsam) und Fast (schnell) sowie ein optionales Kommunikationsobjekt zur Verfügung. Siehe Fahrmodus.

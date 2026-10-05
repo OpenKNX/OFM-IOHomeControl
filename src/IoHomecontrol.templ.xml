@@ -15,6 +15,7 @@
           <op:part name="IOHCProducts" href="IoHomeProduct.dynamic.part.xml" instances="1">
             <op:param name="PRODUCT_CC" value="%CC%" />
           </op:part>
+          <op:part name="IOHCMovement" href="IoHomeMovement.dynamic.part.xml" instances="1"><op:param name="PRODUCT_CC" value="%CC%"/></op:part>
           <Static>
             <Parameters>
               <!-- Per-channel parameters -->
@@ -82,7 +83,7 @@
                 <Parameter Id="%AID%_UP-%TT%%CC%018" Name="c%C%OneWayProfileChannel" ParameterType="%AID%_PT-IOHCOneWayProfileChannel" Offset="51" BitOffset="0" Text="1W Profil teilen mit Kanal (0 = eigenes)" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%019" Name="c%C%OneWayAcei" ParameterType="%AID%_PT-IOHCOneWayAcei" Offset="52" BitOffset="0" Text="1W Befehls-Priorität (ACEI)" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%082" Name="c%C%OneWayEnrollmentMac" ParameterType="%AID%_PT-IOHCCheckBox" Offset="53" BitOffset="0" Text="1W Anmeldung mit MAC-Anhang (0x30)" Value="0" />
-                <Parameter Id="%AID%_UP-%TT%%CC%083" Name="c%C%SilentOperation" ParameterType="%AID%_PT-IOHCCheckBox" Offset="53" BitOffset="1" Text="Somfy RS100: leiser Betrieb" Value="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%083" Name="c%C%SilentOperation" ParameterType="%AID%_PT-IOHCCheckBox" Offset="53" BitOffset="1" Text="Leiser Betrieb (reservierter Altparameter)" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%084" Name="c%C%OneWayEnrollmentFinalizer" ParameterType="%AID%_PT-IOHCOneWayEnrollmentFinalizer" Offset="53" BitOffset="2" Text="1W Anmeldeabschluss" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%085" Name="c%C%TwoWayPowerClass" ParameterType="%AID%_PT-IOHCTwoWayPowerClass" Offset="53" BitOffset="4" Text="2W Energieklasse" Value="0" />
                 <Parameter Id="%AID%_UP-%TT%%CC%086" Name="c%C%TwoWayDiscoveryCommand" ParameterType="%AID%_PT-IOHCTwoWayDiscoveryCommand" Offset="54" BitOffset="0" Text="2W Discovery-Befehl" Value="0" />
@@ -433,6 +434,14 @@
                           <ParameterRefRef RefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201" IndentLevel="1" HelpContext="IOHC-Orientierungsobjekte" />
                           <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur bei bestätigtem Lamellen-/Orientierungsparameter aktivieren. Der ETS-Schlüsselimport setzt dies aus Profil und Subprofil." UIHint="Information" />
                         </when></choose>
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901"><when test="0">
+                          <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"><when test="1 2">
+                            <op:usePart name="IOHCMovement" xpath="//Dynamic/*"/>
+                          </when></choose>
+                        </when></choose>
+                        <ParameterBlock Id="%AID%_PB-nnn" Name="ProductFunctions" Text="Produktfunktionen" HelpContext="IOHC-Produktfunktionen">
+                          <op:usePart name="IOHCProducts" xpath="//Dynamic/*" />
+                        </ParameterBlock>
                       </ParameterBlock>
                       <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"><when test="2 3 4 5 6 7 8 9 10 11 12 13">
                       <ParameterBlock Id="%AID%_PB-nnn" Name="Scenes" Text="Szenen">
@@ -450,9 +459,7 @@
                       </when></choose>
 
 
-                      <ParameterBlock Id="%AID%_PB-nnn" Name="ProductFunctions" Text="Produktfunktionen" HelpContext="IOHC-Produktfunktionen">
-                        <op:usePart name="IOHCProducts" xpath="//Dynamic/*" />
-                      </ParameterBlock>
+
                       <ParameterBlock Id="%AID%_PB-nnn" Name="ExpertOptions" Text="Expertenoptionen" HelpContext="IOHC-Expertenoptionen">
                         <ParameterBlock Id="%AID%_PB-nnn" Name="ExpertSettings" Text="Protokoll und Discovery">
                           <ParameterSeparator Id="%AID%_PS-nnn" Text="Standardwerte reichen meist aus. Manuelle Vorgaben bleiben wirksam, wenn Sie zu einem anderen Tab wechseln." UIHint="Information" />
@@ -474,7 +481,7 @@
                             </when>
                             <when test="0">
                               <ParameterRefRef RefId="%AID%_UP-%TT%%CC%097_R-%TT%%CC%09701" IndentLevel="1" HelpContext="IOHC-2W-Befehlsprofil" />
-                              <ParameterRefRef RefId="%AID%_UP-%TT%%CC%083_R-%TT%%CC%08301" IndentLevel="1" HelpContext="IOHC-Silentbetrieb" />
+
                               <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur für einen bestätigten Somfy-RS100-Aktor aktivieren; der Schlüsselimport kann dies nicht sicher erkennen. Bei anderen Geräten deaktiviert lassen, auch nach einem Gerätetypwechsel." UIHint="Information" />
                               <ParameterRefRef RefId="%AID%_UP-%TT%%CC%086_R-%TT%%CC%08601" IndentLevel="1" HelpContext="IOHC-2W-Suchbefehl" />
                               <ParameterRefRef RefId="%AID%_UP-%TT%%CC%087_R-%TT%%CC%08701" IndentLevel="1" HelpContext="IOHC-2W-Suchziel" />

@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns="http://knx.org/xml/project/20" xmlns:op="http://github.com/OpenKNX/OpenKNXproducer"><Dynamic><op:include href="IoHomeMovement.ui.xml" xpath="//Dynamic/*" prefix="MVS" IsInner="true"/></Dynamic></KNX>

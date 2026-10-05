@@ -241,7 +241,7 @@ void IoHomecontrolChannel::setup()
     const uint8_t lTwoWayDiscoveryPreamble = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryPreamble);
     const uint8_t lTwoWayDiscoveryListenChannels = static_cast<uint8_t>(ParamIOHC_cTwoWayDiscoveryListenChannels);
     const uint8_t lTwoWayAcei = static_cast<uint8_t>(ParamIOHC_cTwoWayAcei);
-    const bool lSilentOperation = ParamIOHC_cSilentOperation != 0;
+
 
     // The visible combined channel selector is synchronized to these historic
     // fields so existing ETS projects retain their activation state and type.
@@ -329,7 +329,13 @@ void IoHomecontrolChannel::setup()
         lOneWayPowerClass <= static_cast<uint8_t>(OneWayPowerClass::LowPower)
             ? static_cast<OneWayPowerClass>(lOneWayPowerClass)
             : OneWayPowerClass::Automatic);
-    mSilentOperation = !mIs1W && lSilentOperation;
+#ifdef MVS_ParamBlockOffset
+    mMovementMode = ParamMVS_cMovementMode <= 2 ? ParamMVS_cMovementMode : 0;
+    if (ParamBASE_ModuleEnabled_MVS && ParamMVS_cMovementModeObject)
+        knx.getGroupObject(MVS_KoCalcNumber(MVS_KocMovementMode)).valueNoSend(mMovementMode, Dpt(5, 10));
+#else
+    mMovementMode = ParamIOHC_cSilentOperation ? 1 : 0;
+#endif
     mConfigured1WManufacturer = lOneWayManufacturer;
     if (mConfigured1WManufacturer != 0)
         setOneWayControllerManufacturer(mConfigured1WManufacturer);
@@ -337,7 +343,7 @@ void IoHomecontrolChannel::setup()
     if (mIs1W && mConfigured1WTargetNodeId == 0)
         logInfoP("Channel is configured as 1W but has no ETS 1W target node; pairing must provide a target node explicitly");
 
-    logInfoP("Applied protocol config: %s target=0x%06X broadcastType=%u acei=0x%02X profile=%s manufacturer=0x%02X enrollFinalizer=%u power1W=%s rs100Silent=%u power2W=%s",
+    logInfoP("Applied protocol config: %s target=0x%06X broadcastType=%u acei=0x%02X profile=%s manufacturer=0x%02X enrollFinalizer=%u power1W=%s movementMode=%u power2W=%s",
              mIs1W ? "1W" : "2W",
              static_cast<unsigned long>(mConfigured1WTargetNodeId),
              static_cast<unsigned>(mConfigured1WBroadcastType),
@@ -346,7 +352,7 @@ void IoHomecontrolChannel::setup()
              static_cast<unsigned>(mOneWayControllerManufacturer),
              static_cast<unsigned>(mConfigured1WEnrollmentFinalizer),
              IoHomeController::oneWayPowerClassName(mConfigured1WPowerClass),
-             mSilentOperation ? 1U : 0U,
+             static_cast<unsigned>(mMovementMode),
              twoWayPowerClassName(mConfigured2WPowerClass));
 
     logDebugP("Setup (type=%d, poll=%ds, open=%.1fs, close=%.1fs, invert=%d, powerOn=%d, scenes=%d, 1w=%d, 1wTarget=%06X, 1wType=%u, 1wProfile=%u)",
@@ -1406,7 +1412,7 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
     const bool lQueued = mIs1W
                              ? mController.sendChannelCommand(this, IoHomeCommand::Execute, lParam, iSlatPercent)
                              : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, lParam,
-                                                       0xFF, mSilentOperation ? IOHC_EXECUTE_PROFILE_SILENT : 0xFF);
+                                                       0xFF, movementExecuteProfile());
     if (!lQueued)
         return;
 
@@ -1467,7 +1473,7 @@ void IoHomecontrolChannel::sendFavorite()
     const bool lQueued = mIs1W
                              ? mController.sendChannelCommand(this, IoHomeCommand::Execute, 0xD8)
                              : mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::Execute, 0xD8,
-                                                       0xFF, mSilentOperation ? IOHC_EXECUTE_PROFILE_SILENT : 0xFF);
+                                                       0xFF, movementExecuteProfile());
     if (!lQueued)
         return;
 
@@ -2423,5 +2429,36 @@ void IoHomecontrolChannel::processProductValueInputKo(uint8_t index,GroupObject 
     if(product==7&&fp>=9&&fp<=14)mask|=uint16_t(1)<<((fp%2?fp+1:fp-1)-1);
     if((product==8||product==9)&&(fp==15||fp==16))mask|=0xC000;
     if(!mController.requestMpFpMaskRead(this,mask))logInfoP("Selected product diagnostic GET blocked");
+#endif
+}
+
+// Select a speed only for roller-shutter FP1; other profiles use FP1 differently.
+uint8_t IoHomecontrolChannel::movementExecuteProfile() const
+{
+    if (mIs1W) return 0xFF;
+#ifdef MVS_ParamBlockOffset
+    if (!ParamBASE_ModuleEnabled_MVS) return 0xFF;
+#endif
+    const auto *profile = getEffectiveProfileDescriptor();
+    if (profile && (ioHomeParameterSemantic(profile, 0) != ParameterSemantic::Position ||
+                    ioHomeParameterSemantic(profile, 1) != ParameterSemantic::LinearSpeed)) return 0xFF;
+    if (!profile && ParamIOHC_cDeviceType != 1) return 0xFF;
+    return mMovementMode == 1 ? IOHC_EXECUTE_PROFILE_SILENT :
+           mMovementMode == 2 ? IOHC_EXECUTE_PROFILE_FAST : IOHC_EXECUTE_PROFILE_NORMAL;
+}
+
+void IoHomecontrolChannel::processMovementModeInputKo(GroupObject &ko)
+{
+#ifdef MVS_KoBlockOffset
+    if (!ParamBASE_ModuleEnabled_MVS || !ParamMVS_cMovementModeObject ||
+        !isOperational() || mIs1W || !ParamIOHC_cActive || ParamIOHC_cSuspend) return;
+    const uint8_t mode = ko.value(Dpt(5, 10));
+    if (mode > 2) {
+        // Restore the selected value: invalid telegrams must not become readable state.
+        ko.value(mMovementMode, Dpt(5, 10));
+        return;
+    }
+    mMovementMode = mode;
+    ko.value(mMovementMode, Dpt(5, 10));
 #endif
 }

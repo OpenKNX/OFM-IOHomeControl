@@ -874,7 +874,17 @@ namespace
         return true;
     }
 
-    bool build2WExecutePositionPayload(uint8_t iPositionPercent, bool iSilentOperation, uint8_t iAcei,
+    uint16_t executeMovementSpeed(uint8_t iProfile)
+    {
+        switch (iProfile) {
+        case IOHC_EXECUTE_PROFILE_NORMAL: return IOHC_PARAMETER_DEFAULT;
+        case IOHC_EXECUTE_PROFILE_SILENT: return 0xD805;
+        case IOHC_EXECUTE_PROFILE_FAST: return IOHC_POSITION_MAX;
+        default: return 0xD806; // Keep the original unspecified position payload.
+        }
+    }
+
+    bool build2WExecutePositionPayload(uint8_t iPositionPercent, uint8_t iMovementProfile, uint8_t iAcei,
                                        uint8_t *oData, uint8_t &oLen)
     {
         if (oData == nullptr || iPositionPercent > 100)
@@ -886,30 +896,32 @@ namespace
         oData[2] = static_cast<uint8_t>(iPositionPercent * 2U);
         oData[3] = 0x00;
         oData[4] = 0x80;
-        oData[5] = 0xD8;
-        oData[6] = iSilentOperation ? IOHC_EXECUTE_PROFILE_SILENT : IOHC_EXECUTE_PROFILE_DEFAULT;
+        const uint16_t speed = executeMovementSpeed(iMovementProfile);
+        oData[5] = static_cast<uint8_t>(speed >> 8);
+        oData[6] = static_cast<uint8_t>(speed);
         oData[7] = 0x00;
         oLen = 8;
         return true;
     }
 
-    bool build2WExecuteSpecialPayload(uint8_t iSpecialPosition, bool iSilentOperation, uint8_t iAcei,
+    bool build2WExecuteSpecialPayload(uint8_t iSpecialPosition, uint8_t iMovementProfile, uint8_t iAcei,
                                       uint8_t *oData, uint8_t &oLen)
     {
         if (oData == nullptr)
             return false;
 
-        // Reference template: 01 <ACEI> <D2/D8> 00 00 00. RS100 favourite
-        // uses the observed extended silent form with the selected ACEI.
+        // Special commands retain their short form. Favourite movement can
+        // carry the selected FP1 speed in the same slot as position movement.
         oData[0] = IOHC_ORIGINATOR_USER;
         oData[1] = iAcei;
         oData[2] = iSpecialPosition;
         oData[3] = 0x00;
-        if (iSilentOperation && iSpecialPosition == 0xD8)
+        if (iMovementProfile != 0xFF && iSpecialPosition == 0xD8)
         {
             oData[4] = 0x80;
-            oData[5] = 0xD8;
-            oData[6] = IOHC_EXECUTE_PROFILE_SILENT;
+            const uint16_t speed = executeMovementSpeed(iMovementProfile);
+            oData[5] = static_cast<uint8_t>(speed >> 8);
+            oData[6] = static_cast<uint8_t>(speed);
             oData[7] = 0x00;
             oLen = 8;
         }
@@ -1154,27 +1166,27 @@ namespace
         uint8_t lLen = 0;
 
         static constexpr uint8_t kExecutePosition50[] = {0x01, 0x67, 0x64, 0x00, 0x80, 0xD8, 0x06, 0x00};
-        if (!build2WExecutePositionPayload(50, false, IOHC_ACEI_DEFAULT, lPayload, lLen) ||
+        if (!build2WExecutePositionPayload(50, 0xFF, IOHC_ACEI_DEFAULT, lPayload, lLen) ||
             !payloadEquals(lPayload, lLen, kExecutePosition50, sizeof(kExecutePosition50)))
             return false;
 
         static constexpr uint8_t kExecuteStop[] = {0x01, 0x67, 0xD2, 0x00, 0x00, 0x00};
-        if (!build2WExecuteSpecialPayload(0xD2, false, IOHC_ACEI_DEFAULT, lPayload, lLen) ||
+        if (!build2WExecuteSpecialPayload(0xD2, 0xFF, IOHC_ACEI_DEFAULT, lPayload, lLen) ||
             !payloadEquals(lPayload, lLen, kExecuteStop, sizeof(kExecuteStop)))
             return false;
 
         static constexpr uint8_t kExecuteFavorite[] = {0x01, 0x67, 0xD8, 0x00, 0x00, 0x00};
-        if (!build2WExecuteSpecialPayload(0xD8, false, IOHC_ACEI_DEFAULT, lPayload, lLen) ||
+        if (!build2WExecuteSpecialPayload(0xD8, 0xFF, IOHC_ACEI_DEFAULT, lPayload, lLen) ||
             !payloadEquals(lPayload, lLen, kExecuteFavorite, sizeof(kExecuteFavorite)))
             return false;
 
         static constexpr uint8_t kExecutePosition50Silent[] = {0x01, 0x67, 0x64, 0x00, 0x80, 0xD8, 0x05, 0x00};
-        if (!build2WExecutePositionPayload(50, true, IOHC_ACEI_DEFAULT, lPayload, lLen) ||
+        if (!build2WExecutePositionPayload(50, IOHC_EXECUTE_PROFILE_SILENT, IOHC_ACEI_DEFAULT, lPayload, lLen) ||
             !payloadEquals(lPayload, lLen, kExecutePosition50Silent, sizeof(kExecutePosition50Silent)))
             return false;
 
         static constexpr uint8_t kExecuteFavoriteSilent[] = {0x01, 0x67, 0xD8, 0x00, 0x80, 0xD8, 0x05, 0x00};
-        if (!build2WExecuteSpecialPayload(0xD8, true, IOHC_ACEI_DEFAULT, lPayload, lLen) ||
+        if (!build2WExecuteSpecialPayload(0xD8, IOHC_EXECUTE_PROFILE_SILENT, IOHC_ACEI_DEFAULT, lPayload, lLen) ||
             !payloadEquals(lPayload, lLen, kExecuteFavoriteSilent, sizeof(kExecuteFavoriteSilent)))
             return false;
 
@@ -9879,7 +9891,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             else if (iEntry.param <= 100)
             {
                 if (!build2WExecutePositionPayload(iEntry.param,
-                                                   iEntry.param3 == IOHC_EXECUTE_PROFILE_SILENT,
+                                                   iEntry.param3,
                                                    lTwoWayAcei,
                                                    mTxFrame.data, mTxFrame.dataLen))
                     return false;
@@ -9887,7 +9899,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             else
             {
                 if (!build2WExecuteSpecialPayload(iEntry.param,
-                                                  iEntry.param3 == IOHC_EXECUTE_PROFILE_SILENT,
+                                                  iEntry.param3,
                                                   lTwoWayAcei,
                                                   mTxFrame.data, mTxFrame.dataLen))
                     return false;

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns="http://knx.org/xml/project/20"><Dynamic>
+<ParameterBlock Id="%AID%_PB-nnn" Name="MovementMode" Text="Fahrmodus" HelpContext="IOHC-Fahrmodus">
+<ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101" HelpContext="IOHC-Fahrmodus"/>
+<ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00201" HelpContext="IOHC-Fahrmodus"/>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00201"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00001"/></when></choose>
+</ParameterBlock></Dynamic></KNX>
