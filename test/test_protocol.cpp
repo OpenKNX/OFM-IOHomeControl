@@ -9378,6 +9378,20 @@ TEST(controller_failed_durable_reservation_blocks_first_oneway_transmission)
     ASSERT_EQ(c.oneWayRecovery(),IoHomeController::OneWayRecovery::CommitFailed);
 }
 
+TEST(controller_same_key_counter_reset_recovers_durable_floor) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initOneWayPairingModeControllerForTest(c,m,ch,0x123456,0x654321,key);ch.setNodeId(0x654321);
+    ASSERT_TRUE(c.sendCommand(0x654321,key,IoHomeCommand::Execute,50));
+    c.loop();c.loop();c.loop();
+    const uint16_t floor=ch.getReservedSequence1W();ASSERT_TRUE(floor>0);
+    // Complete burst before issuing a second command.
+    for(unsigned n=0;n<40;n++){ioHomeTestAdvanceMillis(50);c.loop();}
+    ch.setSequence1W(0);
+    ASSERT_TRUE(c.sendCommand(0x654321,key,IoHomeCommand::Execute,50));
+    for(unsigned n=0;n<3;n++) c.loop();
+    ASSERT_TRUE(ch.getSequence1W()>floor);ASSERT_TRUE(!c.oneWayRecoveryRequired());
+}
+
 static void finishCurrentBlind1WPairingTxForTest(IoHomeController &iController)
 {
     // Finish the long-preamble first TX and the manufacturer-selected repeats.

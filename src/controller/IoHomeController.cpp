@@ -5376,7 +5376,8 @@ uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool i
     if (lOwner >= 16) { mReservationFailed = true; mOneWayRecovery=OneWayRecovery::OwnerUnavailable; return 0; }
     const uint32_t lNode = iProfile->getOneWayControllerNodeId();
     const uint8_t *lKey = iProfile->getOneWayControllerKey();
-    if (!mReservationLoaded[lOwner] || mReservationNodes[lOwner] != lNode ||
+    if (!mReservationLoaded[lOwner] || mReservationWatermarks[lOwner] != iProfile->getReservedSequence1W() ||
+        mReservationNodes[lOwner] != lNode ||
         std::memcmp(mReservationKeys[lOwner], lKey, 16))
     {
         uint16_t lWatermark=0;
@@ -5388,7 +5389,12 @@ uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool i
           mOneWayRecovery=lLoad!=IoHomeDurableReservation::Load::Unavailable ?
               OneWayRecovery::JournalCorrupt : OneWayRecovery::StoreUnavailable;
           return 0; }
-        if (lLoad==IoHomeDurableReservation::Load::Found) iProfile->setSequence1W(lWatermark);
+        if (lLoad==IoHomeDurableReservation::Load::Found) {
+            // A same-key reimport/reset cannot move below the durable floor.
+            const uint16_t current=iProfile->getSequence1W();
+            if (static_cast<uint16_t>(current-lWatermark)>=0x8000)
+                iProfile->setSequence1W(lWatermark);
+        }
         mReservationNodes[lOwner]=lNode; std::memcpy(mReservationKeys[lOwner],lKey,16);
         mReservationLoaded[lOwner]=true;
     }
@@ -5396,6 +5402,7 @@ uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool i
     const uint16_t lUsedSequence = iProfile->incrementSequence1W(iForceFlashSave, lFlashSaveRequired);
     const uint16_t lNextSequence = static_cast<uint16_t>(lUsedSequence + 1U);
     const uint16_t lReservedSequence = iProfile->getReservedSequence1W();
+    mReservationWatermarks[lOwner]=lReservedSequence;
 
     if (lFlashSaveRequired && !mReservationJournal.commit(lOwner,lNode,lKey,lReservedSequence))
     { mReservationFailed=true; mOneWayRecovery=OneWayRecovery::CommitFailed; }

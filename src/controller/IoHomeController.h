@@ -1039,6 +1039,7 @@ private:
   IoHomeDurableReservation mReservationJournal;
   bool mReservationLoaded[16]{};
   uint32_t mReservationNodes[16]{};
+  uint16_t mReservationWatermarks[16]{};
   uint8_t mReservationKeys[16][16]{};
   bool mReservationFailed = false;
   OneWayRecovery mOneWayRecovery = OneWayRecovery::Ready;
