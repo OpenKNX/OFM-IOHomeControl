@@ -2407,6 +2407,14 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
         return;
     }
 
+#ifdef PIC_KoBlockOffset
+    const int8_t productChannel=PIC_KoCalcChannel(lAsap);
+    if(productChannel>=0&&productChannel<mNumChannels) {
+        updateCommissioningJob();
+        if(mCommissioningJob.active()||mRadioDiagnostic.active||mMetadataRefreshActive)return;
+        mChannels[productChannel]->processProductInputKo((lAsap-PIC_KoBlockOffset)%PIC_KoBlockSize,iKo);return;
+    }
+#endif
     // Per-channel KO dispatch using knxprod.h macros
     int8_t lChannelId = IOHC_KoCalcChannel(lAsap);
     if (lChannelId >= 0 && lChannelId < mNumChannels)

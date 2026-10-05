@@ -360,6 +360,7 @@ void IoHomecontrolChannel::setup()
 
 void IoHomecontrolChannel::loop()
 {
+    publishProductState();
     if (!isOperational())
         return;
 
@@ -2356,4 +2357,47 @@ GroupObject &IoHomecontrolChannel::getKo(uint8_t iIoIndex)
     // Use the generated IOHC_KoCalcNumber macro from knxprod.h
     // This requires _channelIndex to be set (it is, from constructor)
     return knx.getGroupObject(IOHC_KoCalcNumber(iIoIndex));
+}
+
+void IoHomecontrolChannel::processProductInputKo(uint8_t index,GroupObject &ko)
+{
+#ifdef PIC_KoBlockOffset
+    if(!ParamBASE_ModuleEnabled_PIC||!isOperational()||is1W()||!ParamIOHC_cActive||ParamIOHC_cSuspend||mLocked)return;
+    const auto family=ioHomeBindProductFamily(mProtocolIdentity,mProductIdentityEvidence);
+    if(index==PIC_KocRgb) {
+        const uint32_t rgb=ko.value(DPT_Colour_RGB);
+        if(!mController.requestProductRgb(this,(rgb>>16)&255,(rgb>>8)&255,rgb&255))logInfoP("Product RGB write blocked: binding/qualification/ownership");
+    } else if(index==PIC_KocWhite) {
+        const uint16_t kelvin=ko.value(Dpt(7,600));
+        if(!mController.requestProductWhite(this,kelvin))logInfoP("Product white write blocked: binding/qualification/ownership");
+    } else if(index==PIC_KocRead&&bool(ko.value(DPT_Switch))) {
+        if(family==IoHomeBoundProductFamily::RgbLight) {
+            if(!mController.requestMpFpRead(this,0)||!mController.requestMpFpRead(this,10)||!mController.requestMpFpRead(this,11))logInfoP("Product read partly queued or blocked");
+        } else if(family==IoHomeBoundProductFamily::TunableWhiteLight) {
+            if(!mController.requestMpFpRead(this,14))logInfoP("Product white read blocked");
+        }
+    }
+#endif
+}
+void IoHomecontrolChannel::publishProductState()
+{
+#ifdef PIC_KoBlockOffset
+    const auto family=ioHomeBindProductFamily(mProtocolIdentity,mProductIdentityEvidence);
+    if(!ParamBASE_ModuleEnabled_PIC)return;
+    const bool operational=isOperational()&&!is1W()&&ParamIOHC_cActive&&!ParamIOHC_cSuspend;
+    uint8_t red=0,green=0,blue=0;uint16_t kelvin=0;bool valid=false;uint32_t generation=0;
+    if(operational&&family==IoHomeBoundProductFamily::RgbLight&&ioHomeProductAccess(family,10).knxPublish&&ioHomeProductAccess(family,11).knxPublish) {
+        valid=mProductRuntime.rgb(family,millis(),5000,red,green,blue);generation=mProductRuntime.sample(0)->generation;
+    } else if(operational&&family==IoHomeBoundProductFamily::TunableWhiteLight&&ioHomeProductAccess(family,14).knxPublish) {
+        valid=mProductRuntime.white(family,millis(),5000,kelvin);generation=mProductRuntime.sample(14)->generation;
+    }
+    auto &validKo=knx.getGroupObject(PIC_KoCalcNumber(PIC_KocValid));
+    if(!validKo.initialized()||valid!=mProductPublishedValid)validKo.value(valid,Dpt(1,2));
+    if(valid&&(!mProductPublishedValid||generation!=mProductPublishedGeneration)) {
+        if(family==IoHomeBoundProductFamily::RgbLight)knx.getGroupObject(PIC_KoCalcNumber(PIC_KocRgbFeedback)).value(uint32_t(red)<<16|uint32_t(green)<<8|blue,DPT_Colour_RGB);
+        else knx.getGroupObject(PIC_KoCalcNumber(PIC_KocWhiteFeedback)).value(kelvin,Dpt(7,600));
+        mProductPublishedGeneration=generation;
+    }
+    mProductPublishedValid=valid;
+#endif
 }

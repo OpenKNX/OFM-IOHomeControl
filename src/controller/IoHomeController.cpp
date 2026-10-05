@@ -1,3 +1,4 @@
+#include "../protocol/IoHomeProductActivation.h"
 #include "IoHomeController.h"
 #include "../protocol/IoHomeLogRedaction.h"
 #include "../protocol/IoHomeProfileRegistry.h"
@@ -2505,6 +2506,31 @@ void IoHomeController::servicePriorityRefresh()
         if(requestPriority(ch,level))sample.refreshArmed=false; // one refresh; a new valid reply re-arms it
         return;
     }
+}
+
+bool IoHomeController::requestProductRgb(IoHomecontrolChannel *channel,uint8_t red,uint8_t green,uint8_t blue)
+{
+    if(!channel||!channel->isPaired()||channel->is1W()||mPassiveMode||mGatewayMode||mOneWayKeyReceiveActive||isKeyExtractionActive()||isNetworkScanActive())return false;
+    const auto family=ioHomeBindProductFamily(channel->getProtocolIdentity(),channel->getProductIdentityEvidence());
+    if(!ioHomeProductAccess(family,10).rfWrite||!ioHomeProductAccess(family,11).rfWrite)return false;
+    IoHomeQueueEntry entry{};uint8_t length=0;
+    if(!ioHomeBuildBoundRgbRepresentation(channel->getProtocolIdentity(),channel->getProductIdentityEvidence(),red,green,blue,
+        entry.productActivation+2,sizeof(entry.productActivation)-2,length))return false;
+    entry.productActivation[0]=IOHC_ORIGINATOR_USER;entry.productActivation[1]=channel->getConfigured2WAcei();entry.productActivationLength=length+2;entry.productActivationFamily=static_cast<uint8_t>(family);
+    entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();entry.managementRead=true;std::memcpy(entry.managementKey,entry.encKey,16);
+    entry.command=IoHomeCommand::Execute;entry.sourceChannelIndex=channelIndexFor(channel);entry.maxAttempts=1;entry.active=true;return queuePush(entry);
+}
+bool IoHomeController::requestProductWhite(IoHomecontrolChannel *channel,uint16_t kelvin)
+{
+    if(!channel||!channel->isPaired()||channel->is1W()||mPassiveMode||mGatewayMode||mOneWayKeyReceiveActive||isKeyExtractionActive()||isNetworkScanActive())return false;
+    const auto family=ioHomeBindProductFamily(channel->getProtocolIdentity(),channel->getProductIdentityEvidence());
+    if(!ioHomeProductAccess(family,14).rfWrite)return false;
+    IoHomeQueueEntry entry{};uint8_t length=0;
+    if(!ioHomeBuildBoundWhiteRepresentation(channel->getProtocolIdentity(),channel->getProductIdentityEvidence(),kelvin,IOHC_PARAMETER_IGNORE,
+        entry.productActivation+2,sizeof(entry.productActivation)-2,length))return false;
+    entry.productActivation[0]=IOHC_ORIGINATOR_USER;entry.productActivation[1]=channel->getConfigured2WAcei();entry.productActivationLength=length+2;entry.productActivationFamily=static_cast<uint8_t>(family);
+    entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();entry.managementRead=true;std::memcpy(entry.managementKey,entry.encKey,16);
+    entry.command=IoHomeCommand::Execute;entry.sourceChannelIndex=channelIndexFor(channel);entry.maxAttempts=1;entry.active=true;return queuePush(entry);
 }
 
 bool IoHomeController::requestMpFpRead(IoHomecontrolChannel *channel,uint8_t index)
@@ -7065,7 +7091,7 @@ void IoHomeController::processResponse()
 
     // These recovered read services cannot complete on an unrelated opcode
     // or the legacy descriptor's too-short Priority ACK.
-    if(mCurrentCmd.managementRead&&!mCurrentCmd.objectReadToken&&!mCurrentCmd.mpFpRead) {
+    if(mCurrentCmd.managementRead&&!mCurrentCmd.objectReadToken&&!mCurrentCmd.mpFpRead&&!mCurrentCmd.productActivationLength) {
         if(!managementIdentityMatches(mCurrentCmd)) {
             const auto failed=mCurrentCmd;
             mCurrentCmd.active=false;mState=ControllerState::Idle;
@@ -9581,6 +9607,17 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         // remote profiles may have target node 0, so do not depend solely on
         // node-id lookup or isPaired() here.
         IoHomecontrolChannel *lTargetCh = channelForQueueEntry(iEntry);
+
+        if(iEntry.productActivationLength) {
+            if(!lTargetCh||lTargetCh->is1W()||iEntry.productActivationLength>sizeof(iEntry.productActivation))return false;
+            const auto family=ioHomeBindProductFamily(lTargetCh->getProtocolIdentity(),lTargetCh->getProductIdentityEvidence());
+            if(static_cast<uint8_t>(family)!=iEntry.productActivationFamily)return false;
+            if((family==IoHomeBoundProductFamily::RgbLight&&(!ioHomeProductAccess(family,10).rfWrite||!ioHomeProductAccess(family,11).rfWrite))||
+               (family==IoHomeBoundProductFamily::TunableWhiteLight&&!ioHomeProductAccess(family,14).rfWrite)||
+               (family!=IoHomeBoundProductFamily::RgbLight&&family!=IoHomeBoundProductFamily::TunableWhiteLight))return false;
+            std::memcpy(mTxFrame.data,iEntry.productActivation,iEntry.productActivationLength);mTxFrame.dataLen=iEntry.productActivationLength;
+            mTxFrame.hasHmac=false;mAuthResponseSent=false;break;
+        }
 
         if (lTargetCh && lTargetCh->is1W())
         {

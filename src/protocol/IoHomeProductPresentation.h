@@ -24,8 +24,8 @@ inline IoHomeQuantityPresentation ioHomeTemperaturePresentation(IoHomeTemperatur
 inline IoHomeQuantityPresentation ioHomeLightingPresentation(IoHomeBoundProductFamily family,uint8_t index)
 {
     if(family==IoHomeBoundProductFamily::TunableWhiteLight && index==14)
-        return {IoHomeQuantity::Kelvin,0,0,false}; // DPT/object choice belongs to product revision
+        return {IoHomeQuantity::Kelvin,7,600,false}; // additive Kelvin KO bank
     if(family==IoHomeBoundProductFamily::RgbLight && (index==10 || index==11))
-        return {IoHomeQuantity::Rgb,0,0,false}; // chromaticity pair is not an independent percentage
+        return {IoHomeQuantity::Rgb,232,600,false}; // coherent RGB, not independent chromaticity percentages
     return {};
 }

@@ -27,6 +27,10 @@ public:
   void setup() override;
   void loop() override;
 
+  void processProductInputKo(uint8_t index,GroupObject &ko);
+  void publishProductState();
+  uint32_t mProductPublishedGeneration=0;
+  bool mProductPublishedValid=false;
   void processInputKo(uint8_t iIoIndex, GroupObject &iKo);
   bool restoreLastKnownStateAfterStartup();
 

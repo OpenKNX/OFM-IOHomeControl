@@ -19368,3 +19368,21 @@ TEST(controller_product_default_context_reads_target_not_current_mp) {
         ASSERT_TRUE(!channel.productRuntime().sample(0)->present);ASSERT_TRUE(!channel.testHasPositionFeedback());
     }
 }
+
+TEST(controller_product_writes_remain_blocked_despite_matching_lighting_family) {
+    for(uint8_t sub:{1,2}) {
+        const uint8_t key[16]={1};IoHomeController controller;IoHomecontrol module;IoHomecontrolChannel channel;
+        initPaired2WControllerForTest(controller,module,channel,0x831F2A,0x7E9E6E,key);
+        IoHomeProtocolIdentity identity;identity.valid=true;identity.fullMetadata=true;identity.nodeClass=IoHomeNodeClass::Actuator;
+        identity.profile=6;identity.subProfile=sub;identity.manufacturerId=2;channel.onProtocolIdentity(0x7E9E6E,identity);
+        ASSERT_TRUE(!controller.requestProductRgb(&channel,255,0,0));ASSERT_TRUE(!controller.requestProductWhite(&channel,4250));
+        IoHomeFrame tx;ASSERT_TRUE(!transmitQueuedControllerFrame(controller,tx));
+    }
+}
+
+TEST(product_lighting_knx_types_are_explicit_and_remain_unqualified) {
+    auto rgb=ioHomeLightingPresentation(IoHomeBoundProductFamily::RgbLight,10);
+    ASSERT_EQ(rgb.dptMain,232);ASSERT_EQ(rgb.dptSub,600);ASSERT_TRUE(!rgb.publicationQualified);
+    auto white=ioHomeLightingPresentation(IoHomeBoundProductFamily::TunableWhiteLight,14);
+    ASSERT_EQ(white.dptMain,7);ASSERT_EQ(white.dptSub,600);ASSERT_TRUE(!white.publicationQualified);
+}

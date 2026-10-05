@@ -161,6 +161,9 @@ struct IoHomeQueueEntry
   uint32_t oneWayExactDestination;             // exact 24-bit 1W dst for diagnostics
   uint8_t sourceChannelIndex;                  // 0xFF when not queued from a concrete channel
   uint8_t twoWayTxFreqIdx;                     // 0xFF uses the normal 2W command channel
+  uint8_t productActivation[10];
+  uint8_t productActivationLength;
+  uint8_t productActivationFamily;
   bool twoWayFp;                               // profile-selected functional parameter
   bool managementRead;                        // key snapshot for correlated management reads
   uint8_t managementKey[16];
@@ -563,6 +566,8 @@ public:
   bool sendBatteryStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
   bool sendBatteryStateQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
   bool sendTiltStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
+  bool requestProductRgb(IoHomecontrolChannel *channel,uint8_t red,uint8_t green,uint8_t blue);
+  bool requestProductWhite(IoHomecontrolChannel *channel,uint16_t kelvin);
   bool requestMpFpContext(IoHomecontrolChannel *channel,uint8_t mode);
   bool requestMpFpRead(IoHomecontrolChannel *channel,uint8_t index);
   bool sendDiagnosticFpRead(IoHomecontrolChannel *iChannel, uint8_t iFpIndex);
