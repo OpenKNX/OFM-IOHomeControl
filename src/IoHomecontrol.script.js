@@ -805,6 +805,11 @@ function IOHC_effectiveSettingsText(device,context) {
 function IOHC_showEffectiveSettings(device,online,progress,context) {
     progress.setText(IOHC_effectiveSettingsText(device,context));
 }
+function IOHC_sameRecognitionSnapshot(first,last) {
+    if(!first||!last||first.length!==12||last.length!==12||first[0]!==0||first[1]!==1)return false;
+    for(var i=0;i<12;i++)if(first[i]!==last[i])return false;
+    return true;
+}
 function IOHC_readChannelEvidence(device,online,progress,context) {
     var channel=Number(context.channelIndex)-1;
     if(channel<0||channel>=16||Math.floor(channel)!==channel) throw new Error("Ungültiger Kanal");
@@ -840,7 +845,7 @@ function IOHC_readChannelEvidence(device,online,progress,context) {
             }
         } else text+="Produktbindung von dieser Firmware nicht verfügbar. ";
         var current=IOHC_invokeFunctionProperty(online,[0x1D,channel]);
-        if(!current||current.length!==12||current[0]!==0||current[1]!==1||current[2]!==channel||IOHC_readNodeId(current,3)!==node) throw new Error("Kanal während des Lesens geändert; erneut lesen");
+        if(!IOHC_sameRecognitionSnapshot(identity,current)) throw new Error("Kanal während des Lesens geändert; erneut lesen");
         text+="Aktuelle Geräteevidenz; gespeicherte ETS-Übernahmen stehen im Vorgabenbericht. Keine Einstellungen übernommen und keine RF-Abfrage ausgelöst.";
         progress.setText(text);
     } finally {online.disconnect();}
@@ -1088,7 +1093,7 @@ function IOHC_requestProductObservations(device,online,progress,context) {
             if(!combined||combined.length!==5||combined[0]!==0||combined[1]!==1||combined[2]!==channel||combined[3]!==request[2]||combined[4]!==request[3])
                 throw new Error("Produkt-Snapshot blockiert; Einrichtungs-/Diagnosestatus prüfen");
             var after=IOHC_invokeFunctionProperty(online,[0x1D,channel]);
-            if(!after||after.length!==12||after[0]!==0||after[1]!==1||after[2]!==channel||IOHC_readNodeId(after,3)!==node)
+            if(!IOHC_sameRecognitionSnapshot(identity,after))
                 throw new Error("Kanal geändert; gestartete Abfrage bleibt an die ursprüngliche Identität gebunden");
             progress.setText("Eine gemeinsame MP/FP-Abfrage gestartet. Anschließend Produktevidenz lesen. Gemeinsame Antwortgeneration bedeutet keine Authentifizierung oder Schreibfreigabe.");
             return;
@@ -1103,7 +1108,7 @@ function IOHC_requestProductObservations(device,online,progress,context) {
             queued++;
         }
         var current=IOHC_invokeFunctionProperty(online,[0x1D,channel]);
-        if(!current||current.length!==12||current[0]!==0||current[1]!==1||current[2]!==channel||IOHC_readNodeId(current,3)!==node)
+        if(!IOHC_sameRecognitionSnapshot(identity,current))
             throw new Error("Kanal geändert; gestartete Abfragen sind an ihre ursprüngliche Identität gebunden");
         progress.setText(queued+" Einzelabfragen gestartet. Anschließend Produktevidenz lesen. Separate Antworten bilden keine atomare RGB-Messung; keine Schreibfreigabe oder ETS-Änderung.");
     } finally {online.disconnect();}

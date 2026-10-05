@@ -235,3 +235,14 @@ test("recognition history retains two distinct adoptions and manual ownership",f
     check(!IOHC_applyRecognitionSettings(d,"IOHC_c1",discovery)&&JSON.stringify(d.params)===before,"override changed history");
     check(IOHC_effectiveSettingsText(d,{channelIndex:1}).indexOf("Davor:")>=0,"history absent from summary");
 });
+
+test("channel evidence refuses same-node profile change during reads",function() {
+    var count=0,text="",closed=false,d=deviceWith({});
+    var online={connect:function(){},disconnect:function(){closed=true;},invokeFunctionProperty:function(o,p,data) {
+        if(data[0]===0x22)return [3];
+        var identity=snapshot(0x1C,6,1);if(++count===2)identity[8]=2;return identity;
+    }};
+    var failed=false;try{IOHC_readChannelEvidence(d,online,{setText:function(t){text=t;}},{channelIndex:1});}catch(e){failed=true;}
+    check(failed&&closed&&text==="","mixed semantic evidence displayed");
+    check(!IOHC_sameRecognitionSnapshot(snapshot(0x1C,6,1),snapshot(0x0C,6,1)),"pairing change ignored");
+});

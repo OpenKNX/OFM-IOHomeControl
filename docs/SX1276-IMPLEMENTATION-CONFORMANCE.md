@@ -102,3 +102,12 @@ The offline summary exposes the records. They persist with the ETS project,
 not in device flash. This is bounded adoption history, not a complete audit log,
 authenticated metadata claim, current-source inference or download receipt.
 Actual ETS save/reopen/migration remains unqualified.
+
+## ETS snapshot consistency — 2026-10-05
+
+Online evidence and product-read actions now compare the complete twelve-byte
+recognition snapshot before/after work. Same-node profile, manufacturer,
+power/completeness/pairing changes reject mixed evidence, not just NodeID
+replacement. This does not expose or compare keys; firmware independently
+checks queued key/context revisions. A JavaScript regression test changes the
+subprofile while retaining NodeID and verifies no evidence is displayed.
