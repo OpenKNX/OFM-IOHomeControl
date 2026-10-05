@@ -1605,6 +1605,7 @@ void IoHomecontrol::loop()
 
     if (!mRadioDiagnostic.active)
         processKeyImportWorkflow();
+    updateCommissioningJob();
 
     if (!mRadioDiagnostic.active)
         processMetadataRefresh();
@@ -2405,6 +2406,38 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
     }
 }
 
+void IoHomecontrol::updateCommissioningJob()
+{
+    using O=IoHomeCommissioningJob::Owner; using S=IoHomeCommissioningJob::Stage;
+    if (mCommissioningJob.owner==O::Import && mCommissioningJob.active())
+    {
+        switch(mKeyImportPhase) {
+        case KeyImportPhase::Extracting: mCommissioningJob.stage=S::Preparing; break;
+        case KeyImportPhase::Verifying: mCommissioningJob.stage=S::Verifying; break;
+        case KeyImportPhase::Scanning: mCommissioningJob.stage=S::Discovering; break;
+        case KeyImportPhase::Complete: mCommissioningJob.stage=S::CandidateReady; break;
+        case KeyImportPhase::Failed: case KeyImportPhase::Timeout: mCommissioningJob.stage=S::Failed; break;
+        case KeyImportPhase::Idle: mCommissioningJob.stage=S::Done; break;
+        }
+    }
+    if (mCommissioningJob.owner==O::Pairing && mCommissioningJob.active())
+    {
+        const auto state=mController.state();
+        const auto outcome=mController.pairingTelemetry().outcome;
+        if (outcome==IoHomeController::PairingOutcome::Cancelled) mCommissioningJob.stage=S::Cancelled;
+        else if (outcome==IoHomeController::PairingOutcome::NoResponse ||
+                 outcome==IoHomeController::PairingOutcome::InvalidResponse ||
+                 outcome==IoHomeController::PairingOutcome::KeyExchangeFailure ||
+                 outcome==IoHomeController::PairingOutcome::ConfigurationFailure ||
+                 state==ControllerState::PairFailed) mCommissioningJob.stage=S::Failed;
+        else if (state==ControllerState::PairComplete || state==ControllerState::Idle)
+            mCommissioningJob.stage=mCommissioningJob.channel<mNumChannels && mChannels[mCommissioningJob.channel]->is1W() ? S::Unconfirmed:S::Done;
+        else if (state==ControllerState::PairSendDiscovery || state==ControllerState::PairWaitDiscoveryResponse)
+            mCommissioningJob.stage=S::Discovering;
+        else mCommissioningJob.stage=S::Verifying;
+    }
+}
+
 bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propertyId,
                                             uint8_t length, uint8_t *data,
                                             uint8_t *resultData, uint8_t &resultLength)
@@ -2413,7 +2446,10 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
     if (objectIndex != kFunctionPropertyObjectIndex || propertyId != kFunctionPropertyId || length < 1)
         return false;
 
+    updateCommissioningJob();
     uint8_t lCmd = data[0];
+    if ((lCmd==0x10 || lCmd==0x17) && mCommissioningJob.active())
+    { resultData[0]=4; resultLength=1; return true; }
     switch (lCmd)
     {
     case 0x10: // Start pairing
@@ -2492,6 +2528,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
 
             if (lStarted)
             {
+                mCommissioningJob.begin(IoHomeCommissioningJob::Owner::Pairing,lChannel);
                 if (mChannels[lChannel]->is1W())
                     logInfoP("ETS: 1W pairing started for channel %d mode=%s",
                              lChannel + 1, IoHomeController::pairing1WModeName(lOneWayMode));
@@ -2543,6 +2580,23 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
             return true;
         }
         break;
+    }
+    case 0x1F: // Common job snapshot / generation-checked cancellation
+    {
+        if (length!=1 && length!=5) break;
+        if (length==5)
+        {
+            const uint32_t token=uint32_t(data[1])<<24|uint32_t(data[2])<<16|uint32_t(data[3])<<8|data[4];
+            if (!mCommissioningJob.cancel(token)) { resultData[0]=4; resultLength=1; return true; }
+            mController.cancelPairing(); mController.stopKeyExtraction(); resetKeyImportWorkflow();
+        }
+        resultData[0]=0; resultData[1]=1;
+        resultData[2]=static_cast<uint8_t>(mCommissioningJob.owner);
+        resultData[3]=static_cast<uint8_t>(mCommissioningJob.stage);
+        for(uint8_t i=0;i<4;i++) resultData[4+i]=mCommissioningJob.generation>>(24-8*i);
+        resultData[8]=mCommissioningJob.channel;
+        for(uint8_t i=0;i<3;i++) resultData[9+i]=mCommissioningJob.node>>(16-8*i);
+        resultLength=12; return true;
     }
     case 0x1E: // Extended presentation snapshot; legacy 1D stays byte-exact
     case 0x1D: // Versioned recognition snapshot for an assigned channel (no RF TX)
@@ -2663,6 +2717,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         {
             resetKeyImportWorkflow();
             mKeyImportPhase = KeyImportPhase::Extracting;
+            mCommissioningJob.begin(IoHomeCommissioningJob::Owner::Import);
             logInfoP("ETS: active 2W key extraction armed");
         }
         else

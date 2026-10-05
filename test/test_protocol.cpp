@@ -21,6 +21,7 @@
 #include "protocol/IoHomeProfileRegistry.h"
 #include "protocol/IoHomeProductCodecs.h"
 #include "protocol/IoHomeProductBinding.h"
+#include "protocol/IoHomeCommissioningJob.h"
 #include "protocol/IoHomeProductActivation.h"
 #include <limits>
 #include "protocol/IoHomeLogRedaction.h"
@@ -3634,6 +3635,17 @@ TEST(durable_reservation_journal_reports_commit_and_blocks_corrupt_rollback)
     ASSERT_EQ(k.load(0,0x654321,key,w),L::DifferentIdentity);
     j.corrupt(0,0); ASSERT_EQ(j.load(0,0x123456,key,w),L::Corrupt);
     ASSERT_TRUE(!j.commit(0,0x123456,key,151));
+}
+
+TEST(commissioning_job_rejects_concurrent_owner_and_stale_cancel)
+{
+    IoHomeCommissioningJob j;
+    ASSERT_TRUE(j.begin(IoHomeCommissioningJob::Owner::Pairing,3));
+    ASSERT_TRUE(!j.begin(IoHomeCommissioningJob::Owner::Import));
+    ASSERT_TRUE(!j.cancel(0)); ASSERT_TRUE(j.active());
+    ASSERT_TRUE(j.cancel(1)); ASSERT_TRUE(!j.active());
+    ASSERT_TRUE(j.begin(IoHomeCommissioningJob::Owner::Import));
+    ASSERT_EQ(j.generation,2); ASSERT_TRUE(!j.cancel(1));
 }
 
 TEST(product_binding_requires_exact_identity_and_consistent_evidence)
