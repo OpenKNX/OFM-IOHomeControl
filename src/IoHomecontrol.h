@@ -8,6 +8,7 @@
 #include "protocol/IoHomeAssignmentReceipt.h"
 #include "protocol/IoHomeNetworkStore.h"
 #include "protocol/IoHomeCommissioningHistory.h"
+#include "protocol/IoHomeMetadataStore.h"
 #include "knxprod.h"
 
 class IoHomecontrol : public OpenKNX::Module
@@ -135,6 +136,12 @@ private:
   uint32_t mCommissioningBootId=1;
   IoHomeCommissioningJob mCommissioningJob;
   IoHomeCommissioningHistory mCommissioningHistory;
+  IoHomeMetadataStore mMetadataStores[16]{IoHomeMetadataStore(0),IoHomeMetadataStore(1),IoHomeMetadataStore(2),IoHomeMetadataStore(3),IoHomeMetadataStore(4),IoHomeMetadataStore(5),IoHomeMetadataStore(6),IoHomeMetadataStore(7),IoHomeMetadataStore(8),IoHomeMetadataStore(9),IoHomeMetadataStore(10),IoHomeMetadataStore(11),IoHomeMetadataStore(12),IoHomeMetadataStore(13),IoHomeMetadataStore(14),IoHomeMetadataStore(15)};
+  uint8_t mStoredMetadataBytes[16][IoHomeMetadataStore::PayloadSize]{};
+  bool mStoredMetadataValid[16]{};
+  bool mMetadataStoreFailed[16]{};
+  void serviceMetadataSnapshots();
+  void restoreMetadataSnapshots();
   uint32_t mHistoryRecordedGeneration=0;
   bool mHistoryFailed=false;
   void recordCommissioningOutcome();

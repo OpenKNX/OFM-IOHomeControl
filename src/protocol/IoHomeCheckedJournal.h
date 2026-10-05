@@ -11,7 +11,8 @@ template<unsigned PayloadSize> class IoHomeCheckedJournal {
 public:
  enum class Result:uint8_t {Missing,Found,Corrupt,Unavailable};
  static constexpr unsigned Size=PayloadSize+8;
- explicit IoHomeCheckedJournal(const char *name):mName(name){}
+ explicit IoHomeCheckedJournal(const char *name){setNamespace(name);}
+ void setNamespace(const char *name){std::memset(mName,0,sizeof(mName));if(name)std::strncpy(mName,name,sizeof(mName)-1);}
  Result load(uint8_t *out) {
   uint8_t a[Size]{},b[Size]{};int na=read(0,a),nb=read(1,b);
   if(na<0||nb<0)return Result::Unavailable;
@@ -38,7 +39,7 @@ public:
  void corrupt(unsigned slot){if(slot<2)data[slot][0]=0;}
 #endif
 private:
- const char *mName;
+ char mName[16]{};
  static uint32_t gen(const uint8_t *p){return uint32_t(p[1])|uint32_t(p[2])<<8|uint32_t(p[3])<<16|uint32_t(p[4])<<24;}
  static uint16_t checksum(const uint8_t *p,unsigned n){uint16_t c=0;for(unsigned i=0;i<n;i++){c^=p[i];for(unsigned j=0;j<8;j++)c=(c>>1)^((c&1)?0x8408:0);}return c;}
  static bool valid(const uint8_t *p){return p[0]==1&&p[5]==0&&gen(p)&&checksum(p,Size-2)==uint16_t(p[Size-2]|uint16_t(p[Size-1])<<8);}

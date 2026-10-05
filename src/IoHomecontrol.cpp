@@ -1616,6 +1616,7 @@ void IoHomecontrol::loop()
         processKeyImportWorkflow();
     updateCommissioningJob();
     recordCommissioningOutcome();
+    serviceMetadataSnapshots();
 
     if (!mRadioDiagnostic.active)
         processMetadataRefresh();
@@ -2342,6 +2343,7 @@ void IoHomecontrol::processAfterStartupDelay()
         restoreNetwork();
         initSystemKey();
         restoreAssignmentReceipts();
+        restoreMetadataSnapshots();
         initOneWayControllerProfiles();
         applyOneWayControllerConfiguration();
     }
@@ -2509,6 +2511,39 @@ void IoHomecontrol::restoreAssignmentReceipts()
         identity.fullMetadata=false;identity.ioAddress=receipt.node; // receipt is only a partial metadata snapshot
         identity.profile=receipt.profile;identity.subProfile=receipt.subProfile;identity.manufacturerId=receipt.manufacturer;
         ch->onProtocolIdentity(receipt.node,identity);
+    }
+}
+
+void IoHomecontrol::serviceMetadataSnapshots()
+{
+    if(!managementRequestsAllowed()||!mController.idleForManagedOperation()||!mNetworkHasCommit||mNetworkStoreFailed)return;
+    for(uint8_t c=0;c<mNumChannels;c++) {
+        const auto *ch=mChannels[c];const auto &binding=mCommittedNetwork.channels[c];
+        if(!ch||ch->is1W()||!ch->isPaired()||!binding.managed||binding.node!=ch->getNodeId()||std::memcmp(binding.key,ch->getEncryptionKey(),16)||!ch->getProtocolIdentity().valid||mMetadataStoreFailed[c])continue;
+        IoHomeMetadataStore::Snapshot snapshot;snapshot.node=ch->getNodeId();std::memcpy(snapshot.key,ch->getEncryptionKey(),16);snapshot.identity=ch->getProtocolIdentity();snapshot.evidence=ch->getProductIdentityEvidence();
+        uint8_t bytes[IoHomeMetadataStore::PayloadSize]{};
+        if(!mMetadataStores[c].representation(snapshot,bytes)){mMetadataStoreFailed[c]=true;return;}
+        if(mStoredMetadataValid[c]&&!std::memcmp(bytes,mStoredMetadataBytes[c],sizeof(bytes)))continue;
+        if(mMetadataStores[c].save(snapshot)){std::memcpy(mStoredMetadataBytes[c],bytes,sizeof(bytes));mStoredMetadataValid[c]=true;}else mMetadataStoreFailed[c]=true;
+        return; // bounded one record per idle loop, never a sixteen-record burst
+    }
+}
+void IoHomecontrol::restoreMetadataSnapshots()
+{
+    if(!mNetworkHasCommit||mNetworkStoreFailed)return;
+    for(uint8_t c=0;c<mNumChannels;c++) {
+        auto *ch=mChannels[c];const auto &binding=mCommittedNetwork.channels[c];
+        if(!ch||ch->is1W()||!binding.managed||binding.node!=ch->getNodeId()||std::memcmp(binding.key,ch->getEncryptionKey(),16))continue;
+        IoHomeMetadataStore::Snapshot snapshot;
+        if(mMetadataStores[c].load(binding.node,binding.key,snapshot)) {
+            const auto &existing=ch->getProtocolIdentity();
+            // Separate legacy flash and journal commits have no shared ordering.
+            // Never replace conflicting or fuller legacy metadata during restore.
+            if(existing.valid&&(existing.profile!=snapshot.identity.profile||existing.subProfile!=snapshot.identity.subProfile||existing.manufacturerId!=snapshot.identity.manufacturerId)) {mMetadataStoreFailed[c]=true;continue;}
+            if(!existing.fullMetadata)ch->onProtocolIdentity(binding.node,snapshot.identity);
+            if(!ch->getProductIdentityEvidence().generalInfo2Len)ch->restoreProductIdentityEvidence(snapshot.evidence);
+            mStoredMetadataValid[c]=mMetadataStores[c].representation(snapshot,mStoredMetadataBytes[c]);
+        }
     }
 }
 
@@ -2825,6 +2860,15 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         const bool idle=!mCommissioningJob.active()&&!mRadioDiagnostic.active&&!mMetadataRefreshActive;
         resultData[0]=idle&&mController.requestMpFpRead(mChannels[data[1]],data[2])?0:1;
         resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultLength=4;return true;
+    }
+    case 0x34: // Metadata persistence health; key-free, no repair side effect
+    {
+        if(length!=2||data[1]>=mNumChannels)break;
+        resultData[0]=0;resultData[1]=1;resultData[2]=data[1];
+        resultData[3]=mStoredMetadataValid[data[1]];resultData[4]=mMetadataStoreFailed[data[1]];
+        resultData[5]=mChannels[data[1]]->getProtocolIdentity().valid;
+        resultData[6]=uint8_t(mChannels[data[1]]->getProtocolIdentity().metadataSource);
+        resultLength=7;return true;
     }
     case 0x33: // Key-free durable terminal history, newest index first
     {

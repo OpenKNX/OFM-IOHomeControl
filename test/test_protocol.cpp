@@ -19521,3 +19521,11 @@ TEST(protocol_terminal_history_is_bounded_checked_and_key_free) {
  ASSERT_TRUE(h.read(7,last,count));ASSERT_EQ(last.generation,3);h.journal.failWrites=true;e.generation=11;ASSERT_TRUE(!h.append(e));
  ASSERT_TRUE(h.read(0,last,count));ASSERT_EQ(last.generation,10);h.journal.corrupt(0);ASSERT_TRUE(!h.read(0,last,count));
 }
+
+#include "protocol/IoHomeMetadataStore.h"
+TEST(protocol_metadata_journal_restores_scoped_raw_evidence_only_for_same_key) {
+ IoHomeMetadataStore store(0);IoHomeMetadataStore::Snapshot s;s.node=0x123456;s.key[0]=1;s.identity.valid=true;s.identity.ioAddress=s.node;s.identity.profile=6;s.identity.subProfile=2;s.identity.nodeClass=IoHomeNodeClass::Actuator;s.identity.hasMib=true;s.identity.multiInfoByte=0x42;
+ s.evidence.generalInfo2Len=12;s.evidence.generalInfo2[7]=0x62;s.evidence.generalInfo3Len=1;s.evidence.generalInfo3[0]=0xAA;s.evidence.generalInfo3Outcome=IoHomeGeneralInfo3Outcome::Response;
+ ASSERT_TRUE(store.save(s));IoHomeMetadataStore::Snapshot loaded;ASSERT_TRUE(store.load(s.node,s.key,loaded));ASSERT_EQ(loaded.identity.profile,6);ASSERT_EQ(loaded.identity.multiInfoByte,0x42);ASSERT_EQ(loaded.evidence.generalInfo3[0],0xAA);ASSERT_EQ(loaded.identity.metadataSource,IoHomeMetadataSource::Restored);
+ uint8_t wrong[16]={2};ASSERT_TRUE(!store.load(s.node,wrong,loaded));store.journal.failWrites=true;s.evidence.generalInfo3[0]=0xBB;ASSERT_TRUE(!store.save(s));ASSERT_TRUE(store.load(s.node,s.key,loaded));ASSERT_EQ(loaded.evidence.generalInfo3[0],0xAA);
+}
