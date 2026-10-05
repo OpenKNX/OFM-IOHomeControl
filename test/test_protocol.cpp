@@ -11354,6 +11354,7 @@ static void buildDirectedDiscoveryResponse(IoHomeFrame &oFrame,
 TEST(controller_object_read_authenticates_opening_and_closes_countdown) {
     IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
     initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    c.setGatewayMode(true);ASSERT_TRUE(!c.requestObjectRead(&ch,0,0x8100,0,19));c.setGatewayMode(false);
     ASSERT_TRUE(!c.requestObjectRead(&ch,0,0xA607,0,19));
     ASSERT_TRUE(c.requestObjectRead(&ch,0,0x8100,0,19));const auto token=c.objectReadToken();
     ASSERT_TRUE(!c.requestPriority(&ch,1));ASSERT_TRUE(!c.startPairing(0,0x654321));

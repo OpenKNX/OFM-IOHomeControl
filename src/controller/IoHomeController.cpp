@@ -2401,7 +2401,7 @@ bool IoHomeController::enqueueObjectReadPart(bool opening)
 bool IoHomeController::requestObjectRead(IoHomecontrolChannel *channel,uint8_t provider,uint16_t key,uint16_t offset,uint16_t span)
 {
     if(!channel||!channel->isPaired()||channel->is1W()||mState!=ControllerState::Idle||!queueEmpty()||
-        mPassiveMode||mKeyExtractArmed||mNetworkScanActive||mObjectRead.active()||mObjectReadToken==0xFFFFFFFF||!span)return false;
+        mPassiveMode||mGatewayMode||mOneWayKeyReceiveActive||mKeyExtractArmed||mNetworkScanActive||mObjectRead.active()||mObjectReadToken==0xFFFFFFFF||!span)return false;
     // Metadata/database views only. Key/counter objects and arbitrary providers
     // are not exposed through the raw diagnostic readback API.
     const bool allowed=(provider==0&&(key<=3||key==0x030A||key==0x8100||key==0x8103||key==0x4300||key==0x4302))||(provider==0x0B&&key==0xC000);

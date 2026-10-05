@@ -1727,6 +1727,7 @@ void IoHomecontrol::processMetadataRefresh()
 
 bool IoHomecontrol::startRadioDiagnostic(RadioDiagnosticKind iKind, uint8_t iValue)
 {
+    if(mController.objectRead().active()) {logInfoP("RadioDiag: metadata object read is active");return false;}
     if (mRadioDiagnostic.active)
     {
         logInfoP("RadioDiag: another radio diagnostic is already running");
@@ -4013,7 +4014,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         }
         updateCommissioningJob();
         if (mController.state()!=ControllerState::Idle || mRadioDiagnostic.active ||
-            mMetadataRefreshActive || mCommissioningJob.active() || mKeyImportPhase!=KeyImportPhase::Idle) {
+            mMetadataRefreshActive || mCommissioningJob.active() || mController.objectRead().active() || mKeyImportPhase!=KeyImportPhase::Idle) {
             logInfoP("Radio bandwidth change blocked by active work"); return true;
         }
         const auto err=mController.radio().setReceiveBandwidths(rx,afc);
@@ -4279,7 +4280,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if(sscanf(lSub.c_str(),"object read %x %x %x %u %u %c",&node,&provider,&key,&offset,&span,&extra)!=5||!node||node>0xFFFFFF||provider>255||key>65535||offset>65535||!span||span>1024) {
             logInfoP("Usage: iohc object read NODE PROVIDER KEY OFFSET SPAN; first three hex, offset/span decimal");return true;
         }
-        updateCommissioningJob();if(mCommissioningJob.active()){logInfoP("Finish/cancel commissioning before object read");return true;}
+        updateCommissioningJob();if(mCommissioningJob.active()||mRadioDiagnostic.active||mMetadataRefreshActive){logInfoP("Finish/cancel commissioning or radio diagnostics before object read");return true;}
         IoHomecontrolChannel *channel=nullptr;for(uint8_t c=0;c<mNumChannels;c++)if(mChannels[c]&&mChannels[c]->getNodeId()==node)channel=mChannels[c];
         const bool queued=mController.requestObjectRead(channel,provider,key,offset,span);
         logInfoP("Metadata object read queued=%u token=%lu; raw bytes only, no object write",queued,static_cast<unsigned long>(mController.objectReadToken()));return true;
