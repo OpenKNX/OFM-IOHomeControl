@@ -65,3 +65,12 @@ firmware has downloaded it or a fabricated history of how a value was adopted.
 The online evidence view includes the same summary. No parameter memory, KO
 number, saved permission or expert value changes. Executed ETS JavaScript tests
 verify independent ownership, override precedence and absence of mutations/RF.
+
+## Management ownership and semantic invalidation — 2026-10-05
+
+Priority/sensor-status/sensor-information starts now require an idle managed RF
+owner. Their queued reads snapshot the semantic-context revision as well as
+node/key. Current samples are hidden on any revision change; old priority
+refreshes are retired rather than querying a reclassified node. This prevents
+same-address/key metadata changes from preserving stale sensor meanings. The
+existing raw schemas, correlated trust and unknown physical units are intact.

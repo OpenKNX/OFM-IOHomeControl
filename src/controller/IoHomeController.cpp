@@ -2436,27 +2436,27 @@ void IoHomeController::serviceObjectRead()
 
 bool IoHomeController::requestPriority(IoHomecontrolChannel *channel,uint8_t priority)
 {
-    if(!channel||!channel->isPaired()||channel->is1W()||priority>7)return false;
+    if(!idleForManagedOperation()||!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||priority>7)return false;
     IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
-    entry.managementRead=true;std::memcpy(entry.managementKey,channel->getEncryptionKey(),16);
+    entry.productContextRevision=channel->productContextRevision();entry.managementRead=true;std::memcpy(entry.managementKey,channel->getEncryptionKey(),16);
     entry.command=IoHomeCommand::PriorityLevelRequest;entry.param=priority;entry.sourceChannelIndex=channelIndexFor(channel);
     entry.maxAttempts=1;entry.background=true;entry.active=true;return queuePush(entry);
 }
 
 bool IoHomeController::requestSensorStatus(IoHomecontrolChannel *channel)
 {
-    if(!channel||!channel->isPaired()||channel->is1W()||!channel->getProtocolIdentity().valid||channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Sensor)return false;
+    if(!idleForManagedOperation()||!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||!channel->getProtocolIdentity().valid||channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Sensor)return false;
     IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
-    entry.managementRead=true;std::memcpy(entry.managementKey,channel->getEncryptionKey(),16);
+    entry.productContextRevision=channel->productContextRevision();entry.managementRead=true;std::memcpy(entry.managementKey,channel->getEncryptionKey(),16);
     entry.command=IoHomeCommand::SensorStatusRequest;entry.sourceChannelIndex=channelIndexFor(channel);
     entry.maxAttempts=1;entry.background=true;entry.active=true;return queuePush(entry);
 }
 
 bool IoHomeController::requestSensorInformation(IoHomecontrolChannel *channel)
 {
-    if(!channel||!channel->isPaired()||channel->is1W()||!channel->getProtocolIdentity().valid||channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Sensor)return false;
+    if(!idleForManagedOperation()||!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||!channel->getProtocolIdentity().valid||channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Sensor)return false;
     IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
-    entry.managementRead=true;std::memcpy(entry.managementKey,channel->getEncryptionKey(),16);
+    entry.productContextRevision=channel->productContextRevision();entry.managementRead=true;std::memcpy(entry.managementKey,channel->getEncryptionKey(),16);
     entry.command=IoHomeCommand::SensorSubscribeRequest;entry.param=0xFF;entry.sourceChannelIndex=channelIndexFor(channel);
     entry.maxAttempts=1;entry.background=true;entry.active=true;return queuePush(entry);
 }
@@ -2475,11 +2475,12 @@ bool IoHomeController::requestDefaultSensorSubscription(IoHomecontrolChannel *ch
     entry.maxAttempts=1;entry.active=true;return queuePush(entry);
 }
 
-bool IoHomeController::sampleIdentityMatches(uint8_t channel,uint32_t node,const uint8_t *key) const
+bool IoHomeController::sampleIdentityMatches(uint8_t channel,uint32_t node,const uint8_t *key,uint32_t contextRevision) const
 {
     if(!mModule||channel>=16)return false;
     const auto *ch=mModule->getChannel(channel);
-    return ch&&ch->isPaired()&&!ch->is1W()&&ch->getNodeId()==node&&!std::memcmp(ch->getEncryptionKey(),key,16);
+    return ch&&ch->isPaired()&&!ch->is1W()&&ch->getNodeId()==node&&!std::memcmp(ch->getEncryptionKey(),key,16)&&
+        (!contextRevision||ch->productContextRevision()==contextRevision);
 }
 
 bool IoHomeController::managementIdentityMatches(const IoHomeQueueEntry &entry) const
@@ -2496,21 +2497,21 @@ const IoHomeController::PrioritySample *IoHomeController::prioritySample(uint8_t
     static const PrioritySample empty{};
     if(channel>=16||priority>=8)return &empty;
     const auto &s=mPrioritySamples[channel][priority];
-    return s.valid&&sampleIdentityMatches(channel,s.node,s.key)?&s:&empty;
+    return s.valid&&sampleIdentityMatches(channel,s.node,s.key,s.contextRevision)?&s:&empty;
 }
 const IoHomeController::SensorSample *IoHomeController::sensorSample(uint8_t channel) const
 {
     static const SensorSample empty{};
     if(channel>=16)return &empty;
     const auto &s=mSensorSamples[channel];
-    return s.valid&&sampleIdentityMatches(channel,s.node,s.key)?&s:&empty;
+    return s.valid&&sampleIdentityMatches(channel,s.node,s.key,s.contextRevision)?&s:&empty;
 }
 const IoHomeController::SensorInformationSample *IoHomeController::sensorInformationSample(uint8_t channel) const
 {
     static const SensorInformationSample empty{};
     if(channel>=16)return &empty;
     const auto &s=mSensorInformationSamples[channel];
-    return s.valid&&sampleIdentityMatches(channel,s.node,s.key)?&s:&empty;
+    return s.valid&&sampleIdentityMatches(channel,s.node,s.key,s.contextRevision)?&s:&empty;
 }
 
 void IoHomeController::servicePriorityRefresh()
@@ -2520,7 +2521,7 @@ void IoHomeController::servicePriorityRefresh()
         auto &sample=mPrioritySamples[c][level];
         if(!sample.valid||!sample.refreshArmed||uint32_t(millis()-sample.receivedMs)<uint32_t(sample.state.seconds+20)*1000)continue;
         auto *ch=mModule->getChannel(c);
-        if(!ch||!ch->isPaired()||ch->is1W()||ch->getNodeId()!=sample.node||std::memcmp(ch->getEncryptionKey(),sample.key,16)){sample={};continue;}
+        if(!ch||!ch->isPaired()||ch->is1W()||ch->getNodeId()!=sample.node||std::memcmp(ch->getEncryptionKey(),sample.key,16)||ch->productContextRevision()!=sample.contextRevision){sample={};continue;}
         if(requestPriority(ch,level))sample.refreshArmed=false; // one refresh; a new valid reply re-arms it
         return;
     }
@@ -10490,7 +10491,7 @@ void IoHomeController::dispatchRxFrame()
                 const uint8_t c=channelIndexFor(lCh);IoHomePriorityState state;
                 if(c<16&&managementIdentityMatches(mCurrentCmd)&&ioHomeDecodePriority(mRxFrame.data,mRxFrame.dataLen,mCurrentCmd.param,state)) {
                     auto &sample=mPrioritySamples[c][state.priority];sample={true,state.refreshEnabled,lSrcNode,static_cast<uint32_t>(millis()),state};
-                    std::memcpy(sample.key,mCurrentCmd.managementKey,16);
+                    sample.contextRevision=mCurrentCmd.productContextRevision;std::memcpy(sample.key,mCurrentCmd.managementKey,16);
                 }
                 break;
             }
@@ -10500,7 +10501,7 @@ void IoHomeController::dispatchRxFrame()
                 const uint8_t c=channelIndexFor(lCh);IoHomeSensorStatus state;
                 if(c<16&&managementIdentityMatches(mCurrentCmd)&&ioHomeDecodeSensorStatus(mRxFrame.data,mRxFrame.dataLen,state)) {
                     auto &sample=mSensorSamples[c];sample={true,lSrcNode,static_cast<uint32_t>(millis()),state};
-                    std::memcpy(sample.key,mCurrentCmd.managementKey,16);
+                    sample.contextRevision=mCurrentCmd.productContextRevision;std::memcpy(sample.key,mCurrentCmd.managementKey,16);
                 }
                 break;
             }
@@ -10510,7 +10511,7 @@ void IoHomeController::dispatchRxFrame()
                 const uint8_t c=channelIndexFor(lCh);IoHomeSensorInformation state;
                 if(c<16&&mRxFrame.dataLen>=17&&ioHomeDecodeSensorInformation(mRxFrame.data,17,state)) {
                     auto &sample=mSensorInformationSamples[c];sample={true,lSrcNode,static_cast<uint32_t>(millis()),state};
-                    std::memcpy(sample.key,mCurrentCmd.managementKey,16);std::memcpy(sample.raw,mRxFrame.data,17);
+                    sample.contextRevision=mCurrentCmd.productContextRevision;std::memcpy(sample.key,mCurrentCmd.managementKey,16);std::memcpy(sample.raw,mRxFrame.data,17);
                 }
                 break;
             }

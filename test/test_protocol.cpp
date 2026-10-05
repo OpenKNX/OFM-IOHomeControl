@@ -19467,3 +19467,21 @@ TEST(controller_sensor_subscription_rejects_reclassified_queued_target) {
     ASSERT_TRUE(c.requestDefaultSensorSubscription(&ch,0x111222));identity.nodeClass=IoHomeNodeClass::Actuator;ch.onProtocolIdentity(0x654321,identity);
     IoHomeFrame tx;ASSERT_TRUE(!transmitQueuedControllerFrame(c,tx));
 }
+
+TEST(controller_management_read_starts_refuse_existing_radio_owner) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    IoHomeProtocolIdentity identity;identity.valid=true;identity.nodeClass=IoHomeNodeClass::Sensor;ch.onProtocolIdentity(0x654321,identity);
+    ASSERT_TRUE(c.requestSensorStatus(&ch));ASSERT_TRUE(!c.requestPriority(&ch,1));ASSERT_TRUE(!c.requestSensorInformation(&ch));
+}
+TEST(controller_management_samples_and_queued_reads_expire_on_semantic_change) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    IoHomeProtocolIdentity identity;identity.valid=true;identity.nodeClass=IoHomeNodeClass::Sensor;ch.onProtocolIdentity(0x654321,identity);
+    ASSERT_TRUE(c.requestSensorStatus(&ch));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    uint8_t data[]={0,1,0,0,0,7};IoHomeFrame reply;buildSimpleResponseFrame(reply,0x123456,0x654321,IoHomeCommand::SensorStatusResponse,data,sizeof(data));
+    ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_TRUE(c.sensorSample(0)->valid);
+    identity.profile=2;ch.onProtocolIdentity(0x654321,identity);ASSERT_TRUE(!c.sensorSample(0)->valid);
+    c.loop();ASSERT_TRUE(c.requestSensorInformation(&ch));identity.nodeClass=IoHomeNodeClass::Actuator;ch.onProtocolIdentity(0x654321,identity);
+    c.radio().testClearTransmittedPacket();ASSERT_TRUE(!transmitQueuedControllerFrame(c,tx));
+}

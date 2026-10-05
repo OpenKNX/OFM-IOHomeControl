@@ -169,8 +169,7 @@ struct IoHomeQueueEntry
   bool managementRead;                        // key snapshot for correlated management reads
   uint8_t managementKey[16];
   uint32_t sensorSubscriptionBackbone;        // nonzero only for explicit default write
-  bool mpFpRead;                              // source-backed individual standard GET
-  uint8_t mpFpReadIndex;
+  bool mpFpRead;                              // source-backed standard/context GET
   uint16_t mpFpReadSelected;                  // logical FP mask; all requested fields required
   uint8_t mpFpReadMode;                       // 3=standard, 6/7=default min/max, 9=current alias
   bool diagnosticFpRead;                       // raw-only, no KO publication
@@ -586,9 +585,9 @@ public:
   bool requestSensorStatus(IoHomecontrolChannel *channel);
   bool requestSensorInformation(IoHomecontrolChannel *channel);
   bool requestDefaultSensorSubscription(IoHomecontrolChannel *channel,uint32_t backbone);
-  struct PrioritySample {bool valid=false,refreshArmed=false;uint32_t node=0,receivedMs=0;IoHomePriorityState state;uint8_t key[16]{};};
-  struct SensorSample {bool valid=false;uint32_t node=0,receivedMs=0;IoHomeSensorStatus state;uint8_t key[16]{};};
-  struct SensorInformationSample {bool valid=false;uint32_t node=0,receivedMs=0;IoHomeSensorInformation state;uint8_t key[16]{},raw[17]{};};
+  struct PrioritySample {bool valid=false,refreshArmed=false;uint32_t node=0,receivedMs=0;IoHomePriorityState state;uint8_t key[16]{};uint32_t contextRevision=0;};
+  struct SensorSample {bool valid=false;uint32_t node=0,receivedMs=0;IoHomeSensorStatus state;uint8_t key[16]{};uint32_t contextRevision=0;};
+  struct SensorInformationSample {bool valid=false;uint32_t node=0,receivedMs=0;IoHomeSensorInformation state;uint8_t key[16]{},raw[17]{};uint32_t contextRevision=0;};
   const PrioritySample *prioritySample(uint8_t channel,uint8_t priority) const;
   const SensorSample *sensorSample(uint8_t channel) const;
   const SensorInformationSample *sensorInformationSample(uint8_t channel) const;
@@ -1494,7 +1493,7 @@ private:
 
   // Build frame from queue entry
   bool managementIdentityMatches(const IoHomeQueueEntry &entry) const;
-  bool sampleIdentityMatches(uint8_t channel,uint32_t node,const uint8_t *key) const;
+  bool sampleIdentityMatches(uint8_t channel,uint32_t node,const uint8_t *key,uint32_t contextRevision=0) const;
   bool buildTxFrame(const IoHomeQueueEntry &iEntry);
 
   // Dispatch received frame to appropriate channel
