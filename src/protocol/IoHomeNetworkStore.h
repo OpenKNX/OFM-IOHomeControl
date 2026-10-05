@@ -1,4 +1,5 @@
 #pragma once
+#include "IoHomeStorageBackend.h"
 #include <stdint.h>
 #include <cstring>
 #ifdef ESP32
@@ -72,6 +73,7 @@ private:
         return p[344]==0&&p[345]==0;
     }
     int read(unsigned slot,uint8_t *out) {
+        if(IoHomeStorageBackend::available())return IoHomeStorageBackend::read("iohcnet",slot?"b":"a",out,Size);
 #ifdef ESP32
         Preferences p;if(!p.begin("iohcnet",false))return -1;
         const char *name=slot?"b":"a";size_t n=p.getBytesLength(name);
@@ -83,6 +85,7 @@ private:
 #endif
     }
     bool write(unsigned slot,const uint8_t *in) {
+        if(IoHomeStorageBackend::available())return IoHomeStorageBackend::write("iohcnet",slot?"b":"a",in,Size);
 #ifdef ESP32
         Preferences p;if(!p.begin("iohcnet",false))return false;
         bool ok=p.putBytes(slot?"b":"a",in,Size)==Size;p.end();return ok;

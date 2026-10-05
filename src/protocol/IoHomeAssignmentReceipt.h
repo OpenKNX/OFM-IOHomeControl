@@ -1,4 +1,5 @@
 #pragma once
+#include "IoHomeStorageBackend.h"
 #include "IoHomeCommands.h"
 #include <cstring>
 #include <cstdio>
@@ -78,6 +79,7 @@ private:
     int read(uint8_t c,uint8_t *data)
     {
         if(c>=16) return -1;
+        if(IoHomeStorageBackend::available()){char name[8];snprintf(name,sizeof(name),"c%u",c);return IoHomeStorageBackend::read("iohcassign",name,data,36);}
 #ifdef ESP32
         Preferences p; if(!p.begin("iohcassign",false)) return -1;
         char name[8]; snprintf(name,sizeof(name),"c%u",c); const size_t n=p.getBytesLength(name);
@@ -91,6 +93,8 @@ private:
     }
     bool write(uint8_t c,const uint8_t *data)
     {
+        if(c>=16)return false;
+        if(IoHomeStorageBackend::available()){char name[8];snprintf(name,sizeof(name),"c%u",c);return IoHomeStorageBackend::write("iohcassign",name,data,36);}
 #ifdef ESP32
         Preferences p;if(!p.begin("iohcassign",false))return false;
         char name[8];snprintf(name,sizeof(name),"c%u",c);

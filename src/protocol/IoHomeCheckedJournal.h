@@ -1,4 +1,5 @@
 #pragma once
+#include "IoHomeStorageBackend.h"
 #include <cstdint>
 #include <cstring>
 #ifdef ESP32
@@ -44,6 +45,7 @@ private:
  static uint16_t checksum(const uint8_t *p,unsigned n){uint16_t c=0;for(unsigned i=0;i<n;i++){c^=p[i];for(unsigned j=0;j<8;j++)c=(c>>1)^((c&1)?0x8408:0);}return c;}
  static bool valid(const uint8_t *p){return p[0]==1&&p[5]==0&&gen(p)&&checksum(p,Size-2)==uint16_t(p[Size-2]|uint16_t(p[Size-1])<<8);}
  int read(unsigned slot,uint8_t *out){
+  if(IoHomeStorageBackend::available())return IoHomeStorageBackend::read(mName,slot?"b":"a",out,Size);
 #ifdef ESP32
   Preferences p;if(!p.begin(mName,false))return -1;size_t n=p.getBytesLength(slot?"b":"a");int result=!n?0:n==Size&&p.getBytes(slot?"b":"a",out,Size)==Size?Size:1;p.end();return result;
 #elif defined(TEST_NATIVE)
@@ -53,6 +55,7 @@ private:
 #endif
  }
  bool write(unsigned slot,const uint8_t *in){
+  if(IoHomeStorageBackend::available())return IoHomeStorageBackend::write(mName,slot?"b":"a",in,Size);
 #ifdef ESP32
   Preferences p;if(!p.begin(mName,false))return false;bool ok=p.putBytes(slot?"b":"a",in,Size)==Size;p.end();return ok;
 #elif defined(TEST_NATIVE)

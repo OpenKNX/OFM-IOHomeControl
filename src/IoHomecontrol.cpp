@@ -1562,6 +1562,9 @@ void IoHomecontrol::setup()
 {
     logDebugP("setup");
 
+#if defined(ARDUINO_ARCH_RP2040) && defined(IOHC_RP2040_CHECKED_STORAGE) && IOHC_RP2040_CHECKED_STORAGE
+    if(!IoHomeRp2040Storage::begin())logInfoP("Checked LittleFS storage unavailable; identity operations fail closed");
+#endif
     // Wire controller back-pointer
     mController.setModule(this);
 

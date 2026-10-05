@@ -1,4 +1,5 @@
 #pragma once
+#include "IoHomeStorageBackend.h"
 #include "IoHomeCrypto.h"
 #include <cstring>
 #include <cstdio>
@@ -92,6 +93,7 @@ private:
     int read(uint8_t c,uint8_t s,Record &r,uint32_t node,const uint8_t *key)
     {
         if (c>=16 || !key || !node) return -1;
+        if(IoHomeStorageBackend::available()){char name[16];snprintf(name,sizeof(name),"i%012llx%c",static_cast<unsigned long long>(identityHash(node,key)),s?'b':'a');return IoHomeStorageBackend::read("iohcseq",name,r.bytes,Size);}
 #ifdef ESP32
         Preferences p;
         if (!p.begin("iohcseq",false)) return -1;
@@ -108,6 +110,8 @@ private:
     }
     bool write(uint8_t c,uint8_t s,const Record &r,uint32_t node,const uint8_t *key)
     {
+        if(c>=16||!node||!key)return false;
+        if(IoHomeStorageBackend::available()){char name[16];snprintf(name,sizeof(name),"i%012llx%c",static_cast<unsigned long long>(identityHash(node,key)),s?'b':'a');return IoHomeStorageBackend::write("iohcseq",name,r.bytes,Size);}
 #ifdef ESP32
         Preferences p; if (!p.begin("iohcseq",false)) return false;
         char name[16]; snprintf(name,sizeof(name),"i%012llx%c",static_cast<unsigned long long>(identityHash(node,key)),s?'b':'a');

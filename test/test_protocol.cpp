@@ -19602,3 +19602,16 @@ TEST(protocol_disturbance_policy_keeps_chosen_cadence_separate_from_lbt) {
  for(unsigned c=0;c<3;c++)for(unsigned n=0;n<6;n++)policy.sample(c,-80,true);ASSERT_TRUE(policy.aggregate());ASSERT_EQ(policy.counter(1),255);policy.sample(2,-100,true);ASSERT_TRUE(!policy.aggregate());ASSERT_EQ(policy.counter(0),0);
  for(unsigned n=0;n<300;n++)policy.forced(0x3D);ASSERT_EQ(policy.forcedCount(0x3D),255);ASSERT_EQ(policy.forcedTotal(),300);ASSERT_TRUE(!policy.configure(IoHomeRadioPolicy::Tx::Forced,1));
 }
+TEST(protocol_platform_storage_adapter_keeps_all_journals_checked_and_namespaced) {
+ struct Backend {
+  static std::map<std::string,std::vector<uint8_t>> &records(){static std::map<std::string,std::vector<uint8_t>> r;return r;}
+  static int read(const char *space,const char *key,uint8_t *out,unsigned size){auto &r=records();auto i=r.find(std::string(space)+"/"+key);if(i==r.end())return 0;if(i->second.size()!=size)return 1;std::memcpy(out,i->second.data(),size);return size;}
+  static bool write(const char *space,const char *key,const uint8_t *in,unsigned size){records()[std::string(space)+"/"+key]=std::vector<uint8_t>(in,in+size);return true;}
+ };
+ Backend::records().clear();IoHomeStorageBackend::install(Backend::read,Backend::write);
+ IoHomeNetworkStore network;IoHomeNetworkStore::State state;state.controller=0x123456;ASSERT_TRUE(network.commit(state));IoHomeNetworkStore::State loaded;ASSERT_EQ(network.load(loaded),IoHomeNetworkStore::Result::Found);
+ IoHomeDurableReservation reservation;uint8_t key[16]{1};ASSERT_TRUE(reservation.commit(0,0x654321,key,100));uint16_t watermark=0;ASSERT_EQ(reservation.load(1,0x654321,key,watermark),IoHomeDurableReservation::Load::Found);ASSERT_EQ(watermark,100);
+ IoHomeCheckedJournal<4> journal("custom");uint8_t payload[4]{1,2,3,4},out[4]{};ASSERT_TRUE(journal.commit(payload));ASSERT_EQ(journal.load(out),IoHomeCheckedJournal<4>::Result::Found);ASSERT_TRUE(!std::memcmp(out,payload,4));
+ Backend::records()["custom/a"]={1};ASSERT_EQ(journal.load(out),IoHomeCheckedJournal<4>::Result::Corrupt);ASSERT_TRUE(!journal.commit(payload));
+ IoHomeStorageBackend::install(nullptr,nullptr);
+}
