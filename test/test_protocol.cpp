@@ -19575,3 +19575,11 @@ TEST(protocol_alarm_zone_lookup_and_sliding_lock_are_product_scoped) {
 TEST(protocol_dual_shutter_neutral_half_is_d100_not_zero) {
  uint8_t bytes[8]{};uint8_t length=0;ASSERT_TRUE(ioHomeBuildDualClosure(true,25,false,0,bytes,sizeof(bytes),length));const uint8_t expected[]={0xD8,8,0xC0,0x32,0,0xD1,0,0};ASSERT_EQ(length,8);ASSERT_TRUE(!std::memcmp(bytes,expected,8));double percent=0;ASSERT_TRUE(!ioHomeDecodeDualClosure(1,0xD100,percent));ASSERT_TRUE(ioHomeDecodeDualClosure(2,0xC800,percent));ASSERT_TRUE(percent==100);ASSERT_TRUE(!ioHomeBuildDualClosure(false,0,false,0,bytes,sizeof(bytes),length));
 }
+
+#include "protocol/IoHomeObjectWriteSession.h"
+TEST(protocol_object_write_offline_session_requires_bound_identity_and_zero_closure) {
+ IoHomeObjectWriteSession session;uint8_t key[16]{1},payload[20]{};ASSERT_TRUE(!session.rfWriteQualified);
+ ASSERT_TRUE(session.prepare(0x123456,key,1,9,0,0x030A,0,payload,20,100,1000));const uint8_t opening[]={1,0,0,20};ASSERT_TRUE(session.openingReply(0x123456,key,1,9,opening,4));ASSERT_TRUE(session.nextMode1());ASSERT_EQ(session.transport().pendingSize(),21);
+ const uint8_t first[]={1,0,2};ASSERT_TRUE(session.chunkReply(0x123456,key,1,9,first,3));ASSERT_TRUE(session.nextMode1());const uint8_t second[]={2,0,1};ASSERT_TRUE(session.chunkReply(0x123456,key,1,9,second,3));ASSERT_TRUE(session.nextMode1());const uint8_t close[]={3,0,0};ASSERT_TRUE(session.chunkReply(0x123456,key,1,9,close,3));ASSERT_EQ(session.transport().stage(),IoHomeObjectTransfer::Stage::Done);
+ ASSERT_TRUE(session.prepare(0x123456,key,1,10,0,0x030A,0,payload,20,100,1000));ASSERT_TRUE(!session.bound(0x123456,key,2));ASSERT_EQ(session.transport().stage(),IoHomeObjectTransfer::Stage::IdentityChanged);
+}
