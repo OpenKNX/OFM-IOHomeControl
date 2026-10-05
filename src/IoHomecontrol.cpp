@@ -2800,7 +2800,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         const auto *receiptChannel=mChannels[data[1]];
         const auto &binding=mCommittedNetwork.channels[data[1]];
         if(!mNetworkStoreReady || mNetworkStoreFailed || !mNetworkHasCommit || !receiptChannel ||
-            receiptChannel->is1WDevice() || receiptChannel->getNodeId()!=receipt.node ||
+            receiptChannel->is1W() || receiptChannel->getNodeId()!=receipt.node ||
             std::memcmp(receiptChannel->getEncryptionKey(),receipt.key,16) || !binding.managed ||
             binding.node!=receipt.node || std::memcmp(binding.key,receipt.key,16))
         { resultData[0]=4;resultLength=1;return true; }
@@ -3075,7 +3075,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
                 {
                     if (mChannels[i] != nullptr && mChannels[i]->getNodeId() == lDevice.nodeId)
                     {
-                        lStatus = !mChannels[i]->is1WDevice() &&
+                        lStatus = !mChannels[i]->is1W() &&
                             !std::memcmp(mChannels[i]->getEncryptionKey(),mKeyImportKey.key,16) ? 0x01 : 0x03;
                         lChannelIndex = i;
                         break;
