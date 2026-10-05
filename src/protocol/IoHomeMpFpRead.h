@@ -10,6 +10,15 @@ inline bool ioHomeBuildMpFpRead(uint8_t index,uint8_t *data,uint8_t &length) {
     data[0]=3;data[1]=index>=1&&index<=8?uint8_t(0x80>>(index-1)):0;
     data[2]=index>=9?uint8_t(0x80>>(index-9)):0;length=3;return true;
 }
+// Combined endpoint 0x10012 supplies the same two raw selector bytes.
+// Logical bit zero selects FP1; MP is returned in the fixed reply prefix.
+inline bool ioHomeBuildMpFpMaskRead(uint16_t selected,uint8_t *data,uint8_t &length) {
+    length=0;if(!data)return false;
+    data[0]=3;data[1]=0;data[2]=0;
+    for(uint8_t bit=0;bit<16;bit++)if(selected&(uint16_t(1)<<bit))
+        data[1+bit/8]|=uint8_t(0x80>>(bit%8));
+    length=3;return true;
+}
 struct IoHomeMpFpReply {
     uint8_t basicInfo=0,detailedStatus=0,mainInfo=0;
     uint16_t target=0,current=0,remainingSeconds=0,values[16]{};

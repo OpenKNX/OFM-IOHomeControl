@@ -170,6 +170,7 @@ struct IoHomeQueueEntry
   uint8_t managementKey[16];
   bool mpFpRead;                              // source-backed individual standard GET
   uint8_t mpFpReadIndex;
+  uint16_t mpFpReadSelected;                  // logical FP mask; all requested fields required
   uint8_t mpFpReadMode;                       // 3=standard, 6/7=default min/max, 9=current alias
   bool diagnosticFpRead;                       // raw-only, no KO publication
   uint8_t diagnosticFpReadIndex;
@@ -571,6 +572,7 @@ public:
   bool requestProductWhite(IoHomecontrolChannel *channel,uint16_t kelvin);
   bool requestMpFpContext(IoHomecontrolChannel *channel,uint8_t mode);
   bool requestMpFpRead(IoHomecontrolChannel *channel,uint8_t index);
+  bool requestMpFpMaskRead(IoHomecontrolChannel *channel,uint16_t selected);
   bool sendDiagnosticFpRead(IoHomecontrolChannel *iChannel, uint8_t iFpIndex);
   bool requestObjectRead(IoHomecontrolChannel *channel,uint8_t provider,uint16_t key,uint16_t offset,uint16_t span);
   bool cancelObjectRead(uint32_t token);

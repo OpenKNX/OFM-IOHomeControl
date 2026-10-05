@@ -1024,6 +1024,18 @@ function IOHC_requestProductObservations(device,online,progress,context) {
         var node=IOHC_readNodeId(identity,3),binding=IOHC_invokeFunctionProperty(online,[0x22,channel]);
         if(!node||!binding||binding.length!==6||binding[0]!==0||binding[1]!==1||binding[2]!==channel||binding[3]>4||binding[4]>4)
             throw new Error("Ungültige Produktbindung");
+        if((IOHC_read32(caps,2)&64)!==0) {
+            var mask=binding[3]===1?0x0600:binding[3]===2?0x2000:0;
+            var request=[0x32,channel,mask>>8,mask&255].concat(identity.slice(3,6));
+            var combined=IOHC_invokeFunctionProperty(online,request);
+            if(!combined||combined.length!==5||combined[0]!==0||combined[1]!==1||combined[2]!==channel||combined[3]!==request[2]||combined[4]!==request[3])
+                throw new Error("Produkt-Snapshot blockiert; Einrichtungs-/Diagnosestatus prüfen");
+            var after=IOHC_invokeFunctionProperty(online,[0x1D,channel]);
+            if(!after||after.length!==12||after[0]!==0||after[1]!==1||after[2]!==channel||IOHC_readNodeId(after,3)!==node)
+                throw new Error("Kanal geändert; gestartete Abfrage bleibt an die ursprüngliche Identität gebunden");
+            progress.setText("Eine gemeinsame MP/FP-Abfrage gestartet. Anschließend Produktevidenz lesen. Gemeinsame Antwortgeneration bedeutet keine Authentifizierung oder Schreibfreigabe.");
+            return;
+        }
         var indexes=binding[3]===1?[0,10,11]:binding[3]===2?[0,14]:[0],queued=0;
         for(var i=0;i<indexes.length;i++) {
             var result=IOHC_invokeFunctionProperty(online,[0x2E,channel,indexes[i]].concat(identity.slice(3,6)));

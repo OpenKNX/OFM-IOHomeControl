@@ -197,3 +197,15 @@ test("persistence evidence remains read only and checks boot and live receipt",f
     IOHC_readPersistenceEvidence(d,online,{setText:function(v){text=v;}},{channelIndex:1});
     check(closed&&JSON.stringify(d.params)===before&&text.indexOf("Revision 2")>=0&&text.indexOf("kein Löschen")>=0,"unsafe persistence UI");
 });
+
+test("combined RGB read sends one identity-bound selector",function() {
+    var requests=0,text="",d=deviceWith({});
+    var online={connect:function(){},disconnect:function(){},invokeFunctionProperty:function(o,p,data) {
+        if(data[0]===0x23)return [0,1,0,0,0,127,0,0,0,1];
+        if(data[0]===0x1D)return snapshot(0x1C,6,1);
+        if(data[0]===0x22)return [0,1,0,1,0,0];
+        check(data[0]===0x32&&data.join(",")==="50,0,6,0,18,52,86","combined RGB selector");requests++;return [0,1,0,6,0];
+    }};
+    IOHC_requestProductObservations(d,online,{setText:function(t){text=t;}},{channelIndex:1});
+    check(requests===1&&text.indexOf("gemeinsame")>=0,"one snapshot request");
+});

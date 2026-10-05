@@ -19410,3 +19410,32 @@ TEST(controller_product_context_change_discards_old_samples_and_pending_request)
     ASSERT_TRUE(controller.requestMpFpRead(&channel,14));identity.subProfile=1;channel.onProtocolIdentity(0x7E9E6E,identity);
     ASSERT_TRUE(!channel.productRuntime().sample(14)->present);IoHomeFrame tx;ASSERT_TRUE(!transmitQueuedControllerFrame(controller,tx));
 }
+
+TEST(protocol_combined_selector_matches_all_individual_bits) {
+    for(uint8_t i=1;i<=16;i++) {
+        uint8_t individual[3],combined[3],a=0,b=0;
+        ASSERT_TRUE(ioHomeBuildMpFpRead(i,individual,a));
+        ASSERT_TRUE(ioHomeBuildMpFpMaskRead(uint16_t(1)<<(i-1),combined,b));
+        ASSERT_EQ(a,b);ASSERT_TRUE(!std::memcmp(individual,combined,3));
+    }
+    uint8_t data[3],length;ASSERT_TRUE(ioHomeBuildMpFpMaskRead(0x0600,data,length));
+    ASSERT_EQ(data[1],0);ASSERT_EQ(data[2],0x60);
+    ASSERT_TRUE(ioHomeBuildMpFpMaskRead(0xFFFF,data,length));ASSERT_EQ(data[1],0xFF);ASSERT_EQ(data[2],0xFF);
+}
+TEST(controller_combined_product_read_requires_complete_tuple) {
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x831F2A,0x7E9E6E,key);
+    IoHomeProtocolIdentity identity;identity.valid=true;identity.nodeClass=IoHomeNodeClass::Actuator;ch.onProtocolIdentity(0x7E9E6E,identity);
+    ASSERT_TRUE(c.requestMpFpMaskRead(&ch,0x0600));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ASSERT_EQ(tx.data[2],0x60);
+    uint8_t incomplete[]={0,0,0,0,0x32,0,0,0,0,0,0,0,0,0x40,0x12,0x34};IoHomeFrame reply;
+    buildSimpleResponseFrame(reply,0x831F2A,0x7E9E6E,IoHomeCommand::PrivateResponse,incomplete,sizeof(incomplete));
+    ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_TRUE(!ch.productRuntime().sample(0)->present);
+    uint8_t complete[]={0,0,0,0,0x32,0,0,0,0,0,0,0,0,0x60,0x12,0x34,0x56,0x78};
+    buildSimpleResponseFrame(reply,0x831F2A,0x7E9E6E,IoHomeCommand::PrivateResponse,complete,sizeof(complete));
+    ASSERT_TRUE(queueControllerResponse(c,reply));
+    ASSERT_EQ(ch.productRuntime().sample(10)->raw,0x1234);ASSERT_EQ(ch.productRuntime().sample(11)->raw,0x5678);
+    ASSERT_EQ(ch.productRuntime().sample(0)->generation,ch.productRuntime().sample(11)->generation);
+    ASSERT_EQ(ch.productRuntime().sample(10)->trust,IoHomeProductRuntime::Trust::Correlated);
+    ASSERT_TRUE(!ch.testHasPositionFeedback());
+}

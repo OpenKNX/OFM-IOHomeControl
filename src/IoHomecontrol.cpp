@@ -2817,6 +2817,16 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         resultData[0]=idle&&mController.requestMpFpRead(mChannels[data[1]],data[2])?0:1;
         resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultLength=4;return true;
     }
+    case 0x32: // Combined MP/FP GET: channel, logical mask BE16, expected node BE24
+    {
+        if(length!=7||data[1]>=mNumChannels)break;
+        const uint32_t node=uint32_t(data[4])<<16|uint32_t(data[5])<<8|data[6];
+        if(!node||node!=mChannels[data[1]]->getNodeId())break;
+        const uint16_t selected=uint16_t(data[2])<<8|data[3];
+        const bool idle=!mCommissioningJob.active()&&!mMetadataQuery.active()&&!mPendingDiagnostic.active;
+        resultData[0]=idle&&mController.requestMpFpMaskRead(mChannels[data[1]],selected)?0:1;
+        resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultData[4]=data[3];resultLength=5;return true;
+    }
     case 0x31: // Raw default min/max/current-alias context, same shape as API28
     case 0x28: // Raw product observation, no inferred units/publication
     {
@@ -2838,7 +2848,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
     {
         if(length!=1)break;
         resultData[0]=0;resultData[1]=1;
-        const uint32_t flags=63; // bit4: individual MP/FP GET, bit5: persistence evidence API
+        const uint32_t flags=127; // bit4: individual MP/FP GET, bit5: persistence evidence API, bit6: combined MP/FP GET
         for(uint8_t i=0;i<4;i++){resultData[2+i]=flags>>(24-8*i);resultData[6+i]=mCommissioningBootId>>(24-8*i);}
         resultLength=10;return true;
     }

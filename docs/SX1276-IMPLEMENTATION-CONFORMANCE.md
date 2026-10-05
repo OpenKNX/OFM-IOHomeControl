@@ -19,3 +19,20 @@ Before qualification, capture the actual configured register snapshot and over-t
 Frame codec support for the version-3 `0B 01` header is implemented. This does not mean every controller authentication/continuation producer chooses version 3; that policy needs an original-device exchange capture before changing outgoing defaults.
 
 Controller 3D now preserves the extended form of its authenticated working request. `iohc 2wdiag version auto|3` supplies an explicit queued-2W bench override; ordinary defaults and separate pairing/discovery producers remain unchanged. See [peer qualification procedure](SX1276-PEER-QUALIFICATION.md) for the unexecuted hardware acceptance checks and product-bound high-FP representation vectors.
+
+## Combined product snapshot GET — 2026-10-05
+
+The native OVPd `getMpFp` combined endpoint `0x10012` passes the raw two-byte
+selector after `03`. `requestMpFpMaskRead` now uses this established path.
+Logical mask bit0=FP1; RGB requests MP+FP10+FP11 with `03 00 60` in one
+exchange. All requested FPs must be present before any observation is ingested.
+The existing identity/key/context guards and one-attempt budget apply. A shared
+reply generation proves correlation/coherence, not authentication: unsigned
+responses remain Correlated, and RF-write/KNX-publication gates remain closed.
+
+Function-property `32 channel maskBE16 expectedNodeBE24` returns
+`result schema channel maskBE16` (5 bytes); capability bit6 advertises support.
+ETS uses one combined request when supported and retains the individual-read
+fallback for older firmware. The RGB KNX read trigger also queues one request.
+Native tests exercise selector mapping, incomplete-tuple rejection, atomic
+complete-tuple ingestion and absence of legacy position publication.

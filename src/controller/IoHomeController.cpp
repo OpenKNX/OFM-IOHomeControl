@@ -2539,12 +2539,18 @@ bool IoHomeController::requestProductWhite(IoHomecontrolChannel *channel,uint16_
 
 bool IoHomeController::requestMpFpRead(IoHomecontrolChannel *channel,uint8_t index)
 {
-    if(!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||index>16||!channel->getProtocolIdentity().valid||
+    if(index>16)return false;
+    return requestMpFpMaskRead(channel,index?uint16_t(1)<<(index-1):0);
+}
+
+bool IoHomeController::requestMpFpMaskRead(IoHomecontrolChannel *channel,uint16_t selected)
+{
+    if(!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||!channel->getProtocolIdentity().valid||
        channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Actuator||mPassiveMode||mGatewayMode||
        mOneWayKeyReceiveActive||isKeyExtractionActive()||isNetworkScanActive())return false;
     IoHomeQueueEntry entry{};entry.productContextRevision=channel->productContextRevision();entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
     entry.managementRead=true;std::memcpy(entry.managementKey,entry.encKey,16);
-    entry.command=IoHomeCommand::Private;entry.mpFpRead=true;entry.mpFpReadIndex=index;entry.mpFpReadMode=3;
+    entry.command=IoHomeCommand::Private;entry.mpFpRead=true;entry.mpFpReadSelected=selected;entry.mpFpReadMode=3;
     entry.sourceChannelIndex=channelIndexFor(channel);entry.maxAttempts=1;entry.background=true;entry.active=true;
     return queuePush(entry);
 }
@@ -7117,7 +7123,7 @@ void IoHomeController::processResponse()
             if(mRxFrame.commandId!=IoHomeCommand::PrivateResponse||
                (mCurrentCmd.mpFpReadMode==3&&!ioHomeDecodeMpFpReply(mRxFrame.data,mRxFrame.dataLen,reply))||
                (mCurrentCmd.mpFpReadMode!=3&&mRxFrame.dataLen<5)||
-               (mCurrentCmd.mpFpReadIndex&&!(reply.present&(uint16_t(1)<<(mCurrentCmd.mpFpReadIndex-1))))) {
+               ((reply.present&mCurrentCmd.mpFpReadSelected)!=mCurrentCmd.mpFpReadSelected)) {
                 mState=ControllerState::WaitResponse;return;
             }
         }
@@ -9839,7 +9845,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         //   03 20 01 00    = tilt status
         if(iEntry.mpFpRead) {
             if(iEntry.mpFpReadMode==3) {
-                if(!ioHomeBuildMpFpRead(iEntry.mpFpReadIndex,mTxFrame.data,mTxFrame.dataLen))return false;
+                if(!ioHomeBuildMpFpMaskRead(iEntry.mpFpReadSelected,mTxFrame.data,mTxFrame.dataLen))return false;
             } else {
                 if(iEntry.mpFpReadMode!=6&&iEntry.mpFpReadMode!=7&&iEntry.mpFpReadMode!=9)return false;
                 mTxFrame.data[0]=iEntry.mpFpReadMode;mTxFrame.data[1]=0;mTxFrame.data[2]=0;mTxFrame.dataLen=3;
@@ -10293,7 +10299,7 @@ void IoHomeController::dispatchRxFrame()
                     IoHomeMpFpReply reply;
                     if(mCurrentCmd.active&&mCurrentCmd.destNodeId==lSrcNode&&lDestNode==mOwnNodeId&&
                        managementIdentityMatches(mCurrentCmd)&&ioHomeDecodeMpFpReply(mRxFrame.data,mRxFrame.dataLen,reply)&&
-                       (!mCurrentCmd.mpFpReadIndex||(reply.present&(uint16_t(1)<<(mCurrentCmd.mpFpReadIndex-1))))) {
+                       ((reply.present&mCurrentCmd.mpFpReadSelected)==mCurrentCmd.mpFpReadSelected)) {
                         lCh->productRuntime().observeReply(lSrcNode,reply,mCurrentCmd.observationGeneration,millis(),
                             lVerifiedReplyMac?IoHomeProductRuntime::Trust::Authenticated:IoHomeProductRuntime::Trust::Correlated);
                     }

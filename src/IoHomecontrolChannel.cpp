@@ -2377,7 +2377,7 @@ void IoHomecontrolChannel::processProductInputKo(uint8_t index,GroupObject &ko)
         if(!mController.requestProductWhite(this,kelvin))logInfoP("Product white write blocked: binding/qualification/ownership");
     } else if(index==PIC_KocRead&&bool(ko.value(DPT_Switch))) {
         if(family==IoHomeBoundProductFamily::RgbLight) {
-            if(!mController.requestMpFpRead(this,0)||!mController.requestMpFpRead(this,10)||!mController.requestMpFpRead(this,11))logInfoP("Product read partly queued or blocked");
+            if(!mController.requestMpFpMaskRead(this,(uint16_t(1)<<9)|(uint16_t(1)<<10)))logInfoP("Product snapshot read blocked");
         } else if(family==IoHomeBoundProductFamily::TunableWhiteLight) {
             if(!mController.requestMpFpRead(this,14))logInfoP("Product white read blocked");
         }
