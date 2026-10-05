@@ -2797,6 +2797,13 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         IoHomeAssignmentReceipt::Value receipt;
         if(mAssignmentReceipts.load(data[1],receipt)!=IoHomeAssignmentReceipt::Result::Found)
         { resultData[0]=3;resultLength=1;return true; }
+        const auto *receiptChannel=mChannels[data[1]];
+        const auto &binding=mCommittedNetwork.channels[data[1]];
+        if(!mNetworkStoreReady || mNetworkStoreFailed || !mNetworkHasCommit || !receiptChannel ||
+            receiptChannel->is1WDevice() || receiptChannel->getNodeId()!=receipt.node ||
+            std::memcmp(receiptChannel->getEncryptionKey(),receipt.key,16) || !binding.managed ||
+            binding.node!=receipt.node || std::memcmp(binding.key,receipt.key,16))
+        { resultData[0]=4;resultLength=1;return true; }
         if(length==9)
         {
             const uint32_t generation=uint32_t(data[2])<<24|uint32_t(data[3])<<16|uint32_t(data[4])<<8|data[5];
@@ -3068,13 +3075,14 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
                 {
                     if (mChannels[i] != nullptr && mChannels[i]->getNodeId() == lDevice.nodeId)
                     {
-                        lStatus = 0x01;
+                        lStatus = !mChannels[i]->is1WDevice() &&
+                            !std::memcmp(mChannels[i]->getEncryptionKey(),mKeyImportKey.key,16) ? 0x01 : 0x03;
                         lChannelIndex = i;
                         break;
                     }
                 }
 
-                if (lStatus != 0x01)
+                if (lChannelIndex == 0xFF)
                 {
                     lStatus = 0x02;
                     for (uint8_t i = 0; i < lCandidateCount; i++)
