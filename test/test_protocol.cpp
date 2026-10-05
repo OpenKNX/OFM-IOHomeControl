@@ -29,6 +29,7 @@
 #include "protocol/IoHomeProductPresentation.h"
 #include "protocol/IoHomeProductRuntime.h"
 #include "protocol/IoHomeManagementCodecs.h"
+#include "protocol/IoHomeObjectTransfer.h"
 #include <limits>
 #include "protocol/IoHomeLogRedaction.h"
 #include "protocol/IoHomePassiveAuth.h"
@@ -3727,6 +3728,29 @@ TEST(sensor_decoders_require_exact_fields_and_preserve_unknown_units) {
     uint8_t info[17]{};info[12]=1;info[13]=2;info[14]=0x12;info[15]=0x34;info[16]=0x56;IoHomeSensorInformation decoded;
     ASSERT_TRUE(!ioHomeDecodeSensorInformation(info,16,decoded));ASSERT_TRUE(ioHomeDecodeSensorInformation(info,17,decoded));
     ASSERT_EQ(decoded.minRefresh,258);ASSERT_EQ(decoded.backbone,0x123456);
+}
+
+TEST(object_transfer_bounded_read_sequences_and_completion) {
+    IoHomeObjectTransfer transfer;using D=IoHomeObjectTransfer::Direction;using S=IoHomeObjectTransfer::Stage;
+    ASSERT_TRUE(transfer.begin(D::Read,0x123456,7,0,1,0,36,100,1000));
+    ASSERT_EQ(transfer.openingCommand(),0x46);ASSERT_EQ(transfer.openingData()[8],36);
+    uint8_t opening[]={0xFF,0,0,36};ASSERT_TRUE(!transfer.acceptOpening(0x654321,7,0x47,opening,4));
+    ASSERT_TRUE(transfer.acceptOpening(0x123456,7,0x47,opening,4));ASSERT_TRUE(transfer.next(2));
+    uint8_t chunk[21]={0x7F,0,1};for(uint8_t n=3;n<21;n++)chunk[n]=n;
+    ASSERT_TRUE(transfer.acceptChunk(0x123456,7,chunk,21));ASSERT_EQ(transfer.transferred(),18);
+    ASSERT_TRUE(!transfer.acceptChunk(0x123456,7,chunk,21));ASSERT_TRUE(transfer.next(1));ASSERT_EQ(transfer.pendingData()[0],0x81);
+    chunk[0]=1;ASSERT_TRUE(transfer.acceptChunk(0x123456,7,chunk,21));ASSERT_EQ(transfer.transferred(),36);
+    ASSERT_TRUE(transfer.next(0));uint8_t end[]={2,0,0};ASSERT_TRUE(transfer.acceptChunk(0x123456,7,end,3));ASSERT_EQ(transfer.stage(),S::Done);
+}
+TEST(object_transfer_rejects_write_alignment_and_retains_abort_timeout) {
+    IoHomeObjectTransfer transfer;using D=IoHomeObjectTransfer::Direction;using S=IoHomeObjectTransfer::Stage;
+    ASSERT_TRUE(!transfer.begin(D::Write,1,1,0,0x030A,1,20,0,100));
+    ASSERT_TRUE(transfer.begin(D::Write,1,1,0,0x030A,20,20,0,100));
+    uint8_t open[]={1,0,0,20};ASSERT_TRUE(transfer.acceptOpening(1,1,0x49,open,4));
+    uint8_t bytes[18]{};ASSERT_TRUE(!transfer.next(1,bytes,17));ASSERT_TRUE(transfer.next(1,bytes,18));
+    uint8_t abort[]={1,0,0};ASSERT_TRUE(transfer.acceptChunk(1,1,abort,3));ASSERT_EQ(transfer.stage(),S::Aborted);ASSERT_EQ(transfer.transferred(),0);
+    ASSERT_TRUE(transfer.begin(D::Read,1,2,0,1,0,10,0xFFFFFFF0,100));transfer.tick(100);ASSERT_EQ(transfer.stage(),S::Timeout);
+    ASSERT_TRUE(!transfer.begin(D::Read,1,3,0,1,0,1025,0,100));
 }
 
 TEST(commissioning_job_rejects_concurrent_owner_and_stale_cancel)
