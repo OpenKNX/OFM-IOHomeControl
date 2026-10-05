@@ -19268,3 +19268,35 @@ TEST(product_siren_sequences_pack_source_fields_and_zero_unused_slots) {
     uint8_t duty=99;ASSERT_TRUE(ioHomeSirenDutyFromPercent(50,duty));ASSERT_EQ(duty,15);ASSERT_TRUE(!ioHomeSirenDutyFromPercent(101,duty));ASSERT_EQ(duty,15);
     const auto reserved=ioHomeDecodeSirenSequence(0x7FF,0x2800);ASSERT_TRUE(reserved.defaultDuration&&!reserved.knownVolume);
 }
+
+TEST(mpfp_read_selectors_cover_all_slots_without_refresh_info) {
+    for(uint8_t i=0;i<=16;i++) {
+        uint8_t data[3]={};uint8_t length=0;
+        ASSERT_TRUE(ioHomeBuildMpFpRead(i,data,length));ASSERT_EQ(length,3);ASSERT_EQ(data[0],3);
+        ASSERT_EQ(data[1],i>=1&&i<=8?uint8_t(0x80>>(i-1)):0);
+        ASSERT_EQ(data[2],i>=9?uint8_t(0x80>>(i-9)):0);
+    }
+    uint8_t data[3]={};uint8_t length=99;ASSERT_TRUE(!ioHomeBuildMpFpRead(17,data,length));ASSERT_EQ(length,0);
+}
+TEST(mpfp_sparse_reply_moves_second_mask_and_rejects_partial_state) {
+    const uint8_t data[]={0x12,0x34,0,1,0,2,0,3,0x12,0x34,0x56,0xAB,0xA0,0,4,0,5,0x40,0,6};
+    IoHomeMpFpReply reply;ASSERT_TRUE(ioHomeDecodeMpFpReply(data,sizeof(data),reply));
+    ASSERT_EQ(reply.present,0x205);ASSERT_EQ(reply.values[0],4);ASSERT_EQ(reply.values[2],5);ASSERT_EQ(reply.values[9],6);
+    ASSERT_EQ(reply.current,2);ASSERT_EQ(reply.lastMaster,0x123456);ASSERT_EQ(reply.mainInfo,0xAB);
+    for(size_t length=0;length<sizeof(data);length++) {
+        IoHomeMpFpReply unchanged;unchanged.current=0xBEEF;
+        ASSERT_TRUE(!ioHomeDecodeMpFpReply(data,length,unchanged));ASSERT_EQ(unchanged.current,0xBEEF);
+    }
+    uint8_t extra[sizeof(data)+1];memcpy(extra,data,sizeof(data));extra[sizeof(data)]=0;
+    ASSERT_TRUE(!ioHomeDecodeMpFpReply(extra,sizeof(extra),reply));
+}
+TEST(product_runtime_reply_is_atomic_and_does_not_promote_correlation) {
+    IoHomeProductRuntime runtime;uint8_t key[16]={1};runtime.bind(0x123456,key);
+    IoHomeMpFpReply reply;reply.current=0x3200;reply.present=(1<<9)|(1<<10);reply.values[9]=20000;reply.values[10]=20000;
+    ASSERT_TRUE(runtime.observeReply(0x123456,reply,1,10,IoHomeProductRuntime::Trust::Correlated));
+    uint8_t r=0,g=0,b=0;ASSERT_TRUE(!runtime.rgb(IoHomeBoundProductFamily::RgbLight,11,5000,r,g,b));
+    ASSERT_TRUE(runtime.observe(0x123456,10,123,3,10,IoHomeProductRuntime::Trust::Authenticated));
+    ASSERT_TRUE(!runtime.observeReply(0x123456,reply,2,10,IoHomeProductRuntime::Trust::Correlated));
+    ASSERT_EQ(runtime.sample(0)->generation,1);ASSERT_EQ(runtime.sample(10)->raw,123);
+    ASSERT_TRUE(!runtime.observeReply(0x654321,reply,4,10,IoHomeProductRuntime::Trust::Authenticated));
+}

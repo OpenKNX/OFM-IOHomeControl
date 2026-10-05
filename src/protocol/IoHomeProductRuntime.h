@@ -1,6 +1,7 @@
 #pragma once
 #include "IoHomeProductPolicy.h"
 #include "IoHomeProductCodecs.h"
+#include "IoHomeMpFpRead.h"
 #include <cstring>
 
 // Volatile observations are identity/key-bound; reboot never restores freshness.
@@ -17,6 +18,15 @@ public:
         auto &s=mSamples[index];
         if(s.present&&generation<s.generation)return false; // generations never wrap in controller
         s={raw,generation,now,trust,true};return true;
+    }
+    // One standard reply is one observation generation. Never combine independently
+    // queried FPs into a manufactured authenticated RGB snapshot.
+    bool observeReply(uint32_t peer,const IoHomeMpFpReply &reply,uint32_t generation,uint32_t now,Trust trust) {
+        IoHomeProductRuntime next=*this;
+        if(!next.observe(peer,0,reply.current,generation,now,trust))return false;
+        for(uint8_t index=1;index<=16;index++)if(reply.present&(uint16_t(1)<<(index-1)))
+            if(!next.observe(peer,index,reply.values[index-1],generation,now,trust))return false;
+        *this=next;return true;
     }
     const Sample *sample(uint8_t index) const {return index<=16?&mSamples[index]:nullptr;}
     static bool fresh(const Sample &s,uint32_t now,uint32_t maxAge){return s.present&&maxAge&&uint32_t(now-s.receivedMs)<=maxAge;}
