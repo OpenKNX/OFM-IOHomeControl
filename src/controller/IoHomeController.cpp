@@ -2872,6 +2872,8 @@ bool IoHomeController::sendProfileMovementCommand(uint32_t node,const uint8_t *k
 
 bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
 {
+    // No writable object schema has original-peer qualification.
+    if(static_cast<uint8_t>(iEntry.command)==0x48)return false;
     if(mReceiveConfiguration.active()&&iEntry.rcmToken!=mRcmToken)return false;
     if(mObjectRead.active()&&iEntry.objectReadToken!=mObjectReadToken)return false;
     uint8_t lNext = (mQueueHead + 1) % IOHC_CMD_QUEUE_SIZE;

@@ -121,3 +121,12 @@ identity before applying a selector. No automatic subscriptions or KNX alarm
 publication is enabled. Generic slave RF dispatch/response production remains
 outside the present actuator-controller role; this is the reusable database service.
 Source: dated 2W report “0x8D/0x8E” and “delegation response payload”.
+
+## 15 — Object write allowlist and early rejection
+
+Added an explicit empty RF write allowlist and rejected 48 at queue admission,
+before any RF side effect. Offline preparation remains peer/key/revision/token
+bound, bounded and cancellable; it grants no production write permission.
+The dated reports explicitly leave writable 4300/4302 and 8100/8103 schemas,
+product authorization and peer result semantics unresolved. No generic arbitrary
+provider/key write or guessed terminal closure is introduced.

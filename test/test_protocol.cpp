@@ -19994,3 +19994,12 @@ TEST(protocol_sensor_delegation_exact_record_scopes_and_nonmutating_query)
     ASSERT_TRUE(d.decodeReply(reply,4,result));ASSERT_EQ(result.state,7);ASSERT_EQ(result.sensorValue,0x1234);
     ASSERT_TRUE(!d.decodeReply(reply,3,result));S selector;ASSERT_TRUE(!d.decodeSelector(4,selector));
 }
+
+TEST(controller_unqualified_object_writes_fail_before_enqueue)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ASSERT_TRUE(!c.sendCommand(0x654321,key,static_cast<IoHomeCommand>(0x48),0));
+    ASSERT_TRUE(c.idleForManagedOperation());
+    for(uint16_t object:{0x4300,0x4302,0x8100,0x8103})ASSERT_TRUE(!IoHomeObjectWriteSession::allowed(0,object));
+}

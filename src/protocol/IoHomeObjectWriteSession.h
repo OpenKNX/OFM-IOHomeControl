@@ -5,6 +5,10 @@
 class IoHomeObjectWriteSession {
 public:
  static constexpr bool rfWriteQualified=false;
+ // Explicit empty production allowlist. Transport knowledge cannot authorize a schema.
+ static constexpr bool allowed(uint8_t provider,uint16_t object){
+  (void)provider;(void)object;return false;
+ }
  bool prepare(uint32_t peer,const uint8_t *key,uint32_t revision,uint32_t token,uint8_t provider,uint16_t object,uint16_t offset,const uint8_t *payload,uint16_t size,uint32_t now,uint32_t budget){
   if(!key||!payload||!size||size>IoHomeObjectTransfer::Capacity||!revision||mTransfer.active())return false;
   if(!mTransfer.begin(IoHomeObjectTransfer::Direction::Write,peer,token,provider,object,offset,size,now,budget))return false;
