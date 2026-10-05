@@ -1155,6 +1155,9 @@ function IOHC_continueCommissioning(device,online,progress,context) {
     if(job.owner===2||job.owner===3) {
         IOHC_startKeyExtract(device,online,progress,{channelCount:context&&context.channelCount?context.channelCount:16});return;
     }
+    if(job.owner===1&&job.channel<16&&job.stage===6&&job.node) {
+        IOHC_applyPairingResult(device,online,progress,{channelIndex:job.channel+1});return;
+    }
     if(job.owner===1&&job.channel<16&&job.stage>=6) {
         IOHC_refreshPairingInfo(device,online,progress,{channelIndex:job.channel+1});return;
     }
@@ -1201,4 +1204,16 @@ function IOHC_assignPreviewed(online,job,discoveries,preview) {
   result[2+item.index*2]=response[0];result[3+item.index*2]=response[1];
  }
  return result;
+}
+
+function IOHC_applyPairingResult(device,online,progress,context) {
+ online.connect();try {
+  var job=IOHC_jobSnapshot(online),channel=Number(context.channelIndex)-1;
+  if(!job||job.owner!==1||job.stage!==6||job.channel!==channel||!job.node)throw new Error("Kein abgeschlossenes 2W-Pairing für diesen Kanal");
+  var identity=IOHC_invokeFunctionProperty(online,[0x1D,channel]);
+  if(!identity||identity.length!==12||identity[0]!==0||identity[1]!==1||identity[2]!==channel||IOHC_readNodeId(identity,3)!==job.node||(identity[11]&0x30)!==0x10)throw new Error("Pairing-Zuordnung geändert");
+  if(!IOHC_resumeAssignment(device,online,channel))throw new Error("Kein passender gespeicherter Zuordnungsbeleg");
+  IOHC_queryRecognition(device,online,context,true);
+  progress.setText("Gespeicherte Zuordnung in ETS übernommen. Manuelle Vorgaben bleiben erhalten. Applikation programmieren; Download ist noch offen.");
+ } finally {online.disconnect();}
 }
