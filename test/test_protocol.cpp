@@ -20013,3 +20013,16 @@ TEST(protocol_mode3_budget_uses_systemid_beacon_count_not_mib)
     ASSERT_TRUE(ioHomeSessionPolicy(IoHomeCommand::Execute,50,-1).unresolvedExecuteSelector);
     ASSERT_EQ(ioHomeSessionPolicy(IoHomeCommand::Execute,0xD8,0).stateAttempts,1);
 }
+
+TEST(protocol_physical_bounds_require_provenance_and_expire_with_channel_context)
+{
+    IoHomecontrolChannel channel;channel.setNodeId(0x123456);
+    auto &bounds=channel.physicalBounds();using S=IoHomePhysicalBounds::Source;
+    ASSERT_TRUE(!bounds.set(0x123456,channel.productContextRevision(),28000,30000,S::None,1));
+    ASSERT_TRUE(!bounds.set(0x123456,channel.productContextRevision(),28000,30000,S::OriginalPeerMeasurement,0));
+    ASSERT_TRUE(bounds.set(0x123456,channel.productContextRevision(),28000,30000,S::OriginalPeerMeasurement,1));
+    ASSERT_TRUE(bounds.context(0x123456,channel.productContextRevision()));
+    ASSERT_TRUE(!bounds.context(0x654321,channel.productContextRevision()));
+    ASSERT_EQ(bounds.provenance().evidence,1U);
+    channel.invalidateProductContext();ASSERT_TRUE(!bounds.context(0x123456,channel.productContextRevision()));
+}

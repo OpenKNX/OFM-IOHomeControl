@@ -1,4 +1,5 @@
 #include "protocol/IoHomeProductRuntime.h"
+#include "protocol/IoHomePhysicalBounds.h"
 #pragma once
 #include "OpenKNX.h"
 #include "knxprod.h"
@@ -46,7 +47,9 @@ public:
   // Callbacks from controller when radio responses arrive
   void onPositionFeedback(float iPositionPercent);
   uint32_t productContextRevision() const {return mProductContextRevision;}
-  void invalidateProductContext() {mProfileReceivedMask=0;mRequestedSpeedIndex=0;mProductRuntime.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
+  void invalidateProductContext() {mProfileReceivedMask=0;mRequestedSpeedIndex=0;mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
+  IoHomePhysicalBounds &physicalBounds(){return mPhysicalBounds;}
+  const IoHomePhysicalBounds &physicalBounds()const{return mPhysicalBounds;}
   IoHomeProductRuntime &productRuntime() {return mProductRuntime;}
   const IoHomeProductRuntime &productRuntime() const {return mProductRuntime;}
   void onTargetPositionFeedback(float iTargetPositionPercent);
@@ -269,6 +272,7 @@ private:
   IoHomeProtocolIdentity mProtocolIdentity{};
   uint32_t mProductContextRevision=1;
   IoHomeProductRuntime mProductRuntime;
+  IoHomePhysicalBounds mPhysicalBounds;
   uint16_t mManualPackedProfile = 0;
   IoHomeProductIdentityEvidence mProductIdentityEvidence{};
 

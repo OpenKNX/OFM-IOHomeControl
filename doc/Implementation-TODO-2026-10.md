@@ -160,3 +160,13 @@ or changed global key falls back to five. No SystemId is invented from a key has
 or MIB. Nine-attempt mode has a separate 20-second OFM host ceiling; this is not a
 recovered reference duration. Favorite/authenticated repeat safeguards stay intact.
 Automatic acquisition of the reference BasicNode marker inventory remains open.
+
+## 21 — Physical bounds with provenance
+
+Added volatile per-channel validated temperature bounds with source, evidence ID,
+node and semantic revision. Missing provenance, reversed/equal limits and stale
+identity/revision cannot supply codec context. Every channel context invalidation
+also discards bounds. Diagnostic MP/FP defaults are never promoted to physical
+bounds; no inverse RF write permission follows from storing context. Dynamic
+product-specific bounds acquisition and unidentified sentinels remain unresolved
+in the dated report and require original-peer/product evidence.

@@ -12,6 +12,7 @@
 
 #include "../protocol/IoHomeSequence.h"
 #include "../protocol/IoHomeProductRuntime.h"
+#include "../protocol/IoHomePhysicalBounds.h"
 #include "../protocol/IoHomeAssignmentReceipt.h"
 
 #ifndef logInfoP
@@ -112,7 +113,8 @@ public:
   uint32_t profileFeedbackCount[17] = {};
   void onProfileParameterFeedback(uint8_t index,uint16_t raw) {if(index<17){profileRaw[index]=raw;++profileFeedbackCount[index];}}
   uint32_t productContextRevision() const {return mProductContextRevision;}
-  void invalidateProductContext() {mProductRuntime.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
+  void invalidateProductContext() {mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
+  IoHomePhysicalBounds &physicalBounds(){return mPhysicalBounds;}
   IoHomeProductRuntime &productRuntime() {mProductRuntime.bind(mIoAddress,mEncKey);return mProductRuntime;}
   bool is1W() const { return mIs1W; }
   void setIs1W(bool iIs1W) { mIs1W = iIs1W; }
@@ -608,6 +610,7 @@ private:
   uint32_t mIoAddress = 0;
   uint32_t mProductContextRevision=1;
   IoHomeProductRuntime mProductRuntime;
+  IoHomePhysicalBounds mPhysicalBounds;
   IoHomeProtocolIdentity mProtocolIdentity{};
   uint16_t mManualPackedProfile = 0;
   IoHomeProductIdentityEvidence mProductIdentityEvidence{};
