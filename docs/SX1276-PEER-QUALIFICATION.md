@@ -89,3 +89,14 @@ raw sanitized packets, relevant register snapshot, edge measurements,
 expected/observed state, attempts/failures and reset-to-default result.
 Mark unrun rows explicitly. Add captures to `test/corpus` with provenance and
 separate source-model vectors from measured original-peer traffic.
+
+## Optional sensor producer acceptance
+
+The explicit default-subscription producer and bounded raw polling require their
+own peer acceptance record before claiming supported sensor operation. Use
+`check_release_evidence.py RECORD --product sensor`; the template gate
+`sensor_status_default_subscription_polling` remains `not_run`. Record exact
+sensor identity, established backbone, 8B body/8C response, authentication/error
+behavior, observed event/listening effects, polling intervals and stop/expiry/
+commissioning ownership. Decoder and queued-controller tests cannot fill this
+physical gate. No physical sensor unit or generic auto-subscription is claimed.

@@ -27,6 +27,13 @@ class EvidenceTest(unittest.TestCase):
             record['artifacts'][0]['path']='../capture.txt';self.assertFalse(gate()['complete'])
             record['artifacts'][0]['path']=str(artifact);self.assertFalse(gate()['complete'])
 
+    def test_sensor_feature_requires_its_own_physical_evidence(self):
+        import json
+        path=Path(__file__).resolve().parents[1]/'docs/release-evidence.template.json'
+        result=module.check(json.loads(path.read_text()),path.parent,'sensor')
+        gate=next(r for r in result if r['id']=='sensor_status_default_subscription_polling')
+        self.assertFalse(gate['complete'])
+
     def test_duplicate_records_are_rejected(self):
         with self.assertRaises(ValueError):module.check(dict(schema=1,records=[dict(id='x'),dict(id='x')]),'.')
 

@@ -60,6 +60,12 @@
       "kind": "physical",
       "outcome": "not_run",
       "artifacts": []
+    },
+    {
+      "id": "sensor_status_default_subscription_polling",
+      "kind": "physical",
+      "outcome": "not_run",
+      "artifacts": []
     }
   ]
 }

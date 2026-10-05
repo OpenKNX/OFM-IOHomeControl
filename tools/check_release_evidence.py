@@ -17,7 +17,8 @@ CORE = {
     'network_assignment_powercut': 'physical',
     'ets_import_reopen_download_resume_upgrade': 'ets',
 }
-PRODUCT = {'rgb': 'rgb_binding_read_write_state', 'white': 'white_binding_read_write_state'}
+PRODUCT = {'rgb': 'rgb_binding_read_write_state', 'white': 'white_binding_read_write_state',
+           'sensor': 'sensor_status_default_subscription_polling'}
 
 def check(document, root, product=None):
     if not isinstance(document, dict) or document.get('schema') != 1:
