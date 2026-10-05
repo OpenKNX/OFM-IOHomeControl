@@ -47,3 +47,13 @@ inline bool ioHomeBuildDefaultSensorSubscription(uint32_t backbone,uint8_t *data
     data[13]=backbone>>16;data[14]=backbone>>8;data[15]=backbone;data[16]=0xCC;
     length=17;return true;
 }
+
+// OVPd caller-blob mechanics only; bytes0..12 stay opaque.
+inline bool ioHomeBuildSensorSubscriptionBlob(const uint8_t *blob,uint16_t size,uint32_t backbone,uint8_t *out,uint8_t capacity,uint8_t &length){
+ if(!blob||!size||!out||capacity<17||!backbone||backbone>0xFFFFFF)return false;
+ uint8_t data[17]{};
+ if(blob[0]==0||size>17)data[3]=1;
+ else std::memcpy(data,blob,size);
+ data[13]=backbone>>16;data[14]=backbone>>8;data[15]=backbone;data[16]=0xCC;
+ std::memcpy(out,data,17);length=17;return true;
+}

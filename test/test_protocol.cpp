@@ -19583,3 +19583,9 @@ TEST(protocol_object_write_offline_session_requires_bound_identity_and_zero_clos
  const uint8_t first[]={1,0,2};ASSERT_TRUE(session.chunkReply(0x123456,key,1,9,first,3));ASSERT_TRUE(session.nextMode1());const uint8_t second[]={2,0,1};ASSERT_TRUE(session.chunkReply(0x123456,key,1,9,second,3));ASSERT_TRUE(session.nextMode1());const uint8_t close[]={3,0,0};ASSERT_TRUE(session.chunkReply(0x123456,key,1,9,close,3));ASSERT_EQ(session.transport().stage(),IoHomeObjectTransfer::Stage::Done);
  ASSERT_TRUE(session.prepare(0x123456,key,1,10,0,0x030A,0,payload,20,100,1000));ASSERT_TRUE(!session.bound(0x123456,key,2));ASSERT_EQ(session.transport().stage(),IoHomeObjectTransfer::Stage::IdentityChanged);
 }
+TEST(protocol_sensor_subscription_blob_copies_opaque_prefix_and_owns_tail) {
+ uint8_t blob[18];std::memset(blob,0xAA,sizeof(blob));uint8_t out[17]{};uint8_t length=0;
+ ASSERT_TRUE(ioHomeBuildSensorSubscriptionBlob(blob,17,0x123456,out,17,length));ASSERT_EQ(out[12],0xAA);ASSERT_EQ(out[13],0x12);ASSERT_EQ(out[16],0xCC);
+ ASSERT_TRUE(ioHomeBuildSensorSubscriptionBlob(blob,18,0x123456,out,17,length));ASSERT_EQ(out[0],0);ASSERT_EQ(out[3],1);
+ ASSERT_TRUE(!ioHomeBuildSensorSubscriptionBlob(blob,0,0x123456,out,17,length));ASSERT_TRUE(!ioHomeBuildSensorSubscriptionBlob(blob,1,0,out,17,length));
+}
