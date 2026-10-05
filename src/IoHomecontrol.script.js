@@ -990,3 +990,34 @@ function IOHC_startKeyExtract(device, online, progress, context) {
         online.disconnect();
     }
 }
+
+// Explicit read action, kept separate from the passive evidence view.
+function IOHC_requestProductObservations(device,online,progress,context) {
+    var channel=Number(context.channelIndex)-1;
+    if(channel<0||channel>=16||Math.floor(channel)!==channel) throw new Error("Ungültiger Kanal");
+    online.connect();
+    try {
+        var caps=IOHC_invokeFunctionProperty(online,[0x23]);
+        if(!caps||caps.length!==10||caps[0]!==0||caps[1]!==1||(IOHC_read32(caps,2)&16)===0)
+            throw new Error("Firmware unterstützt diese Produktabfrage nicht");
+        var identity=IOHC_invokeFunctionProperty(online,[0x1D,channel]);
+        if(!identity||identity.length!==12||identity[0]!==0||identity[1]!==1||identity[2]!==channel||
+           (identity[11]&0x14)!==0x14||(identity[11]&0x20)!==0) throw new Error("Gültiger gepaarter 2W-Kanal erforderlich");
+        var node=IOHC_readNodeId(identity,3),binding=IOHC_invokeFunctionProperty(online,[0x22,channel]);
+        if(!node||!binding||binding.length!==6||binding[0]!==0||binding[1]!==1||binding[2]!==channel||binding[3]>4||binding[4]>4)
+            throw new Error("Ungültige Produktbindung");
+        var indexes=binding[3]===1?[0,10,11]:binding[3]===2?[0,14]:[0],queued=0;
+        for(var i=0;i<indexes.length;i++) {
+            var result=IOHC_invokeFunctionProperty(online,[0x2E,channel,indexes[i]].concat(identity.slice(3,6)));
+            if(!result||result.length!==4||result[0]!==0||result[1]!==1||result[2]!==channel||result[3]!==indexes[i]) {
+                progress.setText(queued+" Einzelabfragen gestartet; weitere Abfrage blockiert. Bereits gestartete Abfragen bleiben aktiv.");
+                throw new Error("Produktabfrage blockiert; Einrichtungs-/Diagnosestatus prüfen");
+            }
+            queued++;
+        }
+        var current=IOHC_invokeFunctionProperty(online,[0x1D,channel]);
+        if(!current||current.length!==12||current[0]!==0||current[1]!==1||current[2]!==channel||IOHC_readNodeId(current,3)!==node)
+            throw new Error("Kanal geändert; gestartete Abfragen sind an ihre ursprüngliche Identität gebunden");
+        progress.setText(queued+" Einzelabfragen gestartet. Anschließend Produktevidenz lesen. Separate Antworten bilden keine atomare RGB-Messung; keine Schreibfreigabe oder ETS-Änderung.");
+    } finally {online.disconnect();}
+}

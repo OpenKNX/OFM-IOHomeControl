@@ -153,3 +153,24 @@ test("channel evidence refuses changed identity and closes connection",function(
     var rejected=false;try{IOHC_readChannelEvidence(d,online,{setText:function(v){text=v;}},{channelIndex:1});}catch(e){rejected=true;}
     check(rejected&&disconnected&&text===""&&JSON.stringify(d.params)===before,"stale evidence displayed or applied");
 });
+
+test("product query enqueues bound RGB selectors and preserves project",function() {
+    var d=deviceWith({Name:"Office",ProfileOverride:448}),before=JSON.stringify(d.params),text="",closed=false,seen=[];
+    var identity=snapshot(0x1C,6,1);
+    var online={connect:function(){},disconnect:function(){closed=true;},invokeFunctionProperty:function(o,p,data){
+        if(data[0]===0x23)return [0,1,0,0,0,31,0,0,0,9];
+        if(data[0]===0x1D)return identity;
+        if(data[0]===0x22)return [0,1,0,1,0,0];
+        check(data[0]===0x2E&&data.length===6&&IOHC_readNodeId(data,3)===0x123456,"unbound RF request");
+        seen.push(data[2]);return [0,1,0,data[2]];
+    }};
+    IOHC_requestProductObservations(d,online,{setText:function(v){text=v;}},{channelIndex:1});
+    check(JSON.stringify(seen)==="[0,10,11]"&&text.indexOf("keine atomare RGB")>=0,"selector/coherence policy");
+    check(closed&&JSON.stringify(d.params)===before,"project mutated/connection leaked");
+});
+test("product query rejects legacy firmware before any RF request",function() {
+    var calls=0,closed=false,rejected=false;
+    var online={connect:function(){},disconnect:function(){closed=true;},invokeFunctionProperty:function(o,p,data){calls++;check(data[0]===0x23,"legacy RF request");return [0,1,0,0,0,15,0,0,0,9];}};
+    try{IOHC_requestProductObservations(deviceWith({}),online,{setText:function(){}},{channelIndex:1});}catch(e){rejected=true;}
+    check(rejected&&closed&&calls===1,"legacy query accepted");
+});

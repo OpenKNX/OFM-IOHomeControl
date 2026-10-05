@@ -2752,7 +2752,9 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
     }
     case 0x2E: // Explicit individual MP/FP GET; no writes or legacy KO publication
     {
-        if(length!=3||data[1]>=mNumChannels||data[2]>16)break;
+        if(length!=6||data[1]>=mNumChannels||data[2]>16)break;
+        const uint32_t expectedNode=uint32_t(data[3])<<16|uint32_t(data[4])<<8|data[5];
+        if(!expectedNode||mChannels[data[1]]->getNodeId()!=expectedNode)break;
         updateCommissioningJob();
         const bool idle=!mCommissioningJob.active()&&!mRadioDiagnostic.active&&!mMetadataRefreshActive;
         resultData[0]=idle&&mController.requestMpFpRead(mChannels[data[1]],data[2])?0:1;
