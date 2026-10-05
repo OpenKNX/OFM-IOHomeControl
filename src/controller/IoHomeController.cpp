@@ -4245,6 +4245,13 @@ bool IoHomeController::isPairDiagnosticTraceEnabled() const
     return mPairDiagnosticTraceEnabled;
 }
 
+bool IoHomeController::setDiagnostic2WFrameVersion(uint8_t iVersion)
+{
+    if (iVersion != 0 && iVersion != 3) return false;
+    mDiagnostic2WFrameVersion = iVersion;
+    return true;
+}
+
 void IoHomeController::setDiagnostic2WPowerClass(TwoWayPowerClass iPowerClass)
 {
     mDiagnostic2WPowerClass = iPowerClass <= TwoWayPowerClass::LowPower
@@ -6309,7 +6316,13 @@ void IoHomeController::processIdle()
             if (buildTxFrame(mCurrentCmd))
             {
                 if ((mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) == 0)
+                {
+                    // Freeze the selected form in this working request so
+                    // retries and authentication cannot change mid-exchange.
+                    if (mDiagnostic2WFrameVersion == 3)
+                        mTxFrame.ctrlByte1 = (mTxFrame.ctrlByte1 & ~IOHC_CTRL1_VER_MASK) | 3;
                     resolveTwoWayPreamblePlan(mTxFrame, mCurrentCmd);
+                }
                 mState = ControllerState::TxPending;
             }
             else

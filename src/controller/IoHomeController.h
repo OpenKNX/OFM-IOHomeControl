@@ -713,6 +713,8 @@ public:
 
   void setPairDiagnosticTraceEnabled(bool iEnabled);
   bool isPairDiagnosticTraceEnabled() const;
+  bool setDiagnostic2WFrameVersion(uint8_t iVersion); // 0=auto, 3=bench override
+  uint8_t diagnostic2WFrameVersion() const { return mDiagnostic2WFrameVersion; }
   void setDiagnostic2WPowerClass(TwoWayPowerClass iPowerClass);
   TwoWayPowerClass diagnostic2WPowerClass() const;
   void setDiagnostic2WStartPreamble(uint16_t iPreambleSymbols);
@@ -1264,6 +1266,7 @@ private:
   uint32_t mRxScanIntervalUs;   // interval between frequency switches
   bool mRxScanEnabled;          // whether to cycle frequencies during idle RX
   uint8_t mLastResponseFreqIdx; // frequency index where last response was received
+  uint8_t mDiagnostic2WFrameVersion = 0; // queued 2W bench override only; never persisted
   TwoWayPowerClass mDiagnostic2WPowerClass = TwoWayPowerClass::Automatic;
   uint16_t mDiagnostic2WStartPreamble = 0; // 0 = derive from effective power class
   bool mDiagnostic2WWakeBelief = true;

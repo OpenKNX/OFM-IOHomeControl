@@ -15711,6 +15711,27 @@ TEST(controller_version3_authentication_preserves_working_form_and_hmac)
     }
 }
 
+TEST(controller_runtime_version3_override_reaches_real_queued_authentication)
+{
+    const uint8_t lKey[16] = {1,2,3};
+    IoHomeController lController; IoHomecontrol lModule; IoHomecontrolChannel lChannel;
+    initPaired2WControllerForTest(lController, lModule, lChannel, 0x123456, 0xABCDEF, lKey);
+    ASSERT_EQ(lController.diagnostic2WFrameVersion(), 0);
+    ASSERT_TRUE(!lController.setDiagnostic2WFrameVersion(1));
+    ASSERT_TRUE(!lController.setDiagnostic2WFrameVersion(255));
+    ASSERT_EQ(lController.diagnostic2WFrameVersion(), 0);
+    ASSERT_TRUE(lController.setDiagnostic2WFrameVersion(3));
+    IoHomeFrame lResponse;
+    // The incoming challenge remains ordinary version1: it must not downgrade
+    // the explicitly selected extended working request.
+    ASSERT_TRUE(sendExecuteAndAnswerChallenge(lController, 0x123456, 0xABCDEF, lKey, lResponse));
+    ASSERT_EQ(lResponse.ctrlByte1, 3); ASSERT_EQ(lResponse.ctrlByte0 & 0xC0, 0);
+    ASSERT_EQ(lResponse.commandId, IoHomeCommand::ChallengeResponse);
+    ASSERT_EQ(lResponse.dataLen, 6);
+    ASSERT_TRUE(lController.setDiagnostic2WFrameVersion(0));
+    ASSERT_EQ(lController.diagnostic2WFrameVersion(), 0);
+}
+
 TEST(controller_2w_challenge_response_matches_klr300_continuation_flags_for_low_power_device)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;

@@ -3447,6 +3447,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohcNN pair2w-exp MODE [ADDR]", "Diagnostic-only 2W pairing mode: discovery-confirm|launch-key|pull-key");
     openknx.console.printHelpLine("iohc pair cancel", "Cancel ongoing pairing");
     openknx.console.printHelpLine("iohc pairdiag on|off|status", "Verbose pairing/discovery diagnostics");
+    openknx.console.printHelpLine("iohc 2wdiag version auto|3", "Runtime queued-2W bench override; no automatic negotiation");
     openknx.console.printHelpLine("iohc 2wdiag power auto|always|low", "Runtime-only 2W power-class override");
     openknx.console.printHelpLine("iohc 2wdiag preamble auto|N", "Runtime-only directed 2W START preamble override");
     openknx.console.printHelpLine("iohc 2wdiag wake on|off", "Experimental per-attempt low-power wake preamble belief");
@@ -4105,6 +4106,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         const std::string lArg = lSub.length() > 6 ? trimSpaces(lSub.substr(6)) : std::string();
         if (lArg == "reset")
         {
+            mController.setDiagnostic2WFrameVersion(0);
             mController.setDiagnostic2WPowerClass(TwoWayPowerClass::Automatic);
             mController.setDiagnostic2WStartPreamble(0);
             mController.setDiagnostic2WWakeBelief(true);
@@ -4179,6 +4181,16 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             }
             mController.setDiagnosticDiscoverySettings(lSettings);
         }
+        else if (lArg.rfind("version ", 0) == 0)
+        {
+            const std::string lVersion = trimSpaces(lArg.substr(8));
+            if (lVersion != "auto" && lVersion != "3")
+            {
+                logInfoP("Usage: iohc 2wdiag version auto|3");
+                return true;
+            }
+            mController.setDiagnostic2WFrameVersion(lVersion == "3" ? 3 : 0);
+        }
         else if (lArg.rfind("power ", 0) == 0)
         {
             const std::string lPower = trimSpaces(lArg.substr(6));
@@ -4231,6 +4243,8 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             return true;
         }
 
+        logInfoP("2W queued frame version: %s (runtime bench override, no negotiation)",
+                 mController.diagnostic2WFrameVersion() == 3 ? "3" : "auto");
         const uint16_t lPreamble = mController.diagnostic2WStartPreamble();
         if (lPreamble == 0)
             logInfoP("2WDiag: power=%s startPreamble=automatic wakeBelief=%s runtime-only (continuations stay short)",
