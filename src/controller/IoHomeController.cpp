@@ -1095,7 +1095,9 @@ namespace
                                   TwoWaySenderRole iSenderRole, const IoHomeFrame &iAuthenticatedRequest,
                                   const uint8_t iChallenge[6], const uint8_t iKey[16])
     {
-        if (iChallenge == nullptr || iKey == nullptr)
+        if (iChallenge == nullptr || iKey == nullptr ||
+            (iAuthenticatedRequest.ctrlByte0 & IOHC_CTRL0_MODE_1W) ||
+            &oFrame == &iAuthenticatedRequest)
             return false;
 
         uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
@@ -1108,7 +1110,11 @@ namespace
         // frame. Real KLR300 controller traffic uses CTRL1=0x00 here; target
         // sleep behavior must not leak into continuation flags.
         oFrame.ctrlByte0 = 0;
-        oFrame.ctrlByte1 = 0x00;
+        // STM32 master builders call 0x0800EB9C, whose 0x0800EC00
+        // branch inserts/removes the extension to match the source working
+        // frame. Do not select version from an untrusted incoming challenge.
+        // Ordinary working versions normalize to the existing version0 policy.
+        oFrame.ctrlByte1 = (iAuthenticatedRequest.ctrlByte1 & IOHC_CTRL1_VER_MASK) == 3 ? 3 : 0;
         (void)iSenderRole;
         oFrame.setSrcNode(iSrcNodeId);
         oFrame.setDestNode(iDestNodeId);
@@ -2336,6 +2342,14 @@ bool IoHomeController::sendSetName(uint32_t iDestNodeId, const uint8_t *iEncKey,
     memcpy(lEntry.nameData, iName, iNameLen);
     lEntry.nameLen = iNameLen;
     return queuePush(lEntry);
+}
+
+bool IoHomeController::buildControllerChallengeResponse(IoHomeFrame &oFrame,
+    uint32_t iSource, uint32_t iDestination, const IoHomeFrame &iWorkingRequest,
+    const uint8_t iChallenge[6], const uint8_t iKey[16])
+{
+    return build2WChallengeResponse(oFrame, iSource, iDestination,
+        TwoWaySenderRole::Controller, iWorkingRequest, iChallenge, iKey);
 }
 
 bool IoHomeController::sendIdentify(uint32_t iDestNodeId, const uint8_t *iEncKey)

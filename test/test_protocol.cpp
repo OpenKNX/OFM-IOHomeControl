@@ -15610,6 +15610,41 @@ static void buildChallengeResponseFrame(IoHomeFrame &oFrame,
     oFrame.hasHmac = false;
 }
 
+TEST(controller_version3_authentication_preserves_working_form_and_hmac)
+{
+    const uint8_t lKey[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
+    const uint8_t lChallenge[6] = {0x12,0x34,0x56,0x78,0x9A,0xBC};
+    const uint8_t lTranscript[] = {0x00,0x01,0x00,0xD4,0x00};
+    uint8_t lExpectedMac[6];
+    ASSERT_TRUE(IoHomeCrypto::createHmac2W(lTranscript, sizeof(lTranscript), lChallenge, lKey, lExpectedMac));
+    for (uint8_t lVersion = 0; lVersion < 4; ++lVersion)
+    {
+        IoHomeFrame lWorking, lReply;
+        lWorking.init(); lWorking.setStart2W();
+        lWorking.ctrlByte1 = 0xFC | lVersion;
+        lWorking.commandId = IoHomeCommand::Execute;
+        memcpy(lWorking.data, lTranscript+1, sizeof(lTranscript)-1);
+        lWorking.dataLen = sizeof(lTranscript)-1;
+        ASSERT_TRUE(IoHomeController::buildControllerChallengeResponse(lReply, 0x123456, 0xABCDEF,
+            lWorking, lChallenge, lKey));
+        ASSERT_EQ(lReply.ctrlByte0, 0);
+        ASSERT_EQ(lReply.ctrlByte1, lVersion == 3 ? 3 : 0);
+        ASSERT_TRUE(memcmp(lReply.data, lExpectedMac, 6) == 0);
+        ASSERT_TRUE(!lReply.hasHmac);
+        uint8_t lWire[32]; const uint8_t lLength = lReply.serialize2W(lWire, sizeof(lWire));
+        ASSERT_EQ(lLength, lVersion == 3 ? 17 : 15);
+        if (lVersion == 3) { ASSERT_EQ(lWire[2], 0x0B); ASSERT_EQ(lWire[3], 1); }
+        IoHomeFrame lParsed; ASSERT_TRUE(lParsed.deserialize(lWire, lLength));
+        ASSERT_EQ(lParsed.getSrcNodeId(), 0x123456);
+        ASSERT_EQ(lParsed.getDestNodeId(), 0xABCDEF);
+        ASSERT_EQ(lParsed.commandId, IoHomeCommand::ChallengeResponse);
+        ASSERT_TRUE(memcmp(lParsed.data, lExpectedMac, 6) == 0);
+        ASSERT_TRUE(!IoHomeController::buildControllerChallengeResponse(lWorking, 1, 2, lWorking, lChallenge, lKey));
+        lWorking.ctrlByte0 |= IOHC_CTRL0_MODE_1W;
+        ASSERT_TRUE(!IoHomeController::buildControllerChallengeResponse(lReply, 1, 2, lWorking, lChallenge, lKey));
+    }
+}
+
 TEST(controller_2w_challenge_response_matches_klr300_continuation_flags_for_low_power_device)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;

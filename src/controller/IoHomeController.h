@@ -879,6 +879,12 @@ public:
   // Get current state
   ControllerState state() const;
 
+  // Shared production builder for software/bench qualification. Extended
+  // form derives from the authenticated working request, not the peer 3C.
+  static bool buildControllerChallengeResponse(IoHomeFrame &oFrame,
+      uint32_t iSource, uint32_t iDestination, const IoHomeFrame &iWorkingRequest,
+      const uint8_t iChallenge[6], const uint8_t iKey[16]);
+
   // Pure 2W exchange classification helpers. These intentionally only inspect
   // the original request and the candidate response; they do not touch radio
   // state, timers, retries, or channel state. Unit tests can call these directly.
