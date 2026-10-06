@@ -44,7 +44,6 @@ public:
   bool mProductPublishedValid=false;
   bool limitationEnabled() const;
   bool limitationKoValid() const;
-  bool prepareLimitationRead();
   void printLimitationStatus();
   void updateLimitationStatus();
   void processInputKo(uint8_t iIoIndex, GroupObject &iKo);

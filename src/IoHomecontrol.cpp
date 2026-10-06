@@ -26,7 +26,6 @@
 
 namespace
 {
-    IoHomecontrol *limitationModule=nullptr;
     constexpr uint8_t kRadioDiagSweepChannelCount = 3;
     constexpr uint8_t kRadioDiagPayload[] = {0xAA, 0x55, 0x12, 0x34};
     constexpr uint32_t kRadioDiagSweepFreqs[kRadioDiagSweepChannelCount] = {IOHC_FREQ_2, IOHC_FREQ_3, IOHC_FREQ_1};
@@ -1583,15 +1582,6 @@ void IoHomecontrol::setup()
     {
         mChannels[i] = new IoHomecontrolChannel(i, mController);
         mChannels[i]->setup();
-    }
-    limitationModule=this;
-    for(uint8_t i=0;i<mNumChannels;++i) {
-        const uint8_t _channelIndex=i;
-        knx.getGroupObject(LIM_KoCalcNumber(LIM_KocActive)).readValidityCallback([](GroupObject &ko)->bool {
-            const int8_t c=LIM_KoCalcChannel(ko.asap());
-            auto *ch=limitationModule&&c>=0?limitationModule->getChannel(c):nullptr;
-            return ch&&ch->prepareLimitationRead();
-        });
     }
     applyPendingFlashChannelState();
 

@@ -2594,13 +2594,6 @@ bool IoHomecontrolChannel::limitationEnabled() const {
 bool IoHomecontrolChannel::limitationKoValid() const {
     return limitationEnabled()&&mController.limitationDecision(_channelIndex).valid;
 }
-bool IoHomecontrolChannel::prepareLimitationRead() {
-    if(!limitationKoValid())return false;
-    // Evidence can expire or change precedence between loop() and a GroupValueRead.
-    knx.getGroupObject(LIM_KoCalcNumber(LIM_KocActive)).valueNoSend(
-        mController.limitationDecision(_channelIndex).active,Dpt(1,2));
-    return true;
-}
 void IoHomecontrolChannel::updateLimitationStatus() {
     auto &ko=knx.getGroupObject(LIM_KoCalcNumber(LIM_KocActive));
     const auto &state=mController.limitationState(_channelIndex);
@@ -2608,9 +2601,8 @@ void IoHomecontrolChannel::updateLimitationStatus() {
     auto publication=state.snapshot;publication.node=mNodeId;publication.revision=productContextRevision();
     publication.limitationActive=decision.active;
     const auto action=mLimitationPublication.update(publication,limitationKoValid());
-    if(action==IoHomeLimitationPublication::Action::Invalid)ko.invalidate();
-    else if(action==IoHomeLimitationPublication::Action::Transmit)ko.value(decision.active,Dpt(1,2));
-    else ko.valueNoSend(decision.active,Dpt(1,2));
+    if(action==IoHomeLimitationPublication::Action::Transmit)ko.value(decision.active,Dpt(1,2));
+    else if(action==IoHomeLimitationPublication::Action::Cache)ko.valueNoSend(decision.active,Dpt(1,2));
     if(!limitationEnabled()){mLimitationPolled=false;return;}
     if(mLimitationPollRevision!=productContextRevision()) {
         mLimitationPolled=false;mLimitationPollRevision=productContextRevision();
