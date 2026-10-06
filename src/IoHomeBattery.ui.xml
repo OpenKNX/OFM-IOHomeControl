@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns="http://knx.org/xml/project/20"><Dynamic>
+<ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101" HelpContext="IOHC-Batterie"/>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"><when test="1 2">
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00001"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="Batterie schwach: 1 = schwach, 0 = nachweislich normal/voll. Ohne gültige Rückmeldung kein Telegramm und keine Leseantwort. Prozentwerte sind noch nicht belegt." UIHint="Information"/>
+</when></choose></Dynamic></KNX>

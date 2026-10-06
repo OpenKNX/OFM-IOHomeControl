@@ -11,6 +11,7 @@
 #endif
 
 #include "../protocol/IoHomeSequence.h"
+#include "../protocol/IoHomeBattery.h"
 #include "../protocol/IoHomeProductRuntime.h"
 #include "../protocol/IoHomePhysicalBounds.h"
 #include "../protocol/IoHomeAssignmentReceipt.h"
@@ -113,7 +114,7 @@ public:
   uint32_t profileFeedbackCount[17] = {};
   void onProfileParameterFeedback(uint8_t index,uint16_t raw) {if(index<17){profileRaw[index]=raw;++profileFeedbackCount[index];}}
   uint32_t productContextRevision() const {return mProductContextRevision;}
-  void invalidateProductContext() {mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
+  void invalidateProductContext() {mBatteryInfo={};mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
   IoHomePhysicalBounds &physicalBounds(){return mPhysicalBounds;}
   IoHomeProductRuntime &productRuntime() {mProductRuntime.bind(mIoAddress,mEncKey);return mProductRuntime;}
   bool is1W() const { return mIs1W; }
@@ -463,8 +464,19 @@ public:
     return mProtocolIdentity.nodeClass == IoHomeNodeClass::Unknown ||
            mProtocolIdentity.nodeClass == IoHomeNodeClass::Actuator;
   }
+  uint8_t batteryMonitoring()const{return mBatteryMonitoring;}
+  void setBatteryMonitoring(uint8_t mode){mBatteryMonitoring=mode;}
+  const IoHomeBatteryInfo &batteryInfo()const{return mBatteryInfo;}
+  void onBatteryStatus(uint8_t status,uint8_t command){if(mBatteryMonitoring)mBatteryInfo.observeStatus(status,command,0);}
+  void onBatteryError(uint8_t code,uint8_t command){if(mBatteryMonitoring)mBatteryInfo.observeError(code,command,0);}
+  void onBatteryEventRaw(const IoHomeFrame &){}
+  void onBatteryPrivate(uint8_t,const IoHomeFrame &,int,uint8_t,uint32_t){++mBatteryPrivateReplies;}
+  void onBatteryObject(uint8_t,uint16_t,const uint8_t *,unsigned){++mBatteryObjectReplies;}
+  unsigned testBatteryPrivateReplies()const{return mBatteryPrivateReplies;}
+  unsigned testBatteryObjectReplies()const{return mBatteryObjectReplies;}
   void onBatteryLevel(uint8_t iPercent)
   {
+    if(!mBatteryInfo.percentValid||iPercent>100||iPercent!=mBatteryInfo.percent)return;
     mHasBatteryLevel = true;
     mBatteryLevel = iPercent;
   }
@@ -640,6 +652,7 @@ private:
   bool mHasVelocityFeedback = false;
   ParameterSemantic mVelocitySemantic = ParameterSemantic::Unknown;
   float mVelocityFeedback = 0.0f;
+  uint8_t mBatteryMonitoring=0;IoHomeBatteryInfo mBatteryInfo;unsigned mBatteryPrivateReplies=0,mBatteryObjectReplies=0;
   bool mHasBatteryLevel = false;
   uint8_t mBatteryLevel = 0xFF;
   bool mHasEstimate = false;

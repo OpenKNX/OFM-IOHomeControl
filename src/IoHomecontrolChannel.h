@@ -2,6 +2,8 @@
 #include "protocol/IoHomePhysicalBounds.h"
 #pragma once
 #include "protocol/IoHomeLimitation.h"
+#include "protocol/IoHomeBattery.h"
+#include <vector>
 #include "OpenKNX.h"
 #include "knxprod.h"
 #include "protocol/IoHomeCommands.h"
@@ -52,7 +54,7 @@ public:
   // Callbacks from controller when radio responses arrive
   void onPositionFeedback(float iPositionPercent);
   uint32_t productContextRevision() const {return mProductContextRevision;}
-  void invalidateProductContext() {mProfileReceivedMask=0;mRequestedSpeedIndex=0;mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
+  void invalidateProductContext() {invalidateBattery();mProfileReceivedMask=0;mRequestedSpeedIndex=0;mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
   IoHomePhysicalBounds &physicalBounds(){return mPhysicalBounds;}
   const IoHomePhysicalBounds &physicalBounds()const{return mPhysicalBounds;}
   IoHomeProductRuntime &productRuntime() {return mProductRuntime;}
@@ -84,6 +86,17 @@ public:
   IoHomeGenericCapabilities getProfileCapabilities() const;
   bool allowsActuatorControls() const;
   void onBatteryLevel(uint8_t iPercent);
+  uint8_t batteryMonitoring() const;
+  void invalidateBattery();
+  void onBatteryStatus(uint8_t status,uint8_t command);
+  void onBatteryError(uint8_t code,uint8_t command);
+  void onBatteryObject(uint8_t provider,uint16_t object,const uint8_t *data,unsigned length);
+  void onBatteryEventRaw(const IoHomeFrame &frame);
+  void onBatteryPrivate(uint8_t function,const IoHomeFrame &frame,int rssi,uint8_t frequency,uint32_t responseUs);
+  void printBatteryStatus();
+  void updateBatteryKo();
+  const IoHomeBatteryInfo &batteryInfo()const{return mBatteryInfo;}
+
   void onEstimate(uint8_t iSeconds);
   void onStatusExpected();
   void onStatusPollFailed(bool iAfterChallenge);
@@ -243,6 +256,11 @@ private:
   uint32_t mLast2WMovingEvidenceMs = 0;
   bool mStopSettlePollPending = false;
   bool mStatusExpected = false; // device will auto-send StatusUpdate while tracking
+  IoHomeBatteryInfo mBatteryInfo;
+  struct BatteryObject {std::vector<uint8_t> data;uint32_t timestampMs=0;};
+  BatteryObject mBatteryObjects[5]; // allocation only after explicit diagnostics
+  struct BatteryPrivate {bool valid=false;uint8_t command=0,length=0,data[IOHC_FRAME_MAX_DATA]{};uint32_t timestampMs=0;};
+  BatteryPrivate mBatteryPrivate[2],mBatteryEvent;
   uint8_t mBatteryLevel = 0xFF; // 0xFF = unknown, 0-100 = percent
   bool mLocked = false;         // P2: channel lock
   uint8_t mErrorStatus = 0;     // P2: error status enum (0=OK)

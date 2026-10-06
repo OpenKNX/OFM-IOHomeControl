@@ -368,6 +368,7 @@ void IoHomecontrolChannel::setup()
 void IoHomecontrolChannel::loop()
 {
     updateLimitationStatus();
+    updateBatteryKo();
     updateProfileParameterValidity();
     publishProductState();
     if (!isOperational())
@@ -1070,6 +1071,7 @@ bool IoHomecontrolChannel::allowsActuatorControls() const
 
 void IoHomecontrolChannel::onBatteryLevel(uint8_t iPercent)
 {
+    if(!mBatteryInfo.percentValid||iPercent>100||mBatteryInfo.percent!=iPercent)return;
     mBatteryLevel = iPercent;
     getKo(IOHC_KoCHBattery).value(iPercent, DPT_Scaling);
     logDebugP("Battery level: %d%%", iPercent);
@@ -2640,4 +2642,130 @@ void IoHomecontrolChannel::printLimitationStatus() {
         const auto timer=ioHomeDecodeLimitationTimer(sample.timeRaw);
         logInfoP("    timer provisional KLF/API-derived: kind=%u seconds=%u; not used for automation",unsigned(timer.kind),timer.seconds);
     }
+}
+
+uint8_t IoHomecontrolChannel::batteryMonitoring()const {
+    return ParamBASE_ModuleEnabled_BAT&&ParamIOHC_cActive&&!ParamIOHC_cSuspend&&mPaired&&!mIs1W?ParamBAT_cMode:0;
+}
+void IoHomecontrolChannel::invalidateBattery() {
+    mBatteryInfo={};for(auto &v:mBatteryObjects)v={};mBatteryPrivate[0]={};mBatteryPrivate[1]={};mBatteryEvent={};mBatteryLevel=0xFF;
+    if(knx.configured()) {
+        knx.getGroupObject(BAT_KoCalcNumber(BAT_KocLow)).commFlag(Uninitialized);
+        getKo(IOHC_KoCHBattery).commFlag(Uninitialized);
+    }
+}
+void IoHomecontrolChannel::updateBatteryKo() {
+    auto &ko=knx.getGroupObject(BAT_KoCalcNumber(BAT_KocLow));
+    if(!batteryMonitoring()||!mBatteryInfo.selected().valid){ko.commFlag(Uninitialized);return;}
+    if(!ko.initialized())ko.value(mBatteryInfo.selected().low,Dpt(1,5));
+    else ko.valueCompare(mBatteryInfo.selected().low,Dpt(1,5));
+}
+void IoHomecontrolChannel::onBatteryStatus(uint8_t status,uint8_t command) {
+    if(!batteryMonitoring())return;
+    mBatteryInfo.observeStatus(status,command,millis());
+    if(mBatteryInfo.conflict())logInfoP("Battery conflict: retained A601 precedence; status=%u A601=%u",mBatteryInfo.coarse.raw,mBatteryInfo.somfy.raw);
+    updateBatteryKo();
+}
+void IoHomecontrolChannel::onBatteryError(uint8_t code,uint8_t command) {
+    if(!batteryMonitoring())return;mBatteryInfo.observeError(code,command,millis());updateBatteryKo();
+}
+void IoHomecontrolChannel::onBatteryPrivate(uint8_t function,const IoHomeFrame &frame,int rssi,uint8_t frequency,uint32_t responseUs) {
+    if(batteryMonitoring()!=2||(function!=6&&function!=9))return;
+    auto &sample=mBatteryPrivate[function==9];sample.valid=true;sample.command=uint8_t(frame.commandId);
+    sample.length=frame.dataLen;sample.timestampMs=millis();std::memcpy(sample.data,frame.data,frame.dataLen);
+    std::string raw;char byte[4];for(unsigned i=0;i<frame.dataLen;++i){snprintf(byte,sizeof(byte),"%02X ",frame.data[i]);raw+=byte;}
+    const auto &id=getProtocolIdentity();
+    logInfoP("Battery Private%02X RAW / UNIT UNKNOWN src=%06lX dst=%06lX cmd=%02X payload=%s",
+        function,(unsigned long)frame.getSrcNodeId(),(unsigned long)frame.getDestNodeId(),unsigned(frame.commandId),raw.c_str());
+    logInfoP("  RSSI=%d RF-index=%u frequency=%lu response-us=%lu time-ms=%lu profile=%u subtype=%u manufacturer=%u",rssi,frequency,
+        (unsigned long)(frequency<IOHC_NUM_FREQUENCIES?IOHC_FREQUENCIES[frequency]:0),(unsigned long)responseUs,(unsigned long)millis(),id.profile,id.subProfile,id.manufacturerId);
+}
+void IoHomecontrolChannel::onBatteryObject(uint8_t provider,uint16_t object,const uint8_t *data,unsigned length) {
+    if(batteryMonitoring()!=2||!ioHomeBatteryObject(provider,object))return;
+    bool valid=ioHomeBatteryFields(data,length,object==0xA607,[](const IoHomeBatteryField &){});
+    if(!data||!length||length>1024)return;
+    const unsigned slot=object==0xA601?0:object==0xA607?1:object==0xA60E?2:object==9?3:4;
+    mBatteryObjects[slot].data.assign(data,data+length);mBatteryObjects[slot].timestampMs=millis();
+    if(!valid){logInfoP("Battery object %04X: malformed/duplicate TLV; no semantic update",object);printBatteryStatus();return;}
+    ioHomeBatteryFields(data,length,object==0xA607,[&](const IoHomeBatteryField &field){
+        uint32_t value=0;
+        if(object==0xA601&&field.pid==1&&field.length<=2&&ioHomeBatteryUnsigned(field.data,field.length,value))
+            mBatteryInfo.observeSomfy(value,0x4B,millis());
+    });
+    if(mBatteryInfo.conflict())logInfoP("Battery conflict: retained A601 precedence; status=%u A601=%u",mBatteryInfo.coarse.raw,mBatteryInfo.somfy.raw);
+    printBatteryStatus();updateBatteryKo();
+}
+void IoHomecontrolChannel::printBatteryStatus() {
+    const auto &id=getProtocolIdentity();const auto &selected=mBatteryInfo.selected();
+    logInfoP("Battery ch=%u node=%06lX profile=%u subtype=%u manufacturer=%u monitor=%u percent=unknown",
+        unsigned(_channelIndex+1),(unsigned long)mNodeId,id.profile,id.subProfile,id.manufacturerId,batteryMonitoring());
+    logInfoP("  low=%s source=%s age-ms=%lu conflict=%u",selected.valid?(selected.low?"yes":"no"):"unknown",
+        ioHomeBatterySourceName(mBatteryInfo.source()),selected.valid?(unsigned long)(millis()-selected.timestampMs):0,mBatteryInfo.conflict());
+    static const char *coarseNames[]={"unknown","low","normal","full"};
+    static const char *somfyNames[]={"very-low","low","mid","high","unknown"};
+    logInfoP("  coarse=%s A601=%s",mBatteryInfo.coarse.valid?coarseNames[mBatteryInfo.coarse.raw]:"unknown",
+        mBatteryInfo.somfy.valid?somfyNames[mBatteryInfo.somfy.raw]:"unknown");
+    logInfoP("  coarse-valid=%u raw=%u cmd=%02X A601-valid=%u raw=%u error-valid=%u code=%02X",
+        mBatteryInfo.coarse.valid,mBatteryInfo.coarse.raw,mBatteryInfo.coarse.command,mBatteryInfo.somfy.valid,mBatteryInfo.somfy.raw,mBatteryInfo.error.valid,mBatteryInfo.error.raw);
+    for(const auto *evidence:{&mBatteryInfo.coarse,&mBatteryInfo.somfy,&mBatteryInfo.error})
+        logInfoP("  evidence valid=%u raw=%u command=%02X timestamp-ms=%lu age-ms=%lu",evidence->valid,evidence->raw,evidence->command,
+            (unsigned long)evidence->timestampMs,evidence->valid?(unsigned long)(millis()-evidence->timestampMs):0);
+    const uint16_t objects[]={0xA601,0xA607,0xA60E,9,0x4003};
+    for(unsigned slot=0;slot<5;++slot){
+    const auto &snapshot=mBatteryObjects[slot];if(snapshot.data.empty())continue;
+    const auto *mBatteryObjectData=snapshot.data.data();const unsigned mBatteryObjectLength=snapshot.data.size();
+    const uint16_t mBatteryObjectId=objects[slot];const uint8_t mBatteryObjectProvider=slot<3?2:0;const uint32_t mBatteryObjectMs=snapshot.timestampMs;
+    const auto logBytes=[&](const uint8_t *data,unsigned length){
+        // Bounded lines preserve long fields through the console formatter.
+        for(unsigned offset=0;offset<length;offset+=16){
+            char text[49]{};const unsigned count=std::min(16U,length-offset);
+            for(unsigned i=0;i<count;++i)snprintf(text+i*3,4,"%02X ",data[offset+i]);
+            logInfoP("    raw offset=%u bytes=%s",offset,text);
+        }
+    };
+    const bool grammar=ioHomeBatteryFields(mBatteryObjectData,mBatteryObjectLength,mBatteryObjectId==0xA607,[](const IoHomeBatteryField &){});
+    if(!grammar){
+        logInfoP("  object=%04X len=%u unparsed RAW / UNIT UNKNOWN age-ms=%lu",mBatteryObjectId,mBatteryObjectLength,(unsigned long)(millis()-mBatteryObjectMs));
+        if(mBatteryObjectId!=0xA607)logBytes(mBatteryObjectData,mBatteryObjectLength);
+        else logInfoP("    A607 unparsed content withheld because it can contain one-way keys");
+        continue;
+    }
+    ioHomeBatteryFields(mBatteryObjectData,mBatteryObjectLength,mBatteryObjectId==0xA607,[&](const IoHomeBatteryField &field){
+        const bool relevant=mBatteryObjectId==0xA601?(field.pid==1||field.pid==134||field.pid==146||field.pid==147||field.pid==148):
+            mBatteryObjectId==9?field.pid<=1:mBatteryObjectId==0x4003?field.pid==128:
+            mBatteryObjectId==0xA607?(field.pid==2||field.pid==7||field.pid==8||field.pid==9):(field.pid==0||field.pid==1||field.pid==2);
+        if(!relevant)return; // never log A607 one-way keys (PID 3)
+        uint32_t value=0;const bool integer=ioHomeBatteryUnsigned(field.data,field.length,value);
+        const char *label=mBatteryObjectId==0xA601&&field.pid==146?"LastBatteryVoltageRaw":"RAW / UNIT UNKNOWN";
+        logInfoP("  %s object=%04X provider=%u record=%u PID=%u format=%02X len=%u age-ms=%lu",
+            label,mBatteryObjectId,mBatteryObjectProvider,field.record,field.pid,field.format,field.length,(unsigned long)(millis()-mBatteryObjectMs));
+        logBytes(field.data,field.length);
+        if(integer)logInfoP("    BE unsigned-candidate=%lu signed-candidate=%ld (unit/scale unknown)",(unsigned long)value,(long)ioHomeBatterySigned(value,field.length));
+        if(mBatteryObjectId==0xA607&&field.pid==8&&integer&&field.length<=2&&value<=5){
+            static const char *states[]={"critical","low","medium","high","unknown","notSupported"};
+            uint32_t address=0,role=255;
+            ioHomeBatteryFields(mBatteryObjectData,mBatteryObjectLength,true,[&](const IoHomeBatteryField &other){
+                if(other.record==field.record&&other.pid==2&&other.length==3)ioHomeBatteryUnsigned(other.data,3,address);
+                if(other.record==field.record&&other.pid==7&&other.length<=2)ioHomeBatteryUnsigned(other.data,other.length,role);
+            });
+            logInfoP("    paired-controller=%06lX controller-type=%lu battery-state=%s micromodule-low=%u; separate from actuator battery",
+                (unsigned long)address,(unsigned long)role,states[value],role==0&&value<=1);
+        }
+    });
+    }
+    for(unsigned i=0;i<3;++i){const auto &v=i<2?mBatteryPrivate[i]:mBatteryEvent;if(!v.valid)continue;
+        std::string raw;char byte[4];for(unsigned j=0;j<v.length;++j){snprintf(byte,sizeof(byte),"%02X ",v.data[j]);raw+=byte;}
+        logInfoP("  %s%02X cmd=%02X payload=%s age-ms=%lu RAW / UNIT UNKNOWN",i==2?"UnclassifiedRx":"Private",i==2?0:i?9:6,v.command,raw.c_str(),(unsigned long)(millis()-v.timestampMs));
+    }
+    logInfoP("  Dynamic2001 numeric source/encoding unresolved; no percentage converter, no automatic battery polling");
+}
+
+void IoHomecontrolChannel::onBatteryEventRaw(const IoHomeFrame &frame) {
+    if(batteryMonitoring()!=2)return;
+    mBatteryEvent.valid=true;mBatteryEvent.command=uint8_t(frame.commandId);mBatteryEvent.length=frame.dataLen;
+    mBatteryEvent.timestampMs=millis();std::memcpy(mBatteryEvent.data,frame.data,frame.dataLen);
+    std::string raw;char byte[4];for(unsigned i=0;i<frame.dataLen;++i){snprintf(byte,sizeof(byte),"%02X ",frame.data[i]);raw+=byte;}
+    logInfoP("Battery unclassified RX src=%06lX dst=%06lX cmd=%02X payload=%s time-ms=%lu",
+        (unsigned long)frame.getSrcNodeId(),(unsigned long)frame.getDestNodeId(),unsigned(frame.commandId),raw.c_str(),(unsigned long)millis());
+    logInfoP("  RAW / UNIT UNKNOWN; no event2001 attribution");
 }

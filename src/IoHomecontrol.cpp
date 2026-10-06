@@ -2811,7 +2811,9 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         if(length!=12||!data[11]||data[11]>16)break;
         const uint32_t boot=uint32_t(data[1])<<24|uint32_t(data[2])<<16|uint32_t(data[3])<<8|data[4];
         const uint32_t token=uint32_t(data[5])<<24|uint32_t(data[6])<<16|uint32_t(data[7])<<8|data[8];
-        const uint16_t offset=uint16_t(data[9])<<8|data[10];const auto &read=mController.objectRead();
+        const uint16_t offset=uint16_t(data[9])<<8|data[10];const auto &read=mController.objectRead();const auto *opening=read.openingData();
+        if(opening[1]==2&&opening[3]==0xA6&&opening[4]==7){resultData[0]=1;resultLength=1;return true;} // A607 contains keys; battery console redacts PID 3
+
         if(boot!=mCommissioningBootId||!token||token!=mController.objectReadToken()||read.stage()!=IoHomeObjectTransfer::Stage::Done||!mController.objectReadIdentityValid()||offset>read.transferred())
         {resultData[0]=4;resultLength=1;return true;}
         const uint8_t count=read.transferred()-offset<data[11]?read.transferred()-offset:data[11];
@@ -4145,6 +4147,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc remote link ADDR DEV", "Link device to remote");
     openknx.console.printHelpLine("iohc remote unlink ADDR DEV", "Unlink device from remote");
     openknx.console.printHelpLine("iohc remote observed", "Show observed addresses");
+    openknx.console.printHelpLine("iohc battery CH status|probe|probe09|objects", "Battery evidence and manual raw reads (Extended diagnostics)");
     openknx.console.printHelpLine("iohc sniff start [S]", "Start passive key sniff for S seconds");
     openknx.console.printHelpLine("iohc sniff stop|status|clear", "Manage passive key sniff result");
     openknx.console.printHelpLine("iohc extract start [S]", "Arm active key extraction for S seconds");
@@ -4179,6 +4182,21 @@ void IoHomecontrol::showHelp()
 
 bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 {
+    if(iCmd.rfind("iohc battery ",0)==0) {
+        unsigned index=0;char action[16]{};char extra=0;
+        if(sscanf(iCmd.c_str(),"iohc battery %u %15s %c",&index,action,&extra)!=2||index<1||index>mNumChannels){logInfoP("Usage: iohc battery CHANNEL status|probe|objects");return true;}
+        auto *channel=mChannels[index-1];if(!channel)return true;
+        if(!std::strcmp(action,"status")){channel->printBatteryStatus();return true;}
+        updateCommissioningJob();
+        if(mCommissioningJob.active()||mRadioDiagnostic.active||mMetadataRefreshActive||channel->batteryMonitoring()!=2){logInfoP("Battery probes require Extended diagnostics and idle commissioning/radio/metadata");return true;}
+        if(!std::strcmp(action,"objects"))logInfoP("Battery object reads queued=%u; one manual sequence, no periodic polling",mController.requestBatteryObjects(channel));
+        else if(!std::strcmp(action,"probe")) {
+            // One query at a time; call again with probe09 after inspecting 06.
+            logInfoP("Private06 queued=%u RAW / UNIT UNKNOWN; use probe09 for Private09",mController.requestBatteryPrivate(channel,6));
+        } else if(!std::strcmp(action,"probe09"))logInfoP("Private09 queued=%u RAW / UNIT UNKNOWN",mController.requestBatteryPrivate(channel,9));
+        else logInfoP("Usage: iohc battery CHANNEL status|probe|probe09|objects");
+        return true;
+    }
     if(iCmd.rfind("iohc probe ",0)==0) {
         unsigned channel=0;char probe[32]{};char extra=0;
         if(sscanf(iCmd.c_str(),"iohc probe %u %31s %c",&channel,probe,&extra)!=2||channel<1||channel>mNumChannels||std::strcmp(probe,"status_mp_fp")) {

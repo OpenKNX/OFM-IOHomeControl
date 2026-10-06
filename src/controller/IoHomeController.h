@@ -596,6 +596,8 @@ public:
   // Ask a paired 2W device to identify itself (authenticated 0x1E → 0x3C → 0x3D)
   bool sendIdentify(uint32_t iDestNodeId, const uint8_t *iEncKey);
 
+  bool requestBatteryObjects(IoHomecontrolChannel *channel);
+  bool requestBatteryPrivate(IoHomecontrolChannel *channel,uint8_t function);
   bool sendBatteryStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
   bool sendBatteryStateQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
   bool sendTiltStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey);
@@ -1174,6 +1176,10 @@ private:
   ControllerState mState;
   uint32_t mStateTimer;
   uint32_t mNextObservationGeneration=0;
+  uint32_t mBatteryObjectConsumedToken=0;
+  uint8_t mBatterySequenceChannel=0xFF,mBatterySequenceIndex=0,mBatterySequenceKey[16]{};
+  uint32_t mBatterySequenceNode=0,mBatterySequenceRevision=0,mBatterySequenceToken=0;
+  void serviceBatteryObjects();
   IoHomeObjectTransfer mObjectRead;
   uint32_t mObjectReadToken=0,mObjectReadPeer=0;
   uint8_t mObjectReadChannel=0xFF,mObjectReadKey[16]{};

@@ -113,7 +113,7 @@ snapshot.
 Existing parameter offsets and communication-object numbers remain stable. The
 per-channel memory union grows by three bytes for the key-init delay and discovery
 listen policy; the confirmation mode uses previously free bits. The display selectors remain ETS-only parameters
-outside device memory. Battery, RSSI and Cozy temperature-feedback KOs remain
+outside device memory. Battery percentage, RSSI and Cozy temperature-feedback KOs remain
 declared at their stable numbers but are hidden because firmware has no
 production publisher for them. The battery value remains unknown until a
 device-specific, capture-verified response layout is implemented; normal status
@@ -124,3 +124,10 @@ Run the ETS/UI regression checks and the full OAM producer before release.
 ETS import, navigation and project-upgrade behavior still require verification
 with an installed ETS environment. A producer run that skips XSD validation or
 package creation does not establish that the final application package is valid.
+
+Battery monitoring under Functions and feedback offers Disabled (default), Status
+only and Extended diagnostics. The appended Battery low alarm is DPT 1.005:
+unknown values produce neither an OK telegram nor a read response. Extended
+diagnostics permits manual console probes, with no periodic battery polling.
+Raw voltages/levels and paired controller batteries are separate from actuator
+percentage. See [battery qualification](battery-support.md).

@@ -1984,6 +1984,12 @@ bool IoHomeController::sendCommandInternal(uint32_t iDestNodeId, const uint8_t *
                                            : OneWayDestinationMode::ProfileTyped;
     lEntry.oneWayExactDestination = 0;
     lEntry.sourceChannelIndex = 0xFF;
+    if(iCmd==IoHomeCommand::Private&&iParam==3&&iParam2==0xFF&&iParam3==0xFF&&lOneWayChannel&&!lOneWayChannel->is1W()) {
+        lEntry.sourceChannelIndex=channelIndexFor(lOneWayChannel);
+        lEntry.productContextRevision=lOneWayChannel->productContextRevision();
+        // Capture identity for battery evidence without changing legacy RF policy.
+        std::memcpy(lEntry.managementKey,lOneWayChannel->getEncryptionKey(),16);
+    }
     lEntry.twoWayTxFreqIdx = iFrequencyIndex;
     lEntry.retries = 0;
     lEntry.maxAttempts = iMaxAttempts;
@@ -2388,7 +2394,7 @@ bool IoHomeController::sendBatteryStatusQuery(uint32_t iDestNodeId, const uint8_
     IoHomecontrolChannel *lCh = channelForNode(iDestNodeId);
     if (lCh && lCh->is1W())
         return false;
-    return sendCommand(iDestNodeId, iEncKey, IoHomeCommand::Private, 0x06);
+    return lCh&&iEncKey&&!std::memcmp(iEncKey,lCh->getEncryptionKey(),16)&&requestBatteryPrivate(lCh,6);
 }
 
 bool IoHomeController::sendBatteryStateQuery(uint32_t iDestNodeId, const uint8_t *iEncKey)
@@ -2396,7 +2402,7 @@ bool IoHomeController::sendBatteryStateQuery(uint32_t iDestNodeId, const uint8_t
     IoHomecontrolChannel *lCh = channelForNode(iDestNodeId);
     if (lCh && lCh->is1W())
         return false;
-    return sendCommand(iDestNodeId, iEncKey, IoHomeCommand::Private, 0x09);
+    return lCh&&iEncKey&&!std::memcmp(iEncKey,lCh->getEncryptionKey(),16)&&requestBatteryPrivate(lCh,9);
 }
 
 bool IoHomeController::sendTiltStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey)
@@ -2405,6 +2411,46 @@ bool IoHomeController::sendTiltStatusQuery(uint32_t iDestNodeId, const uint8_t *
     if (lCh && lCh->is1W())
         return false;
     return sendCommand(iDestNodeId, iEncKey, IoHomeCommand::Private, 0x03, 0x20, 0x01);
+}
+
+bool IoHomeController::requestBatteryPrivate(IoHomecontrolChannel *channel,uint8_t function) {
+    if(!channel||channel->batteryMonitoring()!=2||!channel->isPaired()||channel->is1W()||(function!=6&&function!=9)||
+       !mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation())return false;
+    IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
+    entry.command=IoHomeCommand::Private;entry.param=function;entry.param2=0xFF;entry.param3=0xFF;
+    entry.managementRead=true;std::memcpy(entry.managementKey,channel->getEncryptionKey(),16);
+    entry.productContextRevision=channel->productContextRevision();entry.sourceChannelIndex=channelIndexFor(channel);
+    entry.maxAttempts=1;entry.background=true;entry.active=true;return queuePush(entry);
+}
+bool IoHomeController::requestBatteryObjects(IoHomecontrolChannel *channel) {
+    if(!channel||channel->batteryMonitoring()!=2||mBatterySequenceChannel<16||!mModule||!mModule->managementRequestsAllowed())return false;
+    const uint8_t index=channel->getProtocolIdentity().manufacturerId==2?0:3;
+    const uint16_t objects[]={0xA601,0xA607,0xA60E,9,0x4003};
+    if(!requestObjectRead(channel,index<3?2:0,objects[index],0,1024))return false;
+    mBatterySequenceChannel=channelIndexFor(channel);mBatterySequenceIndex=index;mBatterySequenceToken=mObjectReadToken;
+    mBatterySequenceNode=channel->getNodeId();mBatterySequenceRevision=channel->productContextRevision();std::memcpy(mBatterySequenceKey,channel->getEncryptionKey(),16);return true;
+}
+void IoHomeController::serviceBatteryObjects() {
+    if(mObjectRead.stage()==IoHomeObjectTransfer::Stage::Done&&mObjectReadToken!=mBatteryObjectConsumedToken) {
+        mBatteryObjectConsumedToken=mObjectReadToken;const auto *opening=mObjectRead.openingData();
+        const uint16_t object=uint16_t(opening[3])<<8|opening[4];
+        if(mModule&&objectReadIdentityValid()&&opening[5]==0&&opening[6]==0&&ioHomeBatteryObject(opening[1],object)) {
+            auto *channel=mModule->getChannel(mObjectReadChannel);
+            if(channel&&channel->batteryMonitoring()==2)channel->onBatteryObject(opening[1],object,mObjectRead.data(),mObjectRead.transferred());
+        }
+    }
+    if(mBatterySequenceChannel>=16)return;
+    auto *channel=mModule?mModule->getChannel(mBatterySequenceChannel):nullptr;
+    if(!channel||channel->batteryMonitoring()!=2||!sampleIdentityMatches(mBatterySequenceChannel,mBatterySequenceNode,mBatterySequenceKey,mBatterySequenceRevision)||mObjectReadToken!=mBatterySequenceToken) {
+        cancelObjectRead(mBatterySequenceToken);mBatterySequenceChannel=0xFF;return;
+    }
+    if(mObjectRead.active())return;
+    if(mObjectRead.stage()!=IoHomeObjectTransfer::Stage::Done&&mObjectRead.stage()!=IoHomeObjectTransfer::Stage::Rejected){mBatterySequenceChannel=0xFF;return;}
+    if(mState!=ControllerState::Idle||!queueEmpty())return;
+    if(++mBatterySequenceIndex>=5){mBatterySequenceChannel=0xFF;return;}
+    const uint16_t objects[]={0xA601,0xA607,0xA60E,9,0x4003};
+    if(!requestObjectRead(channel,mBatterySequenceIndex<3?2:0,objects[mBatterySequenceIndex],0,1024)){mBatterySequenceChannel=0xFF;return;}
+    mBatterySequenceToken=mObjectReadToken;
 }
 
 bool IoHomeController::objectReadIdentityValid() const
@@ -2425,10 +2471,11 @@ bool IoHomeController::requestObjectRead(IoHomecontrolChannel *channel,uint8_t p
 {
     if(!channel||!channel->isPaired()||channel->is1W()||mState!=ControllerState::Idle||!queueEmpty()||
         mPassiveMode||mGatewayMode||mOneWayKeyReceiveActive||mKeyExtractArmed||mNetworkScanActive||mObjectRead.active()||mObjectReadToken==0xFFFFFFFF||!span)return false;
-    // Metadata/database views only. Key/counter objects and arbitrary providers
-    // are not exposed through the raw diagnostic readback API.
+    // Metadata/database views plus explicit opt-in battery objects. A607 can
+    // contain keys: its full buffer is blocked from ETS slice readback;
+    // battery diagnostics only print non-key fields. No object writes.
     const bool allowed=(provider==0&&(key<=3||key==0x030A||key==0x8100||key==0x8103||key==0x4300||key==0x4302))||(provider==0x0B&&key==0xC000);
-    if(!allowed)return false;
+    if(!allowed&&!(channel->batteryMonitoring()==2&&ioHomeBatteryObject(provider,key)&&offset==0))return false;
     const uint8_t index=channelIndexFor(channel);if(index>=16)return false;
     if(!mObjectRead.begin(IoHomeObjectTransfer::Direction::Read,channel->getNodeId(),mObjectReadToken+1,provider,key,offset,span,millis(),30000))return false;
     ++mObjectReadToken;mObjectReadPeer=channel->getNodeId();mObjectReadChannel=index;std::memcpy(mObjectReadKey,channel->getEncryptionKey(),16);
@@ -6329,6 +6376,7 @@ void IoHomeController::loop()
         mReceiveConfiguration.tick(millis());
     }
     serviceObjectRead();
+    serviceBatteryObjects();
     if (!mRadio.isInitialized())
         return;
 
@@ -7714,8 +7762,8 @@ void IoHomeController::processResponse()
             mCurrentCmd.active=false;mState=ControllerState::Idle;
             notifyCommandExchangeResult(failed,IoHomeCommandExchangeResult::FailedBeforeAuthentication);return;
         }
-        const auto expected=mCurrentCmd.command==IoHomeCommand::PriorityLevelRequest?IoHomeCommand::PriorityLevelResponse:mCurrentCmd.command==IoHomeCommand::SensorStatusRequest?IoHomeCommand::SensorStatusResponse:IoHomeCommand::SensorInformationResponse;
-        const uint8_t minimum=mCurrentCmd.command==IoHomeCommand::PriorityLevelRequest?3:mCurrentCmd.command==IoHomeCommand::SensorStatusRequest?6:17;
+        const auto expected=mCurrentCmd.command==IoHomeCommand::Private?IoHomeCommand::PrivateResponse:mCurrentCmd.command==IoHomeCommand::PriorityLevelRequest?IoHomeCommand::PriorityLevelResponse:mCurrentCmd.command==IoHomeCommand::SensorStatusRequest?IoHomeCommand::SensorStatusResponse:IoHomeCommand::SensorInformationResponse;
+        const uint8_t minimum=mCurrentCmd.command==IoHomeCommand::Private?0:mCurrentCmd.command==IoHomeCommand::PriorityLevelRequest?3:mCurrentCmd.command==IoHomeCommand::SensorStatusRequest?6:17;
         if(mRxFrame.commandId!=IoHomeCommand::ChallengeRequest&&mRxFrame.commandId!=IoHomeCommand::ErrorResponse&&
             (mRxFrame.commandId!=expected||mRxFrame.dataLen<minimum)) {mState=ControllerState::WaitResponse;return;}
         if(mRxFrame.commandId==IoHomeCommand::ChallengeRequest&&mRxFrame.dataLen<6){mState=ControllerState::WaitResponse;return;}
@@ -10946,11 +10994,23 @@ void IoHomeController::dispatchRxFrame()
                     unsigned(mCurrentFreqIdx),static_cast<unsigned long>(IOHC_FREQUENCIES[mCurrentFreqIdx]),static_cast<unsigned long>(millis()));
                 break; // raw only: no position, product cache, originator, rain or KNX changes
             }
+            if(mRxFrame.commandId==IoHomeCommand::ErrorResponse&&mCurrentCmd.active&&mCurrentCmd.command==IoHomeCommand::Private&&
+               (mCurrentCmd.param==6||mCurrentCmd.param==9)&&mCurrentCmd.destNodeId==lSrcNode&&lDestNode==mOwnNodeId&&managementIdentityMatches(mCurrentCmd))
+                lCh->onBatteryPrivate(mCurrentCmd.param,mRxFrame,mRadio.lastRssi(),mCurrentFreqIdx,uint32_t(micros()-mExchangeRequestTxEndUs));
+            if(mRxFrame.commandId==IoHomeCommand::ErrorResponse&&mRxFrame.dataLen&&mCurrentCmd.active&&
+               mCurrentCmd.destNodeId==lSrcNode&&lDestNode==mOwnNodeId&&managementIdentityMatches(mCurrentCmd)&&
+               ((mCurrentCmd.managementRead&&managementIdentityMatches(mCurrentCmd))||
+                sampleIdentityMatches(mCurrentCmd.sourceChannelIndex,lSrcNode,mCurrentCmd.managementKey,mCurrentCmd.productContextRevision)||
+                (mRainExchangeChannel==channelIndexFor(lCh)&&sampleIdentityMatches(mRainExchangeChannel,mRainExchangeNode,mRainExchangeKey,mRainExchangeRevision))))
+                lCh->onBatteryError(mRxFrame.data[0],uint8_t(mRxFrame.commandId));
             // Dispatch based on command type
             switch (mRxFrame.commandId)
             {
             case IoHomeCommand::StatusUpdate:
             {
+                // Keep 0x71 battery candidates raw until its execute-status
+                // placement is independently tied to the native status field.
+                if(mTrustRxPosition&&lDestNode==mOwnNodeId)lCh->onBatteryEventRaw(mRxFrame);
                 // StatusUpdate (0x71) layout per reference (io-rts-esp32):
                 //   data[0]:    flags (bit 0 = stopped)
                 //   data[1]:    flags (bit 7 = status-expected: device will auto-send updates)
@@ -10993,6 +11053,11 @@ void IoHomeController::dispatchRxFrame()
             }
             case IoHomeCommand::PrivateResponse:
             {
+                if(mCurrentCmd.active&&mCurrentCmd.command==IoHomeCommand::Private&&(mCurrentCmd.param==6||mCurrentCmd.param==9)) {
+                    if(mCurrentCmd.destNodeId==lSrcNode&&lDestNode==mOwnNodeId&&managementIdentityMatches(mCurrentCmd))
+                        lCh->onBatteryPrivate(mCurrentCmd.param,mRxFrame,mRadio.lastRssi(),mCurrentFreqIdx,uint32_t(micros()-mExchangeRequestTxEndUs));
+                    break; // raw battery probes never enter position/product/percentage publication
+                }
                 if(mCurrentCmd.mpFpRead) {
                     if(mCurrentCmd.mpFpReadMode!=3) {
                         if(mCurrentCmd.active&&mCurrentCmd.destNodeId==lSrcNode&&lDestNode==mOwnNodeId&&
@@ -11082,6 +11147,10 @@ void IoHomeController::dispatchRxFrame()
                 {
                     const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
                     observeRainStatus(lCh);
+                    if(mCurrentCmd.active&&mCurrentCmd.command==IoHomeCommand::Private&&mCurrentCmd.param==3&&
+                       mCurrentCmd.param2==0xFF&&mCurrentCmd.param3==0xFF&&mCurrentCmd.destNodeId==lSrcNode&&lDestNode==mOwnNodeId&&
+                       sampleIdentityMatches(mCurrentCmd.sourceChannelIndex,lSrcNode,mCurrentCmd.managementKey,mCurrentCmd.productContextRevision))
+                        lCh->onBatteryStatus(mRxFrame.data[1],0x04);
                     dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 2, 4);
                 }
                 // Status-expected flag
@@ -11228,6 +11297,7 @@ void IoHomeController::dispatchRxFrame()
                 break;
 
             default:
+                if(lDestNode==mOwnNodeId)lCh->onBatteryEventRaw(mRxFrame);
                 break;
             }
             break; // found the channel

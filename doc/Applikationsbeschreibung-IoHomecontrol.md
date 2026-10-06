@@ -809,3 +809,30 @@ Ein manuelles Profil ungleich 0 verhindert die automatische Typübernahme. Besch
 ### Begrenzungsstatus (vorläufig, 2W)
 
 Unter **Funktionen und Rückmeldung** kann die rein lesende Begrenzungsabfrage aktiviert werden (Standard: aus). **Begrenzung aktiv** verwendet vorrangig eine frische, zusammengehörige MP-Mindest-/Höchstwertabfrage. Fehlt sie, können eindeutige Begrenzungsfehler, ein vertrauenswürdiger Regen-Originator oder eine abweichende Endposition mit frischem Regenhinweis die Einschränkung melden. Ohne vorherigen Regenhinweis bedeutet eine Zielabweichung keine Regenbegrenzung. Die vorläufige Regen-Merkzeit beträgt höchstens zwei Stunden; eine bestätigte passende Endposition mit Nicht-Regen-Originator löscht den Hinweis. Sofortige Fahrbefehlsbestätigungen und rohe Diagnoseantworten aktualisieren keinen Regenstatus. Ausbleibende Antworten bedeuten unbekannt und senden keine falsche 0. Eine KNX-Leseanforderung wird nur aus einem frischen Zustand beantwortet. Zyklische Abfrage: aus / 1 / 5 / 15 / 30 Minuten; Standard 5 Minuten. Die Antwortfelder bei aktiver Begrenzung sind noch vorläufig. Siehe [Begrenzungsstatus und physische Qualifikation](LIMITATION-STATUS.md).
+
+## Batterieüberwachung
+
+Unter „Funktionen und Rückmeldung“ kann die Batterieüberwachung für einen
+2W-Kanal aktiviert werden. „Aus“ ist der Standard. „Nur Status“ verwendet
+bereits empfangene, bestätigte Statusinformationen. „Erweiterte Diagnose“
+erlaubt zusätzlich manuelle Abfragen über die Konsole; zyklische
+Batterieabfragen werden nicht gestartet.
+
+Das separate Batterieobjekt Kn+0 der BAT-Gruppe meldet „Batterie schwach“
+(DPT 1.005): 1 = schwach, 0 = nachweislich normal/voll. Unbekannt erzeugt
+weder ein falsches OK-Telegramm noch eine Leseantwort. Geräte-, Profil- oder
+Schlüsselwechsel verwerfen alte Werte. Bekannte Werte bleiben bis zur
+nächsten bestätigten Rückmeldung erhalten; ihr Alter ist in der Konsole
+sichtbar. Bestätigte A601-Zustände haben Vorrang vor dem allgemeinen Status.
+
+Der bisher reservierte Batterie-Prozentwert bleibt unbekannt. Batterieklassen
+und Rohspannungen werden nicht in Prozent umgerechnet. Batterien angelernter
+1W-Controller sind ein eigenes Diagnosemerkmal und verändern den Batteriewert
+des Antriebs nicht.
+
+Mit `iohc battery KANAL status` werden Quellen, Gültigkeit, Alter und Rohwerte
+gezeigt. `probe` liest Private06, `probe09` Private09, `objects` startet eine
+einmalige Objektabfrage. Für aktive Abfragen muss „Erweiterte Diagnose“
+gewählt und die vorherige Diagnose abgeschlossen sein. Unbelegte Werte
+tragen ausdrücklich „RAW / UNIT UNKNOWN“; es werden keine Volt-, Energie-
+oder Prozentangaben erfunden.

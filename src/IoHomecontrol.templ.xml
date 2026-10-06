@@ -16,6 +16,7 @@
             <op:param name="PRODUCT_CC" value="%CC%" />
             <op:param name="IOHC_TT" value="%TT%"/>
           </op:part>
+          <op:part name="IOHCBattery" href="IoHomeBattery.dynamic.part.xml" instances="1"><op:param name="PRODUCT_CC" value="%CC%"/></op:part>
           <op:part name="IOHCLimitation" href="IoHomeLimitation.dynamic.part.xml" instances="1"><op:param name="PRODUCT_CC" value="%CC%"/><op:param name="IOHC_TT" value="%TT%"/></op:part>
           <op:part name="IOHCMovement" href="IoHomeMovement.dynamic.part.xml" instances="1"><op:param name="PRODUCT_CC" value="%CC%"/></op:part>
           <op:part name="IOHCProfileObjects" href="IoHomeProfileObjects.dynamic.part.xml" instances="1">
@@ -428,7 +429,7 @@
                         <ParameterRefRef RefId="%AID%_UP-%TT%%CC%007_R-%TT%%CC%00701" IndentLevel="1" HelpContext="IOHC-Verhalten-nach-Neustart" />
                       </when></choose>
                       <ParameterBlock Id="%AID%_PB-nnn" Name="Functions" Text="Funktionen und Rückmeldung">
-                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Batterie, RSSI und Cozy-Temperaturrückmeldung sind derzeit nicht als KNX-Rückmeldungen verfügbar." UIHint="Information" />
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Batterie-Prozent, RSSI und Cozy-Temperaturrückmeldung sind derzeit nicht als KNX-Rückmeldungen verfügbar." UIHint="Information" />
                         <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"><when test="1">
                           <ParameterSeparator Id="%AID%_PS-nnn" Text="Nach dem 2W-Pairing Status / Erkennung lesen. Unterstützte Gerätetypen und Funktionen werden automatisch übernommen. Danach die Applikation programmieren." UIHint="Information" />
                         </when></choose>
@@ -456,6 +457,7 @@
                         <choose ParamRefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901"><when test="0">
                           <op:usePart name="IOHCProfileObjects" xpath="//Dynamic/*"/>
                           <op:usePart name="IOHCLimitation" xpath="//Dynamic/*"/>
+                          <op:usePart name="IOHCBattery" xpath="//Dynamic/*"/>
                         </when></choose>
                         <op:usePart name="IOHCProducts" xpath="//Dynamic/*" />
                       </ParameterBlock>

@@ -13824,6 +13824,7 @@ TEST(controller_private_query_payload_variants)
         IoHomecontrolChannel lChannel;
         initPaired2WControllerForTest(lController, lModule, lChannel,
                                       lRemoteNodeId, lDeviceNodeId, lKey);
+        lChannel.setBatteryMonitoring(2);
         ASSERT_TRUE(lController.sendBatteryStatusQuery(lDeviceNodeId, lKey));
         IoHomeFrame lFrame;
         ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
@@ -13840,6 +13841,7 @@ TEST(controller_private_query_payload_variants)
         IoHomecontrolChannel lChannel;
         initPaired2WControllerForTest(lController, lModule, lChannel,
                                       lRemoteNodeId, lDeviceNodeId, lKey);
+        lChannel.setBatteryMonitoring(2);
         ASSERT_TRUE(lController.sendBatteryStateQuery(lDeviceNodeId, lKey));
         IoHomeFrame lFrame;
         ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
@@ -14446,7 +14448,7 @@ TEST(controller_private_response_learns_power_class_without_guessing_battery_and
         initPaired2WControllerForTest(lController, lModule, lChannel,
                                       lRemoteNodeId, lDeviceNodeId, lKey);
         lChannel.setLowPower2W(false);
-        ASSERT_TRUE(lController.sendBatteryStatusQuery(lDeviceNodeId, lKey));
+        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Private, 3));
         IoHomeFrame lTxFrame;
         ASSERT_TRUE(transmitQueuedControllerFrame(lController, lTxFrame));
 
@@ -16593,7 +16595,7 @@ TEST(controller_private_response_requires_8_bytes_for_position)
     initPaired2WControllerForTest(lController, lModule, lChannel,
                                   lRemoteNodeId, lDeviceNodeId, lKey);
 
-    ASSERT_TRUE(lController.sendBatteryStatusQuery(lDeviceNodeId, lKey));
+    ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Private, 3));
     IoHomeFrame lTxFrame;
     ASSERT_TRUE(transmitQueuedControllerFrame(lController, lTxFrame));
 
@@ -20381,4 +20383,99 @@ TEST(controller_explicit_unrestricted_range_overrides_rain_then_expiry_falls_bac
     auto d=c.limitationDecision(0);ASSERT_TRUE(d.source==IoHomeLimitationSource::ExplicitRange);ASSERT_TRUE(!d.active);
     ioHomeTestSetMillis(c.limitationState(0).snapshot.maximumTimestampMs+IOHC_LIMITATION_FRESH_MS);
     d=c.limitationDecision(0);ASSERT_TRUE(d.source==IoHomeLimitationSource::RainOriginator);ASSERT_TRUE(d.active);
+}
+
+TEST(protocol_battery_coarse_unknown_and_all_unrelated_bits) {
+    for(unsigned bits=0;bits<256;++bits){
+        IoHomeBatteryInfo info;info.observeStatus(bits,4,123);
+        const unsigned state=(bits&0x60)>>5;
+        ASSERT_EQ(info.coarse.valid,state!=0);ASSERT_EQ(info.percentValid,false);
+        if(state){ASSERT_EQ(info.coarse.raw,state);ASSERT_EQ(info.coarse.low,state==1);ASSERT_EQ(info.coarse.timestampMs,123U);ASSERT_EQ(info.coarse.command,4);}
+    }
+    IoHomeBatteryInfo info;info.observeStatus(0x20,4,0);info.observeStatus(0,4,10);
+    ASSERT_TRUE(info.coarse.valid&&info.coarse.low);ASSERT_EQ(info.coarse.timestampMs,0U);
+}
+TEST(protocol_battery_somfy_precedence_unknown_and_conflict) {
+    for(unsigned value=0;value<256;++value){IoHomeBatteryInfo info;info.observeSomfy(value,0x4B,10);
+        ASSERT_EQ(info.somfy.valid,value<4);ASSERT_TRUE(!info.percentValid);if(value<4)ASSERT_EQ(info.selected().low,value<2);
+    }
+    IoHomeBatteryInfo info;info.observeError(0x12,0xFE,1);ASSERT_TRUE(info.selected().low);
+    info.observeStatus(0x40,4,2);ASSERT_TRUE(!info.selected().low);ASSERT_TRUE(info.source()==IoHomeBatterySource::StatusExecuteBits);
+    info.observeSomfy(1,0x4B,3);ASSERT_TRUE(info.conflict()&&info.selected().low);
+    info.observeSomfy(4,0x4B,4);ASSERT_TRUE(info.selected().low);ASSERT_EQ(info.somfy.timestampMs,3U);
+    info.observeError(1,0xFE,5);ASSERT_EQ(info.error.raw,0x12);ASSERT_TRUE(!info.percentValid);
+}
+TEST(protocol_battery_extended_tlv_widths_and_descriptors_preserve_bytes) {
+    const uint8_t data[]={1,0,3,146,1,1,0x1C,0xFD,147,0x11,3,0xFF,0,0x12,0x34,148,3,3,1,2,3,4,134,0,0,9};
+    unsigned fields=0;ASSERT_TRUE(ioHomeBatteryFields(data,sizeof(data),false,[&](const IoHomeBatteryField &f){
+        ++fields;if(f.pid==146){ASSERT_EQ(f.length,2U);ASSERT_EQ(f.data[0],0x1C);ASSERT_EQ(f.data[1],0xFD);}
+        if(f.pid==147){ASSERT_EQ(f.length,4U);ASSERT_EQ(f.format,0x11);ASSERT_EQ(f.data[0],0xFF);}
+    }));ASSERT_EQ(fields,5U);
+    for(unsigned cut=1;cut<3;++cut){unsigned count=0;ASSERT_TRUE(!ioHomeBatteryFields(data,cut,false,[&](const auto &){++count;}));ASSERT_EQ(count,0U);}
+    const uint8_t duplicate[]={1,0,0,1,0,1};unsigned count=0;
+    ASSERT_TRUE(!ioHomeBatteryFields(duplicate,sizeof(duplicate),false,[&](const auto &){++count;}));ASSERT_EQ(count,0U);
+    const uint8_t malformed[]={1,0,0,146,0,5,1};
+    ASSERT_TRUE(!ioHomeBatteryFields(malformed,sizeof(malformed),false,[&](const auto &){++count;}));ASSERT_EQ(count,0U);
+}
+TEST(protocol_battery_a607_ff_inside_values_records_and_unknown_widths) {
+    const uint8_t data[]={9,2,0xFF,0,0x64,8,0,1,7,0,0,2,2,0x12,0x34,0x56,0xFF,8,1,0,3,7,0,1};
+    unsigned fields=0;ASSERT_TRUE(ioHomeBatteryFields(data,sizeof(data),true,[&](const IoHomeBatteryField &f){
+        ++fields;if(f.pid==9){ASSERT_EQ(f.record,0);ASSERT_EQ(f.length,3U);ASSERT_EQ(f.data[0],0xFF);}
+        if(f.record==1&&f.pid==8){ASSERT_EQ(f.length,2U);ASSERT_EQ(f.data[1],3);}
+    }));ASSERT_EQ(fields,6U);
+    uint8_t wide[260]{};wide[0]=9;wide[1]=255;
+    ASSERT_TRUE(!ioHomeBatteryFields(wide,257,true,[](const auto &){}));
+    ASSERT_TRUE(ioHomeBatteryFields(wide,258,true,[](const auto &f){ASSERT_EQ(f.length,256U);}));
+    uint32_t value;ASSERT_TRUE(!ioHomeBatteryUnsigned(wide,256,value));
+}
+TEST(controller_battery_private_probes_are_opt_in_and_never_percent_or_position) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);IoHomeFrame tx;
+    ASSERT_TRUE(!c.requestBatteryPrivate(&ch,6));ch.setBatteryMonitoring(2);
+    ASSERT_TRUE(c.requestBatteryPrivate(&ch,6));ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    const uint8_t data[]={1,0x60,0,100,0,100,100,100};IoHomeFrame f;
+    buildSimpleResponseFrame(f,0x123456,0x654321,IoHomeCommand::PrivateResponse,data,sizeof(data));ASSERT_TRUE(queueControllerResponse(c,f));
+    ASSERT_EQ(ch.testBatteryPrivateReplies(),1U);ASSERT_TRUE(!ch.batteryInfo().coarse.valid&&!ch.testHasBatteryLevel()&&!ch.testHasPositionFeedback());
+    ch.onBatteryLevel(100);ASSERT_TRUE(!ch.testHasBatteryLevel());
+}
+TEST(controller_battery_status_uses_only_full_normal_private_response) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);ch.setBatteryMonitoring(1);IoHomeFrame tx,f;
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3));ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    const uint8_t data[]={5,0x20,0,0,0,0,0,0};buildSimpleResponseFrame(f,0x123456,0x654321,IoHomeCommand::PrivateResponse,data,sizeof(data));ASSERT_TRUE(queueControllerResponse(c,f));
+    ASSERT_TRUE(ch.batteryInfo().coarse.valid&&ch.batteryInfo().coarse.low);ASSERT_TRUE(!ch.testHasBatteryLevel());
+}
+
+TEST(controller_battery_status_rejects_changed_key_short_and_fp_variants) {
+    for(unsigned variant=0;variant<3;++variant){
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);ch.setBatteryMonitoring(1);IoHomeFrame tx,f;
+        ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3,variant==2?0x80:0xFF,variant==2?1:0xFF));
+        ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+        if(variant==0){uint8_t key[16];std::memcpy(key,ch.getEncryptionKey(),16);key[0]^=1;ch.setEncryptionKey(key);}
+        const uint8_t data[]={5,0x60,0,0,0,0,0,0};buildSimpleResponseFrame(f,0x123456,0x654321,IoHomeCommand::PrivateResponse,data,variant==1?7:8);
+        ASSERT_TRUE(queueControllerResponse(c,f));ASSERT_TRUE(!ch.batteryInfo().coarse.valid&&!ch.testHasBatteryLevel());
+    }
+}
+TEST(controller_battery_objects_disabled_and_wrong_peer_private_reply_rejected) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);
+    ASSERT_TRUE(!c.requestBatteryObjects(&ch));ASSERT_TRUE(!c.requestObjectRead(&ch,2,0xA601,0,1024));
+    ch.setBatteryMonitoring(2);ASSERT_TRUE(!c.requestObjectRead(&ch,2,0xA601,1,1024));ASSERT_TRUE(c.requestBatteryPrivate(&ch,9));IoHomeFrame tx,f;
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));const uint8_t data[]={0,0x20,100};
+    buildSimpleResponseFrame(f,0x222222,0x654321,IoHomeCommand::PrivateResponse,data,sizeof(data));ASSERT_TRUE(queueControllerResponse(c,f));
+    ASSERT_EQ(ch.testBatteryPrivateReplies(),0U);ASSERT_TRUE(!ch.batteryInfo().coarse.valid&&!ch.testHasBatteryLevel());
+}
+TEST(protocol_battery_all_numeric_objects_remain_raw_and_signed_candidates) {
+    for(unsigned object:{0xA601U,9U,0x4003U,0xA607U,0xA60EU}) {
+        IoHomeBatteryInfo info;const uint8_t raw[]={9,1,0xFF,0x80};unsigned count=0;
+        ASSERT_TRUE(ioHomeBatteryFields(raw,sizeof(raw),object==0xA607,[&](const auto &field){
+            uint32_t value;ASSERT_TRUE(ioHomeBatteryUnsigned(field.data,field.length,value));ASSERT_EQ(value,0xFF80U);ASSERT_EQ(ioHomeBatterySigned(value,2),-128);++count;
+        }));ASSERT_EQ(count,1U);ASSERT_TRUE(!info.percentValid&&!info.selected().valid);
+    }
+}
+
+TEST(controller_battery_probe_error_logs_raw_and_keeps_code_separate_from_percent) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);ch.setBatteryMonitoring(2);
+    ASSERT_TRUE(c.requestBatteryPrivate(&ch,9));IoHomeFrame tx,f;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    const uint8_t data[]={0x12};buildSimpleResponseFrame(f,0x123456,0x654321,IoHomeCommand::ErrorResponse,data,sizeof(data));
+    ASSERT_TRUE(queueControllerResponse(c,f));ASSERT_EQ(ch.testBatteryPrivateReplies(),1U);
+    ASSERT_TRUE(ch.batteryInfo().error.valid&&ch.batteryInfo().error.low);ASSERT_EQ(ch.batteryInfo().error.raw,0x12);
+    ASSERT_TRUE(!ch.testHasBatteryLevel()&&!ch.batteryInfo().percentValid);
 }
