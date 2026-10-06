@@ -648,6 +648,7 @@ public:
   // Imported BasicNode marker/SystemId evidence, never inferred from name/MIB.
   bool setSessionSystemId(uint8_t systemId);
   int16_t matchingBeaconNodeCount()const;
+  int16_t matchingBeaconNodeCountForSystemId(uint8_t systemId)const;
   bool setBeaconDatabaseEntry(uint32_t node,uint8_t systemId,bool marked);
   bool startReceiveConfiguration(IoHomecontrolChannel *channel,uint8_t systemId);
   bool cancelReceiveConfiguration(){return mReceiveConfiguration.cancel();}
@@ -891,6 +892,7 @@ public:
     IoHomeProtocolIdentity protocolIdentity;
     bool beaconMarkerKnown=false,beaconMarked=false;
     uint8_t systemId=0;
+    uint32_t beaconRevision=0;
     bool active;
   };
 
@@ -1003,7 +1005,8 @@ public:
   IoHomeRadioPolicy &hostRadioPolicy(){return mHostRadioPolicy;}
   bool idleForManagedOperation() const {
     return mState==ControllerState::Idle&&queueEmpty()&&!mCurrentCmd.active&&!mPassiveMode&&!mGatewayMode&&
-        !mOneWayKeyReceiveActive&&!mKeyExtractArmed&&!mNetworkScanActive&&!mObjectRead.active()&&!mReceiveConfiguration.active();
+        !mOneWayKeyReceiveActive&&!mKeyExtractArmed&&!mNetworkScanActive&&!mObjectRead.active()&&!mReceiveConfiguration.active()&&
+        mGetKeyOfNode.stage!=GetKeyStage::Waiting&&mGetKeyOfNode.authentication!=GetKeyAuthentication::Pending;
   }
   ControllerState state() const;
 
@@ -1275,7 +1278,7 @@ private:
   uint8_t mSessionSystemId=0,mSessionSystemKey[16]{};
   IoHomeReceiveConfiguration mReceiveConfiguration;
   uint32_t mRcmPeer=0,mRcmRevision=0,mRcmToken=0;
-  uint8_t mRcmChannel=0xFF,mRcmKey[16]{};
+  uint8_t mRcmChannel=0xFF,mRcmKey[16]{},mRcmGlobalKey[16]{};
   GetKeyOfNodeResult mGetKeyOfNode{};
   uint32_t mNextKeyPrimitiveToken=0;
   RxScanMeasurements mRxScanMeasurements{};

@@ -184,3 +184,16 @@ binding and physical write acceptance are not yet qualified.
 ## 23 — KNX publication gate review
 
 Reviewed existing product publication/trust/freshness and coherent RGB tuple guards. Advanced permissions remain false pending exact identity and original-peer physical qualification. Documented standard-profile availability versus authentication, and the enablement evidence checklist in `docs/qualification/todo-23.md`. No guessed units/DPTs or correlated-to-authenticated promotion is introduced.
+
+## 31 — New commissioning ownership coverage
+
+Exact GetKeyOfNode and RCM exclude unrelated queued jobs while they own the
+controller. RCM and topology evidence are revision-bound; unknown channel markers
+cannot masquerade as a complete zero-match inventory. Global-key changes cancel
+RCM and invalidate the current-SystemId retry context. Cancellation/stale tokens
+block unsent work; no new operation resumes RF after reboot. Exact key adoption
+uses the existing durable network path; temporary RCM/delegation data is volatile.
+Existing ETS jobs/receipts continue to distinguish candidate recognition, explicit
+project adoption and required download. Full durable receipt/history coverage of
+all console commissioning paths remains open, as does physical cancellation/ETS
+qualification; no software audit is claimed as that acceptance.

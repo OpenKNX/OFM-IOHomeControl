@@ -2789,11 +2789,25 @@ bool IoHomeController::setSessionSystemId(uint8_t systemId)
 int16_t IoHomeController::matchingBeaconNodeCount()const
 {
     if(!mSessionSystemIdKnown || std::memcmp(mSessionSystemKey,mSystemKey,16))return -1;
+    return matchingBeaconNodeCountForSystemId(mSessionSystemId);
+}
+int16_t IoHomeController::matchingBeaconNodeCountForSystemId(uint8_t systemId)const
+{
+    if(!mModule)return -1;
+    // Include channel bindings before they appear in passive stats.
+    for(uint8_t i=0;i<16;++i) {
+        const auto *channel=mModule->getChannel(i);
+        if(!channel || !channel->getNodeId() || channel->is1W())continue;
+        bool found=false;
+        for(const auto &node:mNodeStats)if(node.active&&node.nodeId==channel->getNodeId()&&
+            node.beaconMarkerKnown&&node.beaconRevision==channel->productContextRevision())found=true;
+        if(!found)return -1;
+    }
     int16_t count=0;
     for(const auto &node:mNodeStats) {
         if(!node.active)continue;
         if(!node.beaconMarkerKnown)return -1;
-        if(node.beaconMarked&&node.systemId==mSessionSystemId)++count;
+        if(node.beaconMarked&&node.systemId==systemId)++count;
     }
     return count;
 }
@@ -2810,6 +2824,9 @@ bool IoHomeController::setBeaconDatabaseEntry(uint32_t node,uint8_t systemId,boo
         if(!channel || !channel->getProtocolIdentity().fullMetadata)return false;
         record->protocolIdentity=channel->getProtocolIdentity();
     }
+    const auto *boundChannel=channelForNode(node);
+    if(!boundChannel || !boundChannel->productContextRevision())return false;
+    record->beaconRevision=boundChannel->productContextRevision();
     record->beaconMarkerKnown=true;record->beaconMarked=marked;record->systemId=systemId;
     return true;
 }
@@ -2818,15 +2835,11 @@ bool IoHomeController::startReceiveConfiguration(IoHomecontrolChannel *channel,u
 {
     if(!channel || !channel->isPaired() || channel->is1W() || !mModule ||
        !mModule->managementRequestsAllowed() || !idleForManagedOperation() || mRcmToken==0xFFFFFFFF)return false;
-    uint16_t count=0;
-    for(const auto &node:mNodeStats) {
-        if(!node.active)continue;
-        // A partial inventory cannot establish the zero-match branch.
-        if(!node.beaconMarkerKnown)return false;
-        if(node.beaconMarked && node.systemId==systemId)++count;
-    }
+    const int16_t count=matchingBeaconNodeCountForSystemId(systemId);
+    if(count<0)return false;
     mRcmPeer=channel->getNodeId();mRcmRevision=channel->productContextRevision();
     mRcmChannel=channelIndexFor(channel);std::memcpy(mRcmKey,channel->getEncryptionKey(),16);
+    std::memcpy(mRcmGlobalKey,mSystemKey,16);
     if(!mReceiveConfiguration.begin(count,mRcmPeer,mRcmKey,mRcmRevision,millis()))return false;
     ++mRcmToken;
     if(!count)return true;
@@ -2891,6 +2904,8 @@ bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
 {
     // No writable object schema has original-peer qualification.
     if(static_cast<uint8_t>(iEntry.command)==0x48)return false;
+    if((mGetKeyOfNode.stage==GetKeyStage::Waiting || mGetKeyOfNode.authentication==GetKeyAuthentication::Pending)&&
+       iEntry.keyPrimitiveToken!=mGetKeyOfNode.token)return false;
     if(mReceiveConfiguration.active()&&iEntry.rcmToken!=mRcmToken)return false;
     if(mObjectRead.active()&&iEntry.objectReadToken!=mObjectReadToken)return false;
     uint8_t lNext = (mQueueHead + 1) % IOHC_CMD_QUEUE_SIZE;
@@ -6159,6 +6174,7 @@ void IoHomeController::loop()
     if(idleForManagedOperation()&&mRadio.state()==RadioState::Receiving&&mHostRadioPolicy.due(millis())){int16_t rssi=0;bool valid=mRadio.currentRssi(rssi);mHostRadioPolicy.sample(mCurrentFreqIdx,rssi,valid);}
     if(mReceiveConfiguration.active()) {
         const auto *channel=mModule?mModule->getChannel(mRcmChannel):nullptr;
+        if(std::memcmp(mRcmGlobalKey,mSystemKey,16))mReceiveConfiguration.cancel();
         if(channel)mReceiveConfiguration.bound(channel->getNodeId(),channel->getEncryptionKey(),channel->productContextRevision());
         else mReceiveConfiguration.cancel();
         mReceiveConfiguration.tick(millis());

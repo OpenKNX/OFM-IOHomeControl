@@ -19940,7 +19940,9 @@ TEST(controller_exact_get_key_commits_before_optional_auth_and_never_rolls_back)
     const uint8_t oldKey[16]={1},peerKey[16]={2};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
     initPaired2WControllerForTest(c,m,ch,0x831F2A,0x7E9E6E,oldKey);c.setSystemKey(oldKey);
     const uint8_t body[9]={0,0x80,0,0,0,1,0,0,1};ch.onProtocolIdentity(0x7E9E6E,decodeAcceptedDiscoveryIdentity(body,9));
-    ASSERT_TRUE(c.startGetKeyOfNode(&ch,true));IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    ASSERT_TRUE(c.startGetKeyOfNode(&ch,true));
+    ASSERT_TRUE(!c.sendCommand(0x7E9E6E,oldKey,IoHomeCommand::Execute,50));
+    IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
     ASSERT_EQ(request.commandId,IoHomeCommand::LaunchKeyTransfer);ASSERT_EQ(request.dataLen,6);
     uint8_t transcript[7]={0x38};std::memcpy(transcript+1,request.data,6);
     IoHomeFrame reply;reply.init();reply.setSrcNode(0x7E9E6E);reply.setDestNode(0x831F2A);reply.ctrlByte0=IOHC_CTRL0_END;
@@ -20034,4 +20036,18 @@ TEST(protocol_product_write_requires_all_independent_qualification_layers)
     row.exactIdentity=false;ASSERT_TRUE(!row.allowed());
     ASSERT_TRUE(!ioHomeQualifiedFpWrite(IoHomeBoundProductFamily::Unknown,10));
     ASSERT_TRUE(!ioHomeProductAccess(IoHomeBoundProductFamily::RgbLight,10).rfWrite);
+}
+
+TEST(controller_topology_inventory_requires_current_binding_revision)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    const uint8_t body[9]={0,0x80,0,0,0,1,0,0,1};
+    ch.onProtocolIdentity(0x654321,decodeAcceptedDiscoveryIdentity(body,9));
+    ASSERT_TRUE(c.setSessionSystemId(4));ASSERT_EQ(c.matchingBeaconNodeCount(),-1);
+    ASSERT_TRUE(!c.startReceiveConfiguration(&ch,4));
+    ASSERT_TRUE(c.setBeaconDatabaseEntry(0x654321,4,false));ASSERT_EQ(c.matchingBeaconNodeCount(),0);
+    ASSERT_TRUE(c.setBeaconDatabaseEntry(0x654321,4,true));ASSERT_EQ(c.matchingBeaconNodeCount(),1);
+    ch.invalidateProductContext();ASSERT_EQ(c.matchingBeaconNodeCount(),-1);
+    ASSERT_TRUE(!c.startReceiveConfiguration(&ch,4));
 }
