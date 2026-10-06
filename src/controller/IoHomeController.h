@@ -849,6 +849,7 @@ public:
     bool valid=false, durableKnown=false, possibleDesynchronization=false;
     uint32_t node=0, identityRevision=0, skippedOnRestore=0;
     uint16_t current=0, durableHighWater=0, reservedUnused=0;
+    uint8_t ownerChannel=0xFF;
     // 1W has no acknowledged receiver watermark. Never infer one from TX.
     bool peerSequenceKnown=false;
   };

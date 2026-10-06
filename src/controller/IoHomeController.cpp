@@ -5891,16 +5891,20 @@ IoHomeController::OneWaySequenceDiagnostics IoHomeController::oneWaySequenceDiag
 {
     OneWaySequenceDiagnostics d{};
     if(channel>=16 || !mModule) return d;
-    const auto *profile=mModule->getChannel(channel);
-    if(!profile) return d;
-    d.valid=true;d.node=profile->getOneWayControllerNodeId();
+    auto *profile=oneWayProfileForChannel(mModule->getChannel(channel));
+    if(!profile || !profile->is1W()) return d;
+    const uint8_t owner=channelIndexFor(profile);
+    if(owner>=16)return d;
+    d.valid=true;d.ownerChannel=owner;d.node=profile->getOneWayControllerNodeId();
     d.identityRevision=profile->productContextRevision();d.current=profile->getSequence1W();
-    d.durableKnown=mReservationDurableKnown[channel];
-    d.durableHighWater=mReservationDurableWatermarks[channel];
+    const bool sameIdentity=mReservationNodes[owner]==d.node&&
+        !std::memcmp(mReservationKeys[owner],profile->getOneWayControllerKey(),16);
+    d.durableKnown=sameIdentity&&mReservationDurableKnown[owner];
+    d.durableHighWater=d.durableKnown?mReservationDurableWatermarks[owner]:0;
     const uint16_t unused=static_cast<uint16_t>(d.durableHighWater-d.current);
     d.reservedUnused=d.durableKnown&&unused<0x8000?unused:0;
-    d.skippedOnRestore=mReservationSkipped[channel];
-    d.possibleDesynchronization=mReservationPossibleDesync[channel];
+    d.skippedOnRestore=sameIdentity?mReservationSkipped[owner]:0;
+    d.possibleDesynchronization=sameIdentity&&mReservationPossibleDesync[owner];
     return d;
 }
 

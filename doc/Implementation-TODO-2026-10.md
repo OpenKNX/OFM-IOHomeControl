@@ -233,3 +233,7 @@ modified or committed as part of these changes.
 Diagnostics now retain the successfully loaded/committed journal floor separately
 from the RAM allocation cache. A failed first commit reports an unknown durable
 floor, not the rejected reservation; fault injection also verifies RF stays silent.
+
+Sequence diagnostics resolve shared 1W channels to the actual counter owner and
+report its owner index. Cached durable state from a different node/key is unknown,
+not a floor for the new identity. Shared-owner and key-change tests cover this.

@@ -9510,6 +9510,9 @@ TEST(controller_same_key_counter_reset_recovers_durable_floor) {
     ASSERT_TRUE(c.sendCommand(0x654321,key,IoHomeCommand::Execute,50));
     for(unsigned n=0;n<3;n++) c.loop();
     ASSERT_TRUE(ch.getSequence1W()>floor);ASSERT_TRUE(!c.oneWayRecoveryRequired());
+    ASSERT_TRUE(c.oneWaySequenceDiagnostics(0).possibleDesynchronization);
+    const uint8_t differentKey[16]={2};ch.setOneWayControllerKey(differentKey);
+    ASSERT_TRUE(!c.oneWaySequenceDiagnostics(0).durableKnown);
 }
 
 static void finishCurrentBlind1WPairingTxForTest(IoHomeController &iController)
@@ -18409,6 +18412,9 @@ TEST(controller_1w_shared_profile_uses_owner_sequence_and_identity)
     ASSERT_TRUE(sequenceDiagnostics.durableKnown);
     ASSERT_TRUE(!sequenceDiagnostics.peerSequenceKnown);
     ASSERT_EQ(sequenceDiagnostics.current,11);
+    const auto sharedDiagnostics=lController.oneWaySequenceDiagnostics(1);
+    ASSERT_EQ(sharedDiagnostics.ownerChannel,0);ASSERT_EQ(sharedDiagnostics.current,11);
+    ASSERT_EQ(sharedDiagnostics.durableHighWater,sequenceDiagnostics.durableHighWater);
     ASSERT_EQ(sequenceDiagnostics.durableHighWater,lOwner.getReservedSequence1W());
     ASSERT_EQ(sequenceDiagnostics.reservedUnused,static_cast<uint16_t>(lOwner.getReservedSequence1W()-11));
     ASSERT_TRUE(!lController.oneWaySequenceDiagnostics(16).valid);
