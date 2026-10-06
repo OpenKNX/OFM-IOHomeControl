@@ -1179,6 +1179,8 @@ private:
   uint32_t mReservationNodes[16]{};
   uint16_t mReservationWatermarks[16]{};
   uint8_t mReservationKeys[16][16]{};
+  uint16_t mReservationDurableWatermarks[16]{};
+  bool mReservationDurableKnown[16]{};
   uint32_t mReservationSkipped[16]{};
   bool mReservationPossibleDesync[16]{};
   bool mReservationFailed = false;

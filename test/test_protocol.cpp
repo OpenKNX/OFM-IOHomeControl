@@ -9494,6 +9494,8 @@ TEST(controller_failed_durable_reservation_blocks_first_oneway_transmission)
     ASSERT_TRUE(c.radio().testLastTransmittedPacket().empty());
     ASSERT_TRUE(c.oneWayRecoveryRequired());
     ASSERT_EQ(c.oneWayRecovery(),IoHomeController::OneWayRecovery::CommitFailed);
+    const auto d=c.oneWaySequenceDiagnostics(0);
+    ASSERT_TRUE(!d.durableKnown);ASSERT_EQ(d.durableHighWater,0);ASSERT_EQ(d.reservedUnused,0);
 }
 
 TEST(controller_same_key_counter_reset_recovers_durable_floor) {

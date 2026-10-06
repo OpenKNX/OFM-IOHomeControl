@@ -5898,9 +5898,10 @@ IoHomeController::OneWaySequenceDiagnostics IoHomeController::oneWaySequenceDiag
     if(!profile) return d;
     d.valid=true;d.node=profile->getOneWayControllerNodeId();
     d.identityRevision=profile->productContextRevision();d.current=profile->getSequence1W();
-    d.durableKnown=mReservationLoaded[channel];
-    d.durableHighWater=mReservationWatermarks[channel];
-    d.reservedUnused=static_cast<uint16_t>(d.durableHighWater-d.current);
+    d.durableKnown=mReservationDurableKnown[channel];
+    d.durableHighWater=mReservationDurableWatermarks[channel];
+    const uint16_t unused=static_cast<uint16_t>(d.durableHighWater-d.current);
+    d.reservedUnused=d.durableKnown&&unused<0x8000?unused:0;
     d.skippedOnRestore=mReservationSkipped[channel];
     d.possibleDesynchronization=mReservationPossibleDesync[channel];
     return d;
@@ -5928,6 +5929,8 @@ uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool i
           mOneWayRecovery=lLoad!=IoHomeDurableReservation::Load::Unavailable ?
               OneWayRecovery::JournalCorrupt : OneWayRecovery::StoreUnavailable;
           return 0; }
+        mReservationDurableKnown[lOwner]=lLoad==IoHomeDurableReservation::Load::Found;
+        mReservationDurableWatermarks[lOwner]=mReservationDurableKnown[lOwner]?lWatermark:0;
         if (lLoad==IoHomeDurableReservation::Load::Found) {
             mReservationPossibleDesync[lOwner]=true;
             // A same-key reimport/reset cannot move below the durable floor.
@@ -5949,8 +5952,14 @@ uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool i
     const uint16_t lReservedSequence = iProfile->getReservedSequence1W();
     mReservationWatermarks[lOwner]=lReservedSequence;
 
-    if (lFlashSaveRequired && !mReservationJournal.commit(lOwner,lNode,lKey,lReservedSequence))
-    { mReservationFailed=true; mOneWayRecovery=OneWayRecovery::CommitFailed; }
+    if (lFlashSaveRequired) {
+        if(!mReservationJournal.commit(lOwner,lNode,lKey,lReservedSequence)) {
+            mReservationFailed=true;mOneWayRecovery=OneWayRecovery::CommitFailed;
+        } else {
+            mReservationDurableWatermarks[lOwner]=lReservedSequence;
+            mReservationDurableKnown[lOwner]=true;
+        }
+    }
     // Sticky fail-closed; never transmit a RAM-only reservation.
     if (lFlashSaveRequired)
         // A suppressed save would make the new reservation RAM-only and allow

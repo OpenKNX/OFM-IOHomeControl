@@ -227,3 +227,9 @@ unresolved business schemas. The overview below is the current completion state.
 This work does not establish protocol-complete release qualification. The dated
 source reports copied into OAM docs are user-provided evidence inputs and are not
 modified or committed as part of these changes.
+
+## 12 follow-up — Confirmed durable floor
+
+Diagnostics now retain the successfully loaded/committed journal floor separately
+from the RAM allocation cache. A failed first commit reports an unknown durable
+floor, not the rejected reservation; fault injection also verifies RF stays silent.
