@@ -13,6 +13,9 @@ The Velocet utility `Utils/io-utils.lua:getBatteryLevelValue` extracts bits 6:5:
 position/status reply to its own correlated function 03 request (default
 selectors); immediate Execute ACKs, private 06/09, FP reads, short responses,
 foreign peers and changed key/profile contexts cannot update it.
+The legacy byte-60 low-power inference is removed: these bits describe battery
+class and cannot establish RF power mode. Discovery MIB and explicit ETS energy
+class configuration remain the authority.
 
 A601 PID 1 uses 0 very-low, 1 low, 2 mid, 3 high, 4 unknown. Only the first four
 values update the actuator alarm. Unknown/out-of-range values retain previous

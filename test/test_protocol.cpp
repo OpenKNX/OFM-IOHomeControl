@@ -14433,7 +14433,7 @@ TEST(controller_2w_execute_uses_configured_channel_acei)
     }
 }
 
-TEST(controller_private_response_learns_power_class_without_guessing_battery_and_decodes_tilt)
+TEST(controller_private_response_does_not_guess_power_class_or_percent_and_decodes_tilt)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -14458,12 +14458,10 @@ TEST(controller_private_response_learns_power_class_without_guessing_battery_and
                                   lData, sizeof(lData));
         const uint32_t lFlashSavesBeforeResponse = openknx.flash.saveCount;
         ASSERT_TRUE(queueControllerResponse(lController, lResponse));
-        ASSERT_TRUE(lChannel.isLowPower2W());
+        ASSERT_TRUE(!lChannel.isLowPower2W());
         ASSERT_TRUE(lChannel.hasLearnedLowPower2W());
-        ASSERT_EQ(openknx.flash.saveCount, lFlashSavesBeforeResponse + 1);
-        // Function 0x06 is only a candidate battery query. Its response layout
-        // has not been verified, so a plausible payload byte must not be
-        // published as a battery percentage.
+        ASSERT_EQ(openknx.flash.saveCount, lFlashSavesBeforeResponse);
+        // A short status does not establish numeric battery percentage.
         ASSERT_TRUE(!lChannel.testHasBatteryLevel());
         ASSERT_EQ(lChannel.testBatteryLevel(), 0xFF);
     }
@@ -20478,4 +20476,13 @@ TEST(controller_battery_probe_error_logs_raw_and_keeps_code_separate_from_percen
     ASSERT_TRUE(queueControllerResponse(c,f));ASSERT_EQ(ch.testBatteryPrivateReplies(),1U);
     ASSERT_TRUE(ch.batteryInfo().error.valid&&ch.batteryInfo().error.low);ASSERT_EQ(ch.batteryInfo().error.raw,0x12);
     ASSERT_TRUE(!ch.testHasBatteryLevel()&&!ch.batteryInfo().percentValid);
+}
+
+TEST(controller_battery_coarse_states_never_change_rf_power_class) {
+    for(unsigned state=0;state<4;++state){
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);ch.setBatteryMonitoring(1);ch.setLowPower2W(false);
+        IoHomeFrame tx,f;ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3));ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+        const uint8_t data[]={5,uint8_t(state<<5),0,0,0,0,0,0};buildSimpleResponseFrame(f,0x123456,0x654321,IoHomeCommand::PrivateResponse,data,sizeof(data));
+        ASSERT_TRUE(queueControllerResponse(c,f));ASSERT_TRUE(!ch.isLowPower2W());
+    }
 }

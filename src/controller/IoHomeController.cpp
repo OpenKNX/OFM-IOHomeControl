@@ -575,26 +575,6 @@ namespace
                                    lMoving);
     }
 
-    void applyPrivatePowerClassInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData, uint8_t iDataLen)
-    {
-        if (!iChannel || !iData || iDataLen < 2)
-            return;
-
-        // A private/runtime hint is only a fallback when discovery supplied
-        // no static PowerSaveMode. It must not replace the discovery MIB.
-        if (iChannel->getProtocolIdentity().valid &&
-            iChannel->getProtocolIdentity().powerSaveMode != IoHomePowerMode::Unknown)
-            return;
-
-        if (iDataLen >= 6 && iData[1] != 0x60)
-            return;
-
-        if (iData[1] == 0x60)
-            iChannel->setLowPower2W(true);
-        else if (iData[1] == 0x00)
-            iChannel->setLowPower2W(false);
-    }
-
     void applyPrivateFpInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData,
                             uint8_t iDataLen, uint8_t iFpIndex)
     {
@@ -11162,20 +11142,8 @@ void IoHomeController::dispatchRxFrame()
                     uint8_t lEstimate = mRxFrame.data[7];
                     lCh->onEstimate(lEstimate);
                 }
-                const bool lHadPowerClass = lCh->hasLearnedLowPower2W();
-                const bool lWasLowPower = lCh->isLowPower2W();
-                // Normal PrivateResponse payload bytes are position/status
-                // fields, not a generic battery percentage. Keep battery
-                // unknown until a request/response layout is capture-backed.
-                applyPrivatePowerClassInfo(lCh, mRxFrame.data, mRxFrame.dataLen);
-                if ((!lHadPowerClass && lCh->hasLearnedLowPower2W()) ||
-                    lWasLowPower != lCh->isLowPower2W())
-                {
-                    logInfoP("2W power class learned from PRIVATE for 0x%06X: %s",
-                             lSrcNode,
-                             lCh->isLowPower2W() ? "low-power" : "always-alive");
-                    openknx.flash.save();
-                }
+                // Execute-status bits 6:5 describe battery class, not RF power
+                // class. Discovery MIB / explicit configuration owns power mode.
                 uint8_t lPrivateFpIndex = 3;
                 if (mCurrentCmd.command == IoHomeCommand::Private &&
                     mCurrentCmd.param == 0x03 && mCurrentCmd.param3 == 0x01)
