@@ -428,13 +428,14 @@ class ChannelUiTest(unittest.TestCase):
                 "%AID%_O-%TT%%CC%019_R-%TT%%CC%01901",
             },
         )
-        orientation = roller.find(
-            "k:choose[@ParamRefId='%AID%_P-%TT%%CC%102_R-%TT%%CC%10201']", NS
-        )
-        self.assertEqual(
-            {ref.get("RefId") for ref in orientation.findall("k:when[@test='1']/k:ComObjectRefRef", NS)},
-            {"%AID%_O-%TT%%CC%008_R-%TT%%CC%00801", "%AID%_O-%TT%%CC%009_R-%TT%%CC%00901"},
-        )
+        slats = self.template.find(".//k:choose[@ParamRefId='%AID%_P-%TT%%CC%096_R-%TT%%CC%09601']/k:when[@test='16 18 35 36']", NS)
+        self.assertEqual({r.get("RefId") for r in slats.findall("k:ComObjectRefRef", NS)},
+                         {"%AID%_O-%TT%%CC%008_R-%TT%%CC%00801", "%AID%_O-%TT%%CC%009_R-%TT%%CC%00901"})
+        self.assertFalse(slats.findall("k:choose", NS))
+        rows = json.loads((ROOT / "src/protocol/channel-selections.json").read_text())
+        self.assertEqual({int(v) for v in slats.get("test").split()},
+                         {r["value"] for r in rows if r["control"] and r["flags"] & 1})
+        self.assertIsNone(roller.find("k:choose[@ParamRefId='%AID%_P-%TT%%CC%102_R-%TT%%CC%10201']", NS))
 
         light = ko_choice.find("k:when[@test='6']", NS)
         dimmable = light.find(

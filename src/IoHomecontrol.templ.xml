@@ -597,7 +597,7 @@
                                promise any particular actuator KO. The runtime profile stays automatic. -->
                           <when test="1">
                             <ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" />
-                            <choose ParamRefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /></when></choose>
+
                           </when>
                           <when test="2"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" /></when>
                           <when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
@@ -639,6 +639,19 @@
                           <when test="2"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
                           <when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
 </choose>
+
+                        <!-- Exact profiles expose slats directly; discovery uses its learned flag. -->
+                        <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601">
+                          <when test="16 18 35 36">
+                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" />
+                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" />
+                          </when>
+                          <when test="1">
+                            <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201"><when test="1">
+                              <choose ParamRefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /></when></choose>
+                            </when></choose>
+                          </when>
+                        </choose>
 
                         <!-- Scene KOs: only for supported ETS scene categories with SceneCount >= 1. -->
                         <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201"><when test="1 2 3 4 5 6 7 8 9 10 11 12">
