@@ -37,4 +37,37 @@ if '// BEGIN GENERATED CHANNEL SELECTIONS' in s:s=re.sub(r'// BEGIN GENERATED CH
 else:s=s.replace('function IOHC_syncChannelSelection(',block+'\nfunction IOHC_syncChannelSelection(')
 save(p,s)
 
+# Keep KO visibility independent of hidden ParameterCalculation outputs for manual presets.
+# Discovery retains its category/feature conditions; object IDs/numbers remain unchanged.
+def core_kos(kind,flags):
+ position=(0,1,2,4,5,10)
+ if kind==1:return position+(19,)
+ if kind==2:return position+(11,)
+ if kind in (3,9,10):return position
+ if kind in (4,7):return (3,6) if flags&2 else position
+ if kind==5:return (20,22,23,24)
+ if kind==6:return (0,3,6) if flags&4 and not flags&2 else (3,6)
+ if kind==8:return (3,7)
+ if kind in (11,13):return (0,)
+ if kind==12:return (3,6)
+ if kind==14:return (3,6) if flags&2 else (3,)
+ raise AssertionError(f'unsupported manual category: {kind}')
+
+def ko_refs(numbers):
+ return ''.join('<ComObjectRefRef RefId="%AID%_O-%TT%%CC%'+f'{number:03d}'+
+                '_R-%TT%%CC%'+f'{number:03d}'+'01" />' for number in numbers)
+
+p=ROOT/'src/IoHomecontrol.templ.xml';s=p.read_text();groups={}
+for row in rows:
+ if row['control']:groups.setdefault(core_kos(row['type'],row['flags']),[]).append(row['value'])
+groups.setdefault(core_kos(5,0),[]).append(6) # Cozy legacy protocol variant remains selectable.
+for name,items in [('CORE',groups.items()),('WEATHER',[((18,),[r['value'] for r in rows if r['control'] and r['type'] in (1,2,3)])])]:
+ block='<!-- BEGIN GENERATED MANUAL '+name+' KOS -->\n'
+ for numbers,selections in items:
+  block+='                          <when test="'+' '.join(map(str,sorted(selections)))+'">'+ko_refs(numbers)+'</when>\n'
+ block+='                          <!-- END GENERATED MANUAL '+name+' KOS -->'
+ pattern=r'<!-- BEGIN GENERATED MANUAL '+name+r' KOS -->.*?<!-- END GENERATED MANUAL '+name+r' KOS -->'
+ s,count=re.subn(pattern,lambda _:block,s,flags=re.S);assert count==1
+save(p,s)
+
 print('Detailed selections:',len(rows),'(30 supported profiles, 16 diagnosis-only families)')

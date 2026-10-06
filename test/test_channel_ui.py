@@ -137,6 +137,40 @@ class ChannelUiTest(unittest.TestCase):
                 self.assertIsNone(branch, row["label"])
                 self.assertIn("(Diagnose)", row["label"])
 
+    def test_manual_core_kos_use_visible_selection_without_calculated_flags(self):
+        selector = "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"
+        core = next(choice for choice in self.template.findall(f".//k:choose[@ParamRefId='{selector}']", NS)
+                    if choice.find("k:when[@test='1']/k:choose/k:when[@test='14']", NS) is not None)
+        rows = json.loads((ROOT / "src/protocol/channel-selections.json").read_text())
+        def objects(value):
+            branches = [w for w in core.findall("k:when", NS) if str(value) in w.get("test").split()]
+            self.assertEqual(len(branches), 1)
+            self.assertIsNone(branches[0].find("k:choose", NS), "Manual KOs must not depend on calculated flags")
+            return {int(re.search(r"%CC%(\d{3})_R", ref.get("RefId"))[1])
+                    for ref in branches[0].findall("k:ComObjectRefRef", NS)}
+        # This reproduces ETS before hidden DeviceType/feature calculations settle:
+        # only the visible selection is available; all core objects must already be exposed.
+        for value in (16,17,18,19,35,36):
+            self.assertEqual(objects(value), {0,1,2,4,5,10,19})
+        self.assertEqual(objects(24), {3,6}) # binary garage door
+        self.assertEqual(objects(25), {0,3,6}) # dimmable light
+        self.assertEqual(objects(26), {3,6}) # binary light
+        self.assertEqual(objects(6), {20,22,23,24}) # Cozy
+        for row in rows:
+            if row["control"]:
+                self.assertTrue(objects(row["value"]), row["label"])
+            else:
+                self.assertFalse(any(str(row["value"]) in w.get("test").split() for w in core.findall("k:when", NS)))
+
+    def test_manual_rollladen_weather_object_is_independent_of_hidden_category(self):
+        selector = "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"
+        choices = self.template.findall(f".//k:choose[@ParamRefId='{selector}']", NS)
+        branch = next(w for c in choices for w in c.findall("k:when", NS)
+                      if "17" in w.get("test").split() and any("%CC%018_R" in ref.get("RefId")
+                      for ref in w.findall("k:ComObjectRefRef", NS)))
+        self.assertIsNone(branch.find("k:choose", NS))
+        self.assertEqual(len(branch.findall("k:ComObjectRefRef", NS)),1)
+
     def test_every_channel_is_disabled_by_default(self) -> None:
         activity = self.template.find(".//k:Parameter[@Name='c%C%Active']", NS)
         self.assertIsNotNone(activity)
