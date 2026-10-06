@@ -4385,18 +4385,19 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             uint32_t lMilliseconds = 0;
             if (lArg == "default")
                 lMilliseconds = 0;
-            else if (!parseUnsignedDecimal(lArg, lMilliseconds))
-                lMilliseconds = 0;
-            if (lMilliseconds > 10000 ||
+            else if (!parseUnsignedDecimal(lArg, lMilliseconds)) {
+                logInfoP("Usage: iohc discovery listen [100..20000|default]");
+                return true;
+            }
+            if (lMilliseconds > 20000 ||
                 !mController.setDiagnosticDiscoveryListenMs(static_cast<uint16_t>(lMilliseconds)))
             {
-                logInfoP("Usage: iohc discovery listen [100..10000|default] (not during discovery)");
+                logInfoP("Usage: iohc discovery listen [100..20000|default] (not during discovery)");
                 return true;
             }
         }
-        logInfoP("Discovery listen window: %u ms (runtime-only; production default %u ms)",
-                 static_cast<unsigned>(mController.diagnosticDiscoveryListenMs()),
-                 static_cast<unsigned>(IOHC_DISCOVERY_LISTEN_MS));
+        logInfoP("Discovery listen window: %u ms (runtime override or recovered destination/LOW_POWER budget)",
+                 static_cast<unsigned>(mController.diagnosticDiscoveryListenMs()));
         return true;
     }
 

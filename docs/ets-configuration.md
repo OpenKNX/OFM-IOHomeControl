@@ -81,9 +81,11 @@ optional `0x6F` START frames for that pairing transaction. The target's learned
 LOW_POWER flag is retained; `0x32` and `0x3D` remain short continuation frames.
 
 The discovery destination also offers the diagnostic lighting-class targets
-`0x0001BB` and `0x0001BF`. **2W Discovery-Antwortkanäle** defaults to skipping
-the request channel; choose **Alle drei Kanäle** only when testing a peer which
-answers on the request channel.
+`0x0001BB` and `0x0001BF`. **2W Discovery-Antwortkanäle** defaults to short-lived
+channel diversity: alternate selection prefers a different channel without recent
+activity, with a runtime 250 ms experimental cooldown and bounded fallback.
+It does not exclude the request channel for the full discovery window. **Alle drei
+Kanäle** uses ordinary rotation; background scanning always retains all channels.
 
 For ordinary directed 2W START frames, the normal preamble is radio-specific:
 32 symbols on SX1276 and 48 on SX1262. Low-power wake-belief ordering is enabled

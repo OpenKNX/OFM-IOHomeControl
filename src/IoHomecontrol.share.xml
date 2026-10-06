@@ -227,7 +227,7 @@
               </ParameterType>
               <ParameterType Id="%AID%_PT-IOHCTwoWayDiscoveryListenChannels" Name="IOHCTwoWayDiscoveryListenChannels">
                 <TypeRestriction Base="Value" SizeInBit="1">
-                  <Enumeration Text="Anfragekanal überspringen" Value="0" Id="%ENID%" />
+                  <Enumeration Text="Kurzzeitige Kanaldiversität" Value="0" Id="%ENID%" />
                   <Enumeration Text="Alle drei Kanäle" Value="1" Id="%ENID%" />
                 </TypeRestriction>
               </ParameterType>

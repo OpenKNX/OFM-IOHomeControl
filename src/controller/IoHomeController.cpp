@@ -6006,8 +6006,8 @@ void IoHomeController::logDiscoveryTimingTrace(const char *iReason, unsigned lon
              lDeltaUs(mDiscoveryTimingTrace.txStartUs, mDiscoveryTimingTrace.txDoneUs),
              lDeltaUs(mDiscoveryTimingTrace.txDoneUs, mDiscoveryTimingTrace.rxReadyUs),
              iListenElapsedMs,
-             (iListenElapsedMs > mDiagnosticDiscoveryListenMs)
-                 ? (iListenElapsedMs - mDiagnosticDiscoveryListenMs) : 0UL,
+             (iListenElapsedMs > mDiscoveryBudgetMs)
+                 ? (iListenElapsedMs - mDiscoveryBudgetMs) : 0UL,
              static_cast<unsigned long>(mDiscoveryTimingTrace.rxBusyCount),
              lTxBusyHits,
              lTxBusyTotalUs,

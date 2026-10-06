@@ -11,7 +11,7 @@ RF serialization.
 | FP1–FP16 selection | FP1–FP3 profile meanings | FPI1/FPI2 and higher-FP products | selection described | FP1–FP3 only | FP4+/FPI2 representation only; TX blocked |
 | D803 secured ventilation | Window Opener semantic | indirect alias evidence | command value | 2W shape absent | 1W path only; 2W blocked |
 | MIB bit 5 | not defined | raw byte retained | `SyncCtrlGrp` | behaviour absent | no scheduling/group effect |
-| response-time class | 5/10/20/40 ms hint | raw byte retained | 5/10/20/40 s | timing absent | no timeout effect |
+| response-time class | 5/10/20/40 ms hint | raw byte retained | 5/10/20/40 s | physical qualification pending | recovered CTRL1/MIB directed timeout selector |
 | D400 Ignore | access method | defined | documented | existing protocol tests | distinct sentinel |
 | F7FF NoFeedback | feedback sentinel | defined | documented | existing protocol tests | no percentage conversion |
 | D8xx aliases | selected semantics | class-specific instantiation | definitions | incomplete | exact profile/index diagnostic lookup only |
@@ -48,7 +48,7 @@ Do not promote any row to production based on a semantic document alone.
    `01 ACEI D8 03 00 00`.
 2. Nodes spanning response-time classes 0–3: record io address, manufacturer,
    packed profile, raw MIB, power mode, command, TX-end, first response and
-   final response timestamps. Compare millisecond versus second units.
+   final response timestamps. Validate all selected CTRL1/MIB deadlines after actual TX completion; keep KLF turnaround hints separate.
 3. Nodes with MIB bit 5 on/off: capture grouping and scheduling behaviour
    before changing production logic.
 4. Products using FP9/10/11/14/15/16: capture native Private/Execute FPI2

@@ -665,7 +665,7 @@ class ChannelUiTest(unittest.TestCase):
                 "3": "Licht 0x0001BB", "4": "Licht 0x0001BF"
             },
             "IOHCTwoWayDiscoveryListenChannels": {
-                "0": "Anfragekanal überspringen", "1": "Alle drei Kanäle"
+                "0": "Kurzzeitige Kanaldiversität", "1": "Alle drei Kanäle"
             },
             "IOHCTwoWayDiscoveryFlag": {
                 "0": "Automatisch nach Befehl", "1": "Aus", "2": "Ein"

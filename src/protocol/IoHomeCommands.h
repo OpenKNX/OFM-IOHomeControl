@@ -870,9 +870,10 @@ struct IoHomeProtocolIdentity
     // it. Do not use this candidate for production behavior without captures.
     bool syncControlGroupCandidate = false;
     // 0..3 only when a MIB was present. 0xFF keeps an absent MIB distinct from
-    // valid class 0. KLF calls 5/10/20/40 milliseconds, while Velocet
-    // docs/commands.md calls the same values seconds. The raw class is the
-    // authority; neither source interpretation controls RF timeouts.
+    // valid class 0. The recovered CTRL1/MIB selector uses this raw class
+    // for directed deadlines. KLF 5/10/20/40 ms turnaround hints are separate
+    // from those deadlines; responseTimeUnitConfirmed describes only that
+    // old hint interpretation, not the recovered timeout table.
     uint8_t responseTimeClass = 0xFF;
     uint8_t klfTurnaroundHintMs = 0;
     bool responseTimeUnitConfirmed = false;

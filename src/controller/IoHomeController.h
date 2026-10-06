@@ -1616,8 +1616,8 @@ private:
   RadioError configureNormal2WTxRadio(uint16_t iPreambleSymbols);
   // Passive/background monitoring may rotate across every IOHC channel. A
   // response wait must select its policy explicitly: broadcast discovery
-  // replies rotate off the broadcast request channel; unicast replies hold
-  // the channel that carried their request.
+  // replies use short-lived recent-channel diversity (not permanent request
+  // exclusion); unicast replies hold the channel that carried their request.
   void serviceBackgroundRxScan();
   void serviceBroadcastResponseScan(uint8_t iRequestFrequencyIndex,
                                     TwoWayDiscoveryListenChannels iListenChannels = TwoWayDiscoveryListenChannels::SkipRequest);

@@ -4,11 +4,11 @@ Tracks the 33 numbered points in the supplied 2026-10-05 TODO. Native tests veri
 
 ## 1. Directed deadlines
 
-Implemented all 64 CTRL1/MIB deadline entries. Complete discovered MIB selects class; missing/incomplete MIB uses a conservative 1011 ms fallback. Actual outgoing CTRL1 determines the row, including authentication continuation. RX timers begin after TX completion. Timing diagnostics carry deadline, row and fallback. The bounded exchange ceiling is 5 s so three conservative waits fit. Pairing, scan and responder guards retain their independent fixed limits. Native tests cover all entries and delayed TX completion with LPM classes 2/3. Physical timing verification remains pending.
+Implemented all 64 CTRL1/MIB deadline entries. Complete discovered MIB selects class; missing/incomplete MIB uses a conservative 1011 ms fallback. Actual outgoing CTRL1 determines the row, including authentication continuation. RX timers begin after TX completion. Timing diagnostics carry deadline, row and fallback. Exchange ceilings are operation-specific host limits (5/9/20 seconds), separate from each recovered response deadline. Pairing, scan and responder guards retain their independent fixed limits. Native tests cover all entries and delayed TX completion with LPM classes 2/3. Physical timing verification remains pending.
 
 ## 2. Operation-specific session policy
 
-EXECUTE uses mode 3 and the conservative recovered five-attempt budget; the 9-versus-5 database discriminator remains explicitly unresolved. Favourite commands remain single-attempt. PRIVATE has a separate three-state-attempt host policy; modes 3/4 require producer-specific evidence. RF media failures have a separate five-attempt cap, independent of state retries. Whole-session replay is disabled (one session), particularly after authentication. Pairing/key-exchange state machines remain independent. Callback outcomes distinguish media failure, unanswered transaction, authenticated/no-close, explicit rejection and exhausted state budget. Diagnostics expose session mode and counts.
+EXECUTE uses mode 3 and the conservative recovered five-attempt budget; nine is available for a proven zero SetBeacon/SystemId match count; incomplete topology falls back to five. Favourite commands remain single-attempt. PRIVATE has a separate three-state-attempt host policy; modes 3/4 require producer-specific evidence. RF media failures have a separate five-attempt cap, independent of state retries. Whole-session replay is disabled (one session), particularly after authentication. Pairing/key-exchange state machines remain independent. Callback outcomes distinguish media failure, unanswered transaction, authenticated/no-close, explicit rejection and exhausted state budget. Diagnostics expose session mode and counts.
 
 ## 3. Broadcast discovery budgets
 
@@ -197,3 +197,33 @@ Existing ETS jobs/receipts continue to distinguish candidate recognition, explic
 project adoption and required download. Full durable receipt/history coverage of
 all console commissioning paths remains open, as does physical cancellation/ETS
 qualification; no software audit is claimed as that acceptance.
+
+## 33 — Current behavior documentation
+
+Updated MIB deadline comments, discovery budget diagnostics/console range, channel
+diversity ETS label/help and old “no timeout effect” statements. Invalid console
+input no longer silently resets the override. Raw KLF hints and MIB bit-5 meaning
+remain distinct from recovered CTRL1 LOW_POWER timing. RCM/key/discovery status
+above explicitly separates implemented software from unqualified hardware and
+unresolved business schemas. The overview below is the current completion state.
+
+| Points | Current state |
+| --- | --- |
+| 1–4 | Recovered selectors/descriptors and session policy implemented; automatic BasicNode topology acquisition and some producer-specific PRIVATE modes remain open. |
+| 5 | Sensor and Somfy private producers integrated; private replies retained raw, unproven fields not decoded. |
+| 6–8 | Strict identity acceptance, multi-return lifecycle and recent-channel diversity implemented. |
+| 9–10 | Runtime trials, measurements/recovery diagnostics and software checks implemented; production tuning requires physical evidence. |
+| 11–12 | Exact key primitive and 1W gap visibility implemented; peer resynchronization procedure remains unproven. |
+| 13 | RCM prerequisite/timers/ownership integrated; marker evidence import is explicit, automatic acquisition/full recipient emulation and qualification remain open. |
+| 14 | Delegation record/selector/reply service implemented; generic slave RF dispatch remains outside the present role. |
+| 15 | Object writes explicitly denied before enqueue; no qualified writable schema. |
+| 16–20 | Reports explicitly retain unresolved schemas/semantics/commercial identity; evidence requirements recorded, no guessed implementation. |
+| 21–23 | Bounds provenance, write qualification and publication gates implemented/reviewed; physical product qualification remains pending. |
+| 24–30 | Separate case-complete bench/ETS procedures and evidence gates committed; actual runs not performed. |
+| 31 | New owners isolated and stale context blocked; full console receipt/history coverage and qualification remain open. |
+| 32 | Unified queued-exchange record extended; standalone pairing/discovery retain separate telemetry. |
+| 33 | Current comments/help/docs aligned; unresolved facts stay labelled. |
+
+This work does not establish protocol-complete release qualification. The dated
+source reports copied into OAM docs are user-provided evidence inputs and are not
+modified or committed as part of these changes.

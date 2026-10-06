@@ -86,7 +86,7 @@ not implied by confirmation of the byte layout.
 | Profile/subProfile, manufacturer, backbone | defined | stored | described | observed | protocol identity |
 | MIB bits 2/3 polarity | `1` means member/RF support | raw byte only | opposite Yes/No text | needed | KLF interpretation retained |
 | MIB bit 5 | undefined | raw byte only | `SyncCtrlGrp` | needed | provisional; no behavior |
-| MIB bits 7:6 unit | 5/10/20/40 ms | raw byte only | 5/10/20/40 s | timing measurements needed | raw class authoritative |
+| MIB bits 7:6 unit | 5/10/20/40 ms | raw byte only | 5/10/20/40 s | physical qualification pending | raw class selects recovered CTRL1/MIB deadline table |
 | Discovery timestamp | field present | UInt16 | described | raw byte observations | preserve raw; no clock meaning inferred |
 | Native NodeClass RF source | not established here | separate class model | separate classes | needed | unknown |
 
