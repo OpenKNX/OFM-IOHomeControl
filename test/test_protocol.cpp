@@ -20049,6 +20049,7 @@ TEST(controller_topology_inventory_requires_current_binding_revision)
     ASSERT_TRUE(c.setSessionSystemId(4));ASSERT_EQ(c.matchingBeaconNodeCount(),-1);
     ASSERT_TRUE(!c.startReceiveConfiguration(&ch,4));
     ASSERT_TRUE(c.setBeaconDatabaseEntry(0x654321,4,false));ASSERT_EQ(c.matchingBeaconNodeCount(),0);
+    ASSERT_TRUE(!c.setBeaconDatabaseEntry(0x111111,4,true));ASSERT_EQ(c.matchingBeaconNodeCount(),0);
     ASSERT_TRUE(c.setBeaconDatabaseEntry(0x654321,4,true));ASSERT_EQ(c.matchingBeaconNodeCount(),1);
     ch.invalidateProductContext();ASSERT_EQ(c.matchingBeaconNodeCount(),-1);
     ASSERT_TRUE(!c.startReceiveConfiguration(&ch,4));

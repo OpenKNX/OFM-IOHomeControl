@@ -2817,15 +2817,12 @@ bool IoHomeController::receiveConfigurationTemporaryEvent(){return mReceiveConfi
 bool IoHomeController::setBeaconDatabaseEntry(uint32_t node,uint8_t systemId,bool marked)
 {
     if(!idleForManagedOperation())return false;
+    const auto *boundChannel=channelForNode(node);
+    if(!boundChannel || !boundChannel->productContextRevision() ||
+       !boundChannel->getProtocolIdentity().fullMetadata)return false;
     auto *record=findOrAddNodeStats(node);
     if(!record)return false;
-    if(!record->protocolIdentity.fullMetadata) {
-        const auto *channel=channelForNode(node);
-        if(!channel || !channel->getProtocolIdentity().fullMetadata)return false;
-        record->protocolIdentity=channel->getProtocolIdentity();
-    }
-    const auto *boundChannel=channelForNode(node);
-    if(!boundChannel || !boundChannel->productContextRevision())return false;
+    if(!record->protocolIdentity.fullMetadata)record->protocolIdentity=boundChannel->getProtocolIdentity();
     record->beaconRevision=boundChannel->productContextRevision();
     record->beaconMarkerKnown=true;record->beaconMarked=marked;record->systemId=systemId;
     return true;
