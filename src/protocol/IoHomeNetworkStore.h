@@ -75,9 +75,7 @@ private:
     int read(unsigned slot,uint8_t *out) {
         if(IoHomeStorageBackend::available())return IoHomeStorageBackend::read("iohcnet",slot?"b":"a",out,Size);
 #ifdef ESP32
-        Preferences p;if(!p.begin("iohcnet",false))return -1;
-        const char *name=slot?"b":"a";size_t n=p.getBytesLength(name);
-        int result=!n?0:n==Size&&p.getBytes(name,out,Size)==Size?Size:1;p.end();return result;
+        return IoHomeEsp32Storage::read("iohcnet",slot?"b":"a",out,Size);
 #elif defined(TEST_NATIVE)
         if(!present[slot])return 0;std::memcpy(out,data[slot],storedLength[slot]);return storedLength[slot];
 #else

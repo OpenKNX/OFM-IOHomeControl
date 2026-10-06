@@ -81,10 +81,8 @@ private:
         if(c>=16) return -1;
         if(IoHomeStorageBackend::available()){char name[8];snprintf(name,sizeof(name),"c%u",c);return IoHomeStorageBackend::read("iohcassign",name,data,36);}
 #ifdef ESP32
-        Preferences p; if(!p.begin("iohcassign",false)) return -1;
-        char name[8]; snprintf(name,sizeof(name),"c%u",c); const size_t n=p.getBytesLength(name);
-        const int result=n==0?0:n==36 && p.getBytes(name,data,36)==36?36:1;
-        p.end(); return result;
+        char name[8]; snprintf(name,sizeof(name),"c%u",c);
+        return IoHomeEsp32Storage::read("iohcassign",name,data,36);
 #elif defined(TEST_NATIVE)
         if(!mPresent[c])return 0;std::memcpy(data,mData[c],36);return 36;
 #else

@@ -1,5 +1,8 @@
 #pragma once
 #include <stdint.h>
+#ifdef ESP32
+#include "IoHomeEsp32Storage.h"
+#endif
 #include <cstring>
 #include <cstdio>
 // Platform adapter contract: 0 missing, exact length success, -1 unavailable,

@@ -95,12 +95,8 @@ private:
         if (c>=16 || !key || !node) return -1;
         if(IoHomeStorageBackend::available()){char name[16];snprintf(name,sizeof(name),"i%012llx%c",static_cast<unsigned long long>(identityHash(node,key)),s?'b':'a');return IoHomeStorageBackend::read("iohcseq",name,r.bytes,Size);}
 #ifdef ESP32
-        Preferences p;
-        if (!p.begin("iohcseq",false)) return -1;
         char name[16]; snprintf(name,sizeof(name),"i%012llx%c",static_cast<unsigned long long>(identityHash(node,key)),s?'b':'a');
-        const size_t n=p.getBytesLength(name);
-        const int result=n==0 ? 0:n==Size && p.getBytes(name,r.bytes,Size)==Size ? Size:1;
-        p.end(); return result;
+        return IoHomeEsp32Storage::read("iohcseq",name,r.bytes,Size);
 #elif defined(TEST_NATIVE)
         const auto id=identityHash(node,key); mLastIdentity[c]=id;
         auto &entry=mEntries[id];r=entry.records[s]; return entry.present[s] ? Size:0;

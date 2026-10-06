@@ -13,6 +13,9 @@ on:
       - 'src/*.xml'
       - 'src/*.js'
       - 'test/Makefile'
+      - 'test/test_*storage.cpp'
+      - 'test/nvsstub/**'
+      - 'test/fsstub/**'
       - 'test/test_channel_ui.py'
       - 'tools/generate_channel_selections.py'
       - 'test/test_sx1262_device_errors.cpp'
@@ -31,6 +34,9 @@ on:
       - 'src/*.xml'
       - 'src/*.js'
       - 'test/Makefile'
+      - 'test/test_*storage.cpp'
+      - 'test/nvsstub/**'
+      - 'test/fsstub/**'
       - 'test/test_channel_ui.py'
       - 'tools/generate_channel_selections.py'
       - 'test/test_sx1262_device_errors.cpp'
@@ -46,7 +52,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [protocol, controller, exchange, radio, ui]
+        suite: [protocol, controller, exchange, radio, ui, storage]
     steps:
       - uses: actions/checkout@v4
       - name: Run ${{ matrix.suite }} suite
