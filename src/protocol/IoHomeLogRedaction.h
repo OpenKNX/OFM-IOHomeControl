@@ -17,13 +17,13 @@ inline std::string ioHomeBytesToHexForLog(const uint8_t *iData, uint8_t iLen)
         return {};
 
     static const char kHex[] = "0123456789ABCDEF";
-    std::string lOut(static_cast<size_t>(iLen) * 2U, '0');
+    char lHex[2U * UINT8_MAX];
     for (uint8_t i = 0; i < iLen; ++i)
     {
-        lOut[static_cast<size_t>(i) * 2U] = kHex[(iData[i] >> 4) & 0x0F];
-        lOut[static_cast<size_t>(i) * 2U + 1U] = kHex[iData[i] & 0x0F];
+        lHex[static_cast<size_t>(i) * 2U] = kHex[(iData[i] >> 4) & 0x0F];
+        lHex[static_cast<size_t>(i) * 2U + 1U] = kHex[iData[i] & 0x0F];
     }
-    return lOut;
+    return std::string(lHex, static_cast<size_t>(iLen) * 2U);
 }
 
 inline std::string ioHomeRedactionMarker(uint8_t iLen)
