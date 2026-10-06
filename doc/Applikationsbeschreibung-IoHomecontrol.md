@@ -804,3 +804,8 @@ Sichtbar, sobald für einen unterstützten Aktor-Gerätetyp mindestens eine Szen
 Nach erfolgreichem 2W-Pairing liest **Status / Erkennung lesen** das im Gateway gespeicherte Profil, Subprofil und den Hersteller. **Erkannten Gerätetyp übernehmen** stellt bei einem dokumentierten Profil den Gerätetyp und die zugehörigen Lamellen-, Dimm- oder Ein/Aus-Objekte ein. Danach muss die Applikation aus ETS programmiert werden. Die reine Statusabfrage verändert keine Einstellungen und sendet keine neue Funkabfrage.
 
 Ein manuelles Profil ungleich 0 verhindert die automatische Typübernahme. Beschreibung, Energieklasse, Suspendierung und Expertenwerte bleiben bei Erkennung und Import erhalten. Ein unbekanntes Profil oder eine 1W-Anmeldung erfordert eine manuelle Geräteauswahl. Die Profil-Erkennung ist kein Nachweis einer exakten Produktbezeichnung. Bei älterer Firmware ohne Erkennungsabfrage bleibt das bisherige Pairing mit manueller Auswahl verfügbar.
+
+
+### Begrenzungsstatus (vorläufig, 2W)
+
+Unter **Funktionen und Rückmeldung** kann die rein lesende Begrenzungsabfrage aktiviert werden (Standard: aus). **Begrenzung aktiv** meldet nur aus einer frischen, zusammengehörigen MP-Mindest-/Höchstwertabfrage eine bestätigte Einschränkung. Ausbleibende Antworten bedeuten unbekannt und senden keine falsche 0. Eine KNX-Leseanforderung wird nur aus einem frischen Zustand beantwortet. Zyklische Abfrage: aus / 1 / 5 / 15 / 30 Minuten; Standard 5 Minuten. Die Antwortfelder bei aktiver Begrenzung sind noch vorläufig. Siehe [Begrenzungsstatus und physische Qualifikation](LIMITATION-STATUS.md).

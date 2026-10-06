@@ -26,6 +26,7 @@
 
 namespace
 {
+    IoHomecontrol *limitationModule=nullptr;
     constexpr uint8_t kRadioDiagSweepChannelCount = 3;
     constexpr uint8_t kRadioDiagPayload[] = {0xAA, 0x55, 0x12, 0x34};
     constexpr uint32_t kRadioDiagSweepFreqs[kRadioDiagSweepChannelCount] = {IOHC_FREQ_2, IOHC_FREQ_3, IOHC_FREQ_1};
@@ -1583,6 +1584,15 @@ void IoHomecontrol::setup()
         mChannels[i] = new IoHomecontrolChannel(i, mController);
         mChannels[i]->setup();
     }
+    limitationModule=this;
+    for(uint8_t i=0;i<mNumChannels;++i) {
+        const uint8_t _channelIndex=i;
+        knx.getGroupObject(LIM_KoCalcNumber(LIM_KocActive)).readValidityCallback([](GroupObject &ko)->bool {
+            const int8_t c=LIM_KoCalcChannel(ko.asap());
+            auto *ch=limitationModule&&c>=0?limitationModule->getChannel(c):nullptr;
+            return ch&&ch->limitationKoValid();
+        });
+    }
     applyPendingFlashChannelState();
 
     // IMPORTANT: Do NOT generate/persist the system key or 1W controller
@@ -2414,6 +2424,9 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
         return;
     }
 
+#ifdef LIM_KoBlockOffset
+    if(LIM_KoCalcChannel(lAsap)>=0) {logDebugP("Limitation KO is output-only; input ignored");return;}
+#endif
 #ifdef PRF_KoBlockOffset
     const int8_t profileChannel = PRF_KoCalcChannel(lAsap);
     if (profileChannel >= 0 && profileChannel < mNumChannels) {
@@ -4056,6 +4069,7 @@ void IoHomecontrol::showHelp()
     // available IOHC commands on all builds.
 
     openknx.console.printHelpLine("iohc help", "Show io-homecontrol commands");
+    openknx.console.printHelpLine("iohc limitation CH min|max|refresh|status", "Read-only MP limits; opt-in ETS; provisional response fields");
     openknx.console.printHelpLine("iohc priority read NODE LEVEL", "Read priority 0..7; bounded expiry refresh; no lock write");
     openknx.console.printHelpLine("iohc product context NODE MODE", "Read defaults min(6)/max(7)/current alias(9); no physical-unit inference");
     openknx.console.printHelpLine("iohc product read NODE INDEX", "Source-backed individual MP/FP GET, index 0..16; raw observations only");
@@ -4174,6 +4188,21 @@ void IoHomecontrol::showHelp()
 
 bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 {
+    if(iCmd.rfind("iohc limitation ",0)==0) {
+        unsigned channel=0;char action[16]{};char extra=0;
+        if(sscanf(iCmd.c_str(),"iohc limitation %u %15s %c",&channel,action,&extra)!=2||channel<1||channel>mNumChannels) {
+            logInfoP("Usage: iohc limitation CHANNEL min|max|refresh|status");return true;
+        }
+        auto *ch=mChannels[channel-1];
+        if(std::strcmp(action,"status")==0){ch->printLimitationStatus();return true;}
+        if(!ch->limitationEnabled()){logInfoP("Limitation: enable in ETS on a paired 2W actuator first");return true;}
+        bool started=false;
+        if(std::strcmp(action,"refresh")==0)started=mController.refreshLimitationStatus(ch);
+        else if(std::strcmp(action,"min")==0)started=mController.requestLimitationStatus(ch,IoHomeLimitationType::Minimum);
+        else if(std::strcmp(action,"max")==0)started=mController.requestLimitationStatus(ch,IoHomeLimitationType::Maximum);
+        else {logInfoP("Usage: iohc limitation CHANNEL min|max|refresh|status");return true;}
+        logInfoP("Limitation read: %s",started?"queued":"busy/identity not permitted");return true;
+    }
     // Per-channel commands accept the compact channel-first form
     // "iohcNN <cmd> ..." in addition to the canonical "iohc <cmd> NN ...".
     // Placing the channel number directly after the prefix keeps the core

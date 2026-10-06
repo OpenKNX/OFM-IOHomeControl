@@ -1,6 +1,7 @@
 #include "protocol/IoHomeProductRuntime.h"
 #include "protocol/IoHomePhysicalBounds.h"
 #pragma once
+#include "protocol/IoHomeLimitation.h"
 #include "OpenKNX.h"
 #include "knxprod.h"
 #include "protocol/IoHomeCommands.h"
@@ -41,6 +42,10 @@ public:
   void publishProductState();
   uint32_t mProductPublishedGeneration=0;
   bool mProductPublishedValid=false;
+  bool limitationEnabled() const;
+  bool limitationKoValid() const;
+  void printLimitationStatus();
+  void updateLimitationStatus();
   void processInputKo(uint8_t iIoIndex, GroupObject &iKo);
   bool restoreLastKnownStateAfterStartup();
 
@@ -189,6 +194,9 @@ public:
 
 private:
   IoHomeController &mController;
+  IoHomeLimitationPublication mLimitationPublication{};
+  uint32_t mLimitationPollMs=0,mLimitationPollRevision=0;
+  bool mLimitationPolled=false;
   uint32_t mNodeId = 0;           // 3-byte (24-bit) remote device address
   uint8_t mEncKey[16] = {};       // AES-128 encryption key
   uint8_t mLastChallenge[6] = {}; // challenge sent with last authenticated command

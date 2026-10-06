@@ -367,6 +367,7 @@ void IoHomecontrolChannel::setup()
 
 void IoHomecontrolChannel::loop()
 {
+    updateLimitationStatus();
     updateProfileParameterValidity();
     publishProductState();
     if (!isOperational())
@@ -2584,4 +2585,44 @@ bool IoHomecontrolChannel::sendTwoWayMovement(uint8_t position)
     if (index && profile && !(profile->capabilityFlags&IoHomeCapabilityBinaryOnly))
         return mController.sendProfileMovementCommand(mNodeId,mEncKey,position,index,speed);
     return mController.sendCommand(mNodeId,mEncKey,IoHomeCommand::Execute,position,0xFF,movementExecuteProfile());
+}
+
+bool IoHomecontrolChannel::limitationEnabled() const {
+    return ParamLIM_cEnabled&&ParamIOHC_cActive&&!ParamIOHC_cSuspend&&!mIs1W&&mPaired&&
+        mProtocolIdentity.valid&&mProtocolIdentity.nodeClass==IoHomeNodeClass::Actuator&&allowsActuatorControls();
+}
+bool IoHomecontrolChannel::limitationKoValid() const {
+    return limitationEnabled()&&mController.limitationValid(_channelIndex);
+}
+void IoHomecontrolChannel::updateLimitationStatus() {
+    auto &ko=knx.getGroupObject(LIM_KoCalcNumber(LIM_KocActive));
+    const auto &state=mController.limitationState(_channelIndex);
+    const auto action=mLimitationPublication.update(state.snapshot,limitationKoValid());
+    if(action==IoHomeLimitationPublication::Action::Invalid)ko.invalidate();
+    else if(action==IoHomeLimitationPublication::Action::Transmit)ko.value(state.snapshot.limitationActive,Dpt(1,2));
+    else ko.valueNoSend(state.snapshot.limitationActive,Dpt(1,2));
+    if(!limitationEnabled()){mLimitationPolled=false;return;}
+    if(mLimitationPollRevision!=productContextRevision()) {
+        mLimitationPolled=false;mLimitationPollRevision=productContextRevision();
+    }
+    const uint32_t now=millis(),interval=uint32_t(ParamLIM_cInterval)*1000;
+    if(!mLimitationPolled||(interval&&uint32_t(now-mLimitationPollMs)>=interval)) {
+        if(mController.refreshLimitationStatus(this)){mLimitationPolled=true;mLimitationPollMs=now;}
+    }
+}
+void IoHomecontrolChannel::printLimitationStatus() {
+    const auto &s=mController.limitationState(_channelIndex);const auto &v=s.snapshot;
+    const bool valid=limitationKoValid();
+    logInfoP("Limitation ch=%u node=%06X sample-node=%06X coherent=%s active=%s revision=%lu current-revision=%lu token=%lu pending=%s result=%s/%u (5-byte layout provisional)",
+        unsigned(_channelIndex+1),unsigned(mNodeId),unsigned(v.node),valid?"yes":"no",valid?(v.limitationActive?"yes":"no"):"unknown",
+        (unsigned long)v.revision,(unsigned long)productContextRevision(),(unsigned long)v.refreshToken,s.active?"yes":"no",s.resultValid?"known":"none",unsigned(s.result));
+    for(uint8_t i=0;i<2;++i) {
+        const auto &sample=i?v.maximum:v.minimum;const uint32_t at=i?v.maximumTimestampMs:v.minimumTimestampMs;
+        if(!sample.valid){logInfoP("  %s: no sample",i?"max":"min");continue;}
+        logInfoP("  %s: param=%02X raw=%04X percent=%.2f (-1=not-percent) originator=%02X(%s) time=%02X age=%lums bytes=%02X %02X %02X %02X %02X",
+            i?"max":"min",sample.parameterId,sample.valueRaw,sample.percent(),sample.originator,ioHomeOriginatorName(sample.originator),
+            sample.timeRaw,(unsigned long)(millis()-at),sample.raw[0],sample.raw[1],sample.raw[2],sample.raw[3],sample.raw[4]);
+        const auto timer=ioHomeDecodeLimitationTimer(sample.timeRaw);
+        logInfoP("    timer provisional KLF/API-derived: kind=%u seconds=%u; not used for automation",unsigned(timer.kind),timer.seconds);
+    }
 }

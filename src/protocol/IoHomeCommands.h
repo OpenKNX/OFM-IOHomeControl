@@ -30,7 +30,9 @@ enum class IoHomeCommand : uint8_t
     WritePrivate = 0x20,         // Authenticated — set temperature, mode, presence
     WritePrivateResponse = 0x21, // Response to WritePrivate
                                  // Unknown23 = 0x23,  // not used — observed in rspaargaren scan list only
-                                 // Unknown25 = 0x25,  // not used — observed in rspaargaren scan list only
+    // Captured read-only resulting MP limitation status.
+    LimitationStatusRequest = 0x25,
+    LimitationStatusResponse = 0x26,
 
     // Discovery & pairing
     DiscoverRequest = 0x28, // Broadcast to 0x00003B

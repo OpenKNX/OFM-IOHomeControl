@@ -968,6 +968,27 @@ class ChannelUiTest(unittest.TestCase):
             self.assertIn("%IOHC_TT%", choice.get("ParamRefId"))
         self.assertFalse(self.template.findall(".//k:Dynamic//k:ParameterRefRef[@RefId='%AID%_P-%TT%%CC%102_R-%TT%%CC%10201']", NS))
 
+    def test_limitation_status_is_opt_in_two_way_and_output_only(self) -> None:
+        template = parse("IoHomeLimitation.templ.xml")
+        enabled = template.find(".//k:Parameter[@Name='c%C%Enabled']", NS)
+        interval = template.find(".//k:Parameter[@Name='c%C%Interval']", NS)
+        self.assertEqual(enabled.get('Value'), '0')
+        self.assertEqual(interval.get('Value'), '300')
+        choices = template.findall(".//k:ParameterType[@Name='LIMInterval']//k:Enumeration", NS)
+        self.assertEqual({int(c.get('Value')) for c in choices}, {0,60,300,900,1800})
+        ko = template.find('.//k:ComObject', NS)
+        self.assertEqual(ko.get('DatapointType'), 'DPST-1-2')
+        for flag in ('ReadFlag','TransmitFlag','CommunicationFlag'):
+            self.assertEqual(ko.get(flag), 'Enabled')
+        for flag in ('WriteFlag','UpdateFlag','ReadOnInitFlag'):
+            self.assertEqual(ko.get(flag), 'Disabled')
+        part = self.template.find(".//op:usePart[@name='IOHCLimitation']", NS)
+        parents = {child: parent for parent in self.template.iter() for child in parent}
+        self.assertEqual(parents[part].get('test'), '0')
+        self.assertEqual(parents[parents[part]].get('ParamRefId'), '%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901')
+        ui = parse('IoHomeLimitation.ui.xml')
+        self.assertIsNotNone(ui.find("k:Dynamic/k:choose/k:when/k:choose/k:when[@test='1']/k:ComObjectRefRef", NS))
+
     def test_entire_controller_profile_tab_is_one_way_only(self) -> None:
         parents = {child: parent for parent in self.template.iter() for child in parent}
         tab = self.template.find(".//k:ParameterBlock[@Name='ExpertControllerProfile']", NS)

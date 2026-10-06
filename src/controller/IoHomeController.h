@@ -6,6 +6,7 @@
 #include "../protocol/IoHomeRadioPolicy.h"
 #include "../protocol/IoHomeRadioDiversity.h"
 #include "../protocol/IoHomeTransactionTiming.h"
+#include "../protocol/IoHomeLimitation.h"
 #include "../protocol/IoHomeSessionPolicy.h"
 #include "../protocol/IoHomeResponseDescriptor.h"
 #include "../radio/Radio.h"
@@ -140,6 +141,7 @@ struct IoHomeQueueEntry
   uint32_t productContextRevision;
   uint32_t objectReadToken;
   uint32_t keyPrimitiveToken;
+  uint32_t limitationToken;
   uint32_t rcmToken;
   uint8_t objectReadData[9];
   uint8_t objectReadLength;
@@ -610,6 +612,16 @@ public:
   uint8_t objectReadChannel() const {return mObjectReadChannel;}
   bool objectReadIdentityValid() const;
   bool requestPriority(IoHomecontrolChannel *channel,uint8_t priority);
+  struct LimitationState {
+    IoHomeLimitationSnapshot snapshot{};
+    uint8_t key[16]{};bool active=false,pair=false,nextMaximum=false;
+    uint32_t startedMs=0;IoHomeCommandExchangeResult result=IoHomeCommandExchangeResult::FailedBeforeAuthentication;
+    bool resultValid=false;
+  };
+  bool requestLimitationStatus(IoHomecontrolChannel *channel,IoHomeLimitationType type,uint8_t parameterId=0);
+  bool refreshLimitationStatus(IoHomecontrolChannel *channel);
+  const LimitationState &limitationState(uint8_t channel) const;
+  bool limitationValid(uint8_t channel) const;
   bool requestSensorStatus(IoHomecontrolChannel *channel);
   bool requestSensorInformation(IoHomecontrolChannel *channel);
   bool requestDefaultSensorSubscription(IoHomecontrolChannel *channel,uint32_t backbone);
@@ -1007,7 +1019,7 @@ public:
   bool idleForManagedOperation() const {
     return mState==ControllerState::Idle&&queueEmpty()&&!mCurrentCmd.active&&!mPassiveMode&&!mGatewayMode&&
         !mOneWayKeyReceiveActive&&!mKeyExtractArmed&&!mNetworkScanActive&&!mObjectRead.active()&&!mReceiveConfiguration.active()&&
-        mGetKeyOfNode.stage!=GetKeyStage::Waiting&&mGetKeyOfNode.authentication!=GetKeyAuthentication::Pending;
+        mGetKeyOfNode.stage!=GetKeyStage::Waiting&&mGetKeyOfNode.authentication!=GetKeyAuthentication::Pending&&mLimitationOwner==0xFF;
   }
   ControllerState state() const;
 
@@ -1471,6 +1483,11 @@ private:
   void processTx1WRepeat();
   void processWaitResponse();
   void processResponse();
+  LimitationState mLimitations[16]{};
+  uint32_t mLimitationToken=0;uint8_t mLimitationOwner=0xFF;
+  bool enqueueLimitation(IoHomecontrolChannel *channel,IoHomeLimitationType type);
+  void serviceLimitationRefresh();
+  void finishLimitation(const IoHomeQueueEntry &entry,IoHomeCommandExchangeResult result);
   bool startPairingInternal(uint8_t iChannelIndex,
                             uint32_t iKnownNodeId,
                             Pairing2WMode iMode,

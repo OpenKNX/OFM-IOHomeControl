@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns="http://knx.org/xml/project/20"><Dynamic>
+<choose ParamRefId="%AID%_UP-%IOHC_TT%%PRODUCT_CC%002_R-%IOHC_TT%%PRODUCT_CC%00201"><when test="1 2 3 4 6 7 8 9 10 11 12 13 14">
+<ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101" HelpContext="IOHC-Begrenzung"/>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"><when test="1">
+<ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00201" HelpContext="IOHC-Begrenzung"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00001"/>
+</when></choose></when></choose></Dynamic></KNX>

@@ -25,7 +25,7 @@ inline IoHomeResponseDisposition ioHomeResponseDisposition(IoHomeCommand request
         {IoHomeCommand::GetGeneralInfo1,0x55,true},{IoHomeCommand::GetGeneralInfo2,0x57,true},
         {IoHomeCommand::GetGeneralInfo3,0x59,true},{IoHomeCommand::SetConfig1,0x70,true},
         {IoHomeCommand::DiscoverSensorRequest,0x95,false},{IoHomeCommand::DiscoverSensorInSystemRequest,0x97,false},
-        {IoHomeCommand::SensorStatusRequest,0x85,true},{IoHomeCommand::SensorSubscribeRequest,0x8C,true}};
+        {IoHomeCommand::LimitationStatusRequest,0x26,true},{IoHomeCommand::SensorStatusRequest,0x85,true},{IoHomeCommand::SensorSubscribeRequest,0x8C,true}};
     for(const auto &d:descriptors) if(d.request==request) {
         if(response==IoHomeCommand::ChallengeRequest&&d.challenge&&length>=6) return IoHomeResponseDisposition::Challenge;
         if(uint8_t(response)==d.response) return IoHomeResponseDisposition::Accepted;

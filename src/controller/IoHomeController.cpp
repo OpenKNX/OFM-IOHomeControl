@@ -2465,6 +2465,70 @@ bool IoHomeController::requestPriority(IoHomecontrolChannel *channel,uint8_t pri
     entry.maxAttempts=1;entry.background=true;entry.active=true;return queuePush(entry);
 }
 
+const IoHomeController::LimitationState &IoHomeController::limitationState(uint8_t c) const {
+    static const LimitationState empty{};return c<16?mLimitations[c]:empty;
+}
+bool IoHomeController::limitationValid(uint8_t c) const {
+    if(c>=16)return false;
+    const auto &s=mLimitations[c];
+    return sampleIdentityMatches(c,s.snapshot.node,s.key,s.snapshot.revision)&&
+        s.snapshot.fresh(millis(),s.snapshot.node,s.snapshot.revision);
+}
+bool IoHomeController::enqueueLimitation(IoHomecontrolChannel *channel,IoHomeLimitationType type) {
+    const uint8_t c=channelIndexFor(channel);if(c>=16)return false;
+    IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
+    entry.productContextRevision=channel->productContextRevision();entry.managementRead=true;
+    std::memcpy(entry.managementKey,entry.encKey,16);entry.limitationToken=mLimitations[c].snapshot.refreshToken;
+    entry.command=IoHomeCommand::LimitationStatusRequest;entry.param=uint8_t(type);
+    entry.sourceChannelIndex=c;entry.maxAttempts=1;entry.background=true;entry.active=true;
+    return queuePush(entry);
+}
+bool IoHomeController::requestLimitationStatus(IoHomecontrolChannel *channel,IoHomeLimitationType type,uint8_t parameterId) {
+    if(parameterId!=0||(type!=IoHomeLimitationType::Minimum&&type!=IoHomeLimitationType::Maximum)||
+       !mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||!channel||
+       !channel->productContextRevision()||!channel->isPaired()||channel->is1W()||
+       !channel->getProtocolIdentity().valid||channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Actuator||
+       !channel->allowsActuatorControls()||mLimitationToken==0xFFFFFFFF)return false;
+    const uint8_t c=channelIndexFor(channel);if(c>=16)return false;
+    auto &s=mLimitations[c];s={};s.snapshot.begin(channel->getNodeId(),channel->productContextRevision(),++mLimitationToken);
+    std::memcpy(s.key,channel->getEncryptionKey(),16);s.active=true;s.startedMs=millis();mLimitationOwner=c;
+    if(enqueueLimitation(channel,type))return true;
+    s.active=false;mLimitationOwner=0xFF;return false;
+}
+bool IoHomeController::refreshLimitationStatus(IoHomecontrolChannel *channel) {
+    if(!requestLimitationStatus(channel,IoHomeLimitationType::Minimum))return false;
+    mLimitations[channelIndexFor(channel)].pair=true;return true;
+}
+void IoHomeController::finishLimitation(const IoHomeQueueEntry &entry,IoHomeCommandExchangeResult result) {
+    if(!entry.limitationToken||entry.sourceChannelIndex>=16)return;
+    auto &s=mLimitations[entry.sourceChannelIndex];
+    if(entry.limitationToken!=s.snapshot.refreshToken||!s.active)return;
+    s.result=result;s.resultValid=true;
+    if(result==IoHomeCommandExchangeResult::Completed&&s.pair&&entry.param==0x80&&s.snapshot.minimumValid) {
+        s.nextMaximum=true;return;
+    }
+    if(result!=IoHomeCommandExchangeResult::Completed)s.snapshot.coherent=false;
+    s.active=false;s.nextMaximum=false;mLimitationOwner=0xFF;
+}
+void IoHomeController::serviceLimitationRefresh() {
+    if(mLimitationOwner>=16)return;
+    auto &s=mLimitations[mLimitationOwner];
+    const bool invalid=!sampleIdentityMatches(mLimitationOwner,s.snapshot.node,s.key,s.snapshot.revision)||
+        !mModule||!mModule->managementRequestsAllowed()||mPassiveMode||mGatewayMode||mReceiveConfiguration.active()||
+        isKeyExtractionActive()||isNetworkScanActive()||uint32_t(millis()-s.startedMs)>IOHC_LIMITATION_PAIR_MS;
+    if(invalid) {
+        s.active=false;s.nextMaximum=false;s.snapshot.coherent=false;s.resultValid=true;
+        s.result=IoHomeCommandExchangeResult::FailedBeforeAuthentication;mLimitationOwner=0xFF;return;
+    }
+    if(s.nextMaximum&&mState==ControllerState::Idle&&queueEmpty()&&!mCurrentCmd.active) {
+        s.nextMaximum=false;
+        if(!enqueueLimitation(mModule->getChannel(mLimitationOwner),IoHomeLimitationType::Maximum)) {
+            s.active=false;s.snapshot.coherent=false;s.resultValid=true;
+            s.result=IoHomeCommandExchangeResult::FailedBeforeAuthentication;mLimitationOwner=0xFF;
+        }
+    }
+}
+
 bool IoHomeController::requestSensorStatus(IoHomecontrolChannel *channel)
 {
     if(!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||!channel||!channel->productContextRevision()||!channel->isPaired()||channel->is1W()||!channel->getProtocolIdentity().valid||channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Sensor)return false;
@@ -4129,6 +4193,7 @@ void IoHomeController::beginExchangeDiagnosticsWindow()
 void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntry,
                                                    IoHomeCommandExchangeResult iResult)
 {
+    finishLimitation(iEntry,iResult);
     if (iResult == IoHomeCommandExchangeResult::FailedBeforeAuthentication &&
         iEntry.hadAuthenticatedAccept)
     {
@@ -4153,6 +4218,7 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
 void IoHomeController::recordExchangeFailure(const IoHomeQueueEntry &iEntry,
                                              bool iAuthenticatedUnconfirmed)
 {
+    finishLimitation(iEntry,IoHomeCommandExchangeResult::FailedBeforeAuthentication);
     if(iEntry.objectReadToken==mObjectReadToken&&iEntry.objectReadToken)mObjectRead.fail();
     const bool lAuthenticatedUnconfirmed = iAuthenticatedUnconfirmed || iEntry.hadAuthenticatedAccept;
     IoHomecontrolChannel *lChannel = channelForQueueEntry(iEntry);
@@ -5040,6 +5106,7 @@ const char *IoHomeController::commandName(IoHomeCommand iCmd)
         return "Private2";
     case IoHomeCommand::Private2Response:
         return "Private2Response";
+    case IoHomeCommand::LimitationStatusRequest: return "LimitationStatusRequest";
     case IoHomeCommand::PriorityLevelRequest:
         return "PriorityLevelRequest";
     case IoHomeCommand::PriorityLevelResponse:
@@ -6176,6 +6243,7 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
 
 void IoHomeController::loop()
 {
+    serviceLimitationRefresh();
 #if defined(RADIO_SX1276) && !defined(TEST_NATIVE)
     if(idleForManagedOperation()&&(!mModule||mModule->managementRequestsAllowed())&&mRadio.superviseIdleReceive(millis())){
         mRxScanLastSwitch=micros();
@@ -7550,9 +7618,25 @@ void IoHomeController::processResponse()
         std::memcpy(mLastResponseTimingSample.peerResult,mRxFrame.data,mRxFrame.dataLen);
     }
 
+    if(mCurrentCmd.limitationToken) {
+        const uint8_t c=mCurrentCmd.sourceChannelIndex;IoHomeLimitationStatus sample;
+        if(c>=16||!managementIdentityMatches(mCurrentCmd)||!mLimitations[c].active||
+           mCurrentCmd.limitationToken!=mLimitations[c].snapshot.refreshToken) {
+            notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+            mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+        }
+        // No authentication requirement inferred from an unrelated service.
+        if(mRxFrame.commandId!=IoHomeCommand::ErrorResponse) {
+            if(!ioHomeDecodeLimitationStatus(mRxFrame,sample)||sample.parameterId!=0) {
+                mState=ControllerState::WaitResponse;return;
+            }
+            auto &state=mLimitations[c];
+            state.snapshot.accept(static_cast<IoHomeLimitationType>(mCurrentCmd.param),sample,millis());
+        }
+    }
     // These recovered read services cannot complete on an unrelated opcode
     // or the legacy descriptor's too-short Priority ACK.
-    if(mCurrentCmd.managementRead&&!mCurrentCmd.objectReadToken&&!mCurrentCmd.mpFpRead&&!mCurrentCmd.productActivationLength) {
+    if(mCurrentCmd.managementRead&&!mCurrentCmd.limitationToken&&!mCurrentCmd.objectReadToken&&!mCurrentCmd.mpFpRead&&!mCurrentCmd.productActivationLength) {
         if(!managementIdentityMatches(mCurrentCmd)) {
             const auto failed=mCurrentCmd;
             mCurrentCmd.active=false;mState=ControllerState::Idle;
@@ -10091,6 +10175,8 @@ void IoHomeController::updateCurrentFrequencyIndex(uint32_t iFrequencyHz)
 bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 {
     if(!managementIdentityMatches(iEntry))return false;
+    if(iEntry.limitationToken && (iEntry.sourceChannelIndex>=16||!mLimitations[iEntry.sourceChannelIndex].active||
+       iEntry.limitationToken!=mLimitations[iEntry.sourceChannelIndex].snapshot.refreshToken))return false;
     if(iEntry.rcmToken && (iEntry.rcmToken!=mRcmToken ||
        mReceiveConfiguration.stage()!=IoHomeReceiveConfiguration::Stage::Prerequisite ||
        !sampleIdentityMatches(mRcmChannel,mRcmPeer,mRcmKey)))return false;
@@ -10480,6 +10566,10 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         if(!iEntry.objectReadToken||iEntry.objectReadToken!=mObjectReadToken||!mObjectRead.active()||
             iEntry.objectReadLength!=(iEntry.command==IoHomeCommand::Unknown46Request?9:3))return false;
         std::memcpy(mTxFrame.data,iEntry.objectReadData,iEntry.objectReadLength);mTxFrame.dataLen=iEntry.objectReadLength;mTxFrame.hasHmac=false;break;
+    case IoHomeCommand::LimitationStatusRequest:
+        if(!iEntry.limitationToken||!ioHomeBuildLimitationStatusRequest(mTxFrame,mOwnNodeId,iEntry.destNodeId,
+            static_cast<IoHomeLimitationType>(iEntry.param),0,resolveLowPower2W(iEntry.destNodeId)))return false;
+        break;
     case IoHomeCommand::PriorityLevelRequest:
         if(iEntry.param>7)return false;
         mTxFrame.data[0]=iEntry.param;mTxFrame.dataLen=1;mTxFrame.hasHmac=false;break;

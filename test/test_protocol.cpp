@@ -20067,3 +20067,131 @@ TEST(controller_topology_inventory_requires_current_binding_revision)
     ch.invalidateProductContext();ASSERT_EQ(c.matchingBeaconNodeCount(),-1);
     ASSERT_TRUE(!c.startReceiveConfiguration(&ch,4));
 }
+
+// Source capture: laberning/home_io_control 215457eb51730429b75a93ef5af29fb45a018b5e.
+TEST(protocol_limitation_mp_requests_are_exact_and_read_only) {
+    for(bool lp:{false,true})for(auto type:{IoHomeLimitationType::Minimum,IoHomeLimitationType::Maximum}) {
+        IoHomeFrame f;ASSERT_TRUE(ioHomeBuildLimitationStatusRequest(f,0x123456,0x654321,type,0,lp));
+        ASSERT_EQ(unsigned(f.commandId),0x25);ASSERT_EQ(f.dataLen,3);ASSERT_EQ(f.data[0],unsigned(type));
+        ASSERT_EQ(f.data[1],0);ASSERT_EQ(f.data[2],0);ASSERT_TRUE(!f.hasHmac);
+        ASSERT_TRUE((f.ctrlByte0&IOHC_CTRL0_START)!=0);ASSERT_TRUE((f.ctrlByte0&IOHC_CTRL0_MODE_1W)==0);
+        ASSERT_EQ(bool(f.ctrlByte1&IOHC_CTRL1_LOW_POWER),lp);
+        ASSERT_EQ(f.getSrcNodeId(),0x123456);ASSERT_EQ(f.getDestNodeId(),0x654321);
+    }
+    IoHomeFrame f;ASSERT_TRUE(!ioHomeBuildLimitationStatusRequest(f,1,0x123456,IoHomeLimitationType::Minimum,1,false));
+    ASSERT_TRUE(!ioHomeBuildLimitationStatusRequest(f,1,0x3F,IoHomeLimitationType::Minimum,0,false));
+    ASSERT_TRUE(!ioHomeBuildLimitationStatusRequest(f,1,0x123456,static_cast<IoHomeLimitationType>(0),0,false));
+}
+TEST(protocol_limitation_strict_reply_preserves_unrecognized_fields) {
+    IoHomeFrame f;f.init();f.commandId=IoHomeCommand::LimitationStatusResponse;
+    const uint8_t raw[]={0xFF,0xD8,0x00,0xA5,0xFE};std::memcpy(f.data,raw,5);f.dataLen=5;
+    IoHomeLimitationStatus out;ASSERT_TRUE(ioHomeDecodeLimitationStatus(f,out));
+    ASSERT_EQ(out.parameterId,0xFF);ASSERT_EQ(out.valueRaw,0xD800);ASSERT_EQ(out.originator,0xA5);
+    ASSERT_TRUE(!out.normalValue());ASSERT_EQ(out.percent(),-1);ASSERT_TRUE(std::memcmp(out.raw,raw,5)==0);
+    for(uint8_t size:{0,4,6}){f.dataLen=size;ASSERT_TRUE(!ioHomeDecodeLimitationStatus(f,out));ASSERT_TRUE(!out.valid);}
+    f.dataLen=5;f.commandId=IoHomeCommand::StatusUpdate;ASSERT_TRUE(!ioHomeDecodeLimitationStatus(f,out));
+}
+static IoHomeLimitationStatus limitationValue(uint16_t raw) {
+    IoHomeLimitationStatus s;s.valid=true;s.valueRaw=raw;return s;
+}
+TEST(protocol_limitation_coherent_ranges_and_unknown_states) {
+    for(uint16_t min:{0,0x1400})for(uint16_t max:{0xC800,0xBA00}) {
+        IoHomeLimitationSnapshot s;s.begin(123,7,1);
+        s.accept(IoHomeLimitationType::Minimum,limitationValue(min),100);
+        ASSERT_TRUE(!s.coherent);s.accept(IoHomeLimitationType::Maximum,limitationValue(max),110);
+        ASSERT_TRUE(s.fresh(120,123,7));ASSERT_EQ(s.limitationActive,min!=0||max!=0xC800);
+        ASSERT_TRUE(!s.fresh(300100,123,7));ASSERT_TRUE(!s.fresh(120,123,8));ASSERT_TRUE(!s.fresh(120,124,7));
+    }
+    IoHomeLimitationSnapshot s;s.begin(123,7,1);
+    s.accept(IoHomeLimitationType::Maximum,limitationValue(0xC800),1);ASSERT_TRUE(!s.coherent);
+    s.begin(123,7,2);s.accept(IoHomeLimitationType::Minimum,limitationValue(0),1);
+    s.accept(IoHomeLimitationType::Maximum,limitationValue(0xC800),5002);ASSERT_TRUE(!s.coherent);
+    s.begin(123,7,3);s.accept(IoHomeLimitationType::Minimum,limitationValue(0),1);
+    s.accept(IoHomeLimitationType::Maximum,limitationValue(0xD800),2);ASSERT_TRUE(!s.coherent);
+    s.begin(123,7,4);s.accept(IoHomeLimitationType::Minimum,limitationValue(0xBA00),1);
+    s.accept(IoHomeLimitationType::Maximum,limitationValue(0x1400),2);ASSERT_TRUE(!s.coherent);
+    s.begin(123,7,5);auto unknown=limitationValue(0);unknown.parameterId=17;
+    s.accept(IoHomeLimitationType::Minimum,unknown,1);s.accept(IoHomeLimitationType::Maximum,limitationValue(0xC800),2);ASSERT_TRUE(!s.coherent);
+}
+TEST(protocol_limitation_pair_handles_clock_wrap_and_refresh_replacement) {
+    IoHomeLimitationSnapshot s;s.begin(123,7,1);
+    s.accept(IoHomeLimitationType::Minimum,limitationValue(0),0xFFFFFFF0);
+    s.accept(IoHomeLimitationType::Maximum,limitationValue(0xC800),0x20);
+    ASSERT_TRUE(s.fresh(0x30,123,7));s.begin(123,7,2);ASSERT_TRUE(!s.coherent&&!s.minimumValid&&!s.maximumValid);
+}
+TEST(protocol_limitation_originators_and_provisional_timer) {
+    ASSERT_TRUE(std::strcmp(ioHomeOriginatorName(2),"rain")==0);ASSERT_TRUE(std::strcmp(ioHomeOriginatorName(9),"wind")==0);
+    ASSERT_TRUE(std::strcmp(ioHomeOriginatorName(0xA5),"unmapped")==0);
+    ASSERT_EQ(ioHomeDecodeLimitationTimer(0).seconds,30);ASSERT_EQ(ioHomeDecodeLimitationTimer(252).seconds,7590);
+    ASSERT_TRUE(ioHomeDecodeLimitationTimer(253).kind==IoHomeLimitationTimer::Kind::Unlimited);
+    ASSERT_TRUE(ioHomeDecodeLimitationTimer(254).kind==IoHomeLimitationTimer::Kind::Special);
+    ASSERT_TRUE(ioHomeDecodeLimitationTimer(255).kind==IoHomeLimitationTimer::Kind::Special);
+}
+TEST(protocol_limitation_publication_does_not_turn_timeouts_into_zero) {
+    using Action=IoHomeLimitationPublication::Action;IoHomeLimitationPublication p;IoHomeLimitationSnapshot s;
+    s.begin(123,7,1);ASSERT_TRUE(p.update(s,false)==Action::Invalid);
+    s.accept(IoHomeLimitationType::Minimum,limitationValue(0),1);s.accept(IoHomeLimitationType::Maximum,limitationValue(0xC800),2);
+    ASSERT_TRUE(p.update(s,true)==Action::Transmit);ASSERT_TRUE(!p.last);ASSERT_TRUE(p.update(s,true)==Action::Cache);
+    s.accept(IoHomeLimitationType::Maximum,limitationValue(0xBA00),3);ASSERT_TRUE(p.update(s,true)==Action::Transmit);ASSERT_TRUE(p.last);
+    ASSERT_TRUE(p.update(s,false)==Action::Invalid);ASSERT_TRUE(p.last);ASSERT_TRUE(p.update(s,true)==Action::Cache);
+    s.accept(IoHomeLimitationType::Maximum,limitationValue(0xC800),4);ASSERT_TRUE(p.update(s,true)==Action::Transmit);ASSERT_TRUE(!p.last);
+}
+static void initLimitationController(IoHomeController &c,IoHomecontrol &m,IoHomecontrolChannel &ch) {
+    const uint8_t key[16]={1};initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    IoHomeProtocolIdentity id;id.valid=true;id.nodeClass=IoHomeNodeClass::Actuator;ch.onProtocolIdentity(0x654321,id);
+}
+static bool replyLimitation(IoHomeController &c,uint16_t raw,uint8_t parameter=0,uint32_t src=0x654321,uint32_t dst=0x123456,uint8_t length=5) {
+    uint8_t data[]={parameter,uint8_t(raw>>8),uint8_t(raw),2,29,0};IoHomeFrame f;
+    buildSimpleResponseFrame(f,dst,src,IoHomeCommand::LimitationStatusResponse,data,length);return queueControllerResponse(c,f);
+}
+TEST(controller_limitation_refresh_correlates_both_transactions) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initLimitationController(c,m,ch);
+    ASSERT_TRUE(c.refreshLimitationStatus(&ch));ASSERT_TRUE(!c.requestPriority(&ch,1));
+    IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_EQ(unsigned(tx.commandId),0x25);ASSERT_EQ(tx.data[0],0x80);
+    ASSERT_TRUE(replyLimitation(c,0));ASSERT_TRUE(c.limitationState(0).snapshot.minimumValid);ASSERT_TRUE(!c.limitationValid(0));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_EQ(tx.data[0],0xC0);
+    ASSERT_TRUE(replyLimitation(c,0xBA00));ASSERT_TRUE(c.limitationValid(0));ASSERT_TRUE(c.limitationState(0).snapshot.limitationActive);
+    ASSERT_EQ(c.limitationState(0).snapshot.maximum.originator,2);
+    ASSERT_TRUE(replyLimitation(c,0xC800));ASSERT_EQ(c.limitationState(0).snapshot.maximum.valueRaw,0xBA00);
+    ch.invalidateProductContext();ASSERT_TRUE(!c.limitationValid(0));
+}
+TEST(controller_limitation_rejects_wrong_peer_parameter_opcode_and_length) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initLimitationController(c,m,ch);
+    ASSERT_TRUE(c.refreshLimitationStatus(&ch));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ASSERT_TRUE(replyLimitation(c,0,0,0x555555));ASSERT_TRUE(!c.limitationState(0).snapshot.minimumValid);
+    ASSERT_TRUE(replyLimitation(c,0,0,0x654321,0x111111));ASSERT_TRUE(!c.limitationState(0).snapshot.minimumValid);
+    ASSERT_TRUE(replyLimitation(c,0,1));ASSERT_TRUE(!c.limitationState(0).snapshot.minimumValid);
+    ASSERT_TRUE(replyLimitation(c,0,0,0x654321,0x123456,4));ASSERT_TRUE(!c.limitationState(0).snapshot.minimumValid);
+    IoHomeFrame wrong;buildSimpleResponseFrame(wrong,0x123456,0x654321,IoHomeCommand::StatusUpdate,nullptr,0);
+    ASSERT_TRUE(queueControllerResponse(c,wrong));ASSERT_TRUE(!c.limitationState(0).snapshot.minimumValid);
+    ASSERT_TRUE(replyLimitation(c,0));ASSERT_TRUE(c.limitationState(0).snapshot.minimumValid);
+}
+TEST(controller_limitation_single_reads_never_publish_a_pair) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initLimitationController(c,m,ch);IoHomeFrame tx;
+    ASSERT_TRUE(c.requestLimitationStatus(&ch,IoHomeLimitationType::Minimum));ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ASSERT_TRUE(replyLimitation(c,0));ASSERT_TRUE(!c.limitationValid(0));
+    ASSERT_TRUE(c.requestLimitationStatus(&ch,IoHomeLimitationType::Maximum));ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ASSERT_TRUE(replyLimitation(c,0xC800));ASSERT_TRUE(!c.limitationValid(0));ASSERT_TRUE(!c.limitationState(0).snapshot.minimumValid);
+}
+TEST(controller_limitation_identity_changes_discard_queued_and_inflight_reads) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initLimitationController(c,m,ch);IoHomeFrame tx;
+    ASSERT_TRUE(c.refreshLimitationStatus(&ch));ch.invalidateProductContext();ASSERT_TRUE(!transmitQueuedControllerFrame(c,tx));
+    ASSERT_TRUE(c.refreshLimitationStatus(&ch));ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    const uint8_t key[16]={2};ch.setEncryptionKey(key);ASSERT_TRUE(replyLimitation(c,0));ASSERT_TRUE(!c.limitationValid(0));
+    ASSERT_TRUE(!c.limitationState(0).snapshot.minimumValid);
+}
+TEST(controller_limitation_no_response_expires_without_an_inactive_sample) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initLimitationController(c,m,ch);IoHomeFrame tx;
+    ASSERT_TRUE(c.refreshLimitationStatus(&ch));ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ioHomeTestSetMillis(6001);for(int i=0;i<8;++i)c.loop();
+    ASSERT_TRUE(!c.limitationValid(0));ASSERT_TRUE(!c.limitationState(0).active);
+    ASSERT_TRUE(!c.limitationState(0).snapshot.maximumValid);
+}
+TEST(controller_limitation_start_guards_and_parameter_scope) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initLimitationController(c,m,ch);
+    ASSERT_TRUE(!c.requestLimitationStatus(&ch,IoHomeLimitationType::Minimum,1));
+    ch.setIs1W(true);ASSERT_TRUE(!c.refreshLimitationStatus(&ch));ch.setIs1W(false);
+    ch.setPaired(false);ASSERT_TRUE(!c.refreshLimitationStatus(&ch));ch.setPaired(true);
+    IoHomeProtocolIdentity id;id.valid=true;id.nodeClass=IoHomeNodeClass::Sensor;ch.onProtocolIdentity(0x654321,id);
+    ASSERT_TRUE(!c.refreshLimitationStatus(&ch));
+}
