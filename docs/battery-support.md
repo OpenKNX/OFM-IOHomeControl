@@ -57,7 +57,8 @@ there is no code setting percentValid because no converter is qualified.
 - `iohc battery CHANNEL probe09`: one Private09 query, after the prior query ends.
 - `iohc battery CHANNEL objects`: one explicit read sequence. Somfy manufacturer
   02 starts with A601/A607/A60E, then generic 0009/4003; other manufacturers only
-  probe generic objects. Unsupported replies are preserved as transport results;
+  probe generic objects. Object transfers are bound to node, key and channel profile revision, so a
+context change cannot publish a stale completed object. Unsupported replies are preserved as transport results;
   no support is inferred from manufacturer alone.
 
 Object reads use the existing bounded 46/47 + 4A/4B transport. Selection is

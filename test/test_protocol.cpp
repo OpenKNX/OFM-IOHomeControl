@@ -20486,3 +20486,11 @@ TEST(controller_battery_coarse_states_never_change_rf_power_class) {
         ASSERT_TRUE(queueControllerResponse(c,f));ASSERT_TRUE(!ch.isLowPower2W());
     }
 }
+
+TEST(controller_battery_object_transfer_rejects_profile_context_change) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);ch.setBatteryMonitoring(2);
+    ASSERT_TRUE(c.requestObjectRead(&ch,2,0xA601,0,1024));ASSERT_TRUE(c.objectReadIdentityValid());
+    ch.invalidateProductContext();ASSERT_TRUE(!c.objectReadIdentityValid());c.loop();
+    ASSERT_TRUE(c.objectRead().stage()==IoHomeObjectTransfer::Stage::IdentityChanged);
+    ASSERT_EQ(ch.testBatteryObjectReplies(),0U);ASSERT_TRUE(!ch.batteryInfo().somfy.valid);
+}

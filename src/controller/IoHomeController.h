@@ -1181,7 +1181,7 @@ private:
   uint32_t mBatterySequenceNode=0,mBatterySequenceRevision=0,mBatterySequenceToken=0;
   void serviceBatteryObjects();
   IoHomeObjectTransfer mObjectRead;
-  uint32_t mObjectReadToken=0,mObjectReadPeer=0;
+  uint32_t mObjectReadToken=0,mObjectReadPeer=0,mObjectReadRevision=0;
   uint8_t mObjectReadChannel=0xFF,mObjectReadKey[16]{};
   void serviceObjectRead();
   bool enqueueObjectReadPart(bool opening);

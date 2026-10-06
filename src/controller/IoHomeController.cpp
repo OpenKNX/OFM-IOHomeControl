@@ -2435,13 +2435,13 @@ void IoHomeController::serviceBatteryObjects() {
 
 bool IoHomeController::objectReadIdentityValid() const
 {
-    return sampleIdentityMatches(mObjectReadChannel,mObjectReadPeer,mObjectReadKey);
+    return sampleIdentityMatches(mObjectReadChannel,mObjectReadPeer,mObjectReadKey,mObjectReadRevision);
 }
 bool IoHomeController::enqueueObjectReadPart(bool opening)
 {
     IoHomeQueueEntry entry{};entry.destNodeId=mObjectReadPeer;entry.encKey=mObjectReadKey;
     entry.managementRead=true;std::memcpy(entry.managementKey,mObjectReadKey,16);
-    entry.objectReadToken=mObjectReadToken;entry.sourceChannelIndex=mObjectReadChannel;
+    entry.objectReadToken=mObjectReadToken;entry.sourceChannelIndex=mObjectReadChannel;entry.productContextRevision=mObjectReadRevision;
     entry.command=opening?IoHomeCommand::Unknown46Request:IoHomeCommand::Unknown4ARequest;
     entry.objectReadLength=opening?9:mObjectRead.pendingSize();
     std::memcpy(entry.objectReadData,opening?mObjectRead.openingData():mObjectRead.pendingData(),entry.objectReadLength);
@@ -2458,7 +2458,7 @@ bool IoHomeController::requestObjectRead(IoHomecontrolChannel *channel,uint8_t p
     if(!allowed&&!(channel->batteryMonitoring()==2&&ioHomeBatteryObject(provider,key)&&offset==0))return false;
     const uint8_t index=channelIndexFor(channel);if(index>=16)return false;
     if(!mObjectRead.begin(IoHomeObjectTransfer::Direction::Read,channel->getNodeId(),mObjectReadToken+1,provider,key,offset,span,millis(),30000))return false;
-    ++mObjectReadToken;mObjectReadPeer=channel->getNodeId();mObjectReadChannel=index;std::memcpy(mObjectReadKey,channel->getEncryptionKey(),16);
+    ++mObjectReadToken;mObjectReadPeer=channel->getNodeId();mObjectReadChannel=index;mObjectReadRevision=channel->productContextRevision();std::memcpy(mObjectReadKey,channel->getEncryptionKey(),16);
     if(!enqueueObjectReadPart(true)){mObjectRead.fail();return false;}return true;
 }
 bool IoHomeController::cancelObjectRead(uint32_t token){return mObjectRead.cancel(token);}
