@@ -1,3 +1,3 @@
-# Lamellen und Orientierung
+# Lamellen-/Orientierungsobjekte
 
-Blendet die KNX-Objekte für Lamellen bzw. Orientierung ein. Nur aktivieren, wenn das Gerät diese Funktion unterstützt. Die automatische Erkennung kann dies aus einem bekannten Profil übernehmen; die Auswahl fügt dem Aktor keine neue Funktion hinzu.
+Die Gerätetypwahl aktiviert diese Objekte automatisch bei Innenjalousie, Außenjalousie, Rollladen mit verstellbaren Lamellen und Lamellenbehang. Bei „Automatisch“ bestimmt das erkannte Profil die Verfügbarkeit. Ein normaler Rollladen hat keine Lamellenobjekte. Setzen und Rückmeldung verwenden 0–100 %, keine Winkel in Grad.

@@ -89,13 +89,13 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn("getEffectiveProfileDescriptor()", channel)
         self.assertIn("getEffectiveProfileDescriptor()", controller)
         self.assertIn("mProtocolIdentity = lIdentity", channel)
-        selection_ref = "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"
+        selection_ref = "%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201"
         ko_choice = next(
             choice for choice in self.template.findall(
                 f".//k:choose[@ParamRefId='{selection_ref}']", NS
-            ) if choice.find("k:when[@test='15']", NS) is not None
+            ) if choice.find("k:when[@test='14']", NS) is not None
         )
-        self.assertIsNone(ko_choice.find("k:when[@test='1']", NS))
+        self.assertIsNone(ko_choice.find("k:when[@test='0']", NS))
 
     def test_all_channels_are_selected_by_device_type(self) -> None:
         visible = self.share.find(".//k:Parameter[@Name='VisibleChannels']", NS)
@@ -125,11 +125,11 @@ class ChannelUiTest(unittest.TestCase):
         registry = (ROOT / "src/protocol/IoHomeProfileRegistry.cpp").read_text().split("constexpr IoHomeParameterAlias")[0]
         codes = {int(code, 16) for code in re.findall(r"profile\((0x[0-9A-F]+),", registry)}
         self.assertEqual({r["packed"] for r in rows if r["control"]}, codes)
-        selector = "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"
+        selector = "%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201"
         choices = self.template.findall(f".//k:choose[@ParamRefId='{selector}']", NS)
-        ko_choice = next(c for c in choices if {w.get("test") for w in c.findall("k:when", NS)} >= {str(v) for v in range(2, 16)})
+        ko_choice = next(c for c in choices if {w.get("test") for w in c.findall("k:when", NS)} >= {str(v) for v in range(1, 15)})
         for row in rows:
-            branch = ko_choice.find(f"k:when[@test='{row['value']}']", NS)
+            branch = ko_choice.find(f"k:when[@test='{row['type']}']", NS)
             if row["control"]:
                 self.assertIsNotNone(branch, row["label"])
                 self.assertTrue(branch.findall(".//k:ComObjectRefRef", NS), row["label"])
@@ -155,7 +155,7 @@ class ChannelUiTest(unittest.TestCase):
         self.assertEqual((choices[0].get("Text"), choices[0].get("Value")), ("Deaktiviert", "0"))
         self.assertEqual(
             {choice.get("Value") for choice in choices},
-            {str(value) for value in range(16)} | {str(row["value"]) for row in json.loads((ROOT / "src/protocol/channel-selections.json").read_text())},
+            {"0", "1", "6"} | {str(row["value"]) for row in json.loads((ROOT / "src/protocol/channel-selections.json").read_text())},
         )
 
         overrides = [
@@ -408,28 +408,13 @@ class ChannelUiTest(unittest.TestCase):
         self.assertEqual(refs[0].get("RefId"), "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601")
         self.assertEqual(refs[1].get("HelpContext"), "IOHC-Beschreibung")
 
-    def test_device_type_dynamics_follow_visible_selection_directly(self) -> None:
-        selection_ref = "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"
+    def test_device_type_dynamics_follow_effective_category_for_discovery(self) -> None:
         device_type_ref = "%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201"
-
-        # ETS must not have to propagate a calculated DeviceType change before
-        # rebuilding parameter or communication-object visibility.
-        self.assertEqual(
-            self.template.findall(f".//k:choose[@ParamRefId='{device_type_ref}']", NS),
-            [],
-        )
-
-        selector_choices = self.template.findall(
-            f".//k:choose[@ParamRefId='{selection_ref}']", NS
-        )
-        ko_choice = next(
-            choice
-            for choice in selector_choices
-            if {when.get("test") for when in choice.findall("k:when", NS)}
-            >= {str(value) for value in range(2, 16)}
-        )
-
-        roller = ko_choice.find("k:when[@test='2']", NS)
+        choices = self.template.findall(f".//k:choose[@ParamRefId='{device_type_ref}']", NS)
+        ko_choice = next(choice for choice in choices
+                         if {w.get("test") for w in choice.findall("k:when", NS)} >= {str(v) for v in range(1,15)})
+        self.assertIsNone(ko_choice.find("k:when[@test='0']", NS))
+        roller = ko_choice.find("k:when[@test='1']", NS)
         roller_refs = {ref.get("RefId") for ref in roller.findall("k:ComObjectRefRef", NS)}
         self.assertEqual(
             roller_refs,
@@ -451,7 +436,7 @@ class ChannelUiTest(unittest.TestCase):
             {"%AID%_O-%TT%%CC%008_R-%TT%%CC%00801", "%AID%_O-%TT%%CC%009_R-%TT%%CC%00901"},
         )
 
-        light = ko_choice.find("k:when[@test='7']", NS)
+        light = ko_choice.find("k:when[@test='6']", NS)
         dimmable = light.find(
             "k:choose[@ParamRefId='%AID%_P-%TT%%CC%105_R-%TT%%CC%10501']"
             "/k:when[@test='0']/k:choose", NS
@@ -468,19 +453,19 @@ class ChannelUiTest(unittest.TestCase):
             ref.get("RefId") for ref in dimmable.findall("k:when[@test='1']/k:ComObjectRefRef", NS)
         })
         self.assertEqual(
-            {ref.get("RefId") for ref in ko_choice.findall("k:when[@test='9']/k:ComObjectRefRef", NS)},
+            {ref.get("RefId") for ref in ko_choice.findall("k:when[@test='8']/k:ComObjectRefRef", NS)},
             {"%AID%_O-%TT%%CC%003_R-%TT%%CC%00301", "%AID%_O-%TT%%CC%007_R-%TT%%CC%00701"},
         )
         self.assertEqual(
-            {ref.get("RefId") for ref in ko_choice.findall("k:when[@test='12']/k:ComObjectRefRef", NS)},
+            {ref.get("RefId") for ref in ko_choice.findall("k:when[@test='11']/k:ComObjectRefRef", NS)},
+            {"%AID%_O-%TT%%CC%000_R-%TT%%CC%00001"},
+        )
+        self.assertEqual(
+            {ref.get("RefId") for ref in ko_choice.findall("k:when[@test='13']/k:ComObjectRefRef", NS)},
             {"%AID%_O-%TT%%CC%000_R-%TT%%CC%00001"},
         )
         self.assertEqual(
             {ref.get("RefId") for ref in ko_choice.findall("k:when[@test='14']/k:ComObjectRefRef", NS)},
-            {"%AID%_O-%TT%%CC%000_R-%TT%%CC%00001"},
-        )
-        self.assertEqual(
-            {ref.get("RefId") for ref in ko_choice.findall("k:when[@test='15']/k:ComObjectRefRef", NS)},
             {"%AID%_O-%TT%%CC%003_R-%TT%%CC%00301"},
         )
 
@@ -967,11 +952,20 @@ class ChannelUiTest(unittest.TestCase):
         movement_choices = set(parents[movement].get("test").split())
         for row in rows:
             if row['control'] and row['type'] == 1:
-                self.assertIn(str(row['value']), scene_choices)
-                self.assertIn(str(row['value']), movement_choices)
+                self.assertIn(str(row['type']), scene_choices)
+                self.assertIn(str(row['type']), movement_choices)
             if not row['control']:
-                self.assertNotIn(str(row['value']), scene_choices)
-                self.assertNotIn(str(row['value']), movement_choices)
+                self.assertNotIn(str(row['type']), scene_choices)
+                self.assertNotIn(str(row['type']), movement_choices)
+
+    def test_product_options_follow_device_family_and_slats_are_automatic(self) -> None:
+        color = parse("IoHomeProductPIC.ui.xml").find("k:Dynamic/k:choose", NS)
+        values = parse("IoHomeProductPVX.ui.xml").find("k:Dynamic/k:choose", NS)
+        self.assertEqual(color.find("k:when", NS).get("test"), "25 26")
+        self.assertEqual(values.find("k:when", NS).get("test"), "18 21 22 23 30")
+        for choice in (color, values):
+            self.assertIn("%IOHC_TT%", choice.get("ParamRefId"))
+        self.assertFalse(self.template.findall(".//k:Dynamic//k:ParameterRefRef[@RefId='%AID%_P-%TT%%CC%102_R-%TT%%CC%10201']", NS))
 
     def test_entire_controller_profile_tab_is_one_way_only(self) -> None:
         parents = {child: parent for parent in self.template.iter() for child in parent}
@@ -1017,7 +1011,7 @@ class ChannelUiTest(unittest.TestCase):
         binary_ids={r["packed"] for r in manifest if r["flags"]&2}
         self.assertTrue({0x017A,0x01BA,0x01FA,0x057A} <= binary_ids)
         ref = "%AID%_P-%TT%%CC%105_R-%TT%%CC%10501"
-        for selection in ("5", "7", "8"):
+        for selection in ("4", "6", "7"):
             device = next(node for node in self.template.findall(".//k:choose/k:when", NS)
                           if node.get("test") == selection and
                           node.find(f"k:choose[@ParamRefId='{ref}']", NS) is not None)

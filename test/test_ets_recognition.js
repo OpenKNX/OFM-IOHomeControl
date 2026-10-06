@@ -345,13 +345,17 @@ test("all detailed selections configure their profile and retain their exact ETS
   check(roundtrip.Selection===row.value,"round trip "+row.label);
  }
 });
-test("legacy selection and disable preserve existing expert settings", function() {
- for(var value=1;value<=15;value++) {
-  var out={};IOHC_syncChannelSelection({Selection:value},out,{});
-  check(out.Active===1&&out.DeviceType===value-1&&out.Override===undefined&&out.TypeAuto===undefined,"legacy migration "+value);
- }
- var out={};IOHC_syncChannelSelection({Selection:0},out,{});
- check(out.Active===0&&out.DeviceType===undefined&&out.Override===undefined,"disable erases preset");
+test("automatic selection resets manual ownership and disabling preserves the profile", function() {
+ var out={};IOHC_syncChannelSelection({Selection:1},out,{});
+ check(out.Active===1&&out.Override===0&&out.TypeAuto===1&&out.OrientationAuto===1&&out.BinaryAuto===1&&out.DimmableAuto===1,"automatic choice did not relinquish overrides");
+ var disabled={};IOHC_syncChannelSelection({Selection:0},disabled,{});
+ check(disabled.Active===0&&disabled.DeviceType===undefined&&disabled.Override===undefined,"disable erases preset");
  var inactive={};IOHC_syncChannelSelection({Active:0,DeviceType:1,Override:129},inactive,{});
  check(inactive.Selection===0,"inactive detailed preset activates channel");
+ var automatic={};IOHC_syncChannelSelection({Active:1,DeviceType:1,Override:0},automatic,{});
+ check(automatic.Selection===1,"discovered device selects a removed category");
+ var d=deviceWith({Active:1});
+ IOHC_queryRecognition(d,onlineWith(snapshot(0x1C,1,0)),{channelIndex:1},true);
+ IOHC_syncChannelSelection({Active:1,DeviceType:value(d,"DeviceType"),Override:value(d,"ProfileOverride")},automatic,{});
+ check(automatic.Selection===1&&value(d,"OrientationObjects")===1&&value(d,"ProfileOverride")===0&&value(d,"RecognitionTypeAuto")===1,"discovery must retain automatic ownership and enable slats");
 });

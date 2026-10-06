@@ -4,9 +4,11 @@ Deaktiviert blendet die Kanalseite und ihre Kommunikationsobjekte aus. Eine ande
 
 Automatisch (Discovery): Nach 2W-Pairing „Status / Erkennung lesen“. Bekannte Funktionen werden übernommen, sofern die Erkennungsautomatik dies erlaubt. Danach die Applikation programmieren. Bei unbekannten Profilen und 1W ist eine manuelle Auswahl nötig. Die Kategorie bezeichnet kein genaues Produktmodell.
 
-Die allgemeinen Kategorien bleiben für bestehende Projekte verfügbar. Die genauen Gerätetypen wählen zusätzlich das passende Profil und stellen Lamellenfunktion, Binärmodus und Dimmen ein. Diese manuelle Wahl bleibt bei der Erkennung erhalten. „Automatik wiederherstellen“ erlaubt wieder die automatische Zuordnung. Allgemeine Kategorien behalten vorhandene Expertenwerte.
+Jeder Gerätetyp ist einzeln auswählbar. Die Auswahl bestimmt das passende Profil und stellen Lamellenfunktion, Binärmodus und Dimmen ein. Diese manuelle Wahl bleibt bei der Erkennung erhalten. „Automatik wiederherstellen“ erlaubt wieder die automatische Zuordnung. Lamellenobjekte erscheinen automatisch bei passenden Profilen.
 
 Einträge mit „(Diagnose)“ unterscheiden bekannte Gerätefamilien, deren Steuerung noch nicht vollständig unterstützt wird. Sie bieten Erkennung und Diagnose, aber keine normalen Aktor-Steuerobjekte. Cozy-Thermostat verwendet eigene Temperatur-/Modusbefehle und ist von der Heizungs-Temperaturschnittstelle getrennt.
+
+RGB / Farbtemperatur erscheint nur bei den passenden Lichttypen. Temperatur / Modus erscheint bei Wärmepumpe, Warmwasserbereiter, elektrischen Heizkörpern und Heizungs-Temperaturschnittstelle. Die bisherige Produktqualifikation bleibt erforderlich.
 
 ## MP und FP verstehen
 

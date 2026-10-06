@@ -14,6 +14,7 @@
           </op:part>
           <op:part name="IOHCProducts" href="IoHomeProduct.dynamic.part.xml" instances="1">
             <op:param name="PRODUCT_CC" value="%CC%" />
+            <op:param name="IOHC_TT" value="%TT%"/>
           </op:part>
           <op:part name="IOHCMovement" href="IoHomeMovement.dynamic.part.xml" instances="1"><op:param name="PRODUCT_CC" value="%CC%"/></op:part>
           <op:part name="IOHCProfileObjects" href="IoHomeProfileObjects.dynamic.part.xml" instances="1">
@@ -422,8 +423,7 @@
                           <ParameterSeparator Id="%AID%_PS-nnn" Text="Automatisch: gelernte Energieklasse, sonst immer erreichbar. Solar-/Batteriegeräte bei unbekannter Klasse ausdrücklich auf Low Power einstellen." UIHint="Information" />
                         </when>
                       </choose>
-                      <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"><!-- DETAILED GROUP: 2 3 4 5 6 7 8 9 10 11 12 13 -->
-<when test="2 3 4 5 6 7 8 9 10 11 12 13 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 44 45">
+                      <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201"><when test="1 2 3 4 5 6 7 8 9 10 11 12">
                         <ParameterRefRef RefId="%AID%_UP-%TT%%CC%007_R-%TT%%CC%00701" IndentLevel="1" HelpContext="IOHC-Verhalten-nach-Neustart" />
                       </when></choose>
                       <ParameterBlock Id="%AID%_PB-nnn" Name="Functions" Text="Funktionen und Rückmeldung">
@@ -436,76 +436,19 @@
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%003_R-%TT%%CC%00301" IndentLevel="1" HelpContext="IOHC-Status-Abfrageintervall" />
                           </when>
                         </choose>
-                        <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601">
-                          <!-- DETAILED GROUP: 2 3 4 5 8 10 11 -->
-<when test="2 3 4 5 8 10 11 16 17 18 19 20 21 22 23 24 27 28 31 32 34 35 36 37 44 45">
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
+                          <when test="1 2 3 4 7 9 10">
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%004_R-%TT%%CC%00401" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%005_R-%TT%%CC%00501" IndentLevel="1" HelpContext="IOHC-Fahrzeit" />
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%006_R-%TT%%CC%00601" IndentLevel="1" HelpContext="IOHC-Richtung-invertieren" />
                             <ParameterSeparator Id="%AID%_PS-nnn" Text="Fahrzeiten dienen der Positionsschätzung. Empfangene Positionswerte bleiben die maßgebliche Rückmeldung." UIHint="Information" />
                           </when>
-                          <when test="7">
+                          <when test="6">
                             <ParameterRefRef RefId="%AID%_UP-%TT%%CC%081_R-%TT%%CC%08101" IndentLevel="1" HelpContext="IOHC-Dimmbar" />
                           </when>
-<!-- BEGIN DETAILED BRANCHES -->
-<when test="25">
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%081_R-%TT%%CC%08101" IndentLevel="1" HelpContext="IOHC-Dimmbar" />
-                          </when>
-<when test="26">
-                            <ParameterRefRef RefId="%AID%_UP-%TT%%CC%081_R-%TT%%CC%08101" IndentLevel="1" HelpContext="IOHC-Dimmbar" />
-                          </when>
-<!-- END DETAILED BRANCHES -->
-</choose>
-                        <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"><when test="2">
-                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201" IndentLevel="1" HelpContext="IOHC-Orientierungsobjekte" />
-                          <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur bei bestätigtem Lamellen-/Orientierungsparameter aktivieren. Der ETS-Schlüsselimport setzt dies aus Profil und Subprofil." UIHint="Information" />
-                        </when>
-<!-- BEGIN DETAILED BRANCHES -->
-<when test="16">
-                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201" IndentLevel="1" HelpContext="IOHC-Orientierungsobjekte" />
-                          <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur bei bestätigtem Lamellen-/Orientierungsparameter aktivieren. Der ETS-Schlüsselimport setzt dies aus Profil und Subprofil." UIHint="Information" />
-                        </when>
-<when test="17">
-                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201" IndentLevel="1" HelpContext="IOHC-Orientierungsobjekte" />
-                          <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur bei bestätigtem Lamellen-/Orientierungsparameter aktivieren. Der ETS-Schlüsselimport setzt dies aus Profil und Subprofil." UIHint="Information" />
-                        </when>
-<when test="18">
-                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201" IndentLevel="1" HelpContext="IOHC-Orientierungsobjekte" />
-                          <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur bei bestätigtem Lamellen-/Orientierungsparameter aktivieren. Der ETS-Schlüsselimport setzt dies aus Profil und Subprofil." UIHint="Information" />
-                        </when>
-<when test="19">
-                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201" IndentLevel="1" HelpContext="IOHC-Orientierungsobjekte" />
-                          <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur bei bestätigtem Lamellen-/Orientierungsparameter aktivieren. Der ETS-Schlüsselimport setzt dies aus Profil und Subprofil." UIHint="Information" />
-                        </when>
-<when test="31">
-                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201" IndentLevel="1" HelpContext="IOHC-Orientierungsobjekte" />
-                          <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur bei bestätigtem Lamellen-/Orientierungsparameter aktivieren. Der ETS-Schlüsselimport setzt dies aus Profil und Subprofil." UIHint="Information" />
-                        </when>
-<when test="32">
-                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201" IndentLevel="1" HelpContext="IOHC-Orientierungsobjekte" />
-                          <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur bei bestätigtem Lamellen-/Orientierungsparameter aktivieren. Der ETS-Schlüsselimport setzt dies aus Profil und Subprofil." UIHint="Information" />
-                        </when>
-<when test="35">
-                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201" IndentLevel="1" HelpContext="IOHC-Orientierungsobjekte" />
-                          <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur bei bestätigtem Lamellen-/Orientierungsparameter aktivieren. Der ETS-Schlüsselimport setzt dies aus Profil und Subprofil." UIHint="Information" />
-                        </when>
-<when test="36">
-                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201" IndentLevel="1" HelpContext="IOHC-Orientierungsobjekte" />
-                          <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur bei bestätigtem Lamellen-/Orientierungsparameter aktivieren. Der ETS-Schlüsselimport setzt dies aus Profil und Subprofil." UIHint="Information" />
-                        </when>
-<when test="44">
-                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201" IndentLevel="1" HelpContext="IOHC-Orientierungsobjekte" />
-                          <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur bei bestätigtem Lamellen-/Orientierungsparameter aktivieren. Der ETS-Schlüsselimport setzt dies aus Profil und Subprofil." UIHint="Information" />
-                        </when>
-<when test="45">
-                          <ParameterRefRef RefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201" IndentLevel="1" HelpContext="IOHC-Orientierungsobjekte" />
-                          <ParameterSeparator Id="%AID%_PS-nnn" Text="Nur bei bestätigtem Lamellen-/Orientierungsparameter aktivieren. Der ETS-Schlüsselimport setzt dies aus Profil und Subprofil." UIHint="Information" />
-                        </when>
-<!-- END DETAILED BRANCHES -->
 </choose>
                         <choose ParamRefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901"><when test="0">
-                          <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"><!-- DETAILED GROUP: 1 2 -->
-<when test="1 2 16 17 18 19 31 32 35 36 44 45">
+                          <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201"><when test="1">
                             <op:usePart name="IOHCMovement" xpath="//Dynamic/*"/>
                           </when></choose>
                         </when></choose>
@@ -514,8 +457,7 @@
                         </when></choose>
                         <op:usePart name="IOHCProducts" xpath="//Dynamic/*" />
                       </ParameterBlock>
-                      <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"><!-- DETAILED GROUP: 2 3 4 5 6 7 8 9 10 11 12 13 -->
-<when test="2 3 4 5 6 7 8 9 10 11 12 13 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 44 45">
+                      <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201"><when test="1 2 3 4 5 6 7 8 9 10 11 12">
                       <ParameterBlock Id="%AID%_PB-nnn" Name="Scenes" Text="Szenen">
                         <!-- Scene support: available for the selected actuator categories.
                              The complete per-scene UI selection is generated from IoHomecontrol.scene.part.xml. -->
@@ -650,21 +592,21 @@
 
 
                         <!-- === Device-type-specific KOs === -->
-                        <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601">
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
                           <!-- Without an ETS-visible profile choice, auto mode cannot safely
                                promise any particular actuator KO. The runtime profile stays automatic. -->
-                          <when test="2">
+                          <when test="1">
                             <ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" />
                             <choose ParamRefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /></when></choose>
                           </when>
-                          <when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" /></when>
-                          <when test="4"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
-                          <when test="5"><choose ParamRefId="%AID%_P-%TT%%CC%105_R-%TT%%CC%10501">
+                          <when test="2"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" /></when>
+                          <when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
+                          <when test="4"><choose ParamRefId="%AID%_P-%TT%%CC%105_R-%TT%%CC%10501">
                             <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
                             <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
                           </choose></when>
-                          <when test="6"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%023_R-%TT%%CC%02301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%024_R-%TT%%CC%02401" /></when>
-                          <when test="7">
+                          <when test="5"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%023_R-%TT%%CC%02301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%024_R-%TT%%CC%02401" /></when>
+                          <when test="6">
                             <choose ParamRefId="%AID%_P-%TT%%CC%105_R-%TT%%CC%10501">
                               <when test="0"><choose ParamRefId="%AID%_UP-%TT%%CC%081_R-%TT%%CC%08101">
                                 <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
@@ -673,107 +615,17 @@
                               <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
                             </choose>
                           </when>
-                          <when test="8"><choose ParamRefId="%AID%_P-%TT%%CC%105_R-%TT%%CC%10501">
+                          <when test="7"><choose ParamRefId="%AID%_P-%TT%%CC%105_R-%TT%%CC%10501">
                             <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
                             <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
                           </choose></when>
-                          <when test="9"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
+                          <when test="8"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
+                          <when test="9"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
                           <when test="10"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
-                          <when test="11"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
-                          <when test="12"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /></when>
-                          <when test="13"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
-                          <when test="14"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /></when>
-                          <when test="15"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><choose ParamRefId="%AID%_P-%TT%%CC%105_R-%TT%%CC%10501"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when></choose></when>
-<!-- BEGIN DETAILED BRANCHES -->
-<when test="16">
-                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" />
-                            <choose ParamRefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /></when></choose>
-                          </when>
-<when test="17">
-                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" />
-                            <choose ParamRefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /></when></choose>
-                          </when>
-<when test="18">
-                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" />
-                            <choose ParamRefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /></when></choose>
-                          </when>
-<when test="19">
-                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" />
-                            <choose ParamRefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /></when></choose>
-                          </when>
-<when test="20"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
-<when test="21"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" /></when>
-<when test="22"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" /></when>
-<when test="23"><choose ParamRefId="%AID%_P-%TT%%CC%105_R-%TT%%CC%10501">
-                            <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
-                            <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
-                          </choose></when>
-<when test="24"><choose ParamRefId="%AID%_P-%TT%%CC%105_R-%TT%%CC%10501">
-                            <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
-                            <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
-                          </choose></when>
-<when test="25">
-                            <choose ParamRefId="%AID%_P-%TT%%CC%105_R-%TT%%CC%10501">
-                              <when test="0"><choose ParamRefId="%AID%_UP-%TT%%CC%081_R-%TT%%CC%08101">
-                                <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
-                                <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
-                              </choose></when>
-                              <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
-                            </choose>
-                          </when>
-<when test="26">
-                            <choose ParamRefId="%AID%_P-%TT%%CC%105_R-%TT%%CC%10501">
-                              <when test="0"><choose ParamRefId="%AID%_UP-%TT%%CC%081_R-%TT%%CC%08101">
-                                <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
-                                <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
-                              </choose></when>
-                              <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
-                            </choose>
-                          </when>
-<when test="27"><choose ParamRefId="%AID%_P-%TT%%CC%105_R-%TT%%CC%10501">
-                            <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
-                            <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
-                          </choose></when>
-<when test="28"><choose ParamRefId="%AID%_P-%TT%%CC%105_R-%TT%%CC%10501">
-                            <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
-                            <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
-                          </choose></when>
-<when test="29"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
-<when test="30"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
-<when test="31">
-                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" />
-                            <choose ParamRefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /></when></choose>
-                          </when>
-<when test="32">
-                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" />
-                            <choose ParamRefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /></when></choose>
-                          </when>
-<when test="33"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
-<when test="34"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
-<when test="35">
-                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" />
-                            <choose ParamRefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /></when></choose>
-                          </when>
-<when test="36">
-                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" />
-                            <choose ParamRefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /></when></choose>
-                          </when>
-<when test="37"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
-<when test="38"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /></when>
-<when test="39"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /></when>
-<when test="40"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /></when>
-<when test="41"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /></when>
-<when test="42"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /></when>
-<when test="43"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><choose ParamRefId="%AID%_P-%TT%%CC%105_R-%TT%%CC%10501"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when></choose></when>
-<when test="44">
-                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" />
-                            <choose ParamRefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /></when></choose>
-                          </when>
-<when test="45">
-                            <ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" />
-                            <choose ParamRefId="%AID%_P-%TT%%CC%102_R-%TT%%CC%10201"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" /></when></choose>
-                          </when>
-<!-- END DETAILED BRANCHES -->
+                          <when test="11"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /></when>
+                          <when test="12"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
+                          <when test="13"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /></when>
+                          <when test="14"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><choose ParamRefId="%AID%_P-%TT%%CC%105_R-%TT%%CC%10501"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when></choose></when>
 </choose>
 
                         <!-- Battery and RSSI objects remain declared at their stable KO numbers,
@@ -782,30 +634,14 @@
                         <ComObjectRefRef RefId="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" />
 
                         <!-- === Wind/Rain KO: visible for position-capable types === -->
-                        <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601">
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201">
+                          <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
                           <when test="2"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
                           <when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-                          <when test="4"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-<!-- BEGIN DETAILED BRANCHES -->
-<when test="16"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-<when test="17"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-<when test="18"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-<when test="19"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-<when test="20"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-<when test="21"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-<when test="22"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-<when test="31"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-<when test="32"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-<when test="35"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-<when test="36"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-<when test="44"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-<when test="45"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
-<!-- END DETAILED BRANCHES -->
 </choose>
 
                         <!-- Scene KOs: only for supported ETS scene categories with SceneCount >= 1. -->
-                        <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"><!-- DETAILED GROUP: 2 3 4 5 6 7 8 9 10 11 12 13 -->
-<when test="2 3 4 5 6 7 8 9 10 11 12 13 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 44 45">
+                        <choose ParamRefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201"><when test="1 2 3 4 5 6 7 8 9 10 11 12">
                           <choose ParamRefId="%AID%_UP-%TT%%CC%020_R-%TT%%CC%02001"><when test="&gt;=1">
                             <ComObjectRefRef RefId="%AID%_O-%TT%%CC%016_R-%TT%%CC%01601" />
                             <ComObjectRefRef RefId="%AID%_O-%TT%%CC%017_R-%TT%%CC%01701" />

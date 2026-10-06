@@ -303,7 +303,7 @@ Während einer Fahrt schätzt das Modul die Position linear basierend auf den ko
 
 ### **Lamellensteuerung**
 
-Für Jalousien mit bestätigtem Orientierungsparameter steht zusätzlich eine Lamellenposition (DPT 5.001) zur Verfügung. Beim ETS-Schlüsselimport wird diese Eigenschaft aus Profil und Subprofil gesetzt; bei manueller Einrichtung muss sie ausdrücklich aktiviert werden.
+Für Jalousien mit bestätigtem Orientierungsparameter steht zusätzlich eine Lamellenposition (DPT 5.001) zur Verfügung. Beim ETS-Schlüsselimport wird diese Eigenschaft aus Profil und Subprofil gesetzt; bei manueller Einrichtung wird sie durch die genaue Gerätetypwahl gesetzt.
 
 ### **Spezielle Positionen**
 
@@ -397,11 +397,13 @@ Wird direkt auf der Seite **Kanalauswahl** eingestellt. **Deaktiviert** ist der 
 
 **Automatisch (Discovery)** übernimmt den Gerätetyp aus der Erkennung. Nach dem Einlesen und Programmieren stehen die passenden Funktionen bereit.
 
-Die allgemeinen Kategorien bleiben für bestehende Projekte verfügbar. Zusätzlich gibt es jeden unterstützten Profiltyp einzeln: Innen-/Außenjalousie, Rollladenvarianten, Doppelrollladen, Klappladenvarianten, Fenster mit/ohne Regensensor, Markisen, Tore mit Position oder Ein/Aus, Tür-/Fensterschloss, Licht dimmbar oder Ein/Aus sowie die einzelnen Lüftungs- und Heizungsprofile.
+Die allgemeinen Kategorien wurden entfernt. Jeder unterstützte Profiltyp ist einzeln auswählbar: Innen-/Außenjalousie, Rollladenvarianten, Doppelrollladen, Klappladenvarianten, Fenster mit/ohne Regensensor, Markisen, Tore mit Position oder Ein/Aus, Tür-/Fensterschloss, Licht dimmbar oder Ein/Aus sowie die einzelnen Lüftungs- und Heizungsprofile.
 
-Eine genaue Profilauswahl stellt Profil, Lamellenfunktion, Binärmodus und Dimmen passend ein. Diese manuelle Wahl bleibt bei der Erkennung erhalten. **Automatik wiederherstellen** gibt die Zuordnung wieder an die Erkennung zurück. Bei allgemeinen Kategorien bleiben bereits gesetzte Expertenwerte erhalten.
+Eine genaue Profilauswahl stellt Profil, Lamellenfunktion, Binärmodus und Dimmen passend ein. Diese manuelle Wahl bleibt bei der Erkennung erhalten. **Automatik wiederherstellen** gibt die Zuordnung wieder an die Erkennung zurück. Die Lamellenobjekte werden passend zum Profil automatisch eingeblendet; ein zusätzlicher Schalter ist nicht nötig.
 
 Einträge mit **(Diagnose)** unterscheiden weitere bekannte Gerätefamilien, z. B. RGB-Licht, Licht mit Farbtemperatur, Wärmepumpe, Warmwasserbereiter, Heizkörper, Sirene, Sensor, Beacon und Fernbedienung. Dort sind Status/Erkennung und Diagnose verfügbar; normale Aktor-Steuerbefehle sind noch nicht unterstützt. Die Auswahl verspricht keine vollständige Bedienung dieser Geräte.
+
+RGB und Farbtemperatur werden nur für RGB-Licht und Licht mit Farbtemperatur angezeigt. Temperatur und Modus erscheinen nur für Wärmepumpe, Warmwasserbereiter, elektrische Heizkörper und Heizungs-Temperaturschnittstelle. Die Auswahl ersetzt keine Produktqualifikation.
 
 Beim Cozy-Thermostat erscheinen dessen Privatbefehls-KOs. Dieser Gerätetyp ist von der Heizungs-Temperaturschnittstelle und den Heizleistungsprofilen getrennt.
 

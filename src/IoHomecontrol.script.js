@@ -179,7 +179,6 @@ function /* internal helper */ IOHC_applyRecognitionSettings(device, prefix, dis
         if (!permission || Number(permission.value)!==1) continue;
         IOHC_setParameterValue(device,prefix+fields[i][1],fields[i][2]);
         IOHC_recordRecognitionAdoption(device,prefix,i,fields[i][2],discovery);
-        if (i===0) IOHC_setParameterValue(device,prefix+"ChannelSelection",etsType+1);
         changed=true;
     }
     return changed;
@@ -310,8 +309,12 @@ function IOHC_syncChannelSelection(input, output, context) {
             output.Binary=(preset.flags>>1)&1;
             output.Dimmable=(preset.flags>>2)&1;
             output.TypeAuto=0;output.OrientationAuto=0;output.BinaryAuto=0;output.DimmableAuto=0;
-        } else if (selection>0 && selection<=15) {
-            output.DeviceType=selection-1; // Preserve existing expert overrides.
+        } else if (selection===6) {
+            output.DeviceType=5;output.Override=0;output.Orientation=0;output.Binary=0;output.Dimmable=0;
+            output.TypeAuto=0;output.OrientationAuto=0;output.BinaryAuto=0;output.DimmableAuto=0;
+        } else if (selection===1) {
+            output.Override=0;
+            output.TypeAuto=1;output.OrientationAuto=1;output.BinaryAuto=1;output.DimmableAuto=1;
         }
         return;
     }
@@ -323,7 +326,7 @@ function IOHC_syncChannelSelection(input, output, context) {
             output.Selection=preset.value;return;
         }
     }
-    output.Selection=Number(input.DeviceType)+1;
+    output.Selection=Number(input.DeviceType)===5 ? 6 : 1;
 }
 
 function /* internal helper */ IOHC_controllerStateText(state) {

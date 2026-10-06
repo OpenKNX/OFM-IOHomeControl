@@ -81,7 +81,7 @@
                   <!-- END DETAILED SELECTIONS -->
                 </TypeRestriction>
               </ParameterType>
-              <!-- ETS selector: values 0..15 retain legacy meanings; detailed presets use channel-selections.json. -->
+              <!-- ETS selector: disabled, automatic, Cozy and exact profiles from channel-selections.json. -->
               <ParameterType Id="%AID%_PT-IOHCProfileOverride" Name="IOHCProfileOverride">
                 <TypeNumber SizeInBit="16" Type="unsignedInt" minInclusive="0" maxInclusive="65535" />
               </ParameterType>
@@ -89,20 +89,7 @@
                 <TypeRestriction Base="Value" SizeInBit="8">
                   <Enumeration Text="Deaktiviert" Value="0" Id="%ENID%" />
                   <Enumeration Text="Automatisch (Discovery)" Value="1" Id="%ENID%" />
-                  <Enumeration Text="Jalousie / Rollladen" Value="2" Id="%ENID%" />
-                  <Enumeration Text="Fenster" Value="3" Id="%ENID%" />
-                  <Enumeration Text="Markise" Value="4" Id="%ENID%" />
-                  <Enumeration Text="Garagentor" Value="5" Id="%ENID%" />
                   <Enumeration Text="Cozy-Thermostat" Value="6" Id="%ENID%" />
-                  <Enumeration Text="Licht" Value="7" Id="%ENID%" />
-                  <Enumeration Text="Tor" Value="8" Id="%ENID%" />
-                  <Enumeration Text="Schloss" Value="9" Id="%ENID%" />
-                  <Enumeration Text="Sonnenschutz horizontal" Value="10" Id="%ENID%" />
-                  <Enumeration Text="Vorhangschiene" Value="11" Id="%ENID%" />
-                  <Enumeration Text="Lüftung" Value="12" Id="%ENID%" />
-                  <Enumeration Text="Schalter" Value="13" Id="%ENID%" />
-                  <Enumeration Text="Heizung Stellwert" Value="14" Id="%ENID%" />
-                  <Enumeration Text="Heizung Ein/Aus" Value="15" Id="%ENID%" />
                   <!-- BEGIN DETAILED SELECTIONS -->
                   <Enumeration Text="Innenjalousie" Value="16" Id="%ENID%" />
                   <Enumeration Text="Rollladen" Value="17" Id="%ENID%" />
