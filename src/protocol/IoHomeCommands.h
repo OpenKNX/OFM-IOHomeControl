@@ -236,7 +236,8 @@ enum class TwoWayDiscoveryDestinationMode : uint8_t
 enum class TwoWayDiscoveryListenChannels : uint8_t
 {
     Automatic = 0,
-    SkipRequest = 1,
+    PreferAlternateRecentAware = 1, // Short-lived diversity preference; all channels remain eligible.
+    SkipRequest = PreferAlternateRecentAware, // Legacy source compatibility name.
     All = 2,
 };
 
@@ -281,7 +282,7 @@ struct TwoWayDiscoveryFrameOptions
     bool lowPower = false;
     bool ackCapable = false;
     uint16_t preamble = 1024;
-    TwoWayDiscoveryListenChannels listenChannels = TwoWayDiscoveryListenChannels::SkipRequest;
+    TwoWayDiscoveryListenChannels listenChannels = TwoWayDiscoveryListenChannels::PreferAlternateRecentAware;
 };
 
 // Configured 1W enrollment completion policy. Automatic stays conservative:

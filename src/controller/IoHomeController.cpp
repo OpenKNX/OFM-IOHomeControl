@@ -1347,7 +1347,7 @@ TwoWayDiscoveryFrameOptions IoHomeController::resolveTwoWayDiscoveryOptions(
     }
     lOptions.listenChannels = iSettings.listenChannels == TwoWayDiscoveryListenChannels::All
                                   ? TwoWayDiscoveryListenChannels::All
-                                  : TwoWayDiscoveryListenChannels::SkipRequest;
+                                  : TwoWayDiscoveryListenChannels::PreferAlternateRecentAware;
     return lOptions;
 }
 
@@ -5597,9 +5597,9 @@ void IoHomeController::serviceBroadcastResponseScan(uint8_t iRequestFrequencyInd
 
     const uint32_t lNow = micros();
     const bool avoidRecent=iListenChannels!=TwoWayDiscoveryListenChannels::All;
-    const bool lOnSkippedRequestChannel = avoidRecent && mCurrentFreqIdx==iRequestFrequencyIndex &&
+    const bool lOnRecentRequestChannel = avoidRecent && mCurrentFreqIdx==iRequestFrequencyIndex &&
         mRadioDiversity.recent(iRequestFrequencyIndex,millis());
-    if (!lOnSkippedRequestChannel && lNow - mRxScanLastSwitch < mRxScanIntervalUs)
+    if (!lOnRecentRequestChannel && lNow - mRxScanLastSwitch < mRxScanIntervalUs)
         return;
 
     // Never retune during demodulation. Recent activity is a short-lived

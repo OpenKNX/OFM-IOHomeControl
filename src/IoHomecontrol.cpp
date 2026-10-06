@@ -117,7 +117,7 @@ namespace
         switch (iMode)
         {
         case TwoWayDiscoveryListenChannels::All: return "all";
-        case TwoWayDiscoveryListenChannels::SkipRequest: return "skip_request";
+        case TwoWayDiscoveryListenChannels::PreferAlternateRecentAware: return "prefer_alternate_recent_aware";
         default: return "auto";
         }
     }
@@ -4099,7 +4099,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc metadata refresh NODE", "Refresh name, GI1 and GI2 for a paired 2W node (hex)");
     openknx.console.printHelpLine("iohc keyimport status|candidates|trace", "Show import evidence and verification state");
     openknx.console.printHelpLine("iohc discovery trace", "Show discovery reliability counters");
-    openknx.console.printHelpLine("iohc discovery listen [MS|default]", "Runtime-only discovery listen window (default 2000 ms)");
+    openknx.console.printHelpLine("iohc discovery listen [MS|default]", "Runtime-only override; default follows destination/LOW_POWER timing");
     openknx.console.printHelpLine("iohc codec heating RAW16", "Offline heating level; unknown enum rejected");
     openknx.console.printHelpLine("iohc codec siren SOUND16 OPTIONS16", "Offline sequence fields; retain reserved option codes");
     openknx.console.printHelpLine("iohc codec modes heatpump|atlantic-dhw FP15 FP16", "Offline product-specific mode pairs, unknown bits retained");
@@ -4986,7 +4986,8 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             else if (lField == "listen")
             {
                 if (lValue == "auto") lSettings.listenChannels = TwoWayDiscoveryListenChannels::Automatic;
-                else if (lValue == "skip" || lValue == "skip_request") lSettings.listenChannels = TwoWayDiscoveryListenChannels::SkipRequest;
+                else if (lValue == "recent" || lValue == "prefer_alternate_recent_aware" ||
+                         lValue == "skip" || lValue == "skip_request") lSettings.listenChannels = TwoWayDiscoveryListenChannels::PreferAlternateRecentAware;
                 else if (lValue == "all") lSettings.listenChannels = TwoWayDiscoveryListenChannels::All;
                 else lValid = false;
             }
@@ -4997,7 +4998,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 
             if (!lValid)
             {
-                logInfoP("Usage: discovery command auto|28|2e|spe; destination auto|3b|3f|1bb|1bf; ack/lowpower auto|off|on; preamble auto|1024|32|8; listen auto|skip|all");
+                logInfoP("Usage: discovery command auto|28|2e|spe; destination auto|3b|3f|1bb|1bf; ack/lowpower auto|off|on; preamble auto|1024|32|8; listen auto|recent|all");
                 return true;
             }
             mController.setDiagnosticDiscoverySettings(lSettings);

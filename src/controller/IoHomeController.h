@@ -1623,7 +1623,7 @@ private:
   // exclusion); unicast replies hold the channel that carried their request.
   void serviceBackgroundRxScan();
   void serviceBroadcastResponseScan(uint8_t iRequestFrequencyIndex,
-                                    TwoWayDiscoveryListenChannels iListenChannels = TwoWayDiscoveryListenChannels::SkipRequest);
+                                    TwoWayDiscoveryListenChannels iListenChannels = TwoWayDiscoveryListenChannels::PreferAlternateRecentAware);
   bool waitForLbtClear(LbtContext iContext);
   RadioError startRadioTransmit(const uint8_t *iBuffer, uint8_t iLen, LbtContext iLbtContext);
   RadioError startTransmitWithPreamble(const uint8_t *iBuffer, uint8_t iLen,

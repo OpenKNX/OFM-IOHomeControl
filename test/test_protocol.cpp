@@ -10689,7 +10689,7 @@ TEST(discovery_destination_and_listen_options_resolve_independently)
         ASSERT_EQ(lOptions.destination, lVector.destination);
         ASSERT_TRUE(lOptions.ackCapable);
         ASSERT_TRUE(!lOptions.lowPower);
-        ASSERT_EQ(lOptions.listenChannels, TwoWayDiscoveryListenChannels::SkipRequest);
+        ASSERT_EQ(lOptions.listenChannels, TwoWayDiscoveryListenChannels::PreferAlternateRecentAware);
     }
 
     TwoWayDiscoverySettings lAll;
@@ -13004,7 +13004,7 @@ TEST(controller_pairing_discovery_learns_always_alive)
     ASSERT_EQ(lKeyInitFrame.commandId, IoHomeCommand::KeyInitTransfer);
 }
 
-TEST(pairing_broadcast_scan_skips_request_channel_and_unicast_wait_holds_it)
+TEST(pairing_broadcast_scan_prefers_recent_aware_alternates_and_unicast_wait_holds_request)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -13012,8 +13012,8 @@ TEST(pairing_broadcast_scan_skips_request_channel_and_unicast_wait_holds_it)
         0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
         0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
 
-    // Discovery is broadcast on CH2. Its response wait must immediately
-    // listen on CH3, then CH1, and never spend a dwell back on CH2.
+    // Discovery is broadcast on CH2. Prefer CH3/CH1 during its recent-activity
+    // cooldown, then allow CH2 again; this preference is not an exclusion.
     {
         IoHomeController lController;
         IoHomecontrol lModule;
@@ -13035,6 +13035,13 @@ TEST(pairing_broadcast_scan_skips_request_channel_and_unicast_wait_holds_it)
         ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
         lController.loop();
         ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_3);
+
+        ioHomeTestAdvanceMillis(251); // expire the default 250 ms recent-TX cooldown
+        lController.loop();
+        ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_1);
+        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+        lController.loop();
+        ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
     }
 
     // The optional all-channel policy rotates through CH3, CH1 and back to

@@ -303,7 +303,7 @@ void IoHomecontrolChannel::setup()
         lDiscoverySettings.preamble = static_cast<TwoWayDiscoveryPreambleMode>(lTwoWayDiscoveryPreamble);
     lDiscoverySettings.listenChannels = lTwoWayDiscoveryListenChannels == 1
                                             ? TwoWayDiscoveryListenChannels::All
-                                            : TwoWayDiscoveryListenChannels::SkipRequest;
+                                            : TwoWayDiscoveryListenChannels::PreferAlternateRecentAware;
     setConfigured2WDiscoverySettings(lDiscoverySettings);
     setConfigured1WTargetNodeId(lOneWayTargetNodeId);
     setConfigured1WBroadcastType(resolveOneWayBroadcastType(

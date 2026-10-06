@@ -1,8 +1,9 @@
 #pragma once
 #include <stdint.h>
 #include <cstring>
-// Legacy RCM lifecycle model, distinct from master discovery. Does not enqueue
-// the prerequisite variants or claim that a real peer entered configuration.
+// Legacy RCM lifecycle model. The controller owns RF production of the
+// prerequisite 0x36 transaction and calls prerequisite() only after a
+// validated 0x37 response. This model owns the 600/300 s lifecycle.
 class IoHomeReceiveConfiguration {
 public:
  enum class Stage:uint8_t {Idle,Prerequisite,Base,Temporary,Done,Cancelled,Timeout,IdentityChanged};

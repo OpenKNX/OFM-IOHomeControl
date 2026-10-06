@@ -86,6 +86,9 @@ channel diversity: alternate selection prefers a different channel without recen
 activity, with a runtime 250 ms experimental cooldown and bounded fallback.
 It does not exclude the request channel for the full discovery window. **Alle drei
 Kanäle** uses ordinary rotation; background scanning always retains all channels.
+The code calls the default policy `PreferAlternateRecentAware` (numeric value 1).
+The runtime diagnostic command uses `listen recent`; the older `skip` and
+`skip_request` spellings remain accepted aliases for the same policy.
 
 For ordinary directed 2W START frames, the normal preamble is radio-specific:
 32 symbols on SX1276 and 48 on SX1262. Low-power wake-belief ordering is enabled
