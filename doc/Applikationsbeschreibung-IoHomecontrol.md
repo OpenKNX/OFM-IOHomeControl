@@ -395,25 +395,15 @@ Ein Freitextfeld mit bis zu 40 Zeichen zur Benennung des Kanals. Der Text wird i
 
 Wird direkt auf der Seite **Kanalauswahl** eingestellt. **Deaktiviert** ist der Standardwert. Die Auswahl eines Gerätetyps aktiviert den Kanal und beeinflusst, welche Kommunikationsobjekte und Parameter sichtbar sind.
 
-Mögliche Werte:
-* Deaktiviert — Standard
-* Automatisch (Discovery; ohne Aktor-KOs bis zur ETS-Typwahl)
-* Jalousie / Rollladen
-* Fenster
-* Markise
-* Garagentor
-* Cozy-Thermostat
-* Licht
-* Tor
-* Schloss
-* Sonnenschutz horizontal
-* Vorhangschiene
-* Lüftung
-* Schalter
-* Heizung Stellwert
-* Heizung Ein/Aus
+**Automatisch (Discovery)** übernimmt den Gerätetyp aus der Erkennung. Nach dem Einlesen und Programmieren stehen die passenden Funktionen bereit.
 
-> Bei Gerätetypen mit Positionssteuerung werden zusätzlich Öffnungszeit, Schließzeit und Richtung invertieren angezeigt. Beim Cozy-Thermostat erscheinen nur dessen Privatbefehls-KOs. Heizung Stellwert und Heizung Ein/Aus sind davon getrennte Profilkategorien.
+Die allgemeinen Kategorien bleiben für bestehende Projekte verfügbar. Zusätzlich gibt es jeden unterstützten Profiltyp einzeln: Innen-/Außenjalousie, Rollladenvarianten, Doppelrollladen, Klappladenvarianten, Fenster mit/ohne Regensensor, Markisen, Tore mit Position oder Ein/Aus, Tür-/Fensterschloss, Licht dimmbar oder Ein/Aus sowie die einzelnen Lüftungs- und Heizungsprofile.
+
+Eine genaue Profilauswahl stellt Profil, Lamellenfunktion, Binärmodus und Dimmen passend ein. Diese manuelle Wahl bleibt bei der Erkennung erhalten. **Automatik wiederherstellen** gibt die Zuordnung wieder an die Erkennung zurück. Bei allgemeinen Kategorien bleiben bereits gesetzte Expertenwerte erhalten.
+
+Einträge mit **(Diagnose)** unterscheiden weitere bekannte Gerätefamilien, z. B. RGB-Licht, Licht mit Farbtemperatur, Wärmepumpe, Warmwasserbereiter, Heizkörper, Sirene, Sensor, Beacon und Fernbedienung. Dort sind Status/Erkennung und Diagnose verfügbar; normale Aktor-Steuerbefehle sind noch nicht unterstützt. Die Auswahl verspricht keine vollständige Bedienung dieser Geräte.
+
+Beim Cozy-Thermostat erscheinen dessen Privatbefehls-KOs. Dieser Gerätetyp ist von der Heizungs-Temperaturschnittstelle und den Heizleistungsprofilen getrennt.
 
 #### **Suspendiert**
 

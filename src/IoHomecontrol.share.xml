@@ -61,9 +61,27 @@
                   <Enumeration Text="Schalter" Value="12" Id="%ENID%" />
                   <Enumeration Text="Heizung Stellwert" Value="13" Id="%ENID%" />
                   <Enumeration Text="Heizung Ein/Aus" Value="14" Id="%ENID%" />
+                  <!-- BEGIN DETAILED SELECTIONS -->
+                  <Enumeration Text="Rolltor (Diagnose)" Value="15" Id="%ENID%" />
+                  <Enumeration Text="Sicheres Konfigurationsgerät (Diagnose)" Value="16" Id="%ENID%" />
+                  <Enumeration Text="Beacon / Gateway / Repeater (Diagnose)" Value="17" Id="%ENID%" />
+                  <Enumeration Text="Wärmepumpe (Diagnose)" Value="18" Id="%ENID%" />
+                  <Enumeration Text="Einbruchalarm (Diagnose)" Value="19" Id="%ENID%" />
+                  <Enumeration Text="Innensirene (Diagnose)" Value="20" Id="%ENID%" />
+                  <Enumeration Text="Warmwasserbereiter (Diagnose)" Value="21" Id="%ENID%" />
+                  <Enumeration Text="Elektrischer Heizkörper (Diagnose)" Value="22" Id="%ENID%" />
+                  <Enumeration Text="Elektrischer Heizkörper, Variante 1 (Diagnose)" Value="23" Id="%ENID%" />
+                  <Enumeration Text="Lüftung mit Wärmerückgewinnung (Diagnose)" Value="24" Id="%ENID%" />
+                  <Enumeration Text="RGB-Licht (Diagnose)" Value="25" Id="%ENID%" />
+                  <Enumeration Text="Licht mit Farbtemperatur (Diagnose)" Value="26" Id="%ENID%" />
+                  <Enumeration Text="Schalt-Mikromodul, Variante 2 (Diagnose)" Value="27" Id="%ENID%" />
+                  <Enumeration Text="Sensor (Diagnose)" Value="28" Id="%ENID%" />
+                  <Enumeration Text="Fernbedienung / Controller (Diagnose)" Value="29" Id="%ENID%" />
+                  <Enumeration Text="Heizungs-Temperaturschnittstelle (Diagnose)" Value="30" Id="%ENID%" />
+                  <!-- END DETAILED SELECTIONS -->
                 </TypeRestriction>
               </ParameterType>
-              <!-- ETS channel selector: 0 disables, other values map to IOHCDeviceType + 1. -->
+              <!-- ETS selector: values 0..15 retain legacy meanings; detailed presets use channel-selections.json. -->
               <ParameterType Id="%AID%_PT-IOHCProfileOverride" Name="IOHCProfileOverride">
                 <TypeNumber SizeInBit="16" Type="unsignedInt" minInclusive="0" maxInclusive="65535" />
               </ParameterType>
@@ -85,6 +103,54 @@
                   <Enumeration Text="Schalter" Value="13" Id="%ENID%" />
                   <Enumeration Text="Heizung Stellwert" Value="14" Id="%ENID%" />
                   <Enumeration Text="Heizung Ein/Aus" Value="15" Id="%ENID%" />
+                  <!-- BEGIN DETAILED SELECTIONS -->
+                  <Enumeration Text="Innenjalousie" Value="16" Id="%ENID%" />
+                  <Enumeration Text="Rollladen" Value="17" Id="%ENID%" />
+                  <Enumeration Text="Rollladen mit verstellbaren Lamellen" Value="18" Id="%ENID%" />
+                  <Enumeration Text="Rollladen mit Ausstellfunktion" Value="19" Id="%ENID%" />
+                  <Enumeration Text="Senkrechtmarkise außen" Value="20" Id="%ENID%" />
+                  <Enumeration Text="Fensteröffner" Value="21" Id="%ENID%" />
+                  <Enumeration Text="Fensteröffner mit Regensensor" Value="22" Id="%ENID%" />
+                  <Enumeration Text="Garagentor mit Position" Value="23" Id="%ENID%" />
+                  <Enumeration Text="Garagentor Ein/Aus" Value="24" Id="%ENID%" />
+                  <Enumeration Text="Licht dimmbar" Value="25" Id="%ENID%" />
+                  <Enumeration Text="Licht Ein/Aus" Value="26" Id="%ENID%" />
+                  <Enumeration Text="Tor mit Position" Value="27" Id="%ENID%" />
+                  <Enumeration Text="Tor Ein/Aus" Value="28" Id="%ENID%" />
+                  <Enumeration Text="Türschloss" Value="29" Id="%ENID%" />
+                  <Enumeration Text="Fensterschloss" Value="30" Id="%ENID%" />
+                  <Enumeration Text="Innenrollo" Value="31" Id="%ENID%" />
+                  <Enumeration Text="Doppelrollladen" Value="32" Id="%ENID%" />
+                  <Enumeration Text="Schalter Ein/Aus" Value="33" Id="%ENID%" />
+                  <Enumeration Text="Horizontalmarkise" Value="34" Id="%ENID%" />
+                  <Enumeration Text="Außenjalousie" Value="35" Id="%ENID%" />
+                  <Enumeration Text="Lamellenbehang / Louvre" Value="36" Id="%ENID%" />
+                  <Enumeration Text="Vorhangschiene" Value="37" Id="%ENID%" />
+                  <Enumeration Text="Lüftung allgemein" Value="38" Id="%ENID%" />
+                  <Enumeration Text="Lufteinlass" Value="39" Id="%ENID%" />
+                  <Enumeration Text="Luftüberströmung" Value="40" Id="%ENID%" />
+                  <Enumeration Text="Luftauslass" Value="41" Id="%ENID%" />
+                  <Enumeration Text="Außenheizung Stellwert" Value="42" Id="%ENID%" />
+                  <Enumeration Text="Außenheizung Ein/Aus" Value="43" Id="%ENID%" />
+                  <Enumeration Text="Klappladen" Value="44" Id="%ENID%" />
+                  <Enumeration Text="Klappladen mit getrennten Flügeln" Value="45" Id="%ENID%" />
+                  <Enumeration Text="Rolltor (Diagnose)" Value="46" Id="%ENID%" />
+                  <Enumeration Text="Sicheres Konfigurationsgerät (Diagnose)" Value="47" Id="%ENID%" />
+                  <Enumeration Text="Beacon / Gateway / Repeater (Diagnose)" Value="48" Id="%ENID%" />
+                  <Enumeration Text="Wärmepumpe (Diagnose)" Value="49" Id="%ENID%" />
+                  <Enumeration Text="Einbruchalarm (Diagnose)" Value="50" Id="%ENID%" />
+                  <Enumeration Text="Innensirene (Diagnose)" Value="51" Id="%ENID%" />
+                  <Enumeration Text="Warmwasserbereiter (Diagnose)" Value="52" Id="%ENID%" />
+                  <Enumeration Text="Elektrischer Heizkörper (Diagnose)" Value="53" Id="%ENID%" />
+                  <Enumeration Text="Elektrischer Heizkörper, Variante 1 (Diagnose)" Value="54" Id="%ENID%" />
+                  <Enumeration Text="Lüftung mit Wärmerückgewinnung (Diagnose)" Value="55" Id="%ENID%" />
+                  <Enumeration Text="RGB-Licht (Diagnose)" Value="56" Id="%ENID%" />
+                  <Enumeration Text="Licht mit Farbtemperatur (Diagnose)" Value="57" Id="%ENID%" />
+                  <Enumeration Text="Schalt-Mikromodul, Variante 2 (Diagnose)" Value="58" Id="%ENID%" />
+                  <Enumeration Text="Sensor (Diagnose)" Value="59" Id="%ENID%" />
+                  <Enumeration Text="Fernbedienung / Controller (Diagnose)" Value="60" Id="%ENID%" />
+                  <Enumeration Text="Heizungs-Temperaturschnittstelle (Diagnose)" Value="61" Id="%ENID%" />
+                  <!-- END DETAILED SELECTIONS -->
                 </TypeRestriction>
               </ParameterType>
               <!-- Status poll interval -->

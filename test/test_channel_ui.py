@@ -1,8 +1,8 @@
-import json
 #!/usr/bin/env python3
 """Regression checks for the shared OpenKNX channel-selection convention."""
 
 from pathlib import Path
+import json
 import re
 import unittest
 import xml.etree.ElementTree as ET
@@ -120,6 +120,23 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIsNotNone(settings)
         self.assertIsNone(settings.find("k:choose", NS))
 
+    def test_detailed_selection_covers_all_registry_profiles_and_has_no_diagnostic_actuator_kos(self):
+        rows = json.loads((ROOT / "src/protocol/channel-selections.json").read_text())
+        registry = (ROOT / "src/protocol/IoHomeProfileRegistry.cpp").read_text().split("constexpr IoHomeParameterAlias")[0]
+        codes = {int(code, 16) for code in re.findall(r"profile\((0x[0-9A-F]+),", registry)}
+        self.assertEqual({r["packed"] for r in rows if r["control"]}, codes)
+        selector = "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"
+        choices = self.template.findall(f".//k:choose[@ParamRefId='{selector}']", NS)
+        ko_choice = next(c for c in choices if {w.get("test") for w in c.findall("k:when", NS)} >= {str(v) for v in range(2, 16)})
+        for row in rows:
+            branch = ko_choice.find(f"k:when[@test='{row['value']}']", NS)
+            if row["control"]:
+                self.assertIsNotNone(branch, row["label"])
+                self.assertTrue(branch.findall(".//k:ComObjectRefRef", NS), row["label"])
+            else:
+                self.assertIsNone(branch, row["label"])
+                self.assertIn("(Diagnose)", row["label"])
+
     def test_every_channel_is_disabled_by_default(self) -> None:
         activity = self.template.find(".//k:Parameter[@Name='c%C%Active']", NS)
         self.assertIsNotNone(activity)
@@ -138,7 +155,7 @@ class ChannelUiTest(unittest.TestCase):
         self.assertEqual((choices[0].get("Text"), choices[0].get("Value")), ("Deaktiviert", "0"))
         self.assertEqual(
             {choice.get("Value") for choice in choices},
-            {str(value) for value in range(16)},
+            {str(value) for value in range(16)} | {str(row["value"]) for row in json.loads((ROOT / "src/protocol/channel-selections.json").read_text())},
         )
 
         overrides = [
@@ -409,7 +426,7 @@ class ChannelUiTest(unittest.TestCase):
             choice
             for choice in selector_choices
             if {when.get("test") for when in choice.findall("k:when", NS)}
-            == {str(value) for value in range(2, 16)}
+            >= {str(value) for value in range(2, 16)}
         )
 
         roller = ko_choice.find("k:when[@test='2']", NS)
@@ -940,6 +957,30 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIsNotNone(page.find(".//k:ParameterBlock[@Name='Scenes']", NS))
         functions = page.find("k:ParameterBlock[@Name='Functions']", NS)
         self.assertIsNotNone(functions.find("k:choose/k:when[@test='0']/k:ParameterRefRef[@RefId='%AID%_UP-%TT%%CC%003_R-%TT%%CC%00301']", NS))
+
+    def test_exact_cover_profiles_keep_shared_movement_and_scene_controls(self) -> None:
+        parents = {child: parent for parent in self.template.iter() for child in parent}
+        rows = json.loads((ROOT / "src/protocol/channel-selections.json").read_text())
+        scenes = self.template.find(".//k:ParameterBlock[@Name='Scenes']", NS)
+        scene_choices = set(parents[scenes].get("test").split())
+        movement = self.template.find(".//op:usePart[@name='IOHCMovement']", NS)
+        movement_choices = set(parents[movement].get("test").split())
+        for row in rows:
+            if row['control'] and row['type'] == 1:
+                self.assertIn(str(row['value']), scene_choices)
+                self.assertIn(str(row['value']), movement_choices)
+            if not row['control']:
+                self.assertNotIn(str(row['value']), scene_choices)
+                self.assertNotIn(str(row['value']), movement_choices)
+
+    def test_entire_controller_profile_tab_is_one_way_only(self) -> None:
+        parents = {child: parent for parent in self.template.iter() for child in parent}
+        tab = self.template.find(".//k:ParameterBlock[@Name='ExpertControllerProfile']", NS)
+        condition = parents[tab]
+        self.assertEqual(condition.tag, f"{{{KNX}}}when")
+        self.assertEqual(condition.get("test"), "1")
+        self.assertEqual(parents[condition].get("ParamRefId"),
+                         "%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901")
 
     def test_global_navigation_separates_overview_and_online_tools(self) -> None:
         channel = self.share.find(".//k:Channel[@Name='IOHC_Global']", NS)

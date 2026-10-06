@@ -332,3 +332,26 @@ test("profile objects use exact detection or a known manual override",function()
  IOHC_profileObjectsProfile({Override:65535,Detected:"Profil 17/0"},out,{});check(out.Profile===0,"unsupported manual profile exposed objects");
  IOHC_profileObjectsProfile({Override:0,Detected:"1W: keine bestätigte Aktor-Erkennung"},out,{});check(out.Profile===0,"1W inferred an actuator profile");
 });
+
+
+test("all detailed selections configure their profile and retain their exact ETS choice", function() {
+ for(var i=0;i<IOHC_CHANNEL_SELECTIONS.length;i++) {
+  var row=IOHC_CHANNEL_SELECTIONS[i],configured={},roundtrip={};
+  IOHC_syncChannelSelection({Selection:row.value},configured,{});
+  check(configured.Active===1&&configured.DeviceType===row.type&&configured.Override===row.packed,"preset mapping "+row.label);
+  check(configured.Orientation===(row.flags&1)&&configured.Binary===((row.flags>>1)&1)&&configured.Dimmable===((row.flags>>2)&1),"capability mapping "+row.label);
+  check(configured.TypeAuto===0&&configured.OrientationAuto===0&&configured.BinaryAuto===0&&configured.DimmableAuto===0,"manual ownership "+row.label);
+  IOHC_syncChannelSelection(configured,roundtrip,{});
+  check(roundtrip.Selection===row.value,"round trip "+row.label);
+ }
+});
+test("legacy selection and disable preserve existing expert settings", function() {
+ for(var value=1;value<=15;value++) {
+  var out={};IOHC_syncChannelSelection({Selection:value},out,{});
+  check(out.Active===1&&out.DeviceType===value-1&&out.Override===undefined&&out.TypeAuto===undefined,"legacy migration "+value);
+ }
+ var out={};IOHC_syncChannelSelection({Selection:0},out,{});
+ check(out.Active===0&&out.DeviceType===undefined&&out.Override===undefined,"disable erases preset");
+ var inactive={};IOHC_syncChannelSelection({Active:0,DeviceType:1,Override:129},inactive,{});
+ check(inactive.Selection===0,"inactive detailed preset activates channel");
+});

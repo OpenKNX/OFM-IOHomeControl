@@ -1060,6 +1060,9 @@ void IoHomecontrolChannel::setManualProfileOverride(uint16_t iPackedType)
 
 bool IoHomecontrolChannel::allowsActuatorControls() const
 {
+    // Detailed diagnosis-only selections occupy ETS categories 15 and above.
+    // A restored actuator identity must not enable movement on these channels.
+    if (ParamIOHC_cDeviceType >= 15) return false;
     return mProtocolIdentity.nodeClass == IoHomeNodeClass::Unknown ||
            mProtocolIdentity.nodeClass == IoHomeNodeClass::Actuator;
 }

@@ -58,6 +58,7 @@ check-radio: $(SX1262_ERROR_TARGET) $(SX1262_PHY_TARGET) $(BUILD_DIR)/test_sx127
 	./$(BUILD_DIR)/test_sx1276_adapter
 
 check-ui:
+	$(PYTHON) ../tools/generate_channel_selections.py --check
 	$(PYTHON) test_channel_ui.py
 
 corpus: $(PROTOCOL_TARGET)

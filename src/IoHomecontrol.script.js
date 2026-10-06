@@ -293,19 +293,37 @@ function /* internal helper */ IOHC_configureImportedChannel(device, channelNumb
     IOHC_setParameterValue(device, prefix + "Active", 1);
 }
 
+// BEGIN GENERATED CHANNEL SELECTIONS
+var IOHC_CHANNEL_SELECTIONS = [{"value":16,"label":"Innenjalousie","type":1,"packed":64,"flags":1,"control":true},{"value":17,"label":"Rollladen","type":1,"packed":128,"flags":0,"control":true},{"value":18,"label":"Rollladen mit verstellbaren Lamellen","type":1,"packed":129,"flags":1,"control":true},{"value":19,"label":"Rollladen mit Ausstellfunktion","type":1,"packed":130,"flags":0,"control":true},{"value":20,"label":"Senkrechtmarkise außen","type":3,"packed":192,"flags":0,"control":true},{"value":21,"label":"Fensteröffner","type":2,"packed":256,"flags":0,"control":true},{"value":22,"label":"Fensteröffner mit Regensensor","type":2,"packed":257,"flags":0,"control":true},{"value":23,"label":"Garagentor mit Position","type":4,"packed":320,"flags":0,"control":true},{"value":24,"label":"Garagentor Ein/Aus","type":4,"packed":378,"flags":2,"control":true},{"value":25,"label":"Licht dimmbar","type":6,"packed":384,"flags":4,"control":true},{"value":26,"label":"Licht Ein/Aus","type":6,"packed":442,"flags":2,"control":true},{"value":27,"label":"Tor mit Position","type":7,"packed":448,"flags":0,"control":true},{"value":28,"label":"Tor Ein/Aus","type":7,"packed":506,"flags":2,"control":true},{"value":29,"label":"Türschloss","type":8,"packed":576,"flags":0,"control":true},{"value":30,"label":"Fensterschloss","type":8,"packed":577,"flags":0,"control":true},{"value":31,"label":"Innenrollo","type":1,"packed":640,"flags":0,"control":true},{"value":32,"label":"Doppelrollladen","type":1,"packed":832,"flags":0,"control":true},{"value":33,"label":"Schalter Ein/Aus","type":12,"packed":960,"flags":0,"control":true},{"value":34,"label":"Horizontalmarkise","type":9,"packed":1024,"flags":0,"control":true},{"value":35,"label":"Außenjalousie","type":1,"packed":1088,"flags":1,"control":true},{"value":36,"label":"Lamellenbehang / Louvre","type":1,"packed":1152,"flags":1,"control":true},{"value":37,"label":"Vorhangschiene","type":10,"packed":1216,"flags":0,"control":true},{"value":38,"label":"Lüftung allgemein","type":11,"packed":1280,"flags":0,"control":true},{"value":39,"label":"Lufteinlass","type":11,"packed":1281,"flags":0,"control":true},{"value":40,"label":"Luftüberströmung","type":11,"packed":1282,"flags":0,"control":true},{"value":41,"label":"Luftauslass","type":11,"packed":1283,"flags":0,"control":true},{"value":42,"label":"Außenheizung Stellwert","type":13,"packed":1344,"flags":0,"control":true},{"value":43,"label":"Außenheizung Ein/Aus","type":14,"packed":1402,"flags":2,"control":true},{"value":44,"label":"Klappladen","type":1,"packed":1536,"flags":0,"control":true},{"value":45,"label":"Klappladen mit getrennten Flügeln","type":1,"packed":1537,"flags":0,"control":true},{"value":46,"label":"Rolltor (Diagnose)","type":15,"packed":0,"flags":0,"control":false},{"value":47,"label":"Sicheres Konfigurationsgerät (Diagnose)","type":16,"packed":0,"flags":0,"control":false},{"value":48,"label":"Beacon / Gateway / Repeater (Diagnose)","type":17,"packed":0,"flags":0,"control":false},{"value":49,"label":"Wärmepumpe (Diagnose)","type":18,"packed":0,"flags":0,"control":false},{"value":50,"label":"Einbruchalarm (Diagnose)","type":19,"packed":0,"flags":0,"control":false},{"value":51,"label":"Innensirene (Diagnose)","type":20,"packed":0,"flags":0,"control":false},{"value":52,"label":"Warmwasserbereiter (Diagnose)","type":21,"packed":0,"flags":0,"control":false},{"value":53,"label":"Elektrischer Heizkörper (Diagnose)","type":22,"packed":0,"flags":0,"control":false},{"value":54,"label":"Elektrischer Heizkörper, Variante 1 (Diagnose)","type":23,"packed":0,"flags":0,"control":false},{"value":55,"label":"Lüftung mit Wärmerückgewinnung (Diagnose)","type":24,"packed":0,"flags":0,"control":false},{"value":56,"label":"RGB-Licht (Diagnose)","type":25,"packed":0,"flags":0,"control":false},{"value":57,"label":"Licht mit Farbtemperatur (Diagnose)","type":26,"packed":0,"flags":0,"control":false},{"value":58,"label":"Schalt-Mikromodul, Variante 2 (Diagnose)","type":27,"packed":0,"flags":0,"control":false},{"value":59,"label":"Sensor (Diagnose)","type":28,"packed":0,"flags":0,"control":false},{"value":60,"label":"Fernbedienung / Controller (Diagnose)","type":29,"packed":0,"flags":0,"control":false},{"value":61,"label":"Heizungs-Temperaturschnittstelle (Diagnose)","type":30,"packed":0,"flags":0,"control":false}];
+// END GENERATED CHANNEL SELECTIONS
+
 function IOHC_syncChannelSelection(input, output, context) {
     if (input.Selection !== undefined) {
-        var selection = Number(input.Selection);
+        var selection = Number(input.Selection), preset = null;
         output.Active = selection > 0 ? 1 : 0;
-        if (selection > 0) {
-            output.DeviceType = selection - 1;
+        for (var i=0;i<IOHC_CHANNEL_SELECTIONS.length;i++)
+            if (IOHC_CHANNEL_SELECTIONS[i].value===selection) preset=IOHC_CHANNEL_SELECTIONS[i];
+        if (preset) {
+            output.DeviceType=preset.type;
+            output.Override=preset.packed;
+            output.Orientation=preset.flags&1;
+            output.Binary=(preset.flags>>1)&1;
+            output.Dimmable=(preset.flags>>2)&1;
+            output.TypeAuto=0;output.OrientationAuto=0;output.BinaryAuto=0;output.DimmableAuto=0;
+        } else if (selection>0 && selection<=15) {
+            output.DeviceType=selection-1; // Preserve existing expert overrides.
         }
         return;
     }
-
-    output.Selection = Number(input.Active) == 1
-        ? Number(input.DeviceType) + 1
-        : 0;
+    if (Number(input.Active)!==1) {output.Selection=0;return;}
+    for (var i=0;i<IOHC_CHANNEL_SELECTIONS.length;i++) {
+        var preset=IOHC_CHANNEL_SELECTIONS[i];
+        if (preset.type===Number(input.DeviceType) &&
+            (preset.control ? preset.packed===Number(input.Override) : true)) {
+            output.Selection=preset.value;return;
+        }
+    }
+    output.Selection=Number(input.DeviceType)+1;
 }
 
 function /* internal helper */ IOHC_controllerStateText(state) {

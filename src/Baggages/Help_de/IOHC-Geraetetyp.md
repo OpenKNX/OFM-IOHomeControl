@@ -4,6 +4,10 @@ Deaktiviert blendet die Kanalseite und ihre Kommunikationsobjekte aus. Eine ande
 
 Automatisch (Discovery): Nach 2W-Pairing „Status / Erkennung lesen“. Bekannte Funktionen werden übernommen, sofern die Erkennungsautomatik dies erlaubt. Danach die Applikation programmieren. Bei unbekannten Profilen und 1W ist eine manuelle Auswahl nötig. Die Kategorie bezeichnet kein genaues Produktmodell.
 
+Die allgemeinen Kategorien bleiben für bestehende Projekte verfügbar. Die genauen Gerätetypen wählen zusätzlich das passende Profil und stellen Lamellenfunktion, Binärmodus und Dimmen ein. Diese manuelle Wahl bleibt bei der Erkennung erhalten. „Automatik wiederherstellen“ erlaubt wieder die automatische Zuordnung. Allgemeine Kategorien behalten vorhandene Expertenwerte.
+
+Einträge mit „(Diagnose)“ unterscheiden bekannte Gerätefamilien, deren Steuerung noch nicht vollständig unterstützt wird. Sie bieten Erkennung und Diagnose, aber keine normalen Aktor-Steuerobjekte. Cozy-Thermostat verwendet eigene Temperatur-/Modusbefehle und ist von der Heizungs-Temperaturschnittstelle getrennt.
+
 ## MP und FP verstehen
 
 MP ist der Hauptwert, etwa die Rollladenposition. FP1 bis FP16 sind Zusatzwerte, etwa Geschwindigkeit oder Lamellenwinkel. Beim Index bedeutet 0 = MP, 1 = FP1, 2 = FP2 usw. Die Nummer allein sagt nichts über die Bedeutung aus: FP1 kann je nach Profil Geschwindigkeit, Lamellenwinkel oder einen Lichtübergang beschreiben.
