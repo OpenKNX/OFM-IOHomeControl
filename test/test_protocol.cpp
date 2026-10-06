@@ -20234,7 +20234,7 @@ TEST(protocol_rain_short_records_do_not_refresh_retained_originator) {
     IoHomeRainEvidence e;RainLimitationInput in;e.observe({true,0x32,2},in,100);
     e.observe({},in,200);ASSERT_EQ(e.lastRainEvidenceMs,100U);ASSERT_EQ(e.lastCommandMs,100U);
     ASSERT_TRUE(e.lastCommand.valid);ASSERT_TRUE(!e.limitedByRain);
-    IoHomeFrame f;f.commandId=IoHomeCommand::PrivateResponse;f.dataLen=11;
+    IoHomeFrame f;f.init();f.commandId=IoHomeCommand::PrivateResponse;f.dataLen=11;
     ASSERT_TRUE(!ioHomeDecodeLastCommand(f).valid);f.dataLen=12;f.data[10]=0x32;f.data[11]=2;
     auto record=ioHomeDecodeLastCommand(f);ASSERT_TRUE(record.valid);ASSERT_EQ(record.node,0x32U);ASSERT_EQ(record.originator,2);
     f.commandId=IoHomeCommand::StatusUpdate;f.dataLen=15;std::memset(f.data,0,sizeof(f.data));f.data[13]=0x33;f.data[14]=9;
