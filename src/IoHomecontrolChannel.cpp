@@ -2592,15 +2592,25 @@ bool IoHomecontrolChannel::limitationEnabled() const {
         mProtocolIdentity.valid&&mProtocolIdentity.nodeClass==IoHomeNodeClass::Actuator&&allowsActuatorControls();
 }
 bool IoHomecontrolChannel::limitationKoValid() const {
-    return limitationEnabled()&&mController.limitationValid(_channelIndex);
+    return limitationEnabled()&&mController.limitationDecision(_channelIndex).valid;
+}
+bool IoHomecontrolChannel::prepareLimitationRead() {
+    if(!limitationKoValid())return false;
+    // Evidence can expire or change precedence between loop() and a GroupValueRead.
+    knx.getGroupObject(LIM_KoCalcNumber(LIM_KocActive)).valueNoSend(
+        mController.limitationDecision(_channelIndex).active,Dpt(1,2));
+    return true;
 }
 void IoHomecontrolChannel::updateLimitationStatus() {
     auto &ko=knx.getGroupObject(LIM_KoCalcNumber(LIM_KocActive));
     const auto &state=mController.limitationState(_channelIndex);
-    const auto action=mLimitationPublication.update(state.snapshot,limitationKoValid());
+    const auto decision=mController.limitationDecision(_channelIndex);
+    auto publication=state.snapshot;publication.node=mNodeId;publication.revision=productContextRevision();
+    publication.limitationActive=decision.active;
+    const auto action=mLimitationPublication.update(publication,limitationKoValid());
     if(action==IoHomeLimitationPublication::Action::Invalid)ko.invalidate();
-    else if(action==IoHomeLimitationPublication::Action::Transmit)ko.value(state.snapshot.limitationActive,Dpt(1,2));
-    else ko.valueNoSend(state.snapshot.limitationActive,Dpt(1,2));
+    else if(action==IoHomeLimitationPublication::Action::Transmit)ko.value(decision.active,Dpt(1,2));
+    else ko.valueNoSend(decision.active,Dpt(1,2));
     if(!limitationEnabled()){mLimitationPolled=false;return;}
     if(mLimitationPollRevision!=productContextRevision()) {
         mLimitationPolled=false;mLimitationPollRevision=productContextRevision();
@@ -2612,9 +2622,22 @@ void IoHomecontrolChannel::updateLimitationStatus() {
 }
 void IoHomecontrolChannel::printLimitationStatus() {
     const auto &s=mController.limitationState(_channelIndex);const auto &v=s.snapshot;
+    const auto decision=mController.limitationDecision(_channelIndex);
+    const auto &rain=mController.rainState(_channelIndex);
+    const auto &e=rain.evidence;
+    logInfoP("  source=%s rain=%s rule=%s error-valid=%u code=%02X",
+        ioHomeLimitationSourceName(decision.source),e.active(millis())?"yes":"no",ioHomeRainRuleName(e.rule),
+        unsigned(rain.errorValid),unsigned(rain.errorCode));
+    logInfoP("  commander=%06X originator=%02X last-command-valid=%u age=%lums rain-evidence=%u age=%lums",
+        unsigned(e.lastCommand.node),unsigned(e.lastCommand.originator),unsigned(e.lastCommand.valid),
+        static_cast<unsigned long>(millis()-e.lastCommandMs),unsigned(e.hasRainEvidence),
+        static_cast<unsigned long>(millis()-e.lastRainEvidenceMs));
+    logInfoP("  predicted-valid=%u target=%.2f observed-valid=%u target=%.2f stopped=%u (wire percent)",
+        unsigned(e.input.predictedTargetValid),e.input.predictedTarget,
+        unsigned(e.input.observedTargetValid),e.input.observedTarget,unsigned(e.input.stopped));
     const bool valid=limitationKoValid();
     logInfoP("Limitation ch=%u node=%06X sample-node=%06X coherent=%s active=%s revision=%lu current-revision=%lu token=%lu pending=%s result=%s/%u (5-byte layout provisional)",
-        unsigned(_channelIndex+1),unsigned(mNodeId),unsigned(v.node),valid?"yes":"no",valid?(v.limitationActive?"yes":"no"):"unknown",
+        unsigned(_channelIndex+1),unsigned(mNodeId),unsigned(v.node),mController.limitationValid(_channelIndex)?"yes":"no",valid?(decision.active?"yes":"no"):"unknown",
         (unsigned long)v.revision,(unsigned long)productContextRevision(),(unsigned long)v.refreshToken,s.active?"yes":"no",s.resultValid?"known":"none",unsigned(s.result));
     for(uint8_t i=0;i<2;++i) {
         const auto &sample=i?v.maximum:v.minimum;const uint32_t at=i?v.maximumTimestampMs:v.minimumTimestampMs;

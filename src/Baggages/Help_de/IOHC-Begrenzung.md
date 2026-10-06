@@ -1,9 +1,11 @@
 # Begrenzungsstatus
 
-Liest die aktuell wirksame Mindest- und Höchstgrenze des Hauptwerts (MP) eines gepaarten 2W-Aktors. Aktivieren zeigt „Begrenzung aktiv“: 1 = bestätigte Einschränkung, 0 = bestätigter uneingeschränkter Bereich. Es werden keine Grenzen verändert.
+Zeigt „Begrenzung aktiv“ für einen gepaarten 2W-Aktor: 1 = eine Einschränkung wurde gemeldet oder aus Regenstatus erkannt, 0 = ein frisch bestätigter uneingeschränkter Mindest-/Höchstbereich. Es werden keine Grenzen verändert.
 
-Standard: aus, da die Antwort unter aktiver Begrenzung noch mit realem Funk bestätigt werden muss. Bei Aktivierung wird nach Start/Pairing einmal gelesen, danach im gewählten Intervall (Standard 5 Minuten). „Aus“ beim Intervall beendet nur zyklische Abfragen; Start- und manuelle Abfragen bleiben möglich.
+Die direkte Grenzabfrage hat Vorrang. Fehlt sie, werden eindeutige Begrenzungsfehler und bei Positionsgeräten Regenmeldungen ausgewertet. Eine abweichende Endposition zählt nur als Regenbegrenzung, wenn zuvor Regen gemeldet wurde. Die sofortige Fahrbefehlsbestätigung zählt nicht als Regenstatus.
 
-Beide Antworten müssen aus derselben Abfrage stammen und innerhalb von 5 Sekunden eintreffen. Ein bestätigter Zustand gilt höchstens 5 Minuten. Fehlende, alte oder widersprüchliche Antworten bedeuten unbekannt; sie senden keine falsche 0. Ein KNX-Lesetelegramm wird nur mit einem frischen Zustand beantwortet.
+Standard: aus. Bei Aktivierung wird nach Start/Pairing einmal gelesen, danach im gewählten Intervall (Standard 5 Minuten). „Aus“ beim Intervall beendet nur zyklische Abfragen. Regenstatus löst keine zusätzlichen Abfragen aus.
 
-Die fünf Antwortfelder und die Timerdeutung sind vorläufig. Originator und Timer dienen nur der Diagnose. Herstellerübergreifende Unterstützung ist noch nicht physisch bestätigt.
+Direkte Grenzen müssen aus derselben Abfrage innerhalb von 5 Sekunden eintreffen und gelten höchstens 5 Minuten. Regenhinweise werden vorläufig höchstens 2 Stunden berücksichtigt; eine bestätigte unbeschränkte Fahrt löscht sie. Geräte-, Profil- oder Schlüsselwechsel verwerfen alte Hinweise. Fehlende oder alte Daten bedeuten unbekannt und senden keine falsche 0. KNX-Leseanfragen werden nur mit einem gültigen Zustand beantwortet.
+
+Feld- und Timerdeutung sowie die Regenableitung sind vorläufig; reale Funk-/Regentests und herstellerübergreifende Bestätigung stehen noch aus. „iohc limitation CH status“ zeigt die Quelle und Rohdaten. Der Diagnosebefehl „iohc probe CH status_mp_fp“ protokolliert eine KLF-Statusantwort ohne ihre Werte zu übernehmen.

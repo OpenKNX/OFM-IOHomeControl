@@ -20195,3 +20195,190 @@ TEST(controller_limitation_start_guards_and_parameter_scope) {
     IoHomeProtocolIdentity id;id.valid=true;id.nodeClass=IoHomeNodeClass::Sensor;ch.onProtocolIdentity(0x654321,id);
     ASSERT_TRUE(!c.refreshLimitationStatus(&ch));
 }
+
+
+TEST(protocol_rain_probe_payload_and_flags_are_exact) {
+    const uint8_t expected[]={1,0xFE,1,1,1,1,1,1,1,0};
+    for(bool low:{false,true}) {
+        IoHomeFrame f;ASSERT_TRUE(ioHomeBuildStatusMpFpProbe(f,0x123456,0x654321,low));
+        ASSERT_EQ(f.dataLen,10);ASSERT_MEM_EQ(f.data,expected,10);
+        ASSERT_EQ(f.getSrcNodeId(),0x123456U);ASSERT_EQ(f.getDestNodeId(),0x654321U);
+        ASSERT_EQ(bool(f.ctrlByte1&IOHC_CTRL1_LOW_POWER),low);ASSERT_TRUE(!f.hasHmac);
+    }
+    IoHomeFrame f;ASSERT_TRUE(!ioHomeBuildStatusMpFpProbe(f,0,0x654321,true));
+}
+TEST(protocol_rain_rules_require_trusted_originator_or_all_clamp_inputs) {
+    RainLimitationInput in;in.originator=2;ASSERT_TRUE(ioHomeRainLimitationRule(in)==RainLimitationRule::None);
+    in.hasLastCommand=true;ASSERT_TRUE(ioHomeRainLimitationRule(in)==RainLimitationRule::RainOriginator);
+    in.originator=1;in.predictedTarget=0;in.observedTarget=93;
+    in.predictedTargetValid=true;in.observedTargetValid=true;in.stopped=true;
+    ASSERT_TRUE(ioHomeRainLimitationRule(in)==RainLimitationRule::None);
+    in.rainEvidenceRecent=true;ASSERT_TRUE(ioHomeRainLimitationRule(in)==RainLimitationRule::ClampedCommand);
+    in.stopped=false;ASSERT_TRUE(ioHomeRainLimitationRule(in)==RainLimitationRule::None);in.stopped=true;
+    in.predictedTargetValid=false;ASSERT_TRUE(ioHomeRainLimitationRule(in)==RainLimitationRule::None);in.predictedTargetValid=true;
+    in.observedTargetValid=false;ASSERT_TRUE(ioHomeRainLimitationRule(in)==RainLimitationRule::None);in.observedTargetValid=true;
+    in.observedTarget=IOHC_RAIN_TARGET_TOLERANCE/2;ASSERT_TRUE(ioHomeRainLimitationRule(in)==RainLimitationRule::None);
+    in.rainEvidenceRecent=false;in.originator=9;ASSERT_TRUE(ioHomeRainLimitationRule(in)==RainLimitationRule::None);
+}
+TEST(protocol_rain_evidence_expiry_wrap_zero_and_unclamped_clear) {
+    IoHomeRainEvidence e;RainLimitationInput in;in.stopped=true;
+    e.observe({true,0x32,2},in,0);ASSERT_TRUE(e.recent(0));ASSERT_TRUE(e.active(IOHC_RAIN_EVIDENCE_HOLD_MS));
+    ASSERT_TRUE(!e.active(IOHC_RAIN_EVIDENCE_HOLD_MS+1));
+    e={};e.observe({true,0x32,2},in,0xFFFFFFF0U);ASSERT_TRUE(e.active(20));
+    in.predictedTargetValid=in.observedTargetValid=true;in.predictedTarget=0;in.observedTarget=93;
+    e.observe({true,0x123456,1},in,21);ASSERT_TRUE(e.rule==RainLimitationRule::ClampedCommand);
+    in.observedTarget=0;e.observe({true,0x123456,1},in,22);ASSERT_TRUE(!e.hasRainEvidence);ASSERT_TRUE(!e.active(22));
+    in.observedTarget=93;e.observe({true,0x123456,1},in,23);ASSERT_TRUE(!e.limitedByRain);
+}
+TEST(protocol_rain_short_records_do_not_refresh_retained_originator) {
+    IoHomeRainEvidence e;RainLimitationInput in;e.observe({true,0x32,2},in,100);
+    e.observe({},in,200);ASSERT_EQ(e.lastRainEvidenceMs,100U);ASSERT_EQ(e.lastCommandMs,100U);
+    ASSERT_TRUE(e.lastCommand.valid);ASSERT_TRUE(!e.limitedByRain);
+    IoHomeFrame f;f.commandId=IoHomeCommand::PrivateResponse;f.dataLen=11;
+    ASSERT_TRUE(!ioHomeDecodeLastCommand(f).valid);f.dataLen=12;f.data[10]=0x32;f.data[11]=2;
+    auto record=ioHomeDecodeLastCommand(f);ASSERT_TRUE(record.valid);ASSERT_EQ(record.node,0x32U);ASSERT_EQ(record.originator,2);
+    f.commandId=IoHomeCommand::StatusUpdate;f.dataLen=15;std::memset(f.data,0,sizeof(f.data));f.data[13]=0x33;f.data[14]=9;
+    record=ioHomeDecodeLastCommand(f);ASSERT_TRUE(record.valid);ASSERT_EQ(record.node,0x33U);ASSERT_EQ(record.originator,9);
+    f.commandId=IoHomeCommand::Execute;ASSERT_TRUE(!ioHomeDecodeLastCommand(f).valid);
+}
+TEST(protocol_rain_limitation_merge_preserves_range_and_error_priority) {
+    IoHomeRainEvidence e;RainLimitationInput in;e.observe({true,0x32,2},in,100);
+    auto d=ioHomeMergeLimitation(true,false,true,e,100);ASSERT_TRUE(d.valid);ASSERT_TRUE(!d.active);
+    ASSERT_TRUE(d.source==IoHomeLimitationSource::ExplicitRange);
+    d=ioHomeMergeLimitation(false,false,true,e,100);ASSERT_TRUE(d.source==IoHomeLimitationSource::ExplicitError);
+    d=ioHomeMergeLimitation(false,false,false,e,100);ASSERT_TRUE(d.source==IoHomeLimitationSource::RainOriginator);
+    in.predictedTargetValid=in.observedTargetValid=true;in.stopped=true;in.observedTarget=93;
+    e.observe({true,0x123456,1},in,101);
+    d=ioHomeMergeLimitation(false,false,false,e,101);ASSERT_TRUE(d.source==IoHomeLimitationSource::RainClamp);
+    d=ioHomeMergeLimitation(false,false,false,e,IOHC_RAIN_EVIDENCE_HOLD_MS+101);ASSERT_TRUE(!d.valid);
+    e={};d=ioHomeMergeLimitation(false,false,false,e,0);ASSERT_TRUE(!d.valid);
+    ASSERT_TRUE(ioHomeIsExplicitLimitationError(0xE3));ASSERT_TRUE(!ioHomeIsExplicitLimitationError(7));
+}
+static void initRainController(IoHomeController &c,IoHomecontrol &m,IoHomecontrolChannel &ch) {
+    initLimitationController(c,m,ch);IoHomeProtocolIdentity id;id.valid=true;id.nodeClass=IoHomeNodeClass::Actuator;
+    id.profile=4;id.subProfile=1;ch.onProtocolIdentity(0x654321,id);
+}
+static bool replyRainStatus(IoHomeController &c,uint8_t originator=2,uint16_t target=0xBA00,IoHomeCommand command=IoHomeCommand::PrivateResponse) {
+    uint8_t data[15]={};data[0]=5;const uint8_t pos=command==IoHomeCommand::PrivateResponse?2:5;
+    data[pos]=uint8_t(target>>8);data[pos+1]=uint8_t(target);data[pos+2]=uint8_t(target>>8);data[pos+3]=uint8_t(target);
+    const uint8_t base=command==IoHomeCommand::PrivateResponse?8:11;data[base+2]=0x32;data[base+3]=originator;
+    IoHomeFrame f;buildSimpleResponseFrame(f,0x123456,0x654321,command,data,command==IoHomeCommand::PrivateResponse?14:15);
+    return queueControllerResponse(c,f);
+}
+TEST(controller_rain_status_records_identity_and_invalidates_context) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3));IoHomeFrame tx;
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyRainStatus(c));
+    ASSERT_TRUE(c.rainState(0).evidence.hasRainEvidence);ASSERT_EQ(c.rainState(0).evidence.lastCommand.node,0x32U);
+    ASSERT_TRUE(c.limitationDecision(0).source==IoHomeLimitationSource::RainOriginator);
+    ch.invalidateProductContext();ASSERT_TRUE(!c.rainState(0).evidence.hasRainEvidence);ASSERT_TRUE(!c.limitationDecision(0).valid);
+}
+TEST(controller_status_mp_fp_probe_isolates_all_device_state) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);
+    ASSERT_TRUE(c.requestStatusMpFpProbe(&ch));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ASSERT_EQ(tx.dataLen,10);ASSERT_TRUE(replyRainStatus(c));
+    ASSERT_TRUE(!c.rainState(0).evidence.hasRainEvidence);ASSERT_TRUE(!c.rainState(0).evidence.lastCommand.valid);
+    ASSERT_TRUE(!c.limitationDecision(0).valid);ASSERT_TRUE(!ch.testHasPositionFeedback());
+    ASSERT_TRUE(!ch.testHasTargetPositionFeedback());ASSERT_TRUE(!ch.testHasStatusUpdate());
+    ASSERT_TRUE(!ch.testHasCommandExchangeResult());
+    ASSERT_TRUE(replyRainStatus(c));ASSERT_TRUE(!c.rainState(0).evidence.hasRainEvidence); // delayed duplicate
+}
+TEST(controller_execute_ack_cannot_create_clear_or_refresh_rain) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Execute,0));IoHomeFrame tx;
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyRainStatus(c));ASSERT_TRUE(!c.rainState(0).evidence.hasRainEvidence);
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyRainStatus(c));
+    const auto evidenceMs=c.rainState(0).evidence.lastRainEvidenceMs;
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Execute,0));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyRainStatus(c,1,0));
+    ASSERT_TRUE(c.rainState(0).evidence.hasRainEvidence);ASSERT_EQ(c.rainState(0).evidence.lastRainEvidenceMs,evidenceMs);
+    ASSERT_EQ(c.rainState(0).evidence.lastCommand.originator,2);
+}
+TEST(controller_rain_clamp_requires_followup_status_and_clears_on_match) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);IoHomeFrame tx;
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyRainStatus(c));
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Execute,0));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyRainStatus(c,1,0));
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyRainStatus(c,1));
+    ASSERT_TRUE(c.limitationDecision(0).source==IoHomeLimitationSource::RainClamp);
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Execute,0));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyRainStatus(c,1,0));
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyRainStatus(c,1,0));
+    ASSERT_TRUE(!c.rainState(0).evidence.hasRainEvidence);ASSERT_TRUE(!c.limitationDecision(0).valid);
+}
+
+TEST(controller_rain_status_update_uses_its_own_last_commander_offsets) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);
+    const uint8_t data[15]={5,0,0,0,0,0xBA,0,0xBA,0,0,0,0,0,0x32,2};
+    IoHomeFrame status;buildStatusUpdateFrame(status,0x123456,0x654321,data,sizeof(data));
+    ASSERT_TRUE(queueControllerResponse(c,status));ASSERT_TRUE(!c.rainState(0).evidence.hasRainEvidence);
+    const auto &packet=c.radio().testLastTransmittedPacket();IoHomeFrame challenge;
+    ASSERT_TRUE(deserializeFrameForTest(challenge,packet.data(),uint8_t(packet.size())));
+    ASSERT_TRUE(challenge.commandId==IoHomeCommand::ChallengeRequest);
+    IoHomeFrame authenticated;buildChallengeResponseFrame(authenticated,0x123456,0x654321,data,sizeof(data),challenge.data,ch.getEncryptionKey());
+    ASSERT_TRUE(queueControllerResponse(c,authenticated));
+    ASSERT_EQ(c.rainState(0).evidence.lastCommand.node,0x32U);ASSERT_EQ(c.rainState(0).evidence.lastCommand.originator,2);
+    ASSERT_TRUE(c.limitationDecision(0).source==IoHomeLimitationSource::RainOriginator);
+}
+TEST(controller_rain_probe_preserves_existing_evidence_and_product_cache) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);IoHomeFrame tx;
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyRainStatus(c));
+    const auto before=c.rainState(0).evidence;const float position=ch.testPositionFeedback();
+    const float target=ch.testTargetPositionFeedback();const auto feedback=ch.profileFeedbackCount[0];
+    ASSERT_TRUE(c.requestStatusMpFpProbe(&ch));ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyRainStatus(c,1,0));
+    const auto &after=c.rainState(0).evidence;
+    ASSERT_EQ(after.lastCommandMs,before.lastCommandMs);ASSERT_EQ(after.lastRainEvidenceMs,before.lastRainEvidenceMs);
+    ASSERT_EQ(after.lastCommand.originator,before.lastCommand.originator);ASSERT_EQ(ch.testPositionFeedback(),position);
+    ASSERT_EQ(ch.testTargetPositionFeedback(),target);ASSERT_EQ(ch.profileFeedbackCount[0],feedback);
+    ASSERT_TRUE(after.rule==before.rule);ASSERT_EQ(after.limitedByRain,before.limitedByRain);
+}
+TEST(controller_explicit_limitation_error_is_correlated_fresh_and_context_bound) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);IoHomeFrame tx,reply;
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Execute,0));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));const uint8_t code=0xE3;
+    buildSimpleResponseFrame(reply,0x123456,0x654321,IoHomeCommand::ErrorResponse,&code,1);ASSERT_TRUE(queueControllerResponse(c,reply));
+    ASSERT_TRUE(c.limitationDecision(0).source==IoHomeLimitationSource::ExplicitError);
+    const uint32_t at=c.rainState(0).errorMs;ioHomeTestSetMillis(at+IOHC_LIMITATION_FRESH_MS);
+    ASSERT_TRUE(!c.limitationDecision(0).valid);ch.invalidateProductContext();ASSERT_TRUE(!c.rainState(0).errorValid);
+}
+TEST(controller_rain_changed_key_during_status_request_cannot_create_evidence) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);IoHomeFrame tx;
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));const uint8_t key[16]={9};ch.setEncryptionKey(key);
+    ASSERT_TRUE(replyRainStatus(c));ASSERT_TRUE(!c.rainState(0).evidence.hasRainEvidence);
+}
+
+TEST(controller_rain_evidence_expires_in_loop_and_global_key_changes_invalidate) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);IoHomeFrame tx;
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyRainStatus(c));
+    const uint8_t systemKey[16]={8};c.setSystemKey(systemKey);
+    ASSERT_TRUE(!c.limitationDecision(0).valid);c.loop();ASSERT_TRUE(!c.rainState(0).evidence.hasRainEvidence);
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyRainStatus(c));
+    const auto at=c.rainState(0).evidence.lastRainEvidenceMs;ioHomeTestSetMillis(at+IOHC_RAIN_EVIDENCE_HOLD_MS+1);
+    ASSERT_TRUE(!c.limitationDecision(0).valid);c.loop();ASSERT_TRUE(!c.rainState(0).evidence.hasRainEvidence);
+}
+
+TEST(controller_rain_probe_stale_duplicate_cannot_learn_after_context_change) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);IoHomeFrame tx;
+    ASSERT_TRUE(c.requestStatusMpFpProbe(&ch));ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyRainStatus(c));
+    ch.invalidateProductContext();ASSERT_TRUE(replyRainStatus(c));
+    ASSERT_TRUE(!ch.testHasPositionFeedback());ASSERT_TRUE(!c.rainState(0).evidence.lastCommand.valid);
+}
+
+TEST(controller_explicit_unrestricted_range_overrides_rain_then_expiry_falls_back) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);IoHomeFrame tx;
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyRainStatus(c));
+    ASSERT_TRUE(c.refreshLimitationStatus(&ch));ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyLimitation(c,0));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(replyLimitation(c,0xC800));
+    auto d=c.limitationDecision(0);ASSERT_TRUE(d.source==IoHomeLimitationSource::ExplicitRange);ASSERT_TRUE(!d.active);
+    ioHomeTestSetMillis(c.limitationState(0).snapshot.maximumTimestampMs+IOHC_LIMITATION_FRESH_MS);
+    d=c.limitationDecision(0);ASSERT_TRUE(d.source==IoHomeLimitationSource::RainOriginator);ASSERT_TRUE(d.active);
+}

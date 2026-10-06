@@ -7,6 +7,7 @@
 #include "../protocol/IoHomeRadioDiversity.h"
 #include "../protocol/IoHomeTransactionTiming.h"
 #include "../protocol/IoHomeLimitation.h"
+#include "../protocol/IoHomeRainLimitation.h"
 #include "../protocol/IoHomeSessionPolicy.h"
 #include "../protocol/IoHomeResponseDescriptor.h"
 #include "../radio/Radio.h"
@@ -181,6 +182,7 @@ struct IoHomeQueueEntry
   bool managementRead;                        // key snapshot for correlated management reads
   uint8_t managementKey[16];
   uint32_t sensorSubscriptionBackbone;        // nonzero only for explicit default write
+  bool statusMpFpProbe;                       // raw diagnostic; never publish or learn status
   bool mpFpRead;                              // source-backed standard/context GET
   uint16_t mpFpReadSelected;                  // logical FP mask; all requested fields required
   uint8_t mpFpReadMode;                       // 3=standard, 6/7=default min/max, 9=current alias
@@ -622,6 +624,14 @@ public:
   bool refreshLimitationStatus(IoHomecontrolChannel *channel);
   const LimitationState &limitationState(uint8_t channel) const;
   bool limitationValid(uint8_t channel) const;
+  bool requestStatusMpFpProbe(IoHomecontrolChannel *channel);
+  struct RainState {
+    IoHomeRainEvidence evidence{};uint32_t node=0,revision=0;uint8_t key[16]{},systemKey[16]{};
+    bool predictionValid=false,errorValid=false;float prediction=0;
+    uint32_t predictionMs=0,errorMs=0;uint8_t errorCode=0;
+  };
+  const RainState &rainState(uint8_t channel) const;
+  IoHomeLimitationDecision limitationDecision(uint8_t channel) const;
   bool requestSensorStatus(IoHomecontrolChannel *channel);
   bool requestSensorInformation(IoHomecontrolChannel *channel);
   bool requestDefaultSensorSubscription(IoHomecontrolChannel *channel,uint32_t backbone);
@@ -1483,6 +1493,11 @@ private:
   void processTx1WRepeat();
   void processWaitResponse();
   void processResponse();
+  RainState mRainStates[16]{};
+  uint8_t mRainExchangeChannel=0xFF,mRainExchangeKey[16]{},mRainExchangeSystemKey[16]{};
+  uint32_t mRainExchangeNode=0,mRainExchangeRevision=0;
+  RainState &bindRainState(IoHomecontrolChannel *channel);
+  void observeRainStatus(IoHomecontrolChannel *channel);
   LimitationState mLimitations[16]{};
   uint32_t mLimitationToken=0;uint8_t mLimitationOwner=0xFF;
   bool enqueueLimitation(IoHomecontrolChannel *channel,IoHomeLimitationType type);

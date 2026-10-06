@@ -1590,7 +1590,7 @@ void IoHomecontrol::setup()
         knx.getGroupObject(LIM_KoCalcNumber(LIM_KocActive)).readValidityCallback([](GroupObject &ko)->bool {
             const int8_t c=LIM_KoCalcChannel(ko.asap());
             auto *ch=limitationModule&&c>=0?limitationModule->getChannel(c):nullptr;
-            return ch&&ch->limitationKoValid();
+            return ch&&ch->prepareLimitationRead();
         });
     }
     applyPendingFlashChannelState();
@@ -4069,6 +4069,7 @@ void IoHomecontrol::showHelp()
     // available IOHC commands on all builds.
 
     openknx.console.printHelpLine("iohc help", "Show io-homecontrol commands");
+    openknx.console.printHelpLine("iohc probe CH status_mp_fp", "Raw read-only KLF MP/FP probe; reply is not interpreted");
     openknx.console.printHelpLine("iohc limitation CH min|max|refresh|status", "Read-only MP limits; opt-in ETS; provisional response fields");
     openknx.console.printHelpLine("iohc priority read NODE LEVEL", "Read priority 0..7; bounded expiry refresh; no lock write");
     openknx.console.printHelpLine("iohc product context NODE MODE", "Read defaults min(6)/max(7)/current alias(9); no physical-unit inference");
@@ -4188,6 +4189,13 @@ void IoHomecontrol::showHelp()
 
 bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 {
+    if(iCmd.rfind("iohc probe ",0)==0) {
+        unsigned channel=0;char probe[32]{};char extra=0;
+        if(sscanf(iCmd.c_str(),"iohc probe %u %31s %c",&channel,probe,&extra)!=2||channel<1||channel>mNumChannels||std::strcmp(probe,"status_mp_fp")) {
+            logInfoP("Usage: iohc probe CHANNEL status_mp_fp");return true;
+        }
+        logInfoP("status_mp_fp: %s",mController.requestStatusMpFpProbe(mChannels[channel-1])?"queued":"busy/identity not permitted");return true;
+    }
     if(iCmd.rfind("iohc limitation ",0)==0) {
         unsigned channel=0;char action[16]{};char extra=0;
         if(sscanf(iCmd.c_str(),"iohc limitation %u %15s %c",&channel,action,&extra)!=2||channel<1||channel>mNumChannels) {

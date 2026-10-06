@@ -2465,6 +2465,58 @@ bool IoHomeController::requestPriority(IoHomecontrolChannel *channel,uint8_t pri
     entry.maxAttempts=1;entry.background=true;entry.active=true;return queuePush(entry);
 }
 
+IoHomeController::RainState &IoHomeController::bindRainState(IoHomecontrolChannel *channel) {
+    auto &state=mRainStates[channelIndexFor(channel)];
+    if(!sampleIdentityMatches(channelIndexFor(channel),state.node,state.key,state.revision)||std::memcmp(state.systemKey,mSystemKey,16)) {
+        state={};state.node=channel->getNodeId();state.revision=channel->productContextRevision();
+        std::memcpy(state.key,channel->getEncryptionKey(),16);std::memcpy(state.systemKey,mSystemKey,16);
+    }
+    return state;
+}
+const IoHomeController::RainState &IoHomeController::rainState(uint8_t channel) const {
+    static const RainState empty{};
+    if(channel>=16)return empty;
+    const auto &state=mRainStates[channel];
+    return state.revision&&sampleIdentityMatches(channel,state.node,state.key,state.revision)&&!std::memcmp(state.systemKey,mSystemKey,16)?state:empty;
+}
+IoHomeLimitationDecision IoHomeController::limitationDecision(uint8_t channel) const {
+    const auto &state=rainState(channel);const auto now=millis();
+    return ioHomeMergeLimitation(limitationValid(channel),limitationState(channel).snapshot.limitationActive,
+        state.errorValid&&uint32_t(now-state.errorMs)<IOHC_LIMITATION_FRESH_MS,state.evidence,now);
+}
+bool IoHomeController::requestStatusMpFpProbe(IoHomecontrolChannel *channel) {
+    if(!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||!channel||
+       !channel->isPaired()||channel->is1W()||!channel->productContextRevision()||channelIndexFor(channel)>=16)return false;
+    IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
+    entry.productContextRevision=channel->productContextRevision();entry.managementRead=true;
+    std::memcpy(entry.managementKey,entry.encKey,16);entry.statusMpFpProbe=true;
+    entry.command=IoHomeCommand::Private;entry.sourceChannelIndex=channelIndexFor(channel);
+    entry.maxAttempts=1;entry.background=true;entry.active=true;return queuePush(entry);
+}
+void IoHomeController::observeRainStatus(IoHomecontrolChannel *channel) {
+    if(!mTrustRxPosition||!channel||!channel->productContextRevision()||channel->is1W()||channelIndexFor(channel)>=16)return;
+    if(mRxFrame.commandId==IoHomeCommand::PrivateResponse&&mCurrentCmd.privateProbe)return;
+    if(mCurrentCmd.active&&mCurrentCmd.destNodeId==channel->getNodeId()&&
+       mRxFrame.commandId==IoHomeCommand::PrivateResponse&&
+       (!sampleIdentityMatches(mRainExchangeChannel,mRainExchangeNode,mRainExchangeKey,mRainExchangeRevision)||
+        std::memcmp(mRainExchangeSystemKey,mSystemKey,16)))return;
+    const auto *profile=channel->getEffectiveProfileDescriptor();
+    if(!profile)return;
+    const bool positionProfile=ioHomeIsPositionSemantic(ioHomeParameterSemantic(profile,0));
+    auto &state=bindRainState(channel);const uint32_t now=millis();
+    RainLimitationInput in;in.stopped=(mRxFrame.data[0]&1)!=0;
+    const uint8_t offset=mRxFrame.commandId==IoHomeCommand::PrivateResponse?2:5;
+    uint16_t raw=readU16BE(mRxFrame.data,offset);
+    if(raw>IOHC_POSITION_MAX&&raw!=IOHC_NO_FEEDBACK_VALUE&&in.stopped)
+        raw=readU16BE(mRxFrame.data,offset+2);
+    in.observedTargetValid=positionProfile&&raw<=IOHC_POSITION_MAX;in.observedTarget=float(raw)*100/IOHC_POSITION_MAX;
+    in.predictedTargetValid=positionProfile&&state.predictionValid&&uint32_t(now-state.predictionMs)<=IOHC_RAIN_EVIDENCE_HOLD_MS;
+    in.predictedTarget=state.prediction;
+    state.evidence.observe(ioHomeDecodeLastCommand(mRxFrame),in,now);
+    state.errorValid=false; // an independent status supersedes a previous command error
+    if(in.stopped)state.predictionValid=false;
+}
+
 const IoHomeController::LimitationState &IoHomeController::limitationState(uint8_t c) const {
     static const LimitationState empty{};return c<16?mLimitations[c]:empty;
 }
@@ -4194,6 +4246,12 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
                                                    IoHomeCommandExchangeResult iResult)
 {
     finishLimitation(iEntry,iResult);
+    if(iResult==IoHomeCommandExchangeResult::ExplicitlyRejected||iResult==IoHomeCommandExchangeResult::FailedBeforeAuthentication||
+       iResult==IoHomeCommandExchangeResult::MediaAccessFailed) {
+        auto *channel=channelForQueueEntry(iEntry);
+        if(channel&&channelIndexFor(channel)<16&&iEntry.command==IoHomeCommand::Execute)
+            mRainStates[channelIndexFor(channel)].predictionValid=false;
+    }
     if (iResult == IoHomeCommandExchangeResult::FailedBeforeAuthentication &&
         iEntry.hadAuthenticatedAccept)
     {
@@ -4211,7 +4269,7 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
         mLastResponseTimingSample.result=iResult;mLastResponseTimingSample.resultValid=true;
     }
     IoHomecontrolChannel *lChannel = channelForQueueEntry(iEntry);
-    if (lChannel)
+    if (lChannel&&!iEntry.statusMpFpProbe)
         lChannel->onCommandExchangeResult(iEntry.command, iEntry.param, iResult);
 }
 
@@ -4222,7 +4280,7 @@ void IoHomeController::recordExchangeFailure(const IoHomeQueueEntry &iEntry,
     if(iEntry.objectReadToken==mObjectReadToken&&iEntry.objectReadToken)mObjectRead.fail();
     const bool lAuthenticatedUnconfirmed = iAuthenticatedUnconfirmed || iEntry.hadAuthenticatedAccept;
     IoHomecontrolChannel *lChannel = channelForQueueEntry(iEntry);
-    if (lChannel)
+    if (lChannel&&!iEntry.statusMpFpProbe)
         lChannel->onExchangeTimeout(lAuthenticatedUnconfirmed);
 
     if (lAuthenticatedUnconfirmed)
@@ -6244,6 +6302,19 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
 void IoHomeController::loop()
 {
     serviceLimitationRefresh();
+    for(uint8_t c=0;c<16;++c) {
+        auto &state=mRainStates[c];
+        if(!state.node)continue;
+        if(!sampleIdentityMatches(c,state.node,state.key,state.revision)||std::memcmp(state.systemKey,mSystemKey,16)) {
+            state={};continue;
+        }
+        if(!state.evidence.recent(millis())) {
+            state.evidence.hasRainEvidence=false;state.evidence.limitedByRain=false;
+            state.evidence.rule=RainLimitationRule::None;
+        }
+        if(state.errorValid&&uint32_t(millis()-state.errorMs)>=IOHC_LIMITATION_FRESH_MS)state.errorValid=false;
+        if(state.predictionValid&&uint32_t(millis()-state.predictionMs)>IOHC_RAIN_EVIDENCE_HOLD_MS)state.predictionValid=false;
+    }
 #if defined(RADIO_SX1276) && !defined(TEST_NATIVE)
     if(idleForManagedOperation()&&(!mModule||mModule->managementRequestsAllowed())&&mRadio.superviseIdleReceive(millis())){
         mRxScanLastSwitch=micros();
@@ -7636,7 +7707,8 @@ void IoHomeController::processResponse()
     }
     // These recovered read services cannot complete on an unrelated opcode
     // or the legacy descriptor's too-short Priority ACK.
-    if(mCurrentCmd.managementRead&&!mCurrentCmd.limitationToken&&!mCurrentCmd.objectReadToken&&!mCurrentCmd.mpFpRead&&!mCurrentCmd.productActivationLength) {
+    if(mCurrentCmd.statusMpFpProbe&&!managementIdentityMatches(mCurrentCmd)){mCurrentCmd.active=false;mState=ControllerState::Idle;return;}
+    if(mCurrentCmd.managementRead&&!mCurrentCmd.statusMpFpProbe&&!mCurrentCmd.limitationToken&&!mCurrentCmd.objectReadToken&&!mCurrentCmd.mpFpRead&&!mCurrentCmd.productActivationLength) {
         if(!managementIdentityMatches(mCurrentCmd)) {
             const auto failed=mCurrentCmd;
             mCurrentCmd.active=false;mState=ControllerState::Idle;
@@ -10437,7 +10509,11 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         // build2WPrivatePayload(). Known reference forms:
         //   03 00 00       = status
         //   03 20 01 00    = tilt status
-        if(iEntry.mpFpRead) {
+        if(iEntry.statusMpFpProbe) {
+            if(!ioHomeBuildStatusMpFpProbe(mTxFrame,mOwnNodeId,iEntry.destNodeId,resolveLowPower2W(iEntry.destNodeId)))return false;
+            logInfoP("status_mp_fp request cmd=03 node=%06X bytes=%s",iEntry.destNodeId,hexDump(mTxFrame.data,mTxFrame.dataLen).c_str());
+        }
+        else if(iEntry.mpFpRead) {
             if(iEntry.mpFpReadMode==3) {
                 if(!ioHomeBuildMpFpMaskRead(iEntry.mpFpReadSelected,mTxFrame.data,mTxFrame.dataLen))return false;
             } else {
@@ -10722,6 +10798,17 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         mTxFrame.hasHmac = false;
         break;
     }
+    auto *channel=channelForQueueEntry(iEntry);
+    mRainExchangeChannel=0xFF;
+    if(channel&&!channel->is1W()&&channelIndexFor(channel)<16) {
+        mRainExchangeChannel=channelIndexFor(channel);mRainExchangeNode=channel->getNodeId();
+        mRainExchangeRevision=channel->productContextRevision();
+        std::memcpy(mRainExchangeKey,channel->getEncryptionKey(),16);std::memcpy(mRainExchangeSystemKey,mSystemKey,16);
+    }
+    if(channel&&!channel->is1W()&&channelIndexFor(channel)<16&&iEntry.command==IoHomeCommand::Execute&&
+       !iEntry.twoWayFp&&!iEntry.productActivationLength&&!iEntry.twoWayRawExecute&&iEntry.param<=100) {
+        auto &state=bindRainState(channel);state.predictionValid=true;state.prediction=iEntry.param;state.predictionMs=millis();
+    }
     return true;
 }
 
@@ -10852,6 +10939,13 @@ void IoHomeController::dispatchRxFrame()
                 lCh->setLastChallenge(sZeroChallenge);
             }
 
+            if(mCurrentCmd.statusMpFpProbe&&mRxFrame.commandId!=IoHomeCommand::StatusUpdate&&mCurrentCmd.destNodeId==lSrcNode&&
+               lDestNode==mOwnNodeId) {
+                logInfoP("status_mp_fp reply cmd=%02X raw=%s rssi=%d CH=%u frequency=%lu timestamp=%lu",
+                    unsigned(mRxFrame.commandId),hexDump(mRxFrame.data,mRxFrame.dataLen).c_str(),mRadio.lastRssi(),
+                    unsigned(mCurrentFreqIdx),static_cast<unsigned long>(IOHC_FREQUENCIES[mCurrentFreqIdx]),static_cast<unsigned long>(millis()));
+                break; // raw only: no position, product cache, originator, rain or KNX changes
+            }
             // Dispatch based on command type
             switch (mRxFrame.commandId)
             {
@@ -10869,6 +10963,7 @@ void IoHomeController::dispatchRxFrame()
                 if (mTrustRxPosition && mRxFrame.dataLen >= 11)
                 {
                     const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
+                    observeRainStatus(lCh);
                     dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 5, 7);
                 }
                 // Status-expected flag: device will auto-send StatusUpdate
@@ -10986,6 +11081,7 @@ void IoHomeController::dispatchRxFrame()
                 if (mTrustRxPosition && mRxFrame.dataLen >= 8)
                 {
                     const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
+                    observeRainStatus(lCh);
                     dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 2, 4);
                 }
                 // Status-expected flag
@@ -11118,6 +11214,13 @@ void IoHomeController::dispatchRxFrame()
             case IoHomeCommand::SetConfig1Response:      // 0x70 — handled during pairing post-configuration
             case IoHomeCommand::StatusUpdateResponse:    // 0x72 — we send this, shouldn't receive it
             case IoHomeCommand::ErrorResponse:           // 0xFE — error from device
+                if(mRxFrame.commandId==IoHomeCommand::ErrorResponse&&mRxFrame.dataLen>0&&
+                   mCurrentCmd.active&&!mCurrentCmd.managementRead&&mCurrentCmd.destNodeId==lSrcNode&&lDestNode==mOwnNodeId&&
+                   channelIndexFor(lCh)<16&&mRainExchangeChannel==channelIndexFor(lCh)&&
+                   sampleIdentityMatches(mRainExchangeChannel,mRainExchangeNode,mRainExchangeKey,mRainExchangeRevision)&&
+                   !std::memcmp(mRainExchangeSystemKey,mSystemKey,16)&&ioHomeIsExplicitLimitationError(mRxFrame.data[0])) {
+                    auto &state=bindRainState(lCh);state.errorValid=true;state.errorCode=mRxFrame.data[0];state.errorMs=millis();
+                }
                 if (mRxFrame.commandId == IoHomeCommand::ErrorResponse && mRxFrame.dataLen > 0)
                     logInfoP("Device 0x%06X returned error 0x%02X (%s): %s", lSrcNode,
                              static_cast<unsigned>(mRxFrame.data[0]), ioHomeCommandResultName(mRxFrame.data[0]),

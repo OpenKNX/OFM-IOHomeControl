@@ -40,3 +40,23 @@ The attached TODO's steps 23–26 require hardware and were not performed by thi
 4. Repeat on VELUX window variants, Somfy and other 2W coverings. Establish applicable profiles/vendors before enabling polling broadly.
 
 No completion or physical-qualification claim is made for these steps.
+
+## Status-derived rain evidence and KLF diagnostic probe
+
+Additional source: [laberning/home_io_control commit 38f03e651b8418e21685a79f674a8407ed961c8a](https://github.com/laberning/home_io_control/commit/38f03e651b8418e21685a79f674a8407ed961c8a).
+
+For recognized profiles, trusted ordinary PrivateResponse (0x04) and StatusUpdate (0x71) replies may provide a last-command record: three commander bytes plus originator at offsets 8/11 and 11/14 respectively. Short records and zero commander addresses are invalid. Position, product or diagnostic MP/FP replies cannot be substituted for this ordinary layout. Immediate Execute acknowledgements do not update last commander or create, clear or refresh rain evidence.
+
+Originator 02 gives direct rain evidence. For position profiles, a stopped device whose reported target differs from the pending ordinary MP command by more than 100 raw units (about 0.195 percentage points) supplies weaker clamp evidence, **only** while rain evidence remains recent. A mismatch alone never implies rain. A stopped matching target with a valid non-rain last-command record clears the remembered rain evidence. Predictions are kept through intermediate moving statuses and consumed by a stopped report; failed/rejected commands discard the prediction.
+
+The two-hour evidence hold is provisional software policy, not an IO-homecontrol constant. Ages use unsigned subtraction across the millisecond clock wrap. Node, channel key, controller system key and product-context changes make all earlier rain/error evidence unusable. An absent record cannot refresh an earlier rain originator.
+
+The existing KO uses this priority: coherent fresh explicit 0x25/0x26 range (including unrestricted 0), fresh correlated explicit limitation error, trusted status rain originator, then a clamp backed by recent rain. The console preserves the source separately from the binary value. With no usable source the KO remains unknown and does not answer reads; expired evidence never creates a false 0. Explicit command errors expire after five minutes and an independent ordinary position status supersedes them. The feature remains opt-in through the existing ETS setting; rain inference adds no polling.
+
+`iohc limitation 1 status` also shows the evidence source, last commander/originator and age, rain evidence age, rule, predicted/observed wire percentage and validity, stopped flag, and explicit error code.
+
+`iohc probe 1 status_mp_fp` sends the captured PRIVATE function-01 request `01 FE 01 01 01 01 01 01 01 00` using the target's LOW_POWER setting and normal directed transport. Replies are logged as command/raw payload, RSSI, RF channel/frequency and timestamp. The probe is diagnostic-only: its response layout is not decoded and cannot update position, target, movement, last commander, rain evidence, product cache or KOs. Delayed duplicate replies remain isolated until another request replaces the diagnostic context.
+
+### Additional physical qualification — outstanding
+
+The additional TODO steps 27–30 require hardware. No new RF capture or real rain test was performed here. Capture dry VELUX status, rain-closing 0x04/0x71 records with their distinct offsets, rain-at-rest originator, and OPEN during active rain protection (compare the immediate acknowledgement with the later stopped status). Record complete payloads, identities, channel, timing and actual movement; verify source precedence and expiry before relying on the inference for automation. Other device families still need capture qualification.
