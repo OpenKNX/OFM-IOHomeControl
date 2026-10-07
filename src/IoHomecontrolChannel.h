@@ -257,6 +257,7 @@ private:
   bool mStopSettlePollPending = false;
   bool mStatusExpected = false; // device will auto-send StatusUpdate while tracking
   IoHomeBatteryInfo mBatteryInfo;
+  bool mBatteryAlarmPublished = false; // current context; independent of cached KNX value
   struct BatteryObject {std::vector<uint8_t> data;uint32_t timestampMs=0;};
   BatteryObject mBatteryObjects[5]; // allocation only after explicit diagnostics
   struct BatteryPrivate {bool valid=false;uint8_t command=0,length=0,data[IOHC_FRAME_MAX_DATA]{};uint32_t timestampMs=0;};

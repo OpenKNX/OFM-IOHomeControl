@@ -6,7 +6,7 @@
 
 **Erweiterte Diagnose:** Erlaubt manuelle Objekt- und Batterieabfragen über die Konsole. Es gibt keine automatische oder zyklische Batterieabfrage; schlafende Geräte werden dadurch nicht regelmäßig geweckt.
 
-**Batterie schwach (DPT 1.005):** 1 bedeutet schwach, 0 bedeutet nachweislich normal/voll. Ohne gültigen Messzustand sendet und beantwortet das Objekt nichts. Unbekannte Antworten löschen keinen vorher bestätigten Zustand. Der bestätigte Zustand gilt bis zur nächsten bekannten Rückmeldung; er wird bei einem Neustart oder einer Änderung der Gerätezuordnung verworfen.
+**Batterie schwach (DPT 1.005):** 1 bedeutet schwach, 0 bedeutet zuletzt bestätigt normal/voll. Ohne gültigen Batteriezustand wird kein neuer Wert gesendet. Eine Leseanfrage kann weiterhin den zuletzt gespeicherten Wert liefern, auch nach einer Änderung der Gerätezuordnung oder bei ausgeschalteter Überwachung. Vor der ersten bestätigten Rückmeldung und nach einem Neustart gibt es keine Leseantwort. Unbekannte Antworten löschen keinen vorher bestätigten Zustand. Nach einer Änderung der Zuordnung wird die nächste bestätigte Rückmeldung erneut gesendet, auch wenn ihr Wert gleich geblieben ist.
 
 Ein bestätigter A601-Batteriezustand hat Vorrang vor dem allgemeinen Status. Widersprüche und das Alter beider Quellen sind in der Konsole sichtbar. Die Batterie eines angelernten 1W-Controllers gehört zum Controller und verändert die Batterieanzeige des Antriebs nicht.
 

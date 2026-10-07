@@ -39,11 +39,16 @@ object reads or periodic battery polling are enabled. Normal configured status
 polling is independent; battery monitoring does not add wakeups.
 
 The alarm sends 1 for confirmed low and 0 for confirmed normal/full. Unknown
-never initializes a false OK value. The standard KNX v1dev GroupObject setter
-now restores its separate validity flag when given Uninitialized, so the core
-readEnable check suppresses read replies after reassignment or disabled mode.
-Known state is retained until a conclusive replacement or context reset; it has
-no invented battery-expiry interval. Console ages identify old observations.
+never publishes a fabricated OK value. With standard KNX v1dev, marking the
+communication state Uninitialized cancels queued publication but does not erase
+an already initialized cached value: group reads may still return the last known
+value after reassignment or disabled monitoring. Before any confirmed value has
+been published, no read response is available. Runtime battery evidence is reset
+independently; the first confirmed alarm in the new context is always transmitted,
+even when it matches the previous cache. A reboot discards the volatile cache.
+Known evidence is retained until a conclusive replacement or context reset; it
+has no invented battery-expiry interval. Console ages identify old observations.
+No custom KNX core patch is required.
 
 Priority: confirmed A601 enum, normal status enum, correlated result 12 warning,
 unknown. Both independent enum sources remain visible; conflicts are logged.

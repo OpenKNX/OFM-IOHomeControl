@@ -2648,16 +2648,20 @@ uint8_t IoHomecontrolChannel::batteryMonitoring()const {
     return ParamBASE_ModuleEnabled_BAT&&ParamIOHC_cActive&&!ParamIOHC_cSuspend&&mPaired&&!mIs1W?ParamBAT_cMode:0;
 }
 void IoHomecontrolChannel::invalidateBattery() {
+    mBatteryAlarmPublished=false;
     mBatteryInfo={};for(auto &v:mBatteryObjects)v={};mBatteryPrivate[0]={};mBatteryPrivate[1]={};mBatteryEvent={};mBatteryLevel=0xFF;
     if(knx.configured()) {
+        // Standard KNX retains readable cached values once initialized.
+        // Cancel queued publication without publishing a fabricated OK value.
         knx.getGroupObject(BAT_KoCalcNumber(BAT_KocLow)).commFlag(Uninitialized);
         getKo(IOHC_KoCHBattery).commFlag(Uninitialized);
     }
 }
 void IoHomecontrolChannel::updateBatteryKo() {
     auto &ko=knx.getGroupObject(BAT_KoCalcNumber(BAT_KocLow));
-    if(!batteryMonitoring()||!mBatteryInfo.selected().valid){ko.commFlag(Uninitialized);return;}
-    if(!ko.initialized())ko.value(mBatteryInfo.selected().low,Dpt(1,5));
+    if(!batteryMonitoring()||!mBatteryInfo.selected().valid){mBatteryAlarmPublished=false;ko.commFlag(Uninitialized);return;}
+    // Send the first confirmed state after reset even if it equals the old cache.
+    if(!mBatteryAlarmPublished)mBatteryAlarmPublished=ko.value(mBatteryInfo.selected().low,Dpt(1,5));
     else ko.valueCompare(mBatteryInfo.selected().low,Dpt(1,5));
 }
 void IoHomecontrolChannel::onBatteryStatus(uint8_t status,uint8_t command) {
