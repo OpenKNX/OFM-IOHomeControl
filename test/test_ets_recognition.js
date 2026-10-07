@@ -187,7 +187,7 @@ test("commissioning candidate view rejects stale snapshot without displaying res
         return [0,1,0,0x12,0x34,0x56,6,0,1,2,1,0x1C,0,0,0,2,0,0,0,2];
     }};
     try{IOHC_readCommissioningStatus(deviceWith({}),online,{setText:function(v){text=v;}},{});}catch(e){rejected=true;}
-    check(rejected&&closed&&text==="","stale candidates displayed");
+    check(rejected&&closed&&text.indexOf("fehlgeschlagen")>=0&&text.indexOf("0x25")>=0,"stale candidate failure missing");
 });
 
 test("persistence evidence remains read only and checks boot and live receipt",function() {
@@ -358,4 +358,86 @@ test("automatic selection resets manual ownership and disabling preserves the pr
  IOHC_queryRecognition(d,onlineWith(snapshot(0x1C,1,0)),{channelIndex:1},true);
  IOHC_syncChannelSelection({Active:1,DeviceType:value(d,"DeviceType"),Override:value(d,"ProfileOverride")},automatic,{});
  check(automatic.Selection===1&&value(d,"OrientationObjects")===1&&value(d,"ProfileOverride")===0&&value(d,"RecognitionTypeAuto")===1,"discovery must retain automatic ownership and enable slats");
+});
+
+// Model an ETS host collection: only indexed properties and length, no Array methods.
+function hostBytes(bytes) {
+ var host={length:bytes.length};for(var i=0;i<bytes.length;i++)host[i]=String(bytes[i]);return host;
+}
+function importFixture() {
+ var d=deviceWith({Active:0}),nodes=[0x155D81,0xE50470,0x562292],assigned=[0,0,0],acks=0,writes=0,closed=0,text="";
+ for(var c=2;c<=3;c++) {var extra=deviceWith({Active:0});for(var name in extra.params)d.params[name.replace("c1","c"+c)]=extra.params[name];}
+ d.params.IOHC_AssignmentPreviewToken={value:""};
+ var caps=[0,1,0,0,0,127,0,0,0,9],job=[0,1,2,4,0,0,0,2,255,0,0,0,0,0,0,1,0,0,0,0,0,0,0,9,0,3];
+ var online={connect:function(){},disconnect:function(){closed++;},invokeFunctionProperty:function(o,p,data){
+  var cmd=data[0],c=data[1],r;
+  if(cmd===0x18)r=[0,4,0,0,0,0,0,0,3,0,0];
+  else if(cmd===0x23)r=caps;
+  else if(cmd===0x24)r=job;
+  else if(cmd===0x25){var i=data[13],n=nodes[i];r=[0,1,i,n>>16,(n>>8)&255,n&255,1,0,0,2,1,0x1D,0,0,0,2,0,0,0,1];}
+  else if(cmd===0x1D){var n=assigned[c];r=[0,1,c,n>>16,(n>>8)&255,n&255,1,0,0,2,1,n?0x1C:0];}
+  else if(cmd===0x26){writes++;var i=data[13],c=data[14];assigned[c]=nodes[i];r=[0,c];}
+  else if(cmd===0x21){var n=assigned[c];if(data.length>2)acks++;r=[0,1,c,0,0,0,2,n>>16,(n>>8)&255,n&255,1,0,0,1,2,0];}
+  else if(cmd===0x1B)r=[0];
+  else throw new Error("Unexpected import command "+cmd);
+  return hostBytes(r);
+ }};
+ return {device:d,online:online,progress:{setText:function(t){text=t;},setProgress:function(){}},
+  text:function(){return text;},writes:function(){return writes;},acks:function(){return acks;},closed:function(){return closed;}};
+}
+function withLegacyRuntime(run) {
+ var oldJSON=JSON,oldMap=Array.prototype.map,oldImul=Math.imul;
+ try{JSON=undefined;Array.prototype.map=undefined;Math.imul=undefined;run();}
+ finally{JSON=oldJSON;Array.prototype.map=oldMap;Math.imul=oldImul;}
+}
+test("host collections import three candidates without JSON map or imul",function(){
+ var f=importFixture();withLegacyRuntime(function(){
+  IOHC_continueCommissioning(f.device,f.online,f.progress,{channelCount:3});
+  check(f.writes()===0&&f.text().indexOf("3 Zuordnungen")>=0,"preview must not assign");
+  IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});
+  check(f.writes()===3&&f.acks()===3&&f.text().indexOf("3 importiert")>=0,"confirmed import failed");
+  for(var c=1;c<=3;c++)check(f.device.params["IOHC_c"+c+"Active"].value===1,"ETS channel missing");
+  IOHC_readCommissioningStatus(f.device,f.online,f.progress,{});
+  check(f.text().indexOf("Kandidaten 3")>=0&&f.closed()===4,"status/connection handling");
+ });
+});
+test("ETS setter failure keeps firmware assignment recoverable without ACK",function(){
+ var f=importFixture(),saved=f.device.params.IOHC_c1Active,fail=true;
+ IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});
+ Object.defineProperty(saved,"value",{get:function(){return 0;},set:function(v){if(fail)throw new Error("test setter rejected");},configurable:true});
+ var rejected=false;try{IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});}catch(e){rejected=true;}
+ check(rejected&&f.writes()===3&&f.acks()===0&&f.closed()===2,"receipt lost or premature ACK");
+ check(f.text().indexOf("ETS-Kanalparameter")>=0&&f.text().indexOf("test setter rejected")>=0,"setter stage missing");
+ f.device.params.IOHC_c1Active={value:0};
+ withLegacyRuntime(function(){check(IOHC_resumeAssignment(f.device,f.online,0),"receipt recovery failed");});
+ check(f.acks()===1&&f.device.params.IOHC_c1Active.value===1&&f.writes()===3,"recovery repeated RF assignment");
+});
+test("connection failures identify the failing step and disconnect",function(){
+ var closed=0,text="",online={connect:function(){throw new Error("offline");},disconnect:function(){closed++;}};
+ var p={setText:function(t){text=t;},setProgress:function(){}};
+ var handlers=[IOHC_startKeyExtract,IOHC_continueCommissioning,IOHC_readCommissioningStatus];
+ for(var i=0;i<handlers.length;i++){var rejected=false;try{handlers[i](deviceWith({}),online,p,{});}catch(e){rejected=true;}check(rejected&&text.indexOf("Verbindung")>=0&&text.indexOf("offline")>=0,"connect diagnostic");}
+ check(closed===3,"failed connection cleanup");
+});
+test("preview token binds choice target occupancy node and existing flag",function(){
+ var f=importFixture(),job=IOHC_jobSnapshot(f.online),found=[{index:0,nodeId:0x155D81,metadataValid:true,protocolType:1,subtype:0,passiveAuthVerified:true}];
+ var first=IOHC_assignmentPreview(f.online,f.device,job,found,3,0,0).token;
+ check(first!==IOHC_assignmentPreview(f.online,f.device,job,found,3,1,0).token,"choice unbound");
+ check(first!==IOHC_assignmentPreview(f.online,f.device,job,found,3,0,1).token,"target unbound");
+ f.device.params.IOHC_c3Active.value=1;
+ check(first!==IOHC_assignmentPreview(f.online,f.device,job,found,3,0,0).token,"occupancy unbound");
+ f.device.params.IOHC_c3Active.value=0;found[0].nodeId++;
+ check(first!==IOHC_assignmentPreview(f.online,f.device,job,found,3,0,0).token,"node unbound");
+ found[0].nodeId--;found[0].index=1;
+ check(first!==IOHC_assignmentPreview(f.online,f.device,job,found,3,0,0).token,"index unbound");
+});
+
+test("changed job token prevents preview assignment before any write",function(){
+ var f=importFixture(),job=IOHC_jobSnapshot(f.online),preview={plan:[{index:0,channel:0,node:0x155D81}]};job.token[11]++;
+ var rejected=false;try{IOHC_assignPreviewed(f.online,job,[],preview);}catch(e){rejected=true;}
+ check(rejected&&f.writes()===0,"stale preview wrote assignment");
+});
+test("host response normalization rejects malformed bytes and lengths",function(){
+ var bad=[{length:1,0:undefined},{length:1,0:256},{length:1,0:-1},{length:1,0:1.5},{length:-1},{}];
+ for(var i=0;i<bad.length;i++){var rejected=false;try{IOHC_invokeFunctionProperty({invokeFunctionProperty:function(){return bad[i];}},[0x23]);}catch(e){rejected=true;}check(rejected,"malformed host response accepted");}
 });

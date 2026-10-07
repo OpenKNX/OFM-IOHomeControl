@@ -19,6 +19,14 @@ def parse(name: str) -> ET.Element:
 
 
 class ChannelUiTest(unittest.TestCase):
+    def test_ets_host_collection_compatibility(self):
+        script = (ROOT / "src" / "IoHomecontrol.script.js").read_text()
+        for unsupported in ("JSON.stringify", ".map(", "Math.imul"):
+            self.assertNotIn(unsupported, script)
+        self.assertIn("IOHC_copyBytes(response,0,length,bytes)", script)
+        self.assertIn("IOHC_bytesEqual(current.token,job.token)", script)
+        self.assertIn("IOHC_commissioningFailure(progress,trace,error)", script)
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.share = parse("IoHomecontrol.share.xml")

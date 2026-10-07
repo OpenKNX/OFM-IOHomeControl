@@ -8,7 +8,57 @@ var IOHC_FUNCTION_PROPERTY_OBJECT_INDEX = 160;
 var IOHC_FUNCTION_PROPERTY_ID = 10;
 
 function /* internal helper */ IOHC_invokeFunctionProperty(online, data) {
-    return online.invokeFunctionProperty(IOHC_FUNCTION_PROPERTY_OBJECT_INDEX, IOHC_FUNCTION_PROPERTY_ID, data);
+    var response=online.invokeFunctionProperty(IOHC_FUNCTION_PROPERTY_OBJECT_INDEX, IOHC_FUNCTION_PROPERTY_ID, data);
+    if(response===null || response===undefined) return response;
+    var length=Number(response.length);
+    if(!isFinite(length)||length<0||Math.floor(length)!==length) throw new Error("Ungültige Antwortlänge");
+    for(var i=0;i<length;i++) {
+        var byte=Number(response[i]);
+        if(!isFinite(byte)||byte<0||byte>255||Math.floor(byte)!==byte) throw new Error("Ungültiges Antwortbyte");
+    }
+    var bytes=[];
+    IOHC_copyBytes(response,0,length,bytes);
+    return bytes;
+}
+
+// ETS returns indexed host collections, not necessarily JavaScript arrays.
+function /* internal helper */ IOHC_copyBytes(source,start,end,target) {
+    for(var i=start;i<end;i++) target.push(Number(source[i])&255);
+}
+function /* internal helper */ IOHC_tokenHex(data) {
+    var text="";
+    for(var i=0;i<data.length;i++) {
+        var part=(Number(data[i])&255).toString(16);
+        text+=(part.length<2?"0":"")+part;
+    }
+    return text;
+}
+function /* internal helper */ IOHC_bytesEqual(a,b) {
+    if(!a||!b||a.length!==b.length) return false;
+    for(var i=0;i<a.length;i++) if(Number(a[i])!==Number(b[i])) return false;
+    return true;
+}
+function /* internal helper */ IOHC_hashByte(hash,value) {
+    hash=(hash^(value&255))>>>0;
+    return (hash+(hash<<1)+(hash<<4)+(hash<<7)+(hash<<8)+(hash<<24))>>>0;
+}
+function /* internal helper */ IOHC_hashNode(hash,node) {
+    hash=IOHC_hashByte(hash,node>>16);
+    hash=IOHC_hashByte(hash,node>>8);
+    return IOHC_hashByte(hash,node);
+}
+function /* internal helper */ IOHC_traceOnline(online,trace) {
+    return {
+        connect:function /* callback */ () {trace.step="Verbindung";return online.connect();},
+        disconnect:function /* callback */ () {return online.disconnect();},
+        invokeFunctionProperty:function /* callback */ (object,property,data) {
+            trace.step="Funktionsaufruf 0x"+IOHC_tokenHex([data[0]]);
+            return online.invokeFunctionProperty(object,property,data);
+        }
+    };
+}
+function /* internal helper */ IOHC_commissioningFailure(progress,trace,error) {
+    progress.setText("2W-Übernahme fehlgeschlagen bei '"+trace.step+"': "+(error&&error.message?error.message:String(error)));
 }
 
 function /* internal helper */ IOHC_getChannelPrefix(context) {
@@ -222,7 +272,7 @@ function /* internal helper */ IOHC_queryRecognition(device, online, context, ap
     return applied;
 }
 
-function /* internal helper */ IOHC_resumeAssignment(device,online,channel) {
+function /* internal helper */ IOHC_resumeAssignment(device,online,channel,trace) {
     var receipt=IOHC_invokeFunctionProperty(online,[0x21,channel]);
     if(!receipt || receipt.length!==16 || receipt[0]!==0 || receipt[1]!==1 || receipt[2]!==channel) return false;
     var discovery={nodeId:IOHC_readNodeId(receipt,7),protocolType:receipt[10]|receipt[11]<<8,
@@ -232,6 +282,7 @@ function /* internal helper */ IOHC_resumeAssignment(device,online,channel) {
     var current=IOHC_invokeFunctionProperty(online,[0x1D,channel]);
     if(!current || current.length!==12 || current[0]!==0 || current[1]!==1 || current[2]!==channel ||
        IOHC_readNodeId(current,3)!==discovery.nodeId || (current[11]&0x20)!==0) return false;
+    if(trace)trace.step="ETS-Kanalparameter";
     IOHC_configureImportedChannel(device,channel+1,discovery);
     IOHC_setParameterValue(device,"IOHC_c"+(channel+1)+"SyncStatus","ETS gesetzt; Gerätebeleg offen");
     var ack=[0x21,channel].concat(receipt.slice(3,10));
@@ -752,12 +803,15 @@ function /* internal helper */ IOHC_jobSnapshot(online) {
     var job=IOHC_invokeFunctionProperty(online,[0x24]);
     if(!job || job.length!==26 || job[0]!==0 || job[1]!==1 || IOHC_read32(job,20)!==IOHC_read32(caps,6))
         throw new Error("Job-Status hat sich geändert; erneut lesen");
+    var token=[];
+    IOHC_copyBytes(job,20,24,token);IOHC_copyBytes(job,4,8,token);IOHC_copyBytes(job,12,16,token);
     return {owner:job[2],stage:job[3],channel:job[8],node:IOHC_readNodeId(job,9),generation:IOHC_read32(job,4),revision:IOHC_read32(job,12),
-            remainingMs:IOHC_read32(job,16),error:job[24],count:job[25],token:job.slice(20,24).concat(job.slice(4,8),job.slice(12,16))};
+            remainingMs:IOHC_read32(job,16),error:job[24],count:job[25],token:token};
 }
 function IOHC_readCommissioningStatus(device,online,progress,context) {
-    online.connect();
+    var trace={step:"Vorbereitung"};online=IOHC_traceOnline(online,trace);
     try {
+        online.connect();
         var job=IOHC_jobSnapshot(online);
         if(!job) throw new Error("Firmware unterstützt keinen erweiterten Einrichtungsstatus");
         var owners=["Keine Einrichtung","Pairing","Schlüsselimport","Schlüsselaufzeichnung","1W-Fernbedienung kopieren"];
@@ -783,13 +837,13 @@ function IOHC_readCommissioningStatus(device,online,progress,context) {
                 text+=", "+((flags&8)?"vollständige":"teilweise")+" Metadaten";
             }
             var current=IOHC_jobSnapshot(online);
-            if(!current||JSON.stringify(current.token)!==JSON.stringify(job.token)||current.count!==job.count||current.stage!==job.stage)
+            if(!current||!IOHC_bytesEqual(current.token,job.token)||current.count!==job.count||current.stage!==job.stage)
                 throw new Error("Einrichtung während des Lesens geändert; erneut lesen");
         }
         if(job.owner===3||job.owner===4) text+=". Aufzeichnung/Kopie bestätigt keine Aktor-Anmeldung";
         text+=". Statuslesen ändert keine ETS-Einstellungen und bestätigt keinen Geräte-Download.";
         progress.setText(text);
-    } finally {online.disconnect();}
+    } catch(error) {IOHC_commissioningFailure(progress,trace,error);throw error;} finally {online.disconnect();}
 }
 // Project settings and permission ownership only; no fabricated adoption history.
 function /* internal helper */ IOHC_effectiveSettingsText(device,context) {
@@ -904,8 +958,9 @@ function /* internal helper */ IOHC_assignFrozenCandidates(online,job,discoverie
 function IOHC_startKeyExtract(device, online, progress, context) {
     progress.setText("2W-Schlüsselextraktion wird vorbereitet ...");
     progress.setProgress(5);
-    online.connect();
+    var trace={step:"Vorbereitung"};online=IOHC_traceOnline(online,trace);
     try {
+        online.connect();
         var status = IOHC_invokeFunctionProperty(online, [0x18]);
         if (!status || status.length < 11 || status[0] != 0) {
             throw new Error("io-homecontrol: Ungültige Statusantwort während der 2W-Übernahme");
@@ -1025,8 +1080,10 @@ function IOHC_startKeyExtract(device, online, progress, context) {
         var preview=null,previewParameter=IOHC_getParameter(device,"IOHC_AssignmentPreviewToken");
         if(job&&previewParameter) {
             var chosen=IOHC_getParameter(device,"IOHC_ImportCandidate"),target=IOHC_getParameter(device,"IOHC_ImportTargetChannel");
+            trace.step="Zuordnungsvorschau";
             preview=IOHC_assignmentPreview(online,device,job,discoveries,channelCount,Number(chosen?chosen.value:0),Number(target?target.value:0));
             if(String(previewParameter.value)!==preview.token) {
+                trace.step="ETS-Vorschauparameter";
                 IOHC_setParameterValue(device,"IOHC_AssignmentPreviewToken",preview.token);
                 progress.setText("Zuordnungsvorschau: "+preview.text+" Auswahl prüfen; erneut Weiter drücken, um genau diese Zuordnung zu speichern.");return;
             }
@@ -1045,13 +1102,16 @@ function IOHC_startKeyExtract(device, online, progress, context) {
             var assignmentStatus = assignmentResponse[2 + (d * 2)];
             var assignedChannel = assignmentResponse[3 + (d * 2)];
             if (assignmentStatus == 0) {
-                if(job) IOHC_resumeAssignment(device,online,assignedChannel);
+                trace.step="ETS-Kanalparameter / Zuordnungsbeleg";
+                if(job) {if(!IOHC_resumeAssignment(device,online,assignedChannel,trace))throw new Error("Zuordnungsbeleg nicht verfügbar; ETS-Abgleich erneut ausführen");}
                 else IOHC_configureImportedChannel(device, assignedChannel + 1, discoveries[d]);
                 channelActive[assignedChannel] = true;
                 configuredChannels++;
             } else if (assignmentStatus == 1) {
+                trace.step="ETS-Kanalparameter / Zuordnungsbeleg";
+                var resumed=job&&assignedChannel<channelCount&&IOHC_resumeAssignment(device,online,assignedChannel,trace);
                 if (assignedChannel < channelCount && !channelActive[assignedChannel]) {
-                    IOHC_configureImportedChannel(device, assignedChannel + 1, discoveries[d]);
+                    if(!resumed) IOHC_configureImportedChannel(device, assignedChannel + 1, discoveries[d]);
                     channelActive[assignedChannel] = true;
                     configuredChannels++;
                 } else {
@@ -1070,14 +1130,17 @@ function IOHC_startKeyExtract(device, online, progress, context) {
             throw new Error("io-homecontrol: Schlüsselübernahme konnte nicht abgeschlossen werden");
         }
 
-        var nodeText = discoveries.length ? discoveries.map(function /* callback */ (entry) {
+        var nodeTexts=[];
+        for(var ni=0;ni<discoveries.length;ni++) {
+            var entry=discoveries[ni];
             var source = entry.passiveAuthVerified && entry.speResponseSeen ? "passiv+SPE" :
                          entry.passiveAuthVerified ? "passiv authentifiziert" :
                          entry.directedVerified ? "gerichtet authentifiziert" : "SPE";
             var metadata = entry.metadataComplete ? "Metadaten vollständig" :
                            entry.metadataValid ? "Metadaten teilweise" : "Metadaten ausstehend";
-            return IOHC_formatNodeId(entry.nodeId) + " (" + source + ", " + metadata + ")";
-        }).join(", ") : "keine";
+            nodeTexts.push(IOHC_formatNodeId(entry.nodeId) + " (" + source + ", " + metadata + ")");
+        }
+        var nodeText=nodeTexts.length?nodeTexts.join(", "):"keine";
         var summary = configuredChannels + " importiert, " + alreadyConfigured + " vorhanden";
         if (unassigned > 0) {
             summary += ", " + unassigned + " ohne freien Kanal";
@@ -1090,6 +1153,7 @@ function IOHC_startKeyExtract(device, online, progress, context) {
                                : (configuredChannels > 0
                                       ? "Erfolgreich; Programmierung nötig"
                                       : "Erfolgreich; keine Änderung");
+        trace.step="ETS-Ergebnisparameter";
         IOHC_setExtractionResult(device, resultStatus, nodeIds);
 
         if (resultCount == 0) {
@@ -1102,7 +1166,7 @@ function IOHC_startKeyExtract(device, online, progress, context) {
                              nodeText + ". " + summary + ".");
         }
         progress.setProgress(100);
-    } finally {
+    } catch(error) {IOHC_commissioningFailure(progress,trace,error);throw error;} finally {
         online.disconnect();
     }
 }
@@ -1166,7 +1230,7 @@ function IOHC_readPersistenceEvidence(device,online,progress,context) {
         text+="Zuordnungsbeleg: "+receipts[record[10]]+", Revision "+IOHC_read32(record,12)+", "+(record[11]?"aktuell":"nicht aktuell")+". Globaler 1W-Wiederherstellungsstatus "+record[20]+". ";
         text+="Nur Statusprüfung: kein Löschen oder Reparieren, kein Download- oder Stromausfallnachweis.";
         var current=IOHC_invokeFunctionProperty(online,[0x2F,channel]);
-        if(!current||current.length!==21||JSON.stringify(current)!==JSON.stringify(record))throw new Error("Speicherstatus während des Lesens geändert; erneut lesen");
+        if(!current||current.length!==21||!IOHC_bytesEqual(current,record))throw new Error("Speicherstatus während des Lesens geändert; erneut lesen");
         progress.setText(text);
     } finally {online.disconnect();}
 }
@@ -1174,8 +1238,10 @@ function IOHC_readPersistenceEvidence(device,online,progress,context) {
 // Bounded explicit continuation; no background ETS polling/dialog API assumed.
 function IOHC_continueCommissioning(device,online,progress,context) {
     var job=null;
-    online.connect();try{job=IOHC_jobSnapshot(online);}finally{online.disconnect();}
-    if(!job)throw new Error("Firmware unterstützt diese Einrichtung nicht");
+    var trace={step:"Vorbereitung"},tracked=IOHC_traceOnline(online,trace);
+    try{tracked.connect();job=IOHC_jobSnapshot(tracked);if(!job)throw new Error("Firmware unterstützt diese Einrichtung nicht");}
+    catch(error){IOHC_commissioningFailure(progress,trace,error);throw error;}
+    finally{tracked.disconnect();}
     if(job.owner===2||job.owner===3) {
         IOHC_startKeyExtract(device,online,progress,{channelCount:context&&context.channelCount?context.channelCount:16});return;
     }
@@ -1213,14 +1279,27 @@ function /* internal helper */ IOHC_assignmentPreview(online,device,job,discover
   channels[channel].used=true;plan.push({index:d.index,node:d.nodeId,channel:channel,existing:existing>=0});
   text+=IOHC_formatNodeId(d.nodeId)+" → Kanal "+(channel+1)+(existing>=0?" (vorhanden)":" (neu)")+(!supported?" (manuelle Produktwahl)":"")+". ";
  }
- var serialized=JSON.stringify([choice,target,channels,plan]),hash=2166136261;
- for(var b=0;b<serialized.length;b++){hash=(hash^serialized.charCodeAt(b))>>>0;hash=(hash+(hash<<1)+(hash<<4)+(hash<<7)+(hash<<8)+(hash<<24))>>>0;}
- var token=job.token.map(function /* callback */ (v){return ("0"+v.toString(16)).slice(-2);}).join("")+":"+("00000000"+hash.toString(16)).slice(-8);
+ // Fixed-width fields and lengths bind every field of the previous preview schema.
+ var hash=IOHC_hashByte(IOHC_hashByte(2166136261,choice),target);
+ hash=IOHC_hashByte(hash,channels.length);
+ for(var b=0;b<channels.length;b++) {
+  hash=IOHC_hashNode(hash,channels[b].node);hash=IOHC_hashByte(hash,channels[b].used?1:0);
+ }
+ hash=IOHC_hashByte(hash,plan.length);
+ for(var n=0;n<plan.length;n++) {
+  hash=IOHC_hashByte(hash,plan[n].index);hash=IOHC_hashNode(hash,plan[n].node);
+  hash=IOHC_hashByte(hash,plan[n].channel);hash=IOHC_hashByte(hash,plan[n].existing?1:0);
+ }
+ var hashText=hash.toString(16);while(hashText.length<8)hashText="0"+hashText;
+ var token=IOHC_tokenHex(job.token)+":"+hashText;
  var current=IOHC_jobSnapshot(online);
- if(!current||JSON.stringify(current.token)!==JSON.stringify(job.token)||current.stage!==4||current.count!==job.count)throw new Error("Vorschau veraltet; erneut lesen");
+ if(!current||!IOHC_bytesEqual(current.token,job.token)||current.stage!==4||current.count!==job.count)throw new Error("Vorschau veraltet; erneut lesen");
  return {token:token,plan:plan,text:plan.length+" Zuordnungen; "+skipped+" ausgelassen. "+text};
 }
 function /* internal helper */ IOHC_assignPreviewed(online,job,discoveries,preview) {
+ var current=IOHC_jobSnapshot(online);
+ if(!current||!IOHC_bytesEqual(current.token,job.token)||current.stage!==4||current.count!==job.count)
+  throw new Error("Vorschau veraltet; erneut lesen");
  var result=[0,discoveries.length];for(var d=0;d<discoveries.length;d++)result.push(2,255);
  for(var i=0;i<preview.plan.length;i++) {
   var item=preview.plan[i],response=IOHC_invokeFunctionProperty(online,[0x26].concat(job.token,[item.index,item.channel],[(item.node>>16)&255,(item.node>>8)&255,item.node&255]));
@@ -1252,7 +1331,7 @@ function /* internal helper */ IOHC_recognitionConflicts(device,context,response
 function IOHC_showRecognitionConflicts(device,online,progress,context) {
  online.connect();try {
   var request=[0x1E,Number(context.channelIndex)-1],first=IOHC_invokeFunctionProperty(online,request),conflicts=IOHC_recognitionConflicts(device,context,first),last=IOHC_invokeFunctionProperty(online,request);
-  if(JSON.stringify(first)!==JSON.stringify(last))throw new Error("Erkennung während des Lesens geändert");
+  if(!IOHC_bytesEqual(first,last))throw new Error("Erkennung während des Lesens geändert");
   progress.setText(conflicts.length?conflicts.join(". ")+". Vorgaben behalten oder automatische Übernahme vorbereiten; nichts geändert.":"ETS-Vorgaben stimmen mit der Erkennung überein; nichts geändert.");
  }finally{online.disconnect();}
 }
@@ -1263,7 +1342,7 @@ function IOHC_restoreAutomatic(device,online,progress,context) {
  var prefix=IOHC_getChannelPrefix(context),names=["ProfileOverride","RecognitionTypeAuto","RecognitionOrientationAuto","RecognitionBinaryAuto","RecognitionDimmableAuto"],parameters=[],values=[];
  for(var i=0;i<names.length;i++){var p=IOHC_getParameter(device,prefix+names[i]);if(!p)throw new Error("Automatische Vorgaben nicht verfügbar");parameters.push(p);values.push(Number(p.value));}
  var preview=IOHC_getParameter(device,prefix+"AutomaticResetPreview");if(!preview)throw new Error("Vorschaufunktion nicht verfügbar");
- var token=JSON.stringify(values);
+ var token=values.join(",");
  if(String(preview.value)!==token){preview.value=token;progress.setText("Vorschau: Profil-Override "+values[0]+" → 0; automatische Übernahme für Gerätetyp, Orientierung, Binärmodus und Dimmen erlauben. Erneut drücken zum Bestätigen. Pairing, Schlüssel, Zähler und übrige Expertenwerte bleiben erhalten.");return;}
  parameters[0].value=0;for(var j=1;j<parameters.length;j++)parameters[j].value=1;preview.value="";
  progress.setText("Automatische Übernahme vorbereitet. Erkennung bewusst übernehmen, danach Applikation programmieren. Pairing, Schlüssel und Zähler unverändert.");
@@ -1304,7 +1383,7 @@ function /* internal helper */ IOHC_priorityAction(device,online,progress,contex
 }
 function IOHC_requestPriorityEvidence(d,o,p,c){return IOHC_priorityAction(d,o,p,c,1);}
 function IOHC_requestSensorStatus(d,o,p,c){return IOHC_priorityAction(d,o,p,c,2);}
-function /* internal helper */ IOHC_hexBytes(bytes){return bytes.map(function /* callback */ (v){return (v<16?"0":"")+v.toString(16).toUpperCase();}).join("");}
+function /* internal helper */ IOHC_hexBytes(bytes){return IOHC_tokenHex(bytes).toUpperCase();}
 function IOHC_readSensorEvidence(device,online,progress,context){
  return IOHC_boundDiagnostic(device,online,progress,context,function /* callback */ (c,id){
   var level=Number(IOHC_getParameter(device,IOHC_getChannelPrefix(context)+"PriorityLevel").value);
@@ -1360,7 +1439,9 @@ var IOHC_SEMANTICS=[{"product":"heatpump","index":0,"meaning":"temperature setpo
 function IOHC_showSemanticHelp(device,online,progress,context){
  var name=String(IOHC_getParameter(device,IOHC_getChannelPrefix(context)+"SemanticProduct").value),rows=IOHC_SEMANTICS.filter(function /* callback */ (r){return r.product===name;});
  if(!rows.length)throw new Error("Keine bekannte Produktdefinition. Beispiele: heatpump, generic-heater, pergola, alarm, siren. Keine automatische Variantenbindung.");
- progress.setText(rows.map(function /* callback */ (r){return (r.index?"FP"+r.index:"MP")+": "+r.meaning+" ["+r.unit+"], "+r.conversion+"; "+r.specials;}).join(". ")+". Diagnoseauswahl erteilt keine RF-Schreib- oder KNX-Publikationsfreigabe.");
+ var descriptions=[];
+ for(var i=0;i<rows.length;i++){var r=rows[i];descriptions.push((r.index?"FP"+r.index:"MP")+": "+r.meaning+" ["+r.unit+"], "+r.conversion+"; "+r.specials);}
+ progress.setText(descriptions.join(". ")+". Diagnoseauswahl erteilt keine RF-Schreib- oder KNX-Publikationsfreigabe.");
 }
 
 function IOHC_readSelectedProduct(device,online,progress,context){
