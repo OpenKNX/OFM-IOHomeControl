@@ -112,6 +112,13 @@ IOHC_ASSERT_SCENE_LAYOUT(10);
 
 namespace
 {
+    void cancelPendingBatteryWrite(GroupObject &ko)
+    {
+        // A valid KO stays readable until reboot. Only cancel an unsent write;
+        // do not initialize an unknown KO or alter an in-flight telegram.
+        if (ko.commFlag() == WriteRequest) ko.commFlag(Ok);
+    }
+
     constexpr uint32_t kTrackedStatusPollDefaultMs = 2000UL;
     constexpr uint32_t kTrackedStatusEstimateBiasMs = 1000UL;
     constexpr uint32_t kTrackedStatusPollWindowMs = 10UL * 60UL * 1000UL;
@@ -2651,15 +2658,13 @@ void IoHomecontrolChannel::invalidateBattery() {
     mBatteryAlarmPublished=false;
     mBatteryInfo={};for(auto &v:mBatteryObjects)v={};mBatteryPrivate[0]={};mBatteryPrivate[1]={};mBatteryEvent={};mBatteryLevel=0xFF;
     if(knx.configured()) {
-        // Standard KNX retains readable cached values once initialized.
-        // Cancel queued publication without publishing a fabricated OK value.
-        knx.getGroupObject(BAT_KoCalcNumber(BAT_KocLow)).commFlag(Uninitialized);
-        getKo(IOHC_KoCHBattery).commFlag(Uninitialized);
+        cancelPendingBatteryWrite(knx.getGroupObject(BAT_KoCalcNumber(BAT_KocLow)));
+        cancelPendingBatteryWrite(getKo(IOHC_KoCHBattery));
     }
 }
 void IoHomecontrolChannel::updateBatteryKo() {
     auto &ko=knx.getGroupObject(BAT_KoCalcNumber(BAT_KocLow));
-    if(!batteryMonitoring()||!mBatteryInfo.selected().valid){mBatteryAlarmPublished=false;ko.commFlag(Uninitialized);return;}
+    if(!batteryMonitoring()||!mBatteryInfo.selected().valid){mBatteryAlarmPublished=false;cancelPendingBatteryWrite(ko);return;}
     // Send the first confirmed state after reset even if it equals the old cache.
     if(!mBatteryAlarmPublished)mBatteryAlarmPublished=ko.value(mBatteryInfo.selected().low,Dpt(1,5));
     else ko.valueCompare(mBatteryInfo.selected().low,Dpt(1,5));

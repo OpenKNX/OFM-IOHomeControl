@@ -39,9 +39,9 @@ object reads or periodic battery polling are enabled. Normal configured status
 polling is independent; battery monitoring does not add wakeups.
 
 The alarm sends 1 for confirmed low and 0 for confirmed normal/full. Unknown
-never publishes a fabricated OK value. With standard KNX v1dev, marking the
-communication state Uninitialized cancels queued publication but does not erase
-an already initialized cached value: group reads may still return the last known
+never publishes a fabricated OK value. Resetting runtime evidence cancels only
+an unsent WriteRequest by marking it Ok; it never sets a KO to Uninitialized.
+An already initialized cached value stays valid: group reads may return the last known
 value after reassignment or disabled monitoring. Before any confirmed value has
 been published, no read response is available. Runtime battery evidence is reset
 independently; the first confirmed alarm in the new context is always transmitted,
