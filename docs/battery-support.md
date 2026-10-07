@@ -50,8 +50,9 @@ Known evidence is retained until a conclusive replacement or context reset; it
 has no invented battery-expiry interval. Console ages identify old observations.
 No custom KNX core patch is required.
 
-Priority: confirmed A601 enum, normal status enum, correlated result 12 warning,
-unknown. Both independent enum sources remain visible; conflicts are logged.
+The newest conclusive evidence wins, with wrap-safe millis() comparison. For
+equal timestamps, priority is A601 enum, normal status enum, then correlated
+result 12 warning; no conclusive evidence means unknown. Both independent enum sources remain visible; conflicts are logged.
 The percentage publisher requires percentValid and a matching 0..100 value;
 there is no code setting percentValid because no converter is qualified.
 

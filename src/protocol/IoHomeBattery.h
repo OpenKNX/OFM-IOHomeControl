@@ -11,12 +11,25 @@ inline const char *ioHomeBatterySourceName(IoHomeBatterySource s){
 }
 inline IoHomeBatteryState ioHomeBatteryState(uint8_t status){return IoHomeBatteryState((status&0x60U)>>5U);}
 struct IoHomeBatteryEvidence {bool valid=false,low=false;uint8_t raw=0,command=0;uint32_t timestampMs=0;};
+inline bool ioHomeBatteryTimestampNewer(uint32_t a,uint32_t b){return int32_t(a-b)>0;}
 struct IoHomeBatteryInfo {
  IoHomeBatteryEvidence coarse,somfy,error;
  // No numeric converter is qualified. Raw/categorical inputs cannot set this.
  bool percentValid=false;uint8_t percent=0;uint32_t percentTimestampMs=0;
- IoHomeBatterySource source()const{return somfy.valid?IoHomeBatterySource::A601Status:coarse.valid?IoHomeBatterySource::StatusExecuteBits:error.valid?IoHomeBatterySource::BatteryError:IoHomeBatterySource::None;}
- const IoHomeBatteryEvidence &selected()const{return somfy.valid?somfy:coarse.valid?coarse:error;}
+ struct Selection {const IoHomeBatteryEvidence *evidence;IoHomeBatterySource source;};
+ Selection selection()const {
+  // Start with the highest-confidence source; replace only with newer evidence.
+  // millis() ordering assumes observations are less than half its range apart.
+  Selection result{&error,IoHomeBatterySource::None};
+  if(somfy.valid)result={&somfy,IoHomeBatterySource::A601Status};
+  if(coarse.valid&&(result.source==IoHomeBatterySource::None||ioHomeBatteryTimestampNewer(coarse.timestampMs,result.evidence->timestampMs)))
+   result={&coarse,IoHomeBatterySource::StatusExecuteBits};
+  if(error.valid&&(result.source==IoHomeBatterySource::None||ioHomeBatteryTimestampNewer(error.timestampMs,result.evidence->timestampMs)))
+   result={&error,IoHomeBatterySource::BatteryError};
+  return result;
+ }
+ IoHomeBatterySource source()const{return selection().source;}
+ const IoHomeBatteryEvidence &selected()const{return *selection().evidence;}
  bool conflict()const{return somfy.valid&&coarse.valid&&somfy.low!=coarse.low;}
  void observeStatus(uint8_t status,uint8_t command,uint32_t now){
   const uint8_t state=uint8_t(ioHomeBatteryState(status));if(!state)return;

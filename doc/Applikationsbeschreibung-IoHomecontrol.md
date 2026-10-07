@@ -819,11 +819,14 @@ erlaubt zusätzlich manuelle Abfragen über die Konsole; zyklische
 Batterieabfragen werden nicht gestartet.
 
 Das separate Batterieobjekt Kn+0 der BAT-Gruppe meldet „Batterie schwach“
-(DPT 1.005): 1 = schwach, 0 = nachweislich normal/voll. Unbekannt erzeugt
-weder ein falsches OK-Telegramm noch eine Leseantwort. Geräte-, Profil- oder
-Schlüsselwechsel verwerfen alte Werte. Bekannte Werte bleiben bis zur
-nächsten bestätigten Rückmeldung erhalten; ihr Alter ist in der Konsole
-sichtbar. Bestätigte A601-Zustände haben Vorrang vor dem allgemeinen Status.
+(DPT 1.005): 1 = schwach, 0 = zuletzt bestätigt normal/voll. Unbekannt erzeugt
+kein neues Telegramm; Leseanfragen können den zuletzt gespeicherten Wert liefern.
+Vor der ersten bestätigten Rückmeldung und nach einem Neustart gibt es keine
+Leseantwort. Geräte-, Profil- oder Schlüsselwechsel verwerfen die Laufzeitevidenz;
+die nächste bestätigte Rückmeldung wird erneut gesendet. Die neueste eindeutige
+Evidenz gewinnt. Bei gleichem Zeitpunkt gilt A601 vor allgemeinem Status vor
+Batteriewarnung. Alle Quellen, ihr Alter und Widersprüche bleiben in der Konsole
+sichtbar.
 
 Der bisher reservierte Batterie-Prozentwert bleibt unbekannt. Batterieklassen
 und Rohspannungen werden nicht in Prozent umgerechnet. Batterien angelernter

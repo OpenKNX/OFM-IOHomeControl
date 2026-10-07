@@ -8,6 +8,6 @@
 
 **Batterie schwach (DPT 1.005):** 1 bedeutet schwach, 0 bedeutet zuletzt bestätigt normal/voll. Ohne gültigen Batteriezustand wird kein neuer Wert gesendet. Eine Leseanfrage kann weiterhin den zuletzt gespeicherten Wert liefern, auch nach einer Änderung der Gerätezuordnung oder bei ausgeschalteter Überwachung. Vor der ersten bestätigten Rückmeldung und nach einem Neustart gibt es keine Leseantwort. Unbekannte Antworten löschen keinen vorher bestätigten Zustand. Nach einer Änderung der Zuordnung wird die nächste bestätigte Rückmeldung erneut gesendet, auch wenn ihr Wert gleich geblieben ist.
 
-Ein bestätigter A601-Batteriezustand hat Vorrang vor dem allgemeinen Status. Widersprüche und das Alter beider Quellen sind in der Konsole sichtbar. Die Batterie eines angelernten 1W-Controllers gehört zum Controller und verändert die Batterieanzeige des Antriebs nicht.
+Die neueste bestätigte Rückmeldung bestimmt den Batteriezustand. Bei gleichem Zeitpunkt hat A601 Vorrang vor dem allgemeinen Status; danach folgt eine ausdrückliche Batteriewarnung. Widersprüche und das Alter beider Quellen sind in der Konsole sichtbar. Die Batterie eines angelernten 1W-Controllers gehört zum Controller und verändert die Batterieanzeige des Antriebs nicht.
 
 Der bisherige Batterie-Prozentwert bleibt unbekannt: Batterieklassen, Rohspannungen und unbestätigte Zahlen werden nicht in Prozent umgerechnet. Diagnosewerte mit „RAW / UNIT UNKNOWN“ haben noch keine belegte Einheit oder Skala.

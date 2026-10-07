@@ -41,7 +41,7 @@ $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
 $(SX1262_PHY_TARGET): $(SX1262_PHY_SRCS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(SX1262_PHY_SRCS)
 
-run: check-protocol check-controller check-exchange check-radio check-ui
+run: check-protocol check-controller check-exchange check-radio check-ui check-battery-publication
 
 check-protocol: $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite protocol
@@ -89,3 +89,7 @@ check-storage: $(STORAGE_TARGET) $(ESP32_STORAGE_TARGET)
 
 $(ESP32_STORAGE_TARGET): test_esp32_storage.cpp nvsstub/nvs.h ../src/protocol/IoHomeEsp32Storage.h | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -Invsstub -o $@ test_esp32_storage.cpp
+
+.PHONY: check-battery-publication
+check-battery-publication:
+	$(PYTHON) test_battery_publication.py

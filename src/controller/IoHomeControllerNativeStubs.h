@@ -474,8 +474,10 @@ public:
   void onBatteryObject(uint8_t,uint16_t,const uint8_t *,unsigned){++mBatteryObjectReplies;}
   unsigned testBatteryPrivateReplies()const{return mBatteryPrivateReplies;}
   unsigned testBatteryObjectReplies()const{return mBatteryObjectReplies;}
+  unsigned testBatteryLevelCalls()const{return mBatteryLevelCalls;}
   void onBatteryLevel(uint8_t iPercent)
   {
+    ++mBatteryLevelCalls;
     if(!mBatteryInfo.percentValid||iPercent>100||iPercent!=mBatteryInfo.percent)return;
     mHasBatteryLevel = true;
     mBatteryLevel = iPercent;
@@ -652,7 +654,7 @@ private:
   bool mHasVelocityFeedback = false;
   ParameterSemantic mVelocitySemantic = ParameterSemantic::Unknown;
   float mVelocityFeedback = 0.0f;
-  uint8_t mBatteryMonitoring=0;IoHomeBatteryInfo mBatteryInfo;unsigned mBatteryPrivateReplies=0,mBatteryObjectReplies=0;
+  uint8_t mBatteryMonitoring=0;IoHomeBatteryInfo mBatteryInfo;unsigned mBatteryPrivateReplies=0,mBatteryObjectReplies=0,mBatteryLevelCalls=0;
   bool mHasBatteryLevel = false;
   uint8_t mBatteryLevel = 0xFF;
   bool mHasEstimate = false;

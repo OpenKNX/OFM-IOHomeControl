@@ -1913,40 +1913,9 @@ TEST(challenge_cleared_after_verify)
 }
 
 // =====================================================================
-// 23. Battery level decoding
+// 23. StatusUpdate battery percentage is deliberately unqualified.
 // =====================================================================
-
-TEST(battery_level_decoding)
-{
-    // StatusUpdate frame reference layout:
-    //   data[0]: flags (bit 0 = stopped)
-    //   data[3]: battery level (0-100)
-    //   data[7:8]: current position (16-bit BE)
-    // Battery in byte 3, valid range 0-100
-    uint8_t data[11] = {};
-    data[0] = 0x00; // not stopped (moving)
-    data[3] = 100;  // battery 100%
-    data[7] = 0x64; // current pos MSB
-    data[8] = 0x00; // current pos LSB → 0x6400
-
-    // Battery extraction
-    uint8_t battery = data[3];
-    ASSERT_EQ(battery, 100);
-    ASSERT_TRUE(battery <= 100); // valid range
-
-    // Stopped flag
-    bool stopped = (data[0] & 0x01) != 0;
-    ASSERT_TRUE(!stopped);
-
-    // Low battery
-    data[3] = 15;
-    ASSERT_EQ(data[3], 15);
-    ASSERT_TRUE(data[3] <= 100);
-
-    // Invalid battery (>100 should be rejected by controller)
-    data[3] = 0xFF;
-    ASSERT_TRUE(data[3] > 100); // controller should skip this
-}
+static void test_status_update_does_not_guess_battery_percentage();
 
 // =====================================================================
 // 24. DiscoverSPE frame serialization
@@ -18780,8 +18749,8 @@ int main()
     RUN(challenge_zero_detection);
     RUN(challenge_cleared_after_verify);
 
-    printf("\nBattery level decoding:\n");
-    RUN(battery_level_decoding);
+    printf("\nStatusUpdate does not guess battery percentage:\n");
+    RUN(status_update_does_not_guess_battery_percentage);
 
     printf("\nDiscoverSPE frame:\n");
     RUN(frame_discover_spe_request);
@@ -20493,4 +20462,51 @@ TEST(controller_battery_object_transfer_rejects_profile_context_change) {
     ch.invalidateProductContext();ASSERT_TRUE(!c.objectReadIdentityValid());c.loop();
     ASSERT_TRUE(c.objectRead().stage()==IoHomeObjectTransfer::Stage::IdentityChanged);
     ASSERT_EQ(ch.testBatteryObjectReplies(),0U);ASSERT_TRUE(!ch.batteryInfo().somfy.valid);
+}
+
+TEST(status_update_does_not_guess_battery_percentage) {
+    const uint8_t values[]={0,15,50,75,100,255};
+    for(auto value:values) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);ch.setBatteryMonitoring(1);IoHomeFrame f;
+        uint8_t data[11]{};data[0]=1;data[3]=value;
+        buildStatusUpdateFrame(f,0x123456,ch.getNodeId(),data,sizeof(data));
+        ASSERT_TRUE(queueControllerResponse(c,f));
+        const auto &packet=c.radio().testLastTransmittedPacket();IoHomeFrame challenge;
+        ASSERT_TRUE(deserializeFrameForTest(challenge,packet.data(),uint8_t(packet.size())));
+        ASSERT_TRUE(challenge.commandId==IoHomeCommand::ChallengeRequest);
+        IoHomeFrame authenticated;
+        buildChallengeResponseFrame(authenticated,0x123456,ch.getNodeId(),data,sizeof(data),challenge.data,ch.getEncryptionKey());
+        ASSERT_TRUE(queueControllerResponse(c,authenticated));
+        ASSERT_TRUE(ch.testHasPositionFeedback()); // prove the authenticated status was dispatched
+        ASSERT_TRUE(!ch.batteryInfo().percentValid&&!ch.testHasBatteryLevel());
+        ASSERT_EQ(ch.testBatteryLevel(),0xFF);ASSERT_EQ(ch.testBatteryLevelCalls(),0U);
+    }
+}
+TEST(protocol_battery_newest_evidence_and_equal_timestamp_confidence) {
+    IoHomeBatteryInfo info;
+    info.observeSomfy(3,0x4B,100);info.observeStatus(0x20,4,200);
+    ASSERT_TRUE(info.selected().low&&info.source()==IoHomeBatterySource::StatusExecuteBits&&info.conflict());
+    ASSERT_EQ(info.somfy.timestampMs,100U);
+    info={};info.observeSomfy(1,0x4B,100);info.observeStatus(0x60,4,200);
+    ASSERT_TRUE(!info.selected().low&&info.source()==IoHomeBatterySource::StatusExecuteBits&&info.conflict());
+    info={};info.observeStatus(0x40,4,100);info.observeError(0x12,0xFE,200);
+    ASSERT_TRUE(info.selected().low&&info.source()==IoHomeBatterySource::BatteryError);
+    info={};info.observeError(0x12,0xFE,100);info.observeStatus(0x40,4,200);
+    ASSERT_TRUE(!info.selected().low&&info.source()==IoHomeBatterySource::StatusExecuteBits);
+    info={};info.observeError(0x12,0xFE,100);info.observeStatus(0x40,4,100);
+    ASSERT_TRUE(info.source()==IoHomeBatterySource::StatusExecuteBits);
+    info.observeSomfy(3,0x4B,100);ASSERT_TRUE(!info.selected().low&&info.source()==IoHomeBatterySource::A601Status);
+    info.observeSomfy(4,0x4B,300);info.observeStatus(0,4,400);info.observeError(1,0xFE,500);
+    ASSERT_EQ(info.selected().timestampMs,100U);ASSERT_TRUE(!info.percentValid);
+}
+TEST(protocol_battery_timestamp_wraparound_arbitrates_all_sources) {
+    const uint32_t old=0xFFFFFFF0,newer=0x10;
+    ASSERT_TRUE(ioHomeBatteryTimestampNewer(newer,old));ASSERT_TRUE(!ioHomeBatteryTimestampNewer(old,newer));
+    ASSERT_TRUE(!ioHomeBatteryTimestampNewer(old,old));
+    IoHomeBatteryInfo info;info.observeSomfy(3,0x4B,old);info.observeStatus(0x20,4,newer);
+    ASSERT_TRUE(info.selected().low&&info.source()==IoHomeBatterySource::StatusExecuteBits);
+    info={};info.observeStatus(0x40,4,old);info.observeError(0x12,0xFE,newer);
+    ASSERT_TRUE(info.selected().low&&info.source()==IoHomeBatterySource::BatteryError);
+    info={};info.observeError(0x12,0xFE,old);info.observeSomfy(3,0x4B,newer);
+    ASSERT_TRUE(!info.selected().low&&info.source()==IoHomeBatterySource::A601Status);
 }

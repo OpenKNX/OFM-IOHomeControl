@@ -2667,7 +2667,7 @@ void IoHomecontrolChannel::updateBatteryKo() {
 void IoHomecontrolChannel::onBatteryStatus(uint8_t status,uint8_t command) {
     if(!batteryMonitoring())return;
     mBatteryInfo.observeStatus(status,command,millis());
-    if(mBatteryInfo.conflict())logInfoP("Battery conflict: retained A601 precedence; status=%u A601=%u",mBatteryInfo.coarse.raw,mBatteryInfo.somfy.raw);
+    if(mBatteryInfo.conflict())logInfoP("Battery conflict: selected=%s low=%u status=%u A601=%u",ioHomeBatterySourceName(mBatteryInfo.source()),unsigned(mBatteryInfo.selected().low),mBatteryInfo.coarse.raw,mBatteryInfo.somfy.raw);
     updateBatteryKo();
 }
 void IoHomecontrolChannel::onBatteryError(uint8_t code,uint8_t command) {
@@ -2696,19 +2696,21 @@ void IoHomecontrolChannel::onBatteryObject(uint8_t provider,uint16_t object,cons
         if(object==0xA601&&field.pid==1&&field.length<=2&&ioHomeBatteryUnsigned(field.data,field.length,value))
             mBatteryInfo.observeSomfy(value,0x4B,millis());
     });
-    if(mBatteryInfo.conflict())logInfoP("Battery conflict: retained A601 precedence; status=%u A601=%u",mBatteryInfo.coarse.raw,mBatteryInfo.somfy.raw);
+    if(mBatteryInfo.conflict())logInfoP("Battery conflict: selected=%s low=%u status=%u A601=%u",ioHomeBatterySourceName(mBatteryInfo.source()),unsigned(mBatteryInfo.selected().low),mBatteryInfo.coarse.raw,mBatteryInfo.somfy.raw);
     printBatteryStatus();updateBatteryKo();
 }
 void IoHomecontrolChannel::printBatteryStatus() {
     const auto &id=getProtocolIdentity();const auto &selected=mBatteryInfo.selected();
     logInfoP("Battery ch=%u node=%06lX profile=%u subtype=%u manufacturer=%u monitor=%u percent=unknown",
         unsigned(_channelIndex+1),(unsigned long)mNodeId,id.profile,id.subProfile,id.manufacturerId,batteryMonitoring());
-    logInfoP("  low=%s source=%s age-ms=%lu conflict=%u",selected.valid?(selected.low?"yes":"no"):"unknown",
+    logInfoP("  selected=%s source=%s age-ms=%lu conflict=%u",selected.valid?(selected.low?"yes":"no"):"unknown",
         ioHomeBatterySourceName(mBatteryInfo.source()),selected.valid?(unsigned long)(millis()-selected.timestampMs):0,mBatteryInfo.conflict());
     static const char *coarseNames[]={"unknown","low","normal","full"};
     static const char *somfyNames[]={"very-low","low","mid","high","unknown"};
-    logInfoP("  coarse=%s A601=%s",mBatteryInfo.coarse.valid?coarseNames[mBatteryInfo.coarse.raw]:"unknown",
-        mBatteryInfo.somfy.valid?somfyNames[mBatteryInfo.somfy.raw]:"unknown");
+    logInfoP("  coarse=%s age-ms=%lu",mBatteryInfo.coarse.valid?coarseNames[mBatteryInfo.coarse.raw]:"unknown",
+        mBatteryInfo.coarse.valid?(unsigned long)(millis()-mBatteryInfo.coarse.timestampMs):0);
+    logInfoP("  A601=%s age-ms=%lu",mBatteryInfo.somfy.valid?somfyNames[mBatteryInfo.somfy.raw]:"unknown",
+        mBatteryInfo.somfy.valid?(unsigned long)(millis()-mBatteryInfo.somfy.timestampMs):0);
     logInfoP("  coarse-valid=%u raw=%u cmd=%02X A601-valid=%u raw=%u error-valid=%u code=%02X",
         mBatteryInfo.coarse.valid,mBatteryInfo.coarse.raw,mBatteryInfo.coarse.command,mBatteryInfo.somfy.valid,mBatteryInfo.somfy.raw,mBatteryInfo.error.valid,mBatteryInfo.error.raw);
     for(const auto *evidence:{&mBatteryInfo.coarse,&mBatteryInfo.somfy,&mBatteryInfo.error})
