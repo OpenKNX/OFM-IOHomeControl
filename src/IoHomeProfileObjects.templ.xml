@@ -208,4 +208,7 @@
 <ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00330" RefId="%AID%_O-%TT%%CC%003" Text="Kanal %C% Fahrgeschwindigkeit setzen" FunctionText="Fahrgeschwindigkeit setzen"/>
 <ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00430" RefId="%AID%_O-%TT%%CC%004" Text="Kanal %C% Fahrgeschwindigkeit Rückmeldung" FunctionText="Fahrgeschwindigkeit Rückmeldung"/>
 <ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00530" RefId="%AID%_O-%TT%%CC%005" Text="Kanal %C% Fahrgeschwindigkeit gültig" FunctionText="Fahrgeschwindigkeit gültig"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00031" RefId="%AID%_O-%TT%%CC%000" Text="Kanal %C% Position setzen" FunctionText="Position setzen"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00131" RefId="%AID%_O-%TT%%CC%001" Text="Kanal %C% Position Rückmeldung" FunctionText="Position Rückmeldung"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00231" RefId="%AID%_O-%TT%%CC%002" Text="Kanal %C% Position gültig" FunctionText="Position gültig"/>
 <ComObjectRef Id="%AID%_O-%TT%%CC%015_R-%TT%%CC%01501" RefId="%AID%_O-%TT%%CC%015" Text="Kanal %C% Profilwerte lesen" FunctionText="Profilwerte lesen"/></ComObjectRefs></Static><Dynamic/></ApplicationProgram></ApplicationPrograms></Manufacturer></ManufacturerData></KNX>

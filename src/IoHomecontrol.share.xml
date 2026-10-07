@@ -137,6 +137,7 @@
                   <Enumeration Text="Sensor (Diagnose)" Value="59" Id="%ENID%" />
                   <Enumeration Text="Fernbedienung / Controller (Diagnose)" Value="60" Id="%ENID%" />
                   <Enumeration Text="Heizungs-Temperaturschnittstelle (Diagnose)" Value="61" Id="%ENID%" />
+                  <Enumeration Text="Bioklimatische Pergola (Lamellen über Position)" Value="62" Id="%ENID%" />
                   <!-- END DETAILED SELECTIONS -->
                 </TypeRestriction>
               </ParameterType>

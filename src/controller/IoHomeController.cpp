@@ -1964,10 +1964,11 @@ bool IoHomeController::sendCommandInternal(uint32_t iDestNodeId, const uint8_t *
                                            : OneWayDestinationMode::ProfileTyped;
     lEntry.oneWayExactDestination = 0;
     lEntry.sourceChannelIndex = 0xFF;
-    if(iCmd==IoHomeCommand::Private&&iParam==3&&iParam2==0xFF&&iParam3==0xFF&&lOneWayChannel&&!lOneWayChannel->is1W()) {
+    if(((iCmd==IoHomeCommand::Private&&iParam==3&&iParam2==0xFF&&iParam3==0xFF)||
+        (iCmd==IoHomeCommand::Execute&&iParam==0xD2))&&lOneWayChannel&&!lOneWayChannel->is1W()) {
         lEntry.sourceChannelIndex=channelIndexFor(lOneWayChannel);
         lEntry.productContextRevision=lOneWayChannel->productContextRevision();
-        // Capture identity for battery evidence without changing legacy RF policy.
+        // Capture identity for battery evidence and short STOP ACKs without changing RF policy.
         std::memcpy(lEntry.managementKey,lOneWayChannel->getEncryptionKey(),16);
     }
     lEntry.twoWayTxFreqIdx = iFrequencyIndex;
@@ -11113,6 +11114,18 @@ void IoHomeController::dispatchRxFrame()
                                      ioHomeWindowSecurityModeName(lMode));
                     }
                     break; // diagnostic reads never publish KOs
+                }
+                // PR #157 proves current position in the short pergola STOP ACK.
+                // Other short EXECUTE fields remain opaque; require the exact
+                // profile and a correlated, identity-bound STOP transaction.
+                const auto *lAckProfile=lCh->getEffectiveProfileDescriptor();
+                if(mSawChallenge&&mAuthResponseSent&&mRxFrame.dataLen==6&&mRxFrame.data[0]==5&&mRxFrame.data[1]==0&&
+                   lAckProfile&&lAckProfile->profile==0x1D&&lAckProfile->subProfile==0&&
+                   mCurrentCmd.active&&mCurrentCmd.command==IoHomeCommand::Execute&&mCurrentCmd.param==0xD2&&
+                   mCurrentCmd.destNodeId==lSrcNode&&lDestNode==mOwnNodeId&&
+                   sampleIdentityMatches(mCurrentCmd.sourceChannelIndex,lSrcNode,mCurrentCmd.managementKey,mCurrentCmd.productContextRevision)) {
+                    const uint8_t lStopStatus[]={0xD2,0,mRxFrame.data[2],mRxFrame.data[3]};
+                    dispatchPositionStatus(lCh,lStopStatus,sizeof(lStopStatus),true,0,2);
                 }
                 if (!mTrustRxPosition)
                     break;

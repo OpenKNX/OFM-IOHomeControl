@@ -398,6 +398,7 @@ Wird direkt auf der Seite **Kanalauswahl** eingestellt. **Deaktiviert** ist der 
 **Automatisch (Discovery)** übernimmt den Gerätetyp aus der Erkennung. Nach dem Einlesen und Programmieren stehen die passenden Funktionen bereit.
 
 Die allgemeinen Kategorien wurden entfernt. Jeder unterstützte Profiltyp ist einzeln auswählbar: Innen-/Außenjalousie, Rollladenvarianten, Doppelrollladen, Klappladenvarianten, Fenster mit/ohne Regensensor, Markisen, Tore mit Position oder Ein/Aus, Tür-/Fensterschloss, Licht dimmbar oder Ein/Aus sowie die einzelnen Lüftungs- und Heizungsprofile.
+Die bioklimatische Somfy-Pergola (Profil 29/0) steuert ihre Lamellenöffnung über MP/Position mit normaler Richtung. Separate Lamellen-KOs werden nicht angeboten. Die Drahtsemantik basiert auf öffentlichen PR-157-Captures aus laberning/home_io_control; eine physische OFM-Hardwarequalifikation steht aus.
 
 Eine genaue Profilauswahl stellt Profil, Lamellenfunktion, Binärmodus und Dimmen passend ein. Diese manuelle Wahl bleibt bei der Erkennung erhalten. **Automatik wiederherstellen** gibt die Zuordnung wieder an die Erkennung zurück. Die Lamellenobjekte werden passend zum Profil automatisch eingeblendet; ein zusätzlicher Schalter ist nicht nötig.
 

@@ -633,7 +633,7 @@
 </choose>
                           </when>
                           <!-- BEGIN GENERATED MANUAL CORE KOS -->
-                          <when test="16 17 18 19 31 32 35 36 44 45"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" /></when>
+                          <when test="16 17 18 19 31 32 35 36 44 45 62"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%019_R-%TT%%CC%01901" /></when>
                           <when test="20 23 27 34 37"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
                           <when test="21 22"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%011_R-%TT%%CC%01101" /></when>
                           <when test="24 26 28 33 43"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
@@ -657,7 +657,7 @@
                             </choose>
                           </when>
                           <!-- BEGIN GENERATED MANUAL WEATHER KOS -->
-                          <when test="16 17 18 19 20 21 22 31 32 35 36 44 45"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
+                          <when test="16 17 18 19 20 21 22 31 32 35 36 44 45 62"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%018_R-%TT%%CC%01801" /></when>
                           <!-- END GENERATED MANUAL WEATHER KOS -->
                         </choose>
 

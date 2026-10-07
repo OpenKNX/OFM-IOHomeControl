@@ -346,7 +346,141 @@ static const uint8_t kKlr300NodeVerifyRequest[] = {
     0x48, 0x24, 0x7E, 0x9E, 0x6E, 0xE2, 0xD1, 0xFF, 0x36,
 };
 
+// Byte-exact public PR #157 captures; omitted authentication stays omitted.
+static const uint8_t kPergola_gi2_request[] = {0x48, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x56};
+static const uint8_t kPergola_gi2_reply[] = {0x98, 0x00, 0x9A, 0xF3, 0xCE, 0x26, 0x25, 0x52, 0x57, 0x35, 0x31, 0x35, 0x30, 0x37, 0x30, 0x32, 0x41, 0x30, 0x38, 0x07, 0x40, 0x01, 0x0A, 0x00, 0x00};
+static const uint8_t kPergola_closed[] = {0x96, 0x00, 0x9A, 0xF3, 0xCE, 0x26, 0x25, 0x52, 0x04, 0x05, 0x00, 0xC8, 0x00, 0xC8, 0x00, 0x00, 0x00, 0x9A, 0xF3, 0xCE, 0x01, 0x00, 0x00};
+static const uint8_t kPergola_moving[] = {0x96, 0x00, 0x9A, 0xF3, 0xCE, 0x26, 0x25, 0x52, 0x04, 0x04, 0x80, 0xC8, 0x00, 0x93, 0xB1, 0x00, 0x05, 0x9A, 0xF3, 0xCE, 0x01, 0x00, 0x00};
+static const uint8_t kPergola_off_target70[] = {0x96, 0x00, 0x9A, 0xF3, 0xCE, 0x26, 0x25, 0x52, 0x04, 0x05, 0x00, 0x8C, 0x00, 0x8D, 0xDF, 0x00, 0x00, 0x9A, 0xF3, 0xCE, 0x01, 0x00, 0x00};
+static const uint8_t kPergola_off_target50[] = {0x96, 0x00, 0x9A, 0xF3, 0xCE, 0x26, 0x25, 0x52, 0x04, 0x05, 0x00, 0x64, 0x00, 0x65, 0x7A, 0x00, 0x00, 0x9A, 0xF3, 0xCE, 0x01, 0x00, 0x00};
+static const uint8_t kPergola_stop_unknown[] = {0x96, 0x00, 0x9A, 0xF3, 0xCE, 0x26, 0x25, 0x52, 0x04, 0x05, 0x00, 0xD2, 0x00, 0xD2, 0x00, 0x00, 0x00, 0x9A, 0xF3, 0xCE, 0x01, 0x00, 0x00};
+static const uint8_t kPergola_stop_position[] = {0x96, 0x00, 0x9A, 0xF3, 0xCE, 0x26, 0x25, 0x52, 0x04, 0x05, 0x00, 0xD2, 0x00, 0x22, 0xDF, 0x00, 0x00, 0x9A, 0xF3, 0xCE, 0x01, 0x00, 0x00};
+static const uint8_t kPergola_favorite[] = {0x96, 0x00, 0x9A, 0xF3, 0xCE, 0x26, 0x25, 0x52, 0x04, 0x05, 0x00, 0xD8, 0x00, 0x62, 0x05, 0x00, 0x00, 0x9A, 0xF3, 0xCE, 0x01, 0x00, 0x00};
+static const uint8_t kPergola_position_ack[] = {0x8E, 0x00, 0x9A, 0xF3, 0xCE, 0x26, 0x25, 0x52, 0x04, 0x2C, 0x80, 0xA5, 0x20, 0x00, 0x00};
+static const uint8_t kPergola_main_ack[] = {0x8E, 0x00, 0x9A, 0xF3, 0xCE, 0x26, 0x25, 0x52, 0x04, 0x04, 0x80, 0x31, 0x81, 0x00, 0x00};
+static const uint8_t kPergola_session_0[] = {0x50, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x00, 0x01, 0x63, 0x00, 0x00, 0x80, 0xD8, 0x06, 0x00};
+static const uint8_t kPergola_session_1[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
+static const uint8_t kPergola_session_2[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
+static const uint8_t kPergola_session_3[] = {0x50, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x00, 0x01, 0x63, 0xC8, 0x00, 0x80, 0xD8, 0x06, 0x00};
+static const uint8_t kPergola_session_4[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
+static const uint8_t kPergola_session_5[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
+static const uint8_t kPergola_session_6[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
+static const uint8_t kPergola_session_7[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
+static const uint8_t kPergola_session_8[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
+static const uint8_t kPergola_session_9[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
+static const uint8_t kPergola_session_10[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
+static const uint8_t kPergola_session_11[] = {0x50, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x00, 0x01, 0x63, 0x64, 0x00, 0x80, 0xD8, 0x06, 0x00};
+static const uint8_t kPergola_session_12[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
+static const uint8_t kPergola_session_13[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
+static const uint8_t kPergola_session_14[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
+static const uint8_t kPergola_session_15[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
+static const uint8_t kPergola_session_16[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
+static const uint8_t kPergola_session_17[] = {0x50, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x00, 0x01, 0x63, 0x00, 0x00, 0x80, 0xD8, 0x06, 0x00};
+static const uint8_t kPergola_session_18[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
+static const uint8_t kPergola_session_19[] = {0x4E, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x00, 0x01, 0x63, 0xD2, 0x00, 0x00, 0x00};
+static const uint8_t kPergola_session_20[] = {0x8E, 0x00, 0x9A, 0xF3, 0xCE, 0x26, 0x25, 0x52, 0x04, 0x05, 0x00, 0x3E, 0xA0, 0x00, 0x00};
+static const uint8_t kPergola_session_21[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
+
 static const Frame kFrames[] = {
+    {"pergola_gi2_request", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; probe/somfy_pergola_louver_probe_get_info2_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_gi2_request, sizeof(kPergola_gi2_request), static_cast<IoHomeCommand>(0x56), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_gi2_reply", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; probe/somfy_pergola_louver_probe_get_info2_sx1262.yaml; device reply", RadioPath::SX1262,
+     kPergola_gi2_reply, sizeof(kPergola_gi2_reply), static_cast<IoHomeCommand>(0x57), 0x262552, 0x9AF3CE, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_closed", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; statuspoll/somfy_pergola_louver_statuspoll_replies_sx1262.yaml; device reply", RadioPath::SX1262,
+     kPergola_closed, sizeof(kPergola_closed), static_cast<IoHomeCommand>(0x04), 0x262552, 0x9AF3CE, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_moving", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; statuspoll/somfy_pergola_louver_statuspoll_replies_sx1262.yaml; device reply", RadioPath::SX1262,
+     kPergola_moving, sizeof(kPergola_moving), static_cast<IoHomeCommand>(0x04), 0x262552, 0x9AF3CE, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_off_target70", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; statuspoll/somfy_pergola_louver_statuspoll_replies_sx1262.yaml; device reply", RadioPath::SX1262,
+     kPergola_off_target70, sizeof(kPergola_off_target70), static_cast<IoHomeCommand>(0x04), 0x262552, 0x9AF3CE, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_off_target50", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; statuspoll/somfy_pergola_louver_statuspoll_replies_sx1262.yaml; device reply", RadioPath::SX1262,
+     kPergola_off_target50, sizeof(kPergola_off_target50), static_cast<IoHomeCommand>(0x04), 0x262552, 0x9AF3CE, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_stop_unknown", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; statuspoll/somfy_pergola_louver_statuspoll_replies_sx1262.yaml; device reply", RadioPath::SX1262,
+     kPergola_stop_unknown, sizeof(kPergola_stop_unknown), static_cast<IoHomeCommand>(0x04), 0x262552, 0x9AF3CE, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_stop_position", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; statuspoll/somfy_pergola_louver_statuspoll_replies_sx1262.yaml; device reply", RadioPath::SX1262,
+     kPergola_stop_position, sizeof(kPergola_stop_position), static_cast<IoHomeCommand>(0x04), 0x262552, 0x9AF3CE, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_favorite", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; statuspoll/somfy_pergola_louver_statuspoll_replies_sx1262.yaml; device reply", RadioPath::SX1262,
+     kPergola_favorite, sizeof(kPergola_favorite), static_cast<IoHomeCommand>(0x04), 0x262552, 0x9AF3CE, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_position_ack", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_execute_acks_sx1262.yaml; device reply", RadioPath::SX1262,
+     kPergola_position_ack, sizeof(kPergola_position_ack), static_cast<IoHomeCommand>(0x04), 0x262552, 0x9AF3CE, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_main_ack", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_execute_acks_sx1262.yaml; device reply", RadioPath::SX1262,
+     kPergola_main_ack, sizeof(kPergola_main_ack), static_cast<IoHomeCommand>(0x04), 0x262552, 0x9AF3CE, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_0", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_0, sizeof(kPergola_session_0), static_cast<IoHomeCommand>(0x00), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_1", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_1, sizeof(kPergola_session_1), static_cast<IoHomeCommand>(0x03), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_2", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_2, sizeof(kPergola_session_2), static_cast<IoHomeCommand>(0x03), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_3", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_3, sizeof(kPergola_session_3), static_cast<IoHomeCommand>(0x00), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_4", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_4, sizeof(kPergola_session_4), static_cast<IoHomeCommand>(0x03), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_5", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_5, sizeof(kPergola_session_5), static_cast<IoHomeCommand>(0x03), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_6", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_6, sizeof(kPergola_session_6), static_cast<IoHomeCommand>(0x03), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_7", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_7, sizeof(kPergola_session_7), static_cast<IoHomeCommand>(0x03), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_8", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_8, sizeof(kPergola_session_8), static_cast<IoHomeCommand>(0x03), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_9", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_9, sizeof(kPergola_session_9), static_cast<IoHomeCommand>(0x03), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_10", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_10, sizeof(kPergola_session_10), static_cast<IoHomeCommand>(0x03), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_11", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_11, sizeof(kPergola_session_11), static_cast<IoHomeCommand>(0x00), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_12", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_12, sizeof(kPergola_session_12), static_cast<IoHomeCommand>(0x03), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_13", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_13, sizeof(kPergola_session_13), static_cast<IoHomeCommand>(0x03), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_14", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_14, sizeof(kPergola_session_14), static_cast<IoHomeCommand>(0x03), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_15", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_15, sizeof(kPergola_session_15), static_cast<IoHomeCommand>(0x03), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_16", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_16, sizeof(kPergola_session_16), static_cast<IoHomeCommand>(0x03), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_17", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_17, sizeof(kPergola_session_17), static_cast<IoHomeCommand>(0x00), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_18", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_18, sizeof(kPergola_session_18), static_cast<IoHomeCommand>(0x03), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_19", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_19, sizeof(kPergola_session_19), static_cast<IoHomeCommand>(0x00), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_20", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; device reply", RadioPath::SX1262,
+     kPergola_session_20, sizeof(kPergola_session_20), static_cast<IoHomeCommand>(0x04), 0x262552, 0x9AF3CE, false, false, false, CryptoExpectation::NoCrypto},
+    {"pergola_session_21", "somfy_pergola_louver_pr157",
+     "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml; hub request", RadioPath::SX1262,
+     kPergola_session_21, sizeof(kPergola_session_21), static_cast<IoHomeCommand>(0x03), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
     {"issue112_discover_response", "tahoma_kli_ssl_issue112",
      "public TaHoma/KLI SSL capture from laberning/home_io_control Issue #112", RadioPath::ProtocolOnly,
      kIssue112DiscoverResponse, sizeof(kIssue112DiscoverResponse), IoHomeCommand::DiscoverResponse,
@@ -481,6 +615,7 @@ static const PairingWaitInjection kPairingWaitInjections[] = {
 // protocol-identical. The radio field preserves the capture context without
 // implying that OFM has a driver for that radio (notably LR1121).
 static const Scenario kScenarios[] = {
+    {"somfy_pergola_louver_pr157", "pergola_gi2_reply", RadioPath::SX1262, "public MP position, full status and short ACK layouts"},
     {"smoove_remove_add_sx1276", "smoove_remove_controller", RadioPath::SX1276,
      "0x39 then 29-byte 0x30"},
     {"sendkey_no_mac", "smoove_sendkey_no_mac", RadioPath::SX1276,

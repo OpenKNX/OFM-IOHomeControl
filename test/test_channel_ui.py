@@ -3,6 +3,8 @@
 
 from pathlib import Path
 import json
+import hashlib
+from collections import Counter
 import re
 import unittest
 import xml.etree.ElementTree as ET
@@ -127,6 +129,33 @@ class ChannelUiTest(unittest.TestCase):
         )
         self.assertIsNotNone(settings)
         self.assertIsNone(settings.find("k:choose", NS))
+
+    def test_pergola_original_yaml_provenance_and_exact_golden_bytes(self):
+        hashes = {'exchange/somfy_pergola_louver_exchange_execute_acks_sx1262.yaml': '58834ce7445b33204d98d11745e5a2b94822ddebc202cc77c68df87a5b7e8d21', 'exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml': '81e1330c04a84915f479faad29ba45a4b504b12ece2937bb627d9a06d9eff028', 'probe/somfy_pergola_louver_probe_get_info2_sx1262.yaml': 'ec9a75ca7b04faf89b9decc7c935769b7fbfb6a86bccb0bd562f2ba3a1bb525e', 'statuspoll/somfy_pergola_louver_statuspoll_replies_sx1262.yaml': 'bca765421eaadb8a3856790e8ed7945fbe875badff6ed09b0651754b09d6f869'}
+        wires = []
+        for file, digest in hashes.items():
+            path = ROOT / "test/corpus/captures" / file
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), digest)
+            wires.extend(bytes.fromhex(h) for h in re.findall(r'hex: "([0-9A-F ]+)"', path.read_text()))
+        header = (ROOT / "test/corpus/golden_rf_corpus.h").read_text()
+        fixtures = [bytes(int(v, 16) for v in re.findall(r"0x([0-9A-F]{2})", body))
+                    for body in re.findall(r"kPergola_\w+\[\] = \{(.*?)\};", header)]
+        self.assertEqual(len(wires), 33)
+        self.assertEqual(Counter(wires), Counter(fixtures))
+
+    def test_pergola_preset_exposes_position_cover_without_slats(self):
+        rows = json.loads((ROOT / "src/protocol/channel-selections.json").read_text())
+        row = next(r for r in rows if r["packed"] == 0x0740)
+        self.assertEqual((row["type"], row["flags"]), (1, 0))
+        selector = "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"
+        branches = self.template.findall(f".//k:choose[@ParamRefId='{selector}']/k:when", NS)
+        core = next(w for w in branches if str(row["value"]) in w.get("test").split() and w.findall("k:ComObjectRefRef", NS))
+        numbers = {int(re.search(r"%CC%(\d{3})_R", ref.get("RefId"))[1]) for ref in core.findall("k:ComObjectRefRef", NS)}
+        self.assertEqual(numbers, {0,1,2,4,5,10,19})
+        self.assertTrue(numbers.isdisjoint({8,9,21}))
+        profiles = parse("IoHomeProfileObjects.ui.xml")
+        branch = profiles.find(".//k:when[@test='1856']", NS)
+        self.assertIsNotNone(branch)
 
     def test_detailed_selection_covers_all_registry_profiles_and_has_no_diagnostic_actuator_kos(self):
         rows = json.loads((ROOT / "src/protocol/channel-selections.json").read_text())

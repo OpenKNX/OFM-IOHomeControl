@@ -54,3 +54,24 @@ bench session; do not relabel the current fixture as hardware evidence.
 The corpus intentionally stores only values that are safe to publish. A frame
 whose real cryptographic outcome depends on a private key may assert
 `HmacPresentKeyRedacted`, but must not embed the key merely to make a test pass.
+
+## Somfy bioclimatic pergola / Pergola louver IO (PR #157)
+
+`somfy_pergola_louver_pr157` retains public 2W GI2, EXECUTE, status-poll and ACK
+captures for io type 0x1D / subprofile 0. It verifies MP-position semantics,
+STOP/Favorite special values, short ACK layouts, and non-exact resting positions.
+Source: [https://github.com/laberning/home_io_control/commit/1c57116ba2843acc7d4a74439767e8714613e6f1](https://github.com/laberning/home_io_control/commit/1c57116ba2843acc7d4a74439767e8714613e6f1), public PR #157 (@piitaya),
+2026-10-06, actuator 262552 / hub 9AF3CE, Heltec V3 / SX1262. The probe/session
+were recorded by a second receiver; full status and immediate ACKs came from the
+hub log. Original timing, radio/context notes and omitted authentication remain
+in all four original YAML files alongside the executable C++ fixtures. No OFM
+physical capture or hardware qualification is claimed. Synthetic authentication
+in controller tests is OFM test infrastructure, not captured wire material.
+
+The YAML files below were copied unchanged from the cited commit. Their SHA-256
+hashes are checked in the UI/provenance regression:
+
+- `exchange/somfy_pergola_louver_exchange_execute_acks_sx1262.yaml`: `58834ce7445b33204d98d11745e5a2b94822ddebc202cc77c68df87a5b7e8d21`
+- `exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml`: `81e1330c04a84915f479faad29ba45a4b504b12ece2937bb627d9a06d9eff028`
+- `probe/somfy_pergola_louver_probe_get_info2_sx1262.yaml`: `ec9a75ca7b04faf89b9decc7c935769b7fbfb6a86bccb0bd562f2ba3a1bb525e`
+- `statuspoll/somfy_pergola_louver_statuspoll_replies_sx1262.yaml`: `bca765421eaadb8a3856790e8ed7945fbe875badff6ed09b0651754b09d6f869`

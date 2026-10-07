@@ -6,7 +6,8 @@ from xml.sax.saxutils import escape
 ROOT=Path(__file__).resolve().parents[1]
 rows=json.loads((ROOT/'src/protocol/channel-selections.json').read_text())
 assert [r['value'] for r in rows]==list(range(16,16+len(rows)))
-assert len({r['packed'] for r in rows if r['control']})==30
+registry=(ROOT/'src/protocol/IoHomeProfileRegistry.cpp').read_text().split('constexpr IoHomeParameterAlias')[0]
+assert {r['packed'] for r in rows if r['control']}=={int(p,16) for p in re.findall(r'profile\((0x[0-9A-F]+),',registry)}
 recognition={r['packed']:r for r in json.loads((ROOT/'src/protocol/recognition.json').read_text())}
 for row in rows:
  if row['control']:assert (row['type'],row['flags'])==(recognition[row['packed']]['type'],recognition[row['packed']]['flags'])
@@ -70,4 +71,4 @@ for name,items in [('CORE',groups.items()),('WEATHER',[((18,),[r['value'] for r 
  s,count=re.subn(pattern,lambda _:block,s,flags=re.S);assert count==1
 save(p,s)
 
-print('Detailed selections:',len(rows),'(30 supported profiles, 16 diagnosis-only families)')
+print('Detailed selections:',len(rows),'('+str(sum(r['control'] for r in rows))+' supported profiles, '+str(sum(not r['control'] for r in rows))+' diagnosis-only families)')

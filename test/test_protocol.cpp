@@ -7019,7 +7019,7 @@ TEST(golden_rf_corpus_covers_every_pairing_wait_injection)
         ASSERT_EQ(lFixture->crypto, CryptoExpectation::PairingCorrelationMustReject);
     }
 
-    ASSERT_EQ(scenarioCount, 10);
+    ASSERT_EQ(scenarioCount, 11);
     for (uint8_t i = 0; i < scenarioCount; i++)
     {
         const Scenario &lScenario = kScenarios[i];
@@ -20509,4 +20509,115 @@ TEST(protocol_battery_timestamp_wraparound_arbitrates_all_sources) {
     ASSERT_TRUE(info.selected().low&&info.source()==IoHomeBatterySource::BatteryError);
     info={};info.observeError(0x12,0xFE,old);info.observeSomfy(3,0x4B,newer);
     ASSERT_TRUE(!info.selected().low&&info.source()==IoHomeBatterySource::A601Status);
+}
+
+// PR #157 wire bytes are public originals. Test keys/authentication below are
+// synthetic OFM infrastructure, never reconstructed capture authentication.
+static void initPergolaController(IoHomeController &c,IoHomecontrol &m,IoHomecontrolChannel &ch) {
+    const uint8_t key[16]={1};initPaired2WControllerForTest(c,m,ch,0x9AF3CE,0x262552,key);
+    IoHomeProtocolIdentity id;id.valid=true;id.nodeClass=IoHomeNodeClass::Actuator;
+    id.profile=0x1D;id.subProfile=0;id.manufacturerId=2;id.fullMetadata=true;
+    id.metadataSource=IoHomeMetadataSource::DiscoverResponse;ch.onProtocolIdentity(0x262552,id);
+}
+static bool pergolaCapture(const char *id,IoHomeFrame &frame) {
+    const auto *f=IoHomeGoldenRfCorpus::findFrame(id);
+    return f&&deserializeFrameForTest(frame,f->bytes,f->wireLen);
+}
+static bool authenticatePergolaCommand(IoHomeController &c) {
+    const uint8_t challenge[6]={1,2,3,4,5,6};IoHomeFrame request;
+    buildPairChallengeRequestFrame(request,0x9AF3CE,0x262552,challenge);
+    if(!queueControllerResponse(c,request))return false;
+    const auto &packet=c.radio().testLastTransmittedPacket();IoHomeFrame response;
+    return deserializeFrameForTest(response,packet.data(),uint8_t(packet.size()))&&response.commandId==IoHomeCommand::ChallengeResponse;
+}
+TEST(protocol_pergola_profile_is_normal_mp_cover_without_fps) {
+    const auto *d=ioHomeProfileDescriptor(0x1D,0);ASSERT_TRUE(d);
+    ASSERT_TRUE(std::strcmp(d->label,"Bioclimatic Pergola")==0);
+    ASSERT_EQ((d->profile<<6)|d->subProfile,0x0740);
+    ASSERT_TRUE(d->mp==ParameterSemantic::Position&&d->mpPolarity==ParameterPolarity::Normal);
+    ASSERT_EQ(d->capabilityFlags,uint32_t(IoHomeCapabilityPosition));ASSERT_TRUE(!d->securedVentilation);
+    for(unsigned i=1;i<=16;++i)ASSERT_TRUE(ioHomeParameterSemantic(d,i)==ParameterSemantic::Unsupported);
+    ASSERT_TRUE(!ioHomeProfileDescriptor(0x1D,1));
+    for(unsigned i=0;i<3;++i){float pct=0;ASSERT_TRUE(ioHomeRawToPercent(i*0x6400,d->mpPolarity,pct));ASSERT_EQ(pct,float(i*50));}
+    ASSERT_TRUE(ioHomeClassifyRawParameterValue(0xD200,0x0740,0)==RawParameterValueKind::Current);
+    ASSERT_TRUE(ioHomeClassifyRawParameterValue(0xD800,0x0740,0)==RawParameterValueKind::Alias);
+    ASSERT_TRUE(ioHomeParameterDescriptor(d,0).source==IoHomeParameterSource::PublicCapture);
+}
+TEST(controller_pergola_original_gi2_matches_discovered_identity) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPergolaController(c,m,ch);
+    IoHomeFrame f;ASSERT_TRUE(pergolaCapture("pergola_gi2_reply",f));ASSERT_TRUE(queueControllerResponse(c,f));
+    const auto &e=ch.getProductIdentityEvidence();ASSERT_TRUE(e.generalInfo2TypeValid&&e.generalInfo2MatchesDiscovery);
+    ASSERT_EQ(e.generalInfo2Profile,29U);ASSERT_EQ(e.generalInfo2SubProfile,0U);
+    ASSERT_EQ((e.generalInfo2Profile<<6)|e.generalInfo2SubProfile,0x0740);
+    ASSERT_MEM_EQ(e.generalInfo2,f.data,16);ASSERT_TRUE(!ch.testHasSlatFeedback());
+}
+TEST(controller_pergola_generic_execute_mp_values_and_stop_favorite) {
+    const uint8_t params[]={0,100,50,0xD2,0xD8};
+    const char *captures[]={"pergola_session_0","pergola_session_3","pergola_session_11","pergola_session_19"};
+    for(unsigned i=0;i<5;++i) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPergolaController(c,m,ch);IoHomeFrame tx;
+        ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Execute,params[i]));
+        ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(tx.commandId==IoHomeCommand::Execute);
+        ASSERT_EQ((unsigned(tx.data[2])<<8)|tx.data[3],i<3?unsigned(params[i])*512U:unsigned(params[i])<<8);
+        if(i<4){IoHomeFrame captured;ASSERT_TRUE(pergolaCapture(captures[i],captured));ASSERT_MEM_EQ(tx.data+2,captured.data+2,2);}
+        ASSERT_TRUE(!c.sendTiltCommand(ch.getNodeId(),ch.getEncryptionKey(),50));
+    }
+}
+TEST(controller_pergola_original_full_status_special_targets_and_resting_tolerance) {
+    struct Case {const char *id;float target,current;bool currentValid,moving;};
+    const Case cases[]={
+        {"pergola_closed",100,100,true,false},{"pergola_moving",100,0x93B1/512.0f,true,true},
+        {"pergola_off_target70",70,0x8DDF/512.0f,true,false},{"pergola_off_target50",50,0x657A/512.0f,true,false},
+        {"pergola_stop_unknown",-1,0,false,false},{"pergola_stop_position",-1,0x22DF/512.0f,true,false},
+        {"pergola_favorite",-1,0x6205/512.0f,true,false}};
+    for(const auto &expected:cases) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPergolaController(c,m,ch);IoHomeFrame tx,reply;
+        ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3));
+        ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(pergolaCapture(expected.id,reply));
+        ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_TRUE(ch.testHasStatusUpdate());
+        ASSERT_EQ(ch.testStatusMoving(),expected.moving);ASSERT_EQ(ch.testHasPositionFeedback(),expected.currentValid);
+        if(expected.currentValid)ASSERT_TRUE(std::fabs(ch.testPositionFeedback()-expected.current)<0.01f);
+        if(expected.target>=0)ASSERT_TRUE(std::fabs(ch.testTargetPositionFeedback()-expected.target)<0.01f);
+        else {float target;ASSERT_TRUE(!ioHomeRawToPercent((reply.data[2]<<8)|reply.data[3],ParameterPolarity::Normal,target));}
+        if(!expected.currentValid)ASSERT_TRUE(!ch.testHasTargetPositionFeedback());
+        ASSERT_TRUE(!ch.testHasSlatFeedback()&&!ch.testHasBatteryLevel());
+        ASSERT_TRUE(c.state()==ControllerState::Idle);
+    }
+}
+TEST(controller_pergola_short_execute_acks_correlate_without_guessing_fields) {
+    for(const char *id:{"pergola_position_ack","pergola_main_ack"}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPergolaController(c,m,ch);IoHomeFrame tx,reply;
+        ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Execute,100));
+        ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(pergolaCapture(id,reply));ASSERT_EQ(reply.dataLen,6);
+        ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_TRUE(c.state()==ControllerState::Idle);
+        ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasSlatFeedback());
+        ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3));
+        ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(pergolaCapture("pergola_off_target50",reply));
+        ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_TRUE(ch.testHasPositionFeedback()&&!ch.testStatusMoving());
+    }
+}
+TEST(controller_pergola_short_stop_ack_current_then_full_poll) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPergolaController(c,m,ch);IoHomeFrame tx,reply;
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Execute,0xD2));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(authenticatePergolaCommand(c));
+    ASSERT_TRUE(pergolaCapture("pergola_session_20",reply));
+    ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_TRUE(c.state()==ControllerState::Idle);
+    ASSERT_TRUE(ch.testHasPositionFeedback()&&ch.testHasStatusUpdate()&&!ch.testStatusMoving());
+    ASSERT_TRUE(std::fabs(ch.testPositionFeedback()-0x3EA0/512.0f)<0.01f);
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_EQ(tx.data[0],3);
+    ASSERT_TRUE(pergolaCapture("pergola_stop_position",reply));ASSERT_TRUE(queueControllerResponse(c,reply));
+    ASSERT_TRUE(std::fabs(ch.testPositionFeedback()-0x22DF/512.0f)<0.01f);
+}
+TEST(controller_pergola_short_stop_ack_requires_profile_command_and_context) {
+    for(unsigned variant=0;variant<5;++variant) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPergolaController(c,m,ch);IoHomeFrame tx,reply;
+        if(variant==0){auto id=ch.getProtocolIdentity();id.profile=2;ch.onProtocolIdentity(ch.getNodeId(),id);}
+        ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Execute,variant==1?100:0xD2));
+        ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));if(variant!=3)ASSERT_TRUE(authenticatePergolaCommand(c));
+        if(variant==2)ch.invalidateProductContext();
+        if(variant==4){uint8_t key[16];std::memcpy(key,ch.getEncryptionKey(),16);key[0]^=1;ch.setEncryptionKey(key);}
+        ASSERT_TRUE(pergolaCapture("pergola_session_20",reply));ASSERT_TRUE(queueControllerResponse(c,reply));
+        ASSERT_TRUE(!ch.testHasPositionFeedback());
+    }
 }

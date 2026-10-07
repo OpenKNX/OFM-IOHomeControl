@@ -441,3 +441,11 @@ test("host response normalization rejects malformed bytes and lengths",function(
  var bad=[{length:1,0:undefined},{length:1,0:256},{length:1,0:-1},{length:1,0:1.5},{length:-1},{}];
  for(var i=0;i<bad.length;i++){var rejected=false;try{IOHC_invokeFunctionProperty({invokeFunctionProperty:function(){return bad[i];}},[0x23]);}catch(e){rejected=true;}check(rejected,"malformed host response accepted");}
 });
+
+test("pergola automatically recognizes MP cover without slat or ventilation",function(){
+ var d=deviceWith({OrientationObjects:1});
+ check(IOHC_queryRecognition(d,onlineWith(snapshot(0x1C,29,0)),{channelIndex:1},true),"pergola not recognized");
+ check(value(d,"DeviceType")===1&&value(d,"OrientationObjects")===0&&value(d,"BinaryOnly")===0,"pergola inferred slats/binary");
+ var preset=IOHC_CHANNEL_SELECTIONS[IOHC_CHANNEL_SELECTIONS.length-1];
+ check(preset.value===62&&preset.packed===1856&&preset.flags===0,"explicit pergola preset missing");
+});

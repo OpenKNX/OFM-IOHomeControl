@@ -54,3 +54,5 @@ Normale Positionsrohwerte reichen von 0x0000 bis 0xC800; 512 Rohwertschritte ent
 0xD100 steht für Zielwert, 0xD200 für aktuellen Wert, 0xD300 für Standardwert und 0xD400 für unverändert / ignorieren. Das sind Steuerkennungen, keine Messwerte. Auch 0xD800 ist kein Prozentwert: bei geeigneten Profilen steht es für eine gespeicherte Position.
 
 Weitere bekannte MP-Sonderpositionen: Fenster 0xD803 = gesicherte Lüftung; Tor 0xD807 = Fußgängeröffnung; Garagentor 0xD809 = Teilöffnung; Außenjalousie und Klappladen 0xD80A = gesicherte Position. Das erklärt die Kennung, schaltet aber keinen zusätzlichen KNX-Befehl frei.
+
+**Bioklimatische Pergola:** Die Lamellenöffnung wird über die normale Position gesteuert (0 % offen, 100 % geschlossen). Keine separate Lamellen-/Orientierungsfunktion verwenden. Profil 29/0 wird bei der Gerätesuche automatisch erkannt.

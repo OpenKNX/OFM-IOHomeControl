@@ -309,5 +309,11 @@
 <ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00330"/>
 <ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00430"/>
 <ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00530"/>
+</when>
+<when test="1856">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="MP: Position"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00031"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00131"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00231"/>
 </when></choose><choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"><when test="&gt;0"><ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%015_R-%TT%%PRODUCT_CC%01501"/></when></choose>
 </when></choose></Dynamic></KNX>

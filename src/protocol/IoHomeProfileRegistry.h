@@ -5,7 +5,8 @@
 
 #include "IoHomeCommands.h"
 
-// KLF200 API v3.18, Appendix 2, Table 276. These are parameter meanings,
+// KLF200 API v3.18, Appendix 2, Table 276, plus exact public-capture profiles.
+// These are parameter meanings,
 // independent of manufacturer, product family, and the still-unconfirmed RF
 // source of NodeClass. FP array index 0 represents FP1.
 enum class ParameterSemantic : uint8_t
@@ -53,7 +54,7 @@ enum class RawParameterValueKind : uint8_t
     Alias, NoFeedback, Unknown, Discrete
 };
 
-enum class IoHomeParameterSource : uint8_t { Unknown, KlfAppendix2, Ovpd };
+enum class IoHomeParameterSource : uint8_t { Unknown, KlfAppendix2, Ovpd, PublicCapture };
 
 struct IoHomeParameterDescriptor
 {
@@ -82,7 +83,8 @@ enum class IoHomeAliasSemantic : uint8_t
 enum class IoHomeAliasSource : uint8_t
 {
     KlfConfirmed,
-    OvpdConfirmed
+    OvpdConfirmed,
+    PublicCapture
 };
 
 struct IoHomeParameterAlias
@@ -133,14 +135,14 @@ struct IoHomeProfileDescriptor
     bool securedVentilation;
 };
 
-// Returns nullptr for a profile absent from Appendix 2. Callers should keep
+// Returns nullptr for a profile absent from the supported registry. Callers should keep
 // the captured identity and treat its MP/FP meanings as Unknown.
 const IoHomeProfileDescriptor *ioHomeProfileDescriptor(uint16_t iProfile,
                                                         uint8_t iSubProfile);
 const IoHomeProfileDescriptor *ioHomeProfileDescriptor(const IoHomeProtocolIdentity &iIdentity);
 
 // Index 0 is MP, 1..16 are FP1..FP16. Unsupported means not documented by
-// KLF Appendix 2 for this profile, not unsupported by the protocol;
+// the supported registry for this profile, not unsupported by the protocol;
 // an unknown profile or invalid index is Unknown.
 ParameterSemantic ioHomeParameterSemantic(const IoHomeProfileDescriptor *iDescriptor,
                                           uint8_t iParameterIndex);

@@ -115,6 +115,8 @@ namespace
         profile(0x0600, "Swinging Shutter", S::ShutterClosure, S::LinearSpeed),
         profile(0x0601, "Independent Leaf Swinging Shutter", S::ShutterClosure,
                 S::LinearSpeed),
+        // Public laberning/home_io_control PR #157: louvers use MP, no proven FP.
+        profile(0x0740, "Bioclimatic Pergola", S::Position),
     };
 
     constexpr IoHomeParameterAlias kAliases[] = {
@@ -132,6 +134,7 @@ namespace
         {0x04C0, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::OvpdConfirmed},
         {0x0600, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::OvpdConfirmed},
         {0x0601, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::OvpdConfirmed},
+        {0x0740, 0, 0xD800, IoHomeAliasSemantic::MemorizedPosition, IoHomeAliasSource::PublicCapture},
         {0x0440, 3, 0xD800, IoHomeAliasSemantic::MemorizedTilt,
          IoHomeAliasSource::OvpdConfirmed},
         {0x0100, 0, 0xD803, IoHomeAliasSemantic::SecuredVentilation,
@@ -277,7 +280,9 @@ IoHomeParameterDescriptor ioHomeParameterDescriptor(
     lResult.index = iParameterIndex;
     lResult.semantic = ioHomeResolvedParameterSemantic(iDescriptor, iParameterIndex);
     if (lResult.semantic != ParameterSemantic::Unknown && lResult.semantic != ParameterSemantic::Unsupported)
-        lResult.source = lResult.semantic == ioHomeParameterSemantic(iDescriptor, iParameterIndex)
+        lResult.source = iDescriptor&&iDescriptor->profile==0x1D&&iDescriptor->subProfile==0
+                             ? IoHomeParameterSource::PublicCapture
+                             : lResult.semantic == ioHomeParameterSemantic(iDescriptor, iParameterIndex)
                              ? IoHomeParameterSource::KlfAppendix2 : IoHomeParameterSource::Ovpd;
     if (!iDescriptor || iParameterIndex > 16)
         return lResult;

@@ -366,5 +366,13 @@
     "packed": 0,
     "flags": 0,
     "control": false
+  },
+  {
+    "value": 62,
+    "label": "Bioklimatische Pergola (Lamellen über Position)",
+    "type": 1,
+    "packed": 1856,
+    "flags": 0,
+    "control": true
   }
 ]

@@ -13,7 +13,7 @@ for code,name,args in re.findall(r'profile\((0x[0-9A-F]+), "([^"]+)", (.*?)\)',r
  if code=='0x0082':values[9]='ProjectionAngle'
  if code=='0x0241':values[1]='WindowSecurityMode'
  profiles.append((int(code,16),name,values))
-assert len(profiles)==30
+assert profiles and len({p[0] for p in profiles})==len(profiles)
 A='%AID%';T='%TT%%CC%'
 start=f'''<?xml version="1.0" encoding="utf-8"?>
 <KNX xmlns="http://knx.org/xml/project/20" xmlns:op="http://github.com/OpenKNX/OpenKNXproducer">

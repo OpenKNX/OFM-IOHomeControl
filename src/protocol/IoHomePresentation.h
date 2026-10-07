@@ -36,6 +36,7 @@ inline IoHomePresentation ioHomePresentation(uint16_t packed)
     case 0x057A: return {14, 2};
     case 0x0600: return {1, 0};
     case 0x0601: return {1, 0};
+    case 0x0740: return {1, 0};
     default: return {0,0};
     }
 }
