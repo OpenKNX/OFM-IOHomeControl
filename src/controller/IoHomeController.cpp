@@ -2404,7 +2404,7 @@ bool IoHomeController::requestBatteryPrivate(IoHomecontrolChannel *channel,uint8
     entry.maxAttempts=1;entry.background=true;entry.active=true;return queuePush(entry);
 }
 bool IoHomeController::requestBatteryObjects(IoHomecontrolChannel *channel) {
-    if(!channel||channel->batteryMonitoring()!=2||mBatterySequenceChannel<16||!mModule||!mModule->managementRequestsAllowed())return false;
+    if(!channel||channel->batteryMonitoring()!=2||mBatterySequenceChannel<16||mDynamicSequenceChannel<16||!mModule||!mModule->managementRequestsAllowed())return false;
     const uint8_t index=channel->getProtocolIdentity().manufacturerId==2?0:3;
     const uint16_t objects[]={0xA601,0xA607,0xA60E,9,0x4003};
     if(!requestObjectRead(channel,index<3?2:0,objects[index],0,1024))return false;
@@ -2432,6 +2432,75 @@ void IoHomeController::serviceBatteryObjects() {
     const uint16_t objects[]={0xA601,0xA607,0xA60E,9,0x4003};
     if(!requestObjectRead(channel,mBatterySequenceIndex<3?2:0,objects[mBatterySequenceIndex],0,1024)){mBatterySequenceChannel=0xFF;return;}
     mBatterySequenceToken=mObjectReadToken;
+}
+
+const IoHomeController::DynamicActuatorState &IoHomeController::dynamicActuatorState(uint8_t channel)const {
+    static const DynamicActuatorState empty{};
+    if(channel>=16)return empty;
+    const auto &state=mDynamicActuators[channel];
+    return state.revision&&sampleIdentityMatches(channel,state.node,state.key,state.revision)?state:empty;
+}
+bool IoHomeController::requestDynamicCapabilities(IoHomecontrolChannel *channel) {
+    if(!channel||!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||
+       mDynamicSequenceChannel<16||mBatterySequenceChannel<16)return false;
+    const auto &evidence=channel->getProductIdentityEvidence();
+    const uint8_t index=channelIndexFor(channel);
+    if(index>=16||channel->is1W()||!channel->isPaired()||!channel->hasProtocolIdentity()||
+       channel->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Actuator||evidence.generalInfo1Len<=10||evidence.generalInfo1[10]<4)return false;
+    if(!requestObjectRead(channel,0,0x8100,0,1024))return false;
+    auto &state=mDynamicActuators[index];state={};state.node=channel->getNodeId();
+    state.revision=channel->productContextRevision();std::memcpy(state.key,channel->getEncryptionKey(),16);
+    state.attempted=true;mDynamicSequenceChannel=index;mDynamicSequenceIndex=0;mDynamicSequenceToken=mObjectReadToken;
+    return true;
+}
+void IoHomeController::serviceDynamicActuators() {
+    // Discard cached raw/normalized state after reassignment, key or profile change.
+    for(uint8_t i=0;i<16;++i) {
+        auto &state=mDynamicActuators[i];
+        if(state.revision&&!sampleIdentityMatches(i,state.node,state.key,state.revision))state={};
+    }
+    if(mDynamicSequenceChannel<16) {
+        auto &state=mDynamicActuators[mDynamicSequenceChannel];
+        if(!state.revision||mObjectReadToken!=mDynamicSequenceToken||!mModule||!mModule->managementRequestsAllowed()) {
+            cancelObjectRead(mDynamicSequenceToken);mDynamicSequenceChannel=0xFF;return;
+        }
+        if(mObjectRead.active())return;
+        if(mObjectRead.stage()==IoHomeObjectTransfer::Stage::Done&&objectReadIdentityValid()&&!state.objectComplete[mDynamicSequenceIndex]) {
+            const auto *opening=mObjectRead.openingData();
+            const uint16_t expected=mDynamicSequenceIndex?0x8103:0x8100;
+            if(opening[1]==0&&opening[3]==uint8_t(expected>>8)&&opening[4]==uint8_t(expected)&&opening[5]==0&&opening[6]==0) {
+                state.rawObjects[mDynamicSequenceIndex].assign(mObjectRead.data(),mObjectRead.data()+mObjectRead.transferred());
+                state.objectComplete[mDynamicSequenceIndex]=true;
+                logInfoP("Dynamic object node=%06X object=%04X len=%u RAW / SCHEMA UNKNOWN data=%s",
+                    state.node,expected,unsigned(mObjectRead.transferred()),hexDump(mObjectRead.data(),mObjectRead.transferred()).c_str());
+            }
+        }
+        if(mState!=ControllerState::Idle||!queueEmpty())return;
+        if(mDynamicSequenceIndex==0) {
+            auto *channel=mModule?mModule->getChannel(mDynamicSequenceChannel):nullptr;
+            // Always attempt both objects, even when 8100 timed out/rejected.
+            if(requestObjectRead(channel,0,0x8103,0,1024)) {
+                mDynamicSequenceIndex=1;mDynamicSequenceToken=mObjectReadToken;return;
+            }
+        }
+        logInfoP("Dynamic capability enrichment node=%06X 8100=%u 8103=%u; decoder unavailable, normal controls retained",
+            state.node,state.objectComplete[0],state.objectComplete[1]);
+        mDynamicSequenceChannel=0xFF;return;
+    }
+    // Once per bound identity per boot. Never retry optional failures forever.
+    if(!mModule||!mRadio.isInitialized()||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||mBatterySequenceChannel<16)return;
+    for(uint8_t i=0;i<16;++i) {
+        auto *channel=mModule->getChannel(i);
+        if(channel&&!mDynamicActuators[i].attempted&&requestDynamicCapabilities(channel))return;
+    }
+}
+void IoHomeController::printDynamicActuatorStatus(uint8_t channel) {
+    const auto &state=dynamicActuatorState(channel);
+    logInfoP("Dynamic node=%06X attempted=%u 8100=%u (%u bytes) 8103=%u (%u bytes)",state.node,state.attempted,
+        state.objectComplete[0],unsigned(state.rawObjects[0].size()),state.objectComplete[1],unsigned(state.rawObjects[1].size()));
+    logInfoP("Capability wire schema and event decoder unavailable; no subscriptions sent, no sensor or battery percent published");
+    for(unsigned i=0;i<2;++i)if(state.objectComplete[i])logInfoP("  object=%04X raw=%s",i?0x8103:0x8100,
+        hexDump(state.rawObjects[i].data(),state.rawObjects[i].size()).c_str());
 }
 
 bool IoHomeController::objectReadIdentityValid() const
@@ -6358,6 +6427,7 @@ void IoHomeController::loop()
     }
     serviceObjectRead();
     serviceBatteryObjects();
+    serviceDynamicActuators();
     if (!mRadio.isInitialized())
         return;
 
@@ -10968,6 +11038,16 @@ void IoHomeController::dispatchRxFrame()
                 lCh->setLastChallenge(sZeroChallenge);
             }
 
+            // Trace owned-node traffic without inferring event IDs/subtypes from
+            // arbitrary bytes. This does not authenticate or publish a scalar.
+            if(mDynamicEventTrace&&lDestNode==mOwnNodeId) {
+                const bool dynamicObject=mDynamicSequenceChannel<16&&mCurrentCmd.objectReadToken&&
+                    mCurrentCmd.objectReadToken==mDynamicSequenceToken&&objectReadIdentityValid();
+                logInfoP("Dynamic trace node=%06X cmd=%02X len=%u raw=%s rssi=%d CH=%u timestamp=%lu macVerified=%u event/subtype/scalar=UNKNOWN",
+                    lSrcNode,unsigned(mRxFrame.commandId),unsigned(mRxFrame.dataLen),
+                    ioHomeDynamicTracePayload(mRxFrame.commandId,mRxFrame.data,mRxFrame.dataLen,dynamicObject).c_str(),mRadio.lastRssi(),unsigned(mCurrentFreqIdx),
+                    static_cast<unsigned long>(millis()),lVerifiedReplyMac);
+            }
             if(mCurrentCmd.statusMpFpProbe&&mRxFrame.commandId!=IoHomeCommand::StatusUpdate&&mCurrentCmd.destNodeId==lSrcNode&&
                lDestNode==mOwnNodeId) {
                 logInfoP("status_mp_fp reply cmd=%02X raw=%s rssi=%d CH=%u frequency=%lu timestamp=%lu",

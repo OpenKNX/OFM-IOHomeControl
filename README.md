@@ -367,3 +367,5 @@ After successful 2W pairing, use **Status / Erkennung lesen**, then **Erkannten 
 Execute JavaScript regressions with `python3 test/test_ets_recognition.py` (Node.js on PATH or `pip install quickjs` in a test virtual environment). Native checks remain `make -C test run`.
 
 Somfy Bioclimatic Pergola / Pergola louver IO (2W, 0x1D/0): MP position with normal polarity, based on public PR #157 captures. See [support and qualification notes](docs/somfy-bioclimatic-pergola.md); physical OFM qualification remains pending.
+
+RS100 Solar dynamic actuator capability diagnostics and current wire-evidence limitations: [documentation](docs/rs100-solar-dynamic-sensors.md).

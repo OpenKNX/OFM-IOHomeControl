@@ -32,6 +32,7 @@
 #include "protocol/IoHomeProductRuntime.h"
 #include "protocol/IoHomeManagementCodecs.h"
 #include "protocol/IoHomeObjectTransfer.h"
+#include "protocol/IoHomeDynamicActuator.h"
 #include <limits>
 #include "protocol/IoHomeLogRedaction.h"
 #include "protocol/IoHomePassiveAuth.h"
@@ -20620,4 +20621,148 @@ TEST(controller_pergola_short_stop_ack_requires_profile_command_and_context) {
         ASSERT_TRUE(pergolaCapture("pergola_session_20",reply));ASSERT_TRUE(queueControllerResponse(c,reply));
         ASSERT_TRUE(!ch.testHasPositionFeedback());
     }
+}
+
+
+TEST(protocol_dynamic_capabilities_are_bounded_and_atomic) {
+    IoHomeActuatorCapabilities caps;
+    const uint8_t sensors[]={6,0x89,0x82};const uint16_t events[]={0x2001,0x2005};
+    ASSERT_TRUE(caps.assign(sensors,3,events,2,0x8000));
+    ASSERT_TRUE(caps.hasSunEnergy()&&caps.hasClosureSpeed()&&caps.containsEvent(0x2001));
+    const uint16_t duplicate[]={0x2001,0x2001};
+    ASSERT_TRUE(!caps.assign(sensors,3,duplicate,2,0));ASSERT_TRUE(caps.hasSunEnergy());
+    ASSERT_TRUE(!caps.assign(sensors,9,events,2,0));ASSERT_TRUE(!caps.assign(sensors,3,events,17,0));
+    ASSERT_TRUE(!caps.assign(nullptr,1,events,2,0));
+    ASSERT_TRUE(caps.assign(sensors,3,events,1,0));ASSERT_TRUE(!caps.hasSunEnergy()&&!caps.hasClosureSpeed());
+    caps.valid=false;ASSERT_TRUE(!caps.containsEvent(0x2001)&&!caps.containsSensor(6));
+}
+TEST(protocol_dynamic_subscription_is_exact_server_payload_and_advertised_only) {
+    IoHomeActuatorCapabilities caps;IoHomeDynamicSubscription request;
+    const uint8_t sensor=6;const uint16_t events[]={0x2001,0x2005,0x1234};
+    ASSERT_TRUE(!ioHomeDynamicSubscription(caps,0x2005,request));
+    ASSERT_TRUE(caps.assign(&sensor,1,events,3,0));
+    ASSERT_TRUE(ioHomeDynamicSubscription(caps,0x2005,request));
+    ASSERT_EQ(request.serverParameter,0x0FB0);ASSERT_EQ(sizeof(request.payload),2U);
+    ASSERT_EQ(request.payload[0],0x20);ASSERT_EQ(request.payload[1],5);
+    ASSERT_TRUE(ioHomeDynamicSubscription(caps,0x2001,request));ASSERT_EQ(request.payload[1],1);
+    ASSERT_TRUE(!ioHomeDynamicSubscription(caps,0x1234,request));
+    ASSERT_TRUE(caps.assign(&sensor,1,events,1,0));ASSERT_TRUE(!ioHomeDynamicSubscription(caps,0x2005,request));
+}
+TEST(protocol_dynamic_normalized_scalar_conversion_never_guesses_percent_or_unit) {
+    IoHomeActuatorCapabilities caps;IoHomeDynamicValues values;IoHomeBatteryInfo battery;
+    const uint8_t sensor=6;const uint16_t events[]={0x2001,0x2005};
+    ASSERT_TRUE(!values.acceptScalar(caps,0x2005,6,20,1));
+    ASSERT_TRUE(caps.assign(&sensor,1,events,2,0));
+    ASSERT_TRUE(values.acceptScalar(caps,0x2005,6,10,2));ASSERT_EQ(values.luminanceLux,1100U);
+    ASSERT_TRUE(values.acceptScalar(caps,0x2005,6,20,3));ASSERT_EQ(values.sunEnergyRaw,20);ASSERT_EQ(values.luminanceLux,2200U);
+    ASSERT_TRUE(values.acceptScalar(caps,0x2005,6,65535,4));ASSERT_EQ(values.luminanceLux,7208850U);
+    ASSERT_TRUE(!values.acceptScalar(caps,0x2005,6,65536,5));ASSERT_EQ(values.sunEnergyTimestampMs,4U);
+    ASSERT_TRUE(!values.acceptScalar(caps,0x2005,0x89,20,5));
+    ASSERT_TRUE(values.acceptScalar(caps,0x2001,0,87,6));ASSERT_EQ(values.dynamicBatteryRaw,87);
+    ASSERT_TRUE(!values.acceptScalar(caps,0x2001,0,101,7));ASSERT_EQ(values.batteryTimestampMs,6U);
+    ASSERT_TRUE(!battery.percentValid&&!battery.selected().valid);
+}
+
+static void setDynamicTestVersion(IoHomecontrolChannel &ch,uint8_t version) {
+    uint8_t info[12]{};info[10]=version;
+    ch.onPostPairEnrichmentResponse(IoHomeCommand::GetGeneralInfo1Response,info,sizeof(info));
+}
+TEST(controller_dynamic_reads_gate_protocol_version_and_management_busy) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);
+    ASSERT_TRUE(!c.requestDynamicCapabilities(&ch));setDynamicTestVersion(ch,3);
+    ASSERT_TRUE(!c.requestDynamicCapabilities(&ch));setDynamicTestVersion(ch,4);
+    m.managementAllowed=false;ASSERT_TRUE(!c.requestDynamicCapabilities(&ch));m.managementAllowed=true;
+    ASSERT_TRUE(c.requestDynamicCapabilities(&ch));ASSERT_TRUE(!c.requestDynamicCapabilities(&ch));
+    ASSERT_TRUE(c.dynamicActuatorState(0).attempted);ASSERT_TRUE(!c.dynamicActuatorState(0).capabilities.valid);
+    IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ASSERT_EQ(tx.commandId,IoHomeCommand::Unknown46Request);ASSERT_EQ(tx.data[1],0);ASSERT_EQ(tx.data[3],0x81);ASSERT_EQ(tx.data[4],0);
+    ASSERT_TRUE(!ch.testHasBatteryLevel());
+}
+TEST(controller_dynamic_timeout_attempts_second_object_once_and_keeps_control) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);setDynamicTestVersion(ch,4);
+    c.loop();const auto first=c.objectReadToken();ASSERT_TRUE(first!=0);
+    ASSERT_TRUE(c.dynamicActuatorState(0).attempted);
+    ioHomeTestAdvanceMillis(30001);c.loop();
+    ASSERT_EQ(c.objectReadToken(),first+1);IoHomeFrame tx;
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_EQ(tx.commandId,IoHomeCommand::Unknown46Request);ASSERT_EQ(tx.data[4],3);
+    ioHomeTestAdvanceMillis(30001);c.loop();c.loop();
+    ASSERT_EQ(c.objectReadToken(),first+1);ASSERT_TRUE(!c.objectRead().active());
+    ASSERT_TRUE(!c.dynamicActuatorState(0).capabilities.valid);
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Execute,50));
+}
+TEST(controller_dynamic_reassignment_discards_pending_state) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);setDynamicTestVersion(ch,4);
+    ASSERT_TRUE(c.requestDynamicCapabilities(&ch));
+    const uint8_t replacement[16]={2};ch.setEncryptionKey(replacement);
+    ASSERT_TRUE(!c.dynamicActuatorState(0).attempted);m.managementAllowed=false;c.loop();
+    ASSERT_TRUE(!c.objectRead().active());ASSERT_TRUE(!c.dynamicActuatorState(0).capabilities.valid);
+    m.managementAllowed=true;ASSERT_TRUE(c.requestDynamicCapabilities(&ch));
+}
+
+static bool completeDynamicRawReadForTest(IoHomeController &c,const uint8_t *data,unsigned length) {
+    IoHomeFrame tx,reply;
+    if(!transmitQueuedControllerFrame(c,tx)||tx.commandId!=IoHomeCommand::Unknown46Request)return false;
+    buildSimpleResponseFrame(reply,0x123456,0x654321,IoHomeCommand::ChallengeRequest,nullptr,0);
+    reply.dataLen=6;for(unsigned i=0;i<6;++i)reply.data[i]=i+1;
+    if(!queueControllerResponse(c,reply))return false;
+    buildSimpleResponseFrame(reply,0x123456,0x654321,IoHomeCommand::Unknown46Response,nullptr,0);
+    reply.dataLen=4;reply.data[0]=1;reply.data[3]=length;
+    if(!queueControllerResponse(c,reply))return false;
+    if(!transmitQueuedControllerFrame(c,tx)||tx.commandId!=IoHomeCommand::Unknown4ARequest)return false;
+    buildSimpleResponseFrame(reply,0x123456,0x654321,IoHomeCommand::Unknown4AResponse,nullptr,0);
+    reply.dataLen=3+length;reply.data[0]=1;reply.data[2]=1;std::memcpy(reply.data+3,data,length);
+    if(!queueControllerResponse(c,reply))return false;
+    if(!transmitQueuedControllerFrame(c,tx)||tx.commandId!=IoHomeCommand::Unknown4ARequest)return false;
+    buildSimpleResponseFrame(reply,0x123456,0x654321,IoHomeCommand::Unknown4AResponse,nullptr,0);
+    reply.dataLen=3;reply.data[0]=2;
+    return queueControllerResponse(c,reply);
+}
+TEST(controller_dynamic_raw_objects_preserve_bytes_without_schema_guessing) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);setDynamicTestVersion(ch,4);
+    ASSERT_TRUE(c.requestDynamicCapabilities(&ch));
+    // Recognizable event IDs and sensor type in arbitrary bytes are NOT capabilities.
+    const uint8_t first[]={0x20,1,0x20,5,6,0x80,0};const uint8_t second[]={1,87,20};
+    ASSERT_TRUE(completeDynamicRawReadForTest(c,first,sizeof(first)));
+    ASSERT_TRUE(completeDynamicRawReadForTest(c,second,sizeof(second)));c.loop();
+    const auto &state=c.dynamicActuatorState(0);
+    ASSERT_TRUE(state.objectComplete[0]&&state.objectComplete[1]);
+    ASSERT_EQ(state.rawObjects[0].size(),sizeof(first));ASSERT_MEM_EQ(state.rawObjects[0].data(),first,sizeof(first));
+    ASSERT_MEM_EQ(state.rawObjects[1].data(),second,sizeof(second));
+    ASSERT_TRUE(!state.capabilities.valid&&!state.values.luminanceValid&&!state.values.dynamicBatteryValid);
+    ASSERT_TRUE(!ch.testHasBatteryLevel()&&!ch.testHasPositionFeedback());
+    ASSERT_TRUE(c.requestDynamicCapabilities(&ch));ASSERT_TRUE(c.dynamicActuatorState(0).rawObjects[0].empty());
+}
+TEST(controller_dynamic_boot_repeats_reads_without_cached_capability_assumptions) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);setDynamicTestVersion(ch,4);
+    c.loop();ASSERT_TRUE(c.dynamicActuatorState(0).attempted);
+    IoHomeController rebooted;rebooted.setModule(&m);rebooted.setOwnNodeId(0x123456);rebooted.init();rebooted.loop();
+    ASSERT_TRUE(rebooted.dynamicActuatorState(0).attempted);ASSERT_TRUE(rebooted.objectRead().active());
+    ASSERT_TRUE(!rebooted.dynamicActuatorState(0).capabilities.valid);
+}
+
+TEST(protocol_dynamic_trace_redacts_keys_and_non_dynamic_object_chunks) {
+    const uint8_t raw[]={1,2,3,4};
+    ASSERT_TRUE(ioHomeDynamicTracePayload(IoHomeCommand::KeyTransfer,raw,4,true).find("redacted")!=std::string::npos);
+    ASSERT_TRUE(ioHomeDynamicTracePayload(IoHomeCommand::SendKey1W,raw,4,false).find("redacted")!=std::string::npos);
+    ASSERT_TRUE(ioHomeDynamicTracePayload(IoHomeCommand::Unknown4AResponse,raw,4,false).find("redacted")!=std::string::npos);
+    ASSERT_EQ(ioHomeDynamicTracePayload(IoHomeCommand::Unknown4AResponse,raw,4,true),std::string("01020304"));
+    ASSERT_EQ(ioHomeDynamicTracePayload(IoHomeCommand::StatusUpdate,raw,4,false),std::string("01020304"));
+}
+TEST(controller_dynamic_optional_read_yields_when_management_is_disabled) {
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);setDynamicTestVersion(ch,4);
+    ASSERT_TRUE(c.requestDynamicCapabilities(&ch));const auto token=c.objectReadToken();
+    m.managementAllowed=false;c.loop();c.loop();ASSERT_TRUE(!c.objectRead().active());
+    ASSERT_EQ(c.objectReadToken(),token);m.managementAllowed=true;c.loop();
+    ASSERT_EQ(c.objectReadToken(),token);ASSERT_TRUE(c.requestDynamicCapabilities(&ch));
+}
+
+TEST(controller_dynamic_enrichment_excludes_sensors_and_one_way_channels) {
+    for(auto type:{IoHomeNodeClass::Sensor,IoHomeNodeClass::Controller,IoHomeNodeClass::Unknown}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);
+        IoHomeProtocolIdentity identity;identity.valid=true;identity.nodeClass=type;
+        ch.clearProtocolIdentity();ch.onProtocolIdentity(ch.getNodeId(),identity);setDynamicTestVersion(ch,4);
+        ASSERT_TRUE(!c.requestDynamicCapabilities(&ch));c.loop();ASSERT_EQ(c.objectReadToken(),0U);
+    }
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);
+    setDynamicTestVersion(ch,4);ch.setIs1W(true);ASSERT_TRUE(!c.requestDynamicCapabilities(&ch));
 }

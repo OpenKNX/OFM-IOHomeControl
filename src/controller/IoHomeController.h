@@ -1,5 +1,7 @@
 #include "../protocol/IoHomeManagementCodecs.h"
 #include "../protocol/IoHomeObjectTransfer.h"
+#include "../protocol/IoHomeDynamicActuator.h"
+#include <vector>
 #include "../protocol/IoHomeDurableReservation.h"
 #include "../protocol/IoHomeReceiveConfiguration.h"
 #pragma once
@@ -608,6 +610,19 @@ public:
   bool requestProfileParameterRead(IoHomecontrolChannel *channel);
   bool requestMpFpMaskRead(IoHomecontrolChannel *channel,uint16_t selected);
   bool sendDiagnosticFpRead(IoHomecontrolChannel *iChannel, uint8_t iFpIndex);
+  struct DynamicActuatorState {
+    uint32_t node=0,revision=0;
+    uint8_t key[16]{};
+    bool attempted=false;
+    bool objectComplete[2]{};
+    std::vector<uint8_t> rawObjects[2]; // allocate only on successful reads
+    IoHomeActuatorCapabilities capabilities;
+    IoHomeDynamicValues values;
+  };
+  bool requestDynamicCapabilities(IoHomecontrolChannel *channel);
+  const DynamicActuatorState &dynamicActuatorState(uint8_t channel)const;
+  void printDynamicActuatorStatus(uint8_t channel);
+  void setDynamicEventTrace(bool enabled){mDynamicEventTrace=enabled;}
   bool requestObjectRead(IoHomecontrolChannel *channel,uint8_t provider,uint16_t key,uint16_t offset,uint16_t span);
   bool cancelObjectRead(uint32_t token);
   const IoHomeObjectTransfer &objectRead() const {return mObjectRead;}
@@ -1180,6 +1195,11 @@ private:
   uint8_t mBatterySequenceChannel=0xFF,mBatterySequenceIndex=0,mBatterySequenceKey[16]{};
   uint32_t mBatterySequenceNode=0,mBatterySequenceRevision=0,mBatterySequenceToken=0;
   void serviceBatteryObjects();
+  void serviceDynamicActuators();
+  DynamicActuatorState mDynamicActuators[16]{};
+  uint8_t mDynamicSequenceChannel=0xFF,mDynamicSequenceIndex=0;
+  uint32_t mDynamicSequenceToken=0;
+  bool mDynamicEventTrace=false;
   IoHomeObjectTransfer mObjectRead;
   uint32_t mObjectReadToken=0,mObjectReadPeer=0,mObjectReadRevision=0;
   uint8_t mObjectReadChannel=0xFF,mObjectReadKey[16]{};

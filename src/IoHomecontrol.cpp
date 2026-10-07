@@ -4147,6 +4147,8 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc remote link ADDR DEV", "Link device to remote");
     openknx.console.printHelpLine("iohc remote unlink ADDR DEV", "Unlink device from remote");
     openknx.console.printHelpLine("iohc remote observed", "Show observed addresses");
+    openknx.console.printHelpLine("iohc dynamic CH status|read", "Protocol-v4 raw capability objects 8100/8103");
+    openknx.console.printHelpLine("iohc event trace on|off", "Trace owned-node RF payloads; event schema unresolved");
     openknx.console.printHelpLine("iohc battery CH status|probe|probe09|objects", "Battery evidence and manual raw reads (Extended diagnostics)");
     openknx.console.printHelpLine("iohc sniff start [S]", "Start passive key sniff for S seconds");
     openknx.console.printHelpLine("iohc sniff stop|status|clear", "Manage passive key sniff result");
@@ -4182,6 +4184,20 @@ void IoHomecontrol::showHelp()
 
 bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 {
+    if(iCmd=="iohc event trace on"||iCmd=="iohc event trace off") {
+        mController.setDynamicEventTrace(iCmd=="iohc event trace on");
+        logInfoP("Dynamic raw event tracing %s",iCmd=="iohc event trace on"?"enabled":"disabled");return true;
+    }
+    if(iCmd.rfind("iohc dynamic ",0)==0) {
+        unsigned index=0;char action[16]{};char extra=0;
+        if(sscanf(iCmd.c_str(),"iohc dynamic %u %15s %c",&index,action,&extra)!=2||index<1||index>mNumChannels) {
+            logInfoP("Usage: iohc dynamic CHANNEL status|read");return true;
+        }
+        if(!std::strcmp(action,"status"))mController.printDynamicActuatorStatus(index-1);
+        else if(!std::strcmp(action,"read"))logInfoP("Dynamic capability reads queued=%u",mController.requestDynamicCapabilities(mChannels[index-1]));
+        else logInfoP("Usage: iohc dynamic CHANNEL status|read");
+        return true;
+    }
     if(iCmd.rfind("iohc battery ",0)==0) {
         unsigned index=0;char action[16]{};char extra=0;
         if(sscanf(iCmd.c_str(),"iohc battery %u %15s %c",&index,action,&extra)!=2||index<1||index>mNumChannels){logInfoP("Usage: iohc battery CHANNEL status|probe|probe09|objects");return true;}
