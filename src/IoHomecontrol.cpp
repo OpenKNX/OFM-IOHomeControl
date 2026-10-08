@@ -946,10 +946,10 @@ void IoHomecontrol::processKeyImportWorkflow()
             return;
         }
 
-        // The extraction throwaway ID represents the temporary emulated
-        // device. For authenticated network access, use the recovered
-        // hub/controller node ID together with the recovered system key.
-        mController.setOwnNodeId(mKeyImportHubNodeId);
+        // Import network membership material, never the peer's sender identity.
+        // Existing paired identities stay stable; a known collision needs
+        // explicit commissioning rather than an automatic address replacement.
+        mController.observeForeignController(mKeyImportHubNodeId);
         mController.setSystemKey(mKeyImportKey.key);
         openknx.flash.save();
 
@@ -959,8 +959,15 @@ void IoHomecontrol::processKeyImportWorkflow()
         mKeyImportDirectedNodeId = 0;
         mKeyImportDirectedAwaiting = false;
         mKeyImportDirectedTriedGeneric = false;
+        logInfoP("ETS key import: key captured hub=%06X gateway=%06X extraction=%06X; controller authorization unverified",
+                 mKeyImportHubNodeId, mController.getOwnNodeId(), mKeyImportExtractionNodeId);
+        if (mController.twoWayIdentityCollision()) {
+            mKeyImportPhase = KeyImportPhase::Failed;
+            logInfoP("ETS key import: identity collision; key retained, active discovery blocked; explicit re-pairing required");
+            return;
+        }
         logInfoP("ETS key import: starting authenticated discovery as 0x%06X",
-                 mKeyImportHubNodeId);
+                 mController.getOwnNodeId());
         mController.startDiscovery(true);
         if (mController.state() != ControllerState::DiscoverySending &&
             mController.state() != ControllerState::DiscoveryListening)
@@ -1138,16 +1145,12 @@ void IoHomecontrol::deriveOwnNodeId()
         return;
     }
 
-    // Derive a 3-byte (24-bit) io-homecontrol node ID from the ESP32 MAC address.
-    // Use the last 3 bytes of the base MAC, OR'd with 0x800000 to mark as locally administered.
-    uint32_t lNodeId = 0x800001; // fallback
+    // Provision a random unicast sender once. Restored identities are preserved
+    // above; neither hub/remote IDs nor MAC/serial suffixes define this address.
+    uint32_t lNodeId = 0x800001; // non-ESP32 fallback
 #ifdef ESP32
-    uint8_t lMac[6] = {};
-    if (esp_base_mac_addr_get(lMac) == ESP_OK)
-    {
-        lNodeId = ((uint32_t)lMac[3] << 16) | ((uint32_t)lMac[4] << 8) | lMac[5];
-        lNodeId |= 0x800000; // set high bit to mark locally administered
-    }
+    do { lNodeId = esp_random() & 0x00FFFFFF; }
+    while (getAddressClass(lNodeId) != IoHomeAddressClass::Unicast);
 #endif
     mController.setOwnNodeId(lNodeId);
     logDebugP("Own node ID: %06X", lNodeId);

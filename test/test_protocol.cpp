@@ -9453,6 +9453,21 @@ static void initOneWayPairingModeControllerForTest(IoHomeController &oController
     oChannel.setEncryptionKey(iKey);
 }
 
+TEST(controller_two_way_collision_keeps_identity_and_preserves_one_way)
+{
+    IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch; const uint8_t key[16]={1,2,3};
+    initOneWayPairingModeControllerForTest(c,m,ch,0x123456,0x654321,key);
+    const auto own=c.getOwnNodeId();
+    c.observeForeignController(0xE2D1FF);ASSERT_TRUE(!c.twoWayIdentityCollision());
+    c.observeForeignController(own);ASSERT_TRUE(c.twoWayIdentityCollision());
+    c.setSystemKey(key);c.setOwnNodeId(own);
+    ASSERT_EQ(c.getOwnNodeId(),own);ASSERT_TRUE(c.twoWayIdentityCollision());
+    ch.setNodeId(0x654321);
+    ASSERT_TRUE(c.sendCommand(0x654321,key,IoHomeCommand::Execute,50));
+    c.radio().testClearTransmittedPacket();c.loop();c.loop();c.loop();
+    ASSERT_TRUE(!c.radio().testLastTransmittedPacket().empty());
+}
+
 TEST(controller_failed_durable_reservation_blocks_first_oneway_transmission)
 {
     IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch; const uint8_t key[16]={1,2,3};
@@ -11280,6 +11295,17 @@ static void initPaired2WControllerForTest(IoHomeController &oController,
     oChannel.setNodeId(iDeviceNodeId);
     oChannel.setEncryptionKey(iKey);
     oChannel.setIs1W(false);
+}
+
+TEST(controller_collision_blocks_active_two_way_transmission)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    c.observeForeignController(0x123456);
+    ASSERT_TRUE(c.sendCommand(0x654321,key,IoHomeCommand::Execute,50));
+    c.radio().testClearTransmittedPacket();c.loop();c.loop();c.loop();
+    ASSERT_TRUE(c.radio().testLastTransmittedPacket().empty());
+    ASSERT_EQ(c.getOwnNodeId(),0x123456U);
 }
 
 static bool transmitQueuedControllerFrame(IoHomeController &iController,

@@ -1011,6 +1011,8 @@ public:
   // Set own node ID (3-byte, 24-bit)
   void setOwnNodeId(uint32_t iNodeId);
   uint32_t getOwnNodeId() const;
+  void observeForeignController(uint32_t node);
+  bool twoWayIdentityCollision() const { return mIdentityCollisionNode == mOwnNodeId && mOwnNodeId != 0; }
 
   // Set system key (16 bytes AES-128)
   void setSystemKey(const uint8_t *iKey);
@@ -1185,6 +1187,7 @@ private:
 
   // Own identity
   uint32_t mOwnNodeId;
+  uint32_t mIdentityCollisionNode=0;
   uint8_t mSystemKey[16];
 
   // State machine

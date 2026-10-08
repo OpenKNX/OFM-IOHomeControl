@@ -1535,6 +1535,14 @@ uint32_t IoHomeController::getOwnNodeId() const
     return mOwnNodeId;
 }
 
+void IoHomeController::observeForeignController(uint32_t node)
+{
+    if (node && node == mOwnNodeId && !twoWayIdentityCollision()) {
+        mIdentityCollisionNode=node;
+        logInfoP("2W identity collision gateway=%06X foreign=%06X; active 2W TX blocked, no automatic NID change",mOwnNodeId,node);
+    }
+}
+
 void IoHomeController::setSystemKey(const uint8_t *iKey)
 {
     memcpy(mSystemKey, iKey, 16);
@@ -6098,6 +6106,10 @@ void IoHomeController::processPendingDiscoveryResponses()
 
 RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8_t iLength)
 {
+    if(iData&&iLength&&!(iData[0]&IOHC_CTRL0_MODE_1W)&&twoWayIdentityCollision()) {
+        logInfoP("2W TX rejected: identity_collision gateway=%06X",mOwnNodeId);
+        return RadioError::HardwareError;
+    }
     if(mCurrentCmd.active&&mCurrentCmd.managementRead&&!managementIdentityMatches(mCurrentCmd))
         return RadioError::HardwareError;
     if (iData && iLength && (iData[0] & IOHC_CTRL0_MODE_1W) && mReservationFailed)
@@ -6540,6 +6552,8 @@ void IoHomeController::loop()
         }
         if (lParsed)
         {
+            if (!(mRxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W))
+                observeForeignController(mRxFrame.getSrcNodeId());
             ++mRxScanMeasurements.captures;
             mRadioDiversity.activity(mCurrentFreqIdx,millis());
             const ControllerState lPairingStateBeforeRx = mState;
