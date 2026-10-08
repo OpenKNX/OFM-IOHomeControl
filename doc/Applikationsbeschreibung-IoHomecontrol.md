@@ -234,7 +234,7 @@ Die Diagnose unterscheidet vollständige Antwort-Timeouts von einem authentifizi
 
 #### **2W Befehlsprofil**
 
-Das Befehlsprofil legt das ACEI-Byte für normale 2W-Execute-Befehle kanalweise fest. **Standard / Somfy (0x67)** bleibt die Voreinstellung und entspricht einem realen Somfy-Hub-Mitschnitt. Für Vergleichstests kann **Alternative / KIG300-Capture (0x63)** gewählt werden, ohne die Firmware neu zu kompilieren. Spezielle Telegrammformen wie Lamellen- und Atlantic-Cozy-Befehle behalten ihr eigenes protokollspezifisches ACEI.
+Das Befehlsprofil legt das ACEI-Byte für normale 2W-Execute-Befehle kanalweise fest. **Standard / Somfy (0x67)** bleibt die Voreinstellung und entspricht einem realen Somfy-Hub-Mitschnitt. Für Vergleichstests kann **VELUX / KIG300 (0x63)** gewählt werden, ohne die Firmware neu zu kompilieren. Dieser Wert wurde bei VELUX/KIG300 beobachtet; die Unterstützung jeder VELUX-Geräteklasse ist damit nicht nachgewiesen. Spezielle Telegrammformen wie Lamellen- und Atlantic-Cozy-Befehle behalten ihr eigenes protokollspezifisches ACEI.
 
 ### **1W (unidirektional)**
 

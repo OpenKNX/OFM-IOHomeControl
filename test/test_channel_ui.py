@@ -913,7 +913,7 @@ class ChannelUiTest(unittest.TestCase):
             {item.get("Value"): item.get("Text") for item in profile_type.findall(".//k:Enumeration", NS)},
             {
                 "103": "Standard / Somfy (0x67)",
-                "99": "Alternative / KIG300-Capture (0x63)",
+                "99": "VELUX / KIG300 (0x63)",
             },
         )
 
