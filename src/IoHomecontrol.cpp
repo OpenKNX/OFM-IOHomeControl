@@ -951,6 +951,11 @@ void IoHomecontrol::processKeyImportWorkflow()
         // explicit commissioning rather than an automatic address replacement.
         mController.observeForeignController(mKeyImportHubNodeId);
         mController.setSystemKey(mKeyImportKey.key);
+        if(!prepareTwoWayPersistence()) {
+            mKeyImportPhase=KeyImportPhase::Failed;
+            logInfoP("ETS key import: key captured but durable network commit failed; no discovery TX");
+            return;
+        }
         openknx.flash.save();
 
         mKeyImportPhase = KeyImportPhase::Scanning;
@@ -1061,9 +1066,12 @@ void IoHomecontrol::processKeyImportWorkflow()
         }
 
         mKeyImportPhase = KeyImportPhase::Complete;
-        logInfoP("ETS key import: discovery complete, %u device(s) found%s",
-                 static_cast<unsigned>(mKeyImportDeviceCount),
-                 mKeyImportOverflow ? " (result buffer full)" : "");
+        logInfoP("ETS key import: key_capture=%s inventory=%s devices=%u passive_candidates=%u directed_verified=%u directed_failed=%u gateway=%06X hub=%06X%s",
+                 mKeyImportKey.valid?"captured":"missing",mKeyImportDeviceCount?"nodes_found":"no_node_ids",
+                 unsigned(mKeyImportDeviceCount),unsigned(mKeyImportCandidateCount),unsigned(mKeyImportDirectedSuccesses),
+                 unsigned(mKeyImportDirectedFailures),mController.getOwnNodeId(),mKeyImportHubNodeId,
+                 mKeyImportOverflow?" (result buffer full)":"");
+        if(!mKeyImportDeviceCount)logInfoP("ETS key import: key stored; no actuator identity verified or channel assigned; key capture is not controller authorization");
     }
 }
 
