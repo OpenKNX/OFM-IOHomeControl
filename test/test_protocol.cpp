@@ -14429,7 +14429,8 @@ TEST(controller_2w_execute_uses_configured_channel_acei)
         0x2A, 0xDD, 0xFC, 0x13, 0xC9, 0x97, 0x60, 0x11,
         0xB1, 0xC1, 0x09, 0xFB, 0xF3, 0x95, 0x2F, 0xA1};
 
-    for (const uint8_t lCommandParam : {static_cast<uint8_t>(50), static_cast<uint8_t>(0xD2)})
+    for(const uint8_t acei : {uint8_t(0x63),uint8_t(0x67)})
+    for (const uint8_t lCommandParam : {uint8_t(0),uint8_t(50),uint8_t(100),uint8_t(0xD2),uint8_t(0xD8)})
     {
         IoHomeController lController;
         IoHomecontrol lModule;
@@ -14438,14 +14439,14 @@ TEST(controller_2w_execute_uses_configured_channel_acei)
                                       lRemoteNodeId, lDeviceNodeId, lKey);
 
         ASSERT_EQ(lChannel.getConfigured2WAcei(), IOHC_ACEI_DEFAULT);
-        lChannel.setConfigured2WAcei(0x63);
-        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, lCommandParam));
+        lChannel.setConfigured2WAcei(acei);
+        ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey, IoHomeCommand::Execute, lCommandParam,lCommandParam==0xD8?0x03:0xFF));
 
         IoHomeFrame lFrame;
         ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
         ASSERT_EQ(lFrame.commandId, IoHomeCommand::Execute);
         ASSERT_EQ(lFrame.data[0], IOHC_ORIGINATOR_USER);
-        ASSERT_EQ(lFrame.data[1], 0x63);
+        ASSERT_EQ(lFrame.data[1], acei);
     }
 }
 

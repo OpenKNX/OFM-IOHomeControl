@@ -6137,13 +6137,13 @@ void IoHomeController::recordTwoWayTrace(const char *event,const IoHomeFrame &fr
 void IoHomeController::printTwoWayTrace() const
 {
     logInfoP("2W identity gateway=%06X origin=local-or-restored collision=%u state=%s; transport completion does not prove actuation",mOwnNodeId,twoWayIdentityCollision(),stateName(mState));
-    const auto &outcome=mLastTwoWayOutcome;
+    [[maybe_unused]] const auto &outcome=mLastTwoWayOutcome;
     logInfoP("2W lastOutcome valid=%u cmd=%02X peer=%06X gateway=%06X result=%u transport_complete=%u authenticated_exchange=%u device_accepted=%s actuation_started=unknown target_reached=unknown",
         outcome.valid,unsigned(outcome.command),outcome.peer,outcome.gateway,unsigned(outcome.result),outcome.transportComplete,
         outcome.authenticatedExchange,outcome.deviceAccepted==Evidence::No?"no":"unknown");
     const uint32_t first=mTwoWayTraceCount>kTwoWayTraceCapacity?mTwoWayTraceCount-kTwoWayTraceCapacity+1:1;
     for(uint32_t id=first;id<=mTwoWayTraceCount;++id) {
-        const auto &p=twoWayTracePoint(id);
+        [[maybe_unused]] const auto &p=twoWayTracePoint(id);
         logInfoP("2WTrace id=%lu localTX=%lu event=%s ms=%lu us=%lu sessionMs=%lu src=%06X dst=%06X gateway=%06X cmd=%02X ctrl=%02X/%02X RF=%lu state=%u attempt=%u deadlineMs=%u payload=%s",
             (unsigned long)p.id,(unsigned long)p.txId,p.event,(unsigned long)p.timeMs,(unsigned long)p.timeUs,(unsigned long)p.sessionStartMs,
             p.src,p.dst,p.gateway,p.command,p.ctrl0,p.ctrl1,(unsigned long)p.frequencyHz,p.state,p.attempt,p.deadlineMs,p.payload);
@@ -8043,12 +8043,13 @@ void IoHomeController::processResponse()
     }
     const bool lStatusSeen = mRxFrame.commandId == IoHomeCommand::StatusUpdate ||
                              mRxFrame.commandId == IoHomeCommand::PrivateResponse;
-    logInfoP("2W result cmd=0x%02X result=%s authenticated_exchange=%s challenge_response=%s final_response=yes status=%s device_accepted=unknown actuation_started=unknown target_reached=unknown",
+    logInfoP("2W result cmd=0x%02X result=%s authenticated_exchange=%s challenge_response=%s final_response=yes status=%s device_accepted=%s actuation_started=unknown target_reached=unknown",
              static_cast<unsigned>(lCompletedCmd.command),
              lExplicitFailure ? "explicit_rejection" : "transport_complete",
              mSawChallenge && mAuthResponseSent ? "yes" : "no",
              mAuthResponseSent ? "yes" : "no",
-             lStatusSeen ? "yes" : "no");
+             lStatusSeen ? "yes" : "no",
+             lExplicitFailure ? "no" : "unknown");
     notifyCommandExchangeResult(lCompletedCmd,
                                 lExplicitFailure
                                     ? IoHomeCommandExchangeResult::ExplicitlyRejected

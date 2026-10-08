@@ -371,3 +371,5 @@ Somfy Bioclimatic Pergola / Pergola louver IO (2W, 0x1D/0): MP position with nor
 RS100 Solar dynamic actuator capability diagnostics and current wire-evidence limitations: [documentation](docs/rs100-solar-dynamic-sensors.md).
 
 No ETS available? Use the explicitly enabled [io-homecontrol standalone diagnostic mode](docs/standalone-diagnostics.md).
+
+2W identity, battery and VELUX test follow-up: [software changes and pending hardware qualification](docs/todo-2026-10-08-qualification.md).
