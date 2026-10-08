@@ -306,6 +306,34 @@ function IOHC_applyRecognizedType(device, online, progress, context) {
     }
 }
 
+// Set the visible ETS selector explicitly: script writes to its calculated
+// memory inputs alone do not reliably refresh the selector in ETS.
+function /* internal helper */ IOHC_activateImportedChannel(device, prefix) {
+    var fields = [
+        ["DeviceType", "DeviceType"], ["ProfileOverride", "Override"],
+        ["OrientationObjects", "Orientation"], ["BinaryOnly", "Binary"], ["Dimmable", "Dimmable"],
+        ["RecognitionTypeAuto", "TypeAuto"], ["RecognitionOrientationAuto", "OrientationAuto"],
+        ["RecognitionBinaryAuto", "BinaryAuto"], ["RecognitionDimmableAuto", "DimmableAuto"]
+    ];
+    var saved = {}, input = {Active: 1}, output = {};
+    for (var i=0;i<fields.length;i++) {
+        var parameter=IOHC_getParameter(device,prefix+fields[i][0]);
+        if (parameter) {
+            saved[fields[i][0]]=parameter.value;
+            input[fields[i][1]]=parameter.value;
+        }
+    }
+    IOHC_syncChannelSelection(input,output,{});
+    IOHC_setParameterValue(device,prefix+"ChannelSelection",output.Selection);
+    // Selecting automatic/preset can run the reverse calculation. Preserve
+    // manual field ownership and expert values before applying recognition.
+    for (var i=0;i<fields.length;i++) {
+        if (saved[fields[i][0]]!==undefined)
+            IOHC_setParameterValue(device,prefix+fields[i][0],saved[fields[i][0]]);
+    }
+    IOHC_setParameterValue(device,prefix+"Active",1);
+}
+
 function /* internal helper */ IOHC_configureImportedChannel(device, channelNumber, discovery) {
     var prefix = "IOHC_c" + channelNumber;
     var etsType = discovery.metadataValid
@@ -316,6 +344,7 @@ function /* internal helper */ IOHC_configureImportedChannel(device, channelNumb
                                (discovery.metadataValid ? IOHC_importDeviceLabel(etsType) : "2W-Gerät") +
                                " " + IOHC_formatNodeId(discovery.nodeId));
     }
+    IOHC_activateImportedChannel(device, prefix);
     IOHC_setParameterValue(device, prefix + "ProtocolMode", 0);
     IOHC_applyRecognitionSettings(device, prefix, discovery);
     IOHC_setParameterValue(device, prefix + "PairingLastResult",
@@ -339,8 +368,7 @@ function /* internal helper */ IOHC_configureImportedChannel(device, channelNumb
                                ? "Hersteller " + discovery.manufacturer +
                                  ", Energieklasse " + discovery.powerClass
                                : "Hersteller und Energieklasse unbekannt");
-    // Activate last so all settings are coherent before the calculated
-    // channel selector refreshes the dynamic view.
+    // Keep both ETS visibility and downloaded channel activation explicit.
     IOHC_setParameterValue(device, prefix + "Active", 1);
 }
 

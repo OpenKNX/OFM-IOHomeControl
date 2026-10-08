@@ -494,3 +494,45 @@ test("legacy assignment rejection does not invent a no-free-channel cause",funct
  var summary=IOHC_importAssignmentSummary(0,0,[{}],[0,1,2,255],null);
  check(summary.indexOf("Speicherung abgelehnt")>=0&&summary.indexOf("ohne freien Kanal")<0,"legacy rejection guessed capacity");
 });
+
+// ETS selector writes run the reverse transformation. Do not assume that
+// script writes to hidden calculation inputs update the visible selector.
+function selectorDeviceWith(values) {
+    var d=deviceWith(values), selection=Number(value(d,"ChannelSelection"));
+    var aliases={Active:"Active",DeviceType:"DeviceType",Override:"ProfileOverride",
+        Orientation:"OrientationObjects",Binary:"BinaryOnly",Dimmable:"Dimmable",
+        TypeAuto:"RecognitionTypeAuto",OrientationAuto:"RecognitionOrientationAuto",
+        BinaryAuto:"RecognitionBinaryAuto",DimmableAuto:"RecognitionDimmableAuto"};
+    Object.defineProperty(d.params.IOHC_c1ChannelSelection,"value",{
+        get:function(){return selection;},
+        set:function(next){
+            selection=Number(next);
+            var output={};IOHC_syncChannelSelection({Selection:selection},output,{});
+            for(var alias in output)d.params["IOHC_c1"+aliases[alias]].value=output[alias];
+        }
+    });
+    return d;
+}
+test("key import activates ETS selector and downloaded roller channel",function(){
+    var d=selectorDeviceWith({Active:0,ChannelSelection:0,DeviceType:1});
+    IOHC_configureImportedChannel(d,1,{nodeId:0xE50470,metadataValid:true,protocolType:2,subtype:0,manufacturer:1,powerClass:2});
+    check(value(d,"ChannelSelection")===1,"import left visible selector disabled (no driving KOs)");
+    check(value(d,"Active")===1&&value(d,"DeviceType")===1&&value(d,"ProtocolMode")===0,"downloaded roller channel inactive");
+    check(value(d,"OrientationObjects")===0&&value(d,"ProfileOverride")===0,"import changed automatic profile policy");
+});
+test("import activation preserves manual preset and expert choices under ETS calculation",function(){
+    var d=selectorDeviceWith({Active:0,ChannelSelection:0,DeviceType:7,ProfileOverride:448,
+        RecognitionTypeAuto:0,RecognitionOrientationAuto:0,RecognitionBinaryAuto:1,RecognitionDimmableAuto:0,
+        OrientationObjects:1,BinaryOnly:1,Dimmable:1,TwoWayPowerClass:1,Suspend:1});
+    IOHC_configureImportedChannel(d,1,{nodeId:0x123456,metadataValid:true,protocolType:2,subtype:0,manufacturer:1,powerClass:2});
+    check(value(d,"ChannelSelection")===27&&value(d,"Active")===1,"manual preset not activated");
+    check(value(d,"DeviceType")===7&&value(d,"ProfileOverride")===448&&value(d,"OrientationObjects")===1&&value(d,"BinaryOnly")===1&&value(d,"Dimmable")===1,"selector calculation erased manual values");
+    check(value(d,"RecognitionTypeAuto")===0&&value(d,"RecognitionBinaryAuto")===1&&value(d,"RecognitionDimmableAuto")===0,"selector erased field ownership");
+    check(value(d,"Suspend")===1&&value(d,"TwoWayPowerClass")===1,"activation reset expert choices");
+});
+test("automatic import preserves per-field manual permissions when enabling selector",function(){
+    var d=selectorDeviceWith({Active:0,ChannelSelection:0,DeviceType:1,RecognitionOrientationAuto:0,OrientationObjects:0});
+    IOHC_configureImportedChannel(d,1,{nodeId:0x123456,metadataValid:true,protocolType:1,subtype:0,manufacturer:1,powerClass:2});
+    check(value(d,"ChannelSelection")===1&&value(d,"Active")===1,"automatic channel not enabled");
+    check(value(d,"RecognitionOrientationAuto")===0&&value(d,"OrientationObjects")===0,"import forced manually disabled slats");
+});

@@ -17,3 +17,9 @@ und den Gerätetyp manuell setzen. `iohc metadata refresh NODE` gilt nur für be
 zugeordnete 2W-Geräte. Anschließend in ETS „Erkannten Gerätetyp übernehmen“ ausführen.
 Ein nicht zugeordneter Kandidat wird durch diesen Konsolenbefehl nicht automatisch
 angelegt. Nach ETS-Änderungen die Applikation programmieren.
+
+Die Übernahme aktiviert auch die Kanalauswahl in ETS. Bei automatischer Erkennung
+erscheinen die zum erkannten Profil passenden Kommunikationsobjekte. Fehlen nach
+einer älteren Übernahme die Fahr-Objekte, unter „Kanalauswahl“ den passenden
+Gerätetyp wählen, Gruppenadressen zuordnen und die Applikation erneut programmieren.
+Eine erneute Schlüsselextraktion ist dafür nicht nötig.
