@@ -376,7 +376,7 @@ function importFixture() {
   else if(cmd===0x24)r=job;
   else if(cmd===0x25){var i=data[13],n=nodes[i];r=[0,1,i,n>>16,(n>>8)&255,n&255,1,0,0,2,1,0x1D,0,0,0,2,0,0,0,1];}
   else if(cmd===0x1D){var n=assigned[c];r=[0,1,c,n>>16,(n>>8)&255,n&255,1,0,0,2,1,n?0x1C:0];}
-  else if(cmd===0x26){writes++;var i=data[13],c=data[14];assigned[c]=nodes[i];r=[0,c];}
+  else if(cmd===0x26){var i=data[13],c=data[14];if(assigned[c]===nodes[i])r=[1,c];else{writes++;assigned[c]=nodes[i];r=[0,c];}}
   else if(cmd===0x21){var n=assigned[c];if(data.length>2)acks++;r=[0,1,c,0,0,0,2,n>>16,(n>>8)&255,n&255,1,0,0,1,2,0];}
   else if(cmd===0x1B)r=[0];
   else throw new Error("Unexpected import command "+cmd);
@@ -448,4 +448,49 @@ test("pergola automatically recognizes MP cover without slat or ventilation",fun
  check(value(d,"DeviceType")===1&&value(d,"OrientationObjects")===0&&value(d,"BinaryOnly")===0,"pergola inferred slats/binary");
  var preset=IOHC_CHANNEL_SELECTIONS[IOHC_CHANNEL_SELECTIONS.length-1];
  check(preset.value===62&&preset.packed===1856&&preset.flags===0,"explicit pergola preset missing");
+});
+
+function withImportMetadata(f,flags,type) {
+ var original=f.online.invokeFunctionProperty;
+ f.online.invokeFunctionProperty=function(o,p,data){
+  var result=original(o,p,data);
+  if(data[0]===0x25&&data[13]===2){result[11]=String(flags.value);if(type!==undefined){result[6]=String(type&255);result[7]=String(type>>8);}}
+  return result;
+ };
+}
+test("missing import metadata is distinct from channel capacity and retry adds only missing node",function(){
+ var f=importFixture(),flags={value:1};withImportMetadata(f,flags);
+ IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});
+ check(f.text().indexOf("Metadaten fehlen")>=0&&f.writes()===0,"missing metadata preview");
+ IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});
+ check(f.writes()===2&&f.text().indexOf("1 wegen fehlender Metadaten ausgelassen")>=0,"missing metadata reason lost");
+ check(f.text().indexOf("ohne freien Kanal")<0&&f.device.params.IOHC_c3Active.value===0,"false capacity or activation");
+ flags.value=0x1D;
+ IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});
+ check(f.writes()===2,"changed metadata assigned without preview confirmation");
+ IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});
+ check(f.writes()===3&&f.device.params.IOHC_c3Active.value===1,"retry failed to add missing node or duplicated existing nodes");
+ check(f.text().indexOf("1 importiert, 2 vorhanden")>=0,"duplicate import count");
+});
+test("unknown supported-profile mapping is distinct from missing metadata",function(){
+ var f=importFixture();withImportMetadata(f,{value:0x1D},0xFFFF);
+ IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});
+ check(f.text().indexOf("Profil nicht automatisch zuordenbar")>=0,"unknown profile preview");
+ IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});
+ check(f.writes()===2&&f.text().indexOf("1 mit nicht automatisch zuordenbarem Profil")>=0,"unknown profile result");
+ check(f.text().indexOf("ohne freien Kanal")<0&&f.text().indexOf("wegen fehlender Metadaten")<0,"wrong skip reason");
+});
+test("genuine capacity and deliberately unselected import candidates are counted separately",function(){
+ var f=importFixture();IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:2});
+ IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:2});
+ check(f.writes()===2&&f.text().indexOf("1 ohne freien Kanal")>=0,"capacity reason missing");
+ var chosen=importFixture();chosen.device.params.IOHC_ImportCandidate={value:1};
+ IOHC_startKeyExtract(chosen.device,chosen.online,chosen.progress,{channelCount:3});
+ IOHC_startKeyExtract(chosen.device,chosen.online,chosen.progress,{channelCount:3});
+ check(chosen.writes()===1&&chosen.text().indexOf("2 nicht ausgewählt")>=0,"selection reported as capacity");
+ check(chosen.text().indexOf("ohne freien Kanal")<0,"false capacity for selection");
+});
+test("legacy assignment rejection does not invent a no-free-channel cause",function(){
+ var summary=IOHC_importAssignmentSummary(0,0,[{}],[0,1,2,255],null);
+ check(summary.indexOf("Speicherung abgelehnt")>=0&&summary.indexOf("ohne freien Kanal")<0,"legacy rejection guessed capacity");
 });

@@ -1086,7 +1086,7 @@ function IOHC_startKeyExtract(device, online, progress, context) {
             if(String(previewParameter.value)!==preview.token) {
                 trace.step="ETS-Vorschauparameter";
                 IOHC_setParameterValue(device,"IOHC_AssignmentPreviewToken",preview.token);
-                progress.setText("Zuordnungsvorschau: "+preview.text+" Auswahl prüfen; erneut Weiter drücken, um genau diese Zuordnung zu speichern.");return;
+                progress.setText("Zuordnungsvorschau: "+preview.text+" Auswahl prüfen; nochmals „Ergebnis übernehmen“ drücken, um genau diese Zuordnung zu speichern.");return;
             }
             if(!preview.plan.length){progress.setText("Keine Zuordnung: "+preview.text);return;}
         }
@@ -1119,6 +1119,8 @@ function IOHC_startKeyExtract(device, online, progress, context) {
                     alreadyConfigured++;
                 }
             } else if (assignmentStatus == 2) {
+                // Report the preview's actual skip reason below; status 2 alone
+                // also includes declined/unplanned assignments, not just capacity.
                 unassigned++;
             } else {
                 throw new Error("io-homecontrol: Scan-Ergebnis " + (d + 1) + " ist nicht mehr verfügbar");
@@ -1142,18 +1144,15 @@ function IOHC_startKeyExtract(device, online, progress, context) {
             nodeTexts.push(IOHC_formatNodeId(entry.nodeId) + " (" + source + ", " + metadata + ")");
         }
         var nodeText=nodeTexts.length?nodeTexts.join(", "):"keine";
-        var summary = configuredChannels + " importiert, " + alreadyConfigured + " vorhanden";
-        if (unassigned > 0) {
-            summary += ", " + unassigned + " ohne freien Kanal";
-        }
+        var summary = IOHC_importAssignmentSummary(configuredChannels,alreadyConfigured,discoveries,assignmentResponse,preview);
         if (overflow) {
             summary += ", weitere Ergebnisse verworfen";
         }
         var resultStatus = resultCount == 0
                                ? "Schlüssel extrahiert; keine Geräte gefunden"
                                : (configuredChannels > 0
-                                      ? "Erfolgreich; Programmierung nötig"
-                                      : "Erfolgreich; keine Änderung");
+                                      ? (unassigned ? "Teilweise; Programmierung nötig" : "Erfolgreich; Programmierung nötig")
+                                      : (unassigned ? "Nicht alle zugeordnet; siehe Hinweise" : "Erfolgreich; keine Änderung"));
         trace.step="ETS-Ergebnisparameter";
         IOHC_setExtractionResult(device, resultStatus, nodeIds);
 
@@ -1163,7 +1162,7 @@ function IOHC_startKeyExtract(device, online, progress, context) {
             progress.setText("2W-Schlüssel erfolgreich extrahiert. Gefundene Node-IDs: " + nodeText +
                              ". " + summary + ". Das KNX-Gerät muss jetzt in ETS neu programmiert werden, bevor die Geräte gesteuert werden können.");
         } else {
-            progress.setText("2W-Schlüssel erfolgreich extrahiert. Geräte wurden gefunden, es waren jedoch keine ETS-Änderungen notwendig. Gefundene Node-IDs: " +
+            progress.setText("2W-Schlüssel erfolgreich extrahiert. In diesem Schritt wurden keine neuen ETS-Kanäle angelegt. Gefundene Node-IDs: " +
                              nodeText + ". " + summary + ".");
         }
         progress.setProgress(100);
@@ -1257,7 +1256,8 @@ function IOHC_continueCommissioning(device,online,progress,context) {
 
 function /* internal helper */ IOHC_assignmentPreview(online,device,job,discoveries,count,choice,target) {
  if(count<1||count>16||choice<0||choice>discoveries.length||target<0||target>count||Math.floor(choice)!==choice||Math.floor(target)!==target)throw new Error("Ungültige Kandidaten-/Kanalauswahl");
- var channels=[],plan=[],seen={},text="",skipped=0;
+ var channels=[],plan=[],seen={},text="",skipped=0,reasons=[];
+ for(var r=0;r<discoveries.length;r++)reasons[r]="not_selected";
  for(var c=0;c<count;c++) {
   var id=IOHC_invokeFunctionProperty(online,[0x1D,c]);
   if(!id||id.length!==12||id[0]!==0||id[1]!==1||id[2]!==c)throw new Error("Kanalzustand nicht verfügbar");
@@ -1268,15 +1268,20 @@ function /* internal helper */ IOHC_assignmentPreview(online,device,job,discover
  if(target&&selected.length!==1)throw new Error("Ein Zielkanal erfordert genau einen gewählten Kandidaten");
  for(var i=0;i<selected.length;i++) {
   var d=selected[i],supported=d.metadataValid&&IOHC_etsDeviceType(d.protocolType,d.subtype)!==0;
-  if(!d.nodeId||seen[d.nodeId]){skipped++;continue;}seen[d.nodeId]=true;
-  if(!d.passiveAuthVerified&&!d.directedVerified){skipped++;text+="Node "+IOHC_formatNodeId(d.nodeId)+": nicht verifiziert. ";continue;}
-  if(!choice&&!supported){skipped++;text+="Node "+IOHC_formatNodeId(d.nodeId)+": manuelle Produktauswahl erforderlich. ";continue;}
+  var position=choice?choice-1:i;
+  if(!d.nodeId||seen[d.nodeId]){skipped++;reasons[position]="invalid_or_duplicate";text+="Ungültige oder doppelte Node-ID. ";continue;}seen[d.nodeId]=true;
+  if(!d.passiveAuthVerified&&!d.directedVerified){skipped++;reasons[position]="unverified";text+="Node "+IOHC_formatNodeId(d.nodeId)+": nicht verifiziert. ";continue;}
+  if(!choice&&!supported){
+   skipped++;reasons[position]=d.metadataValid?"unknown_profile":"missing_metadata";
+   text+="Node "+IOHC_formatNodeId(d.nodeId)+(d.metadataValid?": Profil nicht automatisch zuordenbar; Kandidat und Gerätetyp manuell wählen. ":": Metadaten fehlen; Suchlauf wiederholen oder Kandidat manuell wählen. ");continue;
+  }
   var existing=-1,channel=-1;
   for(var j=0;j<count;j++)if(channels[j].node===d.nodeId){existing=j;break;}
   if(existing>=0){channel=existing;if(target&&target-1!==existing)throw new Error("Node ist bereits einem anderen Kanal zugeordnet");}
   else if(target){channel=target-1;if(channels[channel].node||channels[channel].used)throw new Error("Gewählter Kanal ist belegt");}
   else for(var k=0;k<count;k++)if(!channels[k].node&&!channels[k].used){channel=k;break;}
-  if(channel<0){skipped++;text+="Kein freier Kanal für "+IOHC_formatNodeId(d.nodeId)+". ";continue;}
+  if(channel<0){skipped++;reasons[position]="no_free_channel";text+="Kein freier Kanal für "+IOHC_formatNodeId(d.nodeId)+". ";continue;}
+  reasons[position]=null;
   channels[channel].used=true;plan.push({index:d.index,node:d.nodeId,channel:channel,existing:existing>=0});
   text+=IOHC_formatNodeId(d.nodeId)+" → Kanal "+(channel+1)+(existing>=0?" (vorhanden)":" (neu)")+(!supported?" (manuelle Produktwahl)":"")+". ";
  }
@@ -1295,8 +1300,22 @@ function /* internal helper */ IOHC_assignmentPreview(online,device,job,discover
  var token=IOHC_tokenHex(job.token)+":"+hashText;
  var current=IOHC_jobSnapshot(online);
  if(!current||!IOHC_bytesEqual(current.token,job.token)||current.stage!==4||current.count!==job.count)throw new Error("Vorschau veraltet; erneut lesen");
- return {token:token,plan:plan,text:plan.length+" Zuordnungen; "+skipped+" ausgelassen. "+text};
+ return {token:token,plan:plan,reasons:reasons,text:plan.length+" Zuordnungen; "+skipped+" ausgelassen. "+text};
 }
+function /* internal helper */ IOHC_importAssignmentSummary(imported,existing,discoveries,response,preview) {
+ var counts={},labels={missing_metadata:"wegen fehlender Metadaten ausgelassen",unknown_profile:"mit nicht automatisch zuordenbarem Profil",unverified:"nicht verifiziert",no_free_channel:"ohne freien Kanal",not_selected:"nicht ausgewählt",invalid_or_duplicate:"mit ungültiger/doppelter Node-ID",assignment_rejected:"nicht zugeordnet (Kanalzustand oder Speicherung abgelehnt)"};
+ var order=["missing_metadata","unknown_profile","unverified","no_free_channel","not_selected","invalid_or_duplicate","assignment_rejected"];
+ for(var d=0;d<discoveries.length;d++) {
+  if(response[2+d*2]!==2)continue;
+  var reason=preview&&preview.reasons?preview.reasons[d]:null;
+  reason=reason||"assignment_rejected";counts[reason]=(counts[reason]||0)+1;
+ }
+ var text=imported+" importiert, "+existing+" vorhanden";
+ for(var i=0;i<order.length;i++)if(counts[order[i]])text+=", "+counts[order[i]]+" "+labels[order[i]];
+ if(counts.missing_metadata)text+=". Fehlende Metadaten: Schlüsselextraktion/Suche erneut ausführen oder den Kandidaten ausdrücklich einem freien Kanal zuordnen und den Gerätetyp manuell wählen";
+ return text;
+}
+
 function /* internal helper */ IOHC_assignPreviewed(online,job,discoveries,preview) {
  var current=IOHC_jobSnapshot(online);
  if(!current||!IOHC_bytesEqual(current.token,job.token)||current.stage!==4||current.count!==job.count)
