@@ -128,7 +128,10 @@ class ChannelUiTest(unittest.TestCase):
             ".//k:ChannelIndependentBlock/k:ParameterBlock[@Name='Settings']", NS
         )
         self.assertIsNotNone(settings)
-        self.assertIsNone(settings.find("k:choose", NS))
+        # Assignment-only branches must not hide channel selection rows.
+        for choice in settings.findall("k:choose", NS):
+            self.assertFalse(choice.findall(".//k:ParameterRefRef", NS))
+            self.assertFalse(choice.findall(".//k:ParameterBlock", NS))
 
     def test_pergola_original_yaml_provenance_and_exact_golden_bytes(self):
         hashes = {'exchange/somfy_pergola_louver_exchange_execute_acks_sx1262.yaml': '58834ce7445b33204d98d11745e5a2b94822ddebc202cc77c68df87a5b7e8d21', 'exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml': '81e1330c04a84915f479faad29ba45a4b504b12ece2937bb627d9a06d9eff028', 'probe/somfy_pergola_louver_probe_get_info2_sx1262.yaml': 'ec9a75ca7b04faf89b9decc7c935769b7fbfb6a86bccb0bd562f2ba3a1bb525e', 'statuspoll/somfy_pergola_louver_statuspoll_replies_sx1262.yaml': 'bca765421eaadb8a3856790e8ed7945fbe875badff6ed09b0651754b09d6f869'}
@@ -207,6 +210,23 @@ class ChannelUiTest(unittest.TestCase):
                       for ref in w.findall("k:ComObjectRefRef", NS)))
         self.assertIsNone(branch.find("k:choose", NS))
         self.assertEqual(len(branch.findall("k:ComObjectRefRef", NS)),1)
+
+    def test_firmware_activation_is_hidden_but_always_in_download_tree(self) -> None:
+        active = "%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101"
+        selection = "%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"
+        parameter = self.template.find(".//k:Parameter[@Name='c%C%Active']", NS)
+        self.assertEqual(parameter.get("Access"), "None")
+        settings = self.template.find(".//k:ParameterBlock[@Name='Settings']", NS)
+        self.assertIsNotNone(settings.find(f"k:ParameterRefRef[@RefId='{active}']", NS))
+        assignments = settings.find(f"k:choose[@ParamRefId='{selection}']", NS)
+        for condition, expected in (("0", "0"), (">0", "1")):
+            branch = assignments.find(f"k:when[@test='{condition}']", NS)
+            assignment = branch.find("k:Assign", NS)
+            self.assertEqual(assignment.get("TargetParamRefRef"), active)
+            self.assertEqual(assignment.get("Value"), expected)
+        # The reference is unconditional: deactivation must also download zero.
+        self.assertEqual(parameter.get("Offset"), "0")
+        self.assertEqual(parameter.get("BitOffset"), "0")
 
     def test_every_channel_is_disabled_by_default(self) -> None:
         activity = self.template.find(".//k:Parameter[@Name='c%C%Active']", NS)
