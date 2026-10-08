@@ -1649,6 +1649,7 @@ void IoHomecontrol::loop()
     updateCommissioningJob();
     recordCommissioningOutcome();
     serviceMetadataSnapshots();
+    serviceBatteryDiagnostic();
 
     if (!mRadioDiagnostic.active)
         processMetadataRefresh();
@@ -4085,6 +4086,47 @@ void IoHomecontrol::readFlash(const uint8_t *iBuffer, const uint16_t iSize)
 
 // --- Serial console ---
 
+const char *IoHomecontrol::batteryDiagnosticBlockReason(IoHomecontrolChannel *channel) const
+{
+    if(!channel)return "channel";
+    if(channel->batteryDiagnosticMode()!=2)return "diagnostics";
+    if(channel->is1W())return "not_2w";
+    if(!channel->isPaired())return "not_paired";
+    if(channel->batteryMonitoring()!=2)return "channel_disabled_or_suspended";
+    if(mController.twoWayIdentityCollision())return "identity_collision";
+    if(mCommissioningJob.active())return "commissioning";
+    if(mRadioDiagnostic.active)return "radio_diagnostic";
+    if(mMetadataRefreshActive)return "metadata";
+    if(!mController.idleForManagedOperation())return "radio";
+    return nullptr;
+}
+
+void IoHomecontrol::serviceBatteryDiagnostic()
+{
+    auto &pending=mPendingBatteryDiagnostic;
+    if(pending.channel==0xFF)return;
+    auto *channel=getChannel(pending.channel);
+    if(!channel||channel->getNodeId()!=pending.node||channel->productContextRevision()!=pending.revision) {
+        logInfoP("Battery diagnostic cancelled: identity_changed");pending={};return;
+    }
+    if(millis()-pending.startedMs>=10000UL) {
+        logInfoP("Battery diagnostic expired: guard=%s; no RF sent",
+            batteryDiagnosticBlockReason(channel)?batteryDiagnosticBlockReason(channel):"resource_sequence");pending={};return;
+    }
+    if(static_cast<int32_t>(millis()-pending.nextMs)<0)return;
+    pending.nextMs=millis()+250UL;
+    const char *reason=batteryDiagnosticBlockReason(channel);
+    if(reason) {
+        if(std::strcmp(reason,"commissioning")&&std::strcmp(reason,"radio_diagnostic")&&
+           std::strcmp(reason,"metadata")&&std::strcmp(reason,"radio")) {
+            logInfoP("Battery diagnostic cancelled: guard=%s",reason);pending={};
+        }
+        return;
+    }
+    const bool queued=pending.action==0?mController.requestBatteryObjects(channel):mController.requestBatteryPrivate(channel,pending.action);
+    if(queued){logInfoP("Battery diagnostic submitted ch=%u action=%u; support/result pending authenticated response, RAW / UNIT UNKNOWN",pending.channel+1,pending.action);pending={};}
+}
+
 void IoHomecontrol::showHelp()
 {
     // Always show help (even when KNX not configured) so users can see
@@ -4242,14 +4284,21 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if(sscanf(iCmd.c_str(),"iohc battery %u %15s %c",&index,action,&extra)!=2||index<1||index>mNumChannels){logInfoP("Usage: iohc battery CHANNEL status|probe|probe09|objects");return true;}
         auto *channel=mChannels[index-1];if(!channel)return true;
         if(!std::strcmp(action,"status")){channel->printBatteryStatus();return true;}
+        uint8_t requested=0;
+        if(!std::strcmp(action,"probe"))requested=6;
+        else if(!std::strcmp(action,"probe09"))requested=9;
+        else if(std::strcmp(action,"objects")){logInfoP("Usage: iohc battery CHANNEL status|probe|probe09|objects");return true;}
         updateCommissioningJob();
-        if(mCommissioningJob.active()||mRadioDiagnostic.active||mMetadataRefreshActive||channel->batteryMonitoring()!=2){logInfoP("Battery probes require Extended diagnostics and idle commissioning/radio/metadata");return true;}
-        if(!std::strcmp(action,"objects"))logInfoP("Battery object reads queued=%u; one manual sequence, no periodic polling",mController.requestBatteryObjects(channel));
-        else if(!std::strcmp(action,"probe")) {
-            // One query at a time; call again with probe09 after inspecting 06.
-            logInfoP("Private06 queued=%u RAW / UNIT UNKNOWN; use probe09 for Private09",mController.requestBatteryPrivate(channel,6));
-        } else if(!std::strcmp(action,"probe09"))logInfoP("Private09 queued=%u RAW / UNIT UNKNOWN",mController.requestBatteryPrivate(channel,9));
-        else logInfoP("Usage: iohc battery CHANNEL status|probe|probe09|objects");
+        const char *reason=batteryDiagnosticBlockReason(channel);
+        if(reason)logInfoP("Battery diagnostic guard=%s diagnostics=%u monitor=%u",reason,channel->batteryDiagnosticMode(),channel->batteryMonitoring());
+        const bool transient=reason&&(!std::strcmp(reason,"commissioning")||!std::strcmp(reason,"radio_diagnostic")||!std::strcmp(reason,"metadata")||!std::strcmp(reason,"radio"));
+        if(reason&&!transient)return true;
+        if(mPendingBatteryDiagnostic.channel!=0xFF){logInfoP("Battery diagnostic rejected: pending_request");return true;}
+        mPendingBatteryDiagnostic.channel=index-1;mPendingBatteryDiagnostic.action=requested;
+        mPendingBatteryDiagnostic.node=channel->getNodeId();mPendingBatteryDiagnostic.revision=channel->productContextRevision();
+        mPendingBatteryDiagnostic.startedMs=millis();mPendingBatteryDiagnostic.nextMs=millis();
+        logInfoP("Battery diagnostic pending: maximum wait=10000ms; commissioning/metadata/RX scan are not interrupted");
+        serviceBatteryDiagnostic();
         return true;
     }
     if(iCmd.rfind("iohc probe ",0)==0) {

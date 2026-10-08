@@ -11,3 +11,12 @@
 Die neueste bestätigte Rückmeldung bestimmt den Batteriezustand. Bei gleichem Zeitpunkt hat A601 Vorrang vor dem allgemeinen Status; danach folgt eine ausdrückliche Batteriewarnung. Widersprüche und das Alter beider Quellen sind in der Konsole sichtbar. Die Batterie eines angelernten 1W-Controllers gehört zum Controller und verändert die Batterieanzeige des Antriebs nicht.
 
 Der bisherige Batterie-Prozentwert bleibt unbekannt: Batterieklassen, Rohspannungen und unbestätigte Zahlen werden nicht in Prozent umgerechnet. Diagnosewerte mit „RAW / UNIT UNKNOWN“ haben noch keine belegte Einheit oder Skala.
+
+Die sichtbare Auswahl dieses Kanals ist maßgeblich; ein interner BAT-Modulschalter
+schaltet sie nicht zusätzlich ab. `iohc battery 1 status` zeigt Rohparameter,
+Diagnosestufe und wirksamen Modus getrennt. Eine Änderung wirkt bei der nächsten
+Prüfung; bei deaktiviertem/pausiertem Kanal, 1W oder fehlender Kopplung ist keine
+Probe erlaubt. Bei belegtem Funk, Kopplung oder Metadaten wartet eine manuelle
+Probe höchstens zehn Sekunden. Es wird keine laufende Sitzung unterbrochen.
+Eine Probe ist ein Versuch, kein Nachweis für Unterstützung oder eine Batterie.
+Auch VELUX-Geräte mit allgemeinem Profil bleiben bis zur validierten Antwort unbekannt.

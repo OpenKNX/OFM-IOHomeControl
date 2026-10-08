@@ -2671,8 +2671,16 @@ void IoHomecontrolChannel::printLimitationStatus() {
     }
 }
 
+uint8_t IoHomecontrolChannel::batteryDiagnosticMode()const {
+    if(!knx.configured())return ioHomeStandaloneChannel(_channelIndex)?2:0;
+    return ParamBAT_cMode<=2?ParamBAT_cMode:0;
+}
 uint8_t IoHomecontrolChannel::batteryMonitoring()const {
-    return ParamBASE_ModuleEnabled_BAT&&ParamIOHC_cActive&&!ParamIOHC_cSuspend&&mPaired&&!mIs1W?ParamBAT_cMode:0;
+    if(!mPaired||mIs1W)return 0;
+    if(!knx.configured())return batteryDiagnosticMode();
+    // BAT is an embedded per-channel KO bank, not an independently enabled
+    // module. The visible channel mode is authoritative, including partial downloads.
+    return ParamIOHC_cActive&&!ParamIOHC_cSuspend?batteryDiagnosticMode():0;
 }
 void IoHomecontrolChannel::invalidateBattery() {
     mBatteryAlarmPublished=false;
@@ -2729,6 +2737,12 @@ void IoHomecontrolChannel::printBatteryStatus() {
     const auto &id=getProtocolIdentity();const auto &selected=mBatteryInfo.selected();
     logInfoP("Battery ch=%u node=%06lX profile=%u subtype=%u manufacturer=%u monitor=%u percent=unknown",
         unsigned(_channelIndex+1),(unsigned long)mNodeId,id.profile,id.subProfile,id.manufacturerId,batteryMonitoring());
+    logInfoP("  diagnostics=%u raw-mode=%u bank-enabled=%u active=%u suspend=%u paired=%u protocol=%s; monitor is effective channel mode, no periodic probes",
+        batteryDiagnosticMode(),knx.configured()?unsigned(ParamBAT_cMode):0,
+        knx.configured()?unsigned(ParamBASE_ModuleEnabled_BAT):0,
+        knx.configured()?unsigned(ParamIOHC_cActive):1,knx.configured()?unsigned(ParamIOHC_cSuspend):0,
+        unsigned(mPaired),mIs1W?"1W":"2W");
+    logInfoP("  support=unverified-until-valid-response; unknown is neither zero-percent nor communication-error");
     logInfoP("  selected=%s source=%s age-ms=%lu conflict=%u",selected.valid?(selected.low?"yes":"no"):"unknown",
         ioHomeBatterySourceName(mBatteryInfo.source()),selected.valid?(unsigned long)(millis()-selected.timestampMs):0,mBatteryInfo.conflict());
     static const char *coarseNames[]={"unknown","low","normal","full"};

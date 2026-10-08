@@ -87,6 +87,7 @@ public:
   bool allowsActuatorControls() const;
   void onBatteryLevel(uint8_t iPercent);
   uint8_t batteryMonitoring() const;
+  uint8_t batteryDiagnosticMode() const;
   void invalidateBattery();
   void onBatteryStatus(uint8_t status,uint8_t command);
   void onBatteryError(uint8_t code,uint8_t command);

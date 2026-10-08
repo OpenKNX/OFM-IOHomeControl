@@ -61,6 +61,12 @@ public:
 
   IoHomeController &controller();
   bool managementRequestsAllowed() const {return !mCommissioningJob.active()&&!mMetadataRefreshActive&&!mRadioDiagnostic.active;}
+  const char *batteryDiagnosticBlockReason(IoHomecontrolChannel *channel) const;
+  void serviceBatteryDiagnostic();
+  struct PendingBatteryDiagnostic {
+    uint8_t channel=0xFF,action=0;
+    uint32_t node=0,revision=0,startedMs=0,nextMs=0;
+  } mPendingBatteryDiagnostic;
   bool prepareTwoWayPersistence();
   bool persistTwoWayAssignment(uint8_t channel,uint32_t node,const uint8_t *key,const IoHomeProtocolIdentity &identity);
   bool persistTwoWayBinding(uint8_t channel,uint32_t node,const uint8_t *key);

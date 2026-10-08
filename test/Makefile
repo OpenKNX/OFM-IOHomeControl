@@ -41,7 +41,7 @@ $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
 $(SX1262_PHY_TARGET): $(SX1262_PHY_SRCS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(SX1262_PHY_SRCS)
 
-run: check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone
+run: check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics
 
 check-protocol: $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite protocol
@@ -97,3 +97,7 @@ check-battery-publication:
 .PHONY: check-standalone
 check-standalone:
 	$(PYTHON) test_standalone_diag.py
+
+.PHONY: check-battery-diagnostics
+check-battery-diagnostics:
+	$(PYTHON) test_battery_diagnostics.py
