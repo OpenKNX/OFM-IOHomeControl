@@ -23,7 +23,7 @@ struct RecordingKo {
 using GroupObject=RecordingKo;
 void cancelPendingBatteryWrite(GroupObject &ko)
 ''' + cancel + r'''
-struct {RecordingKo ko;RecordingKo &getGroupObject(int){return ko;}} knx;
+struct {bool configured()const{return true;} RecordingKo ko;RecordingKo &getGroupObject(int){return ko;}} knx;
 #define BAT_KoCalcNumber(x) (x)
 #define BAT_KocLow 1
 struct IoHomecontrolChannel {

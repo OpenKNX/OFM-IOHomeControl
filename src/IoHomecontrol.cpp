@@ -1,3 +1,4 @@
+#include "protocol/IoHomeStandaloneDiag.h"
 #include "IoHomecontrol.h"
 #include "protocol/IoHomeProductValues.h"
 #include "ModuleVersionCheck.h"
@@ -1400,6 +1401,7 @@ uint8_t IoHomecontrol::countPairedChannels() const
 
 uint8_t IoHomecontrol::configuredChannelCount() const
 {
+    if(kIoHomeStandaloneDiag&&!knx.configured())return 1;
     return IOHC_ChannelCount;
 }
 
@@ -1558,6 +1560,25 @@ void IoHomecontrol::updateStatusLed()
 
 // --- OpenKNX::Module interface ---
 
+#if defined(IOHC_STANDALONE_DIAG) && IOHC_STANDALONE_DIAG
+// The framework's default Base wrappers skip setup/loop when unconfigured.
+void IoHomecontrol::setup(bool configured) {
+    (void)configured;
+    mStandaloneStartupAtMs=millis();
+    setup();
+}
+void IoHomecontrol::loop(bool configured) {
+    if(!configured&&!mStandaloneStartupReady) {
+        // Common's startup hook only runs with KNX configured. Give the module
+        // its own delay, then use the SAME restore/provisioning hook exactly once.
+        if(uint32_t(millis()-mStandaloneStartupAtMs)<IOHC_STANDALONE_STARTUP_DELAY_MS)return;
+        processAfterStartupDelay();
+        mStandaloneStartupReady=true;
+    }
+    loop();
+}
+#endif
+
 void IoHomecontrol::setup()
 {
     logDebugP("setup");
@@ -1594,7 +1615,7 @@ void IoHomecontrol::setup()
     // processAfterStartupDelay() (run exactly once after the restore).
 
     // Report module status OK
-    KoIOHC_ModuleStatus.value(true, DPT_Switch);
+    if(knx.configured())KoIOHC_ModuleStatus.value(true, DPT_Switch);
 
     mLastControllerState = mController.state();
     mLastPairedCount = countPairedChannels();
@@ -1606,7 +1627,11 @@ void IoHomecontrol::loop()
 {
     // During ETS table programming, Flash::save(true) still declines writes.
     // Do not run the RF/controller state machines until persistence is usable.
-    if (!knx.configured() || !openknx.afterStartupDelay())
+    bool startupReady=openknx.afterStartupDelay();
+#if defined(IOHC_STANDALONE_DIAG) && IOHC_STANDALONE_DIAG
+    startupReady=startupReady||mStandaloneStartupReady;
+#endif
+    if (!ioHomeServiceEnabled(knx.configured()) || !startupReady || !mIdentityRestoreInitDone)
         return;
 
     // Radio diagnostics take exclusive ownership of the radio so the controller
@@ -1648,7 +1673,7 @@ void IoHomecontrol::loop()
                              lState == ControllerState::DiscoveryListening);
     if (lDiscoveryActive != mLastDiscoveryActive)
     {
-        KoIOHC_DiscoveryActive.value(lDiscoveryActive, DPT_Switch);
+        if(knx.configured())KoIOHC_DiscoveryActive.value(lDiscoveryActive, DPT_Switch);
         mLastDiscoveryActive = lDiscoveryActive;
     }
 
@@ -1656,12 +1681,12 @@ void IoHomecontrol::loop()
     bool lScanActive = mController.isNetworkScanActive();
     if (lScanActive != mLastScanActive)
     {
-        KoIOHC_NetworkScanActive.value(lScanActive, DPT_Switch);
+        if(knx.configured())KoIOHC_NetworkScanActive.value(lScanActive, DPT_Switch);
         mLastScanActive = lScanActive;
     }
 
     // Remote observation: report observed remote addresses (KO#25, Feature 5)
-    if (ParamIOHC_RemoteObserve)
+    if (knx.configured() && ParamIOHC_RemoteObserve)
     {
         uint8_t lObservedCount = mRemoteMap.observedCount();
         if (lObservedCount > mLastObservedCount)
@@ -2354,6 +2379,8 @@ void IoHomecontrol::processAfterStartupDelay()
 
     mController.startReceive();
 
+    if(!knx.configured())return; // standalone: no ETS power-on action or KO reads
+
     // P2: Power-on behavior per channel
     for (uint8_t i = 0; i < mNumChannels; i++)
     {
@@ -2391,7 +2418,7 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
         {
             logDebugP("Discovery triggered via KNX");
             mController.startDiscovery();
-            KoIOHC_DiscoveryActive.value(true, DPT_Switch);
+            if(knx.configured())KoIOHC_DiscoveryActive.value(true, DPT_Switch);
         }
         return;
     }
@@ -2410,7 +2437,7 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
             logDebugP("Network scan stopped via KNX");
             mController.stopNetworkScan();
         }
-        KoIOHC_NetworkScanActive.value(lStart, DPT_Switch);
+        if(knx.configured())KoIOHC_NetworkScanActive.value(lStart, DPT_Switch);
         return;
     }
 
@@ -2535,7 +2562,7 @@ void IoHomecontrol::restoreAssignmentReceipts()
         { logInfoP("Assignment recovery conflict channel=%u; no overwrite",i+1);continue; }
         if(ch->getNodeId()==receipt.node && std::memcmp(ch->getEncryptionKey(),receipt.key,16))
         { logInfoP("Assignment recovery key conflict channel=%u; no overwrite",i+1);continue; }
-        if(ch->getNodeId()==receipt.node) continue; // retain richer restored metadata
+        if(ch->getNodeId()==receipt.node && (!kIoHomeStandaloneDiag || ch->hasProtocolIdentity())) continue; // retain richer restored metadata
         ch->setNodeId(receipt.node); ch->setEncryptionKey(receipt.key);
         IoHomeProtocolIdentity identity; identity.valid=receipt.metadataValid;
         identity.fullMetadata=false;identity.ioAddress=receipt.node; // receipt is only a partial metadata snapshot
@@ -4105,6 +4132,10 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc discover spe", "Encrypted SPE/sub-device discovery");
     openknx.console.printHelpLine("iohc metadata refresh NODE", "Refresh name, GI1 and GI2 for a paired 2W node (hex)");
     openknx.console.printHelpLine("iohc keyimport status|candidates|trace", "Show import evidence and verification state");
+#if defined(IOHC_STANDALONE_DIAG) && IOHC_STANDALONE_DIAG
+    openknx.console.printHelpLine("iohc keyimport assign RESULT_INDEX CHANNEL", "Assign verified import result to standalone channel 1 (no overwrite)");
+    openknx.console.printHelpLine("iohc01 stop", "Stop the paired diagnostic actuator using the existing 2W STOP command");
+#endif
     openknx.console.printHelpLine("iohc discovery trace", "Show discovery reliability counters");
     openknx.console.printHelpLine("iohc discovery listen [MS|default]", "Runtime-only override; default follows destination/LOW_POWER timing");
     openknx.console.printHelpLine("iohc codec heating RAW16", "Offline heating level; unknown enum rejected");
@@ -4184,6 +4215,11 @@ void IoHomecontrol::showHelp()
 
 bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 {
+#if defined(IOHC_STANDALONE_DIAG) && IOHC_STANDALONE_DIAG
+    if(!knx.configured()&&iCmd.rfind("iohc",0)==0&&!mStandaloneStartupReady) {
+        logInfoP("Standalone startup/identity restore not ready yet");return true;
+    }
+#endif
     if(iCmd=="iohc event trace on"||iCmd=="iohc event trace off") {
         mController.setDynamicEventTrace(iCmd=="iohc event trace on");
         logInfoP("Dynamic raw event tracing %s",iCmd=="iohc event trace on"?"enabled":"disabled");return true;
@@ -4397,7 +4433,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     }
 #endif
 
-    if (!knx.configured())
+    if (!ioHomeServiceEnabled(knx.configured()))
     {
         openknx.console.printHelpLine("iohc", "Device is not configured. Likely causes: application not downloaded from ETS, firmware/knxprod version mismatch, or missing ETS configuration. Re-download the application and power cycle the device.");
         return true;
@@ -4462,6 +4498,38 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         return true;
     }
 
+#if defined(IOHC_STANDALONE_DIAG) && IOHC_STANDALONE_DIAG
+    if(lSub.rfind("stop ",0)==0) {
+        uint8_t index=0;
+        if(!parseChannelIndex(trimSpaces(lSub.substr(5)),mNumChannels,index)||index!=0||!mChannels[index]||
+           !mChannels[index]->isPaired()||mChannels[index]->is1W()||
+           mChannels[index]->getProtocolIdentity().nodeClass!=IoHomeNodeClass::Actuator||
+           !mChannels[index]->allowsActuatorControls()||!managementRequestsAllowed()||!mController.idleForManagedOperation()) {
+            logInfoP("STOP requires paired diagnostic 2W actuator channel 1 and idle commissioning/RF ownership");return true;
+        }
+        logInfoP("Diagnostic STOP queued=%u",mController.sendCommand(mChannels[index]->getNodeId(),
+            mChannels[index]->getEncryptionKey(),IoHomeCommand::Execute,0xD2));return true;
+    }
+    if(lSub.rfind("keyimport assign",0)==0) {
+        const auto args=trimSpaces(lSub.substr(strlen("keyimport assign")));
+        const auto split=args.find_first_of(" \t");
+        uint32_t result=0,channel=0;
+        if(split==std::string::npos||!parseUnsignedDecimal(args.substr(0,split),result)||
+           !parseUnsignedDecimal(args.substr(split),channel)||result>=mKeyImportDeviceCount||channel!=1||channel>mNumChannels) {
+            logInfoP("Usage: iohc keyimport assign RESULT_INDEX 1 (zero-based result, channel 1 only)");return true;
+        }
+        if(!managementRequestsAllowed()||!mController.idleForManagedOperation()||!mNetworkStoreReady||mNetworkStoreFailed) {
+            logInfoP("Key import assignment blocked: commissioning/RF/storage not ready");return true;
+        }
+        uint8_t existing=0xFF;
+        const uint8_t status=assignKeyImportDevice(uint8_t(result),uint8_t(channel-1),existing);
+        if(status==0)serviceMetadataSnapshots(); // checked store; framework flash declines unconfigured saves
+        logInfoP("Key import assign result=%u channel=%u status=%u existing-channel=%u",result,channel,status,
+            existing==0xFF?0:unsigned(existing+1));
+        return true;
+    }
+#endif
+
     if (lSub == "keyimport status" || lSub == "keyimport candidates" ||
         lSub == "keyimport trace")
     {
@@ -4480,6 +4548,17 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                  mKeyImportOverflow ? 1U : 0U);
         if (lSub != "keyimport status")
         {
+#if defined(IOHC_STANDALONE_DIAG) && IOHC_STANDALONE_DIAG
+            // Use the SAME indexed final result list as assignKeyImportDevice.
+            for(uint8_t i=0;i<mKeyImportDeviceCount;++i) {
+                const auto &device=mKeyImportDevices[i];uint8_t assigned=0;
+                for(uint8_t c=0;c<mNumChannels;++c)if(mChannels[c]&&mChannels[c]->getNodeId()==device.nodeId)assigned=c+1;
+                const auto &id=device.protocolIdentity;
+                logInfoP("KeyImport result index=%u node=%06X profile=%u subtype=%u manufacturer=%u power=%u valid=%u metadata-valid=%u metadata-full=%u passive-auth=%u directed=%u spe=%u assigned-channel=%u",
+                    unsigned(i),device.nodeId,unsigned(id.profile),unsigned(id.subProfile),unsigned(id.manufacturerId),unsigned(id.powerSaveMode),
+                    device.valid,id.valid,id.fullMetadata,device.passiveAuthVerified,device.directedVerified,device.speResponseSeen,unsigned(assigned));
+            }
+#endif
             for (uint8_t i = 0; i < mKeyImportCandidateCount; ++i)
             {
                 const KeyImportCandidate &lCandidate = mKeyImportCandidates[i];

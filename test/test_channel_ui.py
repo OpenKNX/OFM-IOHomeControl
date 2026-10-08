@@ -55,7 +55,7 @@ class ChannelUiTest(unittest.TestCase):
     def test_unconfigured_module_cannot_run_controller_or_radio_diagnostics(self) -> None:
         source = (ROOT / "src" / "IoHomecontrol.cpp").read_text()
         loop = source.split("void IoHomecontrol::loop()", 1)[1].split("void IoHomecontrol::", 1)[0]
-        guard = loop.index("if (!knx.configured() || !openknx.afterStartupDelay())")
+        guard = loop.index("if (!ioHomeServiceEnabled(knx.configured()) || !startupReady || !mIdentityRestoreInitDone)")
         early_return = loop.index("return;", guard)
         self.assertLess(early_return, loop.index("mController.loop()"))
         self.assertLess(early_return, loop.index("processRadioDiagnostic()"))

@@ -1,3 +1,4 @@
+#include "protocol/IoHomeStandaloneDiag.h"
 #include "protocol/IoHomeProfileObjects.h"
 #include "IoHomecontrolChannel.h"
 #include "IoHomecontrol.h"
@@ -227,6 +228,17 @@ const std::string IoHomecontrolChannel::logPrefix()
 
 void IoHomecontrolChannel::setup()
 {
+    if(ioHomeStandaloneChannel(_channelIndex)) {
+        setIs1W(false);setManualProfileOverride(0);
+        setConfigured2WPowerClass(TwoWayPowerClass::Automatic);
+        setConfigured2WDiscoverConfirmMode(PairingDiscoverConfirmMode::Send);
+        setConfigured2WKeyInitDelay(300);setConfigured2WAcei(IOHC_ACEI_DEFAULT);
+        setConfigured2WDiscoverySettings(TwoWayDiscoverySettings{});
+        logInfoP("Standalone diagnostic channel: active, 2W, automatic power, default discovery; no ETS required");
+        return;
+    }
+    if(!knx.configured())return;
+
     const uint8_t lProtocolMode = static_cast<uint8_t>(ParamIOHC_cProtocolMode);
     const uint32_t lOneWayTargetNodeId = static_cast<uint32_t>(ParamIOHC_cOneWayTargetNodeId) & 0x00FFFFFF;
     const uint8_t lOneWayBroadcastType = static_cast<uint8_t>(ParamIOHC_cOneWayBroadcastType);
@@ -374,6 +386,8 @@ void IoHomecontrolChannel::setup()
 
 void IoHomecontrolChannel::loop()
 {
+    if(!knx.configured())return; // RF callbacks/console remain active; no ETS polling or KOs
+
     updateLimitationStatus();
     updateBatteryKo();
     updateProfileParameterValidity();
@@ -669,7 +683,7 @@ void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
 
     mIsMoving = iIsMoving;
     if (!isBinaryDeviceType())
-        getKo(IOHC_KoCHMovementStatus).value(iIsMoving, Dpt(1, 11));
+        if(knx.configured())getKo(IOHC_KoCHMovementStatus).value(iIsMoving, Dpt(1, 11));
     logDebugP("Status: %s", iIsMoving ? "moving" : "idle");
 }
 
@@ -737,7 +751,7 @@ void IoHomecontrolChannel::logStatusSummary(float iCurrentPositionPercent, bool 
 void IoHomecontrolChannel::onSlatFeedback(float iSlatPercent)
 {
     mCurrentSlat = iSlatPercent;
-    getKo(IOHC_KoCHSlatFeedback).value((uint8_t)(iSlatPercent + 0.5f), DPT_Scaling);
+    if(knx.configured())getKo(IOHC_KoCHSlatFeedback).value((uint8_t)(iSlatPercent + 0.5f), DPT_Scaling);
     logDebugP("Slat feedback: %.1f%%", iSlatPercent);
 }
 
@@ -1080,7 +1094,7 @@ void IoHomecontrolChannel::onBatteryLevel(uint8_t iPercent)
 {
     if(!mBatteryInfo.percentValid||iPercent>100||mBatteryInfo.percent!=iPercent)return;
     mBatteryLevel = iPercent;
-    getKo(IOHC_KoCHBattery).value(iPercent, DPT_Scaling);
+    if(knx.configured())getKo(IOHC_KoCHBattery).value(iPercent, DPT_Scaling);
     logDebugP("Battery level: %d%%", iPercent);
 }
 
@@ -1746,6 +1760,7 @@ bool IoHomecontrolChannel::isBinaryDeviceType() const
 
 void IoHomecontrolChannel::publishBinaryStatus()
 {
+    if(!knx.configured())return;
     if (!isBinaryDeviceType())
         return;
 
@@ -1758,6 +1773,7 @@ void IoHomecontrolChannel::publishBinaryStatus()
 
 bool IoHomecontrolChannel::restoreLastKnownStateAfterStartup()
 {
+    if(!knx.configured())return false;
     bool lBinaryState = false;
 
     switch (effectiveDeviceType())
@@ -1826,7 +1842,7 @@ void IoHomecontrolChannel::publishPositionFeedback(float iPositionPercent, bool 
 
     float lReportPos = ParamIOHC_cInvertDir ? (100.0f - mCurrentPosition) : mCurrentPosition;
     if (!lBinaryOnly)
-        getKo(IOHC_KoCHPositionFeedback).value((uint8_t)(lReportPos + 0.5f), DPT_Scaling);
+        if(knx.configured())getKo(IOHC_KoCHPositionFeedback).value((uint8_t)(lReportPos + 0.5f), DPT_Scaling);
     publishBinaryStatus();
 
     if (iLogMessage)
@@ -1879,7 +1895,7 @@ void IoHomecontrolChannel::restoreStopTravelSnapshot()
     mTravelStartTime = lSnapshot.travelStartTime;
     mTravelDurationMs = lSnapshot.travelDurationMs;
     if (!isBinaryDeviceType())
-        getKo(IOHC_KoCHMovementStatus).value(mIsMoving, Dpt(1, 11));
+        if(knx.configured())getKo(IOHC_KoCHMovementStatus).value(mIsMoving, Dpt(1, 11));
     logInfoP("STOP command was rejected or failed locally; restored travel target %.1f%%", mTargetPosition);
 }
 
@@ -2004,7 +2020,7 @@ void IoHomecontrolChannel::updateEstimatedPosition()
     mCurrentPosition = lEstimatedPosition;
     if ((uint8_t)(lEstimatedReported + 0.5f) != (uint8_t)(lPreviousReported + 0.5f))
     {
-        getKo(IOHC_KoCHPositionFeedback).value((uint8_t)(lEstimatedReported + 0.5f), DPT_Scaling);
+        if(knx.configured())getKo(IOHC_KoCHPositionFeedback).value((uint8_t)(lEstimatedReported + 0.5f), DPT_Scaling);
         publishBinaryStatus();
     }
 
@@ -2031,7 +2047,7 @@ float IoHomecontrolChannel::configuredClosingTimeSeconds() const
 void IoHomecontrolChannel::onRssiUpdate(uint8_t iScaledPercent)
 {
     mLastRssi = iScaledPercent;
-    getKo(IOHC_KoCHRssi).value(iScaledPercent, DPT_Scaling);
+    if(knx.configured())getKo(IOHC_KoCHRssi).value(iScaledPercent, DPT_Scaling);
     logDebugP("RSSI: %d%%", iScaledPercent);
 }
 
@@ -2054,7 +2070,7 @@ void IoHomecontrolChannel::setErrorStatus(uint8_t iStatus)
     if (mErrorStatus != iStatus)
     {
         mErrorStatus = iStatus;
-        getKo(IOHC_KoCHErrorStatus).value(iStatus, DPT_DecimalFactor);
+        if(knx.configured())getKo(IOHC_KoCHErrorStatus).value(iStatus, DPT_DecimalFactor);
         logDebugP("Error status: %d", iStatus);
     }
 }
@@ -2409,6 +2425,7 @@ void IoHomecontrolChannel::processProductInputKo(uint8_t index,GroupObject &ko)
 }
 void IoHomecontrolChannel::publishProductState()
 {
+    if(!knx.configured())return;
 #ifdef PVX_KoBlockOffset
     if(ParamBASE_ModuleEnabled_PVX){auto &valid=knx.getGroupObject(PVX_KoCalcNumber(PVX_KocValid));if(!valid.initialized()||bool(valid.value(Dpt(1,2))))valid.value(false,Dpt(1,2));}
 #endif
@@ -2542,6 +2559,7 @@ void IoHomecontrolChannel::onProfileParameterFeedback(uint8_t index, uint16_t ra
         mProfileReceivedMask &= ~(1U<<slot);
         updateProfileParameterValidity();return;
     }
+    if(!knx.configured())return;
     auto &feedback=knx.getGroupObject(PRF_KoCalcNumber(slot*3+1));
     const auto semantic=ioHomeResolvedParameterSemantic(profile,index);
     if (index==0 && ioHomeProfileObjectBinary(profile))
@@ -2559,6 +2577,7 @@ void IoHomecontrolChannel::onProfileParameterFeedback(uint8_t index, uint16_t ra
 
 void IoHomecontrolChannel::updateProfileParameterValidity()
 {
+    if(!knx.configured())return;
 #ifdef PRF_KoBlockOffset
     if (!ParamBASE_ModuleEnabled_PRF) return;
     const bool active=profileObjectsActive();
@@ -2604,6 +2623,7 @@ bool IoHomecontrolChannel::limitationKoValid() const {
     return limitationEnabled()&&mController.limitationDecision(_channelIndex).valid;
 }
 void IoHomecontrolChannel::updateLimitationStatus() {
+    if(!knx.configured())return;
     auto &ko=knx.getGroupObject(LIM_KoCalcNumber(LIM_KocActive));
     const auto &state=mController.limitationState(_channelIndex);
     const auto decision=mController.limitationDecision(_channelIndex);
@@ -2663,6 +2683,7 @@ void IoHomecontrolChannel::invalidateBattery() {
     }
 }
 void IoHomecontrolChannel::updateBatteryKo() {
+    if(!knx.configured())return;
     auto &ko=knx.getGroupObject(BAT_KoCalcNumber(BAT_KocLow));
     if(!batteryMonitoring()||!mBatteryInfo.selected().valid){mBatteryAlarmPublished=false;cancelPendingBatteryWrite(ko);return;}
     // Send the first confirmed state after reset even if it equals the old cache.

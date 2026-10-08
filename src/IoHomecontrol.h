@@ -38,6 +38,12 @@ public:
 
   const std::string name() override;
   const std::string version() override;
+#if defined(IOHC_STANDALONE_DIAG) && IOHC_STANDALONE_DIAG
+  void setup(bool configured) override;
+  void loop(bool configured) override;
+  uint32_t mStandaloneStartupAtMs=0;
+  bool mStandaloneStartupReady=false;
+#endif
   void setup() override;
   void loop() override;
   void processInputKo(GroupObject &iKo) override;
