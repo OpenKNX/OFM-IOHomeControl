@@ -4225,6 +4225,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc remote observed", "Show observed addresses");
     openknx.console.printHelpLine("iohc dynamic CH status|read", "Protocol-v4 raw capability objects 8100/8103");
     openknx.console.printHelpLine("iohc event trace on|off", "Trace owned-node RF payloads; event schema unresolved");
+    openknx.console.printHelpLine("iohc 2wtrace", "Dump bounded 2W TX/RX identity and timing evidence (no keys/auth bytes)");
     openknx.console.printHelpLine("iohc battery CH status|probe|probe09|objects", "Battery evidence and manual raw reads (Extended diagnostics)");
     openknx.console.printHelpLine("iohc sniff start [S]", "Start passive key sniff for S seconds");
     openknx.console.printHelpLine("iohc sniff stop|status|clear", "Manage passive key sniff result");
@@ -5279,8 +5280,11 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                  discoveryListenName(lDiscovery.listenChannels));
         return true;
     }
+    if (lSub == "2wtrace") {mController.printTwoWayTrace();return true;}
     if (lSub.substr(0, 6) == "status")
     {
+        logInfoP("2W sender gateway=%06X importedHub=%06X extractionDevice=%06X identity_collision=%u; serial numbers are separate metadata",
+            mController.getOwnNodeId(),mKeyImportHubNodeId,mKeyImportExtractionNodeId,mController.twoWayIdentityCollision());
         if (lSub.length() > 7)
         {
             uint8_t lIdx = 0;
@@ -8121,8 +8125,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if (parseHexBytes(lArg, lKey, 16))
         {
             mController.setGatewayKey(lKey);
-            logInfoP("Gateway stack key set (first 4 bytes: %02X%02X%02X%02X)",
-                     lKey[0], lKey[1], lKey[2], lKey[3]);
+            logInfoP("Gateway stack key set (redacted)");
         }
         else
         {

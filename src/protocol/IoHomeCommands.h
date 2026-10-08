@@ -147,7 +147,7 @@ enum class IoHomeCommand : uint8_t
 // decide whether optimistic local state may be committed or must be restored.
 enum class IoHomeCommandExchangeResult : uint8_t
 {
-    Completed = 0,
+    Completed = 0, // Transport/session completion only; not proof of acceptance or movement.
     // Reserved for a local build/radio failure. A peer timeout is Unknown,
     // because silence does not prove that a physical command was ignored.
     FailedBeforeAuthentication = 1,

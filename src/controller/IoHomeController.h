@@ -1011,6 +1011,29 @@ public:
   // Set own node ID (3-byte, 24-bit)
   void setOwnNodeId(uint32_t iNodeId);
   uint32_t getOwnNodeId() const;
+  enum class Evidence : uint8_t {Unknown,No,Yes};
+  struct TwoWayOutcome {
+    bool valid=false,transportComplete=false,authenticatedExchange=false;
+    Evidence deviceAccepted=Evidence::Unknown,actuationStarted=Evidence::Unknown,targetReached=Evidence::Unknown;
+    uint32_t gateway=0,peer=0;
+    IoHomeCommand command=IoHomeCommand::Execute;
+    IoHomeCommandExchangeResult result=IoHomeCommandExchangeResult::Unknown;
+  };
+  const TwoWayOutcome &lastTwoWayOutcome() const {return mLastTwoWayOutcome;}
+  struct TwoWayTracePoint {
+    uint32_t id=0,txId=0,timeMs=0,timeUs=0,src=0,dst=0,gateway=0,frequencyHz=0;
+    uint32_t sessionStartMs=0,rxReadUs=0,preambleUs=0,syncUs=0;
+    uint16_t preambleBytes=0,irq=0,deadlineMs=0;
+    uint8_t ctrl0=0,ctrl1=0,command=0,length=0,state=0,attempt=0,lbtAttempts=0;
+    int16_t lbtRssi=0;
+    bool rxTimestampValid=false,activityTimestampValid=false,crcChecked=false,crcValid=false,lbtBypassed=false;
+    const char *event="none";
+    char payload[129]{};
+  };
+  static constexpr uint8_t kTwoWayTraceCapacity=24;
+  const TwoWayTracePoint &twoWayTracePoint(uint32_t id) const { return mTwoWayTrace[(id-1)%kTwoWayTraceCapacity]; }
+  uint32_t twoWayTraceCount() const { return mTwoWayTraceCount; }
+  void printTwoWayTrace() const;
   void observeForeignController(uint32_t node);
   bool twoWayIdentityCollision() const { return mIdentityCollisionNode == mOwnNodeId && mOwnNodeId != 0; }
 
@@ -1188,6 +1211,10 @@ private:
   // Own identity
   uint32_t mOwnNodeId;
   uint32_t mIdentityCollisionNode=0;
+  TwoWayTracePoint mTwoWayTrace[kTwoWayTraceCapacity]{};
+  TwoWayOutcome mLastTwoWayOutcome;
+  uint32_t mTwoWayTraceCount=0,mTwoWayTxId=0;
+  void recordTwoWayTrace(const char *event,const IoHomeFrame &frame,uint8_t wireLength=0);
   uint8_t mSystemKey[16];
 
   // State machine

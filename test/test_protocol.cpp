@@ -12028,6 +12028,26 @@ TEST(controller_raw_two_way_execute_uses_normal_challenge_response_exchange)
     ASSERT_EQ(lController.state(), ControllerState::Idle);
     ASSERT_EQ(lChannel.testLastCommandExchangeResult(),
               IoHomeCommandExchangeResult::Completed);
+    bool sawExecute=false,sawChallenge=false,sawAuth=false,sawCorrelated=false;
+    for(uint32_t id=1;id<=lController.twoWayTraceCount();++id) {
+        const auto &p=lController.twoWayTracePoint(id);
+        ASSERT_EQ(p.id,id);ASSERT_EQ(p.gateway,lRemoteNodeId);
+        if(!std::strcmp(p.event,"tx_started")&&p.command==0x00) {
+            sawExecute=true;ASSERT_EQ(p.src,lRemoteNodeId);ASSERT_EQ(p.dst,lDeviceNodeId);
+            ASSERT_TRUE(!std::strcmp(p.payload,"01634A000000"));
+        }
+        if(p.command==0x3C){sawChallenge=true;ASSERT_TRUE(!std::strcmp(p.payload,"[redacted]"));}
+        if(p.command==0x3D){sawAuth=true;ASSERT_TRUE(!std::strcmp(p.payload,"[redacted]"));}
+        if(!std::strcmp(p.event,"rx_correlated"))sawCorrelated=true;
+    }
+    ASSERT_TRUE(sawExecute&&sawChallenge&&sawAuth&&sawCorrelated);
+
+    const auto &outcome=lController.lastTwoWayOutcome();
+    ASSERT_TRUE(outcome.valid&&outcome.transportComplete&&outcome.authenticatedExchange);
+    ASSERT_EQ(outcome.deviceAccepted,IoHomeController::Evidence::Unknown);
+    ASSERT_EQ(outcome.actuationStarted,IoHomeController::Evidence::Unknown);
+    ASSERT_EQ(outcome.targetReached,IoHomeController::Evidence::Unknown);
+
 }
 
 TEST(controller_raw_two_way_execute_rejects_non_registered_or_wrong_length)

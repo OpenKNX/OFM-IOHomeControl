@@ -1031,13 +1031,7 @@ namespace
                                         lChallenge, iSystemKey, lHmac))
             return false;
 
-#ifndef TEST_NATIVE
-        logDebug("", "2W discovery 0x2A: challenge=%02X%02X%02X%02X%02X%02X hmac=%02X%02X%02X%02X%02X%02X",
-                  lChallenge[0], lChallenge[1], lChallenge[2],
-                  lChallenge[3], lChallenge[4], lChallenge[5],
-                  lHmac[0], lHmac[1], lHmac[2],
-                  lHmac[3], lHmac[4], lHmac[5]);
-#endif
+
 
         memcpy(oFrame.data + sizeof(lChallenge), lHmac, sizeof(lHmac));
         oFrame.dataLen = sizeof(lChallenge) + sizeof(lHmac);
@@ -3383,7 +3377,7 @@ uint16_t IoHomeController::preambleForQueued2WAttempt(const IoHomeFrame &,
                                             ? kPreviousResults[lReasonIndex]
                                             : "unknown";
     if (lPlan.hasLastHeard)
-        logInfoP("2W try=%u cmd=0x%02X reason=%s previous=%s challenge=%s challenge_response=%s final_response=%s status=%s preamble=%u belief=%s use=%s age_ms=%lu",
+        logInfoP("2W PreamblePlan try=%u cmd=0x%02X reason=%s previous=%s challenge=%s challenge_response=%s final_response=%s status=%s preamble=%u belief=%s use=%s age_ms=%lu",
                  static_cast<unsigned>(iEntry.retries + 1U), static_cast<unsigned>(iEntry.command),
                  lReason, lPreviousResult,
                  iEntry.previousChallengeSeen ? "yes" : "no",
@@ -3394,7 +3388,7 @@ uint16_t IoHomeController::preambleForQueued2WAttempt(const IoHomeFrame &,
                  kUseNames[static_cast<uint8_t>(lPlan.use)],
                  static_cast<unsigned long>(lPlan.lastHeardAgeMs));
     else
-        logInfoP("2W try=%u cmd=0x%02X reason=%s previous=%s challenge=%s challenge_response=%s final_response=%s status=%s preamble=%u belief=%s use=%s age_ms=n/a",
+        logInfoP("2W PreamblePlan try=%u cmd=0x%02X reason=%s previous=%s challenge=%s challenge_response=%s final_response=%s status=%s preamble=%u belief=%s use=%s age_ms=n/a",
                  static_cast<unsigned>(iEntry.retries + 1U), static_cast<unsigned>(iEntry.command),
                  lReason, lPreviousResult,
                  iEntry.previousChallengeSeen ? "yes" : "no",
@@ -4009,7 +4003,7 @@ void IoHomeController::selectDirectedResponseTimeout(uint8_t ctrl1)
     mLastResponseTimingSample.selectedTimeoutMs = selected.milliseconds;
     mLastResponseTimingSample.timeoutGroup = selected.group;
     mLastResponseTimingSample.timeoutFallback = selected.fallback;
-    logDebugP("2W deadline=%ums MIBclass=%u CTRL1group=%u fallback=%s",
+    logDebugP("2W TimeoutSelector deadline=%ums MIBclass=%u CTRL1group=%u fallback=%s",
         selected.milliseconds, selected.responseClass, selected.group,
         selected.fallback ? "missing-or-incomplete-discovery-MIB" : "none");
 }
@@ -4370,6 +4364,15 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
     }
     if(iEntry.objectReadToken==mObjectReadToken&&iEntry.objectReadToken&&iResult!=IoHomeCommandExchangeResult::Completed)
         mObjectRead.fail();
+    const auto *outcomeChannel=channelForQueueEntry(iEntry);
+    if(!outcomeChannel||!outcomeChannel->is1W()) {
+        mLastTwoWayOutcome={};mLastTwoWayOutcome.valid=true;
+        mLastTwoWayOutcome.gateway=mOwnNodeId;mLastTwoWayOutcome.peer=iEntry.destNodeId;
+        mLastTwoWayOutcome.command=iEntry.command;mLastTwoWayOutcome.result=iResult;
+        mLastTwoWayOutcome.transportComplete=iResult==IoHomeCommandExchangeResult::Completed;
+        mLastTwoWayOutcome.authenticatedExchange=iEntry.hadAuthenticatedAccept||(mSawChallenge&&mAuthResponseSent);
+        if(iResult==IoHomeCommandExchangeResult::ExplicitlyRejected)mLastTwoWayOutcome.deviceAccepted=Evidence::No;
+    }
     if(mLastResponseTimingSample.ioAddress==iEntry.destNodeId && mLastResponseTimingSample.command==iEntry.command) {
         mLastResponseTimingSample.result=iResult;mLastResponseTimingSample.resultValid=true;
     }
@@ -6104,6 +6107,53 @@ void IoHomeController::processPendingDiscoveryResponses()
     mPendingDiscoveryCount = 0;
 }
 
+void IoHomeController::recordTwoWayTrace(const char *event,const IoHomeFrame &frame,uint8_t wireLength)
+{
+    if(frame.ctrlByte0&IOHC_CTRL0_MODE_1W)return;
+    auto &p=mTwoWayTrace[mTwoWayTraceCount%kTwoWayTraceCapacity];p={};
+    p.id=++mTwoWayTraceCount;p.txId=mTwoWayTxId;p.event=event;
+    p.timeMs=millis();p.timeUs=micros();p.src=frame.getSrcNodeId();p.dst=frame.getDestNodeId();p.gateway=mOwnNodeId;
+    p.ctrl0=frame.ctrlByte0;p.ctrl1=frame.ctrlByte1;p.command=uint8_t(frame.commandId);p.length=wireLength?wireLength:frame.dataLen;
+    p.frequencyHz=mCurrentFreqIdx<IOHC_NUM_FREQUENCIES?IOHC_FREQUENCIES[mCurrentFreqIdx]:0;
+    p.state=uint8_t(mState);p.sessionStartMs=mExchangeStartMs;p.attempt=mCurrentCmd.retries+1;
+    p.preambleBytes=mCurrentTxPreambleSymbols;p.deadlineMs=mResponseTimeoutMs;
+    p.lbtAttempts=mLastLbtAttempts;p.lbtRssi=mLastLbtRssi;p.lbtBypassed=mLastLbtBypassed;
+#if defined(RADIO_SX1276) && !defined(TEST_NATIVE)
+    if(!std::strcmp(event,"rx_observed")||!std::strcmp(event,"rx_correlated")) {
+        const auto &e=mRadio.lastReceiveEvidence();p.rxReadUs=e.readTimestampUs;p.rxTimestampValid=e.timestampValid;
+        p.irq=e.irq;p.crcChecked=e.hardwareCrcChecked;p.crcValid=e.hardwareCrcValid;
+        p.preambleUs=e.preambleTimestampUs;p.syncUs=e.syncTimestampUs;
+        p.activityTimestampValid=e.preambleTimestampValid&&e.syncTimestampValid;
+    }
+#endif
+    // Allowlist functional evidence only: no challenges, HMACs, keys or object chunks.
+    if(frame.commandId==IoHomeCommand::Execute||frame.commandId==IoHomeCommand::StatusUpdate||
+       frame.commandId==IoHomeCommand::PrivateResponse||frame.commandId==IoHomeCommand::ErrorResponse) {
+        const auto hex=ioHomeBytesToHexForLog(frame.data,frame.dataLen);
+        std::snprintf(p.payload,sizeof(p.payload),"%s",hex.c_str());
+    } else std::snprintf(p.payload,sizeof(p.payload),"[redacted]");
+}
+
+void IoHomeController::printTwoWayTrace() const
+{
+    logInfoP("2W identity gateway=%06X origin=local-or-restored collision=%u state=%s; transport completion does not prove actuation",mOwnNodeId,twoWayIdentityCollision(),stateName(mState));
+    const auto &outcome=mLastTwoWayOutcome;
+    logInfoP("2W lastOutcome valid=%u cmd=%02X peer=%06X gateway=%06X result=%u transport_complete=%u authenticated_exchange=%u device_accepted=%s actuation_started=unknown target_reached=unknown",
+        outcome.valid,unsigned(outcome.command),outcome.peer,outcome.gateway,unsigned(outcome.result),outcome.transportComplete,
+        outcome.authenticatedExchange,outcome.deviceAccepted==Evidence::No?"no":"unknown");
+    const uint32_t first=mTwoWayTraceCount>kTwoWayTraceCapacity?mTwoWayTraceCount-kTwoWayTraceCapacity+1:1;
+    for(uint32_t id=first;id<=mTwoWayTraceCount;++id) {
+        const auto &p=twoWayTracePoint(id);
+        logInfoP("2WTrace id=%lu localTX=%lu event=%s ms=%lu us=%lu sessionMs=%lu src=%06X dst=%06X gateway=%06X cmd=%02X ctrl=%02X/%02X RF=%lu state=%u attempt=%u deadlineMs=%u payload=%s",
+            (unsigned long)p.id,(unsigned long)p.txId,p.event,(unsigned long)p.timeMs,(unsigned long)p.timeUs,(unsigned long)p.sessionStartMs,
+            p.src,p.dst,p.gateway,p.command,p.ctrl0,p.ctrl1,(unsigned long)p.frequencyHz,p.state,p.attempt,p.deadlineMs,p.payload);
+        logInfoP("  preambleBytes=%u preambleBits=%lu preambleEstimateUs=%lu LBTattempts=%u LBTrssi=%d bypass=%u RXreadUs=%lu RXtimestampValid=%u IRQ=%04X CRCchecked=%u CRCvalid=%u preambleUs=%lu syncUs=%lu activityTimestampValid=%u (MCU observations, not RF timestamps)",
+            p.preambleBytes,(unsigned long)p.preambleBytes*8UL,(unsigned long)((uint64_t(p.preambleBytes)*8000000ULL)/IOHC_BITRATE),
+            p.lbtAttempts,p.lbtRssi,p.lbtBypassed,(unsigned long)p.rxReadUs,p.rxTimestampValid,p.irq,p.crcChecked,p.crcValid,
+            (unsigned long)p.preambleUs,(unsigned long)p.syncUs,p.activityTimestampValid);
+    }
+}
+
 RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8_t iLength)
 {
     if(iData&&iLength&&!(iData[0]&IOHC_CTRL0_MODE_1W)&&twoWayIdentityCollision()) {
@@ -6118,7 +6168,13 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
     if(iData&&iLength&&!(iData[0]&IOHC_CTRL0_MODE_1W)&&mModule&&!mModule->prepareTwoWayPersistence())
         return RadioError::HardwareError;
 #endif
-    return mRadio.startTransmit(iData, iLength);
+    const auto result=mRadio.startTransmit(iData,iLength);
+    IoHomeFrame frame;
+    if(iData&&iLength&&!(iData[0]&IOHC_CTRL0_MODE_1W)&&frame.deserializeRawWithOptionalCrc(iData,iLength)) {
+        ++mTwoWayTxId;
+        recordTwoWayTrace(result==RadioError::None?"tx_started":"tx_rejected",frame,iLength);
+    }
+    return result;
 }
 
 IoHomeController::OneWaySequenceDiagnostics IoHomeController::oneWaySequenceDiagnostics(uint8_t channel) const
@@ -6554,6 +6610,7 @@ void IoHomeController::loop()
         {
             if (!(mRxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W))
                 observeForeignController(mRxFrame.getSrcNodeId());
+            recordTwoWayTrace("rx_observed",mRxFrame,lLen);
             ++mRxScanMeasurements.captures;
             mRadioDiversity.activity(mCurrentFreqIdx,millis());
             const ControllerState lPairingStateBeforeRx = mState;
@@ -7413,6 +7470,8 @@ void IoHomeController::processTxInProgress()
         }
         else
         {
+            // Record before reopening RX, without console output in this window.
+            recordTwoWayTrace("tx_done_observed",mTxFrame,mTxLen);
             // 2W: switch to RX to listen for response
             markResponseTimingTxEnd();
             const RadioError lRxErr = mRadio.startReceive();
@@ -7592,7 +7651,7 @@ void IoHomeController::processWaitResponse()
                                             mCurrentCmd.sessionPolicy.totalBudgetMs;
                 if (!lRetrySafe)
                 {
-                    logInfoP("Command: Execute to 0x%06X accepted without final response; no resend (confirms=%s repeatable=%s)",
+                    logInfoP("Command: Execute to 0x%06X authenticated but execution unconfirmed; no resend (confirms=%s repeatable=%s)",
                              mCurrentCmd.destNodeId,
                              lKnownConfirmer ? "yes" : "no",
                              lRepeatable ? "yes" : "no");
@@ -7606,7 +7665,7 @@ void IoHomeController::processWaitResponse()
                 mCurrentCmd.previousFinalResponseSeen = false;
                 mCurrentCmd.previousStatusSeen = false;
                 mRetryAtMs = millis() + IOHC_UNCONFIRMED_EXECUTE_RETRY_GAP_MS;
-                logInfoP("Command: Execute to 0x%06X accepted without final response; one targeted resend in %u ms",
+                logInfoP("Command: Execute to 0x%06X authenticated but execution unconfirmed; one targeted resend in %u ms",
                          mCurrentCmd.destNodeId,
                          static_cast<unsigned>(IOHC_UNCONFIRMED_EXECUTE_RETRY_GAP_MS));
                 return;
@@ -7864,6 +7923,7 @@ void IoHomeController::processResponse()
             accepted=mObjectRead.acceptReadChunk(mCurrentCmd.destNodeId,mObjectReadToken,mRxFrame.data,mRxFrame.dataLen);
         if(!accepted){mState=ControllerState::WaitResponse;return;}
     }
+    recordTwoWayTrace("rx_correlated",mRxFrame,mRxRawLen);
     recordResponseTiming(mRxFrame.commandId != IoHomeCommand::ChallengeRequest);
 
     // Check for challenge-response authentication (0x3C) for authenticated 2W commands
@@ -7983,10 +8043,10 @@ void IoHomeController::processResponse()
     }
     const bool lStatusSeen = mRxFrame.commandId == IoHomeCommand::StatusUpdate ||
                              mRxFrame.commandId == IoHomeCommand::PrivateResponse;
-    logInfoP("2W result cmd=0x%02X result=%s challenge=%s challenge_response=%s final_response=yes status=%s",
+    logInfoP("2W result cmd=0x%02X result=%s authenticated_exchange=%s challenge_response=%s final_response=yes status=%s device_accepted=unknown actuation_started=unknown target_reached=unknown",
              static_cast<unsigned>(lCompletedCmd.command),
-             lExplicitFailure ? "explicit_rejection" : "completed",
-             mSawChallenge ? "yes" : "no",
+             lExplicitFailure ? "explicit_rejection" : "transport_complete",
+             mSawChallenge && mAuthResponseSent ? "yes" : "no",
              mAuthResponseSent ? "yes" : "no",
              lStatusSeen ? "yes" : "no");
     notifyCommandExchangeResult(lCompletedCmd,
