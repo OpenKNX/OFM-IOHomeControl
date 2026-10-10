@@ -103,6 +103,9 @@ public:
   void onStatusPollFailed(bool iAfterChallenge);
   void onCommandExchangeResult(IoHomeCommand iCommand, uint8_t iParam,
                                IoHomeCommandExchangeResult iResult);
+  void observe2WMovingStatus(bool iIsMoving);
+  uint32_t twoWayMovingEvidenceGeneration() const { return m2WMovingEvidenceGeneration; }
+  void onUnanswered2WWake(uint32_t iExchangeStartMs, uint32_t iGeneration);
   bool confirmsExecute() const;
   TwoWayWakeBelief twoWayWakeBeliefAt(uint32_t iNowMs, bool iStopCommand = false) const;
   bool twoWayLastHeardAgeAt(uint32_t iNowMs, uint32_t &oAgeMs) const;
@@ -252,6 +255,7 @@ private:
   bool mIsMoving = false;
   bool mHas2WHeardEvidence = false;
   bool mHas2WMovingEvidence = false;
+  uint32_t m2WMovingEvidenceGeneration = 0;
   bool mConfirmsExecute = false; // runtime evidence: peer has closed an Execute exchange
   uint32_t mLast2WHeardMs = 0;
   uint32_t mLast2WMovingEvidenceMs = 0;

@@ -259,6 +259,7 @@ public:
     mStatusMoving = iMoving;
     mHas2WHeardEvidence = true;
     mLast2WHeardMs = ioHomeTestMillis();
+    ++m2WMovingEvidenceGeneration;
     mHas2WMovingEvidence = iMoving;
     if (iMoving)
       mLast2WMovingEvidenceMs = ioHomeTestMillis();
@@ -516,19 +517,30 @@ public:
       mHas2WHeardEvidence = true;
       mLast2WHeardMs = ioHomeTestMillis();
     }
-    const bool lAccepted = iResult == IoHomeCommandExchangeResult::Completed ||
-                           iResult == IoHomeCommandExchangeResult::AuthenticatedUnconfirmed;
-    if (iCommand == IoHomeCommand::Execute && iParam != 0xD2 && iParam != 0xD8 && lAccepted)
-    {
-      mHas2WMovingEvidence = true;
-      mLast2WMovingEvidenceMs = ioHomeTestMillis();
-    }
+
     if (iCommand == IoHomeCommand::Execute && iParam == 0xD2 &&
-        (lAccepted || iResult == IoHomeCommandExchangeResult::Unknown))
+        (iResult == IoHomeCommandExchangeResult::Completed ||
+         iResult == IoHomeCommandExchangeResult::AuthenticatedUnconfirmed ||
+         iResult == IoHomeCommandExchangeResult::Unknown ||
+         iResult == IoHomeCommandExchangeResult::SessionExhausted))
     {
-      mHas2WMovingEvidence = false;
       mStopSettlePollPending = true;
     }
+  }
+  void observe2WMovingStatus(bool iMoving)
+  {
+    mHas2WHeardEvidence = true;
+    mLast2WHeardMs = ioHomeTestMillis();
+    ++m2WMovingEvidenceGeneration;
+    mHas2WMovingEvidence = iMoving;
+    if (iMoving) mLast2WMovingEvidenceMs = ioHomeTestMillis();
+  }
+  uint32_t twoWayMovingEvidenceGeneration() const { return m2WMovingEvidenceGeneration; }
+  void onUnanswered2WWake(uint32_t iExchangeStartMs, uint32_t iGeneration)
+  {
+    if (mHas2WMovingEvidence && iGeneration == m2WMovingEvidenceGeneration &&
+        static_cast<int32_t>(mLast2WMovingEvidenceMs - iExchangeStartMs) <= 0)
+      mHas2WMovingEvidence = false;
   }
   bool confirmsExecute() const { return mConfirmsExecute; }
   TwoWayWakeBelief twoWayWakeBeliefAt(uint32_t iNowMs, bool iStopCommand = false) const
@@ -643,6 +655,7 @@ private:
   bool mStatusMoving = false;
   bool mHas2WHeardEvidence = false;
   bool mHas2WMovingEvidence = false;
+  uint32_t m2WMovingEvidenceGeneration = 0;
   bool mConfirmsExecute = false;
   uint32_t mLast2WHeardMs = 0;
   uint32_t mLast2WMovingEvidenceMs = 0;

@@ -77,6 +77,9 @@ public:
   RadioError setOutputPower(uint8_t iPower);
   RadioError setPreambleLength(uint16_t iSymbols);
   RadioError setPreambleLengthBlocking(uint16_t iSymbols);
+  bool preambleEvidenceAvailable() const { return true; }
+  bool syncEvidenceAvailable() const { return true; }
+  uint16_t maxPreambleLength() const { return 8191; }
   uint16_t defaultStartPreamble() const { return 48; }
   uint16_t defaultResponsePreamble() const { return 8; }
   RadioError setRxBandwidth(RadioSX1262RxBandwidth iBandwidth);
@@ -105,6 +108,10 @@ public:
   uint32_t txDoneCount() const;
   uint32_t rxStartCount() const;
   uint32_t irqCount() const;
+  uint32_t irqQueueOverflowCount() const { return mPendingIrqOverflowCount; }
+  bool softwarePhyEnabled() const { return mSoftwarePhyMode; }
+  uint32_t lastPreambleIrqUs() const { return mLastPreambleIrqUs; }
+  uint32_t lastSyncIrqUs() const { return mSoftwarePhySyncAtUs; }
   uint32_t preambleIrqCount() const;
   uint32_t syncWordIrqCount() const;
   uint32_t rxDoneCount() const;
@@ -190,6 +197,7 @@ private:
   bool mSoftwarePhyMode;
   bool mEms2Mode;
   bool mTxToRxSettlePending;
+  uint32_t mLastPreambleIrqUs = 0;
   volatile uint32_t mSoftwarePhySyncAtUs;
   uint8_t mEarlyRxFrame[IOHC_FRAME_BUFFER_SIZE];
   uint8_t mEarlyRxFrameLen;

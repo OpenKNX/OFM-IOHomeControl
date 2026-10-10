@@ -50,6 +50,7 @@ public:
   RadioError setOutputPower(uint8_t iPower);
   // RegPreambleMsb/Lsb count FSK bytes, not bits or UART-framed software bytes.
   RadioError setPreambleLength(uint16_t iPreambleBytes);
+  uint16_t maxPreambleLength() const { return 65535; }
   uint16_t defaultStartPreamble() const { return 32; }
   uint16_t defaultResponsePreamble() const { return 12; }
   RadioError startTransmit(const uint8_t *iData, uint8_t iLen);
@@ -60,6 +61,8 @@ public:
   bool isSyncDetected() const;
   uint8_t readPacket(uint8_t *oBuffer, uint8_t iMaxLen);
   int16_t lastRssi() const;
+  bool preambleEvidenceAvailable() const { return mDio4Pin != PIN_NOT_CONNECTED; }
+  bool syncEvidenceAvailable() const { return mDio2Pin != PIN_NOT_CONNECTED; }
   const RadioReceiveEvidence &lastReceiveEvidence() const { return mLastReceiveEvidence; }
   bool currentRssi(int16_t &oRssi);
   void sleep();

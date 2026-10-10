@@ -158,52 +158,33 @@ enum class IoHomeCommandExchangeResult : uint8_t
     MediaAccessFailed = 6, // RF producer failed before any accepted transmission
 };
 
-// Experimental low-power wake estimate.  It is intentionally a runtime-only
-// diagnostic until a 2W actuator confirms the policy on real hardware.
-enum class TwoWayWakeBelief : uint8_t
-{
-    Asleep = 0,
-    MaybeAwake = 1,
-    Awake = 2,
-};
-
+// Wake belief requires actual moving status. Last reception is diagnostic only;
+// transport/authentication completion and optimistic travel are not movement.
+enum class TwoWayWakeBelief : uint8_t { Asleep = 0, Awake = 2 };
+constexpr uint16_t IOHC_2W_WAKE_PREAMBLE_DEFAULT = 1024;
 constexpr uint32_t IOHC_2W_MOVING_EVIDENCE_MS = 120000UL;
-constexpr uint32_t IOHC_2W_RECENTLY_HEARD_MS = 30000UL;
-
 inline TwoWayWakeBelief twoWayWakeBelief(bool iHasMovingEvidence,
                                          uint32_t iLastMovingEvidenceMs,
-                                         bool iHasHeardEvidence,
-                                         uint32_t iLastHeardMs,
+                                         bool /*iHasHeardEvidence*/,
+                                         uint32_t /*iLastHeardMs*/,
                                          uint32_t iNowMs,
-                                         bool iStopCommand = false)
+                                         bool /*iStopCommand*/ = false)
 {
-    if (iStopCommand ||
-        (iHasMovingEvidence && static_cast<uint32_t>(iNowMs - iLastMovingEvidenceMs) <= IOHC_2W_MOVING_EVIDENCE_MS))
-        return TwoWayWakeBelief::Awake;
-    if (iHasHeardEvidence && static_cast<uint32_t>(iNowMs - iLastHeardMs) <= IOHC_2W_RECENTLY_HEARD_MS)
-        return TwoWayWakeBelief::MaybeAwake;
-    return TwoWayWakeBelief::Asleep;
+    return iHasMovingEvidence &&
+           static_cast<uint32_t>(iNowMs - iLastMovingEvidenceMs) <= IOHC_2W_MOVING_EVIDENCE_MS
+               ? TwoWayWakeBelief::Awake : TwoWayWakeBelief::Asleep;
 }
-
 inline uint16_t twoWayWakePreamble(TwoWayWakeBelief iBelief, uint8_t iAttemptIndex,
-                                   uint16_t iNormalStartPreamble)
+                                   uint16_t iNormalStartPreamble,
+                                   uint16_t iWakePreamble = IOHC_2W_WAKE_PREAMBLE_DEFAULT)
 {
-    const uint8_t lAttempt = iAttemptIndex > 2 ? 2 : iAttemptIndex;
-    if (iBelief == TwoWayWakeBelief::Awake)
-        return lAttempt == 1 ? 1024 : iNormalStartPreamble; // normal, long, normal
-    if (iBelief == TwoWayWakeBelief::MaybeAwake)
-        return lAttempt == 0 ? iNormalStartPreamble : 1024; // normal, long, long
-    return 1024;                          // asleep: always wake first
+    // Indices are zero based. Every retry, including clamped indices, is long.
+    return iBelief == TwoWayWakeBelief::Awake && iAttemptIndex == 0
+               ? iNormalStartPreamble : iWakePreamble;
 }
-
 inline const char *twoWayWakeBeliefName(TwoWayWakeBelief iBelief)
 {
-    switch (iBelief)
-    {
-    case TwoWayWakeBelief::Awake: return "awake";
-    case TwoWayWakeBelief::MaybeAwake: return "maybe-awake";
-    default: return "asleep";
-    }
+    return iBelief == TwoWayWakeBelief::Awake ? "awake" : "asleep";
 }
 
 // Discovery-family wire policy.  These settings deliberately keep command,

@@ -101,10 +101,12 @@ struct TwoWayPreamblePlan
   bool valid = false;
   TwoWayWakeBeliefUse use = TwoWayWakeBeliefUse::NotLowPower;
   TwoWayWakeBelief belief = TwoWayWakeBelief::Asleep;
+  uint16_t wakePreamble = IOHC_PREAMBLE_LONG;
   uint16_t normalPreamble = IOHC_PREAMBLE_NORMAL_START;
   uint16_t fixedPreamble = IOHC_PREAMBLE_SHORT;
   bool hasLastHeard = false;
   uint32_t lastHeardAgeMs = 0;
+  uint32_t movingEvidenceGeneration = 0;
 };
 
 struct OneWayCopyShape
@@ -198,6 +200,9 @@ struct IoHomeQueueEntry
   IoHomeSessionPolicy sessionPolicy;
   uint8_t authenticatedUnconfirmedTries;
   bool hadAuthenticatedAccept;
+  bool hadPeerResponse = false;
+  bool sawWrongPeer = false;
+  bool sawUnexpectedResponse = false;
   TwoWayRetryReason retryReason;
   bool previousChallengeSeen;
   bool previousChallengeResponseSent;
@@ -418,6 +423,7 @@ public:
     uint16_t rxIrq=0;
     bool rxEvidenceAvailable=false,resultValid=false;
     RadioReceiveEvidence receiveEvidence{};
+    const char *failureReason="none";
     IoHomeCommandExchangeResult result=IoHomeCommandExchangeResult::Unknown;
     uint8_t manufacturerId = 0;
     uint16_t profile = 0;
@@ -863,7 +869,11 @@ public:
   uint8_t diagnostic2WFrameVersion() const { return mDiagnostic2WFrameVersion; }
   void setDiagnostic2WPowerClass(TwoWayPowerClass iPowerClass);
   TwoWayPowerClass diagnostic2WPowerClass() const;
-  void setDiagnostic2WStartPreamble(uint16_t iPreambleSymbols);
+  bool setDiagnostic2WStartPreamble(uint16_t iPreambleSymbols);
+  bool setLowPower2WWakePreamble(uint16_t iPreambleBytes);
+  uint16_t lowPower2WWakePreamble() const { return mLowPower2WWakePreamble; }
+  uint16_t max2WPreamble() const { return mRadio.maxPreambleLength(); }
+  static uint32_t txTimeoutForAirtime(uint8_t iFrameLen, uint16_t iPreambleBytes);
   uint16_t diagnostic2WStartPreamble() const;
   void setDiagnostic2WWakeBelief(bool iEnabled);
   bool diagnostic2WWakeBelief() const;
@@ -878,6 +888,7 @@ public:
   const ResponseTimingSample &lastResponseTimingSample() const;
   const DiagnosticFpSample &lastDiagnosticFpSample() const { return mLastDiagnosticFpSample; }
 #ifdef TEST_NATIVE
+  uint32_t testTxAirtimeAccum(uint8_t iFreq) const { return mTxTimeAccum[iFreq]; }
   void testFailReservationWrites(bool iFail) { mReservationJournal.failWrites=iFail; }
   void testSetTrustRxPosition(bool iTrust) { mTrustRxPosition = iTrust; }
 #endif
@@ -1017,6 +1028,7 @@ public:
     Evidence deviceAccepted=Evidence::Unknown,actuationStarted=Evidence::Unknown,targetReached=Evidence::Unknown;
     uint32_t gateway=0,peer=0;
     IoHomeCommand command=IoHomeCommand::Execute;
+    const char *failureReason="none";
     IoHomeCommandExchangeResult result=IoHomeCommandExchangeResult::Unknown;
   };
   const TwoWayOutcome &lastTwoWayOutcome() const {return mLastTwoWayOutcome;}
@@ -1027,6 +1039,13 @@ public:
     uint8_t ctrl0=0,ctrl1=0,command=0,length=0,state=0,attempt=0,lbtAttempts=0;
     int16_t lbtRssi=0;
     bool rxTimestampValid=false,activityTimestampValid=false,crcChecked=false,crcValid=false,lbtBypassed=false;
+    TwoWayWakeBelief belief = TwoWayWakeBelief::Asleep;
+    TwoWayWakeBeliefUse beliefUse = TwoWayWakeBeliefUse::NotLowPower;
+    uint8_t powerSaveMode = 0xFF;
+    uint32_t txDoneUs=0,rxReadyDelayUs=0,rxReadFailures=0,irqQueueOverflows=0;
+    uint32_t preambleIrqs=0,syncIrqs=0,crcErrors=0,parseFailures=0;
+    bool txDoneValid=false,preambleEvidenceAvailable=false,syncEvidenceAvailable=false,softwarePhy=false;
+    const char *failureReason="none";
     const char *event="none";
     char payload[129]{};
   };
@@ -1301,6 +1320,8 @@ private:
   uint32_t mExchangeStartRxDoneCount = 0;
   uint32_t mExchangeStartCrcErrorCount = 0;
   uint32_t mExchangeStartPreambleCount = 0;
+  uint32_t mExchangeStartParseFailCount = 0;
+  uint32_t mExchangeStartReadFailCount = 0;
   uint32_t mExchangeStartSyncCount = 0;
   uint32_t mExchangeRequestTxEndUs = 0;
   uint32_t mDirectedRequestTxStartUs = 0;
@@ -1519,6 +1540,11 @@ private:
   uint8_t mLastResponseFreqIdx; // frequency index where last response was received
   uint8_t mDiagnostic2WFrameVersion = 0; // queued 2W bench override only; never persisted
   TwoWayPowerClass mDiagnostic2WPowerClass = TwoWayPowerClass::Automatic;
+  uint16_t mLowPower2WWakePreamble = IOHC_PREAMBLE_LONG;
+  bool mQueuedTxAccounted = false;
+  IoHomeFrame mQueuedTxFrame;
+  uint8_t mQueuedTxWireLength = 0;
+  uint32_t mQueuedTxDoneMs = 0;
   uint16_t mDiagnostic2WStartPreamble = 0; // 0 = derive from effective power class
   bool mDiagnostic2WWakeBelief = true;
   TwoWayDiscoverySettings mDiagnosticDiscoverySettings{};

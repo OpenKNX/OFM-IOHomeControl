@@ -643,14 +643,20 @@ void IoHomecontrolChannel::onTargetPositionFeedback(float iTargetPositionPercent
     mTargetPosition = clampPercent(iTargetPositionPercent);
 }
 
-void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
+void IoHomecontrolChannel::observe2WMovingStatus(bool iIsMoving)
 {
     const uint32_t lNow = millis();
     mHas2WHeardEvidence = true;
     mLast2WHeardMs = lNow;
+    ++m2WMovingEvidenceGeneration;
     mHas2WMovingEvidence = iIsMoving;
     if (iIsMoving)
         mLast2WMovingEvidenceMs = lNow;
+}
+
+void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
+{
+    observe2WMovingStatus(iIsMoving);
 
     mStatusPollTimer = delayTimerInit();
     mStatusPollFailures = 0;
@@ -1917,21 +1923,12 @@ void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8
         mLast2WHeardMs = millis();
     }
 
-    const bool lAccepted = iResult == IoHomeCommandExchangeResult::Completed ||
-                           iResult == IoHomeCommandExchangeResult::AuthenticatedUnconfirmed;
-    if (iCommand == IoHomeCommand::Execute && iParam != 0xD2 && iParam != 0xD8 && lAccepted)
-    {
-        mHas2WMovingEvidence = true;
-        mLast2WMovingEvidenceMs = millis();
-    }
-
     if (iCommand != IoHomeCommand::Execute || iParam != 0xD2)
         return;
 
     switch (iResult)
     {
     case IoHomeCommandExchangeResult::Completed:
-        mHas2WMovingEvidence = false;
         mStopSettlePollPending = true;
         clearStopTravelSnapshot();
         break;
@@ -1942,7 +1939,6 @@ void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8
     case IoHomeCommandExchangeResult::AuthenticatedUnconfirmed:
         // The actuator authenticated the STOP, so replay/rollback is unsafe.
         // Keep the snapshot until a status update or a new movement resolves it.
-        mHas2WMovingEvidence = false;
         mStopSettlePollPending = true;
         scheduleStatusPoll(defaultTrackedStatusPollDelayMs());
         logInfoP("STOP exchange authenticated but unconfirmed; waiting for status verification");
@@ -1952,7 +1948,6 @@ void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8
         // Silence is not proof that the motor missed STOP. Preserve the
         // pre-STOP trajectory only as a snapshot until a real status resolves
         // whether it stopped or kept moving.
-        mHas2WMovingEvidence = false;
         mStopSettlePollPending = true;
         scheduleStatusPoll(defaultTrackedStatusPollDelayMs());
         logInfoP("STOP exchange not confirmed; waiting for status verification");
@@ -1961,6 +1956,14 @@ void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8
         restoreStopTravelSnapshot();
         break;
     }
+}
+
+void IoHomecontrolChannel::onUnanswered2WWake(uint32_t iExchangeStartMs, uint32_t iGeneration)
+{
+    // Do not consume moving evidence received during the unanswered exchange.
+    if (mHas2WMovingEvidence && iGeneration == m2WMovingEvidenceGeneration &&
+        static_cast<int32_t>(mLast2WMovingEvidenceMs - iExchangeStartMs) <= 0)
+        mHas2WMovingEvidence = false;
 }
 
 bool IoHomecontrolChannel::confirmsExecute() const

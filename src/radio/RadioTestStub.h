@@ -67,6 +67,10 @@ public:
     return RadioError::None;
   }
   RadioError setPreambleLengthBlocking(uint16_t iSymbols) { return setPreambleLength(iSymbols); }
+  void testSetMaxPreambleLength(uint16_t iMax) { mMaxPreambleLength = iMax; }
+  bool preambleEvidenceAvailable() const { return true; }
+  bool syncEvidenceAvailable() const { return true; }
+  uint16_t maxPreambleLength() const { return mMaxPreambleLength; }
   uint16_t defaultStartPreamble() const { return mDefaultStartPreamble; }
   uint16_t defaultResponsePreamble() const { return mDefaultResponsePreamble; }
 
@@ -98,8 +102,10 @@ public:
     return startTransmit(iData, iLen);
   }
 
+  void testSetReceiveBusyCount(uint8_t iCount) { mReceiveBusyCount = iCount; }
   RadioError startReceive()
   {
+    if (mReceiveBusyCount) { --mReceiveBusyCount; return RadioError::Busy; }
     if (!mInitialized)
       return RadioError::NotInitialized;
     mState = RadioState::Receiving;
@@ -243,6 +249,7 @@ private:
     int16_t rssi;
   };
 
+  uint8_t mReceiveBusyCount = 0;
   bool mInitialized = false;
   bool mTxDonePending = false;
   RadioState mState = RadioState::Idle;
@@ -261,6 +268,7 @@ private:
   uint16_t mLastIrqStatus = 0;
   uint8_t mTestLastRxLen = 0;
   uint16_t mLastPreambleLength = 0;
+  uint16_t mMaxPreambleLength = 8191;
   uint16_t mDefaultStartPreamble = 48;
   uint16_t mDefaultResponsePreamble = 8;
   RadioError mNextFrequencyError = RadioError::None;

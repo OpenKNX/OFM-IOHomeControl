@@ -1,4 +1,5 @@
 #include "RadioSX1262.h"
+#include "SX1262Preamble.h"
 #include "SX1262IoHomePhy.h"
 #include "sx1262Regs-Fsk.h"
 #include "../protocol/IoHomeCommands.h"
@@ -488,16 +489,26 @@ RadioError RadioSX1262::setPreambleLengthBlocking(uint16_t iSymbols)
 
 RadioError RadioSX1262::setPreambleLengthInternal(uint16_t iSymbols, bool iBlocking)
 {
+    uint8_t lMsb = 0, lLsb = 0;
+    if (!sx1262EncodePreamble(iSymbols, lMsb, lLsb))
+    {
+        logError("SX1262", "Invalid preamble bytes=%u; expected 1..8191", iSymbols);
+        return RadioError::InvalidParam;
+    }
     if (!mInitialized)
         return RadioError::NotInitialized;
     if (mState == RadioState::Transmitting)
         return RadioError::Busy;
 
-    mPreambleLength = iSymbols;
     if (mState == RadioState::Receiving && !tryStandby(iBlocking))
         return RadioError::Busy;
+    const uint16_t lPrevious = mPreambleLength;
+    mPreambleLength = iSymbols;
     if (!applyPacketParams(iBlocking))
+    {
+        mPreambleLength = lPrevious;
         return RadioError::Busy;
+    }
     return RadioError::None;
 }
 
@@ -1270,12 +1281,11 @@ bool RadioSX1262::applyPacketParams(bool iBlocking)
     // [7]   CrcType: 0x01 = off, 0x06 = 2-byte CRC
     // [8]   Whitening: 0x00 = off (io-homecontrol does not use whitening)
     uint8_t lParams[9];
-    uint16_t lPreambleBits = mPreambleLength * 8;
+    if (!sx1262EncodePreamble(mPreambleLength, lParams[0], lParams[1]))
+        return false;
     uint8_t lPayloadLen = mPacketPayloadLen;
     if (lPayloadLen == 0)
         lPayloadLen = mSoftwarePhyMode ? SX1262_IOHOME_RX_FIXED_LEN : IOHC_FRAME_BUFFER_SIZE;
-    lParams[0] = (lPreambleBits >> 8) & 0xFF;
-    lParams[1] = lPreambleBits & 0xFF;
     lParams[2] = 0x04;                           // preamble detector: 8 bits (1 byte)
     lParams[3] = mSyncWordBits;                  // sync word length is encoded in bits on SX126x GFSK packet params
     lParams[4] = 0x00;                           // no address filtering
@@ -1619,6 +1629,7 @@ void RadioSX1262::noteIrqStatus(uint16_t iIrq, bool iPolled)
         mPreambleOnlyIrqCount++;
     if (iIrq & SX1262_IRQ_PREAMBLE_DETECTED)
     {
+        if (!mPreambleFlag) mLastPreambleIrqUs = micros();
         mPreambleFlag = true;
         mPreambleIrqCount++;
     }

@@ -1,0 +1,1 @@
+trial_id,tx_id,date,firmware_sha,radio_chip,device_node,device_state,other_sender_active,ctrl0,ctrl1,command,preamble_bytes,try_index,frequency_hz,tx_start_us,tx_done_us,rx_ready_us,preamble_seen,sync_seen,rx_done_us,rx_rssi_dbm,challenge_seen,final_response,response_correlated,status_received,poll_completed,failure_reason

@@ -59,7 +59,7 @@ No ETS defaults or generated parameter memory are edited.
    the applicable diagnostics to verify the identity and channel binding survived.
 
 Existing runtime RF overrides remain available: `iohc 2wdiag power auto|always|low`,
-`iohc 2wdiag preamble auto|N`, `iohc 2wdiag wake on|off`, `iohc 2wdiag status`.
+`iohc 2wdiag preamble auto|N`, `iohc 2wdiag wake-preamble auto|N`, `iohc 2wdiag wake on|off`, `iohc 2wdiag status`.
 Pairing timing, keys and authentication use the existing device-independent paths.
 
 ## Existing gateway (no actuator reset)

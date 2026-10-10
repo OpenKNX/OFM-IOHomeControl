@@ -4170,6 +4170,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc 2wdiag version auto|3", "Runtime queued-2W bench override; no automatic negotiation");
     openknx.console.printHelpLine("iohc 2wdiag power auto|always|low", "Runtime-only 2W power-class override");
     openknx.console.printHelpLine("iohc 2wdiag preamble auto|N", "Runtime-only directed 2W START preamble override");
+    openknx.console.printHelpLine("iohc 2wdiag wake-preamble auto|N", "Runtime low-power wake length; default 1024 bytes");
     openknx.console.printHelpLine("iohc 2wdiag wake on|off", "Experimental per-attempt low-power wake preamble belief");
     openknx.console.printHelpLine("iohc 2wdiag discovery FIELD VALUE", "Override discovery command/dest/ACK/LOW_POWER/preamble independently");
     openknx.console.printHelpLine("iohc 2wdiag status|reset", "Show or clear runtime-only 2W overrides");
@@ -5131,6 +5132,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             mController.setDiagnostic2WFrameVersion(0);
             mController.setDiagnostic2WPowerClass(TwoWayPowerClass::Automatic);
             mController.setDiagnostic2WStartPreamble(0);
+            mController.setLowPower2WWakePreamble(IOHC_PREAMBLE_LONG);
             mController.setDiagnostic2WWakeBelief(true);
             mController.setDiagnosticDiscoverySettings(TwoWayDiscoverySettings{});
         }
@@ -5239,13 +5241,26 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             else
             {
                 uint32_t lSymbols = 0;
-                if (!parseUnsignedDecimal(lPreamble, lSymbols) || lSymbols == 0 || lSymbols > 65535UL)
+                if (!parseUnsignedDecimal(lPreamble, lSymbols) || lSymbols == 0 || lSymbols > mController.max2WPreamble())
                 {
-                    logInfoP("Usage: iohc 2wdiag preamble auto|1..65535");
+                    logInfoP("Usage: iohc 2wdiag preamble auto|1..%u", mController.max2WPreamble());
                     return true;
                 }
                 mController.setDiagnostic2WStartPreamble(static_cast<uint16_t>(lSymbols));
             }
+        }
+        else if (lArg.rfind("wake-preamble ", 0) == 0)
+        {
+            const std::string lValue = trimSpaces(lArg.substr(14));
+            uint32_t lBytes = IOHC_PREAMBLE_LONG;
+            if (lValue != "auto" &&
+                (!parseUnsignedDecimal(lValue, lBytes) || lBytes == 0 ||
+                 lBytes > mController.max2WPreamble()))
+            {
+                logInfoP("Usage: iohc 2wdiag wake-preamble auto|1..%u", mController.max2WPreamble());
+                return true;
+            }
+            mController.setLowPower2WWakePreamble(static_cast<uint16_t>(lBytes));
         }
         else if (lArg.rfind("wake ", 0) == 0)
         {
@@ -5262,7 +5277,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         }
         else if (!lArg.empty() && lArg != "status")
         {
-            logInfoP("Usage: iohc 2wdiag power ... | preamble ... | wake on|off | discovery FIELD VALUE | status | reset");
+            logInfoP("Usage: iohc 2wdiag power ... | preamble ... | wake-preamble ... | wake on|off | discovery FIELD VALUE | status | reset");
             return true;
         }
 
@@ -5278,6 +5293,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                      IoHomecontrolChannel::twoWayPowerClassName(mController.diagnostic2WPowerClass()),
                      static_cast<unsigned>(lPreamble),
                      mController.diagnostic2WWakeBelief() ? "on" : "off");
+        logInfoP("2WDiag: lowPowerWakePreamble=%u maximumPreamble=%u", mController.lowPower2WWakePreamble(), mController.max2WPreamble());
         const TwoWayDiscoverySettings &lDiscovery = mController.diagnosticDiscoverySettings();
         logInfoP("2WDiag discovery: cmd=%s dest=%s ack=%s lp=%s preamble=%s listen=%s runtime-only",
                  discoveryCommandName(lDiscovery.command),
