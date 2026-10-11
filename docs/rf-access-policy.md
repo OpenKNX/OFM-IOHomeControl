@@ -13,11 +13,11 @@ retain more history than an exact rolling hour. Every accepted TX is charged
 once, including retries, ACKs, authentication replies and RF diagnostics; no
 refund is made for aborts or lost TX_DONE. Counters saturate instead of wrapping.
 
-Production boot/reinitialization starts a **3636000 ms quiet recovery period**
-(one hour plus maximum packet tail). RX still operates. This conservative uptime
-policy covers unknown pre-reset RF history without flash wear or trusted wall
-clock; reboot/brownout starts another full wait. It affects pairing and normal
-commands as well as background polls. There is no startup exception for ACKs.
+Boot/reinitialization has no RF startup holdoff. Commands can transmit as soon as
+radio initialization and normal protocol checks finish. The accounting ledger
+is RAM-resident; a reboot starts with an empty ledger, while reinitialization
+within the same controller preserves its existing charged airtime. Temporary
+bypass is disabled at initialization.
 
 `QualifiedPoliteAccess` is represented but **cannot be selected**. The prospective
 36000 ms CH2 fairness target is not an enabled/legal duty limit. The console
@@ -51,7 +51,7 @@ iohc duty reset-debug
 Bare `debug on` refuses until explicit confirmation. The status reports mode,
 used/limit/current/previous bucket milliseconds, blocked count, latest required
 TX airtime, reservedMs=0, session ID and conservative earliestEligibleMs as a
-**delay**, including recovery. These are estimates, not promises of exact rolling
+**delay**. These are estimates, not promises of exact rolling
 hour availability. There are no reservations: acceptance is authoritative.
 Bypassed transmissions log frequency, preamble, size, airtime and charged total,
 benchBypass/simulationBypass and session ID. Off/reset-debug retain all history.
@@ -91,7 +91,7 @@ Source references (not a certification):
 ## Regression checks
 
 From OFM: `python3 test/test_rf_access_policy.py` checks production/simulation/
-debug/production gates, debug web-console support, expiry, uint32 wrap, saturation and reboot recovery.
+debug/production gates, debug web-console support, expiry, uint32 wrap, saturation and immediate startup.
 The native controller suite checks duty admission for direct/queued/1W/ACK/
 auth/discovery paths, LBT behavior, no refund on lost TX_DONE and simulated bypass.
 Hardware acceptance remains pending; only ordinary builds may leave the lab.

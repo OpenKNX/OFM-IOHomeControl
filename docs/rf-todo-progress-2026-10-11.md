@@ -14,8 +14,8 @@ Pre-existing README/battery/wake and recovery documents were preserved.
 - All controller TX plus seven formerly direct module diagnostic calls use
   central admission and charge-on-accept. Existing LBT/authentication/frequency/
   persistence/ownership guards remain. Bypass TX logs airtime and session.
-- Conservative production boot/brownout recovery: full 3636000 ms quiet period.
-  No ordinary/ACK/pairing startup exceptions. RX remains available.
+- No startup RF holdoff, as requested. Transmission is available immediately
+  after radio initialization; RAM-only accounting restarts after reboot.
 - Per-band used/limit/current/previous/next airtime, blocked central-attempt
   counters, reserved=0 and conservative earliest-eligible delay diagnostics.
 - Battery queue/RF completion/reply distinctions and terminal duty results with
@@ -26,7 +26,7 @@ Pre-existing README/battery/wake and recovery documents were preserved.
   channels, retaining STOP/motion/authentication and historical battery rules.
 - Existing one-shot battery commands work with cyclic ETS polling disabled.
 - Regression checks for bands, windows, rollover, uint32 wrap, saturation,
-  recovery, production/debug gates, repeated simulated accepts, no refund,
+  immediate startup, production/debug gates, repeated simulated accepts, no refund,
   duty-blocked probes/objects, identity invalidation and actual poll scheduling.
 - Separate SX1262/SX1276 bench environments and application dependency pin.
 

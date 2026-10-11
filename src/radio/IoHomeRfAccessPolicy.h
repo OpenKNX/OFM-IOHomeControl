@@ -24,15 +24,7 @@ public:
         default:return "DutyLimited";
         }
     }
-    void beginRecovery(uint32_t now) { recoveryStart=now;recovering=true;off(); }
-    uint32_t recoveryRemaining(uint32_t now) const {
-        // One full observation window plus maximum packet tail, measured only
-        // by this boot's uptime. Every reboot/brownout restarts the quiet period.
-        const uint32_t elapsed=uint32_t(now-recoveryStart);
-        return recovering && elapsed<IoHomeDutyBudget::bucketMs ? IoHomeDutyBudget::bucketMs-elapsed:0;
-    }
     void advance(uint32_t now) {
-        if(recovering&&!recoveryRemaining(now))recovering=false;
         if(active==Mode::BenchUnlimited&&uint32_t(now-benchStart)>=benchDurationMs)off();
     }
     Mode mode(uint32_t now) const {
@@ -59,18 +51,16 @@ public:
     bool admits(const IoHomeDutyBudget &budget,uint32_t hz,uint32_t airtime,uint32_t now)const {
         if(IoHomeDutyBudget::band(hz)>=3||airtime>36000U)return false;
         if(bypass(now))return true;
-        return !recoveryRemaining(now)&&budget.admits(hz,airtime);
+        return budget.admits(hz,airtime);
     }
     uint32_t retryAfter(const IoHomeDutyBudget &budget,uint32_t hz,uint32_t airtime,uint32_t now)const {
         if(admits(budget,hz,airtime,now))return 0;
-        const auto wait=budget.retryAfter(hz,airtime,now),recovery=recoveryRemaining(now);
-        return wait>recovery?wait:recovery;
+        return budget.retryAfter(hz,airtime,now);
     }
     // No qualification evidence exists for either production PHY. Requests
     // fail closed; a console switch or a partial LBT check is not evidence.
     bool qualified() {off();return false;}
 private:
     Mode active=Mode::DutyLimited;
-    uint32_t benchStart=0,recoveryStart=0,session=0;
-    bool recovering=false;
+    uint32_t benchStart=0,session=0;
 };

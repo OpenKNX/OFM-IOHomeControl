@@ -1506,10 +1506,7 @@ void IoHomeController::init()
     mRetryAtMs = 0;
     mExchangeStartMs = 0;
     mRfDutyBudget.advance(millis());
-#ifndef TEST_NATIVE
-    mRfAccessPolicy.beginRecovery(millis());
-    logInfoP("RF recovery: quiet observation period=%lu ms; reboot cannot refund airtime",(unsigned long)IoHomeDutyBudget::bucketMs);
-#endif
+    mRfAccessPolicy.off(); // No startup holdoff; temporary bypass never survives reinitialization.
     logInfoP("2W wake belief: %s; normal directed START preamble: %s=%u",
              mDiagnostic2WWakeBelief ? "on" : "off",
              mDiagnostic2WStartPreamble == 0 ? "auto" : "override",
@@ -6364,8 +6361,8 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
             (unsigned long)mRfDutyBudget.used(IOHC_FREQUENCIES[mCurrentFreqIdx]),
             (unsigned long)airtime,
             (unsigned long)IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(IOHC_FREQUENCIES[mCurrentFreqIdx])));
-        logInfoP("RF access blocked mode=%s recoveryMs=%lu retryAfterMs=%lu reservedMs=0",
-            IoHomeRfAccessPolicy::name(mRfAccessPolicy.mode(millis())),(unsigned long)mRfAccessPolicy.recoveryRemaining(millis()),
+        logInfoP("RF access blocked mode=%s retryAfterMs=%lu reservedMs=0",
+            IoHomeRfAccessPolicy::name(mRfAccessPolicy.mode(millis())),
             (unsigned long)mRfAccessPolicy.retryAfter(mRfDutyBudget,IOHC_FREQUENCIES[mCurrentFreqIdx],airtime,millis()));
         observeBatteryDiagnostic(mCurrentCmd,IoHomeBatteryDiagnostic::State::DutyBlocked);
         return RadioError::DutyCycleExceeded; // no timing exemptions, including 0x3D
@@ -12718,11 +12715,11 @@ void IoHomeController::printDutyStatus()
     for(uint8_t b=0;b<3;++b) {
         [[maybe_unused]] const uint32_t hz=b==0?868250000U:b==1?868950000U:869850000U;
         [[maybe_unused]] const uint32_t next=mRfNextAirtimeMs[b]?mRfNextAirtimeMs[b]:1;
-        logInfoP("RF duty band=%u mode=%s usedMs=%lu limitMs=%lu reservedMs=0 nextTxAirtimeMs=%lu blockedTxCount=%lu currentBucket=%lu previousBucket=%lu earliestEligibleMs=%lu recoveryMs=%lu session=%lu qualified=0",
+        logInfoP("RF duty band=%u mode=%s usedMs=%lu limitMs=%lu reservedMs=0 nextTxAirtimeMs=%lu blockedTxCount=%lu currentBucket=%lu previousBucket=%lu earliestEligibleMs=%lu session=%lu qualified=0",
             b,IoHomeRfAccessPolicy::name(mRfAccessPolicy.mode(now)),(unsigned long)mRfDutyBudget.used(hz),
             (unsigned long)IoHomeDutyBudget::allowance(b),(unsigned long)next,(unsigned long)mRfBlockedTxCount[b],
             (unsigned long)mRfDutyBudget.currentUsed(b),(unsigned long)mRfDutyBudget.previousUsed(b),
-            (unsigned long)mRfAccessPolicy.retryAfter(mRfDutyBudget,hz,next,now),(unsigned long)mRfAccessPolicy.recoveryRemaining(now),
+            (unsigned long)mRfAccessPolicy.retryAfter(mRfDutyBudget,hz,next,now),
             (unsigned long)mRfAccessPolicy.sessionId());
     }
 }

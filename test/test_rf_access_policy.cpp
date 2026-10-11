@@ -23,13 +23,15 @@ int main() {
 #else
     assert(!p.bench(0,true));
 #endif
-    p.beginRecovery(100);assert(!p.admits(b,868250000,1,100));
-    p.advance(100+IoHomeDutyBudget::bucketMs);assert(p.admits(b,868250000,1,100+IoHomeDutyBudget::bucketMs));
-    p.beginRecovery(UINT32_MAX-100);assert(p.recoveryRemaining(100)==IoHomeDutyBudget::bucketMs-201);
+    // Startup is immediately eligible; only actual charged airtime can block it.
+    IoHomeDutyBudget fresh;fresh.advance(100);IoHomeRfAccessPolicy startup;
+    assert(startup.admits(fresh,868950000,279,100));
+    assert(startup.retryAfter(fresh,868950000,279,100)==0);
+    startup.off();assert(startup.admits(fresh,868950000,279,100));
     b.charge(868950000,UINT32_MAX);b.charge(868950000,1);assert(b.used(868950000)==UINT32_MAX);
     assert(b.retryAfter(868950000,279,0)==2*IoHomeDutyBudget::bucketMs);
     b.advance(IoHomeDutyBudget::bucketMs);assert(!b.admits(868950000,1));
     b.advance(2*IoHomeDutyBudget::bucketMs);assert(b.admits(868950000,3600));
     assert(!p.admits(b,433000000,1,0));assert(!p.admits(b,868950000,36001,0));
-    std::cout << "RF policy gates, expiry, saturation and conservative recovery passed\n";
+    std::cout << "RF policy gates, expiry, saturation and immediate startup passed\n";
 }
