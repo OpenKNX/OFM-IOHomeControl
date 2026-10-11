@@ -292,6 +292,8 @@ private:
   uint16_t mUnconfirmedExchangeCount = 0;
 
   uint32_t mStatusPollTimer = 0;
+  uint32_t mRfPollRetryAtMs=0;
+  bool mRfPollWaiting=false;
   uint32_t mNextStatusPollMs = 0;
   uint32_t mPollTrackingDeadlineMs = 0;
   bool mSingleFollowUpPollPending = false;

@@ -4307,7 +4307,8 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         unsigned index=0;char action[16]{};char extra=0;
         if(sscanf(iCmd.c_str(),"iohc battery %u %15s %c",&index,action,&extra)!=2||index<1||index>mNumChannels){logInfoP("Usage: iohc battery CHANNEL status|probe|probe09|objects");return true;}
         auto *channel=mChannels[index-1];if(!channel)return true;
-        if(!std::strcmp(action,"status")){channel->printBatteryStatus();return true;}
+        if(!std::strcmp(action,"status")){channel->printBatteryStatus();mController.printBatteryDiagnostic(index-1);
+            logInfoP("Battery deferred pending=%u",mPendingBatteryDiagnostic.channel==index-1);return true;}
         uint8_t requested=0;
         if(!std::strcmp(action,"probe"))requested=6;
         else if(!std::strcmp(action,"probe09"))requested=9;

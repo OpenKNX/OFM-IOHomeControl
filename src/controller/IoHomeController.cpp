@@ -2408,7 +2408,10 @@ bool IoHomeController::requestBatteryPrivate(IoHomecontrolChannel *channel,uint8
     entry.command=IoHomeCommand::Private;entry.param=function;entry.param2=0xFF;entry.param3=0xFF;
     entry.managementRead=true;std::memcpy(entry.managementKey,channel->getEncryptionKey(),16);
     entry.productContextRevision=channel->productContextRevision();entry.sourceChannelIndex=channelIndexFor(channel);
-    entry.maxAttempts=1;entry.background=true;entry.active=true;return queuePush(entry);
+    entry.maxAttempts=1;entry.background=true;entry.active=true;entry.batteryDiagnostic=true;
+    if(!queuePush(entry))return false;
+    if(entry.sourceChannelIndex<16)mBatteryDiagnostics[entry.sourceChannelIndex].begin(entry.destNodeId,entry.managementKey,entry.productContextRevision,function,millis());
+    return true;
 }
 bool IoHomeController::requestBatteryObjects(IoHomecontrolChannel *channel) {
     if(!channel||channel->batteryMonitoring()!=2||mBatterySequenceChannel<16||mDynamicSequenceChannel<16||!mModule||!mModule->managementRequestsAllowed())return false;
@@ -2424,7 +2427,11 @@ void IoHomeController::serviceBatteryObjects() {
         const uint16_t object=uint16_t(opening[3])<<8|opening[4];
         if(mModule&&objectReadIdentityValid()&&opening[5]==0&&opening[6]==0&&ioHomeBatteryObject(opening[1],object)) {
             auto *channel=mModule->getChannel(mObjectReadChannel);
-            if(channel&&channel->batteryMonitoring()==2)channel->onBatteryObject(opening[1],object,mObjectRead.data(),mObjectRead.transferred());
+            if(channel&&channel->batteryMonitoring()==2) {
+                auto &d=mBatteryDiagnostics[mObjectReadChannel];
+                if(d.token==mObjectReadToken){d.observe(IoHomeBatteryDiagnostic::State::ReplyReceived,millis());d.observe(IoHomeBatteryDiagnostic::State::Complete,millis());}
+                channel->onBatteryObject(opening[1],object,mObjectRead.data(),mObjectRead.transferred());
+            }
         }
     }
     if(mBatterySequenceChannel>=16)return;
@@ -2433,7 +2440,16 @@ void IoHomeController::serviceBatteryObjects() {
         cancelObjectRead(mBatterySequenceToken);mBatterySequenceChannel=0xFF;return;
     }
     if(mObjectRead.active())return;
-    if(mObjectRead.stage()!=IoHomeObjectTransfer::Stage::Done&&mObjectRead.stage()!=IoHomeObjectTransfer::Stage::Rejected){mBatterySequenceChannel=0xFF;return;}
+    auto &diagnostic=mBatteryDiagnostics[mBatterySequenceChannel];
+    if(diagnostic.result==IoHomeBatteryDiagnostic::State::DutyBlocked) {
+        for(uint8_t i=mBatterySequenceIndex+1;i<5;++i)diagnostic.objects[i]=IoHomeBatteryDiagnostic::State::DutyBlocked;
+        mBatterySequenceChannel=0xFF;return; // no repeated sends after exhausted quota
+    }
+    using S=IoHomeObjectTransfer::Stage;
+    if(mObjectRead.stage()==S::Done||mObjectRead.stage()==S::Rejected)diagnostic.observe(IoHomeBatteryDiagnostic::State::ReplyReceived,millis());
+    diagnostic.observe(mObjectRead.stage()==S::Done?IoHomeBatteryDiagnostic::State::Complete:
+        mObjectRead.stage()==S::Rejected?IoHomeBatteryDiagnostic::State::Unsupported:
+        mObjectRead.stage()==S::Timeout?IoHomeBatteryDiagnostic::State::Timeout:IoHomeBatteryDiagnostic::State::Failed,millis());
     if(mState!=ControllerState::Idle||!queueEmpty())return;
     if(++mBatterySequenceIndex>=5){mBatterySequenceChannel=0xFF;return;}
     const uint16_t objects[]={0xA601,0xA607,0xA60E,9,0x4003};
@@ -2519,6 +2535,7 @@ bool IoHomeController::enqueueObjectReadPart(bool opening)
     IoHomeQueueEntry entry{};entry.destNodeId=mObjectReadPeer;entry.encKey=mObjectReadKey;
     entry.managementRead=true;std::memcpy(entry.managementKey,mObjectReadKey,16);
     entry.objectReadToken=mObjectReadToken;entry.sourceChannelIndex=mObjectReadChannel;entry.productContextRevision=mObjectReadRevision;
+    entry.batteryDiagnostic=mObjectReadChannel<16&&mBatteryDiagnostics[mObjectReadChannel].token==mObjectReadToken;
     entry.command=opening?IoHomeCommand::Unknown46Request:IoHomeCommand::Unknown4ARequest;
     entry.objectReadLength=opening?9:mObjectRead.pendingSize();
     std::memcpy(entry.objectReadData,opening?mObjectRead.openingData():mObjectRead.pendingData(),entry.objectReadLength);
@@ -2536,6 +2553,14 @@ bool IoHomeController::requestObjectRead(IoHomecontrolChannel *channel,uint8_t p
     const uint8_t index=channelIndexFor(channel);if(index>=16)return false;
     if(!mObjectRead.begin(IoHomeObjectTransfer::Direction::Read,channel->getNodeId(),mObjectReadToken+1,provider,key,offset,span,millis(),30000))return false;
     ++mObjectReadToken;mObjectReadPeer=channel->getNodeId();mObjectReadChannel=index;mObjectReadRevision=channel->productContextRevision();std::memcpy(mObjectReadKey,channel->getEncryptionKey(),16);
+    if(ioHomeBatteryObject(provider,key)&&channel->batteryMonitoring()==2) {
+        auto &d=mBatteryDiagnostics[index];
+        if(mBatterySequenceChannel!=index||!d.matches(channel->getNodeId(),channel->getEncryptionKey(),channel->productContextRevision())||d.action)
+            d.begin(channel->getNodeId(),channel->getEncryptionKey(),channel->productContextRevision(),0,millis());
+        if(channel->getProtocolIdentity().manufacturerId!=2)for(uint8_t i=0;i<3;++i)d.objects[i]=IoHomeBatteryDiagnostic::State::NotApplicable;
+        d.token=mObjectReadToken;d.objectSlot=key==0xA601?0:key==0xA607?1:key==0xA60E?2:key==9?3:4;
+        d.observe(IoHomeBatteryDiagnostic::State::Queued,millis());
+    }
     if(!enqueueObjectReadPart(true)){mObjectRead.fail();return false;}return true;
 }
 bool IoHomeController::cancelObjectRead(uint32_t token){return mObjectRead.cancel(token);}
@@ -4313,6 +4338,14 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
                                                    IoHomeCommandExchangeResult iResult)
 {
     finishLimitation(iEntry,iResult);
+    if(iEntry.batteryDiagnostic) {
+        const auto state=iResult==IoHomeCommandExchangeResult::Completed?IoHomeBatteryDiagnostic::State::Complete:
+            mLastTxDutyDenied?IoHomeBatteryDiagnostic::State::DutyBlocked:
+            iResult==IoHomeCommandExchangeResult::ExplicitlyRejected?IoHomeBatteryDiagnostic::State::Unsupported:
+            iResult==IoHomeCommandExchangeResult::SessionExhausted||iResult==IoHomeCommandExchangeResult::Unknown?IoHomeBatteryDiagnostic::State::Timeout:
+            IoHomeBatteryDiagnostic::State::Failed;
+        if(!iEntry.objectReadToken||state!=IoHomeBatteryDiagnostic::State::Complete)observeBatteryDiagnostic(iEntry,state);
+    }
     if(iResult==IoHomeCommandExchangeResult::ExplicitlyRejected||iResult==IoHomeCommandExchangeResult::FailedBeforeAuthentication||
        iResult==IoHomeCommandExchangeResult::MediaAccessFailed) {
         auto *channel=channelForQueueEntry(iEntry);
@@ -6326,6 +6359,7 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
         logInfoP("RF access blocked mode=%s recoveryMs=%lu retryAfterMs=%lu reservedMs=0",
             IoHomeRfAccessPolicy::name(mRfAccessPolicy.mode(millis())),(unsigned long)mRfAccessPolicy.recoveryRemaining(millis()),
             (unsigned long)mRfAccessPolicy.retryAfter(mRfDutyBudget,IOHC_FREQUENCIES[mCurrentFreqIdx],airtime,millis()));
+        observeBatteryDiagnostic(mCurrentCmd,IoHomeBatteryDiagnostic::State::DutyBlocked);
         return RadioError::DutyCycleExceeded; // no timing exemptions, including 0x3D
     }
 #if defined(RADIO_SX1262)
@@ -6348,6 +6382,7 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
             admittedMode==IoHomeRfAccessPolicy::Mode::SimulationUnlimited,
             (unsigned long)IOHC_FREQUENCIES[mCurrentFreqIdx],mCurrentTxPreambleSymbols,iLength,(unsigned long)airtime,
             (unsigned long)mRfDutyBudget.used(IOHC_FREQUENCIES[mCurrentFreqIdx]),(unsigned long)mRfAccessPolicy.sessionId());
+        observeBatteryDiagnostic(mCurrentCmd,IoHomeBatteryDiagnostic::State::RfStarted);
         ++mRfCounters.transmittedPackets;
         mQueuedTxDoneObserved=false;
         mQueuedTxWireLength=iLength;
@@ -7640,6 +7675,7 @@ void IoHomeController::processTxInProgress()
         {
             mQueuedTxDoneObserved = true;
             mQueuedTxDoneMs = millis();
+            if(mRadio.isTxDone())observeBatteryDiagnostic(mCurrentCmd,IoHomeBatteryDiagnostic::State::RfCompleted);
             if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest &&
                 !mAuthResponseSent && mDirectedRequestTxEndUs == 0)
                 mDirectedRequestTxEndUs = micros();
@@ -10488,7 +10524,7 @@ RadioError IoHomeController::configureTxRadio(uint16_t iPreambleSymbols, const u
     {
         const RadioError lFreqErr = mRadio.setFrequency(*iFrequencyHz);
         if (lFreqErr != RadioError::None) {
-            if(lFreqErr!=RadioError::Busy)logInfoP("RF configure rejected: selectedTxHz=%lu frequency_error=%d",(unsigned long)*iFrequencyHz,int(lFreqErr));
+            if(lFreqErr!=RadioError::Busy){mRfAccessPolicy.off();logInfoP("RF configure rejected: selectedTxHz=%lu frequency_error=%d",(unsigned long)*iFrequencyHz,int(lFreqErr));}
             return lFreqErr;
         }
         updateCurrentFrequencyIndex(*iFrequencyHz);
@@ -10497,6 +10533,7 @@ RadioError IoHomeController::configureTxRadio(uint16_t iPreambleSymbols, const u
     const RadioError lPreambleErr = mRadio.setPreambleLength(iPreambleSymbols);
     if (lPreambleErr == RadioError::None)
         mCurrentTxPreambleSymbols = iPreambleSymbols;
+    if(lPreambleErr!=RadioError::None&&lPreambleErr!=RadioError::Busy)mRfAccessPolicy.off();
     return lPreambleErr;
 }
 
@@ -11371,7 +11408,8 @@ void IoHomeController::dispatchRxFrame()
             }
             if(mRxFrame.commandId==IoHomeCommand::ErrorResponse&&mCurrentCmd.active&&mCurrentCmd.command==IoHomeCommand::Private&&
                (mCurrentCmd.param==6||mCurrentCmd.param==9)&&mCurrentCmd.destNodeId==lSrcNode&&lDestNode==mOwnNodeId&&managementIdentityMatches(mCurrentCmd))
-                lCh->onBatteryPrivate(mCurrentCmd.param,mRxFrame,mRadio.lastRssi(),mCurrentFreqIdx,uint32_t(micros()-mExchangeRequestTxEndUs));
+                { observeBatteryDiagnostic(mCurrentCmd,IoHomeBatteryDiagnostic::State::ReplyReceived);
+                  lCh->onBatteryPrivate(mCurrentCmd.param,mRxFrame,mRadio.lastRssi(),mCurrentFreqIdx,uint32_t(micros()-mExchangeRequestTxEndUs)); }
             if(mRxFrame.commandId==IoHomeCommand::ErrorResponse&&mRxFrame.dataLen&&mCurrentCmd.active&&
                mCurrentCmd.destNodeId==lSrcNode&&lDestNode==mOwnNodeId&&managementIdentityMatches(mCurrentCmd)&&
                ((mCurrentCmd.managementRead&&managementIdentityMatches(mCurrentCmd))||
@@ -11431,7 +11469,8 @@ void IoHomeController::dispatchRxFrame()
             {
                 if(mCurrentCmd.active&&mCurrentCmd.command==IoHomeCommand::Private&&(mCurrentCmd.param==6||mCurrentCmd.param==9)) {
                     if(mCurrentCmd.destNodeId==lSrcNode&&lDestNode==mOwnNodeId&&managementIdentityMatches(mCurrentCmd))
-                        lCh->onBatteryPrivate(mCurrentCmd.param,mRxFrame,mRadio.lastRssi(),mCurrentFreqIdx,uint32_t(micros()-mExchangeRequestTxEndUs));
+                        { observeBatteryDiagnostic(mCurrentCmd,IoHomeBatteryDiagnostic::State::ReplyReceived);
+                  lCh->onBatteryPrivate(mCurrentCmd.param,mRxFrame,mRadio.lastRssi(),mCurrentFreqIdx,uint32_t(micros()-mExchangeRequestTxEndUs)); }
                     break; // raw battery probes never enter position/product/percentage publication
                 }
                 if(mCurrentCmd.mpFpRead) {
@@ -12690,4 +12729,42 @@ RadioError IoHomeController::startDiagnosticTransmit(const uint8_t *data,uint8_t
 {
     const auto prep=configureTxRadio(preamble,&hz);
     return prep==RadioError::None?startControllerTransmit(data,len,blocking):prep;
+}
+
+const IoHomeBatteryDiagnostic &IoHomeController::batteryDiagnostic(uint8_t channel)const
+{
+    static const IoHomeBatteryDiagnostic empty{};
+    if(channel>=16)return empty;
+    const auto &d=mBatteryDiagnostics[channel];
+    return d.node&&sampleIdentityMatches(channel,d.node,d.key,d.revision)?d:empty;
+}
+void IoHomeController::observeBatteryDiagnostic(const IoHomeQueueEntry &entry,IoHomeBatteryDiagnostic::State state)
+{
+    if(!entry.active||!entry.batteryDiagnostic||entry.sourceChannelIndex>=16)return;
+    auto &d=mBatteryDiagnostics[entry.sourceChannelIndex];
+    if(!d.matches(entry.destNodeId,entry.managementKey,entry.productContextRevision)||
+       (entry.objectReadToken&&entry.objectReadToken!=d.token))return;
+    d.observe(state,millis());
+    if(state==IoHomeBatteryDiagnostic::State::DutyBlocked) {
+        d.requiredMs=mRfNextAirtimeMs[IoHomeDutyBudget::band(IOHC_FREQUENCIES[mCurrentFreqIdx])];
+        const uint32_t hz=IOHC_FREQUENCIES[mCurrentFreqIdx],used=mRfDutyBudget.used(hz),limit=IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(hz));
+        d.remainingMs=used<limit?limit-used:0;
+        d.retryAfterMs=mRfAccessPolicy.retryAfter(mRfDutyBudget,hz,d.requiredMs,millis());
+        logInfoP("Battery diagnostic reason=%s_duty_blocked requiredMs=%lu remainingMs=%lu retryAfterMs=%lu",
+            d.action==6?"battery_probe06":d.action==9?"battery_probe09":"battery_objects",(unsigned long)d.requiredMs,(unsigned long)d.remainingMs,(unsigned long)d.retryAfterMs);
+    }
+    logInfoP("Battery diagnostic ch=%u action=%s state=%s rfAccepted=%lu requiredMs=%lu remainingMs=%lu retryAfterMs=%lu; queue acceptance is not RF completion",
+        entry.sourceChannelIndex+1,d.action==6?"battery_probe06":d.action==9?"battery_probe09":"battery_objects",
+        d.resultName(),(unsigned long)d.rfAcceptedCount,(unsigned long)d.requiredMs,
+        (unsigned long)d.remainingMs,(unsigned long)d.retryAfterMs);
+}
+void IoHomeController::printBatteryDiagnostic(uint8_t channel)
+{
+    [[maybe_unused]] const auto &d=batteryDiagnostic(channel);
+    logInfoP("Battery diagnostic ch=%u lastProbeResult=%s pending=%u lastProbeRfAttempt=%lu rfStarted=%u rfCompleted=%u replyReceived=%u rfAccepted=%lu retryAfterMs=%lu resultAgeMs=%lu",
+        channel+1,d.resultName(),d.result==IoHomeBatteryDiagnostic::State::Queued||d.result==IoHomeBatteryDiagnostic::State::RfStarted,
+        (unsigned long)d.lastRfAttemptMs,d.rfStarted,d.rfCompleted,d.replyReceived,(unsigned long)d.rfAcceptedCount,
+        (unsigned long)d.retryAfterMs,d.node?(unsigned long)(millis()-d.resultMs):0);
+    [[maybe_unused]] const uint16_t objects[]={0xA601,0xA607,0xA60E,9,0x4003};
+    if(!d.action)for(unsigned i=0;i<5;++i)logInfoP("  object=%04X state=%s",objects[i],IoHomeBatteryDiagnostic::name(d.objects[i]));
 }

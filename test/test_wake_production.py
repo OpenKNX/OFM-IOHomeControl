@@ -23,6 +23,7 @@ harness=r'''#include <cassert>
 unsigned now=1000;unsigned millis(){return now;}
 #define logInfoP(...) ((void)0)
 #define logDebugP(...) ((void)0)
+#define logInfoP(...) ((void)0)
 constexpr uint32_t kTrackedStatusPollWindowMs=600000;
 bool timeReached(uint32_t a,uint32_t b){return int32_t(a-b)>=0;}
 unsigned delayTimerInit(){return millis();}
@@ -30,7 +31,8 @@ enum class ParameterSemantic {SlatOrientation,HangerOrientation};
 struct IoHomeProfileDescriptor{};
 uint8_t ioHomeParameterIndex(const IoHomeProfileDescriptor*,ParameterSemantic){return 3;}
 struct Controller {
- unsigned submissions=0;uint8_t maxAttempts=0;
+ unsigned submissions=0;uint8_t maxAttempts=0;uint32_t rfWait=0;
+ unsigned statusPollRetryAfterMs(){return rfWait;}
  bool sendBackgroundCommand(uint32_t,const uint8_t*,IoHomeCommand,uint8_t,uint8_t,uint8_t attemptsParam,uint8_t attempts) {
   (void)attemptsParam;++submissions;maxAttempts=attempts;return true;
  }
@@ -40,6 +42,7 @@ struct IoHomecontrolChannel {
  uint32_t mLast2WHeardMs=0,mLast2WMovingEvidenceMs=0,m2WMovingEvidenceGeneration=0;
  bool snapshot=true;unsigned restores=0,polls=0;
  bool mIs1W=false,mStatusExpected=false,mSingleFollowUpPollPending=false;
+ unsigned _channelIndex=0;uint32_t mRfPollRetryAtMs=0;bool mRfPollWaiting=false;
  uint32_t mNodeId=0x123456,mStatusPollTimer=0,mPollTrackingDeadlineMs=0,mNextStatusPollMs=0;
  uint8_t mEncKey[16]{},mAuthPollFailures=0,mStatusPollFailures=0;
  Controller mController;
@@ -81,6 +84,10 @@ tests=r'''int main(){
  ch.mStopSettlePollPending=false;assert(ch.requestStatus(true)&&ch.mController.maxAttempts==1);
  ch.mStopSettlePollPending=true;assert(ch.requestStatus(true)&&ch.mController.maxAttempts==IOHC_EXCHANGE_MAX_ATTEMPTS);
  assert(!ch.mStopSettlePollPending);
+ ch.mController.rfWait=3600000;auto before=ch.mController.submissions;assert(!ch.requestStatus(false));
+ assert(ch.mRfPollWaiting&&ch.mRfPollRetryAtMs==millis()+3600250);assert(ch.mController.submissions==before);
+ ch.mController.rfWait=0;assert(!ch.requestStatus(false));now=ch.mRfPollRetryAtMs;
+ assert(ch.requestStatus(false)&&!ch.mRfPollWaiting&&ch.mController.submissions==before+1);
  ch.mIs1W=true;auto submissions=ch.mController.submissions;assert(!ch.requestStatus(true)&&ch.mController.submissions==submissions);
  ch.mIs1W=false;now=UINT32_MAX-100;
  ch.onStatusPollFailed(false);assert(ch.mStatusPollFailures==1&&uint32_t(ch.mNextStatusPollMs-now)==1000);

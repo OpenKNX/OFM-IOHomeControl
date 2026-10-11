@@ -20486,6 +20486,7 @@ TEST(controller_battery_private_probes_are_opt_in_and_never_percent_or_position)
     const uint8_t data[]={1,0x60,0,100,0,100,100,100};IoHomeFrame f;
     buildSimpleResponseFrame(f,0x123456,0x654321,IoHomeCommand::PrivateResponse,data,sizeof(data));ASSERT_TRUE(queueControllerResponse(c,f));
     ASSERT_EQ(ch.testBatteryPrivateReplies(),1U);ASSERT_TRUE(!ch.batteryInfo().coarse.valid&&!ch.testHasBatteryLevel()&&!ch.testHasPositionFeedback());
+    ASSERT_TRUE(c.batteryDiagnostic(0).rfStarted&&c.batteryDiagnostic(0).rfCompleted&&c.batteryDiagnostic(0).replyReceived);
     ch.onBatteryLevel(100);ASSERT_TRUE(!ch.testHasBatteryLevel());
 }
 TEST(controller_battery_status_uses_only_full_normal_private_response) {
@@ -21246,4 +21247,32 @@ TEST(controller_simulation_unlimited_retains_accounting_and_identity_guards)
     c.testSimulationUnlimited();c.observeForeignController(0x123456);
     ASSERT_EQ(c.testDirectTransmit(data,len,1024,868950000U),RadioError::HardwareError);
     ASSERT_EQ(c.radio().testTransmitCount(),1U);
+}
+
+TEST(controller_battery_probes_duty_blocked_are_never_reported_transmitted)
+{
+    for(uint8_t action:{uint8_t(6),uint8_t(9),uint8_t(0)}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);ch.setBatteryMonitoring(2);
+        c.testChargeDuty(868950000U,3404U);c.setDiagnostic2WStartPreamble(1024);
+        ASSERT_TRUE(action?c.requestBatteryPrivate(&ch,action):c.requestBatteryObjects(&ch));
+        ASSERT_EQ(c.batteryDiagnostic(0).result,IoHomeBatteryDiagnostic::State::Queued);
+        IoHomeFrame tx;ASSERT_TRUE(!transmitQueuedControllerFrame(c,tx));c.loop();
+        const auto &d=c.batteryDiagnostic(0);
+        ASSERT_EQ(d.result,IoHomeBatteryDiagnostic::State::DutyBlocked);
+        ASSERT_TRUE(!d.rfStarted&&!d.rfCompleted&&!d.replyReceived);
+        ASSERT_EQ(d.rfAcceptedCount,0U);ASSERT_TRUE(d.requiredMs>196U);ASSERT_EQ(d.remainingMs,196U);
+        ASSERT_TRUE(d.retryAfterMs>0);ASSERT_EQ(c.radio().testTransmitCount(),0U);
+        ASSERT_TRUE(!std::strcmp(d.resultName(),"not_transmitted_duty_budget"));
+        ch.setNodeId(0x765432);ASSERT_EQ(c.batteryDiagnostic(0).result,IoHomeBatteryDiagnostic::State::NotRequested);
+    }
+}
+TEST(controller_battery_probe_distinguishes_queued_started_done_and_reply)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);ch.setBatteryMonitoring(2);
+    ASSERT_TRUE(c.requestBatteryPrivate(&ch,6));ASSERT_TRUE(!c.batteryDiagnostic(0).rfStarted);
+    IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ASSERT_TRUE(c.batteryDiagnostic(0).rfStarted&&!c.batteryDiagnostic(0).replyReceived);
+    c.loop();ASSERT_TRUE(c.batteryDiagnostic(0).rfCompleted);
 }

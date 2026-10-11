@@ -427,7 +427,8 @@ void IoHomecontrolChannel::loop()
         }
         else
         {
-            onStatusPollFailed(false);
+            if(mRfPollWaiting)mNextStatusPollMs=mRfPollRetryAtMs;
+            else onStatusPollFailed(false);
         }
     }
 
@@ -657,6 +658,7 @@ void IoHomecontrolChannel::observe2WMovingStatus(bool iIsMoving)
 void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
 {
     observe2WMovingStatus(iIsMoving);
+    mRfPollWaiting=false;
 
     mStatusPollTimer = delayTimerInit();
     mStatusPollFailures = 0;
@@ -1570,6 +1572,16 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll)
     if (mIs1W || !allowsActuatorControls())
         return false;
 
+    const uint32_t now=millis();
+    if(mRfPollWaiting&&!timeReached(now,mRfPollRetryAtMs))return false;
+    const uint32_t wait=mController.statusPollRetryAfterMs();
+    if(wait) {
+        const uint32_t bounded=wait==UINT32_MAX?60000U:wait;
+        mRfPollRetryAtMs=now+bounded+uint32_t(_channelIndex+1)*250U;mRfPollWaiting=true;
+        logInfoP("Status poll deferred ch=%u duty_budget retryAfterMs=%lu",unsigned(_channelIndex+1),(unsigned long)bounded);
+        return false;
+    }
+    mRfPollWaiting=false;
     logDebugP("Request status");
 
     // Scheduler-owned status polls normally get one in-exchange attempt and
@@ -2750,7 +2762,7 @@ void IoHomecontrolChannel::printBatteryStatus() {
         ioHomeBatterySourceName(mBatteryInfo.source()),selected.valid?(unsigned long)(millis()-selected.timestampMs):0,mBatteryInfo.conflict());
     static const char *coarseNames[]={"unknown","low","normal","full"};
     static const char *somfyNames[]={"very-low","low","mid","high","unknown"};
-    logInfoP("  coarse=%s age-ms=%lu",mBatteryInfo.coarse.valid?coarseNames[mBatteryInfo.coarse.raw]:"unknown",
+    logInfoP("  coarse historical=%s age-ms=%lu",mBatteryInfo.coarse.valid?coarseNames[mBatteryInfo.coarse.raw]:"unknown",
         mBatteryInfo.coarse.valid?(unsigned long)(millis()-mBatteryInfo.coarse.timestampMs):0);
     logInfoP("  A601=%s age-ms=%lu",mBatteryInfo.somfy.valid?somfyNames[mBatteryInfo.somfy.raw]:"unknown",
         mBatteryInfo.somfy.valid?(unsigned long)(millis()-mBatteryInfo.somfy.timestampMs):0);

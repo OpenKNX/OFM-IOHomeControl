@@ -8,6 +8,7 @@
 #include "../radio/IoHomeAirtime.h"
 #include "../radio/IoHomeDutyBudget.h"
 #include "../radio/IoHomeRfAccessPolicy.h"
+#include "../protocol/IoHomeBatteryDiagnostics.h"
 #include "../protocol/IoHomeRadioPolicy.h"
 #include "../protocol/IoHomeRadioDiversity.h"
 #include "../protocol/IoHomeTransactionTiming.h"
@@ -148,6 +149,7 @@ struct IoHomeQueueEntry
   uint32_t observationGeneration;
   uint32_t productContextRevision;
   uint32_t objectReadToken;
+  bool batteryDiagnostic=false;
   uint32_t keyPrimitiveToken;
   uint32_t limitationToken;
   uint32_t rcmToken;
@@ -888,6 +890,8 @@ public:
   static const char *pairingOutcomeName(PairingOutcome iOutcome);
   const PairingTelemetry &pairingTelemetry() const;
   void printDutyStatus();
+  void printBatteryDiagnostic(uint8_t channel);
+  const IoHomeBatteryDiagnostic &batteryDiagnostic(uint8_t channel)const;
   RadioError startDiagnosticTransmit(const uint8_t *data,uint8_t len,uint16_t preamble,uint32_t hz,bool blocking=false);
   bool enableBenchDuty(bool confirmed);
   void disableDebugDuty() {mRfAccessPolicy.off();}
@@ -1281,6 +1285,8 @@ private:
   uint32_t mStateTimer;
   uint32_t mNextObservationGeneration=0;
   uint32_t mBatteryObjectConsumedToken=0;
+  IoHomeBatteryDiagnostic mBatteryDiagnostics[16]{};
+  void observeBatteryDiagnostic(const IoHomeQueueEntry &entry,IoHomeBatteryDiagnostic::State state);
   uint8_t mBatterySequenceChannel=0xFF,mBatterySequenceIndex=0,mBatterySequenceKey[16]{};
   uint32_t mBatterySequenceNode=0,mBatterySequenceRevision=0,mBatterySequenceToken=0;
   void serviceBatteryObjects();
