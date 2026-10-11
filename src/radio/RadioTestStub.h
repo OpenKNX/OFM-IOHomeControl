@@ -103,8 +103,10 @@ public:
   }
 
   void testSetReceiveBusyCount(uint8_t iCount) { mReceiveBusyCount = iCount; }
+  void testSetNextReceiveError(RadioError iError) { mNextReceiveError = iError; }
   RadioError startReceive()
   {
+    if (mNextReceiveError != RadioError::None) { const auto error = mNextReceiveError; mNextReceiveError = RadioError::None; return error; }
     if (mReceiveBusyCount) { --mReceiveBusyCount; return RadioError::Busy; }
     if (!mInitialized)
       return RadioError::NotInitialized;
@@ -276,6 +278,7 @@ private:
   RadioError mNextFrequencyError = RadioError::None;
   RadioError mNextPreambleError = RadioError::None;
   RadioError mNextTransmitError = RadioError::None;
+  RadioError mNextReceiveError = RadioError::None;
   std::deque<QueuedPacket> mReceiveQueue;
   std::vector<uint8_t> mLastTransmittedPacket;
   std::vector<std::vector<uint8_t>> mTransmittedPackets;

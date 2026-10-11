@@ -32,7 +32,7 @@ Pre-existing README/battery/wake and recovery documents were preserved.
 
 ## Verified in software
 
-Native suite: 711 cases. Policy wrapper compiles production, simulation and bench
+Native suite: 712 cases. Policy wrapper compiles production, simulation and bench
 variants and rejects production/web-console bypass builds. Existing protocol,
 controller, exchange, radio, wake, UI, battery and import identity checks pass.
 Firmware compiled and linked for normal SX1262, production SX1276 and both
@@ -55,3 +55,5 @@ spectrum/antenna power, CCA qualification for every TX type, auth/ACK turnaround
 physical three-channel polling/battery trials, shielded bench approval and
 Austrian/regulatory release review. Native tests cannot replace these checks.
 See [RF policy](rf-access-policy.md) and [battery outcomes](battery-rf-outcomes.md).
+
+Receive faults also revoke temporary RF bypasses; ordinary radio Busy responses retain them. A native regression verifies that charged airtime remains intact.

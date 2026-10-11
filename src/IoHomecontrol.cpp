@@ -1840,7 +1840,7 @@ bool IoHomecontrol::restoreRadioDiagnosticReceive()
         return false;
     }
 
-    if (mController.radio().startReceiveBlocking() == RadioError::Busy)
+    if (mController.startReceive(true) == RadioError::Busy)
         return false;
 #else
     const uint32_t lRestoreFreq = (mRadioDiagnostic.restoreFreqIdx < IOHC_NUM_FREQUENCIES)
@@ -1848,7 +1848,7 @@ bool IoHomecontrol::restoreRadioDiagnosticReceive()
                                       : IOHC_FREQ_2;
     if (mController.radio().setFrequency(lRestoreFreq) != RadioError::None)
         return false;
-    if (mController.radio().startReceive() != RadioError::None)
+    if (mController.startReceive() != RadioError::None)
         return false;
 #endif
     mController.setRxScanEnabled(mRadioDiagnostic.prevRxScanEnabled);
@@ -1859,9 +1859,9 @@ bool IoHomecontrol::forceRestoreRadioDiagnosticReceive()
 {
     mController.radio().standby();
 #if defined(RADIO_SX1262)
-    const RadioError lErr = mController.radio().startReceiveBlocking();
+    const RadioError lErr = mController.startReceive(true);
 #else
-    const RadioError lErr = mController.radio().startReceive();
+    const RadioError lErr = mController.startReceive();
 #endif
     if (lErr == RadioError::None)
     {
@@ -7323,7 +7323,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             lBusyNow = mController.radio().debugReadBusyLevel();
         }
 
-        mController.radio().startReceiveBlocking();
+        mController.startReceive(true);
         mController.setRxScanEnabled(lPrevRxScan);
 
         logInfoP("RadioTxTest: err=%d len=%d done=%d wait=%lu irq=0x%04X txSt=0x%02X stNow=0x%02X mode=%u cmd=%u irqNow=0x%04X devErrB=0x%04X devErrC=0x%04X devErrNow=0x%04X dio1=%d busy=%d",
@@ -7374,7 +7374,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         const uint8_t lOp = mController.radio().debugReadRegister(REG_OPMODE);
 
         // Restore RX and rx-scan
-        mController.radio().startReceive();
+        mController.startReceive();
         mController.setRxScanEnabled(lPrevRxScan);
 
         logInfoP("RadioTxTest: err=%d len=%d done=%d wait=%lu irq1=0x%02X irq2=0x%02X op=0x%02X",
@@ -7577,7 +7577,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         // Restore normal short preamble after the diagnostic, then restart RX.
         if (lIsTxPre)
             mController.radio().setPreambleLength(IOHC_PREAMBLE_SHORT);
-        mController.radio().startReceive();
+        mController.startReceive();
         mController.setRxScanEnabled(lPrevRxScan);
 
         logInfoP("RadioTx%s: err=%d pre=%u len=%u first=0x%02X done=%d wait=%lums budget=%lums lastIrq=0x%04X txIrq=0x%04X txSt=0x%02X irqNow=0x%04X op=0x%02X pl=0x%02X pc2=0x%02X fifoThr=0x%02X preReg=%u",

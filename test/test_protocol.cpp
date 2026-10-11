@@ -21291,3 +21291,20 @@ TEST(controller_simulation_many_accepts_stay_charged_after_mode_exit)
     c.testDutyOff();ASSERT_EQ(c.testDirectTransmit(bytes,length,1024,868950000U),RadioError::DutyCycleExceeded);
     ASSERT_EQ(c.testTxAirtimeAccum(0),airtime*200U);
 }
+
+TEST(controller_receive_fault_revokes_bypass_without_refunding_budget)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    IoHomeFrame f;f.init();f.setSrcNode(0x123456);f.setDestNode(0x654321);f.commandId=IoHomeCommand::StatusUpdateResponse;f.dataLen=1;
+    uint8_t bytes[64]{};const auto length=f.serialize(bytes,sizeof(bytes));
+    c.testChargeDuty(868950000U,3600U);c.testSimulationUnlimited();
+    c.radio().testSetReceiveBusyCount(1);
+    ASSERT_EQ(c.startReceive(),RadioError::Busy);
+    ASSERT_EQ(c.testDirectTransmit(bytes,length,1024,868950000U),RadioError::None);
+    const auto charged=c.testTxAirtimeAccum(0);
+    c.radio().testSetNextReceiveError(RadioError::HardwareError);
+    ASSERT_EQ(c.startReceive(),RadioError::HardwareError);
+    ASSERT_EQ(c.testDirectTransmit(bytes,length,1024,868950000U),RadioError::DutyCycleExceeded);
+    ASSERT_EQ(c.testTxAirtimeAccum(0),charged);ASSERT_EQ(c.radio().testTransmitCount(),1U);
+}

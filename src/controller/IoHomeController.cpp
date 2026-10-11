@@ -1831,9 +1831,17 @@ const Radio &IoHomeController::radio() const
     return mRadio;
 }
 
-RadioError IoHomeController::startReceive()
+RadioError IoHomeController::startReceive(bool iBlocking)
 {
-    return mRadio.startReceive();
+#if defined(RADIO_SX1262)
+    const RadioError lError = iBlocking ? mRadio.startReceiveBlocking() : mRadio.startReceive();
+#else
+    (void)iBlocking;
+    const RadioError lError = mRadio.startReceive();
+#endif
+    if (lError != RadioError::None && lError != RadioError::Busy)
+        mRfAccessPolicy.off();
+    return lError;
 }
 
 uint8_t IoHomeController::uiOpenPercentToRawClosedPercent(uint8_t iUiOpenPercent)
@@ -5859,7 +5867,7 @@ void IoHomeController::serviceBackgroundRxScan()
     if (mRadio.setFrequency(IOHC_FREQUENCIES[lNextFreqIdx]) == RadioError::None)
     {
         mCurrentFreqIdx = lNextFreqIdx;
-        if (mRadio.startReceive() == RadioError::None)
+        if (startReceive() == RadioError::None)
         {
             mRxScanLastSwitch = lNow;++mRxScanMeasurements.retunes;
             mRxScanMeasurements.maxRetuneUs=std::max(mRxScanMeasurements.maxRetuneUs,uint32_t(micros()-retuneStart));
@@ -5911,7 +5919,7 @@ void IoHomeController::serviceBroadcastResponseScan(uint8_t iRequestFrequencyInd
     if (mRadio.setFrequency(IOHC_FREQUENCIES[lNextFreqIdx]) == RadioError::None)
     {
         mCurrentFreqIdx = lNextFreqIdx;
-        if (mRadio.startReceive() == RadioError::None)
+        if (startReceive() == RadioError::None)
         {
             mRxScanLastSwitch = lNow;++mRxScanMeasurements.retunes;
             mRxScanMeasurements.maxRetuneUs=std::max(mRxScanMeasurements.maxRetuneUs,uint32_t(micros()-retuneStart));
@@ -7705,7 +7713,7 @@ void IoHomeController::processTxInProgress()
             }
             return;
         }
-        const RadioError lRxErr = mRadio.startReceive();
+        const RadioError lRxErr = startReceive();
         if (lRxErr == RadioError::Busy)
         {
             // RX reentry is bounded too; never reserve the owner indefinitely.
@@ -10281,7 +10289,7 @@ void IoHomeController::processDiscovery()
         }
         else
         {
-            lRxErr = mRadio.startReceive();
+            lRxErr = startReceive();
             if (lRxErr == RadioError::Busy)
             {
                 mDiscoveryTimingTrace.rxBusyCount++;
@@ -10676,7 +10684,7 @@ RadioError IoHomeController::ensureReceiveAfterTransmit()
     if (mRadio.state() == RadioState::Receiving)
         return RadioError::None;
 
-    const RadioError lRxErr = mRadio.startReceive();
+    const RadioError lRxErr = startReceive();
     if (lRxErr == RadioError::None)
         mRxScanLastSwitch = micros();
     return lRxErr;
@@ -11760,7 +11768,7 @@ void IoHomeController::processStatusAckSend()
 {
     if (mStatusAckFreqIdx >= IOHC_NUM_FREQUENCIES)
     {
-        const RadioError lRxErr = mRadio.startReceive();
+        const RadioError lRxErr = startReceive();
         if (lRxErr == RadioError::Busy)
             return;
         mState = ControllerState::Idle;
@@ -11776,7 +11784,7 @@ void IoHomeController::processStatusAckSend()
     mTxLen = buildStatusUpdateResponse(mStatusAckDestNodeId, mTxBuffer, sizeof(mTxBuffer));
     if (mTxLen == 0)
     {
-        const RadioError lRxErr = mRadio.startReceive();
+        const RadioError lRxErr = startReceive();
         if (lRxErr == RadioError::Busy)
             return;
         mState = ControllerState::Idle;
@@ -12427,7 +12435,7 @@ void IoHomeController::serviceKeyExtractChannelHold()
     if (mRadio.setFrequency(IOHC_FREQ_2) == RadioError::None)
     {
         mCurrentFreqIdx = lCh2;
-        mRadio.startReceive();
+        startReceive();
     }
 }
 

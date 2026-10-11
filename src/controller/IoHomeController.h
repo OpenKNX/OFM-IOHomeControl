@@ -520,7 +520,7 @@ public:
   void loop();
 
   // Start receiving on current frequency
-  RadioError startReceive();
+  RadioError startReceive(bool iBlocking = false);
 
   // Enter sleep mode
   void sleep();
