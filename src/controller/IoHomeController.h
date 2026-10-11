@@ -5,6 +5,8 @@
 #include "../protocol/IoHomeDurableReservation.h"
 #include "../protocol/IoHomeReceiveConfiguration.h"
 #pragma once
+#include "../radio/IoHomeAirtime.h"
+#include "../radio/IoHomeDutyBudget.h"
 #include "../protocol/IoHomeRadioPolicy.h"
 #include "../protocol/IoHomeRadioDiversity.h"
 #include "../protocol/IoHomeTransactionTiming.h"
@@ -537,7 +539,7 @@ public:
   bool verifyKnownNetworkNode(uint32_t iNodeId, const uint8_t *iKey,
                               uint8_t iFrequencyIndex);
   uint16_t normal2WStartPreamble() const;
-  static uint32_t estimatedTxAirtimeMs(uint8_t iFrameLen, uint16_t iPreambleSymbols);
+  static uint32_t estimatedTxAirtimeMs(uint8_t iFrameLen, uint16_t iPreambleSymbols, IoHomeTxPhy phy = kIoHomeTxPhy);
 
   // Queue a command for a concrete 1W channel profile. This path does not
   // require a bound actuator node ID; targetNode=0 is a valid broadcast-only
@@ -888,7 +890,17 @@ public:
   const ResponseTimingSample &lastResponseTimingSample() const;
   const DiagnosticFpSample &lastDiagnosticFpSample() const { return mLastDiagnosticFpSample; }
 #ifdef TEST_NATIVE
-  uint32_t testTxAirtimeAccum(uint8_t iFreq) const { return mTxTimeAccum[iFreq]; }
+  uint32_t testTxAirtimeAccum(uint8_t iFreq) const { return mRfDutyBudget.used(IOHC_FREQUENCIES[iFreq]); }
+  void testSetTraceCounter(uint64_t id) { mTwoWayTraceCount=id; mTwoWayTraceFirst=id+1; }
+  RadioError testDirectTransmit(const uint8_t *data, uint8_t len, uint16_t preamble, uint32_t hz) {
+    const auto prep=configureTxRadio(preamble,&hz);
+    return prep==RadioError::None ? startControllerTransmit(data,len) : prep;
+  }
+  RadioError testHelperTransmit(const uint8_t *data,uint8_t len,uint16_t preamble,bool auth=false) {
+    return startTransmitWithPreamble(data,len,preamble,false,auth?LbtContext::AuthResponse:LbtContext::Normal);
+  }
+  void testSetRxScanFrequency(uint32_t hz) { mRadio.setFrequency(hz); updateCurrentFrequencyIndex(hz); }
+  void testChargeDuty(uint32_t hz, uint32_t ms) { mRfDutyBudget.charge(hz,ms); }
   void testFailReservationWrites(bool iFail) { mReservationJournal.failWrites=iFail; }
   void testSetTrustRxPosition(bool iTrust) { mTrustRxPosition = iTrust; }
 #endif
@@ -1033,7 +1045,10 @@ public:
   };
   const TwoWayOutcome &lastTwoWayOutcome() const {return mLastTwoWayOutcome;}
   struct TwoWayTracePoint {
-    uint32_t id=0,txId=0,timeMs=0,timeUs=0,src=0,dst=0,gateway=0,frequencyHz=0;
+    uint64_t id=0;
+    uint32_t timeMs=0,timeUs=0,src=0,dst=0,gateway=0,frequencyHz=0;
+    uint64_t txId=0,sessionId=0;
+    bool associated=false,associationAmbiguous=false,requestSnapshot=false;
     uint32_t sessionStartMs=0,rxReadUs=0,preambleUs=0,syncUs=0;
     uint16_t preambleBytes=0,irq=0,deadlineMs=0;
     uint8_t ctrl0=0,ctrl1=0,command=0,length=0,state=0,attempt=0,lbtAttempts=0;
@@ -1042,17 +1057,25 @@ public:
     TwoWayWakeBelief belief = TwoWayWakeBelief::Asleep;
     TwoWayWakeBeliefUse beliefUse = TwoWayWakeBeliefUse::NotLowPower;
     uint8_t powerSaveMode = 0xFF;
-    uint32_t txDoneUs=0,rxReadyDelayUs=0,rxReadFailures=0,irqQueueOverflows=0;
+    uint32_t txDoneUs=0,txStartUs=0,rxReadyUs=0,rxReadyDelayUs=0,rxReadFailures=0,irqQueueOverflows=0;
+    uint32_t dutyUsedMs=0,dutyLimitMs=0;
     uint32_t preambleIrqs=0,syncIrqs=0,crcErrors=0,parseFailures=0;
     bool txDoneValid=false,preambleEvidenceAvailable=false,syncEvidenceAvailable=false,softwarePhy=false;
     const char *failureReason="none";
-    const char *event="none";
+    const char *event="none",*eventType="observation",*lbtResult="not_applied";
+    bool attemptFinished=false;
     char payload[129]{};
   };
   static constexpr uint8_t kTwoWayTraceCapacity=24;
-  const TwoWayTracePoint &twoWayTracePoint(uint32_t id) const { return mTwoWayTrace[(id-1)%kTwoWayTraceCapacity]; }
-  uint32_t twoWayTraceCount() const { return mTwoWayTraceCount; }
+  const TwoWayTracePoint &twoWayTracePoint(uint64_t id) const { return mTwoWayTrace[(id-1)%kTwoWayTraceCapacity]; }
+  uint64_t twoWayTraceCount() const { return mTwoWayTraceCount; }
   void printTwoWayTrace() const;
+  void clearTwoWayTrace();
+  void printTwoWayAttemptCsv() const;
+  struct RfCounters {
+    uint64_t transmittedPackets=0,timeoutAttempts=0,correlatedReplies=0,completedStatusPolls=0,wrongPeerFrames=0;
+  };
+  const RfCounters &rfCounters() const { return mRfCounters; }
   void observeForeignController(uint32_t node);
   bool twoWayIdentityCollision() const { return mIdentityCollisionNode == mOwnNodeId && mOwnNodeId != 0; }
 
@@ -1232,7 +1255,15 @@ private:
   uint32_t mIdentityCollisionNode=0;
   TwoWayTracePoint mTwoWayTrace[kTwoWayTraceCapacity]{};
   TwoWayOutcome mLastTwoWayOutcome;
-  uint32_t mTwoWayTraceCount=0,mTwoWayTxId=0;
+  uint64_t mTwoWayTraceCount=0,mTwoWayTraceFirst=1;
+  uint64_t mTwoWayTxId=0,mTwoWaySessionId=0;
+  RfCounters mRfCounters;
+  char mAttemptTxPayload[129]{};
+  bool mResponseTimeoutRecorded=false,mAttemptTxDoneValid=false;
+  uint32_t mAttemptTxStartUs=0,mAttemptTxDoneUs=0,mAttemptRxReadyUs=0;
+  IoHomeFrame mExchangeRequestFrame;
+  uint8_t mExchangeRequestWireLength=0;
+  uint64_t mExchangeRequestSessionId=0;
   void recordTwoWayTrace(const char *event,const IoHomeFrame &frame,uint8_t wireLength=0);
   uint8_t mSystemKey[16];
 
@@ -1283,7 +1314,7 @@ private:
   bool mReservationPossibleDesync[16]{};
   bool mReservationFailed = false;
   OneWayRecovery mOneWayRecovery = OneWayRecovery::Ready;
-  RadioError startControllerTransmit(const uint8_t *iData, uint8_t iLength);
+  RadioError startControllerTransmit(const uint8_t *iData, uint8_t iLength, bool blocking = false);
   IoHomeFrame mTxFrame;
   IoHomeFrame mRxFrame;
   IoHomeFrame mPairSetConfigRequest;
@@ -1520,18 +1551,19 @@ private:
   IoHomeCommandScanResult mScanResult; // accumulated scan results
 
   // Duty cycle tracking (per sub-band per hour)
-  uint32_t mTxTimeAccum[IOHC_NUM_FREQUENCIES]; // accumulated TX time in ms
-  uint32_t mDutyCycleWindowStart;
+  IoHomeDutyBudget mRfDutyBudget;
+  bool mLbtPrepared = false;
+  bool mLastTxDutyDenied = false;
   IoHomeRadioPolicy mHostRadioPolicy;
   uint32_t mLbtBusyCount;
   uint32_t mLbtBypassCount;
   uint32_t mLbtClearCount;
   uint32_t mLbtInvalidRssiCount;
-  int16_t mLastLbtRssi;
-  bool mLastLbtRssiValid;
-  uint8_t mLastLbtAttempts;
-  bool mLastLbtBypassed;
-  bool mLastLbtAuthResponse;
+  int16_t mLastLbtRssi = 0;
+  bool mLastLbtRssiValid = false;
+  uint8_t mLastLbtAttempts = 0;
+  bool mLastLbtBypassed = false;
+  bool mLastLbtAuthResponse = false;
 
   // Multi-frequency RX scanning
   uint32_t mRxScanLastSwitch;   // timestamp (micros) of last frequency switch
@@ -1541,7 +1573,7 @@ private:
   uint8_t mDiagnostic2WFrameVersion = 0; // queued 2W bench override only; never persisted
   TwoWayPowerClass mDiagnostic2WPowerClass = TwoWayPowerClass::Automatic;
   uint16_t mLowPower2WWakePreamble = IOHC_PREAMBLE_LONG;
-  bool mQueuedTxAccounted = false;
+  bool mQueuedTxDoneObserved = false;
   IoHomeFrame mQueuedTxFrame;
   uint8_t mQueuedTxWireLength = 0;
   uint32_t mQueuedTxDoneMs = 0;
@@ -1761,7 +1793,7 @@ private:
 
   // Check duty cycle limit
   bool isDutyCycleOk() const;
-  bool isDutyCycleOk(uint8_t iFreqIdx) const;
+  bool isDutyCycleOk(uint8_t iFreqIdx, uint32_t nextAirtimeMs = 1) const;
 
   // Queue helpers
   bool queuePush(const IoHomeQueueEntry &iEntry);

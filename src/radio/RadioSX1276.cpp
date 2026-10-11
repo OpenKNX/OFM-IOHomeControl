@@ -214,7 +214,8 @@ RadioError RadioSX1276::configure()
     // Preamble detector: ON, 2-byte window, tolerance=10 chip errors over that window
     writeRegister(REG_PREAMBLEDETECT, 0xAA);
 
-    // FSK preamble: 8 bytes default (64 bit periods; about 1.666 ms).
+    // IoHomeOn preamble: 8 configured bytes; MCU timing fits ~10 bits/byte.
+    // RF framing/ramp qualification is pending; see IoHomeAirtime.h.
     writeRegister(REG_PREAMBLEMSB, 0x00);
     writeRegister(REG_PREAMBLELSB, 0x08);
 

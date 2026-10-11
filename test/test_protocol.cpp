@@ -6887,8 +6887,8 @@ TEST(radio_test_stub_directed_start_default_is_configurable)
 
 TEST(duty_cycle_airtime_includes_preamble_sync_crc_and_uart_framing)
 {
-    ASSERT_EQ(IoHomeController::estimatedTxAirtimeMs(10, 48), 14U);
-    ASSERT_EQ(IoHomeController::estimatedTxAirtimeMs(10, 1024), 218U);
+    ASSERT_EQ(IoHomeController::estimatedTxAirtimeMs(10, 48), 19U);
+    ASSERT_EQ(IoHomeController::estimatedTxAirtimeMs(10, 1024), 225U);
     ASSERT_TRUE(IoHomeController::estimatedTxAirtimeMs(10, 1024) >
                 IoHomeController::estimatedTxAirtimeMs(10, 48));
 }
@@ -6964,7 +6964,7 @@ TEST(controller_wake_length_and_tx_timeout_limits)
         ASSERT_TRUE(timeout>airtime);
         ASSERT_TRUE(timeout<=airtime+1300U);
     }
-    ASSERT_EQ(IoHomeController::estimatedTxAirtimeMs(32,2450), 520U);
+    ASSERT_EQ(IoHomeController::estimatedTxAirtimeMs(32,2450), 531U);
 }
 
 TEST(golden_rf_corpus_public_trailer_mac_verifies)
@@ -21022,4 +21022,205 @@ TEST(controller_continuation_trace_and_airtime_use_actual_transmitted_frame)
         }
     }
     ASSERT_TRUE(found);
+}
+
+
+TEST(airtime_per_phy_exact_values_padding_and_overflow_bounds)
+{
+    const uint16_t preambles[]={1024,1536,2048,2450};
+    const uint32_t sx1276Ms[]={279,414,548,654};
+    const uint32_t sx1262Ms[]={225,333,440,525};
+    for (unsigned i=0;i<4;++i) {
+        ASSERT_EQ(ioHomeAirtime(10,preambles[i],IoHomeTxPhy::Sx1276IoHome).budgetMs,sx1276Ms[i]);
+        ASSERT_EQ(ioHomeAirtime(10,preambles[i],IoHomeTxPhy::Sx1262SoftwareUart).budgetMs,sx1262Ms[i]);
+    }
+    const auto sx1276=ioHomeAirtime(10,1024,IoHomeTxPhy::Sx1276IoHome);
+    ASSERT_EQ(sx1276.preambleBits,10240U);ASSERT_EQ(sx1276.syncBits,30U);ASSERT_EQ(sx1276.bodyBits,120U);
+    ASSERT_TRUE(sx1276.packetUs>272396U); // observed MCU duration, not qualified RF edge
+    for (auto phy:{IoHomeTxPhy::Sx1276IoHome,IoHomeTxPhy::Sx1262SoftwareUart}) {
+        for (uint16_t pre:{uint16_t(8),uint16_t(12),uint16_t(1024),uint16_t(8191),uint16_t(65535)}) {
+            for (uint8_t len:{uint8_t(0),uint8_t(9),uint8_t(IOHC_FRAME_BUFFER_SIZE),uint8_t(255)}) {
+                const auto a=ioHomeAirtime(len,pre,phy);
+                ASSERT_EQ(a.preambleBits,uint32_t(pre)*(phy==IoHomeTxPhy::Sx1276IoHome?10U:8U));
+                ASSERT_TRUE(a.bodyBits>=(uint32_t(len)+2U)*10U);
+                ASSERT_TRUE(a.budgetMs*1000U>=a.packetUs);
+                ASSERT_TRUE(a.packetUs<18000000U); // uint64 intermediate never overflows
+            }
+        }
+    }
+    ASSERT_EQ(ioHomeAirtime(9,8,IoHomeTxPhy::Sx1262SoftwareUart).bodyBits,112U);
+    ASSERT_EQ(ioHomeAirtime(0,8,IoHomeTxPhy::Sx1262SoftwareUart).bodyBits,24U);
+}
+
+TEST(duty_budget_band_aggregation_admission_window_and_wrap)
+{
+    IoHomeDutyBudget b;b.advance(UINT32_MAX-100U);
+    ASSERT_TRUE(b.admits(868950000U,3599U));b.charge(868950000U,3599U);
+    ASSERT_TRUE(b.admits(869100000U,1U));ASSERT_TRUE(!b.admits(868950000U,2U));
+    b.charge(869100000U,1U);
+    ASSERT_EQ(b.used(868950000U),3600U);
+    ASSERT_TRUE(b.admits(868950000U,0U));ASSERT_TRUE(!b.admits(868950000U,1U));
+    ASSERT_TRUE(!b.admits(868950000U,UINT32_MAX));
+    ASSERT_TRUE(b.admits(868250000U,36000U));ASSERT_TRUE(b.admits(869850000U,36000U));
+    ASSERT_TRUE(!b.admits(869400000U,1U));
+    b.advance(100U);ASSERT_EQ(b.used(868950000U),3600U);
+    const uint32_t start=UINT32_MAX-100U;
+    b.advance(start+IoHomeDutyBudget::bucketMs);
+    ASSERT_TRUE(!b.admits(868950000U,1U)); // no boundary double burst
+    b.advance(start+2U*IoHomeDutyBudget::bucketMs-1U);
+    ASSERT_TRUE(!b.admits(868950000U,1U));
+    b.advance(start+2U*IoHomeDutyBudget::bucketMs);
+    ASSERT_TRUE(b.admits(868950000U,3600U));
+}
+
+TEST(controller_accepted_tx_accounted_once_and_all_direct_modes_obey_budget)
+{
+    const uint8_t key[16]={1};
+    for (bool oneWay:{false,true}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+        IoHomeFrame frame;frame.init();frame.setSrcNode(0x123456);frame.setDestNode(0x654321);
+        frame.commandId=IoHomeCommand::Execute;frame.dataLen=2;frame.hasHmac=oneWay;frame.ctrlByte0=oneWay?IOHC_CTRL0_MODE_1W:IOHC_CTRL0_START;
+        uint8_t data[IOHC_FRAME_BUFFER_SIZE];const auto len=frame.serialize(data,sizeof(data));ASSERT_TRUE(len>0);
+        const auto estimate=IoHomeController::estimatedTxAirtimeMs(len,1024);
+        c.testChargeDuty(868950000U,3600U-estimate);
+        ASSERT_EQ(c.testDirectTransmit(data,len,1024,868950000U),RadioError::None);
+        ASSERT_EQ(c.rfCounters().transmittedPackets,1U);
+        ASSERT_EQ(c.testTxAirtimeAccum(0),3600U);
+        ASSERT_EQ(c.testDirectTransmit(data,len,1024,868950000U),RadioError::DutyCycleExceeded);
+        ASSERT_EQ(c.radio().testTransmitCount(),1U);ASSERT_EQ(c.testTxAirtimeAccum(0),3600U);
+        ASSERT_EQ(c.rfCounters().transmittedPackets,1U);
+    }
+}
+
+TEST(controller_timeout_latch_snapshot_retry_success_and_unrelated_rx)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ch.setConfigured2WPowerClass(TwoWayPowerClass::LowPower);
+    ASSERT_TRUE(c.sendCommand(0x654321,key,IoHomeCommand::Private,3,0xFF,0xFF,2));
+    IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    const auto ctrl0=c.radio().testLastTransmittedPacket()[0];
+    ioHomeTestSetMicros(12345);c.loop();
+    uint64_t firstTx=0,session=0;
+    for(uint32_t id=1;id<=c.twoWayTraceCount();++id) {
+        const auto &p=c.twoWayTracePoint(id);
+        if(!std::strcmp(p.event,"tx_started")){firstTx=p.txId;session=p.sessionId;ASSERT_EQ(p.txDoneUs,0U);ASSERT_TRUE(!p.txDoneValid);}
+        if(!std::strcmp(p.event,"tx_done_observed")){ASSERT_EQ(p.txDoneUs,12345U);ASSERT_TRUE(p.txDoneValid);}
+    }
+    ioHomeTestAdvanceMillis(c.lastResponseTimingSample().selectedTimeoutMs);c.loop();
+    const auto count=c.twoWayTraceCount();
+    for(unsigned tick=0;tick<100;++tick)c.loop();
+    ASSERT_EQ(c.twoWayTraceCount(),count);ASSERT_EQ(c.rfCounters().timeoutAttempts,1U);
+    ASSERT_EQ(c.radio().testTransmitCount(),1U);
+    ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);c.loop();c.loop();
+    ASSERT_EQ(c.radio().testTransmitCount(),2U);
+    IoHomeFrame reply;reply.init();reply.setSrcNode(0x654321);reply.setDestNode(0x123456);
+    reply.commandId=IoHomeCommand::PrivateResponse;reply.dataLen=8;reply.data[0]=1;
+    ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_TRUE(c.lastTwoWayOutcome().transportComplete);
+    unsigned timeouts=0;bool completed=false,retried=false,ambiguous=false;
+    for(uint32_t id=1;id<=c.twoWayTraceCount();++id) {
+        const auto &p=c.twoWayTracePoint(id);
+        if(!std::strcmp(p.event,"response_timeout")){++timeouts;ASSERT_EQ(p.txId,firstTx);ASSERT_TRUE(!std::strcmp(p.failureReason,"response_timeout"));}
+        if(!std::strcmp(p.event,"tx_started")&&p.txId!=firstTx){retried=true;ASSERT_EQ(p.sessionId,session);ASSERT_EQ(p.txDoneUs,0U);}
+        if(!std::strcmp(p.event,"exchange_completed")){completed=true;ASSERT_EQ(p.ctrl0,ctrl0);ASSERT_EQ(p.ctrl1,request.ctrlByte1);ASSERT_TRUE(!std::strcmp(p.failureReason,"none"));}
+        if(!std::strcmp(p.event,"rx_correlated"))ambiguous=p.associationAmbiguous;
+    }
+    ASSERT_EQ(timeouts,1U);ASSERT_TRUE(completed&&retried&&ambiguous);
+    reply.setSrcNode(0xAABBCC);ASSERT_TRUE(queueControllerResponse(c,reply));
+    bool unrelated=false;
+    for(uint32_t id=1;id<=c.twoWayTraceCount();++id) {
+        const auto &p=c.twoWayTracePoint(id);
+        if(!std::strcmp(p.event,"rx_observed")&&p.src==0xAABBCC){unrelated=true;ASSERT_EQ(p.txId,0U);ASSERT_EQ(p.sessionId,0U);ASSERT_EQ(p.txDoneUs,0U);ASSERT_EQ(p.preambleBytes,0U);ASSERT_EQ(p.deadlineMs,0U);ASSERT_TRUE(!p.associated);}
+    }
+    ASSERT_TRUE(unrelated);
+    const auto packets=c.rfCounters().transmittedPackets;const auto used=c.testTxAirtimeAccum(0);
+    c.clearTwoWayTrace();ASSERT_EQ(c.rfCounters().transmittedPackets,packets);ASSERT_EQ(c.testTxAirtimeAccum(0),used);
+}
+
+TEST(controller_trace_ids_cross_32bit_boundary_without_reuse)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    c.testSetTraceCounter(UINT32_MAX);
+    ASSERT_TRUE(c.sendCommand(0x654321,key,IoHomeCommand::Private,3));
+    IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    ASSERT_TRUE(c.twoWayTraceCount()>UINT32_MAX);
+    ASSERT_EQ(c.twoWayTracePoint(uint64_t(UINT32_MAX)+1).id,uint64_t(UINT32_MAX)+1);
+}
+
+TEST(controller_busy_candidate_has_no_tx_id_and_direct_policy_is_explicit)
+{
+    const uint8_t key[16]={1};
+    for(uint32_t scanHz:{868250000U,869850000U}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+        c.testSetRxScanFrequency(scanHz);
+        c.hostRadioPolicy().configure(IoHomeRadioPolicy::Tx::Strict,0);
+        c.radio().testInjectRxDiagnostics(false,false,false,0,0,-30); // busy; direct path uses duty, not LBT
+        ASSERT_TRUE(c.sendCommand(0x654321,key,IoHomeCommand::Private,3));
+        c.radio().testSetNextTransmitError(RadioError::Busy);c.loop();c.loop();
+        ASSERT_EQ(c.rfCounters().transmittedPackets,0U);ASSERT_EQ(c.twoWayTraceCount(),0U);
+        c.loop();ASSERT_EQ(c.rfCounters().transmittedPackets,1U);
+        const auto &point=c.twoWayTracePoint(c.twoWayTraceCount());
+        ASSERT_EQ(point.txId,1U);ASSERT_EQ(point.frequencyHz,868950000U);
+        ASSERT_TRUE(!std::strcmp(point.lbtResult,"not_applied"));
+    }
+}
+
+TEST(controller_helper_lbt_busy_clear_and_forced_still_use_duty_admission)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    IoHomeFrame frame;frame.init();frame.ctrlByte0=IOHC_CTRL0_START;
+    frame.commandId=IoHomeCommand::Private;frame.dataLen=1;frame.data[0]=3;
+    frame.setSrcNode(0x123456);frame.setDestNode(0x654321);
+    uint8_t data[IOHC_FRAME_BUFFER_SIZE];const auto len=frame.serialize(data,sizeof(data));
+    c.hostRadioPolicy().configure(IoHomeRadioPolicy::Tx::Strict,0);
+    c.radio().testInjectRxDiagnostics(false,false,false,0,0,-30);
+    ASSERT_EQ(c.testHelperTransmit(data,len,8),RadioError::Busy);
+    ASSERT_EQ(c.rfCounters().transmittedPackets,0U);
+    c.radio().testInjectRxDiagnostics(false,false,false,0,0,-100);
+    ASSERT_EQ(c.testHelperTransmit(data,len,8,true),RadioError::None);
+    ASSERT_TRUE(!std::strcmp(c.twoWayTracePoint(c.twoWayTraceCount()).lbtResult,"channel_clear"));
+    const auto used=c.testTxAirtimeAccum(0);ASSERT_TRUE(used>0U);
+    c.testChargeDuty(868950000U,3600U-used);
+    c.hostRadioPolicy().configure(IoHomeRadioPolicy::Tx::Forced,0);
+    ASSERT_EQ(c.testHelperTransmit(data,len,8,true),RadioError::DutyCycleExceeded);
+    ASSERT_EQ(c.rfCounters().transmittedPackets,1U);
+}
+
+TEST(controller_failure_before_tx_does_not_inherit_previous_attempt)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ASSERT_TRUE(c.sendCommand(0x654321,key,IoHomeCommand::Private,3,0xFF,0xFF,1));
+    IoHomeFrame frame;ASSERT_TRUE(transmitQueuedControllerFrame(c,frame));c.loop();
+    ioHomeTestAdvanceMillis(c.lastResponseTimingSample().selectedTimeoutMs);c.loop();
+    c.testChargeDuty(868950000U,3600U-c.testTxAirtimeAccum(0));
+    ASSERT_TRUE(c.sendCommand(0x654321,key,IoHomeCommand::Private,3,0xFF,0xFF,1));c.loop();c.loop();
+    const auto &p=c.twoWayTracePoint(c.twoWayTraceCount());
+    ASSERT_TRUE(!std::strcmp(p.event,"exchange_failed"));ASSERT_TRUE(!p.associated);
+    ASSERT_EQ(p.txId,0U);ASSERT_EQ(p.txDoneUs,0U);ASSERT_EQ(p.preambleBytes,0U);
+    ASSERT_TRUE(!std::strcmp(p.failureReason,"duty_budget_exceeded"));
+    ASSERT_EQ(c.rfCounters().transmittedPackets,1U);
+}
+
+TEST(controller_discovery_blocking_paths_account_actual_preamble_and_gate_quota)
+{
+    const uint8_t key[16]={1};
+    for(bool blocked:{false,true}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+        if(blocked)c.testChargeDuty(868950000U,3600U);
+        c.startDiscovery(false);
+        for(unsigned tick=0;tick<8 && !c.radio().testTransmitCount() && c.state()!=ControllerState::Idle;++tick)c.loop();
+        ASSERT_EQ(c.radio().testTransmitCount(),blocked?0U:1U);
+        if(!blocked) {
+            ASSERT_EQ(c.radio().testLastPreambleLength(),IOHC_PREAMBLE_LONG);
+            const auto len=c.radio().testLastTransmittedPacket().size();
+            ASSERT_EQ(c.testTxAirtimeAccum(0),IoHomeController::estimatedTxAirtimeMs(len,IOHC_PREAMBLE_LONG));
+            ASSERT_EQ(c.rfCounters().transmittedPackets,1U);
+        } else ASSERT_EQ(c.testTxAirtimeAccum(0),3600U);
+    }
 }

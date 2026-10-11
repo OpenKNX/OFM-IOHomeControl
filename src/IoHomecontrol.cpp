@@ -4234,7 +4234,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc remote observed", "Show observed addresses");
     openknx.console.printHelpLine("iohc dynamic CH status|read", "Protocol-v4 raw capability objects 8100/8103");
     openknx.console.printHelpLine("iohc event trace on|off", "Trace owned-node RF payloads; event schema unresolved");
-    openknx.console.printHelpLine("iohc 2wtrace", "Dump bounded 2W TX/RX identity and timing evidence (no keys/auth bytes)");
+    openknx.console.printHelpLine("iohc 2wtrace [clear|csv]", "Dump bounded 2W TX/RX identity and timing evidence (no keys/auth bytes)");
     openknx.console.printHelpLine("iohc battery CH status|probe|probe09|objects", "Battery evidence and manual raw reads (Extended diagnostics)");
     openknx.console.printHelpLine("iohc sniff start [S]", "Start passive key sniff for S seconds");
     openknx.console.printHelpLine("iohc sniff stop|status|clear", "Manage passive key sniff result");
@@ -5304,6 +5304,8 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                  discoveryListenName(lDiscovery.listenChannels));
         return true;
     }
+    if (lSub == "2wtrace clear") {mController.clearTwoWayTrace();return true;}
+    if (lSub == "2wtrace csv") {mController.printTwoWayAttemptCsv();return true;}
     if (lSub == "2wtrace") {mController.printTwoWayTrace();return true;}
     if (lSub.substr(0, 6) == "status")
     {

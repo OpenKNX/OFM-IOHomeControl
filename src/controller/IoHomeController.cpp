@@ -1431,7 +1431,6 @@ IoHomeController::IoHomeController()
       mGatewayMemCmd(0), mGatewayMemDataLen(0),
       mGatewayDiscoverFreqIdx(0),
       mScanIndex(0), mScanTargetNode(0),
-      mDutyCycleWindowStart(0),
       mRxScanLastSwitch(0), mRxScanIntervalUs(IOHC_RX_SCAN_INTERVAL_US),
       mRxScanEnabled(true), mLastResponseFreqIdx(0),
       mPairDiagnosticTraceEnabled(false),
@@ -1446,7 +1445,6 @@ IoHomeController::IoHomeController()
     memset(mSystemKey, 0, sizeof(mSystemKey));
     mRxParseFailCount = 0;
     memset(mCmdQueue, 0, sizeof(mCmdQueue));
-    memset(mTxTimeAccum, 0, sizeof(mTxTimeAccum));
     memset(mPairingChallenge, 0, sizeof(mPairingChallenge));
     memset(mPairSetConfigChallenge, 0, sizeof(mPairSetConfigChallenge));
     memset(mPairKeyTransferChallenge, 0, sizeof(mPairKeyTransferChallenge));
@@ -1507,7 +1505,7 @@ void IoHomeController::init()
     mResponseTimeoutMs = IOHC_RX_TIMEOUT_MS;
     mRetryAtMs = 0;
     mExchangeStartMs = 0;
-    mDutyCycleWindowStart = millis();
+    mRfDutyBudget.advance(millis());
     logInfoP("2W wake belief: %s; normal directed START preamble: %s=%u",
              mDiagnostic2WWakeBelief ? "on" : "off",
              mDiagnostic2WStartPreamble == 0 ? "auto" : "override",
@@ -3301,18 +3299,9 @@ uint16_t IoHomeController::normal2WStartPreamble() const
 }
 
 uint32_t IoHomeController::estimatedTxAirtimeMs(uint8_t iFrameLen,
-                                                uint16_t iPreambleSymbols)
+                                                uint16_t iPreambleSymbols, IoHomeTxPhy phy)
 {
-    // io-homecontrol transmits one eight-bit preamble symbol per configured
-    // preamble byte, followed by the three-byte sync word. The frame and its
-    // two transport-CRC bytes use 8N1 UART cells (10 bits each); SX1276 does
-    // this in IoHomeOn hardware and SX1262 in the software PHY encoder.
-    const uint32_t lPreambleAndSyncBits =
-        (static_cast<uint32_t>(iPreambleSymbols) + IOHC_SYNC_WORD_SIZE) * 8UL;
-    const uint32_t lBodyBits =
-        (static_cast<uint32_t>(iFrameLen) + IOHC_CRC_SIZE) * 10UL;
-    const uint32_t lTotalBits = lPreambleAndSyncBits + lBodyBits;
-    return (lTotalBits * 1000UL + IOHC_BITRATE - 1UL) / IOHC_BITRATE;
+    return ioHomeAirtime(iFrameLen, iPreambleSymbols, phy).budgetMs;
 }
 
 void IoHomeController::resolveTwoWayPreamblePlan(const IoHomeFrame &iFrame,
@@ -3368,41 +3357,7 @@ uint16_t IoHomeController::preambleForQueued2WAttempt(const IoHomeFrame &iFrame,
                                    ? twoWayWakePreamble(lPlan.belief, iEntry.retries,
                                                        lPlan.normalPreamble, lPlan.wakePreamble)
                                    : lPlan.fixedPreamble;
-    static const char *const kUseNames[] = {"not_low_power", "override", "off", "no_channel", "applied"};
-    static const char *const kRetryReasons[] = {"initial", "no_response", "no_closing_reply"};
-    static const char *const kPreviousResults[] = {"none", "no_response", "authenticated_unconfirmed"};
-    const uint8_t lReasonIndex = static_cast<uint8_t>(iEntry.retryReason);
-    const char *const lReason = lReasonIndex < (sizeof(kRetryReasons) / sizeof(kRetryReasons[0]))
-                                    ? kRetryReasons[lReasonIndex]
-                                    : "unknown";
-    const char *const lPreviousResult = lReasonIndex < (sizeof(kPreviousResults) / sizeof(kPreviousResults[0]))
-                                            ? kPreviousResults[lReasonIndex]
-                                            : "unknown";
-    if (lPlan.hasLastHeard)
-        logInfoP("2W PreamblePlan try=%u cmd=0x%02X reason=%s previous=%s challenge=%s challenge_response=%s final_response=%s status=%s preamble=%u belief=%s use=%s age_ms=%lu",
-                 static_cast<unsigned>(iEntry.retries + 1U), static_cast<unsigned>(iEntry.command),
-                 lReason, lPreviousResult,
-                 iEntry.previousChallengeSeen ? "yes" : "no",
-                 iEntry.previousChallengeResponseSent ? "yes" : "no",
-                 iEntry.previousFinalResponseSeen ? "yes" : "no",
-                 iEntry.previousStatusSeen ? "yes" : "no",
-                 static_cast<unsigned>(lPreamble), twoWayWakeBeliefName(lPlan.belief),
-                 kUseNames[static_cast<uint8_t>(lPlan.use)],
-                 static_cast<unsigned long>(lPlan.lastHeardAgeMs));
-    else
-        logInfoP("2W PreamblePlan try=%u cmd=0x%02X reason=%s previous=%s challenge=%s challenge_response=%s final_response=%s status=%s preamble=%u belief=%s use=%s age_ms=n/a",
-                 static_cast<unsigned>(iEntry.retries + 1U), static_cast<unsigned>(iEntry.command),
-                 lReason, lPreviousResult,
-                 iEntry.previousChallengeSeen ? "yes" : "no",
-                 iEntry.previousChallengeResponseSent ? "yes" : "no",
-                 iEntry.previousFinalResponseSeen ? "yes" : "no",
-                 iEntry.previousStatusSeen ? "yes" : "no",
-                 static_cast<unsigned>(lPreamble), twoWayWakeBeliefName(lPlan.belief),
-                 kUseNames[static_cast<uint8_t>(lPlan.use)]);
-    logDebugP("2W attempt node=%06X START=%u LOW_POWER=%u beliefReason=%s freq=%lu",
-        iEntry.destNodeId, !!(iFrame.ctrlByte0 & IOHC_CTRL0_START), !!(iFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER),
-        lPlan.belief == TwoWayWakeBelief::Awake ? "moving_status" : "no_fresh_moving_status",
-        static_cast<unsigned long>(IOHC_FREQUENCIES[mCurrentFreqIdx]));
+    (void)iFrame;
     return lPreamble;
 }
 
@@ -4009,9 +3964,7 @@ void IoHomeController::selectDirectedResponseTimeout(uint8_t ctrl1)
     mLastResponseTimingSample.selectedTimeoutMs = selected.milliseconds;
     mLastResponseTimingSample.timeoutGroup = selected.group;
     mLastResponseTimingSample.timeoutFallback = selected.fallback;
-    logDebugP("2W TimeoutSelector deadline=%ums MIBclass=%u CTRL1group=%u fallback=%s",
-        selected.milliseconds, selected.responseClass, selected.group,
-        selected.fallback ? "missing-or-incomplete-discovery-MIB" : "none");
+
 }
 
 void IoHomeController::beginResponseTimingAttempt()
@@ -4027,7 +3980,7 @@ void IoHomeController::beginResponseTimingAttempt()
     mLastResponseTimingSample.ctrl1=mTxBuffer[1];
     mLastResponseTimingSample.version=mTxFrame.ctrlByte1 & IOHC_CTRL1_VER_MASK;
     mLastResponseTimingSample.attempt=mCurrentCmd.retries+1;
-    mLastResponseTimingSample.preambleBytes=preambleForQueued2WAttempt(mTxFrame,mCurrentCmd);
+    mLastResponseTimingSample.preambleBytes=mCurrentTxPreambleSymbols;
     mLastResponseTimingSample.frequencyHz=mCurrentFreqIdx<IOHC_NUM_FREQUENCIES?IOHC_FREQUENCIES[mCurrentFreqIdx]:0;
     mLastResponseTimingSample.sessionMode=mCurrentCmd.sessionPolicy.mode;
     mLastResponseTimingSample.stateRetries=mCurrentCmd.retries;
@@ -4373,7 +4326,8 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
     if(iEntry.objectReadToken==mObjectReadToken&&iEntry.objectReadToken&&iResult!=IoHomeCommandExchangeResult::Completed)
         mObjectRead.fail();
     const IoHomeRadioHealth lOutcomeHealth = radioHealth();
-    const char *lFailure = iResult == IoHomeCommandExchangeResult::MediaAccessFailed ? "media_access_failed" :
+    const char *lFailure = iResult != IoHomeCommandExchangeResult::Completed && mLastTxDutyDenied ? "duty_budget_exceeded" :
+        iResult == IoHomeCommandExchangeResult::MediaAccessFailed ? "media_access_failed" :
         iResult == IoHomeCommandExchangeResult::FailedBeforeAuthentication ? "local_radio_failure" :
         iResult == IoHomeCommandExchangeResult::AuthenticatedUnconfirmed ? "challenge_without_final" :
         iResult == IoHomeCommandExchangeResult::ExplicitlyRejected ? "peer_rejected" :
@@ -4396,10 +4350,14 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
     if(mLastResponseTimingSample.ioAddress==iEntry.destNodeId && mLastResponseTimingSample.command==iEntry.command) {
         mLastResponseTimingSample.result=iResult;mLastResponseTimingSample.resultValid=true;
     }
+    if (iResult == IoHomeCommandExchangeResult::Completed && iEntry.background &&
+        iEntry.command == IoHomeCommand::Private && iEntry.param == 3) ++mRfCounters.completedStatusPolls;
     recordTwoWayTrace(iResult == IoHomeCommandExchangeResult::Completed
                           ? (iEntry.background && iEntry.command == IoHomeCommand::Private && iEntry.param == 3
                                  ? "status_poll_completed" : "exchange_completed")
-                          : "exchange_failed", mTxFrame, mTxLen);
+                          : "exchange_failed",
+                      mExchangeRequestWireLength && mExchangeRequestSessionId == mTwoWaySessionId ? mExchangeRequestFrame : mTxFrame,
+                      mExchangeRequestWireLength && mExchangeRequestSessionId == mTwoWaySessionId ? mExchangeRequestWireLength : mTxLen);
     if (!(mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) && mTwoWayTraceCount)
         mTwoWayTrace[(mTwoWayTraceCount - 1) % kTwoWayTraceCapacity].failureReason = lFailure;
     IoHomecontrolChannel *lChannel = channelForQueueEntry(iEntry);
@@ -6161,20 +6119,46 @@ void IoHomeController::recordTwoWayTrace(const char *event,const IoHomeFrame &fr
 {
     if(frame.ctrlByte0&IOHC_CTRL0_MODE_1W)return;
     auto &p=mTwoWayTrace[mTwoWayTraceCount%kTwoWayTraceCapacity];p={};
-    p.id=++mTwoWayTraceCount;p.txId=mTwoWayTxId;p.event=event;
+    p.id=++mTwoWayTraceCount;p.event=event;
+    p.eventType=!std::strcmp(event,"tx_started")?"attempt_started":
+        !std::strcmp(event,"response_timeout")?"response_timeout":
+        !std::strcmp(event,"rx_correlated")?"response_received":
+        (!std::strcmp(event,"exchange_completed")||!std::strcmp(event,"exchange_failed")||!std::strcmp(event,"status_poll_completed"))?"exchange_result":
+        !std::strcmp(event,"tx_timeout")?"attempt_finished":"observation";
+    p.attemptFinished=!std::strcmp(event,"response_timeout")||!std::strcmp(event,"tx_timeout")||
+        (!std::strcmp(event,"rx_correlated")&&frame.commandId!=IoHomeCommand::ChallengeRequest);
+    p.requestSnapshot=!std::strcmp(event,"exchange_completed")||!std::strcmp(event,"exchange_failed")||!std::strcmp(event,"status_poll_completed");
+    const bool rxEvent=!std::strncmp(event,"rx_",3)||!std::strcmp(event,"status_received");
+    p.associated=!rxEvent || !std::strcmp(event,"rx_ready") || !std::strcmp(event,"rx_correlated");
+    if (!std::strcmp(event,"tx_rejected")) p.associated=false;
+    if (p.requestSnapshot && (!mExchangeRequestWireLength || mExchangeRequestSessionId!=mTwoWaySessionId))p.associated=false;
+    if(p.associated){p.txId=mTwoWayTxId;p.sessionId=mTwoWaySessionId;}
+    p.associationAmbiguous=!std::strcmp(event,"rx_correlated") &&
+        (mCurrentCmd.retries>0 || mResponseTimeoutRecorded);
     p.timeMs=millis();p.timeUs=micros();p.src=frame.getSrcNodeId();p.dst=frame.getDestNodeId();p.gateway=mOwnNodeId;
     p.ctrl0=frame.ctrlByte0;p.ctrl1=frame.ctrlByte1;p.command=uint8_t(frame.commandId);p.length=wireLength?wireLength:frame.dataLen;
     p.frequencyHz=mCurrentFreqIdx<IOHC_NUM_FREQUENCIES?IOHC_FREQUENCIES[mCurrentFreqIdx]:0;
     p.state=uint8_t(mState);p.sessionStartMs=mExchangeStartMs;p.attempt=mCurrentCmd.retries+1;
     p.preambleBytes=mCurrentTxPreambleSymbols;p.deadlineMs=mResponseTimeoutMs;
     p.lbtAttempts=mLastLbtAttempts;p.lbtRssi=mLastLbtRssi;p.lbtBypassed=mLastLbtBypassed;
+    p.lbtResult=mLastLbtAttempts==0 ? (mLastLbtBypassed?"policy_bypassed":"not_applied") :
+        !mLastLbtRssiValid ? "unavailable" : mLastLbtBypassed ? "busy_bypassed" : "channel_clear";
     p.belief=mCurrentCmd.twoWayPreamblePlan.belief;
     p.beliefUse=mCurrentCmd.twoWayPreamblePlan.use;
     if (const auto *channel=channelForQueueEntry(mCurrentCmd))
         if (channel->getProtocolIdentity().valid)
             p.powerSaveMode=channel->getProtocolIdentity().powerSaveModeRaw;
-    p.txDoneValid=mQueuedTxAccounted;
-    p.txDoneUs=mExchangeAuthTxEndValid && mAuthResponseSent ? mExchangeAuthTxEndUs : mExchangeRequestTxEndUs;
+    p.txDoneValid=p.associated && mAttemptTxDoneValid;
+    p.txStartUs=p.associated?mAttemptTxStartUs:0;
+    p.txDoneUs=p.txDoneValid?mAttemptTxDoneUs:0;
+    p.rxReadyUs=p.associated?mAttemptRxReadyUs:0;
+    p.dutyUsedMs=mRfDutyBudget.used(p.frequencyHz);
+    p.dutyLimitMs=IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(p.frequencyHz));
+    if (!p.associated) {
+        p.sessionStartMs=0;p.attempt=0;p.preambleBytes=0;p.deadlineMs=0;
+        p.powerSaveMode=0xFF;p.beliefUse=TwoWayWakeBeliefUse::NotLowPower;
+        p.lbtAttempts=0;p.lbtRssi=0;p.lbtBypassed=false;p.lbtResult="not_applied";
+    }
     if (!std::strcmp(event,"rx_ready") && p.txDoneValid)
         p.rxReadyDelayUs=p.timeUs-p.txDoneUs;
     // Cached observations only: no SPI/RSSI read or console output between
@@ -6204,8 +6188,13 @@ void IoHomeController::recordTwoWayTrace(const char *event,const IoHomeFrame &fr
         p.activityTimestampValid=e.preambleTimestampValid&&e.syncTimestampValid;
     }
 #endif
+    if(std::strcmp(event,"rx_observed") && std::strcmp(event,"rx_correlated")) {
+        p.preambleUs=0;p.syncUs=0;p.activityTimestampValid=false;
+    }
     // Allowlist functional evidence only: no challenges, HMACs, keys or object chunks.
-    if(frame.commandId==IoHomeCommand::Execute||frame.commandId==IoHomeCommand::StatusUpdate||
+    if(!std::strcmp(event,"tx_done_observed") || !std::strcmp(event,"rx_ready")) {
+        std::memcpy(p.payload,mAttemptTxPayload,sizeof(p.payload));
+    } else if(frame.commandId==IoHomeCommand::Execute||frame.commandId==IoHomeCommand::StatusUpdate||
        frame.commandId==IoHomeCommand::PrivateResponse||frame.commandId==IoHomeCommand::ErrorResponse) {
         const auto hex=ioHomeBytesToHexForLog(frame.data,frame.dataLen);
         std::snprintf(p.payload,sizeof(p.payload),"%s",hex.c_str());
@@ -6214,35 +6203,90 @@ void IoHomeController::recordTwoWayTrace(const char *event,const IoHomeFrame &fr
 
 void IoHomeController::printTwoWayTrace() const
 {
+    logInfoP("RF counters since boot: transmitted_packets=%llu timeout_attempts=%llu correlated_replies=%llu completed_status_polls=%llu wrong_peer_frames=%llu; trace clear/reset does not reset RF budget",
+        (unsigned long long)mRfCounters.transmittedPackets,(unsigned long long)mRfCounters.timeoutAttempts,
+        (unsigned long long)mRfCounters.correlatedReplies,(unsigned long long)mRfCounters.completedStatusPolls,
+        (unsigned long long)mRfCounters.wrongPeerFrames);
     logInfoP("2W identity gateway=%06X origin=local-or-restored collision=%u state=%s; transport completion does not prove actuation",mOwnNodeId,twoWayIdentityCollision(),stateName(mState));
     [[maybe_unused]] const auto &outcome=mLastTwoWayOutcome;
     logInfoP("2W lastOutcome valid=%u cmd=%02X peer=%06X gateway=%06X result=%u transport_complete=%u authenticated_exchange=%u device_accepted=%s actuation_started=unknown target_reached=unknown",
         outcome.valid,unsigned(outcome.command),outcome.peer,outcome.gateway,unsigned(outcome.result),outcome.transportComplete,
         outcome.authenticatedExchange,outcome.deviceAccepted==Evidence::No?"no":"unknown");
-    const uint32_t first=mTwoWayTraceCount>kTwoWayTraceCapacity?mTwoWayTraceCount-kTwoWayTraceCapacity+1:1;
-    for(uint32_t id=first;id<=mTwoWayTraceCount;++id) {
+    const uint64_t retainedFirst=mTwoWayTraceCount>kTwoWayTraceCapacity?mTwoWayTraceCount-kTwoWayTraceCapacity+1:1;
+    const uint64_t first=retainedFirst>mTwoWayTraceFirst?retainedFirst:mTwoWayTraceFirst;
+    for(uint64_t id=first;id<=mTwoWayTraceCount;++id) {
         [[maybe_unused]] const auto &p=twoWayTracePoint(id);
-        logInfoP("2WTrace id=%lu localTX=%lu event=%s ms=%lu us=%lu sessionMs=%lu src=%06X dst=%06X gateway=%06X cmd=%02X ctrl=%02X/%02X RF=%lu state=%u attempt=%u deadlineMs=%u payload=%s",
-            (unsigned long)p.id,(unsigned long)p.txId,p.event,(unsigned long)p.timeMs,(unsigned long)p.timeUs,(unsigned long)p.sessionStartMs,
+        logInfoP("2WTrace id=%llu localTX=%llu session=%llu association=%s frameRole=%s event=%s eventType=%s attempt_finished=%u ms=%lu us=%lu sessionMs=%lu src=%06X dst=%06X gateway=%06X cmd=%02X ctrl=%02X/%02X RF=%lu state=%u attempt=%u deadlineMs=%u payload=%s",
+            (unsigned long long)p.id,(unsigned long long)p.txId,(unsigned long long)p.sessionId,p.associated?"attempt":"none",p.requestSnapshot?"request_snapshot":"event_frame",p.event,p.eventType,p.attemptFinished,(unsigned long)p.timeMs,(unsigned long)p.timeUs,(unsigned long)p.sessionStartMs,
             p.src,p.dst,p.gateway,p.command,p.ctrl0,p.ctrl1,(unsigned long)p.frequencyHz,p.state,p.attempt,p.deadlineMs,p.payload);
-        logInfoP("  preambleBytes=%u preambleBits=%lu preambleEstimateUs=%lu LBTattempts=%u LBTrssi=%d bypass=%u RXreadUs=%lu RXtimestampValid=%u IRQ=%04X CRCchecked=%u CRCvalid=%u preambleUs=%lu syncUs=%lu activityTimestampValid=%u (MCU observations, not RF timestamps)",
-            p.preambleBytes,(unsigned long)p.preambleBytes*8UL,(unsigned long)((uint64_t(p.preambleBytes)*8000000ULL)/IOHC_BITRATE),
+        [[maybe_unused]] const auto airtime=ioHomeAirtime(p.length,p.preambleBytes);
+        [[maybe_unused]] char preambleCounter[16]="n/a",syncCounter[16]="n/a";
+#if defined(RADIO_SX1262) || defined(TEST_NATIVE)
+        std::snprintf(preambleCounter,sizeof(preambleCounter),"%lu",(unsigned long)p.preambleIrqs);
+        std::snprintf(syncCounter,sizeof(syncCounter),"%lu",(unsigned long)p.syncIrqs);
+#endif
+        logInfoP("  configuredPreambleBytes=%u modeledPreambleBits=%lu estimatedPreambleUs=%lu estimatedPacketUs=%lu LBT=%s LBTattempts=%u LBTrssi=%d bypass=%u RXreadUs=%lu RXtimestampValid=%u IRQ=%04X CRCchecked=%u CRCvalid=%u preambleUs=%lu syncUs=%lu activityTimestampValid=%u (MCU observations, not RF timestamps)",
+            p.preambleBytes,(unsigned long)airtime.preambleBits,(unsigned long)airtime.preambleUs,
+            (unsigned long)airtime.packetUs,p.lbtResult,
             p.lbtAttempts,p.lbtRssi,p.lbtBypassed,(unsigned long)p.rxReadUs,p.rxTimestampValid,p.irq,p.crcChecked,p.crcValid,
             (unsigned long)p.preambleUs,(unsigned long)p.syncUs,p.activityTimestampValid);
-        logInfoP("  START=%u LOW_POWER=%u PowerSaveMode=%u belief=%s beliefUse=%u beliefReason=%s failure=%s TXdoneUs=%lu RXreadyDelayUs=%lu TXdoneValid=%u preambleEvidence=%s syncEvidence=%s preamble_irq=%lu sync_irq=%lu crc_errors=%lu rx_read_fail=%lu parse_fail=%lu irq_queue_overflow=%lu software_phy=%u",
+        logInfoP("  START=%u LOW_POWER=%u PowerSaveMode=%u belief=%s beliefUse=%u beliefReason=%s failure=%s TXdoneUs=%lu RXreadyDelayUs=%lu TXdoneValid=%u preambleEvidence=%s syncEvidence=%s preamble_irq=%s sync_irq=%s crc_errors=%lu rx_read_fail=%lu parse_fail=%lu irq_queue_overflow=%lu software_phy=%u",
             !!(p.ctrl0 & IOHC_CTRL0_START),!!(p.ctrl1 & IOHC_CTRL1_LOW_POWER),p.powerSaveMode,
             twoWayWakeBeliefName(p.belief),unsigned(p.beliefUse),
             p.beliefUse!=TwoWayWakeBeliefUse::Applied ? "policy_override_or_not_low_power" :
                 p.belief==TwoWayWakeBelief::Awake ? "moving_status" : "no_fresh_moving_status",
             p.failureReason,(unsigned long)p.txDoneUs,(unsigned long)p.rxReadyDelayUs,p.txDoneValid,
             p.preambleEvidenceAvailable ? "available" : "not_available",p.syncEvidenceAvailable ? "available" : "not_available",
-            (unsigned long)p.preambleIrqs,(unsigned long)p.syncIrqs,(unsigned long)p.crcErrors,
+            preambleCounter,syncCounter,(unsigned long)p.crcErrors,
             (unsigned long)p.rxReadFailures,(unsigned long)p.parseFailures,(unsigned long)p.irqQueueOverflows,p.softwarePhy);
+        logInfoP("  associationAmbiguous=%u tx_done_event_us=n/a tx_start_observed_us=%lu tx_done_observed_us=%lu rx_ready_us=%lu rx_observed_us=%lu rx_correlated_us=%lu dutyUsedMs=%lu dutyLimitMs=%lu timestampSource=MCU_service",
+            p.associationAmbiguous,(unsigned long)p.txStartUs,(unsigned long)p.txDoneUs,(unsigned long)p.rxReadyUs,
+            (unsigned long)(!std::strcmp(p.event,"rx_observed")?p.timeUs:0),
+            (unsigned long)(!std::strcmp(p.event,"rx_correlated")?p.timeUs:0),
+            (unsigned long)p.dutyUsedMs,(unsigned long)p.dutyLimitMs);
     }
 }
 
-RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8_t iLength)
+void IoHomeController::clearTwoWayTrace()
 {
+    mTwoWayTraceFirst=mTwoWayTraceCount+1;
+}
+
+void IoHomeController::printTwoWayAttemptCsv() const
+{
+    logInfoP("2WAttemptCSV session_id,tx_id,try_index,device_node,ctrl0,ctrl1,command,preamble_bytes,frequency_hz,tx_start_us,tx_done_us,rx_ready_us,response_correlated,timeout,poll_completed,exchange_completed,challenge_seen,association_ambiguous,tx_done_valid,rx_ready_valid,failure_reason");
+    const uint64_t first=mTwoWayTraceCount>kTwoWayTraceCapacity?mTwoWayTraceCount-kTwoWayTraceCapacity+1:1;
+    for(uint64_t id=first;id<=mTwoWayTraceCount;++id) {
+        const auto &start=twoWayTracePoint(id);
+        if(id<mTwoWayTraceFirst || std::strcmp(start.event,"tx_started"))continue;
+        uint32_t done=0,ready=0;bool reply=false,timeout=false,poll=false,complete=false,challenge=false,ambiguous=false,doneValid=false,readyValid=false;
+        const char *failure="none";
+        for(uint64_t next=id+1;next<=mTwoWayTraceCount;++next) {
+            const auto &p=twoWayTracePoint(next);if(p.txId!=start.txId)continue;
+            if(!std::strcmp(p.event,"tx_done_observed")){done=p.txDoneUs;doneValid=p.txDoneValid;}
+            if(!std::strcmp(p.event,"rx_ready")){ready=p.rxReadyUs;readyValid=true;}
+            reply|=!std::strcmp(p.event,"rx_correlated");
+            challenge|=!std::strcmp(p.event,"rx_correlated")&&p.command==uint8_t(IoHomeCommand::ChallengeRequest);
+            ambiguous|=p.associationAmbiguous;
+            timeout|=!std::strcmp(p.event,"response_timeout");
+            poll|=!std::strcmp(p.event,"status_poll_completed");
+            complete|=!std::strcmp(p.event,"exchange_completed")||poll;
+            if(std::strcmp(p.failureReason,"none"))failure=p.failureReason;
+        }
+        logInfoP("2WAttemptCSV %llu,%llu,%u,%06X,%02X,%02X,%02X,%u,%lu,%lu,%lu,%lu,%u,%u,%u,%u,%u,%u,%u,%u,%s",
+            (unsigned long long)start.sessionId,(unsigned long long)start.txId,start.attempt?start.attempt-1:0,
+            start.dst,start.ctrl0,start.ctrl1,start.command,start.preambleBytes,(unsigned long)start.frequencyHz,
+            (unsigned long)start.txStartUs,(unsigned long)done,(unsigned long)ready,reply,timeout,poll,complete,challenge,ambiguous,doneValid,readyValid,failure);
+    }
+}
+
+RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8_t iLength, bool blocking)
+{
+    const bool lPrepared=mLbtPrepared;mLbtPrepared=false;
+    if(!lPrepared) {
+        mLastLbtAttempts=0; mLastLbtRssi=0; mLastLbtRssiValid=false;
+        mLastLbtBypassed=false; mLastLbtAuthResponse=false;
+    }
     if(iData&&iLength&&!(iData[0]&IOHC_CTRL0_MODE_1W)&&twoWayIdentityCollision()) {
         logInfoP("2W TX rejected: identity_collision gateway=%06X",mOwnNodeId);
         return RadioError::HardwareError;
@@ -6255,18 +6299,64 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
     if(iData&&iLength&&!(iData[0]&IOHC_CTRL0_MODE_1W)&&mModule&&!mModule->prepareTwoWayPersistence())
         return RadioError::HardwareError;
 #endif
+    mLastTxDutyDenied=false;
+    mRfDutyBudget.advance(millis());
+    const uint32_t airtime = estimatedTxAirtimeMs(iLength, mCurrentTxPreambleSymbols);
+    if (!isDutyCycleOk(mCurrentFreqIdx, airtime)) {
+        mLbtPrepared=false;
+        mLastTxDutyDenied=true;
+        logInfoP("RF TX denied: duty_budget_exceeded frequency=%lu usedMs=%lu nextMs=%lu limitMs=%lu",
+            (unsigned long)IOHC_FREQUENCIES[mCurrentFreqIdx],
+            (unsigned long)mRfDutyBudget.used(IOHC_FREQUENCIES[mCurrentFreqIdx]),
+            (unsigned long)airtime,
+            (unsigned long)IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(IOHC_FREQUENCIES[mCurrentFreqIdx])));
+        return RadioError::DutyCycleExceeded; // no timing exemptions, including 0x3D
+    }
+#if defined(RADIO_SX1262)
+    const auto result=blocking?mRadio.startTransmitBlocking(iData,iLength):mRadio.startTransmit(iData,iLength);
+#else
+    (void)blocking;
     const auto result=mRadio.startTransmit(iData,iLength);
-    if (result == RadioError::None)
-    {
-        mQueuedTxAccounted = false;
-        mQueuedTxWireLength = iLength;
-    }
+#endif
     IoHomeFrame frame;
-    if(iData&&iLength&&!(iData[0]&IOHC_CTRL0_MODE_1W)&&frame.deserializeRawWithOptionalCrc(iData,iLength)) {
-        ++mTwoWayTxId;
-        if (result == RadioError::None) mQueuedTxFrame = frame;
-        recordTwoWayTrace(result==RadioError::None?"tx_started":"tx_rejected",frame,iLength);
+    const bool parsed=iData&&iLength&&frame.deserializeRawWithOptionalCrc(iData,iLength);
+    if(!parsed && iData && iLength)frame.ctrlByte0=iData[0];
+    const bool twoWay=parsed&&!(iData[0]&IOHC_CTRL0_MODE_1W);
+    if (result == RadioError::None) {
+        // Authoritative accounting event: charge at acceptance, never at TX_DONE.
+        // Includes queued/direct/pairing/1W/continuations, lost IRQs and aborts.
+        mRfDutyBudget.advance(millis()); // charge at acceptance even across a programming-time boundary
+        mRfDutyBudget.charge(IOHC_FREQUENCIES[mCurrentFreqIdx], airtime);
+        ++mRfCounters.transmittedPackets;
+        mQueuedTxDoneObserved=false;
+        mQueuedTxWireLength=iLength;
+        mQueuedTxFrame=frame;
+        if (twoWay) {
+            ++mTwoWayTxId;
+            if (!mCurrentCmd.active && (frame.ctrlByte0&IOHC_CTRL0_START)) ++mTwoWaySessionId;
+            mResponseTimeoutRecorded=false;
+            mAttemptTxStartUs=micros(); mAttemptTxDoneUs=0; mAttemptRxReadyUs=0;
+            mAttemptTxDoneValid=false;
+            if (mCurrentCmd.active && !mAuthResponseSent && frame.commandId!=IoHomeCommand::ChallengeResponse) {
+                mExchangeRequestFrame=frame; mExchangeRequestWireLength=iLength;
+                mExchangeRequestSessionId=mTwoWaySessionId;
+                beginResponseTimingAttempt();
+                selectDirectedResponseTimeout(frame.ctrlByte1);
+            }
+            recordTwoWayTrace("tx_started",frame,iLength);
+            std::memcpy(mAttemptTxPayload,mTwoWayTrace[(mTwoWayTraceCount-1)%kTwoWayTraceCapacity].payload,sizeof(mAttemptTxPayload));
+            logDebugP("2W accepted localTX=%llu session=%llu attempt=%u preamble=%u belief=%s TXfreq=%lu timeout=%u LBT=%s duty=%lu/%lu ms",
+                (unsigned long long)mTwoWayTxId,(unsigned long long)mTwoWaySessionId,
+                mCurrentCmd.retries+1,mCurrentTxPreambleSymbols,
+                twoWayWakeBeliefName(mCurrentCmd.twoWayPreamblePlan.belief),
+                (unsigned long)IOHC_FREQUENCIES[mCurrentFreqIdx],mResponseTimeoutMs,
+                mTwoWayTrace[(mTwoWayTraceCount-1)%kTwoWayTraceCapacity].lbtResult,
+                (unsigned long)mRfDutyBudget.used(IOHC_FREQUENCIES[mCurrentFreqIdx]),
+                (unsigned long)IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(IOHC_FREQUENCIES[mCurrentFreqIdx])));
+        }
     }
+    // Rejected candidates have no new TX identity and no attempt snapshot.
+
     return result;
 }
 
@@ -6549,8 +6639,8 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
 
     uint32_t lAccum = 0;
     for (uint8_t i = 0; i < IOHC_NUM_FREQUENCIES; i++)
-        if (mTxTimeAccum[i] > lAccum)
-            lAccum = mTxTimeAccum[i];
+        if (mRfDutyBudget.used(IOHC_FREQUENCIES[i]) > lAccum)
+            lAccum = mRfDutyBudget.used(IOHC_FREQUENCIES[i]);
     lHealth.dutyPermille = static_cast<uint16_t>((lAccum * 1000UL) / IOHC_DUTY_CYCLE_WINDOW_MS);
     return lHealth;
 }
@@ -6611,12 +6701,7 @@ void IoHomeController::loop()
         mDiscoveryLoopStartedUs = lNowUs;
     }
 
-    // Reset duty cycle accumulator every hour
-    if (millis() - mDutyCycleWindowStart > IOHC_DUTY_CYCLE_WINDOW_MS)
-    {
-        memset(mTxTimeAccum, 0, sizeof(mTxTimeAccum));
-        mDutyCycleWindowStart = millis();
-    }
+    mRfDutyBudget.advance(millis());
 
     if (mPassiveKeySniffStatus == PassiveKeySniffStatus::Listening &&
         mPassiveKeySniffTimeoutMs > 0 &&
@@ -7334,6 +7419,9 @@ void IoHomeController::processIdle()
             mSawChallenge = false;
             mRetryAtMs = 0;
             mExchangeStartMs = millis();
+            ++mTwoWaySessionId;
+            mExchangeRequestWireLength = 0;
+            mLastTxDutyDenied=false;
             beginExchangeDiagnosticsWindow();
             if (buildTxFrame(mCurrentCmd))
             {
@@ -7374,9 +7462,6 @@ void IoHomeController::processTxPending()
         mCurrentFreqIdx = frequencyIndexForHz(kNormal2WTxFreqHz);
         mTx1WHopFrequencies = false;
     }
-    const uint8_t lTxDutyFreqIdx = lIs1WFrame ? mCurrentFreqIdx : frequencyIndexForHz(kNormal2WTxFreqHz);
-    if (!isDutyCycleOk(lTxDutyFreqIdx))
-        return; // wait for duty cycle to clear
 
     OneWayCopyShape lOneWayFirstShape{IOHC_PREAMBLE_LONG, false};
     OneWayPowerClass lOneWayPowerClass = OneWayPowerClass::Automatic;
@@ -7433,7 +7518,7 @@ void IoHomeController::processTxPending()
         mRetryAtMs = 0;
     }
     if (!lIs1WFrame &&
-        static_cast<uint32_t>(millis() - mExchangeStartMs) +
+        static_cast<uint64_t>(uint32_t(millis() - mExchangeStartMs)) +
             estimatedTxAirtimeMs(mTxLen, lPreamble) + mResponseTimeoutMs >=
             mCurrentCmd.sessionPolicy.totalBudgetMs)
     {
@@ -7495,8 +7580,7 @@ void IoHomeController::processTxPending()
                      static_cast<unsigned long>(mDirectedRequestTxStartUs));
         }
         if (!lIs1WFrame) {
-            beginResponseTimingAttempt();
-            selectDirectedResponseTimeout(mTxFrame.ctrlByte1);
+            // Timing sample initialized before the accepted tx_started snapshot.
         }
         mStateTimer = millis();
         mState = ControllerState::TxInProgress;
@@ -7510,7 +7594,7 @@ void IoHomeController::processTxPending()
         if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
             logInfoP("KeyImport directed failure: candidate=%06X stage=tx_failed reason=radio_transmit err=%d",
                      mCurrentCmd.destNodeId, static_cast<int>(lErr));
-        if (!lIs1WFrame && ++mCurrentCmd.mediaAttempts < mCurrentCmd.sessionPolicy.rfAttempts &&
+        if (lErr != RadioError::DutyCycleExceeded && !lIs1WFrame && ++mCurrentCmd.mediaAttempts < mCurrentCmd.sessionPolicy.rfAttempts &&
             uint32_t(millis()-mExchangeStartMs)<mCurrentCmd.sessionPolicy.totalBudgetMs) {
             mRetryAtMs=millis()+IOHC_RETRY_GAP_MS;
             logInfoP("Session media access failed; RF retry=%u/%u mode=%u stateRetry=%u wholeRetry=0",
@@ -7528,18 +7612,19 @@ void IoHomeController::processTxInProgress()
     const bool lDone = mRadio.state() != RadioState::Transmitting || mRadio.isTxDone();
     if (lDone)
     {
-        if (!mQueuedTxAccounted)
+        if (!mQueuedTxDoneObserved)
         {
-            mQueuedTxAccounted = true;
+            mQueuedTxDoneObserved = true;
             mQueuedTxDoneMs = millis();
-            mTxTimeAccum[mCurrentFreqIdx] += estimatedTxAirtimeMs(mQueuedTxWireLength, mCurrentTxPreambleSymbols);
             if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest &&
                 !mAuthResponseSent && mDirectedRequestTxEndUs == 0)
                 mDirectedRequestTxEndUs = micros();
             if ((mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) == 0)
             {
-                recordTwoWayTrace("tx_done_observed", mQueuedTxFrame, mQueuedTxWireLength);
                 markResponseTimingTxEnd();
+                mAttemptTxDoneUs = mExchangeAuthTxEndValid && mAuthResponseSent ? mExchangeAuthTxEndUs : mExchangeRequestTxEndUs;
+                mAttemptTxDoneValid = true;
+                recordTwoWayTrace("tx_done_observed", mQueuedTxFrame, mQueuedTxWireLength);
             }
         }
         if (mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W)
@@ -7574,6 +7659,7 @@ void IoHomeController::processTxInProgress()
             return;
         }
         mRxScanLastSwitch = micros();
+        mAttemptRxReadyUs = micros();
         recordTwoWayTrace("rx_ready", mQueuedTxFrame, mQueuedTxWireLength);
         if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest &&
             !mAuthResponseSent && mDirectedRxReadyUs == 0)
@@ -7585,11 +7671,10 @@ void IoHomeController::processTxInProgress()
     }
     else if (static_cast<uint32_t>(millis() - mStateTimer) > currentTxTimeoutMs())
     {
-        // Conservatively account an accepted TX even if its done IRQ was lost.
-        if (!mQueuedTxAccounted)
+        // Airtime was already charged at acceptance, even if the done IRQ was lost.
+        if (!mQueuedTxDoneObserved)
         {
-            mTxTimeAccum[mCurrentFreqIdx] += estimatedTxAirtimeMs(mQueuedTxWireLength, mCurrentTxPreambleSymbols);
-            mQueuedTxAccounted = true;
+            mQueuedTxDoneObserved = true;
         }
         recordTwoWayTrace("tx_timeout", mQueuedTxFrame, mQueuedTxWireLength);
         mRadio.standby();
@@ -7686,7 +7771,12 @@ void IoHomeController::processWaitResponse()
 
     if (millis() - mStateTimer >= mResponseTimeoutMs)
     {
-        recordTwoWayTrace("response_timeout", mTxFrame, mTxLen);
+        if (!mResponseTimeoutRecorded) {
+            mResponseTimeoutRecorded = true;
+            ++mRfCounters.timeoutAttempts;
+            recordTwoWayTrace("response_timeout", mQueuedTxFrame, mQueuedTxWireLength);
+            mTwoWayTrace[(mTwoWayTraceCount-1)%kTwoWayTraceCapacity].failureReason="response_timeout";
+        }
         const auto failExchange = [this]() {
             const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
             const bool lAfterChallenge = mSawChallenge && mWaitingFinalResponse;
@@ -7770,7 +7860,7 @@ void IoHomeController::processWaitResponse()
                 return;
             }
 
-            if (millis() < mRetryAtMs)
+            if (uint32_t(millis()-mRetryAtMs)>=0x80000000UL)
                 return;
         }
 
@@ -7802,7 +7892,7 @@ void IoHomeController::processWaitResponse()
             return;
         }
 
-        if (millis() < mRetryAtMs)
+        if (uint32_t(millis()-mRetryAtMs)>=0x80000000UL)
             return;
 
         mRetryAtMs = 0;
@@ -7857,6 +7947,7 @@ void IoHomeController::processResponse()
         if (mCurrentCmd.active)
         {
             mCurrentCmd.sawWrongPeer = true;
+            ++mRfCounters.wrongPeerFrames;
             recordTwoWayTrace("rx_wrong_peer", mRxFrame, mRxRawLen);
         }
         if (mCurrentCmd.active && mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
@@ -8037,6 +8128,7 @@ void IoHomeController::processResponse()
         if(!accepted){mState=ControllerState::WaitResponse;return;}
     }
     mCurrentCmd.hadPeerResponse = true;
+    ++mRfCounters.correlatedReplies;
     recordTwoWayTrace("rx_correlated",mRxFrame,mRxRawLen);
     recordResponseTiming(mRxFrame.commandId != IoHomeCommand::ChallengeRequest);
 
@@ -8223,6 +8315,7 @@ void IoHomeController::processPairSendDiscovery()
     }
     updateCurrentFrequencyIndex(lDiscoveryFreq);
     const RadioError lPrepErr = mRadio.setPreambleLengthBlocking(lDiscoveryOptions.preamble);
+    if(lPrepErr==RadioError::None)mCurrentTxPreambleSymbols=lDiscoveryOptions.preamble;
 #else
     const RadioError lPrepErr = configureTxRadio(lDiscoveryOptions.preamble, &lDiscoveryFreq);
 #endif
@@ -8239,7 +8332,7 @@ void IoHomeController::processPairSendDiscovery()
     {
         tracePairDiagnosticTx2W(mTxFrame, lDiscoveryOptions.preamble);
 #if defined(RADIO_SX1262)
-        const RadioError lErr = mRadio.startTransmitBlocking(mTxBuffer, mTxLen);
+        const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen, true);
 #else
         const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
 #endif
@@ -8321,6 +8414,7 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
     }
     updateCurrentFrequencyIndex(lConfirmationFreq);
     const RadioError lPrepErr = mRadio.setPreambleLengthBlocking(lPreamble);
+    if(lPrepErr==RadioError::None)mCurrentTxPreambleSymbols=lPreamble;
 #else
     const RadioError lPrepErr = configureTxRadio(lPreamble, &lConfirmationFreq);
 #endif
@@ -8342,7 +8436,7 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
     {
         tracePairDiagnosticTx2W(mTxFrame, lPreamble);
 #if defined(RADIO_SX1262)
-        const RadioError lErr = mRadio.startTransmitBlocking(mTxBuffer, mTxLen);
+        const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen, true);
 #else
         const RadioError lErr = startControllerTransmit(mTxBuffer, mTxLen);
 #endif
@@ -9265,8 +9359,6 @@ bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
 #endif
     if (lTxDone)
     {
-        const uint32_t lTxTimeMs = estimatedTxAirtimeMs(mTxLen, mCurrentTxPreambleSymbols);
-        mTxTimeAccum[mCurrentFreqIdx] += lTxTimeMs;
 
         if (mTx1WRepeatRemaining > 0)
         {
@@ -10007,6 +10099,7 @@ void IoHomeController::processDiscovery()
             lPrepErr = mRadio.setPreambleLengthBlocking(lDiscoveryPreamble);
             if (lPrepErr == RadioError::None)
             {
+                mCurrentTxPreambleSymbols=lDiscoveryPreamble;
                 mDiscoveryTimingTrace.preambleReadyUs = micros();
                 mDiscoverySendPhase = DiscoverySendPhase::StartTransmit;
                 return;
@@ -10036,7 +10129,7 @@ void IoHomeController::processDiscovery()
         {
             RadioError lErr = RadioError::None;
 #if defined(RADIO_SX1262)
-            lErr = mRadio.startTransmitBlocking(mTxBuffer, mTxLen);
+            lErr = startControllerTransmit(mTxBuffer, mTxLen, true);
 #else
             lErr = startControllerTransmit(mTxBuffer, mTxLen);
 #endif
@@ -10354,8 +10447,7 @@ void IoHomeController::processScanWaitResponse()
 
 uint32_t IoHomeController::txTimeoutForAirtime(uint8_t iFrameLen, uint16_t iPreambleBytes)
 {
-    // Nominal UART body + preamble airtime, with bounded scheduler/hardware
-    // headroom. Retain the old 1500 ms margin at 1024 bytes until measured.
+    // Conservative per-chip RF estimate plus bounded scheduler/IRQ headroom.
     const uint32_t lEstimate = estimatedTxAirtimeMs(iFrameLen, iPreambleBytes);
     const uint32_t lMargin = iPreambleBytes >= IOHC_PREAMBLE_LONG ? 1300UL : 500UL;
     return lEstimate + lMargin;
@@ -10371,8 +10463,10 @@ RadioError IoHomeController::configureTxRadio(uint16_t iPreambleSymbols, const u
     if (iFrequencyHz != nullptr)
     {
         const RadioError lFreqErr = mRadio.setFrequency(*iFrequencyHz);
-        if (lFreqErr != RadioError::None)
+        if (lFreqErr != RadioError::None) {
+            if(lFreqErr!=RadioError::Busy)logInfoP("RF configure rejected: selectedTxHz=%lu frequency_error=%d",(unsigned long)*iFrequencyHz,int(lFreqErr));
             return lFreqErr;
+        }
         updateCurrentFrequencyIndex(*iFrequencyHz);
     }
 
@@ -10447,6 +10541,7 @@ RadioError IoHomeController::startRadioTransmit(const uint8_t *iBuffer, uint8_t 
     if (!waitForLbtClear(iLbtContext))
         return RadioError::Busy;
 
+    mLbtPrepared=true;
     const auto result=startControllerTransmit(iBuffer,iLen);
     if(result==RadioError::None&&mLastLbtBypassed){IoHomeFrame frame;if(frame.deserializeRawWithOptionalCrc(iBuffer,iLen))mHostRadioPolicy.forced(uint8_t(frame.commandId));}
     return result;
@@ -10503,8 +10598,7 @@ RadioError IoHomeController::startTransmitWithPreamble(const uint8_t *iBuffer, u
         return lPrepErr;
 
     const RadioError lTxErr = startRadioTransmit(iBuffer, iLen, iLbtContext);
-    if (lTxErr == RadioError::None && iTrackDutyCycle)
-        mTxTimeAccum[mCurrentFreqIdx] += estimatedTxAirtimeMs(iLen, iPreambleSymbols);
+    (void)iTrackDutyCycle; // all accepted transmissions are centrally accounted
 
     return lTxErr;
 }
@@ -11658,8 +11752,6 @@ void IoHomeController::processStatusAckTxWait()
 
     if (mRadio.isTxDone())
     {
-        const uint32_t lTxTimeMs = estimatedTxAirtimeMs(mTxLen, mCurrentTxPreambleSymbols);
-        mTxTimeAccum[mCurrentFreqIdx] += lTxTimeMs;
         mStatusAckFreqIdx++;
         mState = ControllerState::StatusAckSend;
     }
@@ -12541,11 +12633,8 @@ bool IoHomeController::isDutyCycleOk() const
     return isDutyCycleOk(mCurrentFreqIdx);
 }
 
-bool IoHomeController::isDutyCycleOk(uint8_t iFreqIdx) const
+bool IoHomeController::isDutyCycleOk(uint8_t iFreqIdx, uint32_t nextAirtimeMs) const
 {
-    // EU 868 MHz duty cycle: 1% per sub-band per hour = 36000 ms in 3600000 ms window
-    uint32_t lMaxTxTime = IOHC_DUTY_CYCLE_WINDOW_MS / 100; // 1%
-    if (iFreqIdx >= IOHC_NUM_FREQUENCIES)
-        return false;
-    return mTxTimeAccum[iFreqIdx] < lMaxTxTime;
+    return iFreqIdx < IOHC_NUM_FREQUENCIES &&
+        mRfDutyBudget.admits(IOHC_FREQUENCIES[iFreqIdx], nextAirtimeMs);
 }

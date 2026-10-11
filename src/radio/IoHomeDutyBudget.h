@@ -1,0 +1,43 @@
+#pragma once
+#include <cstdint>
+
+// Two complete aligned buckets upper-bound EVERY rolling one-hour interval.
+// Retaining the whole previous bucket is intentionally more restrictive than
+// an exact rolling ledger. No refunds on abort/lost TX_DONE; volatile on reboot.
+class IoHomeDutyBudget {
+public:
+    static constexpr uint32_t windowMs = 3600000U;
+    // Include the maximum admitted packet duration in the bucket period so
+    // expiry cannot drop a packet tail spanning the old bucket boundary.
+    static constexpr uint32_t bucketMs = windowMs + 36000U;
+    static uint8_t band(uint32_t hz) {
+        if (hz >= 868000000U && hz <= 868600000U) return 0;
+        if (hz >= 868700000U && hz <= 869200000U) return 1;
+        if (hz >= 869700000U && hz <= 870000000U) return 2;
+        return 3; // unsupported emission is denied
+    }
+    static uint32_t allowance(uint8_t b) { return b==1 ? 3600U : b<3 ? 36000U : 0U; }
+    void advance(uint32_t now) {
+        if (!initialized) { start=now; initialized=true; }
+        const uint32_t periods = uint32_t(now-start)/bucketMs;
+        if (!periods) return;
+        for (unsigned b=0;b<3;++b) { previous[b]=periods==1?current[b]:0; current[b]=0; }
+        start += periods*bucketMs;
+    }
+    uint32_t used(uint32_t hz) const {
+        const uint8_t b=band(hz);
+        return b<3 ? current[b]+previous[b] : UINT32_MAX;
+    }
+    bool admits(uint32_t hz, uint32_t nextMs) const {
+        const uint8_t b=band(hz); const uint32_t limit=allowance(b);
+        if (b>=3 || nextMs>limit) return false;
+        const uint32_t total=used(hz);
+        return total<=limit && nextMs<=limit-total; // no addition overflow
+    }
+    void charge(uint32_t hz, uint32_t ms) {
+        if (admits(hz,ms)) current[band(hz)] += ms; // defensive bound as well as caller admission
+    }
+private:
+    uint32_t current[3]{},previous[3]{},start=0;
+    bool initialized=false;
+};
