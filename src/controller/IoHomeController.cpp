@@ -6698,7 +6698,8 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
     for (uint8_t i = 0; i < IOHC_NUM_FREQUENCIES; i++)
         if (mRfDutyBudget.used(IOHC_FREQUENCIES[i]) > lAccum)
             lAccum = mRfDutyBudget.used(IOHC_FREQUENCIES[i]);
-    lHealth.dutyPermille = static_cast<uint16_t>((lAccum * 1000UL) / IOHC_DUTY_CYCLE_WINDOW_MS);
+    const uint64_t dutyPermille=(uint64_t(lAccum)*1000U)/IOHC_DUTY_CYCLE_WINDOW_MS;
+    lHealth.dutyPermille=static_cast<uint16_t>(dutyPermille>UINT16_MAX?UINT16_MAX:dutyPermille);
     return lHealth;
 }
 
@@ -7668,14 +7669,15 @@ void IoHomeController::processTxPending()
 
 void IoHomeController::processTxInProgress()
 {
-    const bool lDone = mRadio.state() != RadioState::Transmitting || mRadio.isTxDone();
+    const bool lObservedDone=mRadio.isTxDone(); // consumes the hardware completion event only once
+    const bool lDone = mRadio.state() != RadioState::Transmitting || lObservedDone;
     if (lDone)
     {
         if (!mQueuedTxDoneObserved)
         {
             mQueuedTxDoneObserved = true;
             mQueuedTxDoneMs = millis();
-            if(mRadio.isTxDone())observeBatteryDiagnostic(mCurrentCmd,IoHomeBatteryDiagnostic::State::RfCompleted);
+            if(lObservedDone)observeBatteryDiagnostic(mCurrentCmd,IoHomeBatteryDiagnostic::State::RfCompleted);
             if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest &&
                 !mAuthResponseSent && mDirectedRequestTxEndUs == 0)
                 mDirectedRequestTxEndUs = micros();

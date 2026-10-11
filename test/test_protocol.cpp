@@ -21274,5 +21274,20 @@ TEST(controller_battery_probe_distinguishes_queued_started_done_and_reply)
     ASSERT_TRUE(c.requestBatteryPrivate(&ch,6));ASSERT_TRUE(!c.batteryDiagnostic(0).rfStarted);
     IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
     ASSERT_TRUE(c.batteryDiagnostic(0).rfStarted&&!c.batteryDiagnostic(0).replyReceived);
+    c.radio().testHardwareTxDoneSemantics(true);
     c.loop();ASSERT_TRUE(c.batteryDiagnostic(0).rfCompleted);
+}
+
+TEST(controller_simulation_many_accepts_stay_charged_after_mode_exit)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    IoHomeFrame f;f.init();f.setSrcNode(0x123456);f.setDestNode(0x654321);f.commandId=IoHomeCommand::StatusUpdateResponse;f.dataLen=1;
+    uint8_t bytes[64]{};const auto length=f.serialize(bytes,sizeof(bytes));
+    const auto airtime=IoHomeController::estimatedTxAirtimeMs(length,1024);
+    c.testSimulationUnlimited();
+    for(unsigned i=0;i<200;++i){c.radio().standby();ASSERT_EQ(c.testDirectTransmit(bytes,length,1024,868950000U),RadioError::None);}
+    ASSERT_EQ(c.testTxAirtimeAccum(0),airtime*200U);ASSERT_EQ(c.radio().testTransmitCount(),200U);
+    c.testDutyOff();ASSERT_EQ(c.testDirectTransmit(bytes,length,1024,868950000U),RadioError::DutyCycleExceeded);
+    ASSERT_EQ(c.testTxAirtimeAccum(0),airtime*200U);
 }

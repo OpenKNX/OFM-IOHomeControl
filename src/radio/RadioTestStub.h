@@ -115,6 +115,8 @@ public:
 
   RadioError startReceiveBlocking() { return startReceive(); }
 
+  bool mHardwareTxDoneSemantics=false;
+  void testHardwareTxDoneSemantics(bool enabled){mHardwareTxDoneSemantics=enabled;}
   bool isTxDone()
   {
     if (mTxDonePending)
@@ -124,7 +126,7 @@ public:
       mState = RadioState::Idle;
       return true;
     }
-    return (mState != RadioState::Transmitting);
+    return !mHardwareTxDoneSemantics && (mState != RadioState::Transmitting);
   }
 
   bool isTxDoneBlocking() { return isTxDone(); }
