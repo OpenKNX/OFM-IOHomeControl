@@ -7,9 +7,9 @@ Pre-existing README/battery/wake and recovery documents were preserved.
 
 - Central access policy separate from accounting; explicit DutyLimited,
   QualifiedPoliteAccess (unavailable), BenchUnlimited and SimulationUnlimited.
-- Simulation restricted to TEST_NATIVE/RadioTestStub. Bench restricted to a
-  separate debug build, local explicit confirmation, five-minute expiry,
-  no persistence/web console, identity/error revocation and reset/off without
+- Simulation restricted to TEST_NATIVE/RadioTestStub. Bench available in every
+  OPENKNX_DEBUG build (including web-console builds), explicit confirmation, five-minute expiry,
+  no persistence, identity/error revocation and reset/off without
   ledger refunds. Ordinary firmware cannot select unlimited modes.
 - All controller TX plus seven formerly direct module diagnostic calls use
   central admission and charge-on-accept. Existing LBT/authentication/frequency/
@@ -33,7 +33,7 @@ Pre-existing README/battery/wake and recovery documents were preserved.
 ## Verified in software
 
 Native suite: 712 cases. Policy wrapper compiles production, simulation and bench
-variants and rejects production/web-console bypass builds. Existing protocol,
+variants including debug web console and rejects production bypass builds. Existing protocol,
 controller, exchange, radio, wake, UI, battery and import identity checks pass.
 Firmware compiled and linked for normal SX1262, production SX1276 and both
 bench profiles. No firmware was uploaded and no repository was pushed.

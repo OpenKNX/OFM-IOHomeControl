@@ -4251,7 +4251,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc scan dump", "Dump captured packets with key payload redaction");
     openknx.console.printHelpLine("iohc scan stats", "Show per-node statistics");
     openknx.console.printHelpLine("iohc duty status|limits|mode status", "Per-band conservative accounting and recovery status");
-    openknx.console.printHelpLine("iohc duty debug on CONFIRM_SHIELDED_BENCH", "Separate bench build only; BENCH ONLY - RF duty check bypassed, max 5 minutes");
+    openknx.console.printHelpLine("iohc duty debug on CONFIRM_SHIELDED_BENCH", "Debug builds only; BENCH ONLY - RF duty check bypassed, max 5 minutes");
     openknx.console.printHelpLine("iohc duty debug off|reset-debug", "End debug; never reset/refund actual airtime");
     openknx.console.printHelpLine("iohc radio", "Show radio health summary");
 #if defined(RADIO_SX1262)
@@ -4286,7 +4286,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             mController.qualifiedDuty();logInfoP("QualifiedPoliteAccess denied: no PHY/region qualification; mode=DutyLimited");
         } else if(iCmd=="iohc duty debug on CONFIRM_SHIELDED_BENCH"&&!iDebugKo) {
             logInfoP("%s",mController.enableBenchDuty(true)?"BENCH ONLY - RF duty check bypassed; expires in 300000ms; all other guards retained":"RF bench debug unavailable in this build");
-        } else logInfoP("RF debug denied: local console, separate bench build and CONFIRM_SHIELDED_BENCH required");
+        } else logInfoP("RF debug denied: console command, debug build and CONFIRM_SHIELDED_BENCH required");
         return true;
     }
     if(iCmd=="iohc event trace on"||iCmd=="iohc event trace off") {

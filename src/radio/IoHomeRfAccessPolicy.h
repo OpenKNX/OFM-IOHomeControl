@@ -1,12 +1,14 @@
 #pragma once
 #include "IoHomeDutyBudget.h"
+
+// All OpenKNX debug builds expose the temporary, explicitly confirmed bypass.
+#if defined(OPENKNX_DEBUG) && !defined(IOHC_ENABLE_RF_BENCH_UNLIMITED)
+#define IOHC_ENABLE_RF_BENCH_UNLIMITED
+#endif
 #if defined(IOHC_ENABLE_RF_BENCH_UNLIMITED) && !defined(OPENKNX_DEBUG) && !defined(TEST_NATIVE)
-#error "RF bench bypass requires a separate OPENKNX_DEBUG build"
+#error "RF bench bypass requires an OPENKNX_DEBUG build"
 #endif
 
-#if defined(IOHC_ENABLE_RF_BENCH_UNLIMITED) && defined(OPENKNX_WEBCONSOLE)
-#error "RF bench builds cannot expose a web console"
-#endif
 
 // Access decisions never own/reset the accounting ledger or protocol guards.
 class IoHomeRfAccessPolicy {

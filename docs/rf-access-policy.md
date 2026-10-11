@@ -28,15 +28,16 @@ percentage, ETS setting or persistence switch to enable a higher allowance.
 non-emitting RadioTestStub. Admission can exceed quota while the same ledger
 continues charging. Normal firmware cannot select this mode.
 
-`BenchUnlimited` requires IOHC_ENABLE_RF_BENCH_UNLIMITED in a separate
-OPENKNX_DEBUG build. Compilation fails in production or with OPENKNX_WEBCONSOLE.
+`BenchUnlimited` is available in every OPENKNX_DEBUG build, including IP/web-console
+builds. OPENKNX_DEBUG automatically enables IOHC_ENABLE_RF_BENCH_UNLIMITED.
+An explicit bypass flag without a debug build is rejected in production.
 Use only a shielded/conducted authorized RF lab setup. It is disabled at boot,
 not saved, expires after 300000 ms (wrap-safe), and is revoked on identity/key
 change, collision and observed radio error. Watchdog reboot also disables it.
 Authentication, key ownership, configured frequency, radio power/setup, existing
 LBT checks and timeout/correlation rules are retained. Accounting is never reset.
 
-Local console only (KNX diagnostic commands cannot enable it):
+Console command (serial or debug web console; KNX diagnostic commands cannot enable it):
 
 ```
 iohc duty status
@@ -90,7 +91,7 @@ Source references (not a certification):
 ## Regression checks
 
 From OFM: `python3 test/test_rf_access_policy.py` checks production/simulation/
-bench gates, no web console, expiry, uint32 wrap, saturation and reboot recovery.
+debug/production gates, debug web-console support, expiry, uint32 wrap, saturation and reboot recovery.
 The native controller suite checks duty admission for direct/queued/1W/ACK/
 auth/discovery paths, LBT behavior, no refund on lost TX_DONE and simulated bypass.
 Hardware acceptance remains pending; only ordinary builds may leave the lab.
