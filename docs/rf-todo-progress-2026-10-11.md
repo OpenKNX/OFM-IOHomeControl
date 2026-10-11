@@ -8,9 +8,9 @@ Pre-existing README/battery/wake and recovery documents were preserved.
 - Central access policy separate from accounting; explicit DutyLimited,
   QualifiedPoliteAccess (unavailable), BenchUnlimited and SimulationUnlimited.
 - Simulation restricted to TEST_NATIVE/RadioTestStub. Bench available in every
-  OPENKNX_DEBUG build (including web-console builds), explicit confirmation, five-minute expiry,
-  no persistence, identity/error revocation and reset/off without
-  ledger refunds. Ordinary firmware cannot select unlimited modes.
+  OPENKNX_DEBUG build (including web-console builds), active by default without expiry,
+  no persistent setting, later identity/error revocation and reset/off without
+  ledger refunds. Release firmware cannot select unlimited modes.
 - All controller TX plus seven formerly direct module diagnostic calls use
   central admission and charge-on-accept. Existing LBT/authentication/frequency/
   persistence/ownership guards remain. Bypass TX logs airtime and session.
@@ -56,4 +56,6 @@ physical three-channel polling/battery trials, shielded bench approval and
 Austrian/regulatory release review. Native tests cannot replace these checks.
 See [RF policy](rf-access-policy.md) and [battery outcomes](battery-rf-outcomes.md).
 
-Receive faults also revoke temporary RF bypasses; ordinary radio Busy responses retain them. A native regression verifies that charged airtime remains intact.
+Receive faults also revoke RF bypasses; ordinary radio Busy responses retain them. A native regression verifies that charged airtime remains intact.
+
+User-requested override: debug bypass starts automatically after initialization/identity restore and has no time limit. Release remains DutyLimited. Manual off remains available.

@@ -893,6 +893,7 @@ public:
   void printBatteryDiagnostic(uint8_t channel);
   const IoHomeBatteryDiagnostic &batteryDiagnostic(uint8_t channel)const;
   RadioError startDiagnosticTransmit(const uint8_t *data,uint8_t len,uint16_t preamble,uint32_t hz,bool blocking=false);
+  void resetDutyToBuildDefault();
   bool enableBenchDuty(bool confirmed);
   void disableDebugDuty() {mRfAccessPolicy.off();}
   bool qualifiedDuty() {return mRfAccessPolicy.qualified();}

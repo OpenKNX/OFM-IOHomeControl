@@ -2387,6 +2387,8 @@ void IoHomecontrol::processAfterStartupDelay()
         restoreMetadataSnapshots();
         initOneWayControllerProfiles();
         applyOneWayControllerConfiguration();
+        // Identity restore can revoke bypass; apply the build default once afterward.
+        mController.resetDutyToBuildDefault();
     }
 
     mController.startReceive();
@@ -4250,8 +4252,8 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc scan stop", "Stop network scan");
     openknx.console.printHelpLine("iohc scan dump", "Dump captured packets with key payload redaction");
     openknx.console.printHelpLine("iohc scan stats", "Show per-node statistics");
-    openknx.console.printHelpLine("iohc duty status|limits|mode status", "Per-band conservative accounting and recovery status");
-    openknx.console.printHelpLine("iohc duty debug on CONFIRM_SHIELDED_BENCH", "Debug builds only; BENCH ONLY - RF duty check bypassed, max 5 minutes");
+    openknx.console.printHelpLine("iohc duty status|limits|mode status", "Per-band conservative airtime accounting and access mode");
+    openknx.console.printHelpLine("iohc duty debug on CONFIRM_SHIELDED_BENCH", "Debug default is ON without expiry; re-enable after off/fault");
     openknx.console.printHelpLine("iohc duty debug off|reset-debug", "End debug; never reset/refund actual airtime");
     openknx.console.printHelpLine("iohc radio", "Show radio health summary");
 #if defined(RADIO_SX1262)
@@ -4285,7 +4287,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         } else if(iCmd=="iohc duty mode qualified") {
             mController.qualifiedDuty();logInfoP("QualifiedPoliteAccess denied: no PHY/region qualification; mode=DutyLimited");
         } else if(iCmd=="iohc duty debug on CONFIRM_SHIELDED_BENCH"&&!iDebugKo) {
-            logInfoP("%s",mController.enableBenchDuty(true)?"BENCH ONLY - RF duty check bypassed; expires in 300000ms; all other guards retained":"RF bench debug unavailable in this build");
+            logInfoP("%s",mController.enableBenchDuty(true)?"BENCH ONLY - RF duty check bypassed; no expiry; all other guards retained":"RF bench debug unavailable in this build");
         } else logInfoP("RF debug denied: console command, debug build and CONFIRM_SHIELDED_BENCH required");
         return true;
     }

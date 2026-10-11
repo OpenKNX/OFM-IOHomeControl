@@ -16,8 +16,9 @@ refund is made for aborts or lost TX_DONE. Counters saturate instead of wrapping
 Boot/reinitialization has no RF startup holdoff. Commands can transmit as soon as
 radio initialization and normal protocol checks finish. The accounting ledger
 is RAM-resident; a reboot starts with an empty ledger, while reinitialization
-within the same controller preserves its existing charged airtime. Temporary
-bypass is disabled at initialization.
+within the same controller preserves its existing charged airtime. Debug builds
+activate bypass at initialization and once after startup identity restoration;
+release builds start in DutyLimited.
 
 `QualifiedPoliteAccess` is represented but **cannot be selected**. The prospective
 36000 ms CH2 fairness target is not an enabled/legal duty limit. The console
@@ -28,12 +29,14 @@ percentage, ETS setting or persistence switch to enable a higher allowance.
 non-emitting RadioTestStub. Admission can exceed quota while the same ledger
 continues charging. Normal firmware cannot select this mode.
 
-`BenchUnlimited` is available in every OPENKNX_DEBUG build, including IP/web-console
+`BenchUnlimited` is active by default in every OPENKNX_DEBUG build, including IP/web-console
 builds. OPENKNX_DEBUG automatically enables IOHC_ENABLE_RF_BENCH_UNLIMITED.
 An explicit bypass flag without a debug build is rejected in production.
-Use only a shielded/conducted authorized RF lab setup. It is disabled at boot,
-not saved, expires after 300000 ms (wrap-safe), and is revoked on identity/key
-change, collision and observed radio error. Watchdog reboot also disables it.
+Use only a shielded/conducted authorized RF lab setup. There is no expiry and
+no activation command is required after boot. Manual off/reset-debug, later
+identity/key changes, collision and observed radio errors revoke bypass.
+Reinitialization/reboot restores the debug build default; the ledger is never
+refunded by a mode change. No ETS/flash/NVS flag controls the default.
 Authentication, key ownership, configured frequency, radio power/setup, existing
 LBT checks and timeout/correlation rules are retained. Accounting is never reset.
 
@@ -48,7 +51,8 @@ iohc duty debug off
 iohc duty reset-debug
 ```
 
-Bare `debug on` refuses until explicit confirmation. The status reports mode,
+The confirmed `debug on` command can re-enable bypass after manual off or a fault.
+Bare `debug on` still refuses. The status reports mode,
 used/limit/current/previous bucket milliseconds, blocked count, latest required
 TX airtime, reservedMs=0, session ID and conservative earliestEligibleMs as a
 **delay**. These are estimates, not promises of exact rolling
@@ -91,7 +95,7 @@ Source references (not a certification):
 ## Regression checks
 
 From OFM: `python3 test/test_rf_access_policy.py` checks production/simulation/
-debug/production gates, debug web-console support, expiry, uint32 wrap, saturation and immediate startup.
+debug/production gates, debug web-console support, default bypass without expiry, uint32 wrap, saturation and immediate startup.
 The native controller suite checks duty admission for direct/queued/1W/ACK/
 auth/discovery paths, LBT behavior, no refund on lost TX_DONE and simulated bypass.
 Hardware acceptance remains pending; only ordinary builds may leave the lab.

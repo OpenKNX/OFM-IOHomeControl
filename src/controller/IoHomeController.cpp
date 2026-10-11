@@ -1506,7 +1506,7 @@ void IoHomeController::init()
     mRetryAtMs = 0;
     mExchangeStartMs = 0;
     mRfDutyBudget.advance(millis());
-    mRfAccessPolicy.off(); // No startup holdoff; temporary bypass never survives reinitialization.
+    resetDutyToBuildDefault(); // Debug defaults to bypass; release defaults to budget enforcement.
     logInfoP("2W wake belief: %s; normal directed START preamble: %s=%u",
              mDiagnostic2WWakeBelief ? "on" : "off",
              mDiagnostic2WStartPreamble == 0 ? "auto" : "override",
@@ -12730,6 +12730,12 @@ uint32_t IoHomeController::statusPollRetryAfterMs()
     return mRfAccessPolicy.retryAfter(mRfDutyBudget,IOHC_FREQ_2,required,now);
 }
 
+void IoHomeController::resetDutyToBuildDefault() {
+    mRfAccessPolicy.resetToDefault();
+#ifdef OPENKNX_DEBUG
+    logInfoP("DEBUG RF duty check bypassed by default; no expiry; airtime and other guards retained");
+#endif
+}
 bool IoHomeController::enableBenchDuty(bool confirmed) {return mRfAccessPolicy.bench(millis(),confirmed);}
 
 RadioError IoHomeController::startDiagnosticTransmit(const uint8_t *data,uint8_t len,uint16_t preamble,uint32_t hz,bool blocking)

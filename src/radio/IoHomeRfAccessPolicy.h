@@ -1,7 +1,7 @@
 #pragma once
 #include "IoHomeDutyBudget.h"
 
-// All OpenKNX debug builds expose the temporary, explicitly confirmed bypass.
+// All OpenKNX debug builds expose the default, non-expiring bypass.
 #if defined(OPENKNX_DEBUG) && !defined(IOHC_ENABLE_RF_BENCH_UNLIMITED)
 #define IOHC_ENABLE_RF_BENCH_UNLIMITED
 #endif
@@ -14,7 +14,6 @@
 class IoHomeRfAccessPolicy {
 public:
     enum class Mode : uint8_t { DutyLimited, QualifiedPoliteAccess, BenchUnlimited, SimulationUnlimited };
-    static constexpr uint32_t benchDurationMs=300000U;
     static constexpr uint32_t qualifiedFairnessTargetMs=36000U; // target only; NOT qualified/enabled
     static const char *name(Mode mode) {
         switch(mode) {
@@ -24,17 +23,22 @@ public:
         default:return "DutyLimited";
         }
     }
-    void advance(uint32_t now) {
-        if(active==Mode::BenchUnlimited&&uint32_t(now-benchStart)>=benchDurationMs)off();
+    IoHomeRfAccessPolicy() { resetToDefault(); }
+    void resetToDefault() {
+#ifdef OPENKNX_DEBUG
+        bench(0,true);
+#else
+        off();
+#endif
     }
-    Mode mode(uint32_t now) const {
-        return active==Mode::BenchUnlimited&&uint32_t(now-benchStart)>=benchDurationMs?Mode::DutyLimited:active;
-    }
+    void advance(uint32_t now) { (void)now; } // No time-based expiry.
+    Mode mode(uint32_t now) const { (void)now; return active; }
     bool bypass(uint32_t now) const {auto m=mode(now);return m==Mode::BenchUnlimited||m==Mode::SimulationUnlimited;}
     bool bench(uint32_t now,bool confirmed) {
 #if defined(IOHC_ENABLE_RF_BENCH_UNLIMITED)
+        (void)now;
         if(!confirmed)return false;
-        active=Mode::BenchUnlimited;benchStart=now;++session;return true;
+        active=Mode::BenchUnlimited;++session;return true;
 #else
         (void)now;(void)confirmed;return false;
 #endif
@@ -62,5 +66,5 @@ public:
     bool qualified() {off();return false;}
 private:
     Mode active=Mode::DutyLimited;
-    uint32_t benchStart=0,session=0;
+    uint32_t session=0;
 };

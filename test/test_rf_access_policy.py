@@ -9,4 +9,4 @@ with tempfile.TemporaryDirectory() as d:
     for flags in [["-DIOHC_ENABLE_RF_BENCH_UNLIMITED"],["-DIOHC_ENABLE_RF_BENCH_UNLIMITED","-DOPENKNX_WEBCONSOLE"]]:
         result=subprocess.run([os.environ.get('CXX','c++'),'-std=c++17',*flags,str(root/'test_rf_access_policy.cpp'),'-o',str(Path(d)/'denied')],capture_output=True)
         assert result.returncode and b'error:' in result.stderr
-print('All debug variants allow confirmed temporary bypass; production compile gates passed')
+print('All debug variants default to non-expiring bypass; production compile gates passed')
