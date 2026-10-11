@@ -21224,3 +21224,26 @@ TEST(controller_discovery_blocking_paths_account_actual_preamble_and_gate_quota)
         } else ASSERT_EQ(c.testTxAirtimeAccum(0),3600U);
     }
 }
+
+TEST(controller_simulation_unlimited_retains_accounting_and_identity_guards)
+{
+    IoHomeController c;IoHomecontrol module;IoHomecontrolChannel channel;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,module,channel,0x123456,0x654321,key);
+    IoHomeFrame frame;frame.init();frame.ctrlByte0=0;frame.ctrlByte1=0;frame.commandId=IoHomeCommand::ChallengeResponse;
+    frame.setSrcNode(0x123456);frame.setDestNode(0x654321);frame.dataLen=1;frame.data[0]=0;
+    uint8_t data[64]{};const uint8_t len=frame.serialize(data,sizeof(data));
+    c.testChargeDuty(868950000U,3404U);
+    const uint32_t estimated=IoHomeController::estimatedTxAirtimeMs(len,1024);
+    ASSERT_TRUE(estimated>196U);
+    ASSERT_EQ(c.testDirectTransmit(data,len,1024,868950000U),RadioError::DutyCycleExceeded);
+    c.testSimulationUnlimited();
+    ASSERT_EQ(c.testDirectTransmit(data,len,1024,868950000U),RadioError::None);
+    ASSERT_EQ(c.testTxAirtimeAccum(0),3404U+estimated);
+    c.testDutyOff();
+    ASSERT_EQ(c.testDirectTransmit(data,len,1024,868950000U),RadioError::DutyCycleExceeded);
+    ASSERT_EQ(c.radio().testTransmitCount(),1U);
+    ASSERT_TRUE(!c.qualifiedDuty());
+    c.testSimulationUnlimited();c.observeForeignController(0x123456);
+    ASSERT_EQ(c.testDirectTransmit(data,len,1024,868950000U),RadioError::HardwareError);
+    ASSERT_EQ(c.radio().testTransmitCount(),1U);
+}

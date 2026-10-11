@@ -7,6 +7,7 @@
 #pragma once
 #include "../radio/IoHomeAirtime.h"
 #include "../radio/IoHomeDutyBudget.h"
+#include "../radio/IoHomeRfAccessPolicy.h"
 #include "../protocol/IoHomeRadioPolicy.h"
 #include "../protocol/IoHomeRadioDiversity.h"
 #include "../protocol/IoHomeTransactionTiming.h"
@@ -886,10 +887,18 @@ public:
   static const char *stateName(ControllerState iState);
   static const char *pairingOutcomeName(PairingOutcome iOutcome);
   const PairingTelemetry &pairingTelemetry() const;
+  void printDutyStatus();
+  RadioError startDiagnosticTransmit(const uint8_t *data,uint8_t len,uint16_t preamble,uint32_t hz,bool blocking=false);
+  bool enableBenchDuty(bool confirmed);
+  void disableDebugDuty() {mRfAccessPolicy.off();}
+  bool qualifiedDuty() {return mRfAccessPolicy.qualified();}
+  uint32_t statusPollRetryAfterMs();
   const ExchangeDiagnostics &exchangeDiagnostics() const;
   const ResponseTimingSample &lastResponseTimingSample() const;
   const DiagnosticFpSample &lastDiagnosticFpSample() const { return mLastDiagnosticFpSample; }
 #ifdef TEST_NATIVE
+  void testSimulationUnlimited() { mRfAccessPolicy.simulation(); }
+  void testDutyOff() { mRfAccessPolicy.off(); }
   uint32_t testTxAirtimeAccum(uint8_t iFreq) const { return mRfDutyBudget.used(IOHC_FREQUENCIES[iFreq]); }
   void testSetTraceCounter(uint64_t id) { mTwoWayTraceCount=id; mTwoWayTraceFirst=id+1; }
   RadioError testDirectTransmit(const uint8_t *data, uint8_t len, uint16_t preamble, uint32_t hz) {
@@ -1550,6 +1559,8 @@ private:
   uint32_t mScanTargetNode;
   IoHomeCommandScanResult mScanResult; // accumulated scan results
 
+  IoHomeRfAccessPolicy mRfAccessPolicy;
+  uint32_t mRfBlockedTxCount[3]{},mRfNextAirtimeMs[3]{};
   // Duty cycle tracking (per sub-band per hour)
   IoHomeDutyBudget mRfDutyBudget;
   bool mLbtPrepared = false;

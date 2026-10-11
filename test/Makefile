@@ -32,7 +32,7 @@ suite: $(TARGETS)
 $(BUILD_DIR):
 	mkdir -p $@
 
-$(PROTOCOL_TARGET): $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h | $(BUILD_DIR)
+$(PROTOCOL_TARGET): $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h ../src/radio/IoHomeRfAccessPolicy.h ../src/radio/IoHomeDutyBudget.h | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(PROTOCOL_SRCS)
 
 $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
@@ -115,3 +115,7 @@ check-wake-trials:
 .PHONY: check-module-version
 check-module-version:
 	$(PYTHON) test_module_version.py
+
+.PHONY: check-rf-access-policy
+check-rf-access-policy:
+	$(PYTHON) test_rf_access_policy.py

@@ -1991,7 +1991,7 @@ void IoHomecontrol::processRadioDiagnostic()
             mController.radio().debugClearDeviceErrors();
             mRadioDiagnostic.devErrCleared = mController.radio().debugReadDeviceErrors();
 
-            const auto lErr = mController.radio().startTransmitBlocking(kRadioDiagPayload, sizeof(kRadioDiagPayload));
+            const auto lErr = mController.startDiagnosticTransmit(kRadioDiagPayload,sizeof(kRadioDiagPayload),mController.radio().defaultStartPreamble(),IOHC_FREQ_2,true);
             if (lErr == RadioError::Busy)
             {
                 if (deferRadioDiagnosticBusy())
@@ -2116,7 +2116,7 @@ void IoHomecontrol::processRadioDiagnostic()
         }
 
         mController.radio().debugClearDeviceErrors();
-        const auto lErr = mController.radio().startTransmitBlocking(kRadioDiagPayload, sizeof(kRadioDiagPayload));
+        const auto lErr = mController.startDiagnosticTransmit(kRadioDiagPayload,sizeof(kRadioDiagPayload),mController.radio().defaultStartPreamble(),kRadioDiagSweepFreqs[lFreqPos],true);
         if (lErr == RadioError::Busy)
         {
             if (deferRadioDiagnosticBusy())
@@ -2187,7 +2187,7 @@ void IoHomecontrol::processRadioDiagnostic()
         if (!mRadioDiagnostic.txInProgress)
         {
             // Start a non-blocking TX
-            const auto lErr = mController.radio().startTransmit(kRadioDiagPayload, sizeof(kRadioDiagPayload));
+            const auto lErr = mController.startDiagnosticTransmit(kRadioDiagPayload,sizeof(kRadioDiagPayload),mController.radio().defaultStartPreamble(),IOHC_FREQ_2);
             if (lErr == RadioError::Busy)
             {
                 if (deferRadioDiagnosticBusy())
@@ -2313,7 +2313,7 @@ void IoHomecontrol::processRadioDiagnostic()
             return;
         }
 
-        const auto lErr = mController.radio().startTransmit(kRadioDiagPayload, sizeof(kRadioDiagPayload));
+        const auto lErr = mController.startDiagnosticTransmit(kRadioDiagPayload,sizeof(kRadioDiagPayload),mController.radio().defaultStartPreamble(),kRadioDiagSweepFreqs[lFreqPos]);
         if (lErr == RadioError::Busy)
         {
             if (deferRadioDiagnosticBusy())
@@ -4250,6 +4250,9 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc scan stop", "Stop network scan");
     openknx.console.printHelpLine("iohc scan dump", "Dump captured packets with key payload redaction");
     openknx.console.printHelpLine("iohc scan stats", "Show per-node statistics");
+    openknx.console.printHelpLine("iohc duty status|limits|mode status", "Per-band conservative accounting and recovery status");
+    openknx.console.printHelpLine("iohc duty debug on CONFIRM_SHIELDED_BENCH", "Separate bench build only; BENCH ONLY - RF duty check bypassed, max 5 minutes");
+    openknx.console.printHelpLine("iohc duty debug off|reset-debug", "End debug; never reset/refund actual airtime");
     openknx.console.printHelpLine("iohc radio", "Show radio health summary");
 #if defined(RADIO_SX1262)
     openknx.console.printHelpLine("iohc radio txtest", "Send a minimal SX1262 TX test payload");
@@ -4275,6 +4278,17 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         logInfoP("Standalone startup/identity restore not ready yet");return true;
     }
 #endif
+    if(iCmd.rfind("iohc duty ",0)==0) {
+        if(iCmd=="iohc duty status"||iCmd=="iohc duty limits"||iCmd=="iohc duty mode status")mController.printDutyStatus();
+        else if(iCmd=="iohc duty debug off"||iCmd=="iohc duty reset-debug") {
+            mController.disableDebugDuty();logInfoP("RF mode=DutyLimited; accounting history retained");
+        } else if(iCmd=="iohc duty mode qualified") {
+            mController.qualifiedDuty();logInfoP("QualifiedPoliteAccess denied: no PHY/region qualification; mode=DutyLimited");
+        } else if(iCmd=="iohc duty debug on CONFIRM_SHIELDED_BENCH"&&!iDebugKo) {
+            logInfoP("%s",mController.enableBenchDuty(true)?"BENCH ONLY - RF duty check bypassed; expires in 300000ms; all other guards retained":"RF bench debug unavailable in this build");
+        } else logInfoP("RF debug denied: local console, separate bench build and CONFIRM_SHIELDED_BENCH required");
+        return true;
+    }
     if(iCmd=="iohc event trace on"||iCmd=="iohc event trace off") {
         mController.setDynamicEventTrace(iCmd=="iohc event trace on");
         logInfoP("Dynamic raw event tracing %s",iCmd=="iohc event trace on"?"enabled":"disabled");return true;
@@ -7275,7 +7289,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 
         mController.radio().standby();
 
-        const auto lErr = mController.radio().startTransmitBlocking(kRadioDiagPayload, sizeof(kRadioDiagPayload));
+        const auto lErr = mController.startDiagnosticTransmit(kRadioDiagPayload,sizeof(kRadioDiagPayload),mController.radio().defaultStartPreamble(),IOHC_FREQ_2,true);
         bool lDone = false;
         uint32_t lWaitedMs = 0;
         uint8_t lStatusNow = 0;
@@ -7334,7 +7348,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 
         mController.radio().standby();
 
-        const auto lErr = mController.radio().startTransmit(kRadioDiagPayload, sizeof(kRadioDiagPayload));
+        const auto lErr = mController.startDiagnosticTransmit(kRadioDiagPayload,sizeof(kRadioDiagPayload),mController.radio().defaultStartPreamble(),IOHC_FREQ_2);
         bool lDone = false;
         uint32_t lWaitedMs = 0;
 
@@ -7506,7 +7520,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if (lIsTxPre)
             mController.radio().setPreambleLength(lRequestedPreamble);
 
-        const RadioError lErr = mController.radio().startTransmit(lPayload, lPayloadLen);
+        const RadioError lErr = mController.startDiagnosticTransmit(lPayload,lPayloadLen,lIsTxPre?lRequestedPreamble:mController.radio().defaultStartPreamble(),IOHC_FREQ_2);
         bool lDone = false;
         uint32_t lWaitedMs = 0;
         uint32_t lWaitBudgetMs = IOHC_TX_TIMEOUT_MS;

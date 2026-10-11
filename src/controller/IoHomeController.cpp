@@ -1506,6 +1506,10 @@ void IoHomeController::init()
     mRetryAtMs = 0;
     mExchangeStartMs = 0;
     mRfDutyBudget.advance(millis());
+#ifndef TEST_NATIVE
+    mRfAccessPolicy.beginRecovery(millis());
+    logInfoP("RF recovery: quiet observation period=%lu ms; reboot cannot refund airtime",(unsigned long)IoHomeDutyBudget::bucketMs);
+#endif
     logInfoP("2W wake belief: %s; normal directed START preamble: %s=%u",
              mDiagnostic2WWakeBelief ? "on" : "off",
              mDiagnostic2WStartPreamble == 0 ? "auto" : "override",
@@ -1519,6 +1523,7 @@ void IoHomeController::setModule(IoHomecontrol *iModule)
 
 void IoHomeController::setOwnNodeId(uint32_t iNodeId)
 {
+    if(mOwnNodeId!=(iNodeId&0x00FFFFFF))mRfAccessPolicy.off();
     mOwnNodeId = iNodeId & 0x00FFFFFF;
 }
 
@@ -1530,6 +1535,7 @@ uint32_t IoHomeController::getOwnNodeId() const
 void IoHomeController::observeForeignController(uint32_t node)
 {
     if (node && node == mOwnNodeId && !twoWayIdentityCollision()) {
+        mRfAccessPolicy.off();
         mIdentityCollisionNode=node;
         logInfoP("2W identity collision gateway=%06X foreign=%06X; active 2W TX blocked, no automatic NID change",mOwnNodeId,node);
     }
@@ -1537,6 +1543,7 @@ void IoHomeController::observeForeignController(uint32_t node)
 
 void IoHomeController::setSystemKey(const uint8_t *iKey)
 {
+    if(std::memcmp(mSystemKey,iKey,16))mRfAccessPolicy.off();
     memcpy(mSystemKey, iKey, 16);
 }
 
@@ -6289,27 +6296,36 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
     }
     if(iData&&iLength&&!(iData[0]&IOHC_CTRL0_MODE_1W)&&twoWayIdentityCollision()) {
         logInfoP("2W TX rejected: identity_collision gateway=%06X",mOwnNodeId);
-        return RadioError::HardwareError;
+        { mRfAccessPolicy.off(); return RadioError::HardwareError; }
     }
     if(mCurrentCmd.active&&mCurrentCmd.managementRead&&!managementIdentityMatches(mCurrentCmd))
-        return RadioError::HardwareError;
+        { mRfAccessPolicy.off(); return RadioError::HardwareError; }
     if (iData && iLength && (iData[0] & IOHC_CTRL0_MODE_1W) && mReservationFailed)
-        return RadioError::HardwareError;
+        { mRfAccessPolicy.off(); return RadioError::HardwareError; }
 #ifndef TEST_NATIVE
     if(iData&&iLength&&!(iData[0]&IOHC_CTRL0_MODE_1W)&&mModule&&!mModule->prepareTwoWayPersistence())
-        return RadioError::HardwareError;
+        { mRfAccessPolicy.off(); return RadioError::HardwareError; }
 #endif
+    if(mCurrentFreqIdx>=IOHC_NUM_FREQUENCIES) {mRfAccessPolicy.off();return RadioError::HardwareError;}
     mLastTxDutyDenied=false;
     mRfDutyBudget.advance(millis());
+    mRfAccessPolicy.advance(millis());
+    [[maybe_unused]] const auto admittedMode=mRfAccessPolicy.mode(millis());
+    const bool admittedBypass=mRfAccessPolicy.bypass(millis());
     const uint32_t airtime = estimatedTxAirtimeMs(iLength, mCurrentTxPreambleSymbols);
+    if(mCurrentFreqIdx<IOHC_NUM_FREQUENCIES)mRfNextAirtimeMs[IoHomeDutyBudget::band(IOHC_FREQUENCIES[mCurrentFreqIdx])]=airtime;
     if (!isDutyCycleOk(mCurrentFreqIdx, airtime)) {
         mLbtPrepared=false;
         mLastTxDutyDenied=true;
+        if(mCurrentFreqIdx<IOHC_NUM_FREQUENCIES)++mRfBlockedTxCount[IoHomeDutyBudget::band(IOHC_FREQUENCIES[mCurrentFreqIdx])];
         logInfoP("RF TX denied: duty_budget_exceeded frequency=%lu usedMs=%lu nextMs=%lu limitMs=%lu",
             (unsigned long)IOHC_FREQUENCIES[mCurrentFreqIdx],
             (unsigned long)mRfDutyBudget.used(IOHC_FREQUENCIES[mCurrentFreqIdx]),
             (unsigned long)airtime,
             (unsigned long)IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(IOHC_FREQUENCIES[mCurrentFreqIdx])));
+        logInfoP("RF access blocked mode=%s recoveryMs=%lu retryAfterMs=%lu reservedMs=0",
+            IoHomeRfAccessPolicy::name(mRfAccessPolicy.mode(millis())),(unsigned long)mRfAccessPolicy.recoveryRemaining(millis()),
+            (unsigned long)mRfAccessPolicy.retryAfter(mRfDutyBudget,IOHC_FREQUENCIES[mCurrentFreqIdx],airtime,millis()));
         return RadioError::DutyCycleExceeded; // no timing exemptions, including 0x3D
     }
 #if defined(RADIO_SX1262)
@@ -6327,6 +6343,11 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
         // Includes queued/direct/pairing/1W/continuations, lost IRQs and aborts.
         mRfDutyBudget.advance(millis()); // charge at acceptance even across a programming-time boundary
         mRfDutyBudget.charge(IOHC_FREQUENCIES[mCurrentFreqIdx], airtime);
+        if(admittedBypass)logInfoP("RF TX benchBypass=%u simulationBypass=%u frequency=%lu preamble=%u frameSize=%u airtimeMs=%lu totalMs=%lu session=%lu",
+            admittedMode==IoHomeRfAccessPolicy::Mode::BenchUnlimited,
+            admittedMode==IoHomeRfAccessPolicy::Mode::SimulationUnlimited,
+            (unsigned long)IOHC_FREQUENCIES[mCurrentFreqIdx],mCurrentTxPreambleSymbols,iLength,(unsigned long)airtime,
+            (unsigned long)mRfDutyBudget.used(IOHC_FREQUENCIES[mCurrentFreqIdx]),(unsigned long)mRfAccessPolicy.sessionId());
         ++mRfCounters.transmittedPackets;
         mQueuedTxDoneObserved=false;
         mQueuedTxWireLength=iLength;
@@ -6355,6 +6376,7 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
                 (unsigned long)IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(IOHC_FREQUENCIES[mCurrentFreqIdx])));
         }
     }
+    if(result!=RadioError::None&&result!=RadioError::Busy)mRfAccessPolicy.off();
     // Rejected candidates have no new TX identity and no attempt snapshot.
 
     return result;
@@ -6702,6 +6724,8 @@ void IoHomeController::loop()
     }
 
     mRfDutyBudget.advance(millis());
+    mRfAccessPolicy.advance(millis());
+    if(!mRadio.isInitialized())mRfAccessPolicy.off();
 
     if (mPassiveKeySniffStatus == PassiveKeySniffStatus::Listening &&
         mPassiveKeySniffTimeoutMs > 0 &&
@@ -12636,5 +12660,34 @@ bool IoHomeController::isDutyCycleOk() const
 bool IoHomeController::isDutyCycleOk(uint8_t iFreqIdx, uint32_t nextAirtimeMs) const
 {
     return iFreqIdx < IOHC_NUM_FREQUENCIES &&
-        mRfDutyBudget.admits(IOHC_FREQUENCIES[iFreqIdx], nextAirtimeMs);
+        mRfAccessPolicy.admits(mRfDutyBudget,IOHC_FREQUENCIES[iFreqIdx],nextAirtimeMs,millis());
+}
+
+void IoHomeController::printDutyStatus()
+{
+    const uint32_t now=millis();mRfDutyBudget.advance(now);mRfAccessPolicy.advance(now);
+    for(uint8_t b=0;b<3;++b) {
+        [[maybe_unused]] const uint32_t hz=b==0?868250000U:b==1?868950000U:869850000U;
+        [[maybe_unused]] const uint32_t next=mRfNextAirtimeMs[b]?mRfNextAirtimeMs[b]:1;
+        logInfoP("RF duty band=%u mode=%s usedMs=%lu limitMs=%lu reservedMs=0 nextTxAirtimeMs=%lu blockedTxCount=%lu currentBucket=%lu previousBucket=%lu earliestEligibleMs=%lu recoveryMs=%lu session=%lu qualified=0",
+            b,IoHomeRfAccessPolicy::name(mRfAccessPolicy.mode(now)),(unsigned long)mRfDutyBudget.used(hz),
+            (unsigned long)IoHomeDutyBudget::allowance(b),(unsigned long)next,(unsigned long)mRfBlockedTxCount[b],
+            (unsigned long)mRfDutyBudget.currentUsed(b),(unsigned long)mRfDutyBudget.previousUsed(b),
+            (unsigned long)mRfAccessPolicy.retryAfter(mRfDutyBudget,hz,next,now),(unsigned long)mRfAccessPolicy.recoveryRemaining(now),
+            (unsigned long)mRfAccessPolicy.sessionId());
+    }
+}
+uint32_t IoHomeController::statusPollRetryAfterMs()
+{
+    const uint32_t now=millis();mRfDutyBudget.advance(now);mRfAccessPolicy.advance(now);
+    const uint32_t required=estimatedTxAirtimeMs(32,normal2WStartPreamble());
+    return mRfAccessPolicy.retryAfter(mRfDutyBudget,IOHC_FREQ_2,required,now);
+}
+
+bool IoHomeController::enableBenchDuty(bool confirmed) {return mRfAccessPolicy.bench(millis(),confirmed);}
+
+RadioError IoHomeController::startDiagnosticTransmit(const uint8_t *data,uint8_t len,uint16_t preamble,uint32_t hz,bool blocking)
+{
+    const auto prep=configureTxRadio(preamble,&hz);
+    return prep==RadioError::None?startControllerTransmit(data,len,blocking):prep;
 }
