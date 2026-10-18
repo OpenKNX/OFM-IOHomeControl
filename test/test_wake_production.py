@@ -20,6 +20,7 @@ methods='\n'.join(method(channel,signature) for signature in [
 harness=r'''#include <cassert>
 #include <cstdint>
 #include "protocol/IoHomeCommands.h"
+#include "protocol/IoHomeOptimisticPosition.h"
 unsigned now=1000;unsigned millis(){return now;}
 #define logInfoP(...) ((void)0)
 #define logDebugP(...) ((void)0)
@@ -45,6 +46,11 @@ struct IoHomecontrolChannel {
  unsigned _channelIndex=0;uint32_t mRfPollRetryAtMs=0;bool mRfPollWaiting=false;
  uint32_t mNodeId=0x123456,mStatusPollTimer=0,mPollTrackingDeadlineMs=0,mNextStatusPollMs=0;
  uint8_t mEncKey[16]{},mAuthPollFailures=0,mStatusPollFailures=0;
+ IoHomeOptimisticPosition mOptimisticPosition;
+ uint32_t mTravelDurationMs=0,mTravelStartTime=0;
+ float mCurrentPosition=0,mTargetPosition=0,mTravelStartPosition=0;
+ unsigned publications=0;
+ void publishPositionFeedback(float p,bool){mCurrentPosition=p;++publications;}
  Controller mController;
  bool allowsActuatorControls(){return true;}
  const IoHomeProfileDescriptor*getEffectiveProfileDescriptor(){return nullptr;}
@@ -81,6 +87,21 @@ tests=r'''int main(){
  uint32_t age;assert(ch.twoWayLastHeardAgeAt(now,age)&&age==21);
  ch.observe2WMovingStatus(false);assert(ch.twoWayWakeBeliefAt(now,true)==TwoWayWakeBelief::Asleep);
  assert(ch.restores==6);assert(ch.polls==6);
+ // Execute rejection calls the production callback, not a test reimplementation.
+ ch.mOptimisticPosition.begin(50,25);ch.mOptimisticPosition.observe(30);
+ ch.mTravelDurationMs=20000;ch.mTravelStartTime=100;ch.mTargetPosition=50;
+ auto pollsBefore=ch.polls;
+ ch.onCommandExchangeResult(IoHomeCommand::Execute,50,IoHomeCommandExchangeResult::AuthenticatedUnconfirmed);
+ assert(ch.mTravelDurationMs==20000&&ch.mTargetPosition==50);
+ ch.onCommandExchangeResult(IoHomeCommand::Execute,100,IoHomeCommandExchangeResult::ExplicitlyRejected);
+ assert(ch.mTravelDurationMs==20000&&ch.mTargetPosition==50);
+ ch.onCommandExchangeResult(IoHomeCommand::Execute,50,IoHomeCommandExchangeResult::ExplicitlyRejected);
+ assert(ch.mTravelDurationMs==0&&ch.mTravelStartTime==0&&ch.mTargetPosition==30&&ch.mCurrentPosition==30);
+ assert(ch.polls==pollsBefore+1&&ch.publications==1);
+ ch.mOptimisticPosition={};ch.mOptimisticPosition.begin(100,40);ch.mTargetPosition=100;
+ ch.onCommandExchangeResult(IoHomeCommand::Execute,100,IoHomeCommandExchangeResult::MediaAccessFailed);
+ assert(ch.mTargetPosition==40&&ch.mCurrentPosition==40&&ch.publications==1);
+
  ch.mStopSettlePollPending=false;assert(ch.requestStatus(true)&&ch.mController.maxAttempts==1);
  ch.mStopSettlePollPending=true;assert(ch.requestStatus(true)&&ch.mController.maxAttempts==IOHC_EXCHANGE_MAX_ATTEMPTS);
  assert(!ch.mStopSettlePollPending);
