@@ -21466,6 +21466,18 @@ TEST(golden_rf_corpus_october_device_outcomes_preserve_evidence_limits)
     ASSERT_EQ(frame.dataLen,6); ASSERT_EQ(frame.data[2],0x64);
     ASSERT_TRUE(deserializeFrameForTest(frame,reject->bytes,reject->wireLen));
     ASSERT_EQ(strcmp(ioHomeDecodeErrorResponse(frame.data[0]).name,"PARAMETER_UNKNOWN"),0);
+    const auto *agilia=findFrame("audit_agilia_0"); ASSERT_TRUE(agilia);
+    ASSERT_TRUE(deserializeFrameForTest(frame,agilia->bytes,agilia->wireLen));
+    const auto identity=decodeAcceptedDiscoveryIdentity(frame.data,frame.dataLen);
+    ASSERT_TRUE(identity.valid); ASSERT_EQ(identity.manufacturerId,12); ASSERT_EQ(identity.profile,1023);
+    for (const char *id : {"audit_agilia_4","audit_sunilus_4","audit_sunilus_5"}) {
+        const auto *refusal=findFrame(id); ASSERT_TRUE(refusal);
+        ASSERT_TRUE(deserializeFrameForTest(frame,refusal->bytes,refusal->wireLen));
+        ASSERT_EQ(frame.commandId,IoHomeCommand::ErrorResponse);
+        ASSERT_TRUE(ioHomeKeyTransferDefinitivelyRefused(frame.data[0]));
+        ASSERT_EQ(strcmp(ioHomeDecodeErrorResponse(frame.data[0]).name,
+            frame.data[0]==8?"COMMAND_UNKNOWN":"COMMAND_REJECTED"),0);
+    }
     const auto *nina=findFrame("audit_nina_0"); ASSERT_TRUE(nina);
     ASSERT_TRUE(deserializeFrameForTest(frame,nina->bytes,nina->wireLen));
     ASSERT_EQ(frame.getDestNodeId(),0xC64C3B); ASSERT_EQ(frame.getSrcNodeId(),0xA994E2);
