@@ -865,6 +865,14 @@ namespace
         }
     }
 
+    bool build2WExecuteMainOnlyPayload(uint8_t target, uint8_t acei, uint8_t *data, uint8_t &length)
+    {
+        if (!data) return false;
+        data[0]=IOHC_ORIGINATOR_USER; data[1]=acei; data[2]=target;
+        data[3]=0; data[4]=0; data[5]=0; length=6;
+        return true;
+    }
+
     bool build2WExecutePositionPayload(uint8_t iPositionPercent, uint8_t iMovementProfile, uint8_t iAcei,
                                        uint8_t *oData, uint8_t &oLen)
     {
@@ -1920,6 +1928,11 @@ bool IoHomeController::sendCommandInternal(uint32_t iDestNodeId, const uint8_t *
     {
         return false;
     }
+
+    const auto *targetChannel = channelForNode(iDestNodeId);
+    if (iCmd == IoHomeCommand::Execute && targetChannel && !targetChannel->is1W() &&
+        !ioHomeGarageCommandAllowed(targetChannel->getEffectiveProfileDescriptor(),
+                                   targetChannel->garageEndpointsOnly(), iParam)) return false;
 
     IoHomeQueueEntry lEntry;
     memset(&lEntry, 0, sizeof(lEntry));
@@ -10939,6 +10952,17 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                                                 iEntry.twoWayRawData,
                                                 iEntry.twoWayRawLen))
                     return false;
+            }
+            else if (lTargetCh && ioHomeGarageMainOnly(lTargetCh->getEffectiveProfileDescriptor()) &&
+                     !iEntry.twoWayFp)
+            {
+                if (!ioHomeGarageCommandAllowed(lTargetCh->getEffectiveProfileDescriptor(),
+                                                lTargetCh->garageEndpointsOnly(), iEntry.param)) return false;
+                // A speed FP is not supported by this wire form. Do not quietly
+                // discard explicitly requested speed/gradient semantics.
+                if (iEntry.twoWayMovementFp) return false;
+                if (!build2WExecuteMainOnlyPayload(iEntry.param <= 100 ? iEntry.param * 2U : iEntry.param,
+                                                  lTwoWayAcei, mTxFrame.data, mTxFrame.dataLen)) return false;
             }
             else if (iEntry.twoWayMovementFp)
             {

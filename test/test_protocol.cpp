@@ -21424,3 +21424,29 @@ TEST(controller_pairing_pull_is_verified_diagnostic_without_push_or_key_assignme
         ASSERT_TRUE(c.radio().testLastTransmittedPacket().empty());
     }
 }
+
+TEST(controller_garage_main_only_is_profile_scoped_and_moto_restrictions_are_explicit)
+{
+    const uint8_t key[16]={1};
+    for (uint16_t profile : {0x0140,0x017A,0x0080,0x0000}) {
+        for (uint8_t target : {0,50,100,0xD2,0xD8}) {
+            for (bool moto : {false,true}) {
+                IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+                initPaired2WControllerForTest(c,m,ch,0x831F2A,0x7E9E6E,key);
+                ch.setManualProfileOverride(profile); ch.setGarageEndpointsOnly(moto);
+                const bool garage=profile==0x0140||profile==0x017A;
+                const bool allowed=!(garage&&(moto||profile==0x017A)) || target==0 || target==100 || target==0xD2;
+                ASSERT_EQ(c.sendCommand(0x7E9E6E,key,IoHomeCommand::Execute,target),allowed);
+                if (!allowed) continue;
+                IoHomeFrame frame; ASSERT_TRUE(transmitQueuedControllerFrame(c,frame));
+                ASSERT_EQ(frame.dataLen,garage||target>100?6:8);
+                ASSERT_EQ(frame.data[2],target<=100?target*2:target);
+                if (garage) { ASSERT_EQ(frame.data[4],0); ASSERT_EQ(frame.data[5],0); }
+                else if (target<=100) ASSERT_EQ(frame.data[4],0x80);
+            }
+        }
+    }
+    // Dexxo/discrete-garage alias semantics remain documented; do not erase them
+    // merely because a different MOTO1000 device rejected a partial position.
+    ASSERT_TRUE(ioHomeGarageCommandAllowed(ioHomeProfileDescriptor(5,0),false,50));
+}

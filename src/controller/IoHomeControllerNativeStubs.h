@@ -454,6 +454,8 @@ public:
                                          mManualPackedProfile & 0x3F)
                : ioHomeProfileDescriptor(mProtocolIdentity);
   }
+  bool garageEndpointsOnly() const { return mGarageEndpointsOnly; }
+  void setGarageEndpointsOnly(bool enabled) { mGarageEndpointsOnly=enabled; }
   void setManualProfileOverride(uint16_t iPackedType)
   {
     const uint16_t next=iPackedType != 0 && ioHomeProfileDescriptor(iPackedType >> 6,iPackedType & 0x3F) ? iPackedType : 0;
@@ -632,6 +634,7 @@ private:
   // type 0 / All, which serializes to destination 0x00003F.
   uint8_t mConfigured1WBroadcastType = 0;
   uint8_t mConfigured1WAcei = 0; // mirrors production automatic-by-manufacturer default
+  bool mGarageEndpointsOnly = false;
   uint8_t mConfigured2WAcei = IOHC_ACEI_DEFAULT;
   uint32_t mIoAddress = 0;
   uint32_t mProductContextRevision=1;

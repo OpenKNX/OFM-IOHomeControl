@@ -82,6 +82,7 @@ public:
   uint32_t getIoAddress() const;
   const IoHomeProtocolIdentity &getProtocolIdentity() const;
   const IoHomeProfileDescriptor *getEffectiveProfileDescriptor() const;
+  bool garageEndpointsOnly() const;
   void setManualProfileOverride(uint16_t iPackedType);
   IoHomeGenericCapabilities getProfileCapabilities() const;
   bool allowsActuatorControls() const;

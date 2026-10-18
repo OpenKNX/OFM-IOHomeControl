@@ -8,6 +8,15 @@ inline bool ioHomeProfileObjectBinary(const IoHomeProfileDescriptor *profile) {
     return profile && (profile->mp == ParameterSemantic::LockState || profile->mp == ParameterSemantic::SwitchState ||
                        (profile->capabilityFlags & IoHomeCapabilityBinaryOnly));
 }
+inline bool ioHomeGarageMainOnly(const IoHomeProfileDescriptor *profile) {
+    return profile && profile->profile == 5 && (profile->subProfile == 0 || profile->subProfile == 58);
+}
+inline bool ioHomeGarageCommandAllowed(const IoHomeProfileDescriptor *profile, bool motoEndpointsOnly, uint8_t target) {
+    if (target == 0xD2) return true;
+    const bool endpointsOnly = ioHomeProfileObjectBinary(profile) ||
+                              (ioHomeGarageMainOnly(profile) && motoEndpointsOnly);
+    return !endpointsOnly || target == 0 || target == 100;
+}
 struct IoHomeProfileObjectValue {float percent=0;uint16_t raw=0;bool binary=false;};
 inline bool ioHomeDecodeProfileObject(const IoHomeProfileDescriptor *profile,uint8_t index,uint16_t raw,IoHomeProfileObjectValue &value) {
     if (!profile || ioHomeProfileObjectSlot(index)==0xFF || raw==IOHC_NO_FEEDBACK_VALUE) return false;

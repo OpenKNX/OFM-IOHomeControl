@@ -12,6 +12,10 @@
 #define ParamIOHC_cDimmable 0
 #endif
 
+#ifndef ParamIOHC_cGarageEndpointsOnly
+#define ParamIOHC_cGarageEndpointsOnly 0
+#endif
+
 #ifndef ParamIOHC_cSilentOperation
 #define ParamIOHC_cSilentOperation 0
 #endif
@@ -1064,6 +1068,11 @@ IoHomeGenericCapabilities IoHomecontrolChannel::getProfileCapabilities() const
     return ioHomeProfileCapabilities(getEffectiveProfileDescriptor());
 }
 
+bool IoHomecontrolChannel::garageEndpointsOnly() const
+{
+    return !mIs1W && ioHomeGarageMainOnly(getEffectiveProfileDescriptor()) && ParamIOHC_cGarageEndpointsOnly;
+}
+
 const IoHomeProfileDescriptor *IoHomecontrolChannel::getEffectiveProfileDescriptor() const
 {
     if (mManualPackedProfile != 0)
@@ -1427,6 +1436,8 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
     if (!allowsActuatorControls())
         return;
     const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor();
+    if (garageEndpointsOnly() && (iSlatPercent != 0xFF || (iPercent != 0.0f && iPercent != 100.0f)))
+        return;
     if (lDescriptor && ioHomeParameterSemantic(lDescriptor, 0) == ParameterSemantic::Unsupported)
         return;
     if (lDescriptor && (lDescriptor->capabilityFlags & IoHomeCapabilityBinaryOnly) &&
@@ -1502,6 +1513,7 @@ void IoHomecontrolChannel::sendStop()
 
 void IoHomecontrolChannel::sendFavorite()
 {
+    if (garageEndpointsOnly()) return;
     if (!allowsActuatorControls())
         return;
     if (const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor())

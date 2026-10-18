@@ -1007,6 +1007,17 @@ class ChannelUiTest(unittest.TestCase):
         two_way = diagnostics.find("k:choose[@ParamRefId='%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901']/k:when[@test='0']", NS)
         self.assertEqual(len(two_way.findall('k:ParameterBlock', NS)), 3)
 
+    def test_moto1000_limit_is_explicit_and_does_not_grow_channel_memory(self) -> None:
+        parameter = self.template.find(".//k:Parameter[@Name='c%C%GarageEndpointsOnly']", NS)
+        self.assertEqual(parameter.get('Value'), '0')
+        self.assertEqual((parameter.get('Offset'),parameter.get('BitOffset')), ('0','6'))
+        for other in self.template.findall(".//k:Union/k:Parameter[@Offset='0']", NS):
+            if other is parameter: continue
+            size = 2 if other.get('Name') == 'c%C%OneWayEnrollmentDestination' else 1
+            self.assertNotIn(6, range(int(other.get('BitOffset')),int(other.get('BitOffset'))+size))
+        choice = self.template.find(".//k:ParameterBlock[@Name='ExpertOptions']//k:choose[@ParamRefId='%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201']/k:when[@test='4']", NS)
+        self.assertIsNotNone(choice.find("k:ParameterRefRef[@RefId='%AID%_UP-%TT%%CC%139_R-%TT%%CC%13901']", NS))
+
     def test_visible_settings_have_existing_contextual_help(self) -> None:
         for filename in ('IoHomecontrol.templ.xml','IoHomecontrol.share.xml','IoHomecontrol.scene.part.xml','IoHomeProductPIC.ui.xml','IoHomeProductPVX.ui.xml'):
             for ref in parse(filename).findall('.//k:Dynamic//k:ParameterRefRef', NS):
