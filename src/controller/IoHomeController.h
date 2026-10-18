@@ -352,7 +352,8 @@ public:
     StartRejected = 8,
     // 1W has no return path: a completed enrollment burst only proves that the
     // frames left the radio, never that the actuator stored the controller.
-    OneWayEnrollmentTransmitted = 9
+    OneWayEnrollmentTransmitted = 9,
+    PullDiagnosticComplete = 10
   };
 
   enum class PairingOptionalConfigResult : uint8_t
@@ -363,6 +364,12 @@ public:
     NoReply = 3,
     TxFailure = 4,
   };
+
+  enum class PullKeyResult : uint8_t
+  {
+    NotRun, Received, VerifiedSameKey, VerifiedOtherKey, Unproven, Refused, Timeout
+  };
+  static const char *pullKeyResultName(PullKeyResult result);
 
   struct PairingTelemetry
   {
@@ -382,6 +389,7 @@ public:
       NoReply = 4,
     } discoverConfirmResult = DiscoverConfirmResult::NotRun;
     uint8_t discoverConfirmAttempts = 0;
+    PullKeyResult pullResult = PullKeyResult::NotRun;
     PairingOptionalConfigResult optionalConfig = PairingOptionalConfigResult::NotAttempted;
   };
 
@@ -1457,6 +1465,7 @@ private:
   IoHomeFrame mPairLaunchKeyTransferFrame;
   IoHomeFrame mPairPulledKeyFrame;
   uint8_t mPairPulledKey[16];
+  uint8_t mPairPullFrequency = 0xFF;
   uint8_t mPairPullAuthChallenge[6];
   uint8_t mPairing1WStage = 0; // 0=announce, 1=add, 2=remove, 3=stop, 4=down
   Pairing1WMode mRequestedPairing1WMode = Pairing1WMode::RemoveAdd;
@@ -1649,6 +1658,7 @@ private:
   void processPairWaitLaunchKeyTransfer();
   void processPairSendPullKeyChallenge();
   void processPairWaitPullKeyChallengeResponse();
+  void finishPullKeyDiagnostic(PullKeyResult result);
   void processPairSend1WAnnounce();
   void processPairWait1WAnnounce();
   void processPairSend1WRemove();

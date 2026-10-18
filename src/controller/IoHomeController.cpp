@@ -3950,6 +3950,8 @@ void IoHomeController::cancelPairing()
     if (mState >= ControllerState::PairSendDiscovery &&
         mState <= ControllerState::PairFailed)
     {
+        memset(mPairPulledKey, 0, sizeof(mPairPulledKey));
+        mPairPulledKeyFrame.init();
         completePairingTelemetry(PairingOutcome::Cancelled);
         resetPairingPreambleState();
         mState = ControllerState::Idle;
@@ -3962,6 +3964,7 @@ const char *IoHomeController::pairingOutcomeName(PairingOutcome iOutcome)
 {
     switch (iOutcome)
     {
+    case PairingOutcome::PullDiagnosticComplete: return "pull-diagnostic-complete";
     case PairingOutcome::None: return "none";
     case PairingOutcome::InProgress: return "in-progress";
     case PairingOutcome::Success: return "success";
@@ -5936,6 +5939,7 @@ void IoHomeController::logPairDiagnosticStatus() const
         (isPairDiagnosticState(mState) && mPairingStartTime != 0) ? (millis() - mPairingStartTime) : 0UL);
     const IoHomeRadioHealth lHealth = radioHealth();
 
+    logInfoP("PairDiag: pull_result=%s", pullKeyResultName(mPairingTelemetry.pullResult));
     logInfoP("PairDiag: trace=%s state=%s ch=%u node=0x%06X orderIndex=%u txFreqIdx=%u txFreq=%luHz rxFreqIdx=%u rxFreq=%luHz lastRespFreq=%u elapsed=%lums spe=%d passive=%d rxScan=%d",
              mPairDiagnosticTraceEnabled ? "on" : "off",
              stateName(mState),
@@ -6920,7 +6924,7 @@ void IoHomeController::loop()
                             break;
 
                         case Pairing2WMode::PullKey:
-                            mState = ControllerState::PairSendPullKeyChallenge;
+                            mState = ControllerState::PairSendLaunchKeyTransfer;
                             break;
 
                         case Pairing2WMode::Normal:
@@ -6955,59 +6959,42 @@ void IoHomeController::loop()
                     beginPairKeyInitDelay(PairingTelemetry::DiscoverConfirmResult::ErrorResponse);
                 }
             }
-            else if (mState == ControllerState::PairWaitLaunchKeyTransfer)
+            else if (mState == ControllerState::PairWaitLaunchKeyTransfer ||
+                     mState == ControllerState::PairWaitPullKeyChallengeResponse)
             {
-                if (mRxFrame.commandId == IoHomeCommand::KeyTransfer &&
-                    mRxFrame.getSrcNodeId() == mDiscoveredNodeId &&
-                    mRxFrame.getDestNodeId() == mOwnNodeId &&
-                    mRxFrame.dataLen >= 16)
+                const bool peer = mRxFrame.getSrcNodeId() == mDiscoveredNodeId &&
+                                  mRxFrame.getDestNodeId() == mOwnNodeId &&
+                                  mLastResponseFreqIdx == mPairPullFrequency;
+                if (peer && mRxFrame.commandId == IoHomeCommand::ErrorResponse)
+                    finishPullKeyDiagnostic(PullKeyResult::Refused);
+                else if (peer && mState == ControllerState::PairWaitLaunchKeyTransfer &&
+                         mRxFrame.commandId == IoHomeCommand::KeyTransfer && mRxFrame.dataLen == 16)
                 {
-                    uint8_t lLaunchData[1 + sizeof(mPairingChallenge)] = {static_cast<uint8_t>(IoHomeCommand::LaunchKeyTransfer)};
-                    memcpy(lLaunchData + 1, mPairingChallenge, sizeof(mPairingChallenge));
-                    if (IoHomeCrypto::crypt2WKeyXor(lLaunchData, sizeof(lLaunchData),
-                                                    mPairingChallenge, mRxFrame.data,
-                                                    IOHC_TRANSFER_KEY, mPairPulledKey))
-                    {
+                    uint8_t launchData[7] = {static_cast<uint8_t>(IoHomeCommand::LaunchKeyTransfer)};
+                    memcpy(launchData + 1, mPairingChallenge, 6);
+                    if (IoHomeCrypto::crypt2WKeyXor(launchData, sizeof(launchData),
+                            mPairingChallenge, mRxFrame.data, IOHC_TRANSFER_KEY, mPairPulledKey)) {
                         mPairPulledKeyFrame = mRxFrame;
+                        mPairingTelemetry.pullResult = PullKeyResult::Received;
                         mState = ControllerState::PairSendPullKeyChallenge;
-                    }
-                    else
-                    {
-                        logDebugP("Pairing: failed to decode pulled key from 0x%06X, continuing with push flow", mDiscoveredNodeId);
-                        mState = ControllerState::PairSendKeyInit;
-                    }
+                    } else finishPullKeyDiagnostic(PullKeyResult::Unproven);
                 }
-            }
-            else if (mState == ControllerState::PairWaitPullKeyChallengeResponse)
-            {
-                if (mRxFrame.commandId == IoHomeCommand::ChallengeResponse &&
-                    mRxFrame.getSrcNodeId() == mDiscoveredNodeId &&
-                    mRxFrame.getDestNodeId() == mOwnNodeId &&
-                    mRxFrame.dataLen >= IOHC_HMAC_SIZE)
+                else if (peer && mState == ControllerState::PairWaitPullKeyChallengeResponse &&
+                         mRxFrame.commandId == IoHomeCommand::ChallengeResponse &&
+                         mRxFrame.dataLen == IOHC_HMAC_SIZE)
                 {
-                    uint8_t lHmacInput[1 + IOHC_FRAME_MAX_DATA];
-                    uint8_t lExpected[IOHC_HMAC_SIZE];
-                    lHmacInput[0] = static_cast<uint8_t>(mPairPulledKeyFrame.commandId);
-                    memcpy(lHmacInput + 1, mPairPulledKeyFrame.data, mPairPulledKeyFrame.dataLen);
-
-                    if (IoHomeCrypto::createHmac2W(lHmacInput, 1 + mPairPulledKeyFrame.dataLen,
-                                                   mPairPullAuthChallenge, mPairPulledKey, lExpected))
-                    {
-                        uint8_t lDiff = 0;
-                        for (uint8_t i = 0; i < IOHC_HMAC_SIZE; i++)
-                            lDiff |= (lExpected[i] ^ mRxFrame.data[i]);
-
-                        if (lDiff == 0)
-                            logInfoP("Pairing: pulled device key authenticated for 0x%06X", mDiscoveredNodeId);
-                        else
-                            logDebugP("Pairing: pulled key auth mismatch for 0x%06X, continuing with push flow", mDiscoveredNodeId);
+                    uint8_t input[17] = {static_cast<uint8_t>(IoHomeCommand::KeyTransfer)};
+                    uint8_t expected[IOHC_HMAC_SIZE]{};
+                    memcpy(input + 1, mPairPulledKeyFrame.data, 16);
+                    uint8_t diff = 0xFF;
+                    if (IoHomeCrypto::createHmac2W(input, sizeof(input), mPairPullAuthChallenge,
+                                                 mPairPulledKey, expected)) {
+                        diff = 0;
+                        for (uint8_t i=0; i<IOHC_HMAC_SIZE; ++i) diff |= expected[i] ^ mRxFrame.data[i];
                     }
-                    else
-                    {
-                        logDebugP("Pairing: failed to verify pulled key auth for 0x%06X, continuing with push flow", mDiscoveredNodeId);
-                    }
-
-                    mState = ControllerState::PairSendKeyInit;
+                    finishPullKeyDiagnostic(diff ? PullKeyResult::Unproven :
+                        (memcmp(mPairPulledKey, mSystemKey, 16) == 0
+                            ? PullKeyResult::VerifiedSameKey : PullKeyResult::VerifiedOtherKey));
                 }
             }
             else if (mState == ControllerState::PairWaitDeviceChallenge)
@@ -8603,6 +8590,36 @@ void IoHomeController::processPairWaitKeyInitDelay()
         mState = ControllerState::PairSendKeyInit;
 }
 
+const char *IoHomeController::pullKeyResultName(PullKeyResult result)
+{
+    switch (result) {
+    case PullKeyResult::NotRun: return "not_run";
+    case PullKeyResult::Received: return "received";
+    case PullKeyResult::VerifiedSameKey: return "verified_same_key";
+    case PullKeyResult::VerifiedOtherKey: return "verified_other_key";
+    case PullKeyResult::Unproven: return "unproven";
+    case PullKeyResult::Refused: return "refused";
+    case PullKeyResult::Timeout: return "timeout";
+    }
+    return "unknown";
+}
+
+void IoHomeController::finishPullKeyDiagnostic(PullKeyResult result)
+{
+    mPairingTelemetry.pullResult = result;
+    logInfoP("Pairing pull: result=%s peer=%06X; no key stored", pullKeyResultName(result), mDiscoveredNodeId);
+    // Verification is a diagnostic result only. The candidate is not handed to
+    // pairing finalization, RAM system-key assignment, flash, ETS, or logs.
+    memset(mPairPulledKey, 0, sizeof(mPairPulledKey));
+    memset(mPairPullAuthChallenge, 0, sizeof(mPairPullAuthChallenge));
+    mPairPulledKeyFrame.init();
+    mPairPullFrequency = 0xFF;
+    completePairingTelemetry(PairingOutcome::PullDiagnosticComplete);
+    resetPairingPreambleState();
+    mState = ControllerState::Idle;
+    startReceive();
+}
+
 void IoHomeController::processPairSendLaunchKeyTransfer()
 {
     if (millis() - mPairingStartTime > IOHC_PAIR_TIMEOUT_MS)
@@ -8628,8 +8645,8 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
         return;
     if (lPrepErr != RadioError::None)
     {
-        logDebugP("Pairing: failed to send launch key transfer to 0x%06X, falling back to push flow", mDiscoveredNodeId);
-        mState = ControllerState::PairSendKeyInit;
+        logDebugP("Pairing: failed to send launch key transfer to 0x%06X, diagnostic stopped", mDiscoveredNodeId);
+        finishPullKeyDiagnostic(PullKeyResult::Unproven);
         return;
     }
 
@@ -8641,6 +8658,7 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
         if (lErr == RadioError::None)
         {
             mStateTimer = millis();
+            mPairPullFrequency = mCurrentFreqIdx;
             mState = ControllerState::PairWaitLaunchKeyTransfer;
         }
         else if (lErr == RadioError::Busy)
@@ -8649,14 +8667,14 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
         }
         else
         {
-            logDebugP("Pairing: failed to send launch key transfer to 0x%06X, falling back to push flow", mDiscoveredNodeId);
-            mState = ControllerState::PairSendKeyInit;
+            logDebugP("Pairing: failed to send launch key transfer to 0x%06X, diagnostic stopped", mDiscoveredNodeId);
+            finishPullKeyDiagnostic(PullKeyResult::Unproven);
         }
     }
     else
     {
-        logDebugP("Pairing: failed to send launch key transfer to 0x%06X, falling back to push flow", mDiscoveredNodeId);
-        mState = ControllerState::PairSendKeyInit;
+        logDebugP("Pairing: failed to send launch key transfer to 0x%06X, diagnostic stopped", mDiscoveredNodeId);
+        finishPullKeyDiagnostic(PullKeyResult::Unproven);
     }
 }
 
@@ -8667,14 +8685,14 @@ void IoHomeController::processPairWaitLaunchKeyTransfer()
         return;
     if (lRxErr != RadioError::None)
     {
-        mState = ControllerState::PairSendKeyInit;
+        finishPullKeyDiagnostic(PullKeyResult::Unproven);
         return;
     }
 
     if (millis() - mStateTimer > 1000)
     {
-        logDebugP("Pairing: pulled key transfer timed out for 0x%06X, falling back to push flow", mDiscoveredNodeId);
-        mState = ControllerState::PairSendKeyInit;
+        logDebugP("Pairing: pulled key transfer timed out for 0x%06X, diagnostic stopped", mDiscoveredNodeId);
+        finishPullKeyDiagnostic(PullKeyResult::Timeout);
     }
 }
 
@@ -8702,8 +8720,8 @@ void IoHomeController::processPairSendPullKeyChallenge()
             return;
         if (lPrepErr != RadioError::None)
         {
-            logDebugP("Pairing: failed to challenge pulled key for 0x%06X, falling back to push flow", mDiscoveredNodeId);
-            mState = ControllerState::PairSendKeyInit;
+            logDebugP("Pairing: failed to challenge pulled key for 0x%06X, diagnostic stopped", mDiscoveredNodeId);
+            finishPullKeyDiagnostic(PullKeyResult::Unproven);
             return;
         }
         tracePairDiagnosticTx2W(lFrame, lPreamble);
@@ -8719,14 +8737,14 @@ void IoHomeController::processPairSendPullKeyChallenge()
         }
         else
         {
-            logDebugP("Pairing: failed to challenge pulled key for 0x%06X, falling back to push flow", mDiscoveredNodeId);
-            mState = ControllerState::PairSendKeyInit;
+            logDebugP("Pairing: failed to challenge pulled key for 0x%06X, diagnostic stopped", mDiscoveredNodeId);
+            finishPullKeyDiagnostic(PullKeyResult::Unproven);
         }
     }
     else
     {
-        logDebugP("Pairing: failed to challenge pulled key for 0x%06X, falling back to push flow", mDiscoveredNodeId);
-        mState = ControllerState::PairSendKeyInit;
+        logDebugP("Pairing: failed to challenge pulled key for 0x%06X, diagnostic stopped", mDiscoveredNodeId);
+        finishPullKeyDiagnostic(PullKeyResult::Unproven);
     }
 }
 
@@ -8737,14 +8755,14 @@ void IoHomeController::processPairWaitPullKeyChallengeResponse()
         return;
     if (lRxErr != RadioError::None)
     {
-        mState = ControllerState::PairSendKeyInit;
+        finishPullKeyDiagnostic(PullKeyResult::Unproven);
         return;
     }
 
     if (millis() - mStateTimer > IOHC_RX_TIMEOUT_MS)
     {
-        logDebugP("Pairing: pulled key auth timed out for 0x%06X, falling back to push flow", mDiscoveredNodeId);
-        mState = ControllerState::PairSendKeyInit;
+        logDebugP("Pairing: pulled key auth timed out for 0x%06X, diagnostic stopped", mDiscoveredNodeId);
+        finishPullKeyDiagnostic(PullKeyResult::Timeout);
     }
 }
 

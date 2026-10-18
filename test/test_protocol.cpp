@@ -21350,3 +21350,77 @@ TEST(controller_pairing_definitive_key_refusal_stops_without_persisting)
         ASSERT_TRUE(!ch.isPaired());
     }
 }
+
+TEST(controller_pairing_pull_is_verified_diagnostic_without_push_or_key_assignment)
+{
+    using Result=IoHomeController::PullKeyResult;
+    for (unsigned variant=0;variant<8;++variant) {
+        const uint8_t systemKey[16]={1,2,3,4};
+        uint8_t candidate[16]; memcpy(candidate,systemKey,16);
+        if (variant!=0) candidate[0]^=0x55;
+        IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x831F2A,0,systemKey); c.setSystemKey(systemKey);
+        ASSERT_TRUE(c.startPairingExperimental(0,0,Pairing2WMode::PullKey));
+        IoHomeFrame discovery; ASSERT_TRUE(transmitQueuedControllerFrame(c,discovery));
+        IoHomeFrame response; buildDiscoverResponseFrame(response,0x831F2A,0x7E9E6E,false,IOHC_POWER_SAVE_ALWAYS_ALIVE);
+        ASSERT_TRUE(queueControllerResponse(c,response));
+        IoHomeFrame launch;
+        const auto launchPacket=c.radio().testLastTransmittedPacket();
+        ASSERT_TRUE(deserializeFrameForTest(launch,launchPacket.data(),launchPacket.size()));
+        ASSERT_EQ(launch.commandId,IoHomeCommand::LaunchKeyTransfer);
+        ASSERT_EQ(launch.dataLen,6);
+        c.radio().testClearTransmittedPacket();
+        if (variant==4) {
+            ioHomeTestAdvanceMillis(1001); c.loop();
+            ASSERT_EQ(c.pairingTelemetry().pullResult,Result::Timeout);
+        } else if (variant==5) {
+            buildErrorResponseFrame(response,0x831F2A,0x7E9E6E); response.data[0]=0x08; response.dataLen=1;
+            ASSERT_TRUE(queueControllerResponse(c,response));
+            ASSERT_EQ(c.pairingTelemetry().pullResult,Result::Refused);
+        } else {
+            uint8_t input[7]={0x38}; memcpy(input+1,launch.data,6);
+            response.init(); response.setSrcNode(0x7E9E6E); response.setDestNode(0x831F2A);
+            response.commandId=IoHomeCommand::KeyTransfer; response.dataLen=16;
+            ASSERT_TRUE(IoHomeCrypto::crypt2WKeyXor(input,variant==3?1:7,launch.data,candidate,IOHC_TRANSFER_KEY,response.data));
+            // Wrong peer and malformed length cannot create a candidate.
+            response.setSrcNode(0x123456); ASSERT_TRUE(queueControllerResponse(c,response));
+            ASSERT_EQ(c.state(),ControllerState::PairWaitLaunchKeyTransfer);
+            response.setSrcNode(0x7E9E6E); response.dataLen=17;
+            ASSERT_TRUE(queueControllerResponse(c,response));
+            ASSERT_EQ(c.state(),ControllerState::PairWaitLaunchKeyTransfer);
+            response.dataLen=16;
+            uint8_t transcript[17]={0x32}; memcpy(transcript+1,response.data,16);
+            ASSERT_TRUE(queueControllerResponse(c,response));
+            ASSERT_EQ(c.pairingTelemetry().pullResult,Result::Received);
+            IoHomeFrame challenge; const auto packet=c.radio().testLastTransmittedPacket();
+            ASSERT_TRUE(deserializeFrameForTest(challenge,packet.data(),packet.size()));
+            ASSERT_EQ(challenge.commandId,IoHomeCommand::ChallengeRequest);
+            response.commandId=IoHomeCommand::ChallengeResponse; response.dataLen=6;
+            ASSERT_TRUE(IoHomeCrypto::createHmac2W(transcript,17,challenge.data,candidate,response.data));
+            if (variant==2) response.data[0]^=1;
+            response.setSrcNode(0x123456); ASSERT_TRUE(queueControllerResponse(c,response));
+            ASSERT_EQ(c.state(),ControllerState::PairWaitPullKeyChallengeResponse);
+            response.setSrcNode(0x7E9E6E);
+            if (variant==6) {
+                c.cancelPairing();
+                ASSERT_TRUE(queueControllerResponse(c,response));
+                ASSERT_EQ(c.pairingTelemetry().outcome,IoHomeController::PairingOutcome::Cancelled);
+            } else if (variant==7) {
+                ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS+1); c.loop();
+                ASSERT_EQ(c.pairingTelemetry().pullResult,Result::Timeout);
+                ASSERT_TRUE(queueControllerResponse(c,response));
+                ASSERT_EQ(c.pairingTelemetry().pullResult,Result::Timeout);
+            } else {
+                ASSERT_TRUE(queueControllerResponse(c,response));
+                ASSERT_EQ(c.pairingTelemetry().pullResult,variant==0?Result::VerifiedSameKey:
+                    variant==1?Result::VerifiedOtherKey:Result::Unproven);
+            }
+        }
+        ASSERT_EQ(c.state(),ControllerState::Idle);
+        ASSERT_TRUE(!ch.isPaired());
+        ASSERT_MEM_EQ(c.getSystemKey(),systemKey,16);
+        c.radio().testClearTransmittedPacket();
+        ioHomeTestAdvanceMillis(6000); c.loop();
+        ASSERT_TRUE(c.radio().testLastTransmittedPacket().empty());
+    }
+}
