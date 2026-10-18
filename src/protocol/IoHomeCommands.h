@@ -1402,6 +1402,53 @@ inline const char *ioHomeCommandResultName(uint8_t iCode)
     }
 }
 
+// ErrorResponse DATA[0] is a separate namespace from legacy execution results.
+// Packed code/state interpretation is diagnostic: overlapping legacy values
+// remain explicitly ambiguous; unknown formats must never prove key acceptance.
+struct IoHomeErrorResult
+{
+    uint8_t raw, code, state;
+    const char *name;
+    bool packed, ambiguous;
+};
+inline IoHomeErrorResult ioHomeDecodeErrorResponse(uint8_t raw)
+{
+    const char *name = nullptr;
+    switch (raw & 0xF8U)
+    {
+    case 0x08: name = "COMMAND_UNKNOWN"; break;
+    case 0x10: name = "DATA_ERROR"; break;
+    case 0x18: name = "BAD_MAC"; break;
+    case 0x20: name = "SETUP_REQUIRED"; break;
+    case 0x28: name = "PARAMETER_UNKNOWN"; break;
+    case 0x30: name = "ORIGINATOR_DISABLED"; break;
+    case 0x38: name = "PRIORITY_LOCKED"; break;
+    case 0x40: name = "PRIORITY_SERVICE_NOT_SUPPORTED"; break;
+    case 0x48: name = "PARAMETER_LIMITATION_ADJUSTMENT"; break;
+    case 0x50: name = "PARAMETER_INCOHERENCE_ADJUSTMENT"; break;
+    case 0x58: name = "TOTAL_INCOHERENCE"; break;
+    case 0x60: name = "SERVICE_FULL"; break;
+    case 0x68: name = "ALIAS_INCOHERENCE"; break;
+    case 0x70: name = "SESSION_INTERRUPTED"; break;
+    case 0x78: name = "NOT_IMPLEMENTED"; break;
+    case 0x80: name = "COMMAND_REJECTED"; break;
+    case 0x88: name = "ALREADY_CONFIGURED"; break;
+    }
+    const char *legacy = ioHomeCommandResultName(raw);
+    const bool knownLegacy = strcmp(legacy, "unknown") != 0;
+    // Only state-zero named codes are unambiguous enough to select packed
+    // labels. Preserve nonzero-state legacy results and their original names.
+    const bool packed = name && (raw & 7U) == 0;
+    return {raw, static_cast<uint8_t>(raw >> 3), static_cast<uint8_t>(raw & 7U),
+            packed ? name : legacy, packed, name && (knownLegacy || !packed)};
+}
+inline bool ioHomeKeyTransferDefinitivelyRefused(uint8_t raw)
+{
+    // Exact observed refusals and authentication failures. Do not infer policy
+    // for other packed states or undocumented result bytes.
+    return raw == 0x08 || raw == 0x80 || raw == 0x18 || raw == 0x05;
+}
+
 inline const char *ioHomeCommandResultDescription(uint8_t iCode)
 {
     switch (iCode)

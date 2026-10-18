@@ -7055,7 +7055,18 @@ void IoHomeController::loop()
                     mLastResponseTimingSample.disposition=IoHomeResponseDisposition::FoldedWithoutKeyProof;
                     mLastResponseTimingSample.peerResultLength=mRxFrame.dataLen;
                     std::memcpy(mLastResponseTimingSample.peerResult,mRxFrame.data,mRxFrame.dataLen);
-                    logDebugP("Pairing: accepted foldable 0xFE after key transfer; key proof pending");
+                    const auto result = mRxFrame.dataLen ? ioHomeDecodeErrorResponse(mRxFrame.data[0])
+                                                         : ioHomeDecodeErrorResponse(0);
+                    logInfoP("Pairing: error command=32 phase=%s raw=%02X decoded=%s ambiguous=%u src=%06X dst=%06X challenged=1",
+                             stateName(mState), result.raw, result.name, result.ambiguous,
+                             mRxFrame.getSrcNodeId(), mRxFrame.getDestNodeId());
+                    if (mRxFrame.dataLen && ioHomeKeyTransferDefinitivelyRefused(result.raw)) {
+                        recordPairingDiagnostic(PairingOutcome::KeyExchangeFailure,
+                            result.raw == 0x18 || result.raw == 0x05 ? "key-authentication-failed" : "key-transfer-refused");
+                        mState = ControllerState::PairFailed;
+                    } else {
+                        logDebugP("Pairing: accepted foldable 0xFE after key transfer; key proof pending");
+                    }
                 }
             }
             else if (mState == ControllerState::PairWaitEnrichment)

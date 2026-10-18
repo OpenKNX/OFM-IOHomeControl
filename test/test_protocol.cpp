@@ -21308,3 +21308,45 @@ TEST(controller_receive_fault_revokes_bypass_without_refunding_budget)
     ASSERT_EQ(c.testDirectTransmit(bytes,length,1024,868950000U),RadioError::DutyCycleExceeded);
     ASSERT_EQ(c.testTxAirtimeAccum(0),charged);ASSERT_EQ(c.radio().testTransmitCount(),1U);
 }
+
+TEST(error_response_packed_and_legacy_names_are_separate)
+{
+    const uint8_t raw[] = {0x08,0x28,0x80,0x05,0x58,0x38,0xFF};
+    const char *names[] = {"COMMAND_UNKNOWN","PARAMETER_UNKNOWN","COMMAND_REJECTED","wrong-system-key","TOTAL_INCOHERENCE","PRIORITY_LOCKED","unknown"};
+    for (unsigned i=0;i<sizeof(raw);++i) {
+        const auto result=ioHomeDecodeErrorResponse(raw[i]);
+        ASSERT_EQ(strcmp(result.name,names[i]),0);
+        ASSERT_EQ(result.code,raw[i]>>3); ASSERT_EQ(result.state,raw[i]&7);
+    }
+    ASSERT_TRUE(ioHomeDecodeErrorResponse(0x08).ambiguous);
+    ASSERT_TRUE(ioHomeDecodeErrorResponse(0x58).ambiguous);
+    ASSERT_TRUE(!ioHomeDecodeErrorResponse(0x80).ambiguous);
+    ASSERT_EQ(strcmp(ioHomeCommandResultName(0x08),"execution-error"),0);
+}
+
+TEST(controller_pairing_definitive_key_refusal_stops_without_persisting)
+{
+    // Synthetic session/authentication, real Atlantic/Sunilus refusal bytes.
+    for (uint8_t result : {0x08,0x80,0x18,0x05}) {
+        const uint8_t key[16]={1};
+        IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x831F2A,0,key); c.setSystemKey(key);
+        ASSERT_TRUE(advancePairingToWaitKeyTransferConfirmation(c,0x831F2A,0x7E9E6E));
+        IoHomeFrame reply; buildErrorResponseFrame(reply,0x831F2A,0x123456);
+        reply.data[0]=result; reply.dataLen=1;
+        ASSERT_TRUE(queueControllerResponse(c,reply));
+        ASSERT_EQ(c.state(),ControllerState::PairWaitKeyTransferConfirmation);
+        reply.setSrcNode(0x7E9E6E); reply.setDestNode(0x123456);
+        ASSERT_TRUE(queueControllerResponse(c,reply));
+        ASSERT_EQ(c.state(),ControllerState::PairWaitKeyTransferConfirmation);
+        reply.setDestNode(0x831F2A);
+        ASSERT_TRUE(queueControllerResponse(c,reply));
+        ASSERT_TRUE(!ch.isPaired());
+        ASSERT_EQ(c.pairingTelemetry().diagnostic,IoHomeController::PairingOutcome::KeyExchangeFailure);
+        ASSERT_TRUE(c.state()!=ControllerState::PairWaitKeyTransferConfirmation);
+        c.radio().testClearTransmittedPacket();
+        ioHomeTestAdvanceMillis(6000); c.loop();
+        ASSERT_TRUE(c.radio().testLastTransmittedPacket().empty());
+        ASSERT_TRUE(!ch.isPaired());
+    }
+}
