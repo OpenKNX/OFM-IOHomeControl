@@ -1,0 +1,20 @@
+id: nina_directed_2e_20261018
+source:
+  url: https://github.com/laberning/home_io_control/issues/162#issuecomment-6249941365
+  observed: 2026-10-18
+  radio: sx1262
+  provenance: decoded 10-byte protocol frame reported in issue; no trailing CRC bytes published
+notes: |
+  Somfy Nina sends addressed command 0x2E with one data byte 0x02.
+  Laberning's old Soft-PHY opcode allowlist discarded this CRC-valid frame.
+  OFM uses length+CRC for SX1262, so test the existing parser without copying that workaround.
+  Gateway response sequence and subsequent 0x38 request still need hardware verification.
+frames:
+  - {direction: rx, cmd: '2E', hex: '49 30 C6 4C 3B A9 94 E2 2E 02'}
+expected:
+  destination: C64C3B
+  source: A994E2
+  command: '2E'
+  data: '02'
+  accepted_when_assembled_with_valid_crc: true
+  automatic_key_import_success: unverified

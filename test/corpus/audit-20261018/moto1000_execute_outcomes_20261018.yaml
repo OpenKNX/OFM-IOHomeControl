@@ -1,0 +1,24 @@
+id: moto1000_execute_outcomes_20261018
+source:
+  url: https://github.com/laberning/home_io_control/issues/163#issuecomment-6252058342
+  observed: 2026-10-18
+  radio: sx1262
+  provenance: public tester's FRAME_LOG excerpt; complete headers and shown data, transport CRC absent
+notes: |
+  Somfy MOTO1000 io garage opener subtype 58. 6-byte MAIN-only OPEN succeeds
+  on a known endpoint; 6-byte 50% target is rejected 0xFE/0x28.
+  Auth challenge/response payloads were masked and are not included.
+  This is not a full authenticated exchange and cannot validate MAC calculations.
+frames:
+  - {direction: tx, cmd: '00', tag: open_main_only, hex: '4E 20 8D 76 33 A9 DB EC 00 01 63 00 00 00 00'}
+  - {direction: rx, cmd: '04', tag: open_ack, hex: '8E 00 A9 DB EC 8D 76 33 04 04 80 C8 00 00 00'}
+  - {direction: tx, cmd: '00', tag: intermediate_50_main_only, hex: '4E 20 8D 76 33 A9 DB EC 00 01 63 64 00 00 00'}
+  - {direction: rx, cmd: 'FE', tag: intermediate_50_refused, hex: '89 00 A9 DB EC 8D 76 33 FE 28'}
+expected:
+  supported_open: true
+  target_50_supported: false
+  error_raw: '28'
+  error_result_name: PARAMETER_UNKNOWN
+  control_payload_len: 6
+  challenge_mac_available: false
+  actuation_only_after_authenticated_confirmed_status: true

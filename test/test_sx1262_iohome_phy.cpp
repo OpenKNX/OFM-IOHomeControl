@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 
 #include "radio/SX1262IoHomePhy.h"
 #include "radio/SX1262RxBandwidth.h"
@@ -231,9 +232,27 @@ TEST(encode_pads_partial_uart_byte_high)
   ASSERT_EQ(static_cast<uint8_t>(lEncoded[lEncodedLen - 1U] & 0x03U), 0x03U);
 }
 
+TEST(config_and_key_opcodes_pass_crc_length_filter_without_allowlist)
+{
+  // Nina issue #162 publishes these header/data bytes WITHOUT its RF CRC.
+  // Encode creates a synthetic CRC/UART envelope for the actual PHY parser.
+  for (uint8_t command : {0x2E,0x2F,0x37,0x38}) {
+    uint8_t frame[]={0x49,0x30,0xC6,0x4C,0x3B,0xA9,0x94,0xE2,command,0x02};
+    uint8_t encoded[SX1262_IOHOME_MAX_ENCODED_FRAME_LEN]{};
+    const auto length=sx1262EncodeIoHomeFrame(frame,sizeof(frame),encoded,sizeof(encoded));
+    ASSERT_TRUE(length>0);
+    uint8_t decoded[IOHC_FRAME_BUFFER_SIZE]{}; size_t decodedLength=0;
+    ASSERT_TRUE(sx1262FindIoHomeFrame(encoded,length,decoded,sizeof(decoded),decodedLength));
+    ASSERT_EQ(decodedLength,sizeof(frame)); ASSERT_MEM_EQ(decoded,frame,sizeof(frame));
+    encoded[length/2]^=0x20;
+    ASSERT_TRUE(!sx1262FindIoHomeFrame(encoded,length,decoded,sizeof(decoded),decodedLength));
+  }
+}
+
 int main()
 {
   printf("SX1262 io-home PHY tests\n");
+  RUN(config_and_key_opcodes_pass_crc_length_filter_without_allowlist);
   RUN(rx_bandwidth_command_codes_match_sx1262_table);
   RUN(resolve_sync_remaps_iohome_pattern);
   RUN(resolve_sync_keeps_non_iohome_pattern);

@@ -75,3 +75,46 @@ hashes are checked in the UI/provenance regression:
 - `exchange/somfy_pergola_louver_exchange_open_close_position_stop_sx1262.yaml`: `81e1330c04a84915f479faad29ba45a4b504b12ece2937bb627d9a06d9eff028`
 - `probe/somfy_pergola_louver_probe_get_info2_sx1262.yaml`: `ec9a75ca7b04faf89b9decc7c935769b7fbfb6a86bccb0bd562f2ba3a1bb525e`
 - `statuspoll/somfy_pergola_louver_statuspoll_replies_sx1262.yaml`: `bca765421eaadb8a3856790e8ed7945fbe875badff6ed09b0651754b09d6f869`
+
+## Audit of 18 October 2026
+
+The `audit-20261018/` YAML files retain the supplied public issue excerpts
+(Atlantic AGILIA #165, MOTO1000 #163, Nina #162) and three unmodified upstream
+fixtures, pinned to Laberning `6fdee1e7271838978342b1aa6f24c3a5c5c0674d`.
+The Sunilus fixture was introduced by `6bb8013d7004fcfaed2bef99e3661f2f78590ea6`.
+Twenty-six non-key-transfer protocol frames are executable `Frame` entries in
+`golden_rf_corpus.h`, with six scenario records. Public addresses are retained
+for correlation. No system/controller key or encrypted 0x32 transfer is included.
+Masked authentication bytes are never reconstructed. Original public
+challenge/MAC bytes in the upstream YAML are not used as verification vectors;
+the corresponding C++ selection omits these authentication frames.
+
+Sources:
+- Atlantic: https://github.com/laberning/home_io_control/issues/165
+- MOTO1000: https://github.com/laberning/home_io_control/issues/163#issuecomment-6252058342
+- Nina: https://github.com/laberning/home_io_control/issues/162#issuecomment-6249941365
+- Sunilus: upstream `tests/corpus/captures/pairing/somfy_sunilus_pairing_key_transfer_rejected_error.yaml`
+- Battery: upstream `tests/corpus/captures/statuspoll/somfy_rs100_statuspoll_kig300_sx1276.yaml`
+  and `somfy_oximo40_statuspoll_sx1262.yaml`.
+
+These are **partial public hardware transcripts**, not newly recorded OFM RF
+captures or complete authenticated replays. CRC bytes are absent. The PHY tests
+generate a synthetic CRC/UART envelope for Nina's published bytes, and mutate
+only the opcode for synthetic 0x2F/0x37/0x38 parser regressions. The SX1276 adapter
+test simulates the hardware CRCOK flag. Synthetic pull sessions test real OFM
+controller/crypto code with public test keys; they do not prove Atlantic's
+corrected pull works on hardware.
+
+Both cited battery fixtures report `0x60 = full`. Neither supplies a real
+`not_reported` (`0x80`), `normal`, or `low` observation. Those classes and `0x61`
+are explicitly synthetic boundary cases. Raw 0x71 parser tests do not authorize
+battery publication from unauthenticated messages or new polling.
+
+Immutable YAML SHA-256 values:
+
+- `atlantic_agilia_pairing_push_refused_20261018.yaml`: `e8a33aa5ec3aa4bd0bef645d86255348f6e443935f587ee912bfdd958e6e93e0`
+- `moto1000_execute_outcomes_20261018.yaml`: `2aa3e945d2003ea36918a23ce1f3729b6351e219523ab438b98c1a5ee6e3196d`
+- `nina_directed_2e_20261018.yaml`: `34a63a6c06a5c1cf27d5fad82db2670508075c823f2235ed9f75abbf01999db5`
+- `somfy_oximo40_statuspoll_sx1262.yaml`: `87a877a075d86cc511c5115c6e51ecb53b0f2b0098d44e5baba7add0efe72882`
+- `somfy_rs100_statuspoll_kig300_sx1276.yaml`: `4fa35a95103aadc4bb7988e17fc6bef8ae3a1d9fd2580f6fe23bd9d0e5ce16ee`
+- `somfy_sunilus_pairing_key_transfer_rejected_error.yaml`: `472e32dd809b0efd7e569f71e2f13885bb9fed27c7ae9df1bd0a281e0f0d9fc1`

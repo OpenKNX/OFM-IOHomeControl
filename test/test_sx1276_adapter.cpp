@@ -33,5 +33,15 @@ int main(){
  Bus edges;edges.registers[REG_VERSION]=0x12;RadioSX1276 captured;captured.setNativeTransport(&edges,Bus::read,Bus::write);captured.init(1,2,3,4,5,true);assert(edges.registers[REG_DIOMAPPING1]==0x3D);captured.startReceive();captured.nativeReceiveEdge(false,0xFFFFFFF0);captured.nativeReceiveEdge(true,10);edges.rx={1};edges.registers[REG_IRQFLAGS2]=RF_IRQFLAGS2_PAYLOADREADY|RF_IRQFLAGS2_CRCOK;assert(captured.readPacket(out,8)==1);assert(captured.lastReceiveEvidence().preambleTimestampValid&&captured.lastReceiveEvidence().syncTimestampValid&&captured.lastReceiveEvidence().preambleTimestampUs==0xFFFFFFF0);
  edges.rx={2};assert(captured.readPacket(out,8)==1&&!captured.lastReceiveEvidence().syncTimestampValid);
  Bus missing;RadioSX1276 absent;absent.setNativeTransport(&missing,Bus::read,Bus::write);absent.init(1,2,3);assert(!absent.isInitialized());
+ // Synthetic adapter envelope for the Nina public protocol bytes. SX1276
+ // hardware CRCOK is simulated here; actual RF CRC is tested by SX1262 PHY.
+ Bus opcodes;opcodes.registers[REG_VERSION]=0x12;RadioSX1276 opcodeRadio;
+ opcodeRadio.setNativeTransport(&opcodes,Bus::read,Bus::write);opcodeRadio.init(1,2,3,4);
+ for(uint8_t command:{0x2E,0x2F,0x37,0x38}) {
+  opcodeRadio.startReceive();uint8_t protocol[]={0x49,0x30,0xC6,0x4C,0x3B,0xA9,0x94,0xE2,command,2};
+  opcodes.rx.assign(protocol,protocol+sizeof(protocol));opcodes.registers[REG_IRQFLAGS2]=RF_IRQFLAGS2_PAYLOADREADY|RF_IRQFLAGS2_CRCOK;
+  uint8_t decoded[32]{};assert(opcodeRadio.readPacket(decoded,sizeof(decoded))==sizeof(protocol));
+  assert(std::vector<uint8_t>(decoded,decoded+sizeof(protocol))==std::vector<uint8_t>(protocol,protocol+sizeof(protocol)));
+ }
  puts("SX1276 actual adapter register/FIFO scenarios passed (SPI electrical timing unqualified)");
 }

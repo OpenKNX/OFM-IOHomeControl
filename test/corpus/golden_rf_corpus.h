@@ -381,7 +381,112 @@ static const uint8_t kPergola_session_19[] = {0x4E, 0x00, 0x26, 0x25, 0x52, 0x9A
 static const uint8_t kPergola_session_20[] = {0x8E, 0x00, 0x9A, 0xF3, 0xCE, 0x26, 0x25, 0x52, 0x04, 0x05, 0x00, 0x3E, 0xA0, 0x00, 0x00};
 static const uint8_t kPergola_session_21[] = {0x4B, 0x00, 0x26, 0x25, 0x52, 0x9A, 0xF3, 0xCE, 0x03, 0x03, 0x00, 0x00};
 
+static const uint8_t kAudit_moto_0[] = {0x4E, 0x20, 0x8D, 0x76, 0x33, 0xA9, 0xDB, 0xEC, 0x00, 0x01, 0x63, 0x00, 0x00, 0x00, 0x00};
+static const uint8_t kAudit_moto_1[] = {0x8E, 0x00, 0xA9, 0xDB, 0xEC, 0x8D, 0x76, 0x33, 0x04, 0x04, 0x80, 0xC8, 0x00, 0x00, 0x00};
+static const uint8_t kAudit_moto_2[] = {0x4E, 0x20, 0x8D, 0x76, 0x33, 0xA9, 0xDB, 0xEC, 0x00, 0x01, 0x63, 0x64, 0x00, 0x00, 0x00};
+static const uint8_t kAudit_moto_3[] = {0x89, 0x00, 0xA9, 0xDB, 0xEC, 0x8D, 0x76, 0x33, 0xFE, 0x28};
+static const uint8_t kAudit_agilia_0[] = {0xD1, 0x00, 0x60, 0xF8, 0x23, 0xB6, 0xBD, 0xFB, 0x29, 0xFF, 0xC0, 0xB6, 0xBD, 0xFB, 0x0C, 0xCC, 0x00, 0x00};
+static const uint8_t kAudit_agilia_1[] = {0x48, 0x00, 0xB6, 0xBD, 0xFB, 0x60, 0xF8, 0x23, 0x2C};
+static const uint8_t kAudit_agilia_2[] = {0x88, 0x00, 0x60, 0xF8, 0x23, 0xB6, 0xBD, 0xFB, 0x2D};
+static const uint8_t kAudit_agilia_3[] = {0x48, 0x20, 0xB6, 0xBD, 0xFB, 0x60, 0xF8, 0x23, 0x31};
+static const uint8_t kAudit_agilia_4[] = {0x89, 0x00, 0x60, 0xF8, 0x23, 0xB6, 0xBD, 0xFB, 0xFE, 0x08};
+static const uint8_t kAudit_nina_0[] = {0x49, 0x30, 0xC6, 0x4C, 0x3B, 0xA9, 0x94, 0xE2, 0x2E, 0x02};
+static const uint8_t kAudit_sunilus_0[] = {0xC8, 0x00, 0x00, 0x00, 0x3B, 0xD4, 0xC2, 0x82, 0x28};
+static const uint8_t kAudit_sunilus_1[] = {0xD1, 0x00, 0xD4, 0xC2, 0x82, 0xA8, 0x4B, 0x94, 0x29, 0x04, 0x00, 0xA8, 0x4B, 0x94, 0x02, 0xDC, 0xD4, 0xAB};
+static const uint8_t kAudit_sunilus_2[] = {0x48, 0x20, 0xA8, 0x4B, 0x94, 0xD4, 0xC2, 0x82, 0x31};
+static const uint8_t kAudit_sunilus_4[] = {0x89, 0x00, 0xD4, 0xC2, 0x82, 0xA8, 0x4B, 0x94, 0xFE, 0x80};
+static const uint8_t kAudit_sunilus_5[] = {0x89, 0x00, 0xD4, 0xC2, 0x82, 0xA8, 0x4B, 0x94, 0xFE, 0x80};
+static const uint8_t kAudit_rs100_battery_2[] = {0x58, 0x00, 0xA0, 0x25, 0xE1, 0xE4, 0x61, 0xE9, 0x71, 0x04, 0x60, 0x10, 0x0A, 0x0B, 0x00, 0x00, 0xAC, 0x9E, 0x00, 0x0F, 0xBE, 0xFE, 0xDB, 0x01, 0x00};
+static const uint8_t kAudit_rs100_battery_3[] = {0x96, 0x00, 0xA0, 0x25, 0xE1, 0xE4, 0x61, 0xE9, 0x04, 0x04, 0x60, 0x00, 0x00, 0x77, 0xCE, 0x00, 0x0B, 0xBE, 0xFE, 0xDB, 0x01, 0x00, 0x00};
+static const uint8_t kAudit_rs100_battery_4[] = {0x96, 0x00, 0xA0, 0x25, 0xE1, 0xE4, 0x61, 0xE9, 0x04, 0x04, 0x60, 0x00, 0x00, 0x0E, 0xAC, 0x00, 0x02, 0xBE, 0xFE, 0xDB, 0x01, 0x00, 0x00};
+static const uint8_t kAudit_rs100_battery_5[] = {0x58, 0x00, 0xCA, 0x0A, 0x18, 0xE4, 0x61, 0xE9, 0x71, 0x05, 0x60, 0x10, 0x0A, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xBE, 0xFE, 0xDB, 0x01, 0x00};
+static const uint8_t kAudit_rs100_battery_7[] = {0x58, 0x00, 0xA0, 0x25, 0xE1, 0xE4, 0x61, 0xE9, 0x71, 0x05, 0x60, 0x10, 0x0A, 0x0B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xBE, 0xFE, 0xDB, 0x01, 0x00};
+static const uint8_t kAudit_rs100_battery_10[] = {0x8E, 0x00, 0xBE, 0xFE, 0xDB, 0xE4, 0x61, 0xE9, 0x04, 0x05, 0x60, 0x00, 0x00, 0x00, 0x00};
+static const uint8_t kAudit_rs100_battery_12[] = {0x96, 0x00, 0xA0, 0x25, 0xE1, 0xE4, 0x61, 0xE9, 0x04, 0x05, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xBE, 0xFE, 0xDB, 0x01, 0x00, 0x00};
+static const uint8_t kAudit_rs100_battery_14[] = {0x96, 0x00, 0xBE, 0xFE, 0xDB, 0xE4, 0x61, 0xE9, 0x04, 0x05, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xBE, 0xFE, 0xDB, 0x01, 0x00, 0x00};
+static const uint8_t kAudit_oximo_battery_9[] = {0x96, 0x00, 0xA0, 0x25, 0xE1, 0x54, 0x76, 0x6E, 0x04, 0x04, 0x60, 0x00, 0x00, 0xAC, 0x26, 0x00, 0x10, 0xA0, 0x25, 0xE1, 0x01, 0x00, 0x00};
+static const uint8_t kAudit_oximo_battery_14[] = {0x96, 0x00, 0xA0, 0x25, 0xE1, 0x54, 0x76, 0x6E, 0x04, 0x04, 0x60, 0x00, 0x00, 0x73, 0x81, 0x00, 0x0C, 0xA0, 0x25, 0xE1, 0x01, 0x00, 0x00};
+static const uint8_t kAudit_oximo_battery_23[] = {0x96, 0x00, 0xA0, 0x25, 0xE1, 0x54, 0x76, 0x6E, 0x04, 0x04, 0x60, 0x00, 0x00, 0x11, 0x16, 0x00, 0x05, 0xA0, 0x25, 0xE1, 0x01, 0x00, 0x00};
+
 static const Frame kFrames[] = {
+    {"audit_moto_0", "moto1000",
+     "attached public issue excerpt; CRC absent; incomplete authentication; moto1000_execute_outcomes_20261018.yaml", RadioPath::SX1262,
+     kAudit_moto_0, sizeof(kAudit_moto_0), static_cast<IoHomeCommand>(0x00), 0xA9DBEC, 0x8D7633, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_moto_1", "moto1000",
+     "attached public issue excerpt; CRC absent; incomplete authentication; moto1000_execute_outcomes_20261018.yaml", RadioPath::SX1262,
+     kAudit_moto_1, sizeof(kAudit_moto_1), static_cast<IoHomeCommand>(0x04), 0x8D7633, 0xA9DBEC, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_moto_2", "moto1000",
+     "attached public issue excerpt; CRC absent; incomplete authentication; moto1000_execute_outcomes_20261018.yaml", RadioPath::SX1262,
+     kAudit_moto_2, sizeof(kAudit_moto_2), static_cast<IoHomeCommand>(0x00), 0xA9DBEC, 0x8D7633, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_moto_3", "moto1000",
+     "attached public issue excerpt; CRC absent; incomplete authentication; moto1000_execute_outcomes_20261018.yaml", RadioPath::SX1262,
+     kAudit_moto_3, sizeof(kAudit_moto_3), static_cast<IoHomeCommand>(0xFE), 0x8D7633, 0xA9DBEC, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_agilia_0", "atlantic_agilia",
+     "attached public issue excerpt; CRC absent; incomplete authentication; atlantic_agilia_pairing_push_refused_20261018.yaml", RadioPath::SX1262,
+     kAudit_agilia_0, sizeof(kAudit_agilia_0), static_cast<IoHomeCommand>(0x29), 0xB6BDFB, 0x60F823, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_agilia_1", "atlantic_agilia",
+     "attached public issue excerpt; CRC absent; incomplete authentication; atlantic_agilia_pairing_push_refused_20261018.yaml", RadioPath::SX1262,
+     kAudit_agilia_1, sizeof(kAudit_agilia_1), static_cast<IoHomeCommand>(0x2C), 0x60F823, 0xB6BDFB, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_agilia_2", "atlantic_agilia",
+     "attached public issue excerpt; CRC absent; incomplete authentication; atlantic_agilia_pairing_push_refused_20261018.yaml", RadioPath::SX1262,
+     kAudit_agilia_2, sizeof(kAudit_agilia_2), static_cast<IoHomeCommand>(0x2D), 0xB6BDFB, 0x60F823, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_agilia_3", "atlantic_agilia",
+     "attached public issue excerpt; CRC absent; incomplete authentication; atlantic_agilia_pairing_push_refused_20261018.yaml", RadioPath::SX1262,
+     kAudit_agilia_3, sizeof(kAudit_agilia_3), static_cast<IoHomeCommand>(0x31), 0x60F823, 0xB6BDFB, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_agilia_4", "atlantic_agilia",
+     "attached public issue excerpt; CRC absent; incomplete authentication; atlantic_agilia_pairing_push_refused_20261018.yaml", RadioPath::SX1262,
+     kAudit_agilia_4, sizeof(kAudit_agilia_4), static_cast<IoHomeCommand>(0xFE), 0xB6BDFB, 0x60F823, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_nina_0", "nina_config_close",
+     "attached public issue excerpt; CRC absent; incomplete authentication; nina_directed_2e_20261018.yaml", RadioPath::SX1262,
+     kAudit_nina_0, sizeof(kAudit_nina_0), static_cast<IoHomeCommand>(0x2E), 0xA994E2, 0xC64C3B, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_sunilus_0", "sunilus",
+     "laberning/home_io_control@6fdee1e7271838978342b1aa6f24c3a5c5c0674d; public capture; CRC absent; somfy_sunilus_pairing_key_transfer_rejected_error.yaml", RadioPath::SX1262,
+     kAudit_sunilus_0, sizeof(kAudit_sunilus_0), static_cast<IoHomeCommand>(0x28), 0xD4C282, 0x00003B, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_sunilus_1", "sunilus",
+     "laberning/home_io_control@6fdee1e7271838978342b1aa6f24c3a5c5c0674d; public capture; CRC absent; somfy_sunilus_pairing_key_transfer_rejected_error.yaml", RadioPath::SX1262,
+     kAudit_sunilus_1, sizeof(kAudit_sunilus_1), static_cast<IoHomeCommand>(0x29), 0xA84B94, 0xD4C282, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_sunilus_2", "sunilus",
+     "laberning/home_io_control@6fdee1e7271838978342b1aa6f24c3a5c5c0674d; public capture; CRC absent; somfy_sunilus_pairing_key_transfer_rejected_error.yaml", RadioPath::SX1262,
+     kAudit_sunilus_2, sizeof(kAudit_sunilus_2), static_cast<IoHomeCommand>(0x31), 0xD4C282, 0xA84B94, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_sunilus_4", "sunilus",
+     "laberning/home_io_control@6fdee1e7271838978342b1aa6f24c3a5c5c0674d; public capture; CRC absent; somfy_sunilus_pairing_key_transfer_rejected_error.yaml", RadioPath::SX1262,
+     kAudit_sunilus_4, sizeof(kAudit_sunilus_4), static_cast<IoHomeCommand>(0xFE), 0xA84B94, 0xD4C282, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_sunilus_5", "sunilus",
+     "laberning/home_io_control@6fdee1e7271838978342b1aa6f24c3a5c5c0674d; public capture; CRC absent; somfy_sunilus_pairing_key_transfer_rejected_error.yaml", RadioPath::SX1262,
+     kAudit_sunilus_5, sizeof(kAudit_sunilus_5), static_cast<IoHomeCommand>(0xFE), 0xA84B94, 0xD4C282, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_rs100_battery_2", "rs100_battery",
+     "laberning/home_io_control@6fdee1e7271838978342b1aa6f24c3a5c5c0674d; public capture; CRC absent; somfy_rs100_statuspoll_kig300_sx1276.yaml", RadioPath::SX1276,
+     kAudit_rs100_battery_2, sizeof(kAudit_rs100_battery_2), static_cast<IoHomeCommand>(0x71), 0xE461E9, 0xA025E1, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_rs100_battery_3", "rs100_battery",
+     "laberning/home_io_control@6fdee1e7271838978342b1aa6f24c3a5c5c0674d; public capture; CRC absent; somfy_rs100_statuspoll_kig300_sx1276.yaml", RadioPath::SX1276,
+     kAudit_rs100_battery_3, sizeof(kAudit_rs100_battery_3), static_cast<IoHomeCommand>(0x04), 0xE461E9, 0xA025E1, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_rs100_battery_4", "rs100_battery",
+     "laberning/home_io_control@6fdee1e7271838978342b1aa6f24c3a5c5c0674d; public capture; CRC absent; somfy_rs100_statuspoll_kig300_sx1276.yaml", RadioPath::SX1276,
+     kAudit_rs100_battery_4, sizeof(kAudit_rs100_battery_4), static_cast<IoHomeCommand>(0x04), 0xE461E9, 0xA025E1, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_rs100_battery_5", "rs100_battery",
+     "laberning/home_io_control@6fdee1e7271838978342b1aa6f24c3a5c5c0674d; public capture; CRC absent; somfy_rs100_statuspoll_kig300_sx1276.yaml", RadioPath::SX1276,
+     kAudit_rs100_battery_5, sizeof(kAudit_rs100_battery_5), static_cast<IoHomeCommand>(0x71), 0xE461E9, 0xCA0A18, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_rs100_battery_7", "rs100_battery",
+     "laberning/home_io_control@6fdee1e7271838978342b1aa6f24c3a5c5c0674d; public capture; CRC absent; somfy_rs100_statuspoll_kig300_sx1276.yaml", RadioPath::SX1276,
+     kAudit_rs100_battery_7, sizeof(kAudit_rs100_battery_7), static_cast<IoHomeCommand>(0x71), 0xE461E9, 0xA025E1, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_rs100_battery_10", "rs100_battery",
+     "laberning/home_io_control@6fdee1e7271838978342b1aa6f24c3a5c5c0674d; public capture; CRC absent; somfy_rs100_statuspoll_kig300_sx1276.yaml", RadioPath::SX1276,
+     kAudit_rs100_battery_10, sizeof(kAudit_rs100_battery_10), static_cast<IoHomeCommand>(0x04), 0xE461E9, 0xBEFEDB, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_rs100_battery_12", "rs100_battery",
+     "laberning/home_io_control@6fdee1e7271838978342b1aa6f24c3a5c5c0674d; public capture; CRC absent; somfy_rs100_statuspoll_kig300_sx1276.yaml", RadioPath::SX1276,
+     kAudit_rs100_battery_12, sizeof(kAudit_rs100_battery_12), static_cast<IoHomeCommand>(0x04), 0xE461E9, 0xA025E1, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_rs100_battery_14", "rs100_battery",
+     "laberning/home_io_control@6fdee1e7271838978342b1aa6f24c3a5c5c0674d; public capture; CRC absent; somfy_rs100_statuspoll_kig300_sx1276.yaml", RadioPath::SX1276,
+     kAudit_rs100_battery_14, sizeof(kAudit_rs100_battery_14), static_cast<IoHomeCommand>(0x04), 0xE461E9, 0xBEFEDB, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_oximo_battery_9", "oximo_battery",
+     "laberning/home_io_control@6fdee1e7271838978342b1aa6f24c3a5c5c0674d; public capture; CRC absent; somfy_oximo40_statuspoll_sx1262.yaml", RadioPath::SX1262,
+     kAudit_oximo_battery_9, sizeof(kAudit_oximo_battery_9), static_cast<IoHomeCommand>(0x04), 0x54766E, 0xA025E1, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_oximo_battery_14", "oximo_battery",
+     "laberning/home_io_control@6fdee1e7271838978342b1aa6f24c3a5c5c0674d; public capture; CRC absent; somfy_oximo40_statuspoll_sx1262.yaml", RadioPath::SX1262,
+     kAudit_oximo_battery_14, sizeof(kAudit_oximo_battery_14), static_cast<IoHomeCommand>(0x04), 0x54766E, 0xA025E1, false, false, false, CryptoExpectation::NoCrypto},
+    {"audit_oximo_battery_23", "oximo_battery",
+     "laberning/home_io_control@6fdee1e7271838978342b1aa6f24c3a5c5c0674d; public capture; CRC absent; somfy_oximo40_statuspoll_sx1262.yaml", RadioPath::SX1262,
+     kAudit_oximo_battery_23, sizeof(kAudit_oximo_battery_23), static_cast<IoHomeCommand>(0x04), 0x54766E, 0xA025E1, false, false, false, CryptoExpectation::NoCrypto},
     {"pergola_gi2_request", "somfy_pergola_louver_pr157",
      "public PR #157 / laberning/home_io_control@1c57116ba2843acc7d4a74439767e8714613e6f1; 2026-10-06; probe/somfy_pergola_louver_probe_get_info2_sx1262.yaml; hub request", RadioPath::SX1262,
      kPergola_gi2_request, sizeof(kPergola_gi2_request), static_cast<IoHomeCommand>(0x56), 0x9AF3CE, 0x262552, false, false, false, CryptoExpectation::NoCrypto},
@@ -615,6 +720,12 @@ static const PairingWaitInjection kPairingWaitInjections[] = {
 // protocol-identical. The radio field preserves the capture context without
 // implying that OFM has a driver for that radio (notably LR1121).
 static const Scenario kScenarios[] = {
+    {"moto1000", "audit_moto_0", RadioPath::SX1262, "partial public transcript; parser evidence only, no OFM hardware replay"},
+    {"atlantic_agilia", "audit_agilia_0", RadioPath::SX1262, "partial public transcript; parser evidence only, no OFM hardware replay"},
+    {"nina_config_close", "audit_nina_0", RadioPath::SX1262, "partial public transcript; parser evidence only, no OFM hardware replay"},
+    {"sunilus", "audit_sunilus_0", RadioPath::SX1262, "partial public transcript; parser evidence only, no OFM hardware replay"},
+    {"rs100_battery", "audit_rs100_battery_2", RadioPath::SX1276, "partial public transcript; parser evidence only, no OFM hardware replay"},
+    {"oximo_battery", "audit_oximo_battery_9", RadioPath::SX1262, "partial public transcript; parser evidence only, no OFM hardware replay"},
     {"somfy_pergola_louver_pr157", "pergola_gi2_reply", RadioPath::SX1262, "public MP position, full status and short ACK layouts"},
     {"smoove_remove_add_sx1276", "smoove_remove_controller", RadioPath::SX1276,
      "0x39 then 29-byte 0x30"},

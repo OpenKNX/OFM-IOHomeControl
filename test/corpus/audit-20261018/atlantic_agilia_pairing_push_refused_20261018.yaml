@@ -1,0 +1,24 @@
+id: atlantic_agilia_pairing_push_refused_20261018
+source:
+  url: https://github.com/laberning/home_io_control/issues/165
+  upstream_fixture: https://github.com/laberning/home_io_control/blob/6bb8013d7004fcfaed2bef99e3661f2f78590ea6/tests/corpus/captures/pairing/atlantic_agilia_pairing_key_transfer_command_unknown.yaml
+  observed: 2026-10-16
+  radio: sx1262
+  provenance: public issue frame excerpt, not complete raw RF capture; CRC not present
+notes: |
+  Atlantic heater in Connexion presents controller node type 1023.
+  The 0x3C challenge and 0x32 transfer were masked in public log and MUST NOT be reconstructed.
+  0xFE data[0]=0x08 means packed COMMAND_UNKNOWN, not legacy EXECUTION_ERROR.
+frames:
+  - {direction: rx, cmd: '29', hex: 'D1 00 60 F8 23 B6 BD FB 29 FF C0 B6 BD FB 0C CC 00 00'}
+  - {direction: tx, cmd: '2C', hex: '48 00 B6 BD FB 60 F8 23 2C'}
+  - {direction: rx, cmd: '2D', hex: '88 00 60 F8 23 B6 BD FB 2D'}
+  - {direction: tx, cmd: '31', hex: '48 20 B6 BD FB 60 F8 23 31'}
+  - {direction: rx, cmd: 'FE', hex: '89 00 60 F8 23 B6 BD FB FE 08'}
+expected:
+  discovered_manufacturer_id: 12
+  discovered_node_type: 1023
+  transfer_result_raw: '08'
+  transfer_result_name: COMMAND_UNKNOWN
+  pairing_outcome: rejected_no_key_persisted
+  incomplete_transcript: true

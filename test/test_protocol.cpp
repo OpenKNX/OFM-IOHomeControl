@@ -7057,7 +7057,7 @@ TEST(golden_rf_corpus_covers_every_pairing_wait_injection)
         ASSERT_EQ(lFixture->crypto, CryptoExpectation::PairingCorrelationMustReject);
     }
 
-    ASSERT_EQ(scenarioCount, 11);
+    ASSERT_EQ(scenarioCount, 17);
     for (uint8_t i = 0; i < scenarioCount; i++)
     {
         const Scenario &lScenario = kScenarios[i];
@@ -21449,4 +21449,72 @@ TEST(controller_garage_main_only_is_profile_scoped_and_moto_restrictions_are_exp
     // Dexxo/discrete-garage alias semantics remain documented; do not erase them
     // merely because a different MOTO1000 device rejected a partial position.
     ASSERT_TRUE(ioHomeGarageCommandAllowed(ioHomeProfileDescriptor(5,0),false,50));
+}
+
+TEST(golden_rf_corpus_october_device_outcomes_preserve_evidence_limits)
+{
+    using namespace IoHomeGoldenRfCorpus;
+    const auto *open=findFrame("audit_moto_0");
+    const auto *partial=findFrame("audit_moto_2");
+    const auto *reject=findFrame("audit_moto_3");
+    ASSERT_TRUE(open && partial && reject);
+    IoHomeFrame frame;
+    ASSERT_TRUE(deserializeFrameForTest(frame,open->bytes,open->wireLen));
+    ASSERT_EQ(frame.dataLen,6); ASSERT_EQ(frame.data[2],0);
+    ASSERT_TRUE(deserializeFrameForTest(frame,partial->bytes,partial->wireLen));
+    ASSERT_EQ(frame.dataLen,6); ASSERT_EQ(frame.data[2],0x64);
+    ASSERT_TRUE(deserializeFrameForTest(frame,reject->bytes,reject->wireLen));
+    ASSERT_EQ(strcmp(ioHomeDecodeErrorResponse(frame.data[0]).name,"PARAMETER_UNKNOWN"),0);
+    const auto *nina=findFrame("audit_nina_0"); ASSERT_TRUE(nina);
+    ASSERT_TRUE(deserializeFrameForTest(frame,nina->bytes,nina->wireLen));
+    ASSERT_EQ(frame.getDestNodeId(),0xC64C3B); ASSERT_EQ(frame.getSrcNodeId(),0xA994E2);
+    ASSERT_EQ(frame.commandId,IoHomeCommand::Discover2ERequest); ASSERT_EQ(frame.data[0],2); // Config Close
+    for (unsigned i=0;i<frameCount;++i) {
+        const auto &capture=kFrames[i];
+        if (strcmp(capture.scenario,"rs100_battery") && strcmp(capture.scenario,"oximo_battery")) continue;
+        ASSERT_TRUE(deserializeFrameForTest(frame,capture.bytes,capture.wireLen));
+        // These public status frames actually all report 0x60 (full).
+        // Their unauthenticated 0x71 forms remain parser fixtures, not publication proof.
+        ASSERT_EQ(frame.data[1],0x60);
+        ASSERT_EQ(static_cast<unsigned>(ioHomeBatteryState(frame.data[1])),3);
+    }
+    // Synthetic bit-boundary cases, not claimed as hardware measurements.
+    for (uint8_t raw : {0x20,0x40,0x60,0x61,0x80}) {
+        IoHomeBatteryInfo battery; battery.observeStatus(raw,0x04,100);
+        ASSERT_EQ(battery.coarse.valid,raw!=0x80);
+        ASSERT_TRUE(!battery.percentValid);
+        if (raw!=0x80) ASSERT_EQ(battery.coarse.raw,(raw&0x60)>>5);
+    }
+}
+
+TEST(controller_moto_parameter_rejection_is_explicit_and_peer_correlated)
+{
+    const uint8_t key[16]={1};
+    IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x831F2A,0x7E9E6E,key);
+    ch.setManualProfileOverride(0x0140);
+    ASSERT_TRUE(c.sendCommand(0x7E9E6E,key,IoHomeCommand::Execute,50));
+    IoHomeFrame request; ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    IoHomeFrame error; buildErrorResponseFrame(error,0x831F2A,0x123456,0x28);
+    ASSERT_TRUE(queueControllerResponse(c,error));
+    ASSERT_TRUE(c.state()!=ControllerState::Idle);
+    error.setSrcNode(0x7E9E6E); ASSERT_TRUE(queueControllerResponse(c,error));
+    ASSERT_EQ(ch.testLastCommandExchangeResult(),IoHomeCommandExchangeResult::ExplicitlyRejected);
+}
+
+TEST(controller_nina_config_close_does_not_start_unproven_key_transfer)
+{
+    const uint8_t key[16]={1};
+    for (bool armed : {false,true}) {
+        IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0xC64C3B,0xA994E2,key); c.setSystemKey(key);
+        if (armed) ASSERT_TRUE(c.startKeyExtraction());
+        c.radio().testClearTransmittedPacket();
+        IoHomeFrame frame; frame.init(); frame.ctrlByte0=0x49; frame.ctrlByte1=0x30;
+        frame.setSrcNode(0xA994E2); frame.setDestNode(0xC64C3B);
+        frame.commandId=IoHomeCommand::Discover2ERequest; frame.data[0]=2; frame.dataLen=1;
+        ASSERT_TRUE(queueControllerResponse(c,frame));
+        ASSERT_TRUE(c.radio().testLastTransmittedPacket().empty());
+        ASSERT_MEM_EQ(c.getSystemKey(),key,16);
+    }
 }
