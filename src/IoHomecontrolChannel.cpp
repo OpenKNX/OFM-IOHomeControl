@@ -641,6 +641,7 @@ void IoHomecontrolChannel::processInputKo(uint8_t iIoIndex, GroupObject &iKo)
 void IoHomecontrolChannel::onPositionFeedback(float iPositionPercent)
 {
     publishPositionFeedback(iPositionPercent, true);
+    mOptimisticPosition.observe(mCurrentPosition);
 }
 
 void IoHomecontrolChannel::onTargetPositionFeedback(float iTargetPositionPercent)
@@ -1241,6 +1242,7 @@ bool IoHomecontrolChannel::isOperational() const
 
 void IoHomecontrolChannel::setNodeId(uint32_t iNodeId)
 {
+    if (mNodeId != (iNodeId & 0x00FFFFFF)) mOptimisticPosition={};
     mNodeId = iNodeId & 0x00FFFFFF; // 24-bit
     mPaired = (mNodeId != 0);
     mProductRuntime.bind(mNodeId,mEncKey);
@@ -1253,6 +1255,7 @@ uint32_t IoHomecontrolChannel::getNodeId() const
 
 void IoHomecontrolChannel::setEncryptionKey(const uint8_t *iKey)
 {
+    if (memcmp(mEncKey, iKey, 16)) mOptimisticPosition={};
     memcpy(mEncKey, iKey, 16);
     mProductRuntime.bind(mNodeId,mEncKey);
 }
@@ -1463,6 +1466,8 @@ void IoHomecontrolChannel::sendPositionCommand(float iPercent, uint8_t iSlatPerc
                              : sendTwoWayMovement(lParam);
     if (!lQueued)
         return;
+
+    if (!mIs1W) mOptimisticPosition.begin(lParam, clampPercent(estimateCurrentPosition()));
 
     if (iSlatPercent != 0xFF && !mIs1W && isTiltCapableDeviceType())
         sendSlatCommand(iSlatPercent);
@@ -1945,6 +1950,26 @@ void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8
     {
         mHas2WHeardEvidence = true;
         mLast2WHeardMs = millis();
+    }
+
+    if (iCommand == IoHomeCommand::Execute && iParam <= 100 &&
+        (iResult == IoHomeCommandExchangeResult::ExplicitlyRejected ||
+         iResult == IoHomeCommandExchangeResult::FailedBeforeAuthentication ||
+         iResult == IoHomeCommandExchangeResult::MediaAccessFailed))
+    {
+        float restored=0;
+        if (mOptimisticPosition.reject(iParam, restored)) {
+            mTravelDurationMs=0;
+            mTravelStartTime=0;
+            mCurrentPosition=restored;
+            mTargetPosition=restored;
+            mTravelStartPosition=restored;
+            // A rejection cannot undo already observed physical movement.
+            // Stop optimistic interpolation, retain actual moving evidence,
+            // and resolve the physical state with the existing bounded poll.
+            if (mOptimisticPosition.observed) publishPositionFeedback(restored, false);
+            scheduleStatusPoll(defaultTrackedStatusPollDelayMs());
+        }
     }
 
     if (iCommand != IoHomeCommand::Execute || iParam != 0xD2)

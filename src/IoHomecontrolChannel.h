@@ -1,6 +1,7 @@
 #include "protocol/IoHomeProductRuntime.h"
 #include "protocol/IoHomePhysicalBounds.h"
 #pragma once
+#include "protocol/IoHomeOptimisticPosition.h"
 #include "protocol/IoHomeLimitation.h"
 #include "protocol/IoHomeBattery.h"
 #include <vector>
@@ -54,7 +55,7 @@ public:
   // Callbacks from controller when radio responses arrive
   void onPositionFeedback(float iPositionPercent);
   uint32_t productContextRevision() const {return mProductContextRevision;}
-  void invalidateProductContext() {invalidateBattery();mProfileReceivedMask=0;mRequestedSpeedIndex=0;mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
+  void invalidateProductContext() {mOptimisticPosition={};invalidateBattery();mProfileReceivedMask=0;mRequestedSpeedIndex=0;mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
   IoHomePhysicalBounds &physicalBounds(){return mPhysicalBounds;}
   const IoHomePhysicalBounds &physicalBounds()const{return mPhysicalBounds;}
   IoHomeProductRuntime &productRuntime() {return mProductRuntime;}
@@ -250,6 +251,7 @@ private:
   OneWayEnrollmentDestinationPolicy mConfigured1WEnrollmentDestinationPolicy = OneWayEnrollmentDestinationPolicy::Automatic;
   uint8_t mConfigured1WEnrollmentClassMask = 0; // 0 = captured VELUX default (all three)
   OneWayPowerClass mConfigured1WPowerClass = OneWayPowerClass::Automatic;
+  IoHomeOptimisticPosition mOptimisticPosition;
   float mCurrentPosition = 0.0f;
   float mCurrentSlat = 0.0f;
   float mCurrentVelocity = 0.0f;

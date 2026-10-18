@@ -41,8 +41,8 @@ enum class IoHomeCommand : uint8_t
     DiscoverSPEResponse = 0x2B,
     Confirmation = 0x2C,
     ConfirmationACK = 0x2D,   // Device ACKs discovery confirmation
-    Discover2ERequest = 0x2E, // 1W learning mode / pairing start
-    Discover2EResponse = 0x2F, // addressed authenticated response; passive diagnosis only
+    Discover2ERequest = 0x2E, // 1W learning mode; 2W Config State (00=open, 02=close)
+    Discover2EResponse = 0x2F, // 2W Config State response; responder requires separate authentication evidence
 
     // Key exchange
     // 1W controller-key enrollment / serial transfer.

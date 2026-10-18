@@ -39,6 +39,7 @@
 #include "protocol/IoHomePassiveAuth.h"
 #include "IoHomeRemoteMap.h"
 #include "corpus/golden_rf_corpus.h"
+#include "protocol/IoHomeOptimisticPosition.h"
 
 #ifdef TEST_NATIVE
 #include "controller/IoHomeController.h"
@@ -21517,4 +21518,17 @@ TEST(controller_nina_config_close_does_not_start_unproven_key_transfer)
         ASSERT_TRUE(c.radio().testLastTransmittedPacket().empty());
         ASSERT_MEM_EQ(c.getSystemKey(),key,16);
     }
+}
+
+TEST(optimistic_position_rejection_restores_feedback_and_ignores_superseded_intent)
+{
+    IoHomeOptimisticPosition intent;
+    float restored=123;
+    ASSERT_TRUE(!intent.reject(50,restored)); ASSERT_EQ(restored,123);
+    intent.begin(50,20); intent.begin(100,25);
+    ASSERT_TRUE(!intent.reject(50,restored)); ASSERT_TRUE(intent.pending);
+    ASSERT_TRUE(intent.reject(100,restored)); ASSERT_EQ(restored,25);
+    ASSERT_TRUE(!intent.reject(100,restored));
+    intent.observe(30); intent.begin(50,35); intent.observe(40);
+    ASSERT_TRUE(intent.reject(50,restored)); ASSERT_EQ(restored,40);
 }

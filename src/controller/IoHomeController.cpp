@@ -11766,9 +11766,13 @@ void IoHomeController::dispatchRxFrame()
                     auto &state=bindRainState(lCh);state.errorValid=true;state.errorCode=mRxFrame.data[0];state.errorMs=millis();
                 }
                 if (mRxFrame.commandId == IoHomeCommand::ErrorResponse && mRxFrame.dataLen > 0)
-                    logInfoP("Device 0x%06X returned error 0x%02X (%s): %s", lSrcNode,
-                             static_cast<unsigned>(mRxFrame.data[0]), ioHomeCommandResultName(mRxFrame.data[0]),
-                             ioHomeCommandResultDescription(mRxFrame.data[0]));
+                {
+                    const auto result=ioHomeDecodeErrorResponse(mRxFrame.data[0]);
+                    logInfoP("ErrorResponse command=%02X phase=%s raw=%02X decoded=%s code=%u state=%u ambiguous=%u src=%06X dst=%06X challenged=%u",
+                             static_cast<unsigned>(mCurrentCmd.command), stateName(mState), result.raw,
+                             result.name, result.code, result.state, result.ambiguous, lSrcNode, lDestNode,
+                             mAuthResponseSent);
+                }
                 break;
 
             default:
