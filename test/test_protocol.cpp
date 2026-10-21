@@ -21355,7 +21355,7 @@ TEST(controller_pairing_definitive_key_refusal_stops_without_persisting)
 TEST(controller_pairing_pull_is_verified_diagnostic_without_push_or_key_assignment)
 {
     using Result=IoHomeController::PullKeyResult;
-    for (unsigned variant=0;variant<8;++variant) {
+    for (unsigned variant=0;variant<13;++variant) {
         const uint8_t systemKey[16]={1,2,3,4};
         uint8_t candidate[16]; memcpy(candidate,systemKey,16);
         if (variant!=0) candidate[0]^=0x55;
@@ -21399,10 +21399,34 @@ TEST(controller_pairing_pull_is_verified_diagnostic_without_push_or_key_assignme
             response.commandId=IoHomeCommand::ChallengeResponse; response.dataLen=6;
             ASSERT_TRUE(IoHomeCrypto::createHmac2W(transcript,17,challenge.data,candidate,response.data));
             if (variant==2) response.data[0]^=1;
+            if (variant==12) {
+                // A MAC over the request or plaintext is not a ciphertext proof.
+                ASSERT_TRUE(IoHomeCrypto::createHmac2W(input,7,challenge.data,candidate,response.data));
+            }
             response.setSrcNode(0x123456); ASSERT_TRUE(queueControllerResponse(c,response));
             ASSERT_EQ(c.state(),ControllerState::PairWaitPullKeyChallengeResponse);
             response.setSrcNode(0x7E9E6E);
-            if (variant==6) {
+            if (variant==8) {
+                c.testSetRxScanFrequency(IOHC_FREQ_1);
+                ASSERT_TRUE(queueControllerResponse(c,response));
+                ASSERT_EQ(c.state(),ControllerState::PairWaitPullKeyChallengeResponse);
+                c.testSetRxScanFrequency(IOHC_FREQ_2);
+            }
+            if (variant==9) {
+                // No intervening loop: RX must not win over an expired timer.
+                ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS+1);
+                ASSERT_TRUE(queueControllerResponse(c,response));
+                ASSERT_EQ(c.pairingTelemetry().pullResult,Result::Timeout);
+            } else if (variant==10) {
+                uint8_t changed[16]={7}; c.setSystemKey(changed);
+                ASSERT_TRUE(queueControllerResponse(c,response));
+                ASSERT_EQ(c.pairingTelemetry().pullResult,Result::Unproven);
+                c.setSystemKey(systemKey);
+            } else if (variant==11) {
+                c.setOwnNodeId(0x123456);
+                ASSERT_TRUE(queueControllerResponse(c,response));
+                ASSERT_EQ(c.pairingTelemetry().pullResult,Result::Unproven);
+            } else if (variant==6) {
                 c.cancelPairing();
                 ASSERT_TRUE(queueControllerResponse(c,response));
                 ASSERT_EQ(c.pairingTelemetry().outcome,IoHomeController::PairingOutcome::Cancelled);
@@ -21414,7 +21438,7 @@ TEST(controller_pairing_pull_is_verified_diagnostic_without_push_or_key_assignme
             } else {
                 ASSERT_TRUE(queueControllerResponse(c,response));
                 ASSERT_EQ(c.pairingTelemetry().pullResult,variant==0?Result::VerifiedSameKey:
-                    variant==1?Result::VerifiedOtherKey:Result::Unproven);
+                    (variant==1 || variant==8)?Result::VerifiedOtherKey:Result::Unproven);
             }
         }
         ASSERT_EQ(c.state(),ControllerState::Idle);
