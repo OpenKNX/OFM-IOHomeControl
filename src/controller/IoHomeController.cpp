@@ -2302,6 +2302,13 @@ void IoHomeController::finishHeating(const IoHomeQueueEntry &entry,IoHomeCommand
     if(channel)channel->onHeatingValue(reg,value);
 }
 
+bool IoHomeController::refreshHeating(uint8_t c)
+{
+    auto *ch=mModule&&c<16?mModule->getChannel(c):nullptr;
+    if(!ch||ch->is1W()||!ch->isPaired()||!IoHomeHeating::actuator(ch->getProtocolIdentity()))return false;
+    mHeating[c].refreshRemaining=7;mHeating[c].pollIndex=0;mHeating[c].nextPollMs=millis();return true;
+}
+
 bool IoHomeController::configureHeatingPoll(uint8_t c,uint16_t seconds)
 {
     auto *ch=mModule&&c<16?mModule->getChannel(c):nullptr;
@@ -2319,12 +2326,13 @@ void IoHomeController::serviceHeating()
             !sampleIdentityMatches(c,state.node,state.key,state.revision))) {state.invalidate();continue;}
         if(!ch||ch->is1W()||!ch->isPaired()||!IoHomeHeating::actuator(ch->getProtocolIdentity()))continue;
         if(state.busy||!idleForManagedOperation()||int32_t(millis()-mHeatingNextAdmissionMs)<0)continue;
-        if(!state.initialRead || (state.pollIntervalMs && int32_t(millis()-state.nextPollMs)>=0)){
-            const uint16_t reg=!state.initialRead?0x0115:IoHomeHeating::registers[state.pollIndex%7].reg;
+        if((state.refreshRemaining || state.pollIntervalMs) &&
+           (!state.initialRead || int32_t(millis()-state.nextPollMs)>=0)){
+            const uint16_t reg=(!state.initialRead&&!state.refreshRemaining)?0x0115:IoHomeHeating::registers[state.pollIndex%7].reg;
             const bool queued=requestHeatingRegister(ch,reg,false,0,true);
             mHeatingNextAdmissionMs=millis()+10000; // global spacing, including 16-channel startup
-            if(queued){state.pollIndex=(state.pollIndex+1)%7;state.nextPollMs=millis()+
-                (state.pollIntervalMs?state.pollIntervalMs/7:30000);}
+            if(queued){if(state.refreshRemaining)--state.refreshRemaining;state.pollIndex=(state.pollIndex+1)%7;state.nextPollMs=millis()+
+                (state.refreshRemaining?10000:state.pollIntervalMs?state.pollIntervalMs/7:30000);}
             return;
         }
     }
@@ -5636,6 +5644,7 @@ const char *IoHomeController::stateName(ControllerState iState)
         return "WaitResponse";
     case ControllerState::ProcessResponse:
         return "ProcessResponse";
+    case ControllerState::AtlanticRollCallWait: return "AtlanticRollCallWait";
     case ControllerState::PairSendDiscovery:
         return "PairSendDiscovery";
     case ControllerState::PairWaitDiscoveryResponse:

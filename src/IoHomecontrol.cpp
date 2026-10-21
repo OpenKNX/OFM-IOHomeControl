@@ -444,6 +444,7 @@ namespace
             return "discovery-confirm";
         case Pairing2WMode::LaunchKeyTransfer:
             return "launch-key";
+        case Pairing2WMode::AtlanticPull: return "pull-atlantic";
         case Pairing2WMode::PullKey:
             return "pull-key";
         case Pairing2WMode::Normal:
@@ -470,6 +471,7 @@ namespace
             oMode = Pairing2WMode::LaunchKeyTransfer;
             return true;
         }
+        if(lMode=="pull-atlantic"){oMode=Pairing2WMode::AtlanticPull;return true;}
         if (lMode == "pull-key" || lMode == "pull")
         {
             oMode = Pairing2WMode::PullKey;
@@ -4166,7 +4168,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohcNN pair1w stop|status", "Stop or show the 1W key-receive (clone) state");
     openknx.console.printHelpLine("iohcNN bind1w ADDR", "Bind/rebind a 1W broadcast profile to an actuator node");
     openknx.console.printHelpLine("iohcNN remove1w [ADDR]", "Shortcut for: pair1w [ADDR] remove");
-    openknx.console.printHelpLine("iohcNN pair2w-exp MODE [ADDR]", "Diagnostic-only 2W pairing mode: discovery-confirm|launch-key|pull-key");
+    openknx.console.printHelpLine("iohcNN pair2w-exp MODE [ADDR]", "Diagnostic-only 2W pairing mode: discovery-confirm|launch-key|pull-key|pull-atlantic");
     openknx.console.printHelpLine("iohc pair cancel", "Cancel ongoing pairing");
     openknx.console.printHelpLine("iohc pairdiag on|off|status", "Verbose pairing/discovery diagnostics");
     openknx.console.printHelpLine("iohc 2wdiag version auto|3", "Runtime queued-2W bench override; no automatic negotiation");
@@ -4237,6 +4239,12 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc dynamic CH status|read", "Protocol-v4 raw capability objects 8100/8103");
     openknx.console.printHelpLine("iohc event trace on|off", "Trace owned-node RF payloads; event schema unresolved");
     openknx.console.printHelpLine("iohc 2wtrace [clear|csv]", "Dump bounded 2W TX/RX identity and timing evidence (no keys/auth bytes)");
+    openknx.console.printHelpLine("iohc heating read NODE REGISTER", "Read-only Atlantic 52/1 register; paired per-channel key only");
+    openknx.console.printHelpLine("iohc heating status CHANNEL", "Measured heating values, provenance and staged Atlantic session");
+    openknx.console.printHelpLine("iohc heating refresh CHANNEL", "Stagger seven private reads; no default cyclic polling");
+    openknx.console.printHelpLine("iohc heating poll CHANNEL SECONDS", "Runtime poll interval: 0=off, minimum 60; quota may delay reads");
+    openknx.console.printHelpLine("iohc heating scan|cancel", "Bounded deduplicated saved-heater-key scans / discard temporary acquisition");
+    openknx.console.printHelpLine("iohc heating assign CHANNEL SESSION", "Explicitly persist verified heater to selected EMPTY channel; back up ETS first");
     openknx.console.printHelpLine("iohc battery CH status|probe|probe09|objects", "Battery evidence and manual raw reads (Extended diagnostics)");
     openknx.console.printHelpLine("iohc sniff start [S]", "Start passive key sniff for S seconds");
     openknx.console.printHelpLine("iohc sniff stop|status|clear", "Manage passive key sniff result");
@@ -4327,6 +4335,27 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         logInfoP("Battery diagnostic pending: maximum wait=10000ms; commissioning/metadata/RX scan are not interrupted");
         serviceBatteryDiagnostic();
         return true;
+    }
+    if(iCmd.rfind("iohc heating ",0)==0){
+        const auto args=trimSpaces(iCmd.substr(13));
+        if(args=="scan"){logInfoP("Heating saved-key scan=%s",mController.scanSavedHeatingKeys()?"started":"blocked");return true;}
+        if(args=="cancel"){mController.cancelPairing();mController.cancelAtlantic();logInfoP("Atlantic candidate discarded");return true;}
+        unsigned channel=0,seconds=0,session=0;char extra=0,nodeText[16]{},regText[16]{};
+        if(sscanf(args.c_str(),"status %u %c",&channel,&extra)==1&&channel>=1&&channel<=mNumChannels){
+            mController.printHeatingStatus(channel-1);mController.printAtlanticStatus();return true;}
+        if(sscanf(args.c_str(),"read %15s %15s %c",nodeText,regText,&extra)==2){
+            uint32_t node=0,reg=0;bool queued=false;
+            if(parseHex24(nodeText,node)&&parseHex24(regText,reg)&&reg<=0xFFFF)
+                for(uint8_t c=0;c<mNumChannels;++c)if(mChannels[c]&&mChannels[c]->getNodeId()==node){
+                    queued=mController.requestHeatingRegister(mChannels[c],uint16_t(reg));break;}
+            logInfoP("Heating read=%s (only known paired Atlantic 52/1 nodes)",queued?"queued":"blocked");return true;}
+        if(sscanf(args.c_str(),"poll %u %u %c",&channel,&seconds,&extra)==2&&channel>=1&&channel<=mNumChannels&&seconds<=65535){
+            logInfoP("Heating polling=%s",mController.configureHeatingPoll(channel-1,seconds)?"configured; quota/spacing enforced":"blocked (0 or >=60 seconds)");return true;}
+        if(sscanf(args.c_str(),"refresh %u %c",&channel,&extra)==1&&channel>=1&&channel<=mNumChannels){
+            logInfoP("Heating refresh=%s",mController.refreshHeating(channel-1)?"queued":"blocked");return true;}
+        if(sscanf(args.c_str(),"assign %u %u %c",&channel,&session,&extra)==2&&channel>=1&&channel<=mNumChannels){
+            logInfoP("Atlantic assignment=%s",mController.assignAtlanticHeater(channel-1,session)?"persisted; read recognition into ETS and save project":"blocked; no overwrite or unproven key accepted");return true;}
+        logInfoP("Usage: iohc heating read NODE REGISTER | status/refresh CHANNEL | poll CHANNEL SECONDS | scan | cancel | assign CHANNEL SESSION");return true;
     }
     if(iCmd.rfind("iohc probe ",0)==0) {
         unsigned channel=0;char probe[32]{};char extra=0;
@@ -6324,7 +6353,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         std::string lModeText;
         if (!takeToken(lArgs, lChanText) || !takeToken(lArgs, lModeText))
         {
-            logInfoP("Usage: iohcNN pair2w-exp discovery-confirm|launch-key|pull-key [ADDR]");
+            logInfoP("Usage: iohcNN pair2w-exp discovery-confirm|launch-key|pull-key|pull-atlantic [ADDR]");
             return true;
         }
 
@@ -6343,7 +6372,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         Pairing2WMode lMode = Pairing2WMode::Normal;
         if (!parsePairing2WMode(lModeText, lMode) || lMode == Pairing2WMode::Normal)
         {
-            logInfoP("Usage: iohcNN pair2w-exp discovery-confirm|launch-key|pull-key [ADDR]");
+            logInfoP("Usage: iohcNN pair2w-exp discovery-confirm|launch-key|pull-key|pull-atlantic [ADDR]");
             return true;
         }
 
@@ -6354,7 +6383,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             return true;
         }
 
-        const bool lOk = mController.startPairingExperimental(lIdx, lNodeId, lMode);
+        const bool lOk = lMode==Pairing2WMode::AtlanticPull?mController.startAtlanticPairing(lIdx,lNodeId):mController.startPairingExperimental(lIdx, lNodeId, lMode);
         if (lOk)
             logInfoP("Experimental 2W pairing started for channel %u mode=%s", static_cast<unsigned>(lIdx + 1), pairing2WModeName(lMode));
         else if (mController.lastPairStartStatus() == IoHomeController::PairStartStatus::Busy)

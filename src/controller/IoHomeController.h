@@ -608,6 +608,7 @@ public:
   void printAtlanticStatus() const;
   bool scanSavedHeatingKeys();
   bool requestHeatingRegister(IoHomecontrolChannel *channel,uint16_t reg,bool write=false,float value=0,bool background=false);
+  bool refreshHeating(uint8_t channel);
   bool configureHeatingPoll(uint8_t channel,uint16_t seconds);
   const IoHomeHeating::State &heatingState(uint8_t channel) const {return mHeating[channel<16?channel:16];}
   void printHeatingStatus(uint8_t channel) const;
