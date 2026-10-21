@@ -29,6 +29,20 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn("IOHC_bytesEqual(current.token,job.token)", script)
         self.assertIn("IOHC_commissioningFailure(progress,trace,error)", script)
 
+    def test_pairing_state_labels_match_pinned_controller_enum(self):
+        header = (ROOT / "src/controller/IoHomeController.h").read_text()
+        enum = header.split("enum class ControllerState : uint8_t", 1)[1].split("};", 1)[0]
+        names = re.sub(r"//[^\n]*", "", enum).strip().strip("{}").split(",")
+        names = [name.strip() for name in names if name.strip()]
+        script = (ROOT / "src/IoHomecontrol.script.js").read_text()
+        labels = json.loads(script.split("var labels = ", 1)[1].split(";", 1)[0])
+        for state, text in {"PairSendKeyRecoveryRead": "Recovery: Name lesen",
+                            "PairWaitKeyRecoveryFinal": "Recovery: Warte Namen",
+                            "PairSendSetConfig1": "SetConfig1 senden",
+                            "PairComplete": "Pairing abgeschlossen",
+                            "AtlanticRollCallWait": "Atlantic Roll-Call"}.items():
+            self.assertEqual(labels[names.index(state)], text)
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.share = parse("IoHomecontrol.share.xml")
@@ -379,7 +393,7 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIn("PairWaitEnrichment", header)
         self.assertIn("kPairEnrichmentStepTimeoutMs", header)
         finalize = controller_source.split(
-            "void IoHomeController::finalize2WPairingKey()", 1
+            "void IoHomeController::finalize2WPairingKey(bool recovered)", 1
         )[1].split("IoHomeCommand IoHomeController::pairEnrichmentRequest", 1)[0]
         self.assertIn("PairingOutcome::Success", finalize)
         self.assertIn("ControllerState::PairSendEnrichment", finalize)

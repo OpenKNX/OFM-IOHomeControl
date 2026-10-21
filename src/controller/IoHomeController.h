@@ -275,6 +275,10 @@ enum class ControllerState : uint8_t
   PairSendKeyTransfer,
   PairSendKeyTransferAuthResponse,
   PairWaitKeyTransferConfirmation,
+  PairSendKeyRecoveryRead,
+  PairWaitKeyRecoveryRead,
+  PairSendKeyRecoveryAuth,
+  PairWaitKeyRecoveryFinal,
   PairSendEnrichment,
   PairWaitEnrichment,
   PairSendSetConfig1,
@@ -384,6 +388,9 @@ public:
     uint32_t challengeSeen=0,finalResponseSeen=0,keyRefused=0,keyProven=0;
     uint32_t actuationObserved=0,dutyRejected=0;
   };
+  enum class KeyRecoveryResult : uint8_t { NotRun, Checking, AuthenticatedRead, NotProven, Failed };
+  static const char *keyRecoveryResultName(KeyRecoveryResult result);
+
   struct PairingTelemetry
   {
     PairingOutcome outcome = PairingOutcome::None;
@@ -405,6 +412,8 @@ public:
     PullKeyResult pullResult = PullKeyResult::NotRun;
     PairingOptionalConfigResult optionalConfig = PairingOptionalConfigResult::NotAttempted;
     AttemptCounters counters{};
+    KeyRecoveryResult keyRecovery = KeyRecoveryResult::NotRun;
+    uint8_t keyRecoveryReads = 0;
   };
 
   struct ExchangeRadioSnapshot
@@ -1497,6 +1506,12 @@ private:
   };
   PairEnrichmentStep mPairEnrichmentStep = PairEnrichmentStep::Name;
   uint8_t mPairKeyTransferChallenge[6];
+  IoHomeFrame mPairRecoveryRequest;
+  uint8_t mPairRecoveryChallenge[6]{};
+  uint8_t mPairRecoveryAttempts=0;
+  uint32_t mPairRecoveryStartedMs=0,mPairRecoveryChannelNode=0,mPairRecoveryRevision=0;
+  uint8_t mPairRecoveryChannelKey[16]{};
+  bool mPairRecoveryAuthSent=false;
   IoHomeFrame mPairLaunchKeyTransferFrame;
   IoHomeFrame mPairPulledKeyFrame;
   uint8_t mPairPulledKey[16];
@@ -1733,6 +1748,12 @@ private:
   void processPairSendKeyTransferAuthResponse();
   void processPairWaitKeyTransferConfirmation();
   bool retry2WKeyExchange();
+  bool isPairKeyRecoveryState() const;
+  bool pairKeyRecoveryContextValid() const;
+  void beginPairKeyRecovery();
+  void processPairKeyRecovery();
+  void processPairKeyRecoveryFrame();
+  void finishPairKeyRecovery(bool success, bool retry=true);
   void processPairSendEnrichment();
   void processPairWaitEnrichment();
   void advancePairEnrichment(const char *iResult);
@@ -1777,8 +1798,9 @@ private:
   uint32_t pairing1WFinalizerDestination() const;
   // Store the system key into the paired channel and advance to SetConfig1.
   // Shared by the normal 0x33 confirmation path and the early-confirm path
-  // where a device skips its 0x3C challenge and confirms the key directly.
-  void finalize2WPairingKey();
+  // where a device skips its 0x3C challenge and confirms the key directly,
+  // plus a successful challenged read after a lost confirmation.
+  void finalize2WPairingKey(bool recovered=false);
   bool processPairWait1WBlind(ControllerState iNextState);
 
   void processDiscovery();

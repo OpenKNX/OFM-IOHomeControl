@@ -422,74 +422,9 @@ function IOHC_syncChannelSelection(input, output, context) {
 }
 
 function /* internal helper */ IOHC_controllerStateText(state) {
-    switch (state) {
-    case 0:
-        return "Idle";
-    case 6:
-        return "Discovery senden";
-    case 7:
-        return "Warte Discovery";
-    case 8:
-        return "Discovery bestaetigen";
-    case 9:
-        return "Warte Discovery-Ack";
-    case 10:
-        return "Pause vor Key-Init";
-    case 11:
-        return "Starte Key-Transfer";
-    case 12:
-        return "Warte Key-Transfer";
-    case 13:
-        return "1W Challenge senden";
-    case 14:
-        return "Warte 1W Challenge";
-    case 15:
-        return "1W Ankuendigung senden";
-    case 16:
-        return "Warte 1W Ankuendigung";
-    case 17:
-        return "1W Remove senden";
-    case 18:
-        return "Warte 1W Remove";
-    case 19:
-        return "1W Key senden";
-    case 20:
-        return "Warte 1W Key";
-    case 21:
-        return "1W STOP senden";
-    case 22:
-        return "Warte 1W STOP";
-    case 23:
-        return "1W Abschluss-Pause";
-    case 24:
-        return "1W AB senden";
-    case 25:
-        return "Warte 1W AB";
-    case 26:
-        return "Key init senden";
-    case 27:
-        return "Warte Challenge";
-    case 28:
-        return "Key senden";
-    case 29:
-        return "Key-Antwort senden";
-    case 30:
-        return "Warte Key-Bestaetigung";
-    case 31:
-        return "SetConfig1 senden";
-    case 32:
-        return "Warte SetConfig1";
-    case 33:
-        return "SetConfig1 Auth senden";
-    case 34:
-        return "Warte SetConfig1 final";
-    case 35:
-        return "Pairing abgeschlossen";
-    case 36:
-        return "Pairing fehlgeschlagen";
-    default:
-        return "State " + state;
-    }
+    // Keep pairing state indices aligned with ControllerState in the pinned firmware.
+    var labels = ["Idle", "TX vorbereiten", "TX laeuft", "1W Wiederholung", "Warte Antwort", "Antwort verarbeiten", "Discovery senden", "Warte Discovery", "Discovery bestaetigen", "Warte Discovery-Ack", "Pause vor Key-Init", "Starte Key-Transfer", "Warte Key-Transfer", "Pull-Beweis anfordern", "Warte Pull-Beweis", "1W Ankuendigung senden", "Warte 1W Ankuendigung", "1W Remove senden", "Warte 1W Remove", "1W Key senden", "Warte 1W Key", "1W STOP senden", "Warte 1W STOP", "1W Abschluss-Pause", "1W AB senden", "Warte 1W AB", "Key init senden", "Warte Challenge", "Key senden", "Key-Antwort senden", "Warte Key-Bestaetigung", "Recovery: Name lesen", "Recovery: Warte Challenge", "Recovery: Auth senden", "Recovery: Warte Namen", "Metadaten anfordern", "Warte Metadaten", "SetConfig1 senden", "Warte SetConfig1", "SetConfig1 Auth senden", "Warte SetConfig1 final", "Pairing abgeschlossen", "Pairing fehlgeschlagen", "Atlantic Roll-Call"];
+    return state >= 0 && state < labels.length ? labels[state] : "State " + state;
 }
 
 function /* internal helper */ IOHC_setPairingInfo(device, context, resultText, nodeText, oneWaySummary, diagText) {

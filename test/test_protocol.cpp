@@ -13541,6 +13541,13 @@ TEST(controller_2w_pairing_retries_key_init_with_fresh_challenge)
 
     ioHomeTestAdvanceMillis(5001);
     lController.loop();
+    ASSERT_EQ(lController.state(), ControllerState::PairSendKeyRecoveryRead);
+    for(unsigned attempt=0;attempt<2;++attempt){
+        IoHomeFrame read;ASSERT_TRUE(transmitQueuedControllerFrame(lController,read));
+        ASSERT_EQ(read.commandId,IoHomeCommand::GetName);
+        ioHomeTestAdvanceMillis(1501);lController.loop();
+    }
+    ASSERT_EQ(lController.pairingTelemetry().keyRecovery,IoHomeController::KeyRecoveryResult::NotProven);
     ASSERT_EQ(lController.state(), ControllerState::PairSendKeyInit);
 
     IoHomeFrame lKeyInit;
@@ -22164,4 +22171,108 @@ TEST(controller_atlantic_malformed_received_proof_is_not_retried_as_loss)
     ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::NotProven);
     const auto sent=c.radio().testTransmitCount();ioHomeTestAdvanceMillis(6000);c.loop();
     ASSERT_EQ(c.radio().testTransmitCount(),sent);ASSERT_TRUE(!ch.isPaired());
+}
+
+static bool beginLostConfirmationRecovery(IoHomeController &c)
+{
+    if(!advancePairingToWaitKeyTransferConfirmation(c,0x831F2A,0x7E9E6E))return false;
+    ioHomeTestAdvanceMillis(5001);c.loop();
+    if(c.state()!=ControllerState::PairSendKeyRecoveryRead)return false;
+    IoHomeFrame read;
+    return transmitQueuedControllerFrame(c,read) && read.commandId==IoHomeCommand::GetName &&
+        c.state()==ControllerState::PairWaitKeyRecoveryRead;
+}
+
+TEST(controller_pairing_lost_33_recovers_only_after_challenged_read_and_durable_save)
+{
+    const uint8_t key[16]={0x21,0x43},challenge[6]={1,3,5,7,9,11};
+    for(bool flashFailure:{false,true}){
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x831F2A,0,key);c.setSystemKey(key);
+        ASSERT_TRUE(beginLostConfirmationRecovery(c));
+        ASSERT_EQ(c.pairingTelemetry().keyRecoveryReads,1U);
+        ASSERT_EQ(c.pairingTelemetry().keyExchangeAttempts,1U);
+        IoHomeFrame response;buildPairChallengeRequestFrame(response,0x831F2A,0x7E9E6E,challenge);
+        ASSERT_TRUE(queueControllerResponse(c,response));
+        IoHomeFrame auth;ASSERT_TRUE(lastTransmittedFrameForTest(c,auth));
+        ASSERT_EQ(auth.commandId,IoHomeCommand::ChallengeResponse);
+        uint8_t transcript[]={0x50},mac[6];
+        ASSERT_TRUE(IoHomeCrypto::createHmac2W(transcript,1,challenge,key,mac));ASSERT_MEM_EQ(auth.data,mac,6);
+        ASSERT_EQ(c.state(),ControllerState::PairWaitKeyRecoveryFinal);ASSERT_TRUE(!ch.isPaired());
+        m.failAssignmentPersistence=flashFailure;
+        const uint8_t name[]={'M','o','t','o','r'};
+        buildSimpleResponseFrame(response,0x831F2A,0x7E9E6E,IoHomeCommand::GetNameResponse,name,sizeof(name));
+        ASSERT_TRUE(queueControllerResponse(c,response));
+        ASSERT_EQ(c.pairingTelemetry().keyRecovery,IoHomeController::KeyRecoveryResult::AuthenticatedRead);
+        ASSERT_EQ(c.pairingTelemetry().outcome,flashFailure?IoHomeController::PairingOutcome::ConfigurationFailure:IoHomeController::PairingOutcome::Success);
+        ASSERT_EQ(ch.isPaired(),!flashFailure);
+        if(!flashFailure){ASSERT_EQ(ch.getNodeId(),0x7E9E6EU);ASSERT_MEM_EQ(ch.getEncryptionKey(),key,16);}
+        ASSERT_MEM_EQ(c.getSystemKey(),key,16);
+        ASSERT_EQ(c.pairingTelemetry().keyExchangeAttempts,1U);
+        ASSERT_EQ(c.pairingTelemetry().counters.keyProven,0U); // no peer MAC was received
+        ASSERT_EQ(c.pairingTelemetry().counters.finalResponseSeen,0U); // no fabricated 0x33
+    }
+}
+
+TEST(controller_pairing_recovery_rejects_unbound_unchallenged_and_failed_auth_reads)
+{
+    const uint8_t key[16]={0x21},challenge[6]={1,2,3,4,5,6};
+    for(unsigned variant=0;variant<14;++variant){
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x831F2A,0,key);c.setSystemKey(key);
+        ASSERT_TRUE(beginLostConfirmationRecovery(c));IoHomeFrame response;
+        const uint8_t name[]={'M','o','t','o','r'};
+        if(variant!=0){
+            buildPairChallengeRequestFrame(response,0x831F2A,0x7E9E6E,challenge);
+            if(variant==1)response.dataLen=5;
+            if(variant==2)response.setSrcNode(0x112233);
+            if(variant==3)response.setDestNode(0x112233);
+            if(variant==4)c.testSetRxScanFrequency(IOHC_FREQ_1);
+            if(variant==5)c.radio().testSetNextTransmitError(RadioError::HardwareError);
+            if(variant==6)c.testChargeDuty(868950000U,3600U-c.testTxAirtimeAccum(0));
+            ASSERT_TRUE(queueControllerResponse(c,response));
+        }
+        if(variant==7){uint8_t other[16]={9};c.setSystemKey(other);}
+        if(variant==8)ch.setNodeId(0x112233);
+        if(variant==9){uint8_t other[16]={9};ch.setEncryptionKey(other);}
+        if(variant==10)c.cancelPairing();
+        if(variant==11)ioHomeTestAdvanceMillis(1501);
+        if(variant==12)c.testSetRxScanFrequency(IOHC_FREQ_1);
+        buildSimpleResponseFrame(response,0x831F2A,0x7E9E6E,IoHomeCommand::GetNameResponse,name,sizeof(name));
+        if(variant==13)response.dataLen=0;
+        ASSERT_TRUE(queueControllerResponse(c,response));
+        ASSERT_TRUE(c.pairingTelemetry().outcome!=IoHomeController::PairingOutcome::Success);
+        ASSERT_TRUE(c.pairingTelemetry().keyRecovery!=IoHomeController::KeyRecoveryResult::AuthenticatedRead);
+        if(variant!=8)ASSERT_TRUE(!ch.isPaired());else ASSERT_EQ(ch.getNodeId(),0x112233U);
+        ASSERT_EQ(c.pairingTelemetry().keyExchangeAttempts,1U);
+        c.cancelPairing();
+    }
+}
+
+TEST(controller_pairing_recovery_refusal_stops_and_silence_is_bounded_before_key_init)
+{
+    const uint8_t key[16]={0x21},challenge[6]={1,2,3,4,5,6};
+    for(bool refused:{false,true}){
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x831F2A,0,key);c.setSystemKey(key);
+        ASSERT_TRUE(beginLostConfirmationRecovery(c));
+        if(refused){
+            IoHomeFrame response;buildPairChallengeRequestFrame(response,0x831F2A,0x7E9E6E,challenge);
+            ASSERT_TRUE(queueControllerResponse(c,response));
+            buildErrorResponseFrame(response,0x831F2A,0x7E9E6E,0x05);
+            ASSERT_TRUE(queueControllerResponse(c,response));
+            ASSERT_TRUE(c.state()==ControllerState::PairFailed||c.state()==ControllerState::Idle);
+        }else{
+            ioHomeTestAdvanceMillis(1501);c.loop();IoHomeFrame second;
+            ASSERT_TRUE(transmitQueuedControllerFrame(c,second));ASSERT_EQ(second.commandId,IoHomeCommand::GetName);
+            // An old 0x51 cannot satisfy the new attempt without its own challenge.
+            const uint8_t name[]={'O','l','d'};IoHomeFrame response;
+            buildSimpleResponseFrame(response,0x831F2A,0x7E9E6E,IoHomeCommand::GetNameResponse,name,sizeof(name));
+            ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_TRUE(!ch.isPaired());
+            ioHomeTestAdvanceMillis(1501);c.loop();ASSERT_EQ(c.state(),ControllerState::PairSendKeyInit);
+            ASSERT_TRUE(transmitQueuedControllerFrame(c,second));ASSERT_EQ(second.commandId,IoHomeCommand::KeyInitTransfer);
+            ASSERT_EQ(c.pairingTelemetry().keyRecoveryReads,2U);
+        }
+        ASSERT_TRUE(!ch.isPaired());ASSERT_EQ(c.pairingTelemetry().keyRecovery,IoHomeController::KeyRecoveryResult::NotProven);
+    }
 }

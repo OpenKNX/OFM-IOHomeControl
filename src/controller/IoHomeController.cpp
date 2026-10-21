@@ -3861,6 +3861,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mPairingStartTime = millis();
     mPairPushFrequency = 0xFF;
     mPairPullAttempts = 0;
+    mPairRecoveryAttempts=0;mPairRecoveryAuthSent=false;
     mPairKeyOwner = mOwnNodeId;
     memcpy(mPairSessionKey, mSystemKey, sizeof(mPairSessionKey));
     memset(mPairingChallenge, 0, sizeof(mPairingChallenge)); // will be filled by device's ChallengeRequest
@@ -4111,6 +4112,8 @@ void IoHomeController::cancelPairing()
     {
         memset(mPairPulledKey, 0, sizeof(mPairPulledKey));
         mPairPulledKeyFrame.init();
+        if(isPairKeyRecoveryState())mPairingTelemetry.keyRecovery=KeyRecoveryResult::Failed;
+        mPairRecoveryAuthSent=false;
         completePairingTelemetry(PairingOutcome::Cancelled);
         resetPairingPreambleState();
         mState = ControllerState::Idle;
@@ -5701,6 +5704,10 @@ const char *IoHomeController::stateName(ControllerState iState)
         return "PairSendKeyTransferAuthResponse";
     case ControllerState::PairWaitKeyTransferConfirmation:
         return "PairWaitKeyTransferConfirmation";
+    case ControllerState::PairSendKeyRecoveryRead: return "PairSendKeyRecoveryRead";
+    case ControllerState::PairWaitKeyRecoveryRead: return "PairWaitKeyRecoveryRead";
+    case ControllerState::PairSendKeyRecoveryAuth: return "PairSendKeyRecoveryAuth";
+    case ControllerState::PairWaitKeyRecoveryFinal: return "PairWaitKeyRecoveryFinal";
     case ControllerState::PairSendEnrichment:
         return "PairSendEnrichment";
     case ControllerState::PairWaitEnrichment:
@@ -6126,7 +6133,8 @@ void IoHomeController::logPairDiagnosticStatus() const
         (isPairDiagnosticState(mState) && mPairingStartTime != 0) ? (millis() - mPairingStartTime) : 0UL);
     const IoHomeRadioHealth lHealth = radioHealth();
 
-    logInfoP("PairDiag: pull_result=%s", pullKeyResultName(mPairingTelemetry.pullResult));
+    logInfoP("PairDiag: pull_result=%s key_recovery=%s recovery_reads=%u", pullKeyResultName(mPairingTelemetry.pullResult),
+             keyRecoveryResultName(mPairingTelemetry.keyRecovery),mPairingTelemetry.keyRecoveryReads);
     logInfoP("PairDiag: trace=%s state=%s ch=%u node=0x%06X orderIndex=%u txFreqIdx=%u txFreq=%luHz rxFreqIdx=%u rxFreq=%luHz lastRespFreq=%u elapsed=%lums spe=%d passive=%d rxScan=%d",
              mPairDiagnosticTraceEnabled ? "on" : "off",
              stateName(mState),
@@ -7098,7 +7106,10 @@ void IoHomeController::loop()
                                   mState == ControllerState::PairWaitPullKeyChallengeResponse;
             const uint32_t pairWindow = pushWait ? 5000U :
                 (mState == ControllerState::PairWaitLaunchKeyTransfer ? 1000U : IOHC_RX_TIMEOUT_MS);
-            const bool invalidKeyContext = (pushWait || pullWait) &&
+            const bool recovery=isPairKeyRecoveryState();
+            const bool invalidKeyContext = recovery ? !pairKeyRecoveryContextValid() ||
+                mLastResponseFreqIdx!=mPairPushFrequency || (mRxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) ||
+                uint32_t(millis()-mStateTimer)>1500U : (pushWait || pullWait) &&
                 ((mRxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) ||
                  mOwnNodeId != mPairKeyOwner || memcmp(mPairSessionKey,mSystemKey,16) ||
                  mLastResponseFreqIdx != (pushWait ? mPairPushFrequency : mPairPullFrequency) ||
@@ -7108,6 +7119,7 @@ void IoHomeController::loop()
                 ++mPairingTelemetry.counters.rxUnmatched;
                 logDebugP("Pairing: ignored response outside bound key/session/channel/deadline");
             }
+            else if(recovery){processPairKeyRecoveryFrame();}
             else if(mState==ControllerState::AtlanticRollCallWait){processAtlanticRollCallFrame();}
             else if (mState == ControllerState::WaitResponse)
             {
@@ -7593,6 +7605,12 @@ void IoHomeController::loop()
     case ControllerState::PairWaitKeyTransferConfirmation:
         processPairWaitKeyTransferConfirmation();
         break;
+    case ControllerState::PairSendKeyRecoveryRead:
+    case ControllerState::PairWaitKeyRecoveryRead:
+    case ControllerState::PairSendKeyRecoveryAuth:
+    case ControllerState::PairWaitKeyRecoveryFinal:
+        processPairKeyRecovery();
+        break;
     case ControllerState::PairSendEnrichment:
         processPairSendEnrichment();
         break;
@@ -7613,6 +7631,8 @@ void IoHomeController::loop()
         break;
     case ControllerState::PairFailed:
     {
+        if(mPairingTelemetry.keyRecovery==KeyRecoveryResult::Checking)mPairingTelemetry.keyRecovery=KeyRecoveryResult::Failed;
+        mPairRecoveryAuthSent=false;
         if(mPairing2WMode==Pairing2WMode::AtlanticPull &&
            (mAtlantic.status.stage==AtlanticStage::Discovering||mAtlantic.status.stage==AtlanticStage::Discovered))
             stopAtlantic(AtlanticStage::Failed,"discovery_or_confirmation_failed");
@@ -9938,6 +9958,7 @@ void IoHomeController::processPairSendKeyInit()
                 mPairKeyExchangeStartTime = millis();
             mPairPushFrequency = mCurrentFreqIdx;
             ++mPairKeyExchangeAttempts;
+            mPairingTelemetry.keyExchangeAttempts=mPairKeyExchangeAttempts;
             mStateTimer = millis();
             mState = ControllerState::PairWaitDeviceChallenge;
         }
@@ -9976,9 +9997,9 @@ bool IoHomeController::retry2WKeyExchange()
     return true;
 }
 
-void IoHomeController::finalize2WPairingKey()
+void IoHomeController::finalize2WPairingKey(bool recovered)
 {
-    ++mPairingTelemetry.counters.finalResponseSeen;
+    if(!recovered)++mPairingTelemetry.counters.finalResponseSeen;
     // 0x33 confirms installation; only a verified MAC increments keyProven.
     // Store the negotiated system key as the channel's encryption key and move
     // on to the optional SetConfig1 step. Pairing is rare and critical, so the
@@ -9999,7 +10020,7 @@ void IoHomeController::finalize2WPairingKey()
             openknx.flash.save(true);
         }
     }
-    // A valid 0x33 is the definitive pairing success. Metadata enrichment and
+    // A valid 0x33 or a challenged recovery read establishes success. Metadata enrichment and
     // SetConfig1 are optional post-key operations and cannot undo it.
     completePairingTelemetry(PairingOutcome::Success);
     mPairEnrichmentStep = PairEnrichmentStep::Name;
@@ -10133,9 +10154,124 @@ void IoHomeController::processPairWaitKeyTransferConfirmation()
 
     if (millis() - mStateTimer > 5000) // 5s timeout
     {
-        retry2WKeyExchange();
+        if(mPairing2WMode==Pairing2WMode::Normal)beginPairKeyRecovery();
+        else retry2WKeyExchange();
     }
     // Confirmation response and channel storage handled in main loop RX dispatch
+}
+
+const char *IoHomeController::keyRecoveryResultName(KeyRecoveryResult result)
+{
+    switch(result){
+    case KeyRecoveryResult::NotRun:return "not_run";
+    case KeyRecoveryResult::Checking:return "checking";
+    case KeyRecoveryResult::AuthenticatedRead:return "authenticated_read";
+    case KeyRecoveryResult::NotProven:return "not_proven";
+    default:return "failed";
+    }
+}
+
+bool IoHomeController::isPairKeyRecoveryState() const
+{
+    return mState>=ControllerState::PairSendKeyRecoveryRead && mState<=ControllerState::PairWaitKeyRecoveryFinal;
+}
+bool IoHomeController::pairKeyRecoveryContextValid() const
+{
+    auto *channel=mModule?mModule->getChannel(mPairingChannel):nullptr;
+    return channel && !channel->is1W() && channel->getNodeId()==mPairRecoveryChannelNode &&
+        channel->productContextRevision()==mPairRecoveryRevision &&
+        !memcmp(channel->getEncryptionKey(),mPairRecoveryChannelKey,16) &&
+        mPairKeyOwner==mOwnNodeId && !memcmp(mPairSessionKey,mSystemKey,16) &&
+        uint32_t(millis()-mPairRecoveryStartedMs)<5000U;
+}
+void IoHomeController::beginPairKeyRecovery()
+{
+    auto *channel=mModule?mModule->getChannel(mPairingChannel):nullptr;
+    if(!channel || channel->is1W()){mState=ControllerState::PairFailed;return;}
+    mPairRecoveryStartedMs=millis();mPairRecoveryAttempts=0;mPairRecoveryAuthSent=false;
+    mPairRecoveryChannelNode=channel->getNodeId();mPairRecoveryRevision=channel->productContextRevision();
+    memcpy(mPairRecoveryChannelKey,channel->getEncryptionKey(),16);
+    mPairingTelemetry.keyRecovery=KeyRecoveryResult::Checking;
+    mStateTimer=millis();mState=ControllerState::PairSendKeyRecoveryRead;
+    logInfoP("Pairing: missing 33 from %06X; checking key with challenged name read before another key-init",mDiscoveredNodeId);
+}
+void IoHomeController::finishPairKeyRecovery(bool success,bool retry)
+{
+    mPairRecoveryAuthSent=false;
+    mPairingTelemetry.keyRecovery=success?KeyRecoveryResult::AuthenticatedRead:KeyRecoveryResult::NotProven;
+    logInfoP("Pairing: key_recovery=%s peer=%06X",keyRecoveryResultName(mPairingTelemetry.keyRecovery),mDiscoveredNodeId);
+    if(success){finalize2WPairingKey(true);return;}
+    if(retry)retry2WKeyExchange();else mState=ControllerState::PairFailed;
+}
+void IoHomeController::processPairKeyRecoveryFrame()
+{
+    if(mRxFrame.getSrcNodeId()!=mDiscoveredNodeId || mRxFrame.getDestNodeId()!=mOwnNodeId){
+        ++mPairingTelemetry.counters.rxUnmatched;return;
+    }
+    if(mState!=ControllerState::PairWaitKeyRecoveryRead && mState!=ControllerState::PairWaitKeyRecoveryFinal)return;
+    if(mRxFrame.commandId==IoHomeCommand::KeyTransferConfirmation){
+        // A delayed correlated confirmation remains valid in this bounded session.
+        mPairingTelemetry.keyRecovery=KeyRecoveryResult::NotProven;
+        finalize2WPairingKey();return;
+    }
+    if(mRxFrame.commandId==IoHomeCommand::ErrorResponse && mRxFrame.dataLen==1){
+        // Explicit refusal is not packet loss; never repeat a challenged read or key-init after it.
+        finishPairKeyRecovery(false,false);return;
+    }
+    if(mState==ControllerState::PairWaitKeyRecoveryRead && mRxFrame.commandId==IoHomeCommand::ChallengeRequest &&
+       mRxFrame.dataLen==IOHC_HMAC_SIZE){
+        memcpy(mPairRecoveryChallenge,mRxFrame.data,IOHC_HMAC_SIZE);
+        ++mPairingTelemetry.counters.challengeSeen;mState=ControllerState::PairSendKeyRecoveryAuth;return;
+    }
+    if(mState==ControllerState::PairWaitKeyRecoveryFinal && mPairRecoveryAuthSent &&
+       mRxFrame.commandId==IoHomeCommand::GetNameResponse && mRxFrame.dataLen>0 && mRxFrame.dataLen<=IOHC_NAME_MAX_SIZE){
+        // Acceptance of our challenged request, not a received peer-MAC proof.
+        // Do not increment keyProven (reserved for MACs actually verified locally).
+        finishPairKeyRecovery(true);return;
+    }
+    ++mPairingTelemetry.counters.rxUnmatched;
+}
+void IoHomeController::processPairKeyRecovery()
+{
+    if(!pairKeyRecoveryContextValid()){
+        mPairingTelemetry.keyRecovery=KeyRecoveryResult::Failed;
+        mState=ControllerState::PairFailed;return;
+    }
+    if(mState==ControllerState::PairWaitKeyRecoveryRead || mState==ControllerState::PairWaitKeyRecoveryFinal){
+        const auto rx=ensureReceiveAfterTransmit();
+        if(rx!=RadioError::None && rx!=RadioError::Busy){finishPairKeyRecovery(false,false);return;}
+        if(uint32_t(millis()-mStateTimer)>1500U){
+            if(mPairRecoveryAttempts<2){mPairRecoveryAuthSent=false;mState=ControllerState::PairSendKeyRecoveryRead;}
+            else finishPairKeyRecovery(false);
+        }
+        return;
+    }
+    const bool read=mState==ControllerState::PairSendKeyRecoveryRead;
+    IoHomeFrame frame;
+    if(read){
+        IoHomeQueueEntry entry{};entry.destNodeId=mDiscoveredNodeId;entry.command=IoHomeCommand::GetName;
+        if(!buildTxFrame(entry)){finishPairKeyRecovery(false,false);return;}
+        mTxFrame.setLowPower(pairingLowPower2W());mPairRecoveryRequest=mTxFrame;frame=mPairRecoveryRequest;
+    }else{
+        if(!build2WChallengeResponse(frame,mOwnNodeId,mDiscoveredNodeId,TwoWaySenderRole::Controller,
+                                    mPairRecoveryRequest,mPairRecoveryChallenge,mPairSessionKey)){
+            finishPairKeyRecovery(false,false);return;
+        }
+        frame.dataLen=IOHC_HMAC_SIZE;frame.hasHmac=false;
+    }
+    const uint16_t preamble=read?pairingStartPreamble(frame):authResponsePreamble();
+    const auto prep=configureNormal2WTxRadio(preamble);
+    if(prep==RadioError::Busy)return;
+    if(prep!=RadioError::None){finishPairKeyRecovery(false,false);return;}
+    mTxLen=frame.serialize2W(mTxBuffer,sizeof(mTxBuffer));
+    if(!mTxLen){finishPairKeyRecovery(false,false);return;}
+    const auto tx=startControllerTransmit(mTxBuffer,mTxLen);
+    if(tx==RadioError::Busy)return;
+    if(tx!=RadioError::None){finishPairKeyRecovery(false,false);return;}
+    tracePairDiagnosticTx2W(frame,preamble);mStateTimer=millis();mPairPushFrequency=mCurrentFreqIdx;
+    if(read){++mPairRecoveryAttempts;++mPairingTelemetry.keyRecoveryReads;mPairRecoveryAuthSent=false;}
+    else mPairRecoveryAuthSent=true;
+    mState=read?ControllerState::PairWaitKeyRecoveryRead:ControllerState::PairWaitKeyRecoveryFinal;
 }
 
 IoHomeCommand IoHomeController::pairEnrichmentRequest() const
