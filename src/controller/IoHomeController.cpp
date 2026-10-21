@@ -7222,6 +7222,9 @@ void IoHomeController::loop()
                         mState = ControllerState::PairSendPullKeyChallenge;
                     } else finishPullKeyDiagnostic(PullKeyResult::Unproven);
                 }
+                else if(peer && mState==ControllerState::PairWaitPullKeyChallengeResponse &&
+                        mRxFrame.commandId==IoHomeCommand::ChallengeResponse && mRxFrame.dataLen!=IOHC_HMAC_SIZE)
+                    finishPullKeyDiagnostic(PullKeyResult::Unproven); // received invalid proof is not RF loss
                 else if (peer && mState == ControllerState::PairWaitPullKeyChallengeResponse &&
                          mRxFrame.commandId == IoHomeCommand::ChallengeResponse &&
                          mRxFrame.dataLen == IOHC_HMAC_SIZE)

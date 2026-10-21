@@ -22153,3 +22153,15 @@ TEST(controller_heating_short_preamble_is_not_a_global_low_power_override)
     ASSERT_TRUE(c.requestHeatingRegister(&ch,0x0115));IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
     ASSERT_TRUE((request.ctrlByte1&IOHC_CTRL1_LOW_POWER)!=0);ASSERT_EQ(c.radio().testLastPreambleLength(),IOHC_PREAMBLE_LONG);
 }
+
+TEST(controller_atlantic_malformed_received_proof_is_not_retried_as_loss)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;IoHomeFrame launch,challenge;
+    ASSERT_TRUE(beginAtlanticPullForTest(c,m,ch,launch));const uint8_t key[16]={0x42};uint8_t ciphertext[16];
+    ASSERT_TRUE(sendAtlanticCandidateForTest(c,launch,key,ciphertext,challenge));
+    IoHomeFrame bad;bad.init();bad.setSrcNode(0xB6BDFB);bad.setDestNode(0x60F823);
+    bad.commandId=IoHomeCommand::ChallengeResponse;bad.dataLen=5;ASSERT_TRUE(queueControllerResponse(c,bad));
+    ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::NotProven);
+    const auto sent=c.radio().testTransmitCount();ioHomeTestAdvanceMillis(6000);c.loop();
+    ASSERT_EQ(c.radio().testTransmitCount(),sent);ASSERT_TRUE(!ch.isPaired());
+}
