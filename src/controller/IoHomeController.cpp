@@ -4352,7 +4352,9 @@ IoHomeController::AttemptCounters *IoHomeController::activeAttemptCounters()
 {
     if (mPairingTelemetry.outcome == PairingOutcome::InProgress && isPairDiagnosticState(mState))
         return &mPairingTelemetry.counters;
-    if (mCurrentCmd.active && mCurrentCmd.command == IoHomeCommand::Execute)
+    const auto *channel=channelForQueueEntry(mCurrentCmd);
+    if (mCurrentCmd.active && mCurrentCmd.command == IoHomeCommand::Execute &&
+        (!channel || !channel->is1W()))
         return &mExchangeDiagnostics.counters;
     return nullptr;
 }
@@ -4367,7 +4369,10 @@ void IoHomeController::logAttemptCounters(const char *scope, const AttemptCounte
 
 void IoHomeController::beginExchangeDiagnosticsWindow()
 {
-    mExchangeDiagnostics.counters = {};
+    if (mCurrentCmd.command==IoHomeCommand::Execute) {
+        const auto *channel=channelForQueueEntry(mCurrentCmd);
+        if (!channel || !channel->is1W()) mExchangeDiagnostics.counters = {};
+    }
     const IoHomeRadioHealth lHealth = radioHealth();
     mExchangeStartRxDoneCount = lHealth.rxDoneCount;
     mExchangeStartCrcErrorCount = lHealth.crcErrorCount;

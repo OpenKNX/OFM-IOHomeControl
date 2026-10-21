@@ -21562,6 +21562,11 @@ TEST(controller_moto_parameter_rejection_is_explicit_and_peer_correlated)
     ASSERT_EQ(counters.rxWrongPeer,1U); ASSERT_EQ(counters.finalResponseSeen,1U);
     ASSERT_EQ(counters.challengeSeen,0U); ASSERT_EQ(counters.actuationObserved,0U);
     ASSERT_EQ(counters.keyProven,0U); ASSERT_EQ(counters.keyRefused,0U);
+    // Independent status reads must not erase the last move attempt's counters.
+    ASSERT_TRUE(c.sendCommand(0x7E9E6E,key,IoHomeCommand::Private,3));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    ASSERT_EQ(c.exchangeDiagnostics().counters.rxWrongPeer,1U);
+    ASSERT_EQ(c.exchangeDiagnostics().counters.finalResponseSeen,1U);
 }
 
 TEST(controller_nina_config_close_does_not_start_unproven_key_transfer)
