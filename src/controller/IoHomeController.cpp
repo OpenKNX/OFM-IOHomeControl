@@ -1919,6 +1919,18 @@ bool IoHomeController::sendCommandInternal(uint32_t iDestNodeId, const uint8_t *
                                            uint8_t iMaxAttempts, bool iBackground,
                                            uint8_t iFrequencyIndex)
 {
+    if(iCmd==IoHomeCommand::WritePrivate){
+        auto *channel=channelForNode(iDestNodeId);
+        if(!channel||!iEncKey||std::memcmp(iEncKey,channel->getEncryptionKey(),16))return false;
+        if(iParam==0x03)return requestHeatingRegister(channel,0x0103,true,iParam2/10.f,iBackground);
+        if(iParam==0x04)return requestHeatingRegister(channel,0x0100,true,iParam2,iBackground);
+        if(iParam==0x06)return requestHeatingRegister(channel,0x0106,true,iParam2,iBackground);
+        if(iParam==0x0C)return requestHeatingRegister(channel,0x012C,false,0,iBackground);
+        if(iParam==0x00)return requestHeatingRegister(channel,0x0130,false,0,iBackground);
+        // Presence remains a separate legacy 0110 function. No capture qualifies
+        // its write/readback here; never remap it to occupancy or window state.
+        return false;
+    }
     if (iCmd == IoHomeCommand::WritePrivate && iParam == 0x03)
     {
         if (iParam2 < IOHC_COZY_TEMP_MIN_TENTHS || iParam2 > IOHC_COZY_TEMP_MAX_TENTHS)
@@ -11434,38 +11446,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             std::memcpy(mTxFrame.data,iEntry.heatingData,iEntry.heatingLength);mTxFrame.dataLen=iEntry.heatingLength;
             mTxFrame.setLowPower(false);mTxFrame.hasHmac=false;mAuthResponseSent=false;break;
         }
-        // WritePrivate (0x20) — Cozy/Atlantic thermostat command
-        // param = function selector (0x03=temp, 0x04=mode, etc.). Temperature
-        // uses the full uint16_t param2; all other values remain one byte.
-        // Authenticated with HMAC
-        if (iEntry.param == 0x03)
-            mTxFrame.dataLen = IoHomeCozyPayload::buildTemperature(mTxFrame.data, iEntry.param2);
-        else if (iEntry.param == 0x04)
-            mTxFrame.dataLen = IoHomeCozyPayload::buildMode(mTxFrame.data, static_cast<uint8_t>(iEntry.param2));
-        else if (iEntry.param == 0x10)
-            mTxFrame.dataLen = IoHomeCozyPayload::buildPresence(mTxFrame.data, static_cast<uint8_t>(iEntry.param2));
-        else if (iEntry.param == 0x0E)
-            mTxFrame.dataLen = IoHomeCozyPayload::buildWindow(mTxFrame.data, static_cast<uint8_t>(iEntry.param2));
-        else if (iEntry.param == 0x0C)
-            mTxFrame.dataLen = IoHomeCozyPayload::buildPowerOn(mTxFrame.data);
-        else if (iEntry.param == 0x00)
-            mTxFrame.dataLen = IoHomeCozyPayload::buildMidnightSync(mTxFrame.data);
-        else
-        {
-            // Unknown sub-command — use Cozy wire format
-            mTxFrame.data[0] = IOHC_COZY_ORIGINATOR;
-            mTxFrame.data[1] = IOHC_COZY_ACEI_WRITE;
-            mTxFrame.data[2] = 0x01;
-            mTxFrame.data[3] = iEntry.param;
-            mTxFrame.data[4] = static_cast<uint8_t>(iEntry.param2);
-            mTxFrame.dataLen = 5;
-        }
-
-        // WritePrivate (0x20): authenticated via challenge-response (per rspaargaren)
-        // Device will respond with ChallengeRequest (0x3C), processResponse() handles 0x3D
-        mTxFrame.hasHmac = false;
-        mAuthResponseSent = false;
-        break;
+        return false; // only typed, context-bound heating payloads are authorized
     }
 
     case IoHomeCommand::SendKey1W:

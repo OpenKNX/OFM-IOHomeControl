@@ -625,12 +625,8 @@ void IoHomecontrolChannel::processInputKo(uint8_t iIoIndex, GroupObject &iKo)
         break;
     }
     case IOHC_KoCHCozyWindow:
-    {
-        bool lOpen = (bool)iKo.value(DPT_Switch);
-        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::WritePrivate, 0x0E, lOpen ? 1 : 0);
-        logDebugP("Cozy window: %s", lOpen ? "OPEN" : "CLOSED");
+        logInfoP("Heating window contact is read-only; configure detection separately (0106)");
         break;
-    }
     default:
         break;
     }

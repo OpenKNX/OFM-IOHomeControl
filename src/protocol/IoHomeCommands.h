@@ -1596,12 +1596,12 @@ namespace IoHomeCozyPayload
         oData[4] = iValue;
         return 5;
     }
-    inline uint8_t buildWindow(uint8_t *oData, uint8_t iValue)
+    inline uint8_t buildOpenWindowDetection(uint8_t *oData, uint8_t iValue)
     {
         oData[0] = IOHC_COZY_ORIGINATOR;
         oData[1] = IOHC_COZY_ACEI_WRITE;
         oData[2] = 0x01;
-        oData[3] = 0x0E; // window open/close sub-command
+        oData[3] = 0x06; // configure open-window detection; never write sensor 010E
         oData[4] = iValue;
         return 5;
     }

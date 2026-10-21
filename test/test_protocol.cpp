@@ -7677,12 +7677,12 @@ TEST(cozy_presence_payload)
 TEST(cozy_window_payload)
 {
     uint8_t data[23] = {};
-    uint8_t len = IoHomeCozyPayload::buildWindow(data, IOHC_COZY_WINDOW_OPEN);
+    uint8_t len = IoHomeCozyPayload::buildOpenWindowDetection(data, IOHC_COZY_WINDOW_OPEN);
     ASSERT_EQ(len, 5);
     ASSERT_EQ(data[0], IOHC_COZY_ORIGINATOR);
     ASSERT_EQ(data[1], IOHC_COZY_ACEI_WRITE);
     ASSERT_EQ(data[2], 0x01);
-    ASSERT_EQ(data[3], 0x0E);
+    ASSERT_EQ(data[3], 0x06);
     ASSERT_EQ(data[4], 0x01);
 }
 
@@ -11702,6 +11702,8 @@ TEST(controller_cozy_temperature_preserves_le16_queue_value)
         IoHomecontrolChannel lChannel;
         initPaired2WControllerForTest(lController, lModule, lChannel,
                                       lRemoteNodeId, lDeviceNodeId, lKey);
+        IoHomeProtocolIdentity heating;heating.valid=true;heating.manufacturerId=12;heating.profile=52;heating.subProfile=1;
+        lChannel.onProtocolIdentity(lDeviceNodeId,heating);
         ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey,
                                             IoHomeCommand::WritePrivate, 0x03,
                                             lCase.tenths));
@@ -21890,4 +21892,14 @@ TEST(controller_heating_schema_identity_timeout_and_duty_guards)
             ASSERT_EQ(c.heatingState(0).result,IoHomeHeating::State::Result::Rejected);}
         ASSERT_EQ(ch.heatingPublications,0U);ASSERT_TRUE(!c.heatingState(0).values[IoHomeHeating::index(0x0103)].observed);
     }
+}
+
+TEST(controller_heating_legacy_sensor_write_and_unqualified_profiles_are_blocked)
+{
+ IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initHeatingController(c,m,ch);
+ ASSERT_TRUE(!c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::WritePrivate,0x0E,1));
+ ASSERT_TRUE(!c.requestHeatingRegister(&ch,0x010E,true,1));
+ auto identity=ch.getProtocolIdentity();identity.profile=22;ch.onProtocolIdentity(ch.getNodeId(),identity);
+ ASSERT_TRUE(!c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::WritePrivate,3,175));
+ ASSERT_EQ(c.radio().testTransmitCount(),0U);
 }
