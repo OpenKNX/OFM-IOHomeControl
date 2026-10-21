@@ -174,3 +174,34 @@ complete authenticated Config-State responder transcript and reply length,
 MOTO STOP/mid-travel behavior, and actual KLI/KUX wake-preamble measurements.
 The checklist's issue #165 attachments are not promoted to inspected golden
 captures. No new capture or secret-bearing diagnostic experiment was imported.
+
+## Atlantic private heating, 20 October 2026
+
+Seven upstream YAML fixtures in `atlantic-20261020/` are copied unchanged from
+Laberning `c1d5797811d73add913690425e318124b35ebac0` (PR #175; heating
+implementation introduced in `4824cf651702ebfc9edb12da90c745c48ed50ae8`, PR #174).
+They retain public header/payload bytes and radio timing. Key transfers and
+proof responses are masked or omitted upstream and are never reconstructed.
+The executable corpus selects only non-cryptographic request/response frames;
+public 2A challenge/MAC and 38 challenge bytes are kept only in the source YAML.
+CRC bytes are absent. Controller security tests use independent synthetic keys
+and authentication, not invented hardware authentication. A 2B response after
+a keyed request supports discovery but carries no per-frame MAC; OFM requires
+a challenged private read before explicit assignment even on this fallback.
+
+The three exchange fixtures establish LE temperature, exact GET/SET echo, mode,
+window sensor 010E versus detection setting 0106, and post-write readback.
+The pairing/discovery fixtures preserve the distinct 1023/0 pairing controller
+and 52/1 heater, silent attempts and late cross-frequency responses. They do
+not make the arithmetic +1 rule universal for manufacturer 12. Raw 012C, 012D
+and 0130 remain opaque diagnostics; no clock or schedule writer is enabled.
+
+Immutable SHA-256 values:
+
+- `atlantic_agilia_discovery_heater_rollcall_late_reply.yaml`: `e377e5b371d088d4e0ae91a241edf6ccfa10c1ff60fe79aee44a79afdd6dd55b`
+- `atlantic_agilia_exchange_mode_read_back.yaml`: `61576e86c4017350532bbce2aec9a2a88aeea99bb2caf312669f4952e1ecaedf`
+- `atlantic_agilia_exchange_setpoint_and_off_read_back.yaml`: `76cd157c2dc5b52ab3ac89df07da9f5e803ab95620f42ff8edbccc03c9c94d88`
+- `atlantic_agilia_exchange_status_read.yaml`: `45c079140ccafb9d668d96c5a96bcc8f48a4d2022479bf5e993b51eef15fb914`
+- `atlantic_agilia_pairing_key_pull_heater_rollcall.yaml`: `d95e02323f4094e7a0f1c22ee548844eba270612ce2c1df3c21c4152eaec3e9e`
+- `atlantic_agilia_pairing_key_pull_own_key_heater_silent.yaml`: `2b7d1c85f0f4a051ebc36fd44bbd7b0db816fea38a4a2b65da679c6d29348fd6`
+- `atlantic_agilia_pairing_key_transfer_command_unknown.yaml`: `4b835cccc2d069291632051cc3f80126310522cd6b7a12f423d9191ce1651303`

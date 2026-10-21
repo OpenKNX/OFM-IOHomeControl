@@ -7059,7 +7059,7 @@ TEST(golden_rf_corpus_covers_every_pairing_wait_injection)
         ASSERT_EQ(lFixture->crypto, CryptoExpectation::PairingCorrelationMustReject);
     }
 
-    ASSERT_EQ(scenarioCount, 17);
+    ASSERT_EQ(scenarioCount, 24);
     for (uint8_t i = 0; i < scenarioCount; i++)
     {
         const Scenario &lScenario = kScenarios[i];
@@ -22022,4 +22022,73 @@ TEST(controller_heating_saved_key_scan_deduplicates_without_global_key_changes)
     }
     ASSERT_MEM_EQ(c.getSystemKey(),global,16);ASSERT_MEM_EQ(a.getEncryptionKey(),b.getEncryptionKey(),16);
     c.cancelAtlantic();
+}
+
+TEST(golden_rf_corpus_atlantic_private_heating_values_and_two_node_identity)
+{
+    using namespace IoHomeGoldenRfCorpus;
+    const uint16_t regs[]={0x0115,0x0103,0x0100,0x0117,0x010E,0x0102,0x0106};
+    const float expected[]={19.13f,17.5f,2,0,0,28,1};
+    for(unsigned i=0;i<7;++i){
+        char requestId[80],replyId[80];snprintf(requestId,sizeof(requestId),"heating_exchange_status_read_%u",i*2);
+        snprintf(replyId,sizeof(replyId),"heating_exchange_status_read_%u",i*2+1);
+        const auto *rawRequest=findFrame(requestId),*rawReply=findFrame(replyId);ASSERT_TRUE(rawRequest&&rawReply);
+        IoHomeFrame request,reply;ASSERT_TRUE(deserializeFrameForTest(request,rawRequest->bytes,rawRequest->wireLen));
+        ASSERT_TRUE(deserializeFrameForTest(reply,rawReply->bytes,rawReply->wireLen));
+        ASSERT_EQ(request.commandId,IoHomeCommand::WritePrivate);ASSERT_EQ(reply.commandId,IoHomeCommand::WritePrivateResponse);
+        ASSERT_EQ((uint16_t(request.data[2])<<8)|request.data[3],regs[i]);IoHomeHeating::Value value;
+        ASSERT_TRUE(IoHomeHeating::decodeReply(request.data,request.dataLen,reply.data,reply.dataLen,value));
+        ASSERT_TRUE(value.valid);ASSERT_FLOAT_EQ(value.value,expected[i],0.001f);
+    }
+    for(const char *scenario:{"heating_exchange_setpoint_and_off_read_back","heating_exchange_mode_read_back"}){
+        IoHomeFrame request;
+        for(unsigned i=0;i<frameCount;++i){const auto &fixture=kFrames[i];
+            if(strncmp(fixture.id,scenario,strlen(scenario)))continue;
+            IoHomeFrame frame;ASSERT_TRUE(deserializeFrameForTest(frame,fixture.bytes,fixture.wireLen));
+            if(frame.commandId==IoHomeCommand::WritePrivate)request=frame;
+            else if(frame.commandId==IoHomeCommand::WritePrivateResponse){IoHomeHeating::Value value;
+                ASSERT_TRUE(IoHomeHeating::decodeReply(request.data,request.dataLen,frame.data,frame.dataLen,value));ASSERT_TRUE(value.valid);}
+        }
+    }
+    const auto *rawRemote=findFrame("heating_pairing_key_pull_heater_rollcall_1");
+    const auto *rawHeater=findFrame("heating_pairing_key_pull_heater_rollcall_6");ASSERT_TRUE(rawRemote&&rawHeater);
+    IoHomeFrame remote,heater;ASSERT_TRUE(deserializeFrameForTest(remote,rawRemote->bytes,rawRemote->wireLen));
+    ASSERT_TRUE(deserializeFrameForTest(heater,rawHeater->bytes,rawHeater->wireLen));
+    ASSERT_TRUE(IoHomeHeating::pairingNode(decodeAcceptedDiscoveryIdentity(remote.data,remote.dataLen)));
+    ASSERT_TRUE(IoHomeHeating::actuator(decodeAcceptedDiscoveryIdentity(heater.data,heater.dataLen)));
+    ASSERT_EQ(remote.getSrcNodeId()+1,heater.getSrcNodeId());ASSERT_EQ(heater.commandId,IoHomeCommand::DiscoverSPEResponse);
+}
+TEST(controller_atlantic_full_silence_never_assigns_remote_or_sends_config)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;IoHomeFrame launch,challenge;
+    ASSERT_TRUE(beginAtlanticPullForTest(c,m,ch,launch));const uint8_t key[16]={0x42};uint8_t ciphertext[16];
+    ASSERT_TRUE(sendAtlanticCandidateForTest(c,launch,key,ciphertext,challenge));ASSERT_TRUE(proveAtlanticCandidateForTest(c,ciphertext,challenge,key));
+    IoHomeFrame probe;ASSERT_TRUE(transmitQueuedControllerFrame(c,probe));ioHomeTestAdvanceMillis(6000);c.loop();
+    for(unsigned attempt=0;attempt<3;++attempt){c.loop();ASSERT_EQ(c.state(),ControllerState::AtlanticRollCallWait);
+        c.loop();ioHomeTestAdvanceMillis(1501);c.loop();}
+    c.loop();ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::Failed);
+    ASSERT_TRUE(!ch.isPaired());ASSERT_TRUE(!c.assignAtlanticHeater(0,c.atlanticStatus().session));
+    IoHomeFrame last;ASSERT_TRUE(lastTransmittedFrameForTest(c,last));ASSERT_EQ(last.commandId,IoHomeCommand::DiscoverSPERequest);
+}
+TEST(controller_heating_two_device_keys_and_existing_velux_are_isolated)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel a,b,velux;initHeatingController(c,m,a);
+    const uint8_t other[16]={0x43},global[16]={0x77};c.setSystemKey(global);
+    m.testSetChannel(1,&b);b.setNodeId(0x112233);b.setEncryptionKey(other);b.onProtocolIdentity(0x112233,a.getProtocolIdentity());
+    m.testSetChannel(2,&velux);velux.setNodeId(0x654321);velux.setEncryptionKey(global);
+    ASSERT_TRUE(c.requestHeatingRegister(&a,0x0115));ASSERT_TRUE(c.requestHeatingRegister(&b,0x0115));
+    for(unsigned channel=0;channel<2;++channel){
+        const uint32_t node=channel?0x112233:0xB6BDFC;const uint8_t *key=channel?other:a.getEncryptionKey();
+        IoHomeFrame request,response,auth;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));ASSERT_EQ(request.getDestNodeId(),node);
+        const uint8_t challenge[6]={1,2,3,4,5,6};buildPairChallengeRequestFrame(response,0x60F823,node,challenge);
+        ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_TRUE(lastTransmittedFrameForTest(c,auth));
+        const uint8_t transcript[]={0x20,0x0C,0x60,1,0x15};uint8_t expected[6];
+        ASSERT_TRUE(IoHomeCrypto::createHmac2W(transcript,sizeof(transcript),challenge,key,expected));ASSERT_MEM_EQ(auth.data,expected,6);
+        const uint8_t value[]={0x0C,0x60,1,0x15,0x79,7};
+        buildSimpleResponseFrame(response,0x60F823,node,IoHomeCommand::WritePrivateResponse,value,6);ASSERT_TRUE(queueControllerResponse(c,response));
+    }
+    ASSERT_EQ(a.heatingPublications,1U);ASSERT_EQ(b.heatingPublications,1U);ASSERT_MEM_EQ(velux.getEncryptionKey(),global,16);
+    ASSERT_MEM_EQ(c.getSystemKey(),global,16);
+    ASSERT_TRUE(c.sendCommand(0x654321,global,IoHomeCommand::Private,3));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ASSERT_EQ(tx.commandId,IoHomeCommand::Private);ASSERT_EQ(tx.getDestNodeId(),0x654321U);
 }
