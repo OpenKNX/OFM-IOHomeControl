@@ -1410,6 +1410,9 @@ private:
   uint8_t mOneWayEnrollmentTraceCount = 0;
   int8_t mOneWayEnrollmentActiveTrace = -1;
   uint8_t mPairingChallenge[6];
+  uint8_t mPairPushFrequency = 0xFF;
+  uint32_t mPairKeyOwner = 0;
+  uint8_t mPairSessionKey[16]{};
   uint32_t mDiscoveredNodeId;
   IoHomeProtocolIdentity mPairProtocolIdentity{};
   // Optional 2W target supplied by the caller. Discovery is broadcast, but a

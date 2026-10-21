@@ -3718,6 +3718,9 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mPairingChannel = iChannelIndex;
     mPairingFreqIdx = frequencyIndexForHz(kNormal2WTxFreqHz);
     mPairingStartTime = millis();
+    mPairPushFrequency = 0xFF;
+    mPairKeyOwner = mOwnNodeId;
+    memcpy(mPairSessionKey, mSystemKey, sizeof(mPairSessionKey));
     memset(mPairingChallenge, 0, sizeof(mPairingChallenge)); // will be filled by device's ChallengeRequest
     memset(mPairSetConfigChallenge, 0, sizeof(mPairSetConfigChallenge));
     memset(mPairKeyTransferChallenge, 0, sizeof(mPairKeyTransferChallenge));
@@ -6854,6 +6857,18 @@ void IoHomeController::loop()
         serviceBackgroundRxScan();
     }
 
+    if (isPairDiagnosticState(mState) &&
+        mPairingTelemetry.outcome == PairingOutcome::InProgress &&
+        (mPairKeyOwner != mOwnNodeId || memcmp(mPairSessionKey,mSystemKey,16)))
+    {
+        if (mPairing2WMode == Pairing2WMode::PullKey || mPairing2WMode == Pairing2WMode::LaunchKeyTransfer)
+            finishPullKeyDiagnostic(PullKeyResult::Unproven);
+        else {
+            recordPairingDiagnostic(PairingOutcome::KeyExchangeFailure,"pairing-identity-or-key-changed");
+            mState = ControllerState::PairFailed;
+        }
+    }
+
     // Check for incoming packets in any state
     if (mRadio.isPacketAvailable())
     {
@@ -6886,8 +6901,25 @@ void IoHomeController::loop()
                 tracePairDiagnosticFrame("rx", mRxFrame, mLastResponseFreqIdx, mRadio.lastRssi());
             }
 
-            // If we're waiting for a response, process it
-            if (mState == ControllerState::WaitResponse)
+            // Pairing continuation frames carry no transaction ID. Bind them to
+            // the current local identity/key, RF channel and receive deadline.
+            // A late packet is observed but cannot revive an expired phase.
+            const bool pushWait = mState == ControllerState::PairWaitDeviceChallenge ||
+                                  mState == ControllerState::PairWaitKeyTransferConfirmation;
+            const bool pullWait = mState == ControllerState::PairWaitLaunchKeyTransfer ||
+                                  mState == ControllerState::PairWaitPullKeyChallengeResponse;
+            const uint32_t pairWindow = pushWait ? 5000U :
+                (mState == ControllerState::PairWaitLaunchKeyTransfer ? 1000U : IOHC_RX_TIMEOUT_MS);
+            const bool invalidKeyContext = (pushWait || pullWait) &&
+                ((mRxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) ||
+                 mOwnNodeId != mPairKeyOwner || memcmp(mPairSessionKey,mSystemKey,16) ||
+                 mLastResponseFreqIdx != (pushWait ? mPairPushFrequency : mPairPullFrequency) ||
+                 static_cast<uint32_t>(millis()-mStateTimer) > pairWindow);
+            if (invalidKeyContext)
+            {
+                logDebugP("Pairing: ignored response outside bound key/session/channel/deadline");
+            }
+            else if (mState == ControllerState::WaitResponse)
             {
                 mState = ControllerState::ProcessResponse;
             }
@@ -7060,7 +7092,7 @@ void IoHomeController::loop()
                     logInfoP("Pairing: error command=32 phase=%s raw=%02X decoded=%s ambiguous=%u src=%06X dst=%06X challenged=1",
                              stateName(mState), result.raw, result.name, result.ambiguous,
                              mRxFrame.getSrcNodeId(), mRxFrame.getDestNodeId());
-                    if (mRxFrame.dataLen && ioHomeKeyTransferDefinitivelyRefused(result.raw)) {
+                    if (mRxFrame.dataLen == 1 && ioHomeKeyTransferDefinitivelyRefused(result.raw)) {
                         recordPairingDiagnostic(PairingOutcome::KeyExchangeFailure,
                             result.raw == 0x18 || result.raw == 0x05 ? "key-authentication-failed" : "key-transfer-refused");
                         mState = ControllerState::PairFailed;
@@ -9609,6 +9641,7 @@ void IoHomeController::processPairSendKeyInit()
         {
             if (mPairKeyExchangeAttempts == 0)
                 mPairKeyExchangeStartTime = millis();
+            mPairPushFrequency = mCurrentFreqIdx;
             ++mPairKeyExchangeAttempts;
             mStateTimer = millis();
             mState = ControllerState::PairWaitDeviceChallenge;

@@ -21560,3 +21560,24 @@ TEST(error_response_nonzero_state_preserves_legacy_and_decodes_packed)
         ASSERT_EQ(strcmp(decoded.name,ioHomeCommandResultName(raw)),0);
     }
 }
+
+TEST(controller_pairing_push_rejects_wrong_channel_late_and_changed_key)
+{
+    const uint8_t key[16]={1};
+    for (unsigned variant=0;variant<4;++variant) {
+        IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x831F2A,0,key); c.setSystemKey(key);
+        ASSERT_TRUE(advancePairingToWaitKeyTransferConfirmation(c,0x831F2A,0x7E9E6E));
+        IoHomeFrame response; buildErrorResponseFrame(response,0x831F2A,0x7E9E6E,0x08);
+        if (variant==0) c.testSetRxScanFrequency(IOHC_FREQ_1);
+        if (variant==1) ioHomeTestAdvanceMillis(5001);
+        if (variant==2) { uint8_t other[16]={2}; c.setSystemKey(other); }
+        if (variant==3) { response.data[1]=0; response.dataLen=2; }
+        ASSERT_TRUE(queueControllerResponse(c,response));
+        ASSERT_TRUE(!ch.isPaired());
+        // Wrong-channel/late/malformed refusal cannot become a semantic refusal.
+        if (variant!=2)
+            ASSERT_TRUE(c.pairingTelemetry().diagnostic!=IoHomeController::PairingOutcome::KeyExchangeFailure);
+        else ASSERT_EQ(c.pairingTelemetry().diagnostic,IoHomeController::PairingOutcome::KeyExchangeFailure);
+    }
+}
