@@ -21615,3 +21615,25 @@ TEST(controller_pairing_push_rejects_wrong_channel_late_and_changed_key)
         else ASSERT_EQ(c.pairingTelemetry().diagnostic,IoHomeController::PairingOutcome::KeyExchangeFailure);
     }
 }
+
+TEST(controller_pairing_lost_confirmation_name_reply_is_not_key_proof)
+{
+    const uint8_t key[16]={1}, challenge[6]={1,2,3,4,5,6};
+    IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x831F2A,0,key); c.setSystemKey(key);
+    ASSERT_TRUE(advancePairingToWaitKeyTransferConfirmation(c,0x831F2A,0x7E9E6E));
+    IoHomeFrame response;
+    buildPairChallengeRequestFrame(response,0x831F2A,0x7E9E6E,challenge);
+    ASSERT_TRUE(queueControllerResponse(c,response));
+    IoHomeFrame auth; ASSERT_TRUE(lastTransmittedFrameForTest(c,auth));
+    ASSERT_EQ(auth.commandId,IoHomeCommand::ChallengeResponse);
+    response.commandId=IoHomeCommand::GetNameResponse;
+    memcpy(response.data,"Motor",5); response.dataLen=5;
+    ASSERT_TRUE(queueControllerResponse(c,response));
+    ASSERT_EQ(c.state(),ControllerState::PairWaitKeyTransferConfirmation);
+    ASSERT_TRUE(!ch.isPaired()); ASSERT_EQ(c.pairingTelemetry().counters.keyProven,0U);
+    // An untrusted FE or TX completion cannot fill in the missing confirmation.
+    response.commandId=IoHomeCommand::ErrorResponse; response.data[0]=0xFF; response.dataLen=1;
+    ASSERT_TRUE(queueControllerResponse(c,response)); ASSERT_TRUE(!ch.isPaired());
+    c.cancelPairing(); ASSERT_TRUE(!ch.isPaired());
+}
