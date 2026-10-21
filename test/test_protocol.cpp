@@ -21768,3 +21768,25 @@ TEST(controller_legacy_1w_use_case_has_explicit_2w_config_lifecycle)
         ASSERT_EQ(feedback.lastMaster==c.getOwnNodeId(),lastMaster==0x831F2AU);
     }
 }
+
+TEST(controller_battery_observation_adds_no_cyclic_radio_traffic)
+{
+    IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+    initRainController(c,m,ch); ch.setBatteryMonitoring(1);
+    IoHomeFrame request,response;
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),ch.getEncryptionKey(),IoHomeCommand::Private,3));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    const auto sent=c.radio().testTransmitCount();
+    for (uint8_t raw : {0x60,0x61,0x80,0x20,0x40}) {
+        uint8_t status[8]={1,raw,0,0,0,0,0,0};
+        buildPrivateResponseFrame(response,0x123456,0x654321,status,8);
+        ASSERT_TRUE(queueControllerResponse(c,response));
+        ioHomeTestAdvanceMillis(60000); c.loop();
+        ASSERT_EQ(c.radio().testTransmitCount(),sent);
+        ASSERT_TRUE(!ch.batteryInfo().percentValid);
+    }
+    // Only the first response belongs to the requested status read. The later
+    // unsolicited 04 frames do not replace the qualified full-class evidence.
+    ASSERT_EQ(ch.batteryInfo().coarse.raw,3U);
+    ASSERT_EQ(c.batteryDiagnostic(0).result,IoHomeBatteryDiagnostic::State::NotRequested);
+}
