@@ -4359,7 +4359,7 @@ IoHomeController::AttemptCounters *IoHomeController::activeAttemptCounters()
     return nullptr;
 }
 
-void IoHomeController::logAttemptCounters(const char *scope, const AttemptCounters &c)
+void IoHomeController::logAttemptCounters(const char *scope, const AttemptCounters &c) const
 {
     logInfoP("%s rx_wrong_peer=%lu rx_crc_valid=%lu rx_unmatched=%lu rf_tx_completed=%lu challenge_seen=%lu final_response_seen=%lu key_refused=%lu key_proven=%lu actuation_observed=%lu duty_rejected=%lu",
         scope,(unsigned long)c.rxWrongPeer,(unsigned long)c.rxCrcValid,(unsigned long)c.rxUnmatched,

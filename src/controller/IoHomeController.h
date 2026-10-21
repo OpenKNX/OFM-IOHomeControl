@@ -1661,7 +1661,7 @@ private:
                             bool iExplicitDiagnosticMode);
 
   AttemptCounters *activeAttemptCounters();
-  static void logAttemptCounters(const char *scope, const AttemptCounters &counters);
+  void logAttemptCounters(const char *scope, const AttemptCounters &counters) const;
   void processPairSendDiscovery();
   void processPairWaitDiscoveryResponse();
   void processPairSendDiscoveryConfirmation();
