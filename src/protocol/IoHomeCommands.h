@@ -142,6 +142,18 @@ enum class IoHomeCommand : uint8_t
     ErrorResponse = 0xFE
 };
 
+// Config State is its own transaction, never an implicit LaunchKeyTransfer.
+// Unknown lengths/values remain raw; no response payload shape is inferred.
+inline const char *ioHomeConfigStateName(const uint8_t *data, uint8_t length)
+{
+    if (!data || length!=1) return "unknown";
+    switch (data[0]) {
+    case 0: return "CONFIG OPEN";
+    case 2: return "CONFIG CLOSE";
+    default: return "unknown";
+    }
+}
+
 // Result of a queued 2W command exchange as observed by the controller.  This
 // is intentionally separate from protocol response codes: channels use it to
 // decide whether optimistic local state may be committed or must be restored.

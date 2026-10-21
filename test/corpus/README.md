@@ -133,3 +133,15 @@ this audit adds a production-controller regression rejecting name replies as
 key proof. No automatic GetName pairing fallback is enabled. Hardware work must
 establish an independent peer-generated MAC bound to a fresh local challenge,
 key, peer, session and channel before such a fallback can commit a key.
+
+## Nina responder qualification (P1.4 / BIN-3)
+
+`0x2E 00` and `0x2E 02` are Config Open and Config Close. The public Nina
+bytes prove parser acceptance, not an authenticated responder transcript or
+0x2F reply length. The explicit armed KeyImport observer labels these states
+only for its already locked peer and temporary address, without transmitting.
+The gateway does not gain a Config-State responder. A synthetic test must not
+be used to invent the missing on-air authentication and response layout.
+Qualify `2E -> 3C -> 3D -> 2F` with Nina hardware before enabling a responder;
+any later `38 -> 32` remains a separate user-started acquisition workflow.
+Reference: Laberning `f9cb01641f8c61c0b2d36aae489f70e35a729215`, issue #162.

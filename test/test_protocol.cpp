@@ -21637,3 +21637,14 @@ TEST(controller_pairing_lost_confirmation_name_reply_is_not_key_proof)
     ASSERT_TRUE(queueControllerResponse(c,response)); ASSERT_TRUE(!ch.isPaired());
     c.cancelPairing(); ASSERT_TRUE(!ch.isPaired());
 }
+
+TEST(protocol_nina_config_state_is_distinct_from_key_transfer)
+{
+    const uint8_t open[]={0}, close[]={2}, unknown[]={1}, longClose[]={2,0};
+    ASSERT_EQ(strcmp(ioHomeConfigStateName(open,1),"CONFIG OPEN"),0);
+    ASSERT_EQ(strcmp(ioHomeConfigStateName(close,1),"CONFIG CLOSE"),0);
+    for (const uint8_t *data : {unknown,longClose})
+        ASSERT_EQ(strcmp(ioHomeConfigStateName(data,data==unknown?1:2),"unknown"),0);
+    ASSERT_EQ(strcmp(ioHomeConfigStateName(nullptr,1),"unknown"),0);
+    ASSERT_EQ(strcmp(ioHomeConfigStateName(close,0),"unknown"),0);
+}

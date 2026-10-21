@@ -12283,6 +12283,17 @@ void IoHomeController::processKeyExtractFrame()
 
     switch (mRxFrame.commandId)
     {
+    case IoHomeCommand::Discover2ERequest:
+        // Nina's addressed 2E 02 is Config Close. Captures do not qualify the
+        // responder authentication/2F DATA layout. Observe only in an armed,
+        // already peer-bound import session; never turn it into key pull.
+        if (mKeyExtractArmed && mKeyExtractHubNodeId != 0 &&
+            lSrcNode == mKeyExtractHubNodeId && lDstNode == mKeyExtractThrowawayId &&
+            !(mRxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W))
+            logInfoP("KeyImport: config_state=%s len=%u peer=%06X response=withheld-unqualified-auth-layout",
+                     ioHomeConfigStateName(mRxFrame.data,mRxFrame.dataLen),mRxFrame.dataLen,lSrcNode);
+        return;
+
     case IoHomeCommand::DiscoverRequest:
     {
         logInfoP("KeyExtract: rx 0x28 hub=0x%06X freq=CH%u rssi=%d",
