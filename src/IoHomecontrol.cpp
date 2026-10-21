@@ -2674,6 +2674,7 @@ void IoHomecontrol::updateCommissioningJob()
         const auto state=mController.state();
         const auto outcome=mController.pairingTelemetry().outcome;
         if (outcome==IoHomeController::PairingOutcome::Cancelled) mCommissioningJob.stage=S::Cancelled;
+        else if(outcome==IoHomeController::PairingOutcome::AtlanticPullSuggested)mCommissioningJob.stage=S::Unconfirmed;
         else if (outcome==IoHomeController::PairingOutcome::NoResponse ||
                  outcome==IoHomeController::PairingOutcome::InvalidResponse ||
                  outcome==IoHomeController::PairingOutcome::KeyExchangeFailure ||
@@ -2840,7 +2841,11 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
             resultData[12] = lSequence & 0xFF;
             resultData[13] = mChannels[lChannel]->getConfigured1WBroadcastType();
             resultData[14] = static_cast<uint8_t>(mController.lastPairing1WMode());
-            resultLength = 15;
+            // Optional versioned, read-only advice tail; old clients keep the original 15 bytes.
+            resultData[15]=1;resultData[16]=mController.atlanticPullOffered(lChannel)?1:0;
+            const uint32_t offerNode=resultData[16]?mController.atlanticPullOffer().node:0;
+            resultData[17]=offerNode>>16;resultData[18]=offerNode>>8;resultData[19]=offerNode;
+            resultLength = 20;
             return true;
         }
         break;

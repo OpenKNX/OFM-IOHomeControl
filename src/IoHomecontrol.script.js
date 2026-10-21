@@ -493,7 +493,7 @@ function /* internal helper */ IOHC_applyStatusResponse(device, context, resp, f
     if (!resultText) {
         if (paired) {
             resultText = isOneWay ? "1W Anmeldung gesendet" : "Angelernt";
-        } else if (controllerState >= 6 && controllerState <= 28) {
+        } else if (controllerState >= 6 && controllerState <= 40) {
             resultText = "Pairing aktiv";
         } else {
             resultText = "Nicht angelernt";
@@ -501,7 +501,7 @@ function /* internal helper */ IOHC_applyStatusResponse(device, context, resp, f
     }
 
     if (!diagText) {
-        if (controllerState >= 6 && controllerState <= 28) {
+        if (controllerState >= 6 && controllerState <= 40) {
             diagText = IOHC_controllerStateText(controllerState);
         } else if (lastStartStatus == 1) {
             diagText = "Controller war blockiert";
@@ -514,6 +514,14 @@ function /* internal helper */ IOHC_applyStatusResponse(device, context, resp, f
         }
     }
 
+    if(!paired && !isOneWay && resp.length>=20 && resp[15]===1 && resp[16]===1) {
+        var offerNode=IOHC_readNodeId(resp,17);
+        if(offerNode) {
+            resultText="Atlantic Pull angeboten";
+            nodeText="Pairing-Node "+IOHC_formatNodeId(offerNode);
+            diagText="iohc"+context.channelIndex+" pair2w-exp pull-atlantic "+IOHC_formatNodeId(offerNode);
+        }
+    }
     var oneWaySummary = IOHC_buildOneWaySummary(device, context, paired, pairedNodeId);
     var prefix = IOHC_getChannelPrefix(context);
     var protocolMode = IOHC_getParameter(device, prefix + "ProtocolMode").value;

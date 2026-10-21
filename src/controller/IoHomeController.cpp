@@ -3862,6 +3862,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mPairPushFrequency = 0xFF;
     mPairPullAttempts = 0;
     mPairRecoveryAttempts=0;mPairRecoveryAuthSent=false;
+    mAtlanticPullOffer={};
     mPairKeyOwner = mOwnNodeId;
     memcpy(mPairSessionKey, mSystemKey, sizeof(mPairSessionKey));
     memset(mPairingChallenge, 0, sizeof(mPairingChallenge)); // will be filled by device's ChallengeRequest
@@ -3893,8 +3894,9 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     IoHomecontrolChannel *lCh = mModule ? mModule->getChannel(iChannelIndex) : nullptr;
     if (lCh)
     {
-        lCh->clearProtocolIdentity();
-        lCh->clearProductIdentityEvidence();
+        // Preserve 2W channel metadata until an ordinary valid actuator is selected.
+        // A discovered Atlantic pairing remote only offers a workflow, never a channel mutation.
+        if(lCh->is1W()){lCh->clearProtocolIdentity();lCh->clearProductIdentityEvidence();}
         mPairDiscoverConfirmMode = lCh->getConfigured2WDiscoverConfirmMode();
         mPairKeyInitDelayMs = lCh->getConfigured2WKeyInitDelay();
     }
@@ -4127,6 +4129,7 @@ const char *IoHomeController::pairingOutcomeName(PairingOutcome iOutcome)
     switch (iOutcome)
     {
     case PairingOutcome::PullDiagnosticComplete: return "pull-diagnostic-complete";
+    case PairingOutcome::AtlanticPullSuggested: return "atlantic-pull-suggested";
     case PairingOutcome::None: return "none";
     case PairingOutcome::InProgress: return "in-progress";
     case PairingOutcome::Success: return "success";
@@ -6133,6 +6136,7 @@ void IoHomeController::logPairDiagnosticStatus() const
         (isPairDiagnosticState(mState) && mPairingStartTime != 0) ? (millis() - mPairingStartTime) : 0UL);
     const IoHomeRadioHealth lHealth = radioHealth();
 
+    if(atlanticPullOffered(mPairingChannel))logInfoP("Pairing: Atlantic pairing node %06X; offer iohc%02u pair2w-exp pull-atlantic %06X; explicit empty-channel selection required",mAtlanticPullOffer.node,mPairingChannel+1,mAtlanticPullOffer.node);
     logInfoP("PairDiag: pull_result=%s key_recovery=%s recovery_reads=%u", pullKeyResultName(mPairingTelemetry.pullResult),
              keyRecoveryResultName(mPairingTelemetry.keyRecovery),mPairingTelemetry.keyRecoveryReads);
     logInfoP("PairDiag: trace=%s state=%s ch=%u node=0x%06X orderIndex=%u txFreqIdx=%u txFreq=%luHz rxFreqIdx=%u rxFreq=%luHz lastRespFreq=%u elapsed=%lums spe=%d passive=%d rxScan=%d",
@@ -6327,10 +6331,14 @@ void IoHomeController::processPendingDiscoveryResponses()
             continue;
         }
         IoHomeProtocolIdentity lMetadata;
-        const bool accepted=captureProtocolIdentity(channelForNode(lPending.source), lPending.frame,
+        const bool pairingRemote=lPending.frame.commandId==IoHomeCommand::DiscoverResponse &&
+            IoHomeHeating::pairingNode(decodeAcceptedDiscoveryIdentity(lPending.frame.data,lPending.frame.dataLen));
+        const bool accepted=captureProtocolIdentity(pairingRemote?nullptr:channelForNode(lPending.source), lPending.frame,
                                 "roll-call discovery", &lMetadata,
                                 lPending.frequencyIndex, lPending.rssi);
         if(accepted) {
+            if(lPending.frame.commandId==IoHomeCommand::DiscoverResponse && IoHomeHeating::pairingNode(lMetadata))
+                offerAtlanticPull(lPending.source);
             ++mDiscoverySession.accepted;++mDiscoverySweepAccepted;
             bool seen=false;for(uint32_t node:mDiscoverySeenNodes)if(node==lPending.source){seen=true;break;}
             if(seen){++mDiscoveryDuplicates;++mDiscoverySession.duplicates;}
@@ -7133,7 +7141,8 @@ void IoHomeController::loop()
                     // bind this pairing transaction to another controller's
                     // response while several devices are in learn mode.
                     const uint32_t lSource = mRxFrame.getSrcNodeId();
-                    if (getAddressClass(lSource) == IoHomeAddressClass::Unicast &&
+                    if (!(mRxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) &&
+                        getAddressClass(lSource) == IoHomeAddressClass::Unicast &&
                         mRxFrame.getDestNodeId() == mOwnNodeId &&
                         (mPairingKnownNodeId == 0 || lSource == mPairingKnownNodeId))
                     {
@@ -7143,6 +7152,17 @@ void IoHomeController::loop()
                         // backbone reference, including the valid value zero.
                         IoHomecontrolChannel *lPairChannel =
                             mModule ? mModule->getChannel(mPairingChannel) : nullptr;
+                        const auto discovered=decodeAcceptedDiscoveryIdentity(mRxFrame.data,mRxFrame.dataLen);
+                        if(mPairing2WMode==Pairing2WMode::Normal && IoHomeHeating::pairingNode(discovered)){
+                            // Inventory-only observation: no push, pull, channel metadata or durable assignment.
+                            if(!captureProtocolIdentity(nullptr,mRxFrame,"Atlantic pull offer",&mPairProtocolIdentity))return;
+                            mDiscoveredNodeId=lSource;offerAtlanticPull(lSource,mPairingChannel);
+                            completePairingTelemetry(PairingOutcome::AtlanticPullSuggested);
+                            mState=ControllerState::PairComplete;return;
+                        }
+                        if(discovered.valid && lPairChannel){
+                            lPairChannel->clearProtocolIdentity();lPairChannel->clearProductIdentityEvidence();
+                        }
                         if(!captureProtocolIdentity(lPairChannel, mRxFrame,
                                                  "pairing discovery",
                                                  &mPairProtocolIdentity)) return;
@@ -13297,6 +13317,21 @@ void IoHomeController::printBatteryDiagnostic(uint8_t channel)
         (unsigned long)d.retryAfterMs,d.node?(unsigned long)(millis()-d.resultMs):0);
     [[maybe_unused]] const uint16_t objects[]={0xA601,0xA607,0xA60E,9,0x4003};
     if(!d.action)for(unsigned i=0;i<5;++i)logInfoP("  object=%04X state=%s",objects[i],IoHomeBatteryDiagnostic::name(d.objects[i]));
+}
+
+bool IoHomeController::atlanticPullOffered(uint8_t channel) const
+{
+    const auto *target=mModule?mModule->getChannel(channel):nullptr;
+    return target && !target->is1W() && !target->isPaired() && !target->getNodeId() &&
+        mAtlanticPullOffer.node && mAtlanticPullOffer.owner==mOwnNodeId &&
+        uint32_t(millis()-mAtlanticPullOffer.observedMs)<180000U &&
+        (mAtlanticPullOffer.channel==0xFF || mAtlanticPullOffer.channel==channel);
+}
+void IoHomeController::offerAtlanticPull(uint32_t node,uint8_t channel)
+{
+    mAtlanticPullOffer.node=node;mAtlanticPullOffer.owner=mOwnNodeId;
+    mAtlanticPullOffer.observedMs=millis();mAtlanticPullOffer.channel=channel;
+    logInfoP("Pairing: Atlantic 1023/0 pairing node %06X detected; no key transfer or assignment. Select an empty 2W channel and explicitly run iohcNN pair2w-exp pull-atlantic %06X",node,node);
 }
 
 bool IoHomeController::startAtlanticPairing(uint8_t channel,uint32_t peer)

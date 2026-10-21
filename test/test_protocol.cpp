@@ -22276,3 +22276,97 @@ TEST(controller_pairing_recovery_refusal_stops_and_silence_is_bounded_before_key
         ASSERT_TRUE(!ch.isPaired());ASSERT_EQ(c.pairingTelemetry().keyRecovery,IoHomeController::KeyRecoveryResult::NotProven);
     }
 }
+
+TEST(controller_pairing_atlantic_remote_offers_pull_without_keys_or_channel_mutation)
+{
+    const uint8_t global[16]={0x77},savedKey[16]={0x42};
+    for(bool occupied:{false,true}){
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x60F823,occupied?0x112233:0,savedKey);c.setSystemKey(global);
+        IoHomeProtocolIdentity saved;saved.valid=true;saved.profile=6;saved.subProfile=1;saved.manufacturerId=2;
+        saved.ioAddress=0x112233;ch.onProtocolIdentity(0x112233,saved);
+        const auto revision=ch.productContextRevision();const auto persisted=openknx.flash.saveCount;
+        ASSERT_TRUE(c.startPairing(0));IoHomeFrame request,response;
+        ASSERT_TRUE(transmitQueuedControllerFrame(c,request));ASSERT_EQ(request.commandId,IoHomeCommand::DiscoverRequest);
+        const auto txCount=c.radio().testTransmitCount();
+        buildDiscoverResponseFrame(response,0x60F823,0xB6BDFB,false,IOHC_POWER_SAVE_ALWAYS_ALIVE);
+        response.data[0]=0xFF;response.data[1]=0xC0;response.data[5]=12;
+        ASSERT_TRUE(queueControllerResponse(c,response));
+        ASSERT_EQ(c.pairingTelemetry().outcome,IoHomeController::PairingOutcome::AtlanticPullSuggested);
+        ASSERT_EQ(c.atlanticPullOffer().node,0xB6BDFBU);
+        ASSERT_EQ(c.atlanticPullOffered(0),!occupied);
+        ASSERT_TRUE(!c.atlanticPullOffered(16));
+        ASSERT_EQ(c.radio().testTransmitCount(),txCount); // no 2C, 31, 32, 38 or 6F
+        ASSERT_EQ(ch.getNodeId(),occupied?0x112233U:0U);ASSERT_EQ(ch.isPaired(),occupied);
+        ASSERT_EQ(ch.getProtocolIdentity().profile,6U);ASSERT_EQ(ch.getProtocolIdentity().ioAddress,0x112233U);
+        ASSERT_EQ(ch.productContextRevision(),revision);ASSERT_MEM_EQ(ch.getEncryptionKey(),savedKey,16);
+        ASSERT_MEM_EQ(c.getSystemKey(),global,16);ASSERT_EQ(openknx.flash.saveCount,persisted);
+        ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::None);
+        c.loop();ASSERT_EQ(c.state(),ControllerState::Idle);
+        ASSERT_EQ(c.pairingTelemetry().keyExchangeAttempts,0U);
+        if(!occupied){
+            ioHomeTestAdvanceMillis(180000);ASSERT_TRUE(!c.atlanticPullOffered(0));
+            ASSERT_EQ(c.radio().testTransmitCount(),txCount);
+            // An offer is advice only. Explicit acquisition still rediscovers and verifies the peer.
+            ASSERT_TRUE(c.startAtlanticPairing(0,0xB6BDFB));
+            ASSERT_TRUE(transmitQueuedControllerFrame(c,request));ASSERT_EQ(request.commandId,IoHomeCommand::DiscoverRequest);
+            ASSERT_TRUE(!c.atlanticPullOffered(0));ASSERT_TRUE(!ch.isPaired());
+        }
+    }
+}
+
+TEST(controller_pairing_atlantic_offer_requires_exact_profile_and_correlated_discovery)
+{
+    const uint8_t key[16]={0x77};
+    for(unsigned variant=0;variant<6;++variant){
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x60F823,0,key);c.setSystemKey(key);
+        ASSERT_TRUE(c.startPairing(0,variant==4?0x112233:0));IoHomeFrame request,response;
+        ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+        buildDiscoverResponseFrame(response,0x60F823,0xB6BDFB,false,IOHC_POWER_SAVE_ALWAYS_ALIVE);
+        response.data[0]=0xFF;response.data[1]=0xC0;response.data[5]=12;
+        if(variant==0)response.data[5]=2; // another manufacturer's remote
+        if(variant==1)response.data[1]=0xC1; // subtype 1
+        if(variant==2){response.data[0]=0x0D;response.data[1]=1;} // actual heater, not pairing remote
+        if(variant==3)response.setDestNode(0x112233);
+        if(variant==5)response.dataLen=2;
+        ASSERT_TRUE(queueControllerResponse(c,response));
+        ASSERT_TRUE(!c.atlanticPullOffered(0));ASSERT_EQ(c.atlanticPullOffer().node,0U);
+        ASSERT_TRUE(c.pairingTelemetry().outcome!=IoHomeController::PairingOutcome::AtlanticPullSuggested);
+        ASSERT_TRUE(!ch.isPaired());ASSERT_MEM_EQ(c.getSystemKey(),key,16);c.cancelPairing();
+    }
+}
+
+TEST(controller_discovery_atlantic_pairing_remote_is_an_advisory_offer_only)
+{
+    const uint8_t key[16]={0x77};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x60F823,0,key);c.setSystemKey(key);
+    c.startDiscovery(false);IoHomeFrame request,response;
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    buildDiscoverResponseFrame(response,0x60F823,0xB6BDFB,false,IOHC_POWER_SAVE_ALWAYS_ALIVE);
+    response.data[0]=0xFF;response.data[1]=0xC0;response.data[5]=12;
+    ASSERT_TRUE(queueControllerResponse(c,response));
+    ioHomeTestAdvanceMillis(c.diagnosticDiscoveryListenMs()+1);c.loop();
+    ASSERT_TRUE(c.atlanticPullOffered(0));ASSERT_EQ(c.atlanticPullOffer().node,0xB6BDFBU);
+    ASSERT_TRUE(!ch.isPaired());ASSERT_TRUE(!ch.hasProtocolIdentity());ASSERT_MEM_EQ(c.getSystemKey(),key,16);
+    ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::None);
+    ch.setIs1W(true);ASSERT_TRUE(!c.atlanticPullOffered(0));ch.setIs1W(false);
+    c.setOwnNodeId(0x112233);ASSERT_TRUE(!c.atlanticPullOffered(0));
+}
+
+TEST(controller_discovery_atlantic_offer_preserves_an_occupied_channel_metadata)
+{
+    const uint8_t key[16]={0x42};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x60F823,0xB6BDFB,key);c.setSystemKey(key);
+    IoHomeProtocolIdentity old;old.valid=true;old.profile=6;old.subProfile=1;old.manufacturerId=2;
+    ch.onProtocolIdentity(0xB6BDFB,old);const auto revision=ch.productContextRevision();
+    const auto saves=openknx.flash.saveCount;c.startDiscovery(false);IoHomeFrame request,response;
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    buildDiscoverResponseFrame(response,0x60F823,0xB6BDFB,false,IOHC_POWER_SAVE_ALWAYS_ALIVE);
+    response.data[0]=0xFF;response.data[1]=0xC0;response.data[5]=12;
+    ASSERT_TRUE(queueControllerResponse(c,response));
+    ioHomeTestAdvanceMillis(c.diagnosticDiscoveryListenMs()+1);c.loop();
+    ASSERT_TRUE(!c.atlanticPullOffered(0));ASSERT_EQ(ch.getProtocolIdentity().profile,6U);
+    ASSERT_EQ(ch.productContextRevision(),revision);ASSERT_EQ(openknx.flash.saveCount,saves);
+    ASSERT_EQ(ch.getNodeId(),0xB6BDFBU);ASSERT_MEM_EQ(ch.getEncryptionKey(),key,16);
+}

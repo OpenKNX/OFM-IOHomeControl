@@ -553,3 +553,31 @@ test("private heating KO bank requires online paired Atlantic 52/1",function(){
  IOHC_queryRecognition(old,onlineWith([3]),{channelIndex:1},false);
  check(old.params.HTG_c1Qualified.value===0,"old firmware must clear stale heating qualification");
 });
+
+test("Atlantic pull offer is advisory and preserves ETS channel settings",function() {
+ var d=deviceWith({Name:"Office",Active:0,DeviceType:7,ProfileOverride:448,ProtocolMode:0});
+ var response=new Array(20).fill(0);response[15]=1;response[16]=1;response[17]=0xB6;response[18]=0xBD;response[19]=0xFB;
+ IOHC_applyStatusResponse(d,{channelIndex:1},response,null,null);
+ check(value(d,"PairingLastResult")==="Atlantic Pull angeboten","offer not displayed");
+ check(value(d,"PairedNodeIdDisplay")==="Pairing-Node B6BDFB","pairing remote labelled paired");
+ check(value(d,"PairingDiag")==="iohc1 pair2w-exp pull-atlantic B6BDFB","action incomplete/truncated");
+ check(value(d,"Name")==="Office"&&value(d,"Active")===0&&value(d,"DeviceType")===7&&value(d,"ProfileOverride")===448&&value(d,"ProtocolMode")===0,"offer changed ETS configuration");
+ response[16]=0;IOHC_applyStatusResponse(d,{channelIndex:1},response,null,null);
+ check(value(d,"PairingLastResult")==="Nicht angelernt","stale offer retained");
+});
+test("Atlantic advice ignores old unknown one-way and paired status responses",function() {
+ for(var variant=0;variant<5;variant++) {
+  var d=deviceWith({ProtocolMode:variant===3?1:0});
+  d.params.IOHC_c1OneWayBroadcastType={value:2};d.params.IOHC_c1OneWayTargetNodeId={value:0};
+  var r=new Array(20).fill(0);r[15]=1;r[16]=1;r[17]=0xB6;r[18]=0xBD;r[19]=0xFB;
+  if(variant===0)r=r.slice(0,15);if(variant===1)r[15]=2;
+  if(variant===2)r[17]=r[18]=r[19]=0;if(variant===4)r[0]=1;
+  IOHC_applyStatusResponse(d,{channelIndex:1},r,null,null);
+  check(value(d,"PairingLastResult")!=="Atlantic Pull angeboten","unsafe offer variant "+variant);
+ }
+});
+test("recovery and optional metadata steps remain active in ETS status",function() {
+ var d=deviceWith({ProtocolMode:0}),r=new Array(15).fill(0);r[4]=34;
+ IOHC_applyStatusResponse(d,{channelIndex:1},r,null,null);
+ check(value(d,"PairingLastResult")==="Pairing aktiv"&&value(d,"PairingDiag")==="Recovery: Warte Namen","recovery stage hidden");
+});

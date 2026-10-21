@@ -364,7 +364,8 @@ public:
     // 1W has no return path: a completed enrollment burst only proves that the
     // frames left the radio, never that the actuator stored the controller.
     OneWayEnrollmentTransmitted = 9,
-    PullDiagnosticComplete = 10
+    PullDiagnosticComplete = 10,
+    AtlanticPullSuggested = 11
   };
 
   enum class PairingOptionalConfigResult : uint8_t
@@ -610,6 +611,9 @@ public:
     AtlanticStage stage=AtlanticStage::None;uint32_t session=0,pairingNode=0,heaterNode=0;
     uint8_t channel=0xFF,proofAttempts=0,rollcallAttempts=0;const char *reason="none";
   };
+  struct AtlanticPullOffer { uint32_t node=0,owner=0,observedMs=0;uint8_t channel=0xFF; };
+  const AtlanticPullOffer &atlanticPullOffer() const {return mAtlanticPullOffer;}
+  bool atlanticPullOffered(uint8_t channel) const;
   bool startAtlanticPairing(uint8_t channel,uint32_t pairingNode=0);
   bool assignAtlanticHeater(uint8_t channel,uint32_t session);
   void cancelAtlantic();
@@ -1706,6 +1710,8 @@ private:
     AtlanticStatus status;uint8_t key[16]{},globalKey[16]{};uint32_t gateway=0,startedMs=0,revision=0;
     IoHomeProtocolIdentity identity{};bool keyProven=false,manualScan=false;uint8_t scanNext=0;
   } mAtlantic;
+  AtlanticPullOffer mAtlanticPullOffer{};
+  void offerAtlanticPull(uint32_t node,uint8_t channel=0xFF);
   uint32_t mNextAtlanticSession=0;
   bool atlanticContextMatches() const;
   bool queueAtlanticProbe(uint32_t node);
