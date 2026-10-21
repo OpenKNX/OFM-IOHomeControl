@@ -40,6 +40,7 @@
 #include "IoHomeRemoteMap.h"
 #include "corpus/golden_rf_corpus.h"
 #include "protocol/IoHomeOptimisticPosition.h"
+#include "protocol/IoHomeHeatingRegisters.h"
 
 #ifdef TEST_NATIVE
 #include "controller/IoHomeController.h"
@@ -21794,4 +21795,28 @@ TEST(controller_battery_observation_adds_no_cyclic_radio_traffic)
     // unsolicited 04 frames do not replace the qualified full-class evidence.
     ASSERT_EQ(ch.batteryInfo().coarse.raw,3U);
     ASSERT_EQ(c.batteryDiagnostic(0).result,IoHomeBatteryDiagnostic::State::NotRequested);
+}
+
+TEST(heating_register_codec_captured_values_and_invalid_shapes)
+{
+ using namespace IoHomeHeating;
+ uint8_t request[6];Value value;
+ struct Vector {uint16_t reg;uint8_t bytes[2];uint8_t length;float expected;};
+ const Vector vectors[]={{0x0103,{0xAF,0},2,17.5f},{0x0115,{0x79,7},2,19.13f},{0x0102,{0x18,1},2,28.f}};
+ for(const auto &v:vectors){
+  ASSERT_EQ(build(v.reg,false,0,request),4);uint8_t reply[6];memcpy(reply,request,4);memcpy(reply+4,v.bytes,v.length);
+  ASSERT_TRUE(decodeReply(request,4,reply,4+v.length,value));ASSERT_TRUE(value.valid);ASSERT_FLOAT_EQ(value.value,v.expected,0.001f);
+  ASSERT_TRUE(!decodeReply(request,4,reply,3+v.length,value));reply[3]^=1;ASSERT_TRUE(!decodeReply(request,4,reply,4+v.length,value));
+ }
+ ASSERT_EQ(build(0x0103,true,17.5f,request),6);ASSERT_EQ(request[4],0xAF);ASSERT_EQ(request[5],0);
+ ASSERT_EQ(build(0x010E,true,1,request),0);ASSERT_EQ(build(0x0115,true,20,request),0);
+ ASSERT_EQ(build(0x0100,true,3,request),0);ASSERT_EQ(build(0x0103,true,NAN,request),0);
+ ASSERT_EQ(build(0x0103,true,29,request),0);ASSERT_EQ(build(0x0106,true,2,request),0);
+ const uint8_t fault[]={0xFF,0xFF},negative[]={0x0C,0xFE};
+ ASSERT_TRUE(decodeValue(*descriptor(0x0115),fault,2,value));ASSERT_TRUE(value.sensorFault&&!value.valid);
+ ASSERT_TRUE(decodeValue(*descriptor(0x0115),negative,2,value));ASSERT_FLOAT_EQ(value.value,-5.0f,0.001f);
+ uint32_t node=123;ASSERT_TRUE(!nextNode(0xFFFFFF,node));ASSERT_EQ(node,123U);
+ ASSERT_TRUE(nextNode(0xB6BDFB,node));ASSERT_EQ(node,0xB6BDFCU);
+ IoHomeProtocolIdentity id;id.valid=true;id.manufacturerId=12;id.profile=52;id.subProfile=1;ASSERT_TRUE(actuator(id));
+ for(uint16_t profile:{14,22,1023}){id.profile=profile;ASSERT_TRUE(!actuator(id));}
 }
