@@ -21663,3 +21663,35 @@ TEST(protocol_battery_latest_not_reported_keeps_historical_alarm_evidence)
     info.observeStatus(0x40,0x04,4);
     ASSERT_EQ(strcmp(ioHomeBatteryStateName(ioHomeBatteryState(info.lastStatus.raw)),"normal"),0);
 }
+
+TEST(controller_moto_authentication_without_final_reply_never_claims_actuation)
+{
+    const uint8_t key[16]={1}, challenge[6]={1,2,3,4,5,6};
+    IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x831F2A,0x7E9E6E,key);
+    ch.setManualProfileOverride(0x0140); ch.setGarageEndpointsOnly(true);
+    ASSERT_TRUE(c.sendCommand(0x7E9E6E,key,IoHomeCommand::Execute,0));
+    IoHomeFrame request,response; ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    ASSERT_EQ(request.dataLen,6);
+    buildPairChallengeRequestFrame(response,0x831F2A,0x7E9E6E,challenge);
+    ASSERT_TRUE(queueControllerResponse(c,response));
+    IoHomeFrame auth; ASSERT_TRUE(lastTransmittedFrameForTest(c,auth));
+    ASSERT_EQ(auth.commandId,IoHomeCommand::ChallengeResponse);
+    c.loop(); ioHomeTestAdvanceMillis(6000); c.loop();
+    ASSERT_EQ(c.state(),ControllerState::Idle);
+    const auto outcome=c.lastTwoWayOutcome();
+    ASSERT_EQ(outcome.result,IoHomeCommandExchangeResult::AuthenticatedUnconfirmed);
+    ASSERT_TRUE(outcome.authenticatedExchange); ASSERT_TRUE(!outcome.transportComplete);
+    ASSERT_EQ(outcome.actuationStarted,IoHomeController::Evidence::Unknown);
+    ASSERT_EQ(outcome.targetReached,IoHomeController::Evidence::Unknown);
+    ASSERT_EQ(c.exchangeDiagnostics().counters.challengeSeen,1U);
+    ASSERT_EQ(c.exchangeDiagnostics().counters.finalResponseSeen,0U);
+    ASSERT_EQ(c.exchangeDiagnostics().counters.actuationObserved,0U);
+    const auto sent=c.radio().testTransmitCount();
+    // Late status remains independent feedback, not a retroactive final reply.
+    const uint8_t status[8]={1,0x60,0,0,0,0,0,0};
+    buildPrivateResponseFrame(response,0x831F2A,0x7E9E6E,status,8);
+    ASSERT_TRUE(queueControllerResponse(c,response));
+    ASSERT_EQ(c.lastTwoWayOutcome().result,IoHomeCommandExchangeResult::AuthenticatedUnconfirmed);
+    ioHomeTestAdvanceMillis(6000); c.loop(); ASSERT_EQ(c.radio().testTransmitCount(),sent);
+}
