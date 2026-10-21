@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns="http://knx.org/xml/project/20"><Dynamic>
+<choose ParamRefId="%AID%_P-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00401"><when test="1">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="Private Heizregister: Atlantic 52/1"/>
+<ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101" HelpContext="IOHC-Geraetetyp"/>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"><when test="1">
+<ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00301" HelpContext="IOHC-Geraetetyp"/>
+<ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00201" HelpContext="IOHC-Geraetetyp"/>
+<ParameterSeparator Id="%AID%_PS-nnn" Text="Werte bleiben bis zur bestätigten Abfrage unbekannt. Gültigkeitsmaske beachten. Schreiben wird erst nach GET-Rücklesen als beobachteter Sollwert gemeldet. Funkbudget begrenzt Abfragen." UIHint="Information"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00001"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00201"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00301"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00401"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00501"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%006_R-%TT%%PRODUCT_CC%00601"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%007_R-%TT%%PRODUCT_CC%00701"/>
+<ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%009_R-%TT%%PRODUCT_CC%00901"/>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00201"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%008_R-%TT%%PRODUCT_CC%00801"/></when></choose>
+</when></choose></when></choose></Dynamic></KNX>

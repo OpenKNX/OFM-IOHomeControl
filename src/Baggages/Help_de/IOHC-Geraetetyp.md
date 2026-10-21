@@ -56,3 +56,13 @@ Normale Positionsrohwerte reichen von 0x0000 bis 0xC800; 512 Rohwertschritte ent
 Weitere bekannte MP-Sonderpositionen: Fenster 0xD803 = gesicherte Lüftung; Tor 0xD807 = Fußgängeröffnung; Garagentor 0xD809 = Teilöffnung; Außenjalousie und Klappladen 0xD80A = gesicherte Position. Das erklärt die Kennung, schaltet aber keinen zusätzlichen KNX-Befehl frei.
 
 **Bioklimatische Pergola:** Die Lamellenöffnung wird über die normale Position gesteuert (0 % offen, 100 % geschlossen). Keine separate Lamellen-/Orientierungsfunktion verwenden. Profil 29/0 wird bei der Gerätesuche automatisch erkannt.
+
+## Atlantic-Heizregister ab Anwendung 4.6
+
+Nur ein online gelesener, gepaarter 2W-Kanal mit Hersteller 12 und RF-Profil 52/1 schaltet die optionalen privaten Heizungsobjekte frei. Die ETS-Kategorie Cozy allein genügt nicht. Nach „Status / Erkennung lesen“ die privaten Heizregister bewusst aktivieren und die Applikation programmieren. Abfragezyklus 0 bedeutet aus; sonst mindestens 60 Sekunden. Die sieben Reads werden gestaffelt und können am Funkbudget warten.
+
+Raumtemperatur, gemessener Sollwert, Istmodus, Regleraktivität, Fensterkontakt, Fenstererkennung und optionaler Maximalsollwert werden erst nach gültiger Antwort ausgegeben. Die Gültigkeitsmaske kennzeichnet Bit 0 Modus, 1 Maximalsollwert, 2 Sollwert, 3 Fenstererkennung, 4 Fensterkontakt, 5 Raumtemperatur und 6 Regler. Sensorfehler löschen die Gültigkeit, statt 0 Grad oder „heizt“ zu erfinden.
+
+Vor ETS-Migration Projekt sichern: Kn+24 ist ab 4.6 ausschließlich Fensterkontakt-Rückmeldung, alte schreibende Gruppenadressen entfernen. Kn+22 verwendet DPT 5.010 mit Rohcodes 0 Auto, 1 Manuell, 2 Programm, 4 Aus; 3 Extern ist nur lesbar. Kn+21 meldet den nachgelesenen Sollwert, nicht die Raumtemperatur. Anwesenheit Kn+23 bleibt reserviert und wird nicht angeboten. Die neuen Objekte liegen in einer eigenen Bank; die bisherigen Kanalnummern und Parameter bleiben erhalten.
+
+Atlantic-Schlüsselabholung ist eine explizite Diagnose: `iohcNN pair2w-exp pull-atlantic [PAIRNODE]`, dann `iohc heating status NN`. Erst nach Schlüsselbeweis und Heizungsantwort kann `iohc heating assign NN SESSION` den gewählten leeren Kanal dauerhaft zuordnen. Ein Schlüsselbeweis allein bedeutet noch nicht „paired“. Die Node+1-Probe gilt nur für den bestätigten AGILIA-Workflow.

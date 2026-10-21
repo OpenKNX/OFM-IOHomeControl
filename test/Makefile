@@ -41,7 +41,7 @@ $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
 $(SX1262_PHY_TARGET): $(SX1262_PHY_SRCS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(SX1262_PHY_SRCS)
 
-run: check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
+run: check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
 
 check-protocol: $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite protocol
@@ -119,3 +119,11 @@ check-module-version:
 .PHONY: check-rf-access-policy
 check-rf-access-policy:
 	$(PYTHON) test_rf_access_policy.py
+
+.PHONY: check-heating-publication
+check-heating-publication:
+	$(PYTHON) test_heating_publication.py
+
+.PHONY: check-heating-recovery
+check-heating-recovery:
+	$(PYTHON) test_heating_recovery.py

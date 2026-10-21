@@ -232,6 +232,8 @@ const std::string IoHomecontrolChannel::logPrefix()
 
 void IoHomecontrolChannel::setup()
 {
+    invalidateHeatingFeedback(); // no measurement is fresh after restart
+
     if(ioHomeStandaloneChannel(_channelIndex)) {
         setIs1W(false);setManualProfileOverride(0);
         setConfigured2WPowerClass(TwoWayPowerClass::Automatic);
@@ -412,6 +414,17 @@ void IoHomecontrolChannel::loop()
     // tracked purely by travel-time estimation above.
     if (mIs1W)
         return;
+
+    if(IoHomeHeating::actuator(getProtocolIdentity())){
+#ifdef ParamHTG_cPollSeconds
+        syncHeatingConfiguration();
+        if(privateHeatingEnabled()){
+            if(!mController.heatingState(_channelIndex).initialRead)
+                mController.requestHeatingRegister(this,0x0115);
+        }
+#endif
+        return; // private ECL registers never enter generic MP/FP status polling
+    }
 
     if (mPollTrackingDeadlineMs != 0 &&
         timeReached(lNow, mPollTrackingDeadlineMs) &&
@@ -600,6 +613,7 @@ void IoHomecontrolChannel::processInputKo(uint8_t iIoIndex, GroupObject &iKo)
     case IOHC_KoCHCozyTemp:
     {
         float lTempC = (float)iKo.value(Dpt(9, 1));
+        if(!std::isfinite(lTempC))return;
         // Convert DPT 9.001 (°C) to io-homecontrol tenths (70=7.0°C, 280=28.0°C)
         uint16_t lTenths = (uint16_t)(lTempC * 10.0f + 0.5f);
         if (lTenths < 70)
@@ -618,12 +632,8 @@ void IoHomecontrolChannel::processInputKo(uint8_t iIoIndex, GroupObject &iKo)
         break;
     }
     case IOHC_KoCHCozyPresence:
-    {
-        bool lPresent = (bool)iKo.value(DPT_Switch);
-        mController.sendCommand(mNodeId, mEncKey, IoHomeCommand::WritePrivate, 0x10, lPresent ? 1 : 0);
-        logDebugP("Cozy presence: %s", lPresent ? "ON" : "OFF");
+        logInfoP("Heating presence writer is not hardware-qualified; no register reassignment");
         break;
-    }
     case IOHC_KoCHCozyWindow:
         logInfoP("Heating window contact is read-only; configure detection separately (0106)");
         break;
@@ -1239,6 +1249,7 @@ bool IoHomecontrolChannel::isOperational() const
 void IoHomecontrolChannel::setNodeId(uint32_t iNodeId)
 {
     if (mNodeId != (iNodeId & 0x00FFFFFF)) mOptimisticPosition={};
+    if(mNodeId!=(iNodeId&0x00FFFFFF))invalidateHeatingFeedback();
     mNodeId = iNodeId & 0x00FFFFFF; // 24-bit
     mPaired = (mNodeId != 0);
     mProductRuntime.bind(mNodeId,mEncKey);
@@ -1251,7 +1262,7 @@ uint32_t IoHomecontrolChannel::getNodeId() const
 
 void IoHomecontrolChannel::setEncryptionKey(const uint8_t *iKey)
 {
-    if (memcmp(mEncKey, iKey, 16)) mOptimisticPosition={};
+    if (memcmp(mEncKey, iKey, 16)) {mOptimisticPosition={};invalidateHeatingFeedback();}
     memcpy(mEncKey, iKey, 16);
     mProductRuntime.bind(mNodeId,mEncKey);
 }
@@ -2868,8 +2879,64 @@ void IoHomecontrolChannel::onBatteryEventRaw(const IoHomeFrame &frame) {
     logInfoP("  RAW / UNIT UNKNOWN; no event2001 attribution");
 }
 
+void IoHomecontrolChannel::syncHeatingConfiguration()
+{
+#ifdef ParamHTG_cPollSeconds
+    const bool enabled=privateHeatingEnabled();const uint16_t seconds=ParamHTG_cPollSeconds;
+    if(!mHeatingConfigSeen || enabled!=mHeatingWasEnabled || seconds!=mHeatingConfiguredPoll){
+        if(enabled || (mHeatingConfigSeen&&mHeatingWasEnabled))
+            mController.configureHeatingPoll(_channelIndex,enabled?seconds:0);
+        mHeatingConfigSeen=true;mHeatingWasEnabled=enabled;mHeatingConfiguredPoll=seconds;
+    }
+#endif
+}
+bool IoHomecontrolChannel::privateHeatingEnabled() const
+{
+#ifdef ParamHTG_cEnabled
+    return !mIs1W&&mPaired&&ParamHTG_cEnabled&&IoHomeHeating::actuator(getProtocolIdentity())&&getProtocolIdentity().ioAddress==mNodeId;
+#else
+    return false;
+#endif
+}
+void IoHomecontrolChannel::invalidateHeatingFeedback()
+{
+    mHeatingConfigSeen=false;
+#ifdef HTG_KocValid
+    if(knx.configured())knx.getGroupObject(HTG_KoCalcNumber(HTG_KocValid)).value(uint8_t(0),Dpt(5,10));
+#endif
+}
+void IoHomecontrolChannel::processHeatingInputKo(uint8_t index,GroupObject &ko)
+{
+#ifdef HTG_KocDetectionSet
+    if(!isOperational()||!privateHeatingEnabled())return;
+    if(index==HTG_KocDetectionSet)mController.requestHeatingRegister(this,0x0106,true,bool(ko.value(Dpt(1,3)))?1:0);
+    if(index==HTG_KocRead&&bool(ko.value(Dpt(1,17))))mController.refreshHeating(_channelIndex);
+#else
+    (void)index;(void)ko;
+#endif
+}
 void IoHomecontrolChannel::onHeatingValue(uint16_t reg,const IoHomeHeating::Value &value)
 {
-    if(!knx.configured()||!value.valid||!IoHomeHeating::actuator(getProtocolIdentity())||mIs1W)return;
-    if(reg==0x0103)getKo(IOHC_KoCHCozyTempFeedback).value(value.value,Dpt(9,1));
+    if(!knx.configured()||!IoHomeHeating::actuator(getProtocolIdentity())||getProtocolIdentity().ioAddress!=mNodeId||mIs1W)return;
+    if(value.valid){
+        if(reg==0x0103)getKo(IOHC_KoCHCozyTempFeedback).value(value.value,Dpt(9,1));
+        if(reg==0x010E)getKo(IOHC_KoCHCozyWindow).value(bool(value.raw),Dpt(1,19));
+    }
+#ifdef HTG_KocValid
+    if(!privateHeatingEnabled())return;
+    uint8_t valid=0;const auto &state=mController.heatingState(_channelIndex);
+    for(uint8_t i=0;i<7;++i)if(state.values[i].observed&&state.values[i].decoded.valid)valid|=1U<<i;
+    knx.getGroupObject(HTG_KoCalcNumber(HTG_KocValid)).value(valid,Dpt(5,10));
+    if(!value.valid)return; // fault/unknown changes validity, never fabricates a value
+    switch(reg){
+    case 0x0115:knx.getGroupObject(HTG_KoCalcNumber(HTG_KocRoomTemperature)).value(value.value,Dpt(9,1));break;
+    case 0x0103:knx.getGroupObject(HTG_KoCalcNumber(HTG_KocSetpointFeedback)).value(value.value,Dpt(9,1));break;
+    case 0x0100:knx.getGroupObject(HTG_KoCalcNumber(HTG_KocModeFeedback)).value(uint8_t(value.raw),Dpt(5,10));break;
+    case 0x0117:knx.getGroupObject(HTG_KoCalcNumber(HTG_KocHeating)).value(value.raw==2,Dpt(1,11));break;
+    case 0x010E:knx.getGroupObject(HTG_KoCalcNumber(HTG_KocWindow)).value(bool(value.raw),Dpt(1,19));break;
+    case 0x0106:knx.getGroupObject(HTG_KoCalcNumber(HTG_KocDetectionFeedback)).value(bool(value.raw),Dpt(1,3));break;
+    case 0x0102:if(ParamHTG_cMaxObject)knx.getGroupObject(HTG_KoCalcNumber(HTG_KocMaxSetpoint)).value(value.value,Dpt(9,1));break;
+    default:break;
+    }
+#endif
 }

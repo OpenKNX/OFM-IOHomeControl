@@ -46,7 +46,7 @@ def core_kos(kind,flags):
  if kind==2:return position+(11,)
  if kind in (3,9,10):return position
  if kind in (4,7):return (3,6) if flags&2 else position
- if kind==5:return (20,22,23,24)
+ if kind==5:return (20,21,22,24)
  if kind==6:return (0,3,6) if flags&4 and not flags&2 else (3,6)
  if kind==8:return (3,7)
  if kind in (11,13):return (0,)
@@ -55,8 +55,11 @@ def core_kos(kind,flags):
  raise AssertionError(f'unsupported manual category: {kind}')
 
 def ko_refs(numbers):
- return ''.join('<ComObjectRefRef RefId="%AID%_O-%TT%%CC%'+f'{number:03d}'+
+ refs=''.join('<ComObjectRefRef RefId="%AID%_O-%TT%%CC%'+f'{number:03d}'+
                 '_R-%TT%%CC%'+f'{number:03d}'+'01" />' for number in numbers)
+ if numbers==(20,21,22,24):
+  return '<choose ParamRefId="%AID%_P-%TT%%CC%140_R-%TT%%CC%14001"><when test="1">'+refs+'</when></choose>'
+ return refs
 
 p=ROOT/'src/IoHomecontrol.templ.xml';s=p.read_text();groups={}
 for row in rows:

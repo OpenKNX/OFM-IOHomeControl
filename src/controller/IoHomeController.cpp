@@ -2258,7 +2258,10 @@ bool IoHomeController::requestHeatingRegister(IoHomecontrolChannel *channel,uint
     state.node=channel->getNodeId();state.gateway=mOwnNodeId;state.revision=channel->productContextRevision();
     std::memcpy(state.key,entry.managementKey,16);state.token=entry.heatingToken;
     state.pendingRegister=reg;state.busy=true;state.initialRead=true;state.result=IoHomeHeating::State::Result::Queued;
-    if(write)state.values[IoHomeHeating::index(reg)]={};
+    if(write){
+        state.values[IoHomeHeating::index(reg)]={};
+        channel->onHeatingValue(reg,IoHomeHeating::Value{}); // clear validity, never publish the requested value
+    }
     return true;
 }
 

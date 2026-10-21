@@ -138,7 +138,7 @@ Das io-homecontrol-Modul unterstützt verschiedene Gerätetypen. Der Gerätetyp 
 | Fenster | Dachfenster, Fensteröffner | Lüftungsposition |
 | Markise | Horizontale und vertikale Markisen | Position, Auf/Ab, Stopp |
 | Garagentor | Garagentorantriebe | Position, Auf/Ab, Stopp |
-| Cozy-Thermostat | Atlantic Cozy io | Temperatur-Sollwert, Betriebsmodus, Anwesenheit, Fensterkontakt |
+| Cozy-Thermostat | Atlantic Cozy io | Temperatur-Sollwert mit Readback, Betriebsmodus, Fensterkontakt-Rückmeldung (nur bestätigtes Atlantic-Profil 52/1) |
 | Licht | io-homecontrol Lichtaktoren, Schalter und Dimmer | Ein/Aus, optional zusätzlich Helligkeit 0-100 % |
 | Tor | Schiebetore, Drehtorantriebe | Position, Auf/Ab, Stopp |
 | Schloss | io-homecontrol Türschlösser | Verriegeln/Entriegeln, Status, Kanal sperren |
@@ -592,11 +592,11 @@ Für Atlantic Cozy io Thermostate stehen zusätzliche Kommunikationsobjekte zur 
 Temperatursollwerte von 7,0 bis 28,0 °C werden als vorzeichenloser 16-Bit-Wert in Zehntelgrad und Little-Endian-Reihenfolge übertragen. Beispielsweise wird 28,0 °C als `18 01` codiert; Werte oberhalb von 25,5 °C werden dadurch nicht auf ein Byte abgeschnitten.
 
 * **Temperatur Sollwert** (KO Kn+20, DPT 9.001): Setzt die Zieltemperatur
-* **Betriebsmodus** (KO Kn+22, DPT 20.102): HVAC-Betriebsmodus
-* **Anwesenheit** (KO Kn+23, DPT 1.018): Anwesenheitsstatus
-* **Fensterkontakt** (KO Kn+24, DPT 1.019): Fenster offen/geschlossen
+* **Betriebsmodus** (KO Kn+22, DPT 5.010): Rohcode 0 Auto, 1 Manuell, 2 Programm, 4 Aus
+* Kn+23 bleibt reserviert; ein Anwesenheits-Writer ist nicht freigegeben.
+* **Fensterkontakt** (KO Kn+24, DPT 1.019): ausschließlich Rückmeldung des Fenstersensors
 
-Kn+21 bleibt reserviert, wird aber mangels Firmware-Rückmeldung nicht in ETS angezeigt.
+Kn+21 (DPT 9.001) meldet den tatsächlich nachgelesenen Sollwert. Die Raumtemperatur hat ein eigenes Objekt in der zusätzlichen Heizungsbank.
 
 ----
 
@@ -650,10 +650,10 @@ Bei kanalbezogenen Befehlen wird die Kanalnummer direkt an das Präfix angehäng
 |--------|-------------|
 | `iohcNN cozy temp TT` | Setzt Temperatur (in Zehntel, z.B. 215 = 21,5°C) |
 | `iohcNN cozy mode MM` | Setzt Betriebsmodus |
-| `iohcNN cozy presence 0/1` | Setzt Anwesenheit |
-| `iohcNN cozy window 0/1` | Setzt Fensterkontakt |
-| `iohcNN cozy poweron` | Sendet Einschalt-Befehl |
-| `iohcNN cozy midnight` | Sendet Mitternachts-Zeitsync |
+| `iohc heating read NODE 0110` | Separater Presence-Rohdatenread; keine Umdeutung zu Occupancy |
+| `iohcNN cozy detection 0/1` | Setzt Fenstererkennung 0106 und liest zurück; 010E bleibt Sensor |
+| `iohcNN cozy poweron` | Liest den rohen 012C-Block |
+| `iohcNN cozy midnight` | Liest den rohen 0130-Block; kein Uhr-Writer |
 
 ### **Fernbedienungs-Befehle**
 
@@ -794,11 +794,12 @@ Sichtbar, sobald für einen unterstützten Aktor-Gerätetyp mindestens eine Szen
 | Offset | Name | DPT | Richtung | Beschreibung |
 |--------|------|-----|----------|-------------|
 | Kn+20 | Temperatur Sollwert | 9.001 | Schreiben | Zieltemperatur |
-| Kn+22 | Betriebsmodus | 20.102 | Schreiben | HVAC-Modus |
-| Kn+23 | Anwesenheit | 1.018 | Schreiben | Anwesenheitsstatus |
-| Kn+24 | Fensterkontakt | 1.019 | Schreiben | Fenster offen/geschlossen |
+| Kn+21 | Sollwert Rückmeldung | 9.001 | Lesen/Senden | Bestätigter Readback |
+| Kn+22 | Betriebsmodus | 5.010 | Schreiben | Rohcode 0/1/2/4 |
+| Kn+23 | Anwesenheit | 1.018 | Reserviert | Nicht angeboten |
+| Kn+24 | Fensterkontakt | 1.019 | Lesen/Senden | Gemessener Fenstersensor |
 
-> Kn+21 (Cozy-Temperaturrückmeldung) bleibt an seiner reservierten Nummer, ist aber ohne Firmware-Publisher in ETS ausgeblendet. Kn+14 sperrt den KNX-Kanal; es ist kein Schlossbefehl.
+> Vor Migration auf 4.6 ETS-Projekt sichern, alte schreibende Gruppenadressen am Fensterkontakt entfernen und den Betriebsmodus auf DPT 5.010 prüfen. Kn+14 sperrt den KNX-Kanal; es ist kein Schlossbefehl.
 
 ## Erkannten Gerätetyp aus dem Pairing übernehmen
 
@@ -840,3 +841,17 @@ einmalige Objektabfrage. Für aktive Abfragen muss „Erweiterte Diagnose“
 gewählt und die vorherige Diagnose abgeschlossen sein. Unbelegte Werte
 tragen ausdrücklich „RAW / UNIT UNKNOWN“; es werden keine Volt-, Energie-
 oder Prozentangaben erfunden.
+
+## Private Atlantic-Heizung ab 4.6
+
+Die ETS-Rolle Cozy/Heizung ist nicht die RF-Profilnummer. Private ECL-Register erfordern eine bestätigte 2W-Identität mit Hersteller 12 und RF-Profil 52/1. Andere Heizpumpen-, MP/FP- und Warmwasserprofile behalten ihre bisherigen Codecs. Die zusätzliche HTG-Bank stellt zehn Objekte je Kanal bereit, ohne den 25-Objekt- oder 68-Byte-Kanalblock zu verschieben. Nach Online-Erkennung können die Heizungsobjekte bewusst aktiviert werden.
+
+Die Gültigkeitsmaske kennzeichnet Bit 0 Modus, 1 Maximalsollwert, 2 Sollwert, 3 Fenstererkennung, 4 Fensterkontakt, 5 Raumtemperatur und 6 Reglerstatus. Ohne bestätigte Abfrage ist der Wert unbekannt. 0115 meldet signierte Hundertstel Grad; FFFF ist Sensorfehler. 0103 und 0102 verwenden Zehntelgrad. Nur Reglercode 2 bedeutet aktives Heizelement. Ein Schreib-ACK ist kein erreichter physikalischer Sollwert: erst ein eigener GET veröffentlicht den beobachteten Registerwert.
+
+Polling ist zunächst aus. Ein expliziter Zyklus ab 60 Sekunden wird über die sieben Register gestaffelt, mit globalem Abstand, begrenzten Wiederholungen und vorheriger Funkbudgetprüfung. Quotenmangel führt zu Verzögerung, nicht zu Debug-Bypass. `iohc heating read NODE REGISTER`, `status CHANNEL`, `refresh CHANNEL`, `poll CHANNEL SECONDS` und `scan` dienen gezielten Tests.
+
+`iohcNN pair2w-exp pull-atlantic [PAIRNODE]` startet ausschließlich den bestätigten AGILIA-Zwei-Node-Workflow. Nach korrelierter Discovery und Confirmation erfolgt Pull mit sieben Byte IV-Transkript und MAC-Beweis über den originalen Ciphertext. Nur fehlende Proof-Antworten erhalten bis zu drei frische Challenges; eine falsche MAC beendet den Versuch. Der fremde Schlüssel bleibt bis zu drei Minuten temporär. Eine read-only Probe an Pairing-Node+1 prüft den Heizkörper; optionaler Key-Roll-Call akzeptiert auch späte Antworten auf einem anderen Kanal, ersetzt aber den Heizungsread nicht. Erst `iohc heating assign CHANNEL SESSION` persistiert den bewiesenen und zugeordneten Schlüssel atomar in den bewusst gewählten leeren Kanal. Systemschlüssel und andere Kanäle bleiben erhalten. Kein automatischer Push oder 6F an den Remote-Node. `iohc heating cancel` verwirft die Sitzung.
+
+Quellen: Laberning 4824cf651702ebfc9edb12da90c745c48ed50ae8 und c1d5797811d73add913690425e318124b35ebac0; öffentliche AGILIA-Teiltranskripte, Velocet ECL-Produktdateien und bestehende generische STM32-Foldable-Analyse. Die neuen nativen Authentifizierungstests sind synthetisch; OFM-Hardwarevalidierung, weitere Atlantic-Familien und Raw-Blöcke 012C/012D/0130 bleiben gesonderte Hardwarearbeit.
+
+Air-Time-Plan (berechnete lokale TX-Zeit, keine Hardwaremessung): Bei 48-Byte-Start-Preamble und 8 bzw. 32 Byte Continuation beträgt ein GET plus eigene 3D-Antwort 32 bzw. 37 ms. Für 16 Kanäle, sieben Register und maximal zwei GET-Versuche sind das 7168 bzw. 8288 ms pro Gesamtzyklus. Bei 60 Sekunden wären 430080 bzw. 497280 ms/h angeboten, bei 300 Sekunden 86016 bzw. 99456 ms/h; das übersteigt die 3600-ms/h-Quote des 0,1%-Bands deutlich. Deshalb gibt es keinen aktiven Standardzyklus und keine garantierte Einhaltung eines zu kurzen Wunschintervalls. Die Produktion begrenzt tatsächliche TX-Zeit, staffelt fair reihum über die Kanäle und setzt bei Quotenmangel Backoff; ein Debug-Bypass kann diese zusätzliche Heizungszulassung nicht aushebeln. Für viele Heizkörper gezielte Minimalabfragen und deutlich längere Zyklen verwenden.

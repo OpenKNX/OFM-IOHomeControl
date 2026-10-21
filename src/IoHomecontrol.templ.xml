@@ -16,6 +16,7 @@
             <op:param name="PRODUCT_CC" value="%CC%" />
             <op:param name="IOHC_TT" value="%TT%"/>
           </op:part>
+          <op:part name="IOHCHeating" href="IoHomeHeating.dynamic.part.xml" instances="1"><op:param name="PRODUCT_CC" value="%CC%"/></op:part>
           <op:part name="IOHCBattery" href="IoHomeBattery.dynamic.part.xml" instances="1"><op:param name="PRODUCT_CC" value="%CC%"/></op:part>
           <op:part name="IOHCLimitation" href="IoHomeLimitation.dynamic.part.xml" instances="1"><op:param name="PRODUCT_CC" value="%CC%"/><op:param name="IOHC_TT" value="%TT%"/></op:part>
           <op:part name="IOHCMovement" href="IoHomeMovement.dynamic.part.xml" instances="1"><op:param name="PRODUCT_CC" value="%CC%"/></op:part>
@@ -49,6 +50,7 @@
               <Parameter Id="%AID%_P-%TT%%CC%095" Name="c%C%DiagnosticObjects" ParameterType="%AID%_PT-IOHCCheckBox" Text="Reservierte Diagnoseobjekte" Value="0" />
               <Parameter Id="%AID%_P-%TT%%CC%102" Name="c%C%OrientationObjects" ParameterType="%AID%_PT-IOHCCheckBox" Text="Lamellen-/Orientierungsobjekte verwenden" Value="0" />
               <!-- ETS-only discovery flag; keeps .58 subprofiles from exposing percentage KOs. -->
+              <Parameter Id="%AID%_P-%TT%%CC%140" Name="c%C%HeatingQualified" ParameterType="%AID%_PT-IOHCCheckBox" Text="Private Atlantic-Heizung aus Gerät bestätigt" Value="0" Access="Read" op:configTransfer="never" />
               <Parameter Id="%AID%_P-%TT%%CC%105" Name="c%C%BinaryOnly" ParameterType="%AID%_PT-IOHCCheckBox" Text="Nur Ein/Aus (On/Off-Subprofil)" Value="0" op:configTransfer="never" />
 
               <Parameter Id="%AID%_P-%TT%%CC%110" Name="c%C%RecognitionTypeAuto" ParameterType="%AID%_PT-IOHCCheckBox" Text="Gerätetyp aus Erkennung übernehmen" Value="1" op:configTransfer="never" />
@@ -210,6 +212,7 @@
               <ParameterRef Id="%AID%_P-%TT%%CC%136_R-%TT%%CC%13601" RefId="%AID%_P-%TT%%CC%136" />
               <ParameterRef Id="%AID%_P-%TT%%CC%137_R-%TT%%CC%13701" RefId="%AID%_P-%TT%%CC%137" />
               <ParameterRef Id="%AID%_P-%TT%%CC%138_R-%TT%%CC%13801" RefId="%AID%_P-%TT%%CC%138" />
+              <ParameterRef Id="%AID%_P-%TT%%CC%140_R-%TT%%CC%14001" RefId="%AID%_P-%TT%%CC%140" />
             </ParameterRefs>
 
             <ParameterCalculations>
@@ -310,16 +313,16 @@
               <ComObject Id="%AID%_O-%TT%%CC%020" Name="CH%C%CozyTemp" Text="Kanal %C% Temperatur Sollwert" FunctionText="Temperatur Sollwert" ObjectSize="2 Bytes" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-1" Number="%K20%" />
 
               <!-- K21: Temperature feedback (read) -->
-              <ComObject Id="%AID%_O-%TT%%CC%021" Name="CH%C%CozyTempFeedback" Text="Kanal %C% Temperatur Rückmeldung" FunctionText="Temperatur Rückmeldung" ObjectSize="2 Bytes" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-1" Number="%K21%" />
+              <ComObject Id="%AID%_O-%TT%%CC%021" Name="CH%C%CozyTempFeedback" Text="Kanal %C% Sollwert Rückmeldung" FunctionText="Sollwert Rückmeldung" ObjectSize="2 Bytes" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-1" Number="%K21%" />
 
               <!-- K22: Operating mode (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%022" Name="CH%C%CozyMode" Text="Kanal %C% Betriebsmodus" FunctionText="Betriebsmodus" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-20-102" Number="%K22%" />
+              <ComObject Id="%AID%_O-%TT%%CC%022" Name="CH%C%CozyMode" Text="Kanal %C% Betriebsmodus" FunctionText="0=Auto 1=Manuell 2=Programm 4=Aus" ObjectSize="1 Byte" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-10" Number="%K22%" />
 
               <!-- K23: Presence (write) -->
               <ComObject Id="%AID%_O-%TT%%CC%023" Name="CH%C%CozyPresence" Text="Kanal %C% Anwesenheit" FunctionText="Anwesenheit" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-18" Number="%K23%" />
 
-              <!-- K24: Window contact (write) -->
-              <ComObject Id="%AID%_O-%TT%%CC%024" Name="CH%C%CozyWindow" Text="Kanal %C% Fensterkontakt" FunctionText="Fensterkontakt" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-19" Number="%K24%" />
+              <!-- K24: Window sensor feedback; never a write to register 010E -->
+              <ComObject Id="%AID%_O-%TT%%CC%024" Name="CH%C%CozyWindow" Text="Kanal %C% Fensterkontakt" FunctionText="Fensterkontakt" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-19" Number="%K24%" />
 
             </ComObjectTable>
 
@@ -444,7 +447,7 @@
                         <ParameterRefRef RefId="%AID%_UP-%TT%%CC%007_R-%TT%%CC%00701" IndentLevel="1" HelpContext="IOHC-Verhalten-nach-Neustart" />
                       </when></choose>
                       <ParameterBlock Id="%AID%_PB-nnn" Name="Functions" Text="Funktionen und Rückmeldung">
-                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Batterie-Prozent, RSSI und Cozy-Temperaturrückmeldung sind derzeit nicht als KNX-Rückmeldungen verfügbar." UIHint="Information" />
+                        <ParameterSeparator Id="%AID%_PS-nnn" Text="Batterie-Prozent und RSSI sind nicht als KNX-Rückmeldungen verfügbar. Atlantic-Heizwerte erfordern bestätigtes Profil 52/1." UIHint="Information" />
                         <choose ParamRefId="%AID%_P-%TT%%CC%096_R-%TT%%CC%09601"><when test="1">
                           <ParameterSeparator Id="%AID%_PS-nnn" Text="Nach dem 2W-Pairing Status / Erkennung lesen. Unterstützte Gerätetypen und Funktionen werden automatisch übernommen. Danach die Applikation programmieren." UIHint="Information" />
                         </when></choose>
@@ -473,6 +476,7 @@
                           <op:usePart name="IOHCProfileObjects" xpath="//Dynamic/*"/>
                           <op:usePart name="IOHCLimitation" xpath="//Dynamic/*"/>
                           <op:usePart name="IOHCBattery" xpath="//Dynamic/*"/>
+                          <op:usePart name="IOHCHeating" xpath="//Dynamic/*"/>
                         </when></choose>
                         <op:usePart name="IOHCProducts" xpath="//Dynamic/*" />
                       </ParameterBlock>
@@ -627,7 +631,7 @@
                             <when test="0"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%010_R-%TT%%CC%01001" /></when>
                             <when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
                           </choose></when>
-                          <when test="5"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%023_R-%TT%%CC%02301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%024_R-%TT%%CC%02401" /></when>
+                          <when test="5"><choose ParamRefId="%AID%_P-%TT%%CC%140_R-%TT%%CC%14001"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%021_R-%TT%%CC%02101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%024_R-%TT%%CC%02401" /></when></choose></when>
                           <when test="6">
                             <choose ParamRefId="%AID%_P-%TT%%CC%105_R-%TT%%CC%10501">
                               <when test="0"><choose ParamRefId="%AID%_UP-%TT%%CC%081_R-%TT%%CC%08101">
@@ -658,7 +662,7 @@
                           <when test="25"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" /></when>
                           <when test="29 30"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" /></when>
                           <when test="38 39 40 41 42"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" /></when>
-                          <when test="6"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%023_R-%TT%%CC%02301" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%024_R-%TT%%CC%02401" /></when>
+                          <when test="6"><choose ParamRefId="%AID%_P-%TT%%CC%140_R-%TT%%CC%14001"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%CC%020_R-%TT%%CC%02001" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%021_R-%TT%%CC%02101" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%022_R-%TT%%CC%02201" /><ComObjectRefRef RefId="%AID%_O-%TT%%CC%024_R-%TT%%CC%02401" /></when></choose></when>
                           <!-- END GENERATED MANUAL CORE KOS -->
                         </choose>
 

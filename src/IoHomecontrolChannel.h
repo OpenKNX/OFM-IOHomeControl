@@ -54,10 +54,16 @@ public:
   bool restoreLastKnownStateAfterStartup();
 
   // Callbacks from controller when radio responses arrive
+  bool mHeatingConfigSeen=false,mHeatingWasEnabled=false;
+  uint16_t mHeatingConfiguredPoll=0;
+  void syncHeatingConfiguration();
+  bool privateHeatingEnabled() const;
+  void processHeatingInputKo(uint8_t index,GroupObject &ko);
+  void invalidateHeatingFeedback();
   void onHeatingValue(uint16_t reg,const IoHomeHeating::Value &value);
   void onPositionFeedback(float iPositionPercent);
   uint32_t productContextRevision() const {return mProductContextRevision;}
-  void invalidateProductContext() {mOptimisticPosition={};invalidateBattery();mProfileReceivedMask=0;mRequestedSpeedIndex=0;mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
+  void invalidateProductContext() {invalidateHeatingFeedback();mOptimisticPosition={};invalidateBattery();mProfileReceivedMask=0;mRequestedSpeedIndex=0;mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
   IoHomePhysicalBounds &physicalBounds(){return mPhysicalBounds;}
   const IoHomePhysicalBounds &physicalBounds()const{return mPhysicalBounds;}
   IoHomeProductRuntime &productRuntime() {return mProductRuntime;}

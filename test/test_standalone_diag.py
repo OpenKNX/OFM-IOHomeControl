@@ -58,6 +58,7 @@ enum class IoHomeCommand{Execute};
 struct FakeIdentity {IoHomeNodeClass nodeClass=IoHomeNodeClass::Actuator;unsigned profile=4,subProfile=1,manufacturerId=2,powerSaveMode=1;bool valid=true,fullMetadata=true;};
 struct RecordingKo {unsigned writes=0;template<class T,class D>void value(T,D){assert(knx.ready);++writes;}};
 struct IoHomecontrolChannel {
+ unsigned heatingInvalidations=0;void invalidateHeatingFeedback(){++heatingInvalidations;}
  RecordingKo ko;RecordingKo &getKo(unsigned){return ko;}
  unsigned mLastRssi=0,mErrorStatus=0;float mCurrentSlat=0;
  void onRssiUpdate(uint8_t);void setErrorStatus(uint8_t);void onSlatFeedback(float);
@@ -146,7 +147,7 @@ int main(){
   m.loop(false);assert(m.restores==1&&m.loops==2);
  }else{assert(m.setupCalls==0&&m.loops==0&&m.restores==0&&m.configuredChannelCount()==16);}
  IoHomecontrolChannel channel;channel.setup();
- assert(channel.setupReads==0);
+ assert(channel.setupReads==0&&channel.heatingInvalidations==1);
  if(kIoHomeStandaloneDiag)assert(!channel.oneWay&&channel.manual==0&&channel.power==0&&channel.confirm==1&&channel.delay==300);
  channel.onRssiUpdate(45);channel.setErrorStatus(1);channel.onSlatFeedback(25);
  assert(channel.ko.writes==0&&channel.mLastRssi==45&&channel.mErrorStatus==1&&channel.mCurrentSlat==25);

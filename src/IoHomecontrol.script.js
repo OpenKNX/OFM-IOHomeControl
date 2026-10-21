@@ -155,7 +155,8 @@ var IOHC_PRESENTATIONS = {
     1402: [14, 2],
     1536: [1, 0],
     1537: [1, 0],
-    1856: [1, 0]
+    1856: [1, 0],
+    3329: [5, 0]
 };
 function /* internal helper */ IOHC_etsDeviceType(p,s) { return (IOHC_PRESENTATIONS[(p<<6)|s] || [0,0])[0]; }
 function /* internal helper */ IOHC_hasOrientationObjects(p,s) { return (IOHC_PRESENTATIONS[(p<<6)|s] || [0,0])[1]&1; }
@@ -235,6 +236,15 @@ function /* internal helper */ IOHC_applyRecognitionSettings(device, prefix, dis
     return changed;
 }
 
+// Only an online, paired 2W identity may expose the private Atlantic KO bank.
+function /* internal helper */ IOHC_updateHeatingQualification(device,prefix,discovery,ready,oneWay) {
+ var qualified=discovery&&ready&&!oneWay&&discovery.metadataValid&&discovery.manufacturer===12&&
+  discovery.protocolType===52&&discovery.subtype===1?1:0;
+ var p=IOHC_getParameter(device,prefix.replace("IOHC_","HTG_")+"Qualified");
+ if(p)p.value=qualified;
+ var legacy=IOHC_getParameter(device,prefix+"HeatingQualified");if(legacy)legacy.value=qualified;
+}
+
 function /* internal helper */ IOHC_queryRecognition(device, online, context, applySettings) {
     var channel = context.channelIndex - 1;
     var prefix = "IOHC_c" + context.channelIndex;
@@ -244,6 +254,7 @@ function /* internal helper */ IOHC_queryRecognition(device, online, context, ap
     // Older firmware has no snapshot API. Keep the existing status workflow usable.
     if (!response || response.length != 12 || response[0] != 0 ||
         response[1] != 1 || response[2] != channel) {
+        IOHC_updateHeatingQualification(device,prefix,null,false,true);
         IOHC_setParameterValue(device, prefix + "ImportedProfile", "Erkennung nicht verfügbar (Firmware)");
         IOHC_setParameterValue(device, prefix + "ImportedManufacturer", "Nicht aus aktueller Firmware gelesen");
         return false;
@@ -258,6 +269,7 @@ function /* internal helper */ IOHC_queryRecognition(device, online, context, ap
     if (hasPresentation) { discovery.presentationType=extended[12]; discovery.presentationFlags=extended[13]; }
     var oneWay = (response[11] & 0x20) != 0;
     var ready = (response[11] & 0x10) != 0;
+    IOHC_updateHeatingQualification(device,prefix,discovery,ready,oneWay);
     IOHC_setParameterValue(device, prefix + "ImportedProfile",
         oneWay ? "1W: keine bestätigte Aktor-Erkennung" :
         discovery.metadataValid ? "Profil " + discovery.protocolType + "/" + discovery.subtype :

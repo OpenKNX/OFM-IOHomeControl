@@ -536,3 +536,20 @@ test("automatic import preserves per-field manual permissions when enabling sele
     check(value(d,"ChannelSelection")===1&&value(d,"Active")===1,"automatic channel not enabled");
     check(value(d,"RecognitionOrientationAuto")===0&&value(d,"OrientationObjects")===0,"import forced manually disabled slats");
 });
+
+test("private heating KO bank requires online paired Atlantic 52/1",function(){
+ var cases=[{type:52,sub:1,mfr:12,flags:0x1C,expected:1},
+ {type:52,sub:1,mfr:2,flags:0x1C,expected:0},{type:52,sub:0,mfr:12,flags:0x1C,expected:0},
+ {type:22,sub:1,mfr:12,flags:0x1C,expected:0},{type:14,sub:0,mfr:12,flags:0x1C,expected:0},
+ {type:1023,sub:0,mfr:12,flags:0x1C,expected:0},{type:52,sub:1,mfr:12,flags:0x3C,expected:0},
+ {type:52,sub:1,mfr:12,flags:0x0C,expected:0}];
+ for(var i=0;i<cases.length;i++){
+  var c=cases[i],d=deviceWith({});d.params.HTG_c1Qualified={value:1};d.params.IOHC_c1HeatingQualified={value:1};
+  var response=snapshot(c.flags,c.type,c.sub);response[9]=c.mfr;
+  IOHC_queryRecognition(d,onlineWith(response),{channelIndex:1},false);
+  check(d.params.HTG_c1Qualified.value===c.expected&&d.params.IOHC_c1HeatingQualified.value===c.expected,"heating qualification case "+i);
+ }
+ var old=deviceWith({});old.params.HTG_c1Qualified={value:1};
+ IOHC_queryRecognition(old,onlineWith([3]),{channelIndex:1},false);
+ check(old.params.HTG_c1Qualified.value===0,"old firmware must clear stale heating qualification");
+});

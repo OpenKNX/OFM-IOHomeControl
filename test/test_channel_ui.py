@@ -185,9 +185,14 @@ class ChannelUiTest(unittest.TestCase):
         def objects(value):
             branches = [w for w in core.findall("k:when", NS) if str(value) in w.get("test").split()]
             self.assertEqual(len(branches), 1)
-            self.assertIsNone(branches[0].find("k:choose", NS), "Manual KOs must not depend on calculated flags")
-            return {int(re.search(r"%CC%(\d{3})_R", ref.get("RefId"))[1])
-                    for ref in branches[0].findall("k:ComObjectRefRef", NS)}
+            if value==6:
+                guard=branches[0].find("k:choose",NS)
+                self.assertIn("140_R",guard.get("ParamRefId"))
+                refs=branches[0].findall(".//k:ComObjectRefRef",NS)
+            else:
+                self.assertIsNone(branches[0].find("k:choose", NS), "Manual KOs must not depend on calculated flags")
+                refs=branches[0].findall("k:ComObjectRefRef",NS)
+            return {int(re.search(r"%CC%(\d{3})_R", ref.get("RefId"))[1]) for ref in refs}
         # This reproduces ETS before hidden DeviceType/feature calculations settle:
         # only the visible selection is available; all core objects must already be exposed.
         for value in (16,17,18,19,35,36):
@@ -195,7 +200,7 @@ class ChannelUiTest(unittest.TestCase):
         self.assertEqual(objects(24), {3,6}) # binary garage door
         self.assertEqual(objects(25), {0,3,6}) # dimmable light
         self.assertEqual(objects(26), {3,6}) # binary light
-        self.assertEqual(objects(6), {20,22,23,24}) # Cozy
+        self.assertEqual(objects(6), {20,21,22,24}) # guarded heating: setpoint feedback, read-only window
         for row in rows:
             if row["control"]:
                 self.assertTrue(objects(row["value"]), row["label"])
@@ -1127,7 +1132,7 @@ class ChannelUiTest(unittest.TestCase):
         param = self.template.find(".//k:Parameter[@Name='c%C%DiagnosticObjects']", NS)
         self.assertEqual(param.get('Value'), '0')
         dynamic_refs = {r.get('RefId') for r in self.template.findall('.//k:Dynamic//k:ComObjectRefRef', NS)}
-        for number in (12, 13, 21):
+        for number in (12, 13):
             self.assertFalse(any(f"%CC%{number:03d}_R-" in ref for ref in dynamic_refs))
 
     def test_import_uses_exact_profile_and_subprofile_for_ets_presentation(self) -> None:
@@ -1178,6 +1183,27 @@ class ChannelUiTest(unittest.TestCase):
         self.assertRegex(documentation, r"\bKn\+\d+\b")
         self.assertIsNone(re.search(r"\bKO\s*[-#:]?\s*\d+\b", documentation))
         self.assertIsNone(re.search(r"^\|\s*\d+\s*\|", documentation, re.MULTILINE))
+
+    def test_heating_bank_is_append_only_and_profile_qualified(self):
+        heating=parse("IoHomeHeating.templ.xml")
+        objects=heating.findall(".//k:ComObject",NS)
+        self.assertEqual(len(objects),10)
+        self.assertEqual({o.get("Number") for o in objects},{f"%K{i}%" for i in range(10)})
+        for o in objects:
+            self.assertIn(o.get("WriteFlag"),("Enabled","Disabled"))
+        self.assertEqual(heating.find(".//k:Union",NS).get("SizeInBit"),"24")
+        enabled=heating.find(".//k:Parameter[@Name='c%C%Enabled']",NS)
+        self.assertEqual(enabled.get("Value"),"0")
+        qualified=heating.find(".//k:Parameter[@Name='c%C%Qualified']",NS)
+        self.assertEqual(qualified.get("Value"),"0"); self.assertEqual(qualified.get("Access"),"Read")
+        ui=parse("IoHomeHeating.ui.xml")
+        condition=ui.find("k:Dynamic/k:choose",NS)
+        self.assertIn("004_R",condition.get("ParamRefId"))
+        self.assertEqual(condition.find("k:when",NS).get("test"),"1")
+        window=self.template.find(".//k:ComObject[@Name='CH%C%CozyWindow']",NS)
+        self.assertEqual(window.get("WriteFlag"),"Disabled");self.assertEqual(window.get("TransmitFlag"),"Enabled")
+        mode=self.template.find(".//k:ComObject[@Name='CH%C%CozyMode']",NS)
+        self.assertEqual(mode.get("DatapointType"),"DPST-5-10")
 
 
 if __name__ == "__main__":

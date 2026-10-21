@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns="http://knx.org/xml/project/20" xmlns:op="http://github.com/OpenKNX/OpenKNXproducer"><ManufacturerData><Manufacturer RefId="M-00FA"><ApplicationPrograms>
+<ApplicationProgram Id="%AID%" ProgramType="ApplicationProgram" MaskVersion="MV-07B0" Name="IOHCHeating" LoadProcedureStyle="MergedProcedure" PeiType="0" DefaultLanguage="de" DynamicTableManagement="false" Linkable="true" MinEtsVersion="4.0" ApplicationNumber="0" ApplicationVersion="0"><Static><ParameterTypes>
+<ParameterType Id="%AID%_PT-HTGInterval" Name="HTGInterval"><TypeNumber Type="unsignedInt" SizeInBit="16" minInclusive="0" maxInclusive="65535"/></ParameterType>
+</ParameterTypes><Parameters>
+<Parameter Id="%AID%_P-%TT%%CC%004" Name="c%C%Qualified" ParameterType="%AID%_PT-IOHCCheckBox" Text="Atlantic 52/1 aus Gerät bestätigt" Value="0" Access="Read" op:configTransfer="never"/>
+<Union SizeInBit="24"><Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0"/>
+<Parameter Id="%AID%_UP-%TT%%CC%001" Name="c%C%Enabled" ParameterType="%AID%_PT-IOHCCheckBox" Offset="0" BitOffset="0" Text="Private Atlantic-Heizregister verwenden" Value="0"/>
+<Parameter Id="%AID%_UP-%TT%%CC%002" Name="c%C%MaxObject" ParameterType="%AID%_PT-IOHCCheckBox" Offset="0" BitOffset="1" Text="Maximalen Sollwert als Diagnoseobjekt anzeigen" Value="0"/>
+<Parameter Id="%AID%_UP-%TT%%CC%003" Name="c%C%PollSeconds" ParameterType="%AID%_PT-HTGInterval" Offset="1" BitOffset="0" Text="Abfragezyklus in Sekunden (0=aus, sonst mindestens 60)" Value="0"/>
+</Union></Parameters><ParameterRefs>
+<ParameterRef Id="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101" RefId="%AID%_UP-%TT%%CC%001"/>
+<ParameterRef Id="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201" RefId="%AID%_UP-%TT%%CC%002"/>
+<ParameterRef Id="%AID%_UP-%TT%%CC%003_R-%TT%%CC%00301" RefId="%AID%_UP-%TT%%CC%003"/>
+<ParameterRef Id="%AID%_P-%TT%%CC%004_R-%TT%%CC%00401" RefId="%AID%_P-%TT%%CC%004"/>
+</ParameterRefs><ComObjectTable>
+<ComObject Id="%AID%_O-%TT%%CC%000" Name="c%C%RoomTemperature" Text="Kanal %C% Raumtemperatur" FunctionText="Raumtemperatur" ObjectSize="2 Bytes" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-1" Number="%K0%"/>
+<ComObject Id="%AID%_O-%TT%%CC%001" Name="c%C%SetpointFeedback" Text="Kanal %C% Sollwert Rückmeldung" FunctionText="Sollwert Rückmeldung" ObjectSize="2 Bytes" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-1" Number="%K1%"/>
+<ComObject Id="%AID%_O-%TT%%CC%002" Name="c%C%ModeFeedback" Text="Kanal %C% Istmodus 0=Auto 1=Manuell 2=Programm 3=Extern 4=Aus" FunctionText="Istmodus 0=Auto 1=Manuell 2=Programm 3=Extern 4=Aus" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-10" Number="%K2%"/>
+<ComObject Id="%AID%_O-%TT%%CC%003" Name="c%C%Valid" Text="Kanal %C% Gültigkeit Bit0=Modus 1=Max 2=Soll 3=Erkennung 4=Fenster 5=Raum 6=Regler" FunctionText="Gültigkeit Bit0=Modus 1=Max 2=Soll 3=Erkennung 4=Fenster 5=Raum 6=Regler" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-10" Number="%K3%"/>
+<ComObject Id="%AID%_O-%TT%%CC%004" Name="c%C%Heating" Text="Kanal %C% Heizelement aktiv" FunctionText="Heizelement aktiv" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-11" Number="%K4%"/>
+<ComObject Id="%AID%_O-%TT%%CC%005" Name="c%C%Window" Text="Kanal %C% Fensterkontakt Rückmeldung" FunctionText="Fensterkontakt Rückmeldung" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-19" Number="%K5%"/>
+<ComObject Id="%AID%_O-%TT%%CC%006" Name="c%C%DetectionSet" Text="Kanal %C% Fenstererkennung freigeben" FunctionText="Fenstererkennung freigeben" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-3" Number="%K6%"/>
+<ComObject Id="%AID%_O-%TT%%CC%007" Name="c%C%DetectionFeedback" Text="Kanal %C% Fenstererkennung Status" FunctionText="Fenstererkennung Status" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-3" Number="%K7%"/>
+<ComObject Id="%AID%_O-%TT%%CC%008" Name="c%C%MaxSetpoint" Text="Kanal %C% Maximaler Sollwert" FunctionText="Maximaler Sollwert" ObjectSize="2 Bytes" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-1" Number="%K8%"/>
+<ComObject Id="%AID%_O-%TT%%CC%009" Name="c%C%Read" Text="Kanal %C% Heizungswerte abfragen" FunctionText="Heizungswerte abfragen" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-17" Number="%K9%"/>
+</ComObjectTable><ComObjectRefs>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" RefId="%AID%_O-%TT%%CC%000"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" RefId="%AID%_O-%TT%%CC%001"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" RefId="%AID%_O-%TT%%CC%002"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" RefId="%AID%_O-%TT%%CC%003"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" RefId="%AID%_O-%TT%%CC%004"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" RefId="%AID%_O-%TT%%CC%005"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" RefId="%AID%_O-%TT%%CC%006"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" RefId="%AID%_O-%TT%%CC%007"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" RefId="%AID%_O-%TT%%CC%008"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" RefId="%AID%_O-%TT%%CC%009"/>
+</ComObjectRefs></Static><Dynamic/></ApplicationProgram></ApplicationPrograms></Manufacturer></ManufacturerData></KNX>

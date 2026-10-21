@@ -2460,6 +2460,12 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
 #ifdef LIM_KoBlockOffset
     if(LIM_KoCalcChannel(lAsap)>=0) {logDebugP("Limitation KO is output-only; input ignored");return;}
 #endif
+#ifdef HTG_KoBlockOffset
+    const int8_t heatingChannel=HTG_KoCalcChannel(lAsap);
+    if(heatingChannel>=0&&heatingChannel<mNumChannels&&mChannels[heatingChannel]){
+        mChannels[heatingChannel]->processHeatingInputKo((lAsap-HTG_KoBlockOffset)%HTG_KoBlockSize,iKo);return;
+    }
+#endif
 #ifdef PRF_KoBlockOffset
     const int8_t profileChannel = PRF_KoCalcChannel(lAsap);
     if (profileChannel >= 0 && profileChannel < mNumChannels) {
@@ -2578,11 +2584,14 @@ void IoHomecontrol::restoreAssignmentReceipts()
         { logInfoP("Assignment recovery conflict channel=%u; no overwrite",i+1);continue; }
         if(ch->getNodeId()==receipt.node && std::memcmp(ch->getEncryptionKey(),receipt.key,16))
         { logInfoP("Assignment recovery key conflict channel=%u; no overwrite",i+1);continue; }
-        if(ch->getNodeId()==receipt.node && (!kIoHomeStandaloneDiag || ch->hasProtocolIdentity())) continue; // retain richer restored metadata
+        if(ch->getNodeId()==receipt.node && ch->hasProtocolIdentity()) continue; // retain richer restored metadata
         ch->setNodeId(receipt.node); ch->setEncryptionKey(receipt.key);
         IoHomeProtocolIdentity identity; identity.valid=receipt.metadataValid;
         identity.fullMetadata=false;identity.ioAddress=receipt.node; // receipt is only a partial metadata snapshot
         identity.profile=receipt.profile;identity.subProfile=receipt.subProfile;identity.manufacturerId=receipt.manufacturer;
+        identity.powerSaveModeRaw=receipt.power;
+        identity.powerSaveMode=receipt.power==IOHC_POWER_SAVE_ALWAYS_ALIVE?IoHomePowerMode::AlwaysAlive:
+            receipt.power==IOHC_POWER_SAVE_LOW_POWER?IoHomePowerMode::LowPower:IoHomePowerMode::Unknown;
         ch->onProtocolIdentity(receipt.node,identity);
     }
 }
@@ -4225,11 +4234,10 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohcNN send1w-type open|close|stop|vent|force [TYPE]", "Send 1W Execute with explicit broadcast type");
     openknx.console.printHelpLine("iohcNN 1wacei [HH]", "Show/set 1W Execute ACEI (priority) byte, e.g. 61 for Velux");
     openknx.console.printHelpLine("iohcNN cozy temp TT", "Set thermostat temp (TT=tenths, 70-280)");
-    openknx.console.printHelpLine("iohcNN cozy mode MM", "Set thermostat mode (0-3)");
-    openknx.console.printHelpLine("iohcNN cozy presence 0/1", "Set presence on/off");
-    openknx.console.printHelpLine("iohcNN cozy window 0/1", "Set window open/close");
-    openknx.console.printHelpLine("iohcNN cozy poweron", "Send power on");
-    openknx.console.printHelpLine("iohcNN cozy midnight", "Send midnight sync");
+    openknx.console.printHelpLine("iohcNN cozy mode MM", "Request raw Atlantic mode 0/1/2/4 with readback");
+    openknx.console.printHelpLine("iohcNN cozy detection 0/1", "Enable/disable window detection (0106), never sensor state");
+    openknx.console.printHelpLine("iohcNN cozy poweron", "Read opaque 012C list; no power writer");
+    openknx.console.printHelpLine("iohcNN cozy midnight", "Read opaque 0130 block; no clock writer");
     openknx.console.printHelpLine("iohc remote list", "List tracked remotes");
     openknx.console.printHelpLine("iohc remote add ADDR NAME", "Add remote (hex addr)");
     openknx.console.printHelpLine("iohc remote del ADDR", "Remove remote");
@@ -6906,7 +6914,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             !parseChannelIndex(lCozyArgs.substr(0, lSpace1), mNumChannels, lIdx) ||
             !mChannels[lIdx]->isPaired())
         {
-            logInfoP("Usage: iohcNN cozy temp|mode|presence|window|poweron|midnight [VALUE]");
+            logInfoP("Usage: iohcNN cozy temp|mode|detection|poweron|midnight [VALUE]");
             return true;
         }
 
@@ -6917,63 +6925,17 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         uint32_t lValue = 0;
         const bool lHasValue = parseUnsignedDecimal(lValueText, lValue);
 
-        if (lAction == "temp" && lHasValue)
-        {
-            if (lValue < IOHC_COZY_TEMP_MIN_TENTHS || lValue > IOHC_COZY_TEMP_MAX_TENTHS)
-            {
-                logInfoP("Cozy temperature must be %u-%u tenths", IOHC_COZY_TEMP_MIN_TENTHS,
-                         IOHC_COZY_TEMP_MAX_TENTHS);
-                return true;
-            }
-            const uint16_t lTemp = static_cast<uint16_t>(lValue);
-            mController.sendCommand(mChannels[lIdx]->getNodeId(),
-                                    mChannels[lIdx]->getEncryptionKey(),
-                                    IoHomeCommand::WritePrivate, 0x03, lTemp);
-            logInfoP("Cozy: set temperature %u (tenths) on channel %d",
-                     static_cast<unsigned>(lTemp), lIdx + 1);
-        }
-        else if (lAction == "mode" && lHasValue)
-        {
-            uint8_t lMode = static_cast<uint8_t>(lValue);
-            mController.sendCommand(mChannels[lIdx]->getNodeId(),
-                                    mChannels[lIdx]->getEncryptionKey(),
-                                    IoHomeCommand::WritePrivate, 0x04, lMode);
-            logInfoP("Cozy: set mode %d on channel %d", lMode, lIdx + 1);
-        }
-        else if (lAction == "presence" && lHasValue)
-        {
-            uint8_t lVal = static_cast<uint8_t>(lValue);
-            mController.sendCommand(mChannels[lIdx]->getNodeId(),
-                                    mChannels[lIdx]->getEncryptionKey(),
-                                    IoHomeCommand::WritePrivate, 0x10, lVal);
-            logInfoP("Cozy: set presence %s on channel %d", lVal ? "ON" : "OFF", lIdx + 1);
-        }
-        else if (lAction == "window" && lHasValue)
-        {
-            uint8_t lVal = static_cast<uint8_t>(lValue);
-            mController.sendCommand(mChannels[lIdx]->getNodeId(),
-                                    mChannels[lIdx]->getEncryptionKey(),
-                                    IoHomeCommand::WritePrivate, 0x0E, lVal);
-            logInfoP("Cozy: set window %s on channel %d", lVal ? "OPEN" : "CLOSED", lIdx + 1);
-        }
-        else if (lAction == "poweron")
-        {
-            mController.sendCommand(mChannels[lIdx]->getNodeId(),
-                                    mChannels[lIdx]->getEncryptionKey(),
-                                    IoHomeCommand::WritePrivate, 0x0C, 0);
-            logInfoP("Cozy: power on channel %d", lIdx + 1);
-        }
-        else if (lAction == "midnight")
-        {
-            mController.sendCommand(mChannels[lIdx]->getNodeId(),
-                                    mChannels[lIdx]->getEncryptionKey(),
-                                    IoHomeCommand::WritePrivate, 0x00, 0);
-            logInfoP("Cozy: midnight sync on channel %d", lIdx + 1);
-        }
-        else
-        {
-            logInfoP("Invalid cozy command: %s", lCozyArgs.c_str());
-        }
+        bool queued=false;
+        auto *channel=mChannels[lIdx];
+        if(lAction=="temp"&&lHasValue&&lValue>=70&&lValue<=280)
+            queued=mController.requestHeatingRegister(channel,0x0103,true,lValue/10.f);
+        else if(lAction=="mode"&&lHasValue&&lValue<=4)
+            queued=mController.requestHeatingRegister(channel,0x0100,true,float(lValue));
+        else if(lAction=="detection"&&lHasValue&&lValue<=1)
+            queued=mController.requestHeatingRegister(channel,0x0106,true,float(lValue));
+        else if(lAction=="poweron"&&lValueText.empty())queued=mController.requestHeatingRegister(channel,0x012C);
+        else if(lAction=="midnight"&&lValueText.empty())queued=mController.requestHeatingRegister(channel,0x0130);
+        logInfoP("Heating request=%s; window sensor is read-only, presence writer unqualified; writes require readback",queued?"queued":"blocked");
         return true;
     }
 
