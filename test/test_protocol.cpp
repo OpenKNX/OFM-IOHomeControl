@@ -21710,3 +21710,61 @@ TEST(controller_moto_authentication_without_final_reply_never_claims_actuation)
     ASSERT_EQ(c.lastTwoWayOutcome().result,IoHomeCommandExchangeResult::AuthenticatedUnconfirmed);
     ioHomeTestAdvanceMillis(6000); c.loop(); ASSERT_EQ(c.radio().testTransmitCount(),sent);
 }
+
+TEST(controller_legacy_1w_use_case_has_explicit_2w_config_lifecycle)
+{
+    // Synthetic orchestration of the OVPd use case for a known paired 2W
+    // actuator. This is not a default requirement for pure 1W products.
+    const uint8_t key[16]={1}, challenge[6]={1,2,3,4,5,6};
+    IoHomeController c; IoHomecontrol m; IoHomecontrolChannel actuator,remote;
+    initPaired2WControllerForTest(c,m,actuator,0x831F2A,0x7E9E6E,key);
+    c.setSystemKey(key);
+    m.testSetChannel(1,&remote); remote.setIs1W(true);
+    remote.setConfigured1WTargetNodeId(0x7E9E6E);
+    remote.setOneWayControllerNodeId(0x831F2A); remote.setOneWayControllerKey(key);
+    remote.setEncryptionKey(key); remote.setOneWayControllerManufacturer(1);
+    remote.setConfigured1WEnrollmentFinalizer(OneWayEnrollmentFinalizer::StopDown);
+    for (uint8_t config : {0,2}) {
+        ASSERT_TRUE(c.sendCommand(0x7E9E6E,key,IoHomeCommand::Discover2ERequest,config));
+        IoHomeFrame request,response; ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+        ASSERT_EQ(request.commandId,IoHomeCommand::Discover2ERequest);
+        ASSERT_EQ(request.data[0],config);
+        buildPairChallengeRequestFrame(response,0x831F2A,0x7E9E6E,challenge);
+        ASSERT_TRUE(queueControllerResponse(c,response));
+        buildSimpleResponseFrame(response,0x831F2A,0x7E9E6E,IoHomeCommand::Discover2EResponse,&config,1);
+        ASSERT_TRUE(queueControllerResponse(c,response));
+        ASSERT_EQ(c.state(),ControllerState::Idle);
+        ASSERT_EQ(c.lastTwoWayOutcome().result,IoHomeCommandExchangeResult::Completed);
+        if (config==0) {
+            ASSERT_TRUE(c.startPairing1W(1,0x7E9E6E,Pairing1WMode::RemoveAdd));
+            for (unsigned step=0;step<20 && c.state()!=ControllerState::PairComplete;++step) {
+                c.loop();
+                switch(c.state()) {
+                case ControllerState::PairWait1WRemove:
+                case ControllerState::PairWait1WKeyTransfer:
+                case ControllerState::PairWait1WFinalizerStop:
+                case ControllerState::PairWait1WFinalizerDown:
+                    finishCurrentBlind1WPairingTxForTest(c); break;
+                case ControllerState::PairWait1WFinalizerGap:
+                    ioHomeTestAdvanceMillis(IOHC_1W_ENROLL_FINALIZER_DELAY_MS); break;
+                default: break;
+                }
+            }
+            ASSERT_EQ(c.state(),ControllerState::PairComplete);
+            ASSERT_EQ(remote.getSequence1W(),4U); // REMOVE, shared ADD sequence, STOP, DOWN
+            c.loop(); ASSERT_EQ(c.state(),ControllerState::Idle);
+        }
+    }
+    // Independent post-close status read: compare LastMaster explicitly,
+    // including a negative value. Completion of the 1W burst is not proof.
+    for (uint32_t lastMaster : {0x831F2AU,0x112233U}) {
+        ASSERT_TRUE(c.sendCommand(0x7E9E6E,key,IoHomeCommand::Private,3));
+        IoHomeFrame request,response; ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+        uint8_t status[14]={1,0,0,0,0,0,0,0,0,0,0,0,0,0};
+        status[8]=uint8_t(lastMaster>>16); status[9]=uint8_t(lastMaster>>8); status[10]=uint8_t(lastMaster);
+        buildPrivateResponseFrame(response,0x831F2A,0x7E9E6E,status,14);
+        ASSERT_TRUE(queueControllerResponse(c,response));
+        IoHomeMpFpReply feedback; ASSERT_TRUE(ioHomeDecodeMpFpReply(response.data,response.dataLen,feedback));
+        ASSERT_EQ(feedback.lastMaster==c.getOwnNodeId(),lastMaster==0x831F2AU);
+    }
+}
