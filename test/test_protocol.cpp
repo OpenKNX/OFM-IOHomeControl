@@ -22370,3 +22370,21 @@ TEST(controller_discovery_atlantic_offer_preserves_an_occupied_channel_metadata)
     ASSERT_EQ(ch.productContextRevision(),revision);ASSERT_EQ(openknx.flash.saveCount,saves);
     ASSERT_EQ(ch.getNodeId(),0xB6BDFBU);ASSERT_MEM_EQ(ch.getEncryptionKey(),key,16);
 }
+
+TEST(heating_cache_memory_budget_preserves_maximum_raw_reply_and_unknown_view)
+{
+    // REG1 IP release has a constrained DRAM linker segment. Cache growth must
+    // be checked against that target instead of silently consuming its margin.
+    static_assert(sizeof(IoHomeHeating::Observation)<=44,"Heating observation RAM regression");
+    IoHomeHeating::Value value;uint8_t data[23];
+    for(uint8_t i=0;i<sizeof(data);++i)data[i]=uint8_t(0x80+i);
+    ASSERT_TRUE(IoHomeHeating::decodeValue(*IoHomeHeating::descriptor(0x0130),data,sizeof(data),value));
+    ASSERT_EQ(value.length,sizeof(data));ASSERT_MEM_EQ(value.bytes,data,sizeof(data));ASSERT_TRUE(!value.valid);
+    IoHomeController first,second;
+    const auto &unknown=first.heatingState(16);
+    ASSERT_EQ(&unknown,&second.heatingState(255));
+    ASSERT_EQ(unknown.result,IoHomeHeating::State::Result::Unknown);
+    ASSERT_EQ(unknown.node,0U);ASSERT_TRUE(!unknown.busy);
+    for(const auto &sample:unknown.values)ASSERT_TRUE(!sample.observed&&!sample.decoded.valid);
+    for(uint8_t channel=0;channel<16;++channel)ASSERT_TRUE(&first.heatingState(channel)!=&unknown);
+}

@@ -35,7 +35,10 @@ inline bool pairingNode(const IoHomeProtocolIdentity &id){
 inline bool nextNode(uint32_t pairing,uint32_t &node){
  if(!pairing||pairing>=0xFFFFFF)return false;node=pairing+1;return true;
 }
-struct Value {bool valid=false,sensorFault=false;float value=0;uint16_t raw=0;uint8_t bytes[23]{},length=0;};
+// Put naturally aligned fields first: this cache is repeated for every register
+// and channel. Keep all 23 raw bytes; avoid four bytes of padding per value.
+struct Value {float value=0;uint16_t raw=0;uint8_t bytes[23]{},length=0;bool valid=false,sensorFault=false;};
+static_assert(sizeof(Value)==32,"Heating values must fit the ESP32 static RAM budget");
 inline bool decodeValue(const Descriptor &d,const uint8_t *data,uint8_t length,Value &out){
  if(!data||!length||length>sizeof(out.bytes)||(d.width&&length!=d.width))return false;
  Value v;v.length=length;std::memcpy(v.bytes,data,length);v.raw=data[0]|(length>1?uint16_t(data[1])<<8:0);

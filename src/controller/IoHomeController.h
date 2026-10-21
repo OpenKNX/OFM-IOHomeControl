@@ -624,7 +624,7 @@ public:
   bool requestHeatingRegister(IoHomecontrolChannel *channel,uint16_t reg,bool write=false,float value=0,bool background=false);
   bool refreshHeating(uint8_t channel);
   bool configureHeatingPoll(uint8_t channel,uint16_t seconds);
-  const IoHomeHeating::State &heatingState(uint8_t channel) const {return mHeating[channel<16?channel:16];}
+  const IoHomeHeating::State &heatingState(uint8_t channel) const {return channel<16?mHeating[channel]:kInvalidHeatingState;}
   void printHeatingStatus(uint8_t channel) const;
   bool sendRawTwoWayExecute(IoHomecontrolChannel *iChannel,
                             const uint8_t *iPayload, uint8_t iPayloadLen,
@@ -1721,7 +1721,8 @@ private:
   void processAtlanticRollCallFrame();
   bool selectSavedHeatingKey();
   void stopAtlantic(AtlanticStage stage,const char *reason);
-  IoHomeHeating::State mHeating[17]{}; // slot 16 is an immutable invalid-channel view
+  IoHomeHeating::State mHeating[16]{};
+  inline static constexpr IoHomeHeating::State kInvalidHeatingState{}; // shared read-only invalid-channel view
   uint32_t mNextHeatingToken=0,mHeatingNextAdmissionMs=0;
   uint8_t mHeatingNextChannel=0;
   bool heatingContextMatches(const IoHomeQueueEntry &entry) const;
