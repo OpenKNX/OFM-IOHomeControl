@@ -2215,6 +2215,119 @@ bool IoHomeController::sendOneWayChannelRawExecute(IoHomecontrolChannel *iChanne
     return queuePush(lEntry);
 }
 
+bool IoHomeController::requestHeatingRegister(IoHomecontrolChannel *channel,uint16_t reg,bool write,float value,bool background)
+{
+    const uint8_t c=channelIndexFor(channel);
+    if(!channel||c>=16||!channel->isPaired()||channel->is1W()||
+       !IoHomeHeating::actuator(channel->getProtocolIdentity())||!mModule||!mModule->managementRequestsAllowed())return false;
+    uint8_t data[6]{};const uint8_t length=IoHomeHeating::build(reg,write,value,data);if(!length)return false;
+    auto &state=mHeating[c];
+    if(state.node && (state.node!=channel->getNodeId() || state.revision!=channel->productContextRevision() ||
+        state.gateway!=mOwnNodeId || std::memcmp(state.key,channel->getEncryptionKey(),16)))state.invalidate();
+    if(state.busy)return false;
+    // Estimate both local transmissions before admission, independently of a
+    // debug bypass. The central producer still enforces LBT and every actual TX.
+    const uint32_t cost=estimatedTxAirtimeMs(9+length,48)+estimatedTxAirtimeMs(15,authResponsePreamble());
+    const uint8_t frequency=frequencyIndexForHz(kNormal2WTxFreqHz);
+    mRfDutyBudget.advance(millis());
+    if(mRfDutyBudget.used(kNormal2WTxFreqHz)+cost>IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(kNormal2WTxFreqHz))) {
+        state.result=IoHomeHeating::State::Result::QuotaDenied;state.nextPollMs=millis()+30000;return false;
+    }
+    IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
+    entry.command=IoHomeCommand::WritePrivate;entry.sourceChannelIndex=c;entry.twoWayTxFreqIdx=frequency;
+    entry.productContextRevision=channel->productContextRevision();entry.managementRead=true;
+    std::memcpy(entry.managementKey,entry.encKey,16);entry.heatingLength=length;std::memcpy(entry.heatingData,data,length);
+    if(++mNextHeatingToken==0)++mNextHeatingToken;entry.heatingToken=mNextHeatingToken;
+    entry.maxAttempts=write?1:2;entry.active=true;entry.background=background;
+    if(!queuePush(entry))return false;
+    state.node=channel->getNodeId();state.gateway=mOwnNodeId;state.revision=channel->productContextRevision();
+    std::memcpy(state.key,entry.managementKey,16);state.token=entry.heatingToken;
+    state.pendingRegister=reg;state.busy=true;state.initialRead=true;state.result=IoHomeHeating::State::Result::Queued;
+    if(write)state.values[IoHomeHeating::index(reg)]={};
+    return true;
+}
+
+bool IoHomeController::heatingContextMatches(const IoHomeQueueEntry &entry) const
+{
+    if(!entry.heatingToken)return true;
+    if(entry.sourceChannelIndex>=16)return false;
+    const auto &state=mHeating[entry.sourceChannelIndex];
+    const auto *ch=mModule?mModule->getChannel(entry.sourceChannelIndex):nullptr;
+    return ch&&!ch->is1W()&&IoHomeHeating::actuator(ch->getProtocolIdentity())&&
+        state.busy&&state.token==entry.heatingToken&&state.gateway==mOwnNodeId&&
+        state.node==entry.destNodeId&&state.revision==ch->productContextRevision()&&
+        sampleIdentityMatches(entry.sourceChannelIndex,entry.destNodeId,entry.managementKey,state.revision);
+}
+
+void IoHomeController::finishHeating(const IoHomeQueueEntry &entry,IoHomeCommandExchangeResult result)
+{
+    if(!entry.heatingToken||entry.sourceChannelIndex>=16)return;
+    auto &state=mHeating[entry.sourceChannelIndex];if(state.token!=entry.heatingToken)return;
+    if(!heatingContextMatches(entry)){state.invalidate();state.result=IoHomeHeating::State::Result::IdentityChanged;return;}
+    state.busy=false;
+    if(result!=IoHomeCommandExchangeResult::Completed){
+        state.result=mLastTxDutyDenied?IoHomeHeating::State::Result::QuotaDenied:
+            result==IoHomeCommandExchangeResult::ExplicitlyRejected?IoHomeHeating::State::Result::Rejected:
+            state.result==IoHomeHeating::State::Result::Invalid?IoHomeHeating::State::Result::Invalid:IoHomeHeating::State::Result::Timeout;
+        state.nextPollMs=millis()+30000;return;
+    }
+    const uint16_t reg=uint16_t(entry.heatingData[2])<<8|entry.heatingData[3];
+    auto *channel=channelForQueueEntry(entry);
+    if(entry.heatingData[1]==0x61){
+        state.result=IoHomeHeating::State::Result::ReadbackPending;
+        if(!requestHeatingRegister(channel,reg))state.result=IoHomeHeating::State::Result::Invalid;
+        else state.result=IoHomeHeating::State::Result::ReadbackPending;
+        return;
+    }
+    IoHomeHeating::Value value;
+    if(!IoHomeHeating::decodeReply(entry.heatingData,entry.heatingLength,mRxFrame.data,mRxFrame.dataLen,value)) {
+        state.result=IoHomeHeating::State::Result::Invalid;return;
+    }
+    auto &observation=state.values[IoHomeHeating::index(reg)];
+    observation={value,static_cast<uint32_t>(millis()),entry.heatingToken,true};
+    state.result=value.sensorFault?IoHomeHeating::State::Result::SensorFault:IoHomeHeating::State::Result::Observed;
+    if(channel)channel->onHeatingValue(reg,value);
+}
+
+bool IoHomeController::configureHeatingPoll(uint8_t c,uint16_t seconds)
+{
+    auto *ch=mModule&&c<16?mModule->getChannel(c):nullptr;
+    if(!ch||ch->is1W()||!ch->isPaired()||!IoHomeHeating::actuator(ch->getProtocolIdentity())||(seconds&&seconds<60))return false;
+    mHeating[c].pollIntervalMs=uint32_t(seconds)*1000;mHeating[c].nextPollMs=millis()+1000;return true;
+}
+
+void IoHomeController::serviceHeating()
+{
+    if(!mModule||!mModule->managementRequestsAllowed())return;
+    for(uint8_t c=0;c<16;++c){
+        auto &state=mHeating[c];auto *ch=mModule->getChannel(c);
+        if(state.node&&(!ch||!IoHomeHeating::actuator(ch->getProtocolIdentity())||state.gateway!=mOwnNodeId||
+            !sampleIdentityMatches(c,state.node,state.key,state.revision))) {state.invalidate();continue;}
+        if(!ch||ch->is1W()||!ch->isPaired()||!IoHomeHeating::actuator(ch->getProtocolIdentity()))continue;
+        if(state.busy||!idleForManagedOperation()||int32_t(millis()-mHeatingNextAdmissionMs)<0)continue;
+        if(!state.initialRead || (state.pollIntervalMs && int32_t(millis()-state.nextPollMs)>=0)){
+            const uint16_t reg=!state.initialRead?0x0115:IoHomeHeating::registers[state.pollIndex%7].reg;
+            const bool queued=requestHeatingRegister(ch,reg,false,0,true);
+            mHeatingNextAdmissionMs=millis()+10000; // global spacing, including 16-channel startup
+            if(queued){state.pollIndex=(state.pollIndex+1)%7;state.nextPollMs=millis()+
+                (state.pollIntervalMs?state.pollIntervalMs/7:30000);}
+            return;
+        }
+    }
+}
+
+void IoHomeController::printHeatingStatus(uint8_t c) const
+{
+    if(c>=16)return;const auto &state=mHeating[c];
+    logInfoP("Heating channel=%u node=%06X result=%s busy=%u pollMs=%lu",c+1,state.node,
+        IoHomeHeating::resultName(state.result),state.busy,(unsigned long)state.pollIntervalMs);
+    for(uint8_t i=0;i<IoHomeHeating::count;++i){const auto &o=state.values[i];
+        logInfoP("  register=%04X name=%s observed=%u valid=%u value=%s raw_length=%u token=%lu timestampMs=%lu",
+            IoHomeHeating::registers[i].reg,IoHomeHeating::registers[i].name,o.observed,o.decoded.valid,
+            o.decoded.valid?std::to_string(o.decoded.value).c_str():"unknown",o.decoded.length,(unsigned long)o.token,(unsigned long)o.timestampMs);
+    }
+}
+
 bool IoHomeController::sendRawTwoWayExecute(IoHomecontrolChannel *iChannel,
                                             const uint8_t *iPayload, uint8_t iPayloadLen,
                                             bool iSingleAttempt)
@@ -4386,6 +4499,7 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
                                                    IoHomeCommandExchangeResult iResult)
 {
     if (iEntry.command == IoHomeCommand::Execute) logAttemptCounters("MoveDiagCounters",mExchangeDiagnostics.counters);
+    finishHeating(iEntry,iResult);
     finishLimitation(iEntry,iResult);
     if(iEntry.batteryDiagnostic) {
         const auto state=iResult==IoHomeCommandExchangeResult::Completed?IoHomeBatteryDiagnostic::State::Complete:
@@ -6758,6 +6872,7 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
 
 void IoHomeController::loop()
 {
+    serviceHeating();
     serviceLimitationRefresh();
     for(uint8_t c=0;c<16;++c) {
         auto &state=mRainStates[c];
@@ -7590,6 +7705,7 @@ void IoHomeController::processIdle()
                     if (mDiagnostic2WFrameVersion == 3)
                         mTxFrame.ctrlByte1 = (mTxFrame.ctrlByte1 & ~IOHC_CTRL1_VER_MASK) | 3;
                     resolveTwoWayPreamblePlan(mTxFrame, mCurrentCmd);
+                    if(mCurrentCmd.heatingToken){mCurrentCmd.twoWayPreamblePlan.fixedPreamble=48;mCurrentCmd.twoWayPreamblePlan.use=TwoWayWakeBeliefUse::NotLowPower;}
                 }
                 mState = ControllerState::TxPending;
             }
@@ -8126,6 +8242,26 @@ void IoHomeController::processResponse()
         return;
     }
 
+    if(mCurrentCmd.heatingToken){
+        if(!heatingContextMatches(mCurrentCmd)){
+            notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+            mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+        }
+        const bool expired=uint32_t(millis()-mExchangeStartMs)>=mCurrentCmd.sessionPolicy.totalBudgetMs ||
+            uint32_t(millis()-mStateTimer)>=mResponseTimeoutMs;
+        if(expired || (mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W)){mState=ControllerState::WaitResponse;return;}
+        if(mRxFrame.commandId==IoHomeCommand::WritePrivateResponse){
+            IoHomeHeating::Value value;
+            if(!mSawChallenge||!mAuthResponseSent ||
+               !IoHomeHeating::decodeReply(mCurrentCmd.heatingData,mCurrentCmd.heatingLength,mRxFrame.data,mRxFrame.dataLen,value)){
+                mHeating[mCurrentCmd.sourceChannelIndex].result=IoHomeHeating::State::Result::Invalid;
+                mState=ControllerState::WaitResponse;return;
+            }
+        } else if(mRxFrame.commandId!=IoHomeCommand::ChallengeRequest && mRxFrame.commandId!=IoHomeCommand::ErrorResponse){
+            mState=ControllerState::WaitResponse;return;
+        }
+    }
+
     if(mCurrentCmd.rcmToken) {
         if(mCurrentCmd.rcmToken!=mRcmToken || !mReceiveConfiguration.active()) {
             mCurrentCmd.active=false;mState=ControllerState::Idle;return;
@@ -8246,7 +8382,7 @@ void IoHomeController::processResponse()
     // These recovered read services cannot complete on an unrelated opcode
     // or the legacy descriptor's too-short Priority ACK.
     if(mCurrentCmd.statusMpFpProbe&&!managementIdentityMatches(mCurrentCmd)){mCurrentCmd.active=false;mState=ControllerState::Idle;return;}
-    if(mCurrentCmd.managementRead&&!mCurrentCmd.statusMpFpProbe&&!mCurrentCmd.limitationToken&&!mCurrentCmd.objectReadToken&&!mCurrentCmd.mpFpRead&&!mCurrentCmd.productActivationLength) {
+    if(mCurrentCmd.managementRead&&!mCurrentCmd.heatingToken&&!mCurrentCmd.statusMpFpProbe&&!mCurrentCmd.limitationToken&&!mCurrentCmd.objectReadToken&&!mCurrentCmd.mpFpRead&&!mCurrentCmd.productActivationLength) {
         if(!managementIdentityMatches(mCurrentCmd)) {
             const auto failed=mCurrentCmd;
             mCurrentCmd.active=false;mState=ControllerState::Idle;
@@ -10849,7 +10985,7 @@ void IoHomeController::updateCurrentFrequencyIndex(uint32_t iFrequencyHz)
 
 bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 {
-    if(!managementIdentityMatches(iEntry))return false;
+    if(!managementIdentityMatches(iEntry)||!heatingContextMatches(iEntry))return false;
     if(iEntry.limitationToken && (iEntry.sourceChannelIndex>=16||!mLimitations[iEntry.sourceChannelIndex].active||
        iEntry.limitationToken!=mLimitations[iEntry.sourceChannelIndex].snapshot.refreshToken))return false;
     if(iEntry.rcmToken && (iEntry.rcmToken!=mRcmToken ||
@@ -11293,6 +11429,11 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 
     case IoHomeCommand::WritePrivate:
     {
+        if(iEntry.heatingToken){
+            if(!heatingContextMatches(iEntry)||iEntry.heatingLength<4||iEntry.heatingLength>6)return false;
+            std::memcpy(mTxFrame.data,iEntry.heatingData,iEntry.heatingLength);mTxFrame.dataLen=iEntry.heatingLength;
+            mTxFrame.setLowPower(false);mTxFrame.hasHmac=false;mAuthResponseSent=false;break;
+        }
         // WritePrivate (0x20) — Cozy/Atlantic thermostat command
         // param = function selector (0x03=temp, 0x04=mode, etc.). Temperature
         // uses the full uint16_t param2; all other values remain one byte.

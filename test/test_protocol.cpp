@@ -21820,3 +21820,74 @@ TEST(heating_register_codec_captured_values_and_invalid_shapes)
  IoHomeProtocolIdentity id;id.valid=true;id.manufacturerId=12;id.profile=52;id.subProfile=1;ASSERT_TRUE(actuator(id));
  for(uint16_t profile:{14,22,1023}){id.profile=profile;ASSERT_TRUE(!actuator(id));}
 }
+
+static void initHeatingController(IoHomeController &c,IoHomecontrol &m,IoHomecontrolChannel &ch)
+{
+    const uint8_t key[16]={0x42};
+    initPaired2WControllerForTest(c,m,ch,0x60F823,0xB6BDFC,key);
+    IoHomeProtocolIdentity id;id.valid=true;id.fullMetadata=true;id.manufacturerId=12;id.profile=52;id.subProfile=1;
+    id.powerSaveMode=IoHomePowerMode::AlwaysAlive;id.ioAddress=0xB6BDFC;ch.onProtocolIdentity(0xB6BDFC,id);
+}
+static bool authenticateHeatingRequest(IoHomeController &c)
+{
+    const uint8_t challenge[6]={1,3,5,7,9,11};IoHomeFrame response;
+    buildPairChallengeRequestFrame(response,0x60F823,0xB6BDFC,challenge);
+    return queueControllerResponse(c,response);
+}
+TEST(controller_heating_reads_require_authenticated_exact_echo)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initHeatingController(c,m,ch);
+    const uint8_t globalKey[16]={0x77};c.setSystemKey(globalKey);
+    ASSERT_TRUE(c.requestHeatingRegister(&ch,0x0115));ASSERT_TRUE(!c.requestHeatingRegister(&ch,0x0103));
+    IoHomeFrame request,response;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    ASSERT_EQ(request.commandId,IoHomeCommand::WritePrivate);ASSERT_EQ(request.dataLen,4);
+    ASSERT_EQ(c.radio().testLastPreambleLength(),48);
+    const uint8_t data[]={0x0C,0x60,0x01,0x15,0x79,0x07};
+    buildSimpleResponseFrame(response,0x60F823,0xB6BDFC,IoHomeCommand::WritePrivateResponse,data,6);
+    ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_TRUE(c.heatingState(0).busy);
+    ASSERT_TRUE(authenticateHeatingRequest(c));
+    IoHomeFrame auth;ASSERT_TRUE(lastTransmittedFrameForTest(c,auth));
+    uint8_t transcript[5]={0x20,0x0C,0x60,1,0x15},mac[6],challenge[6]={1,3,5,7,9,11};
+    ASSERT_TRUE(IoHomeCrypto::createHmac2W(transcript,5,challenge,ch.getEncryptionKey(),mac));ASSERT_MEM_EQ(mac,auth.data,6);
+    response.setSrcNode(0x112233);ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_TRUE(c.heatingState(0).busy);
+    response.setSrcNode(0xB6BDFC);response.data[3]=3;ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_TRUE(c.heatingState(0).busy);
+    response.data[3]=0x15;response.data[1]=0x61;ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_TRUE(c.heatingState(0).busy);
+    response.data[1]=0x60;ASSERT_TRUE(queueControllerResponse(c,response));
+    const auto &observed=c.heatingState(0).values[IoHomeHeating::index(0x0115)];
+    ASSERT_TRUE(observed.observed&&observed.decoded.valid);ASSERT_FLOAT_EQ(observed.decoded.value,19.13f,0.001f);
+    ASSERT_TRUE(!c.heatingState(0).busy);ASSERT_EQ(ch.heatingPublications,1U);ASSERT_MEM_EQ(c.getSystemKey(),globalKey,16);
+}
+TEST(controller_heating_write_ack_requires_separate_actual_readback)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initHeatingController(c,m,ch);
+    ASSERT_TRUE(c.requestHeatingRegister(&ch,0x0103,true,17.5f));IoHomeFrame request,response;
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,request));ASSERT_TRUE(authenticateHeatingRequest(c));
+    buildSimpleResponseFrame(response,0x60F823,0xB6BDFC,IoHomeCommand::WritePrivateResponse,request.data,request.dataLen);
+    ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_EQ(ch.heatingPublications,0U);
+    ASSERT_TRUE(!c.heatingState(0).values[IoHomeHeating::index(0x0103)].observed);
+    IoHomeFrame read;ASSERT_TRUE(transmitQueuedControllerFrame(c,read));ASSERT_EQ(read.data[1],0x60);
+    ASSERT_TRUE(authenticateHeatingRequest(c));
+    ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_TRUE(c.heatingState(0).busy); // old SET echo
+    const uint8_t clamped[]={0x0C,0x60,1,3,0xAA,0};
+    buildSimpleResponseFrame(response,0x60F823,0xB6BDFC,IoHomeCommand::WritePrivateResponse,clamped,6);
+    ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_EQ(ch.heatingPublications,1U);
+    ASSERT_FLOAT_EQ(c.heatingState(0).values[IoHomeHeating::index(0x0103)].decoded.value,17.0f,0.001f);
+}
+TEST(controller_heating_schema_identity_timeout_and_duty_guards)
+{
+    for(unsigned variant=0;variant<8;++variant){
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initHeatingController(c,m,ch);
+        auto id=ch.getProtocolIdentity();
+        if(variant<4){if(variant==0)id.profile=22;if(variant==1)id.subProfile=2;if(variant==2)id.manufacturerId=2;
+            if(variant==3)ch.setIs1W(true);ch.onProtocolIdentity(0xB6BDFC,id);
+            ASSERT_TRUE(!c.requestHeatingRegister(&ch,0x0103));continue;}
+        if(variant==4){c.testChargeDuty(IOHC_FREQ_2,3600);ASSERT_TRUE(!c.requestHeatingRegister(&ch,0x0103));
+            ASSERT_EQ(c.heatingState(0).result,IoHomeHeating::State::Result::QuotaDenied);continue;}
+        ASSERT_TRUE(c.requestHeatingRegister(&ch,0x0103));IoHomeFrame tx,response;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+        if(variant==5){uint8_t key[16]={8};ch.setEncryptionKey(key);c.loop();}
+        else if(variant==6){ASSERT_TRUE(authenticateHeatingRequest(c));ioHomeTestAdvanceMillis(6000);c.loop();}
+        else {buildErrorResponseFrame(response,0x60F823,0xB6BDFC,0x28);ASSERT_TRUE(queueControllerResponse(c,response));
+            ASSERT_EQ(c.heatingState(0).result,IoHomeHeating::State::Result::Rejected);}
+        ASSERT_EQ(ch.heatingPublications,0U);ASSERT_TRUE(!c.heatingState(0).values[IoHomeHeating::index(0x0103)].observed);
+    }
+}

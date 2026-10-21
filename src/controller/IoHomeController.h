@@ -20,6 +20,7 @@
 #include "../protocol/IoHomeFrame.h"
 #include "../protocol/IoHomeCrypto.h"
 #include "../protocol/IoHomeCommands.h"
+#include "../protocol/IoHomeHeatingRegisters.h"
 #include "../protocol/IoHomeProfileRegistry.h"
 #include <stdint.h>
 #include <string>
@@ -148,6 +149,9 @@ struct IoHomeQueueEntry
   uint32_t destNodeId;
   uint32_t observationGeneration;
   uint32_t productContextRevision;
+  uint32_t heatingToken=0;
+  uint8_t heatingData[6]{};
+  uint8_t heatingLength=0;
   uint32_t objectReadToken;
   bool batteryDiagnostic=false;
   uint32_t keyPrimitiveToken;
@@ -589,6 +593,10 @@ public:
   // engine. Only the payload is raw; addressing, power class, preamble,
   // retries, challenge-response authentication, and result handling remain
   // the same as for ordinary registered-device commands.
+  bool requestHeatingRegister(IoHomecontrolChannel *channel,uint16_t reg,bool write=false,float value=0,bool background=false);
+  bool configureHeatingPoll(uint8_t channel,uint16_t seconds);
+  const IoHomeHeating::State &heatingState(uint8_t channel) const {return mHeating[channel<16?channel:16];}
+  void printHeatingStatus(uint8_t channel) const;
   bool sendRawTwoWayExecute(IoHomecontrolChannel *iChannel,
                             const uint8_t *iPayload, uint8_t iPayloadLen,
                             bool iSingleAttempt = false);
@@ -1662,6 +1670,11 @@ private:
 
   AttemptCounters *activeAttemptCounters();
   void logAttemptCounters(const char *scope, const AttemptCounters &counters) const;
+  IoHomeHeating::State mHeating[17]{}; // slot 16 is an immutable invalid-channel view
+  uint32_t mNextHeatingToken=0,mHeatingNextAdmissionMs=0;
+  bool heatingContextMatches(const IoHomeQueueEntry &entry) const;
+  void finishHeating(const IoHomeQueueEntry &entry,IoHomeCommandExchangeResult result);
+  void serviceHeating();
   void processPairSendDiscovery();
   void processPairWaitDiscoveryResponse();
   void processPairSendDiscoveryConfirmation();

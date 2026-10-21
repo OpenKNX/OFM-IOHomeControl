@@ -1,4 +1,5 @@
 #pragma once
+#include "../protocol/IoHomeHeatingRegisters.h"
 
 #include "../IoHomeRemoteMap.h"
 #include "../IoHomecontrolHardware.h"
@@ -243,6 +244,8 @@ public:
   void setConfigured1WProfileChannel(uint8_t iChannelIndex) { mConfigured1WProfileChannel = iChannelIndex; }
   uint8_t getConfigured1WProfileChannel() const { return mConfigured1WProfileChannel; }
 
+  unsigned heatingPublications=0;
+  void onHeatingValue(uint16_t,const IoHomeHeating::Value &value){if(value.valid)++heatingPublications;}
   void onPositionFeedback(float iPercent)
   {
     mHasPositionFeedback = true;

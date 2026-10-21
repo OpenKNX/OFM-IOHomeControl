@@ -4,6 +4,7 @@
 #include "protocol/IoHomeOptimisticPosition.h"
 #include "protocol/IoHomeLimitation.h"
 #include "protocol/IoHomeBattery.h"
+#include "protocol/IoHomeHeatingRegisters.h"
 #include <vector>
 #include "OpenKNX.h"
 #include "knxprod.h"
@@ -53,6 +54,7 @@ public:
   bool restoreLastKnownStateAfterStartup();
 
   // Callbacks from controller when radio responses arrive
+  void onHeatingValue(uint16_t reg,const IoHomeHeating::Value &value);
   void onPositionFeedback(float iPositionPercent);
   uint32_t productContextRevision() const {return mProductContextRevision;}
   void invalidateProductContext() {mOptimisticPosition={};invalidateBattery();mProfileReceivedMask=0;mRequestedSpeedIndex=0;mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}

@@ -2871,3 +2871,9 @@ void IoHomecontrolChannel::onBatteryEventRaw(const IoHomeFrame &frame) {
         (unsigned long)frame.getSrcNodeId(),(unsigned long)frame.getDestNodeId(),unsigned(frame.commandId),raw.c_str(),(unsigned long)millis());
     logInfoP("  RAW / UNIT UNKNOWN; no event2001 attribution");
 }
+
+void IoHomecontrolChannel::onHeatingValue(uint16_t reg,const IoHomeHeating::Value &value)
+{
+    if(!knx.configured()||!value.valid||!IoHomeHeating::actuator(getProtocolIdentity())||mIs1W)return;
+    if(reg==0x0103)getKo(IOHC_KoCHCozyTempFeedback).value(value.value,Dpt(9,1));
+}
