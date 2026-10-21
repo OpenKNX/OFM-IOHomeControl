@@ -22092,3 +22092,64 @@ TEST(controller_heating_two_device_keys_and_existing_velux_are_isolated)
     ASSERT_TRUE(c.sendCommand(0x654321,global,IoHomeCommand::Private,3));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
     ASSERT_EQ(tx.commandId,IoHomeCommand::Private);ASSERT_EQ(tx.getDestNodeId(),0x654321U);
 }
+
+TEST(controller_heating_polling_is_opt_in_and_quota_cannot_use_bench_bypass)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initHeatingController(c,m,ch);
+    ioHomeTestAdvanceMillis(300000);c.loop();ASSERT_EQ(c.radio().testTransmitCount(),0U);
+    ASSERT_TRUE(!c.configureHeatingPoll(0,59));ASSERT_TRUE(!c.configureHeatingPoll(16,300));
+    ASSERT_TRUE(c.configureHeatingPoll(0,60));c.testChargeDuty(IOHC_FREQ_2,3600);c.testSimulationUnlimited();
+    ioHomeTestAdvanceMillis(1001);c.loop();ASSERT_EQ(c.radio().testTransmitCount(),0U);
+    ASSERT_EQ(c.heatingState(0).result,IoHomeHeating::State::Result::QuotaDenied);
+    ASSERT_TRUE(!c.requestHeatingRegister(&ch,0x0102));ASSERT_EQ(c.radio().testTransmitCount(),0U);
+    ASSERT_TRUE(c.configureHeatingPoll(0,0));
+}
+TEST(heating_airtime_plan_for_sixteen_channels_includes_retry_budget)
+{
+    const auto limit=IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(IOHC_FREQ_2));
+    for(uint16_t responsePreamble:{8,32}){
+        const uint32_t exchange=IoHomeController::estimatedTxAirtimeMs(13,48)+IoHomeController::estimatedTxAirtimeMs(15,responsePreamble);
+        const uint32_t cycle=16U*7U*2U*exchange; // every GET has at most two attempts
+        const uint32_t offeredAt60=cycle*60U,offeredAt300=cycle*12U;
+        printf("Heating airtime: responsePre=%u localExchangeMs=%u worst16x7CycleMs=%u offered60sMsPerHour=%u offered300sMsPerHour=%u productionLimitMsPerHour=%u\n",
+            responsePreamble,exchange,cycle,offeredAt60,offeredAt300,limit);
+        ASSERT_TRUE(offeredAt60>limit&&offeredAt300>limit);
+        const uint32_t admitted=limit/exchange;ASSERT_TRUE(admitted*exchange<=limit);
+        ASSERT_TRUE((admitted+1)*exchange>limit);
+    }
+}
+TEST(controller_heating_stale_metadata_cannot_authorize_a_different_node)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initHeatingController(c,m,ch);
+    ch.setNodeId(0x112233);ASSERT_TRUE(!c.requestHeatingRegister(&ch,0x0103));
+    ASSERT_EQ(c.radio().testTransmitCount(),0U);
+}
+
+TEST(controller_heating_scheduler_serves_channels_fairly_without_catchup_bursts)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel a,b,d;initHeatingController(c,m,a);
+    const uint8_t key[16]={0x42};
+    m.testSetChannel(1,&b);b.setNodeId(0x112233);b.setEncryptionKey(key);b.onProtocolIdentity(0x112233,a.getProtocolIdentity());
+    m.testSetChannel(2,&d);d.setNodeId(0x445566);d.setEncryptionKey(key);d.onProtocolIdentity(0x445566,a.getProtocolIdentity());
+    for(uint8_t i=0;i<3;++i)ASSERT_TRUE(c.configureHeatingPoll(i,60));
+    ioHomeTestAdvanceMillis(1001);
+    for(uint32_t peer:{0xB6BDFCU,0x112233U,0x445566U}){
+        IoHomeFrame request,reply;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));ASSERT_EQ(request.getDestNodeId(),peer);
+        const uint8_t challenge[6]={2,4,6,8,10,12};buildPairChallengeRequestFrame(reply,0x60F823,peer,challenge);
+        ASSERT_TRUE(queueControllerResponse(c,reply));const uint8_t data[]={0x0C,0x60,1,0x15,0x79,7};
+        buildSimpleResponseFrame(reply,0x60F823,peer,IoHomeCommand::WritePrivateResponse,data,6);
+        ASSERT_TRUE(queueControllerResponse(c,reply));
+        const auto sent=c.radio().testTransmitCount();c.loop();ASSERT_EQ(c.radio().testTransmitCount(),sent);
+        ioHomeTestAdvanceMillis(10001);
+    }
+}
+
+TEST(controller_heating_short_preamble_is_not_a_global_low_power_override)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initHeatingController(c,m,ch);
+    auto identity=ch.getProtocolIdentity();identity.powerSaveMode=IoHomePowerMode::LowPower;
+    identity.powerSaveModeRaw=IOHC_POWER_SAVE_LOW_POWER;ch.onProtocolIdentity(ch.getNodeId(),identity);
+    ch.setConfigured2WPowerClass(TwoWayPowerClass::LowPower);
+    ASSERT_TRUE(c.requestHeatingRegister(&ch,0x0115));IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    ASSERT_TRUE((request.ctrlByte1&IOHC_CTRL1_LOW_POWER)!=0);ASSERT_EQ(c.radio().testLastPreambleLength(),IOHC_PREAMBLE_LONG);
+}

@@ -81,7 +81,7 @@ struct State {
  uint32_t token=0,node=0,revision=0,gateway=0;uint8_t key[16]{};
  uint16_t pendingRegister=0;bool busy=false;
  uint32_t nextPollMs=0,pollIntervalMs=0;uint8_t pollIndex=0,refreshRemaining=0;bool initialRead=false;
- void invalidate(){*this={};}
+ void invalidate(){*this=State();}
 };
 inline const char *resultName(State::Result result){
  switch(result){case State::Result::Queued:return "queued";case State::Result::ReadbackPending:return "readback_pending";

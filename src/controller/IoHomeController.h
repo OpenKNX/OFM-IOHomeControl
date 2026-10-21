@@ -596,7 +596,7 @@ public:
   // engine. Only the payload is raw; addressing, power class, preamble,
   // retries, challenge-response authentication, and result handling remain
   // the same as for ordinary registered-device commands.
-  enum class AtlanticStage:uint8_t {None,Discovered,KeyVerified,Probing,RollCall,HeaterVerified,Persisted,Refused,NotProven,Timeout,Cancelled,Failed};
+  enum class AtlanticStage:uint8_t {None,Discovering,Discovered,KeyVerified,Probing,RollCall,HeaterVerified,Persisted,Refused,NotProven,Timeout,Cancelled,Failed};
   struct AtlanticStatus {
     AtlanticStage stage=AtlanticStage::None;uint32_t session=0,pairingNode=0,heaterNode=0;
     uint8_t channel=0xFF,proofAttempts=0,rollcallAttempts=0;const char *reason="none";
@@ -605,6 +605,7 @@ public:
   bool assignAtlanticHeater(uint8_t channel,uint32_t session);
   void cancelAtlantic();
   const AtlanticStatus &atlanticStatus() const {return mAtlantic.status;}
+  static const char *atlanticStageName(AtlanticStage stage);
   void printAtlanticStatus() const;
   bool scanSavedHeatingKeys();
   bool requestHeatingRegister(IoHomecontrolChannel *channel,uint16_t reg,bool write=false,float value=0,bool background=false);
@@ -1701,6 +1702,7 @@ private:
   void stopAtlantic(AtlanticStage stage,const char *reason);
   IoHomeHeating::State mHeating[17]{}; // slot 16 is an immutable invalid-channel view
   uint32_t mNextHeatingToken=0,mHeatingNextAdmissionMs=0;
+  uint8_t mHeatingNextChannel=0;
   bool heatingContextMatches(const IoHomeQueueEntry &entry) const;
   void finishHeating(const IoHomeQueueEntry &entry,IoHomeCommandExchangeResult result);
   void serviceHeating();

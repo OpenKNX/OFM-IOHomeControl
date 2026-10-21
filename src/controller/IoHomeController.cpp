@@ -2232,7 +2232,7 @@ bool IoHomeController::requestHeatingRegister(IoHomecontrolChannel *channel,uint
 {
     const uint8_t c=channelIndexFor(channel);
     if(!channel||c>=16||!channel->isPaired()||channel->is1W()||
-       !IoHomeHeating::actuator(channel->getProtocolIdentity())||!mModule||!mModule->managementRequestsAllowed())return false;
+       !IoHomeHeating::actuator(channel->getProtocolIdentity())||channel->getProtocolIdentity().ioAddress!=channel->getNodeId()||!mModule||!mModule->managementRequestsAllowed())return false;
     uint8_t data[6]{};const uint8_t length=IoHomeHeating::build(reg,write,value,data);if(!length)return false;
     auto &state=mHeating[c];
     if(state.node && (state.node!=channel->getNodeId() || state.revision!=channel->productContextRevision() ||
@@ -2240,7 +2240,9 @@ bool IoHomeController::requestHeatingRegister(IoHomecontrolChannel *channel,uint
     if(state.busy)return false;
     // Estimate both local transmissions before admission, independently of a
     // debug bypass. The central producer still enforces LBT and every actual TX.
-    const uint32_t cost=estimatedTxAirtimeMs(9+length,48)+estimatedTxAirtimeMs(15,authResponsePreamble());
+    const uint16_t requestPreamble=channel->getProtocolIdentity().powerSaveMode==IoHomePowerMode::AlwaysAlive?48:
+        resolveLowPower2W(channel->getNodeId())?IOHC_PREAMBLE_LONG:normal2WStartPreamble();
+    const uint32_t cost=estimatedTxAirtimeMs(9+length,requestPreamble)+estimatedTxAirtimeMs(15,authResponsePreamble());
     const uint8_t frequency=frequencyIndexForHz(kNormal2WTxFreqHz);
     mRfDutyBudget.advance(millis());
     if(mRfDutyBudget.used(kNormal2WTxFreqHz)+cost>IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(kNormal2WTxFreqHz))) {
@@ -2266,7 +2268,7 @@ bool IoHomeController::heatingContextMatches(const IoHomeQueueEntry &entry) cons
     if(entry.sourceChannelIndex>=16)return false;
     const auto &state=mHeating[entry.sourceChannelIndex];
     const auto *ch=mModule?mModule->getChannel(entry.sourceChannelIndex):nullptr;
-    return ch&&!ch->is1W()&&IoHomeHeating::actuator(ch->getProtocolIdentity())&&
+    return ch&&!ch->is1W()&&IoHomeHeating::actuator(ch->getProtocolIdentity())&&ch->getProtocolIdentity().ioAddress==entry.destNodeId&&
         state.busy&&state.token==entry.heatingToken&&state.gateway==mOwnNodeId&&
         state.node==entry.destNodeId&&state.revision==ch->productContextRevision()&&
         sampleIdentityMatches(entry.sourceChannelIndex,entry.destNodeId,entry.managementKey,state.revision);
@@ -2320,17 +2322,18 @@ void IoHomeController::serviceHeating()
 {
     if(mAtlantic.status.stage==AtlanticStage::RollCall)return;
     if(!mModule||!mModule->managementRequestsAllowed())return;
-    for(uint8_t c=0;c<16;++c){
+    for(uint8_t slot=0;slot<16;++slot){
+        const uint8_t c=(mHeatingNextChannel+slot)%16;
         auto &state=mHeating[c];auto *ch=mModule->getChannel(c);
         if(state.node&&(!ch||!IoHomeHeating::actuator(ch->getProtocolIdentity())||state.gateway!=mOwnNodeId||
             !sampleIdentityMatches(c,state.node,state.key,state.revision))) {state.invalidate();continue;}
-        if(!ch||ch->is1W()||!ch->isPaired()||!IoHomeHeating::actuator(ch->getProtocolIdentity()))continue;
-        if(state.busy||!idleForManagedOperation()||int32_t(millis()-mHeatingNextAdmissionMs)<0)continue;
+        if(!ch||ch->is1W()||!ch->isPaired()||!IoHomeHeating::actuator(ch->getProtocolIdentity())||ch->getProtocolIdentity().ioAddress!=ch->getNodeId())continue;
+        if(state.busy||!idleForManagedOperation()||(mHeatingNextAdmissionMs&&int32_t(millis()-mHeatingNextAdmissionMs)<0))continue;
         if((state.refreshRemaining || state.pollIntervalMs) &&
-           (!state.initialRead || int32_t(millis()-state.nextPollMs)>=0)){
+           (!state.nextPollMs || int32_t(millis()-state.nextPollMs)>=0)){
             const uint16_t reg=(!state.initialRead&&!state.refreshRemaining)?0x0115:IoHomeHeating::registers[state.pollIndex%7].reg;
             const bool queued=requestHeatingRegister(ch,reg,false,0,true);
-            mHeatingNextAdmissionMs=millis()+10000; // global spacing, including 16-channel startup
+            mHeatingNextAdmissionMs=millis()+10000;mHeatingNextChannel=(c+1)%16; // global spacing, including 16-channel startup
             if(queued){if(state.refreshRemaining)--state.refreshRemaining;state.pollIndex=(state.pollIndex+1)%7;state.nextPollMs=millis()+
                 (state.refreshRemaining?10000:state.pollIntervalMs?state.pollIntervalMs/7:30000);}
             return;
@@ -7156,6 +7159,7 @@ void IoHomeController::loop()
                             if(!IoHomeHeating::pairingNode(mPairProtocolIdentity)){
                                 stopAtlantic(AtlanticStage::Failed,"wrong_pairing_profile");mState=ControllerState::PairFailed;
                             }else{
+                                mAtlantic.status.stage=AtlanticStage::Discovered;
                                 mAtlantic.status.pairingNode=mDiscoveredNodeId;
                                 mAtlantic.revision=lPairChannel?lPairChannel->productContextRevision():0;
                                 mPairDiscoverConfirmMode=PairingDiscoverConfirmMode::SendWithAck;
@@ -7603,6 +7607,9 @@ void IoHomeController::loop()
         break;
     case ControllerState::PairFailed:
     {
+        if(mPairing2WMode==Pairing2WMode::AtlanticPull &&
+           (mAtlantic.status.stage==AtlanticStage::Discovering||mAtlantic.status.stage==AtlanticStage::Discovered))
+            stopAtlantic(AtlanticStage::Failed,"discovery_or_confirmation_failed");
         // A failed 1W pairing attempt may have left a tentative target
         // address behind (set eagerly by the console command before the
         // attempt ran). Clear it so the channel status does not keep
@@ -7746,7 +7753,10 @@ void IoHomeController::processIdle()
                     if (mDiagnostic2WFrameVersion == 3)
                         mTxFrame.ctrlByte1 = (mTxFrame.ctrlByte1 & ~IOHC_CTRL1_VER_MASK) | 3;
                     resolveTwoWayPreamblePlan(mTxFrame, mCurrentCmd);
-                    if(mCurrentCmd.heatingToken||mCurrentCmd.atlanticToken){mCurrentCmd.twoWayPreamblePlan.fixedPreamble=48;mCurrentCmd.twoWayPreamblePlan.use=TwoWayWakeBeliefUse::NotLowPower;}
+                    if(mCurrentCmd.atlanticToken || (mCurrentCmd.heatingToken && channelForQueueEntry(mCurrentCmd) &&
+                        channelForQueueEntry(mCurrentCmd)->getProtocolIdentity().powerSaveMode==IoHomePowerMode::AlwaysAlive)){
+                        mCurrentCmd.twoWayPreamblePlan.fixedPreamble=48;mCurrentCmd.twoWayPreamblePlan.use=TwoWayWakeBeliefUse::NotLowPower;
+                    }
                 }
                 mState = ControllerState::TxPending;
             }
@@ -11512,7 +11522,10 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         if(iEntry.heatingToken||iEntry.atlanticToken){
             if(!heatingContextMatches(iEntry)||iEntry.heatingLength<4||iEntry.heatingLength>6)return false;
             std::memcpy(mTxFrame.data,iEntry.heatingData,iEntry.heatingLength);mTxFrame.dataLen=iEntry.heatingLength;
-            mTxFrame.setLowPower(false);mTxFrame.hasHmac=false;mAuthResponseSent=false;break;
+            const auto *heatingChannel=channelForQueueEntry(iEntry);
+            if(iEntry.atlanticToken || (heatingChannel&&heatingChannel->getProtocolIdentity().powerSaveMode==IoHomePowerMode::AlwaysAlive))
+                mTxFrame.setLowPower(false);
+            mTxFrame.hasHmac=false;mAuthResponseSent=false;break;
         }
         return false; // only typed, context-bound heating payloads are authorized
     }
@@ -13152,7 +13165,7 @@ bool IoHomeController::startAtlanticPairing(uint8_t channel,uint32_t peer)
     if(!startPairingExperimental(channel,peer,Pairing2WMode::AtlanticPull))return false;
     mAtlantic={};if(++mNextAtlanticSession==0)++mNextAtlanticSession;
     mAtlantic.status.session=mNextAtlanticSession;mAtlantic.status.channel=channel;
-    mAtlantic.status.stage=AtlanticStage::Discovered;mAtlantic.gateway=mOwnNodeId;
+    mAtlantic.status.stage=AtlanticStage::Discovering;mAtlantic.gateway=mOwnNodeId;
     mAtlantic.startedMs=millis();mAtlantic.revision=ch->productContextRevision();
     std::memcpy(mAtlantic.globalKey,mSystemKey,16);return true;
 }
@@ -13246,7 +13259,10 @@ void IoHomeController::serviceAtlantic()
     const auto stage=mAtlantic.status.stage;
     if(stage==AtlanticStage::None||stage==AtlanticStage::Cancelled||stage==AtlanticStage::Persisted||
        stage==AtlanticStage::Refused||stage==AtlanticStage::NotProven||stage==AtlanticStage::Timeout||stage==AtlanticStage::Failed)return;
-    if(!atlanticContextMatches()){stopAtlantic(AtlanticStage::Timeout,"session_expired_or_identity_changed");return;}
+    if(!atlanticContextMatches()){
+        const bool expired=uint32_t(millis()-mAtlantic.startedMs)>180000;
+        stopAtlantic(expired?AtlanticStage::Timeout:AtlanticStage::Failed,expired?"session_expired":"identity_changed");return;
+    }
     if(stage!=AtlanticStage::RollCall||mState!=ControllerState::Idle||mCurrentCmd.active||!queueEmpty())return;
     const uint8_t attempt=mAtlantic.status.rollcallAttempts;
     if(attempt>=3){
@@ -13318,10 +13334,16 @@ bool IoHomeController::scanSavedHeatingKeys()
     std::memcpy(mAtlantic.globalKey,mSystemKey,16);
     if(selectSavedHeatingKey())return true;stopAtlantic(AtlanticStage::None,"no_saved_heating_keys");return false;
 }
+const char *IoHomeController::atlanticStageName(AtlanticStage stage)
+{
+    static const char *names[]={"none","discovering","discovered_pairing_node","key_verified","probing_heater","rollcall",
+        "actuator_address_verified","assigned_and_persisted","refused","not_proven","timeout","cancelled","failed"};
+    const auto i=static_cast<unsigned>(stage);return i<sizeof(names)/sizeof(names[0])?names[i]:"unknown";
+}
 void IoHomeController::printAtlanticStatus() const
 {
     const auto &status=mAtlantic.status;
-    logInfoP("Atlantic stage=%u session=%lu channel=%u pairingNode=%06X heaterNode=%06X proofAttempts=%u rollcallAttempts=%u reason=%s",
-        unsigned(status.stage),(unsigned long)status.session,unsigned(status.channel+1),status.pairingNode,status.heaterNode,
+    logInfoP("Atlantic stage=%s session=%lu channel=%u pairingNode=%06X heaterNode=%06X proofAttempts=%u rollcallAttempts=%u reason=%s",
+        atlanticStageName(status.stage),(unsigned long)status.session,unsigned(status.channel+1),status.pairingNode,status.heaterNode,
         status.proofAttempts,status.rollcallAttempts,status.reason);
 }
