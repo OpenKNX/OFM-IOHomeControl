@@ -1436,9 +1436,10 @@ inline IoHomeErrorResult ioHomeDecodeErrorResponse(uint8_t raw)
     }
     const char *legacy = ioHomeCommandResultName(raw);
     const bool knownLegacy = strcmp(legacy, "unknown") != 0;
-    // Only state-zero named codes are unambiguous enough to select packed
-    // labels. Preserve nonzero-state legacy results and their original names.
-    const bool packed = name && (raw & 7U) == 0;
+    // State bits belong to the packed layout too. Preserve explicitly known
+    // nonzero-state legacy bytes (especially literal FE 05); otherwise expose
+    // the packed name and state instead of silently calling it unknown.
+    const bool packed = name && ((raw & 7U) == 0 || !knownLegacy);
     return {raw, static_cast<uint8_t>(raw >> 3), static_cast<uint8_t>(raw & 7U),
             packed ? name : legacy, packed, name && (knownLegacy || !packed)};
 }

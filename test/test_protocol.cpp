@@ -21544,3 +21544,19 @@ TEST(optimistic_position_rejection_restores_feedback_and_ignores_superseded_inte
     intent.observe(30); intent.begin(50,35); intent.observe(40);
     ASSERT_TRUE(intent.reject(50,restored)); ASSERT_EQ(restored,40);
 }
+
+TEST(error_response_nonzero_state_preserves_legacy_and_decodes_packed)
+{
+    for (uint8_t raw : {0x81,0x82,0x87,0x89,0x8F}) {
+        const auto decoded=ioHomeDecodeErrorResponse(raw);
+        ASSERT_TRUE(decoded.packed); ASSERT_TRUE(!decoded.ambiguous);
+        ASSERT_EQ(decoded.code,raw>>3); ASSERT_EQ(decoded.state,raw&7);
+        ASSERT_TRUE(strcmp(decoded.name,"unknown")!=0);
+        ASSERT_TRUE(!ioHomeKeyTransferDefinitivelyRefused(raw));
+    }
+    for (uint8_t raw : {0x05,0x09,0xDF,0xFF}) {
+        const auto decoded=ioHomeDecodeErrorResponse(raw);
+        ASSERT_TRUE(!decoded.packed);
+        ASSERT_EQ(strcmp(decoded.name,ioHomeCommandResultName(raw)),0);
+    }
+}
