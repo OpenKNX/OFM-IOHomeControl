@@ -21343,6 +21343,10 @@ TEST(controller_pairing_definitive_key_refusal_stops_without_persisting)
         reply.setDestNode(0x831F2A);
         ASSERT_TRUE(queueControllerResponse(c,reply));
         ASSERT_TRUE(!ch.isPaired());
+        ASSERT_EQ(c.pairingTelemetry().counters.keyRefused,1U);
+        ASSERT_EQ(c.pairingTelemetry().counters.keyProven,0U);
+        ASSERT_EQ(c.pairingTelemetry().counters.rxWrongPeer,2U);
+        ASSERT_EQ(c.pairingTelemetry().counters.rxCrcValid,0U); // injection is not CRC evidence
         ASSERT_EQ(c.pairingTelemetry().diagnostic,IoHomeController::PairingOutcome::KeyExchangeFailure);
         ASSERT_TRUE(c.state()!=ControllerState::PairWaitKeyTransferConfirmation);
         c.radio().testClearTransmittedPacket();
@@ -21442,6 +21446,8 @@ TEST(controller_pairing_pull_is_verified_diagnostic_without_push_or_key_assignme
             }
         }
         ASSERT_EQ(c.state(),ControllerState::Idle);
+        ASSERT_EQ(c.pairingTelemetry().counters.keyProven,(variant==0||variant==1||variant==8)?1U:0U);
+        ASSERT_EQ(c.pairingTelemetry().counters.actuationObserved,0U);
         ASSERT_TRUE(!ch.isPaired());
         ASSERT_MEM_EQ(c.getSystemKey(),systemKey,16);
         c.radio().testClearTransmittedPacket();
@@ -21537,6 +21543,10 @@ TEST(controller_moto_parameter_rejection_is_explicit_and_peer_correlated)
     ASSERT_TRUE(c.state()!=ControllerState::Idle);
     error.setSrcNode(0x7E9E6E); ASSERT_TRUE(queueControllerResponse(c,error));
     ASSERT_EQ(ch.testLastCommandExchangeResult(),IoHomeCommandExchangeResult::ExplicitlyRejected);
+    const auto &counters=c.exchangeDiagnostics().counters;
+    ASSERT_EQ(counters.rxWrongPeer,1U); ASSERT_EQ(counters.finalResponseSeen,1U);
+    ASSERT_EQ(counters.challengeSeen,0U); ASSERT_EQ(counters.actuationObserved,0U);
+    ASSERT_EQ(counters.keyProven,0U); ASSERT_EQ(counters.keyRefused,0U);
 }
 
 TEST(controller_nina_config_close_does_not_start_unproven_key_transfer)

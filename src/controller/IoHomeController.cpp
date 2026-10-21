@@ -4308,6 +4308,7 @@ void IoHomeController::completePairingTelemetry(PairingOutcome iOutcome)
 {
     if (mPairingTelemetry.outcome != PairingOutcome::InProgress && iOutcome != PairingOutcome::StartRejected)
         return;
+    logAttemptCounters("PairDiagCounters",mPairingTelemetry.counters);
     mPairingTelemetry.outcome = iOutcome;
     mPairingTelemetry.peerNodeId = mDiscoveredNodeId ? mDiscoveredNodeId : mPairingKnownNodeId;
     mPairingTelemetry.keyExchangeAttempts = mPairKeyExchangeAttempts;
@@ -4347,8 +4348,26 @@ void IoHomeController::resetPairingPreambleState()
     mPairAcceptedDiscoveryPreamble = 0;
 }
 
+IoHomeController::AttemptCounters *IoHomeController::activeAttemptCounters()
+{
+    if (mPairingTelemetry.outcome == PairingOutcome::InProgress && isPairDiagnosticState(mState))
+        return &mPairingTelemetry.counters;
+    if (mCurrentCmd.active && mCurrentCmd.command == IoHomeCommand::Execute)
+        return &mExchangeDiagnostics.counters;
+    return nullptr;
+}
+
+void IoHomeController::logAttemptCounters(const char *scope, const AttemptCounters &c)
+{
+    logInfoP("%s rx_wrong_peer=%lu rx_crc_valid=%lu rx_unmatched=%lu rf_tx_completed=%lu challenge_seen=%lu final_response_seen=%lu key_refused=%lu key_proven=%lu actuation_observed=%lu duty_rejected=%lu",
+        scope,(unsigned long)c.rxWrongPeer,(unsigned long)c.rxCrcValid,(unsigned long)c.rxUnmatched,
+        (unsigned long)c.rfTxCompleted,(unsigned long)c.challengeSeen,(unsigned long)c.finalResponseSeen,
+        (unsigned long)c.keyRefused,(unsigned long)c.keyProven,(unsigned long)c.actuationObserved,(unsigned long)c.dutyRejected);
+}
+
 void IoHomeController::beginExchangeDiagnosticsWindow()
 {
+    mExchangeDiagnostics.counters = {};
     const IoHomeRadioHealth lHealth = radioHealth();
     mExchangeStartRxDoneCount = lHealth.rxDoneCount;
     mExchangeStartCrcErrorCount = lHealth.crcErrorCount;
@@ -4361,6 +4380,7 @@ void IoHomeController::beginExchangeDiagnosticsWindow()
 void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntry,
                                                    IoHomeCommandExchangeResult iResult)
 {
+    if (iEntry.command == IoHomeCommand::Execute) logAttemptCounters("MoveDiagCounters",mExchangeDiagnostics.counters);
     finishLimitation(iEntry,iResult);
     if(iEntry.batteryDiagnostic) {
         const auto state=iResult==IoHomeCommandExchangeResult::Completed?IoHomeBatteryDiagnostic::State::Complete:
@@ -6375,6 +6395,7 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
     if (!isDutyCycleOk(mCurrentFreqIdx, airtime)) {
         mLbtPrepared=false;
         mLastTxDutyDenied=true;
+        if (auto *counters=activeAttemptCounters()) ++counters->dutyRejected;
         if(mCurrentFreqIdx<IOHC_NUM_FREQUENCIES)++mRfBlockedTxCount[IoHomeDutyBudget::band(IOHC_FREQUENCIES[mCurrentFreqIdx])];
         logInfoP("RF TX denied: duty_budget_exceeded frequency=%lu usedMs=%lu nextMs=%lu limitMs=%lu",
             (unsigned long)IOHC_FREQUENCIES[mCurrentFreqIdx],
@@ -6889,6 +6910,20 @@ void IoHomeController::loop()
             ++mRxScanMeasurements.captures;
             mRadioDiversity.activity(mCurrentFreqIdx,millis());
             const ControllerState lPairingStateBeforeRx = mState;
+            if (auto *counters=activeAttemptCounters()) {
+#if defined(RADIO_SX1276) && !defined(TEST_NATIVE)
+                const auto evidence=mRadio.lastReceiveEvidence();
+                if (evidence.hardwareCrcChecked && evidence.hardwareCrcValid) ++counters->rxCrcValid;
+#elif defined(RADIO_SX1262) && !defined(TEST_NATIVE)
+                // readPacket returns only the PHY-validated cache or a packet
+                // accepted by the enabled hardware CRC engine.
+                ++counters->rxCrcValid;
+#endif
+                // Native queue injection has no CRC evidence; do not count it.
+                if (mPairingTelemetry.outcome==PairingOutcome::InProgress && mDiscoveredNodeId &&
+                    (mRxFrame.getSrcNodeId()!=mDiscoveredNodeId || mRxFrame.getDestNodeId()!=mOwnNodeId))
+                    ++counters->rxWrongPeer;
+            }
             // Record which frequency the response came on
             mLastResponseFreqIdx = mCurrentFreqIdx;
 
@@ -6917,6 +6952,7 @@ void IoHomeController::loop()
                  static_cast<uint32_t>(millis()-mStateTimer) > pairWindow);
             if (invalidKeyContext)
             {
+                ++mPairingTelemetry.counters.rxUnmatched;
                 logDebugP("Pairing: ignored response outside bound key/session/channel/deadline");
             }
             else if (mState == ControllerState::WaitResponse)
@@ -7050,6 +7086,7 @@ void IoHomeController::loop()
                     mRxFrame.dataLen >= sizeof(mPairingChallenge))
                 {
                     // Device sends its challenge — extract and store for key transfer
+                    ++mPairingTelemetry.counters.challengeSeen;
                     memcpy(mPairingChallenge, mRxFrame.data, sizeof(mPairingChallenge));
                     mState = ControllerState::PairSendKeyTransfer;
                 }
@@ -7070,6 +7107,7 @@ void IoHomeController::loop()
                     mRxFrame.getDestNodeId() == mOwnNodeId &&
                     mRxFrame.dataLen >= sizeof(mPairKeyTransferChallenge))
                 {
+                    ++mPairingTelemetry.counters.challengeSeen;
                     memcpy(mPairKeyTransferChallenge, mRxFrame.data, sizeof(mPairKeyTransferChallenge));
                     mState = ControllerState::PairSendKeyTransferAuthResponse;
                 }
@@ -7093,6 +7131,8 @@ void IoHomeController::loop()
                              stateName(mState), result.raw, result.name, result.ambiguous,
                              mRxFrame.getSrcNodeId(), mRxFrame.getDestNodeId());
                     if (mRxFrame.dataLen == 1 && ioHomeKeyTransferDefinitivelyRefused(result.raw)) {
+                        ++mPairingTelemetry.counters.keyRefused;
+                        ++mPairingTelemetry.counters.finalResponseSeen;
                         recordPairingDiagnostic(PairingOutcome::KeyExchangeFailure,
                             result.raw == 0x18 || result.raw == 0x05 ? "key-authentication-failed" : "key-transfer-refused");
                         mState = ControllerState::PairFailed;
@@ -7260,6 +7300,11 @@ void IoHomeController::loop()
                 // Unsolicited frame (e.g., status update from device)
                 dispatchRxFrame();
             }
+
+            if (!invalidKeyContext && (pushWait || pullWait) && mState==lPairingStateBeforeRx &&
+                !(pushWait && mRxFrame.commandId==IoHomeCommand::ErrorResponse && mRxFrame.dataLen==1 &&
+                  mRxFrame.getSrcNodeId()==mDiscoveredNodeId && mRxFrame.getDestNodeId()==mOwnNodeId))
+                ++mPairingTelemetry.counters.rxUnmatched;
 
             // Pairing accepts only strictly correlated frames. Preserve a
             // structured reason when a received frame leaves a response-wait
@@ -7725,6 +7770,7 @@ void IoHomeController::processTxInProgress()
         {
             mQueuedTxDoneObserved = true;
             mQueuedTxDoneMs = millis();
+            if(lObservedDone) { if (auto *counters=activeAttemptCounters()) ++counters->rfTxCompleted; }
             if(lObservedDone)observeBatteryDiagnostic(mCurrentCmd,IoHomeBatteryDiagnostic::State::RfCompleted);
             if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest &&
                 !mAuthResponseSent && mDirectedRequestTxEndUs == 0)
@@ -8058,6 +8104,7 @@ void IoHomeController::processResponse()
         {
             mCurrentCmd.sawWrongPeer = true;
             ++mRfCounters.wrongPeerFrames;
+            if (auto *counters=activeAttemptCounters()) ++counters->rxWrongPeer;
             recordTwoWayTrace("rx_wrong_peer", mRxFrame, mRxRawLen);
         }
         if (mCurrentCmd.active && mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
@@ -8159,7 +8206,7 @@ void IoHomeController::processResponse()
     }
 
     const auto disposition=ioHomeResponseDisposition(mCurrentCmd.command,mRxFrame.commandId,mRxFrame.dataLen);
-    if(disposition==IoHomeResponseDisposition::Ignore) {mCurrentCmd.sawUnexpectedResponse=true;recordTwoWayTrace("rx_unexpected",mRxFrame,mRxRawLen);dispatchRxFrame();mState=ControllerState::WaitResponse;return;}
+    if(disposition==IoHomeResponseDisposition::Ignore) {if (auto *counters=activeAttemptCounters()) ++counters->rxUnmatched;mCurrentCmd.sawUnexpectedResponse=true;recordTwoWayTrace("rx_unexpected",mRxFrame,mRxRawLen);dispatchRxFrame();mState=ControllerState::WaitResponse;return;}
     if (mCurrentCmd.background && mCurrentCmd.command == IoHomeCommand::Private &&
         mCurrentCmd.param == 3 && mRxFrame.commandId == IoHomeCommand::PrivateResponse &&
         mRxFrame.dataLen < 8)
@@ -8236,6 +8283,10 @@ void IoHomeController::processResponse()
         else if(mCurrentCmd.command==IoHomeCommand::Unknown4ARequest&&mRxFrame.commandId==IoHomeCommand::Unknown4AResponse)
             accepted=mObjectRead.acceptReadChunk(mCurrentCmd.destNodeId,mObjectReadToken,mRxFrame.data,mRxFrame.dataLen);
         if(!accepted){mState=ControllerState::WaitResponse;return;}
+    }
+    if (auto *counters=activeAttemptCounters()) {
+        if (mRxFrame.commandId==IoHomeCommand::ChallengeRequest) ++counters->challengeSeen;
+        else ++counters->finalResponseSeen;
     }
     mCurrentCmd.hadPeerResponse = true;
     ++mRfCounters.correlatedReplies;
@@ -8352,7 +8403,11 @@ void IoHomeController::processResponse()
         if ((mRxFrame.commandId == IoHomeCommand::PrivateResponse && mRxFrame.dataLen >= 8) ||
             (mRxFrame.commandId == IoHomeCommand::StatusUpdate && mRxFrame.dataLen >= 11))
             if (auto *channel = channelForQueueEntry(lCompletedCmd))
-                channel->observe2WMovingStatus((mRxFrame.data[0] & 0x01) == 0);
+            {
+                const bool moving=(mRxFrame.data[0] & 0x01) == 0;
+                channel->observe2WMovingStatus(moving);
+                if (moving) ++mExchangeDiagnostics.counters.actuationObserved;
+            }
         mTrustRxPosition = false;
     }
     dispatchRxFrame();
@@ -8651,6 +8706,11 @@ const char *IoHomeController::pullKeyResultName(PullKeyResult result)
 
 void IoHomeController::finishPullKeyDiagnostic(PullKeyResult result)
 {
+    if (result==PullKeyResult::VerifiedSameKey || result==PullKeyResult::VerifiedOtherKey) {
+        ++mPairingTelemetry.counters.keyProven;
+        ++mPairingTelemetry.counters.finalResponseSeen;
+    }
+    if (result==PullKeyResult::Refused) ++mPairingTelemetry.counters.keyRefused;
     mPairingTelemetry.pullResult = result;
     logInfoP("Pairing pull: result=%s peer=%06X; no key stored", pullKeyResultName(result), mDiscoveredNodeId);
     // Verification is a diagnostic result only. The candidate is not handed to
@@ -9683,6 +9743,8 @@ bool IoHomeController::retry2WKeyExchange()
 
 void IoHomeController::finalize2WPairingKey()
 {
+    ++mPairingTelemetry.counters.finalResponseSeen;
+    // 0x33 confirms installation; only a verified MAC increments keyProven.
     // Store the negotiated system key as the channel's encryption key and move
     // on to the optional SetConfig1 step. Pairing is rare and critical, so the
     // flash write bypasses the normal throttle.
@@ -10750,6 +10812,10 @@ RadioError IoHomeController::ensureReceiveAfterTransmit()
 {
     if (mRadio.state() == RadioState::Transmitting) {
         if(!mRadio.isTxDone())return RadioError::Busy;
+        if (!mQueuedTxDoneObserved) {
+            if (auto *counters=activeAttemptCounters()) ++counters->rfTxCompleted;
+            mQueuedTxDoneObserved=true;
+        }
         mRadioDiversity.activity(mCurrentFreqIdx,millis());
     }
 

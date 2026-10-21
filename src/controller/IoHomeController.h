@@ -371,6 +371,12 @@ public:
   };
   static const char *pullKeyResultName(PullKeyResult result);
 
+  struct AttemptCounters
+  {
+    uint32_t rxWrongPeer=0,rxCrcValid=0,rxUnmatched=0,rfTxCompleted=0;
+    uint32_t challengeSeen=0,finalResponseSeen=0,keyRefused=0,keyProven=0;
+    uint32_t actuationObserved=0,dutyRejected=0;
+  };
   struct PairingTelemetry
   {
     PairingOutcome outcome = PairingOutcome::None;
@@ -391,6 +397,7 @@ public:
     uint8_t discoverConfirmAttempts = 0;
     PullKeyResult pullResult = PullKeyResult::NotRun;
     PairingOptionalConfigResult optionalConfig = PairingOptionalConfigResult::NotAttempted;
+    AttemptCounters counters{};
   };
 
   struct ExchangeRadioSnapshot
@@ -417,6 +424,7 @@ public:
 
   struct ExchangeDiagnostics
   {
+    AttemptCounters counters{};
     uint16_t timeoutCount = 0;
     uint16_t unconfirmedCount = 0;
     ExchangeRadioSnapshot lastUnconfirmed{};
@@ -1652,6 +1660,8 @@ private:
                             Pairing2WMode iMode,
                             bool iExplicitDiagnosticMode);
 
+  AttemptCounters *activeAttemptCounters();
+  static void logAttemptCounters(const char *scope, const AttemptCounters &counters);
   void processPairSendDiscovery();
   void processPairWaitDiscoveryResponse();
   void processPairSendDiscoveryConfirmation();
