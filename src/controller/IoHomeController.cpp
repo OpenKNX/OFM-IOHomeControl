@@ -372,6 +372,7 @@ namespace
             return "discovery-confirmation";
         case Pairing2WMode::LaunchKeyTransfer:
             return "launch-key-transfer";
+        case Pairing2WMode::AtlanticPull: return "AtlanticPull";
         case Pairing2WMode::PullKey:
             return "pull-key";
         default:
@@ -2310,6 +2311,7 @@ bool IoHomeController::configureHeatingPoll(uint8_t c,uint16_t seconds)
 
 void IoHomeController::serviceHeating()
 {
+    if(mAtlantic.status.stage==AtlanticStage::RollCall)return;
     if(!mModule||!mModule->managementRequestsAllowed())return;
     for(uint8_t c=0;c<16;++c){
         auto &state=mHeating[c];auto *ch=mModule->getChannel(c);
@@ -3844,6 +3846,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mPairingFreqIdx = frequencyIndexForHz(kNormal2WTxFreqHz);
     mPairingStartTime = millis();
     mPairPushFrequency = 0xFF;
+    mPairPullAttempts = 0;
     mPairKeyOwner = mOwnNodeId;
     memcpy(mPairSessionKey, mSystemKey, sizeof(mPairSessionKey));
     memset(mPairingChallenge, 0, sizeof(mPairingChallenge)); // will be filled by device's ChallengeRequest
@@ -4088,6 +4091,7 @@ Pairing1WMode IoHomeController::lastPairing1WMode() const
 
 void IoHomeController::cancelPairing()
 {
+    if(mPairing2WMode==Pairing2WMode::AtlanticPull){mPairingTelemetry.pullResult=PullKeyResult::Cancelled;cancelAtlantic();}
     if (mState >= ControllerState::PairSendDiscovery &&
         mState <= ControllerState::PairFailed)
     {
@@ -4511,6 +4515,7 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
                                                    IoHomeCommandExchangeResult iResult)
 {
     if (iEntry.command == IoHomeCommand::Execute) logAttemptCounters("MoveDiagCounters",mExchangeDiagnostics.counters);
+    finishAtlanticProbe(iEntry,iResult);
     finishHeating(iEntry,iResult);
     finishLimitation(iEntry,iResult);
     if(iEntry.batteryDiagnostic) {
@@ -6884,6 +6889,7 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
 
 void IoHomeController::loop()
 {
+    serviceAtlantic();
     serviceHeating();
     serviceLimitationRefresh();
     for(uint8_t c=0;c<16;++c) {
@@ -7014,7 +7020,7 @@ void IoHomeController::loop()
         mPairingTelemetry.outcome == PairingOutcome::InProgress &&
         (mPairKeyOwner != mOwnNodeId || memcmp(mPairSessionKey,mSystemKey,16)))
     {
-        if (mPairing2WMode == Pairing2WMode::PullKey || mPairing2WMode == Pairing2WMode::LaunchKeyTransfer)
+        if (mPairing2WMode == Pairing2WMode::AtlanticPull || mPairing2WMode == Pairing2WMode::PullKey || mPairing2WMode == Pairing2WMode::LaunchKeyTransfer)
             finishPullKeyDiagnostic(PullKeyResult::Unproven);
         else {
             recordPairingDiagnostic(PairingOutcome::KeyExchangeFailure,"pairing-identity-or-key-changed");
@@ -7087,6 +7093,7 @@ void IoHomeController::loop()
                 ++mPairingTelemetry.counters.rxUnmatched;
                 logDebugP("Pairing: ignored response outside bound key/session/channel/deadline");
             }
+            else if(mState==ControllerState::AtlanticRollCallWait){processAtlanticRollCallFrame();}
             else if (mState == ControllerState::WaitResponse)
             {
                 mState = ControllerState::ProcessResponse;
@@ -7136,6 +7143,16 @@ void IoHomeController::loop()
                             mState = ControllerState::PairSendLaunchKeyTransfer;
                             break;
 
+                        case Pairing2WMode::AtlanticPull:
+                            if(!IoHomeHeating::pairingNode(mPairProtocolIdentity)){
+                                stopAtlantic(AtlanticStage::Failed,"wrong_pairing_profile");mState=ControllerState::PairFailed;
+                            }else{
+                                mAtlantic.status.pairingNode=mDiscoveredNodeId;
+                                mAtlantic.revision=lPairChannel?lPairChannel->productContextRevision():0;
+                                mPairDiscoverConfirmMode=PairingDiscoverConfirmMode::SendWithAck;
+                                mState=ControllerState::PairSendDiscoveryConfirmation;
+                            }
+                            break;
                         case Pairing2WMode::PullKey:
                             mState = ControllerState::PairSendLaunchKeyTransfer;
                             break;
@@ -7459,6 +7476,9 @@ void IoHomeController::loop()
     // State machine
     switch (mState)
     {
+    case ControllerState::AtlanticRollCallWait:
+        processAtlanticRollCall();
+        break;
     case ControllerState::Idle:
         processIdle();
         break;
@@ -7717,7 +7737,7 @@ void IoHomeController::processIdle()
                     if (mDiagnostic2WFrameVersion == 3)
                         mTxFrame.ctrlByte1 = (mTxFrame.ctrlByte1 & ~IOHC_CTRL1_VER_MASK) | 3;
                     resolveTwoWayPreamblePlan(mTxFrame, mCurrentCmd);
-                    if(mCurrentCmd.heatingToken){mCurrentCmd.twoWayPreamblePlan.fixedPreamble=48;mCurrentCmd.twoWayPreamblePlan.use=TwoWayWakeBeliefUse::NotLowPower;}
+                    if(mCurrentCmd.heatingToken||mCurrentCmd.atlanticToken){mCurrentCmd.twoWayPreamblePlan.fixedPreamble=48;mCurrentCmd.twoWayPreamblePlan.use=TwoWayWakeBeliefUse::NotLowPower;}
                 }
                 mState = ControllerState::TxPending;
             }
@@ -8254,6 +8274,22 @@ void IoHomeController::processResponse()
         return;
     }
 
+    if(mCurrentCmd.atlanticToken){
+        if(!atlanticContextMatches()||mCurrentCmd.atlanticToken!=mAtlantic.status.session||mAtlantic.status.stage!=AtlanticStage::Probing){
+            mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+        }
+        const bool expired=uint32_t(millis()-mStateTimer)>=mResponseTimeoutMs;
+        if(expired||(mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W)){mState=ControllerState::WaitResponse;return;}
+        if(mRxFrame.commandId==IoHomeCommand::WritePrivateResponse){
+            IoHomeHeating::Value value;
+            if(!mSawChallenge||!mAuthResponseSent ||
+               !IoHomeHeating::decodeReply(mCurrentCmd.heatingData,mCurrentCmd.heatingLength,mRxFrame.data,mRxFrame.dataLen,value)){
+                mState=ControllerState::WaitResponse;return;
+            }
+        } else if(mRxFrame.commandId!=IoHomeCommand::ChallengeRequest&&mRxFrame.commandId!=IoHomeCommand::ErrorResponse){
+            mState=ControllerState::WaitResponse;return;
+        }
+    }
     if(mCurrentCmd.heatingToken){
         if(!heatingContextMatches(mCurrentCmd)){
             notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::FailedBeforeAuthentication);
@@ -8831,6 +8867,7 @@ void IoHomeController::beginPairKeyInitDelay(PairingTelemetry::DiscoverConfirmRe
 {
     mPairingTelemetry.discoverConfirmResult = iResult;
     mPairingTelemetry.discoverConfirmAttempts = mPairDiscoverConfirmAttempts;
+    if(mPairing2WMode==Pairing2WMode::AtlanticPull){mState=ControllerState::PairSendLaunchKeyTransfer;return;}
     mStateTimer = millis();
     mState = mPairKeyInitDelayMs == 0
                  ? ControllerState::PairSendKeyInit
@@ -8846,6 +8883,7 @@ void IoHomeController::processPairWaitKeyInitDelay()
 const char *IoHomeController::pullKeyResultName(PullKeyResult result)
 {
     switch (result) {
+    case PullKeyResult::Cancelled: return "cancelled";
     case PullKeyResult::NotRun: return "not_run";
     case PullKeyResult::Received: return "received";
     case PullKeyResult::VerifiedSameKey: return "verified_same_key";
@@ -8864,6 +8902,15 @@ void IoHomeController::finishPullKeyDiagnostic(PullKeyResult result)
         ++mPairingTelemetry.counters.finalResponseSeen;
     }
     if (result==PullKeyResult::Refused) ++mPairingTelemetry.counters.keyRefused;
+    const bool atlantic=mPairing2WMode==Pairing2WMode::AtlanticPull;
+    const bool proven=result==PullKeyResult::VerifiedSameKey||result==PullKeyResult::VerifiedOtherKey;
+    if(atlantic&&proven&&atlanticContextMatches()){
+        std::memcpy(mAtlantic.key,mPairPulledKey,16);mAtlantic.keyProven=true;
+        mAtlantic.status.stage=AtlanticStage::KeyVerified;
+    } else if(atlantic){
+        stopAtlantic(result==PullKeyResult::Refused?AtlanticStage::Refused:
+            result==PullKeyResult::Timeout?AtlanticStage::Timeout:AtlanticStage::NotProven,pullKeyResultName(result));
+    }
     mPairingTelemetry.pullResult = result;
     logInfoP("Pairing pull: result=%s peer=%06X; no key stored", pullKeyResultName(result), mDiscoveredNodeId);
     // Verification is a diagnostic result only. The candidate is not handed to
@@ -8876,6 +8923,11 @@ void IoHomeController::finishPullKeyDiagnostic(PullKeyResult result)
     resetPairingPreambleState();
     mState = ControllerState::Idle;
     startReceive();
+    if(atlantic&&proven&&mAtlantic.keyProven){
+        uint32_t heater=0;
+        if(!IoHomeHeating::nextNode(mAtlantic.status.pairingNode,heater) || !queueAtlanticProbe(heater))
+            stopAtlantic(AtlanticStage::Failed,"no_heater_at_plus_one_or_quota");
+    }
 }
 
 void IoHomeController::processPairSendLaunchKeyTransfer()
@@ -8889,6 +8941,7 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
     mPairLaunchKeyTransferFrame.init();
     mPairLaunchKeyTransferFrame.setStart2W();
     mPairLaunchKeyTransferFrame.setLowPower(pairingLowPower2W());
+    if(mPairing2WMode==Pairing2WMode::AtlanticPull)mPairLaunchKeyTransferFrame.ctrlByte1=0x04;
     mPairLaunchKeyTransferFrame.setSrcNode(mOwnNodeId);
     mPairLaunchKeyTransferFrame.setDestNode(mDiscoveredNodeId);
     mPairLaunchKeyTransferFrame.commandId = IoHomeCommand::LaunchKeyTransfer;
@@ -8897,7 +8950,7 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
     mPairLaunchKeyTransferFrame.dataLen = sizeof(mPairingChallenge);
     mPairLaunchKeyTransferFrame.hasHmac = false;
 
-    const uint16_t lPreamble = preambleFor2WRequest(mPairLaunchKeyTransferFrame);
+    const uint16_t lPreamble = mPairing2WMode==Pairing2WMode::AtlanticPull?48:preambleFor2WRequest(mPairLaunchKeyTransferFrame);
     const RadioError lPrepErr = configureNormal2WTxRadio(lPreamble);
     if (lPrepErr == RadioError::Busy)
         return;
@@ -8986,6 +9039,8 @@ void IoHomeController::processPairSendPullKeyChallenge()
         const RadioError lErr = startControllerTransmit(mTxBuffer, lLen);
         if (lErr == RadioError::None)
         {
+            ++mPairPullAttempts;
+            if(mPairing2WMode==Pairing2WMode::AtlanticPull)mAtlantic.status.proofAttempts=mPairPullAttempts;
             mStateTimer = millis();
             mState = ControllerState::PairWaitPullKeyChallengeResponse;
         }
@@ -9020,7 +9075,9 @@ void IoHomeController::processPairWaitPullKeyChallengeResponse()
     if (millis() - mStateTimer > IOHC_RX_TIMEOUT_MS)
     {
         logDebugP("Pairing: pulled key auth timed out for 0x%06X, diagnostic stopped", mDiscoveredNodeId);
-        finishPullKeyDiagnostic(PullKeyResult::Timeout);
+        if(mPairing2WMode==Pairing2WMode::AtlanticPull && mPairPullAttempts<3){
+            mState=ControllerState::PairSendPullKeyChallenge; // fresh challenge, original 32 transcript
+        }else finishPullKeyDiagnostic(PullKeyResult::Timeout);
     }
 }
 
@@ -10998,6 +11055,8 @@ void IoHomeController::updateCurrentFrequencyIndex(uint32_t iFrequencyHz)
 bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 {
     if(!managementIdentityMatches(iEntry)||!heatingContextMatches(iEntry))return false;
+    if(iEntry.atlanticToken && (!atlanticContextMatches()||mAtlantic.status.session!=iEntry.atlanticToken||
+        mAtlantic.status.stage!=AtlanticStage::Probing))return false;
     if(iEntry.limitationToken && (iEntry.sourceChannelIndex>=16||!mLimitations[iEntry.sourceChannelIndex].active||
        iEntry.limitationToken!=mLimitations[iEntry.sourceChannelIndex].snapshot.refreshToken))return false;
     if(iEntry.rcmToken && (iEntry.rcmToken!=mRcmToken ||
@@ -11441,7 +11500,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 
     case IoHomeCommand::WritePrivate:
     {
-        if(iEntry.heatingToken){
+        if(iEntry.heatingToken||iEntry.atlanticToken){
             if(!heatingContextMatches(iEntry)||iEntry.heatingLength<4||iEntry.heatingLength>6)return false;
             std::memcpy(mTxFrame.data,iEntry.heatingData,iEntry.heatingLength);mTxFrame.dataLen=iEntry.heatingLength;
             mTxFrame.setLowPower(false);mTxFrame.hasHmac=false;mAuthResponseSent=false;break;
@@ -13074,4 +13133,186 @@ void IoHomeController::printBatteryDiagnostic(uint8_t channel)
         (unsigned long)d.retryAfterMs,d.node?(unsigned long)(millis()-d.resultMs):0);
     [[maybe_unused]] const uint16_t objects[]={0xA601,0xA607,0xA60E,9,0x4003};
     if(!d.action)for(unsigned i=0;i<5;++i)logInfoP("  object=%04X state=%s",objects[i],IoHomeBatteryDiagnostic::name(d.objects[i]));
+}
+
+bool IoHomeController::startAtlanticPairing(uint8_t channel,uint32_t peer)
+{
+    auto *ch=mModule&&channel<16?mModule->getChannel(channel):nullptr;
+    if(!ch||ch->is1W()||ch->isPaired()||peer>0xFFFFFF||!idleForManagedOperation()||
+       !mModule->managementRequestsAllowed())return false;
+    if(!startPairingExperimental(channel,peer,Pairing2WMode::AtlanticPull))return false;
+    mAtlantic={};if(++mNextAtlanticSession==0)++mNextAtlanticSession;
+    mAtlantic.status.session=mNextAtlanticSession;mAtlantic.status.channel=channel;
+    mAtlantic.status.stage=AtlanticStage::Discovered;mAtlantic.gateway=mOwnNodeId;
+    mAtlantic.startedMs=millis();mAtlantic.revision=ch->productContextRevision();
+    std::memcpy(mAtlantic.globalKey,mSystemKey,16);return true;
+}
+
+bool IoHomeController::atlanticContextMatches() const
+{
+    if(!mModule||!mAtlantic.status.session||mAtlantic.gateway!=mOwnNodeId||
+       std::memcmp(mAtlantic.globalKey,mSystemKey,16)||uint32_t(millis()-mAtlantic.startedMs)>180000)return false;
+    const auto *ch=mModule->getChannel(mAtlantic.status.channel);
+    if(!ch||ch->is1W()||ch->productContextRevision()!=mAtlantic.revision)return false;
+    if(mAtlantic.manualScan)return ch->isPaired()&&IoHomeHeating::actuator(ch->getProtocolIdentity())&&
+        ch->getNodeId()==mAtlantic.status.heaterNode&&!std::memcmp(ch->getEncryptionKey(),mAtlantic.key,16);
+    return !ch->isPaired(); // an occupied channel is never overwritten
+}
+
+void IoHomeController::stopAtlantic(AtlanticStage stage,const char *reason)
+{
+    mAtlantic.status.stage=stage;mAtlantic.status.reason=reason;mAtlantic.keyProven=false;
+    std::memset(mAtlantic.key,0,sizeof(mAtlantic.key));
+    if(mCurrentCmd.atlanticToken){mCurrentCmd.active=false;mState=ControllerState::Idle;}
+    if(mState==ControllerState::AtlanticRollCallWait)mState=ControllerState::Idle;
+}
+void IoHomeController::cancelAtlantic()
+{
+    stopAtlantic(AtlanticStage::Cancelled,"cancelled");
+    std::memset(mPairPulledKey,0,sizeof(mPairPulledKey));
+    std::memset(mPairPullAuthChallenge,0,sizeof(mPairPullAuthChallenge));
+    mPairPulledKeyFrame.init();
+}
+
+bool IoHomeController::queueAtlanticProbe(uint32_t node)
+{
+    if(!mAtlantic.keyProven||!atlanticContextMatches()||!node||node>0xFFFFFF)return false;
+    const uint32_t cost=estimatedTxAirtimeMs(13,48)+estimatedTxAirtimeMs(15,authResponsePreamble());
+    mRfDutyBudget.advance(millis());
+    if(mRfDutyBudget.used(kNormal2WTxFreqHz)+cost>IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(kNormal2WTxFreqHz)))return false;
+    IoHomeQueueEntry entry{};entry.destNodeId=node;entry.encKey=mAtlantic.key;
+    entry.command=IoHomeCommand::WritePrivate;entry.atlanticToken=mAtlantic.status.session;
+    entry.sourceChannelIndex=mAtlantic.status.channel;entry.heatingLength=IoHomeHeating::build(0x0102,false,0,entry.heatingData);
+    entry.maxAttempts=1;entry.active=true;
+    entry.twoWayTxFreqIdx=frequencyIndexForHz(kNormal2WTxFreqHz);
+    if(!queuePush(entry))return false;
+    mAtlantic.status.heaterNode=node;mAtlantic.status.stage=AtlanticStage::Probing;
+    mAtlantic.status.reason="read_only_max_setpoint_probe";return true;
+}
+
+void IoHomeController::finishAtlanticProbe(const IoHomeQueueEntry &entry,IoHomeCommandExchangeResult result)
+{
+    if(!entry.atlanticToken||entry.atlanticToken!=mAtlantic.status.session)return;
+    if(!atlanticContextMatches()){stopAtlantic(AtlanticStage::Failed,"identity_changed");return;}
+    if(result==IoHomeCommandExchangeResult::Completed){
+        IoHomeHeating::Value value;
+        if(IoHomeHeating::decodeReply(entry.heatingData,entry.heatingLength,mRxFrame.data,mRxFrame.dataLen,value)&&value.valid){
+            if(!mAtlantic.identity.valid){
+                // This scoped inference is supported by AGILIA's proven key
+                // plus independently authenticated read-only +1 response.
+                mAtlantic.identity.valid=true;mAtlantic.identity.fullMetadata=false;
+                mAtlantic.identity.profile=52;mAtlantic.identity.subProfile=1;mAtlantic.identity.manufacturerId=12;
+                mAtlantic.identity.powerSaveMode=IoHomePowerMode::AlwaysAlive;
+                mAtlantic.identity.powerSaveModeRaw=IOHC_POWER_SAVE_ALWAYS_ALIVE;
+            }
+            mAtlantic.identity.ioAddress=entry.destNodeId;
+            mAtlantic.status.stage=AtlanticStage::HeaterVerified;
+            mAtlantic.status.reason="heater_address_verified_not_assigned";return;
+        }
+    }
+    if(mAtlantic.status.rollcallAttempts){stopAtlantic(AtlanticStage::Failed,"readback_invalid_after_rollcall");return;}
+    mAtlantic.status.stage=AtlanticStage::RollCall;mAtlantic.status.reason="no_heater_at_plus_one";
+}
+
+bool IoHomeController::assignAtlanticHeater(uint8_t channel,uint32_t session)
+{
+    if(channel>=16||channel!=mAtlantic.status.channel||session!=mAtlantic.status.session||
+       mAtlantic.manualScan||!mAtlantic.keyProven||mAtlantic.status.stage!=AtlanticStage::HeaterVerified||
+       !atlanticContextMatches()||!idleForManagedOperation()||!mModule->managementRequestsAllowed()||
+       !IoHomeHeating::actuator(mAtlantic.identity))return false;
+    auto *ch=mModule->getChannel(channel);
+    if(!mModule->persistTwoWayAssignment(channel,mAtlantic.status.heaterNode,mAtlantic.key,mAtlantic.identity)){
+        mAtlantic.status.reason="persistence_failed_not_assigned";return false;
+    }
+    ch->setNodeId(mAtlantic.status.heaterNode);ch->setEncryptionKey(mAtlantic.key);
+    ch->clearProtocolIdentity();ch->onProtocolIdentity(mAtlantic.status.heaterNode,mAtlantic.identity);
+    openknx.flash.save(true);
+    stopAtlantic(AtlanticStage::Persisted,"persisted_after_explicit_channel_assignment");
+    // First measured value is requested separately; no synthetic startup state.
+    requestHeatingRegister(ch,0x0115);return true;
+}
+
+void IoHomeController::serviceAtlantic()
+{
+    const auto stage=mAtlantic.status.stage;
+    if(stage==AtlanticStage::None||stage==AtlanticStage::Cancelled||stage==AtlanticStage::Persisted||
+       stage==AtlanticStage::Refused||stage==AtlanticStage::NotProven||stage==AtlanticStage::Timeout||stage==AtlanticStage::Failed)return;
+    if(!atlanticContextMatches()){stopAtlantic(AtlanticStage::Timeout,"session_expired_or_identity_changed");return;}
+    if(stage!=AtlanticStage::RollCall||mState!=ControllerState::Idle||mCurrentCmd.active||!queueEmpty())return;
+    const uint8_t attempt=mAtlantic.status.rollcallAttempts;
+    if(attempt>=3){
+        if(mAtlantic.manualScan&&selectSavedHeatingKey())return;
+        stopAtlantic(mAtlantic.manualScan?AtlanticStage::None:AtlanticStage::Failed,
+            mAtlantic.manualScan?"saved_key_scan_complete":"rollcall_silent");return;
+    }
+    const uint32_t frequency=IOHC_FREQUENCIES[attempt%IOHC_NUM_FREQUENCIES];
+    TwoWayDiscoveryFrameOptions options;options.command=IoHomeCommand::DiscoverSPERequest;
+    options.destination=0x00003B;options.lowPower=false;options.ackCapable=false;options.preamble=48;
+    IoHomeFrame frame;if(!buildTwoWayDiscoveryFrame(frame,mOwnNodeId,options,mAtlantic.key))return;
+    const uint8_t length=frame.serialize2W(mTxBuffer,sizeof(mTxBuffer));if(!length)return;
+    mRfDutyBudget.advance(millis());
+    if(mRfDutyBudget.used(frequency)+estimatedTxAirtimeMs(length,48)>
+       IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(frequency))){stopAtlantic(AtlanticStage::Failed,"quota_denied");return;}
+    const auto prepared=configureTxRadio(48,&frequency);if(prepared==RadioError::Busy)return;
+    if(prepared!=RadioError::None){stopAtlantic(AtlanticStage::Failed,"rx_or_tx_not_ready");return;}
+    const auto sent=startControllerTransmit(mTxBuffer,length);if(sent==RadioError::Busy)return;
+    if(sent!=RadioError::None){stopAtlantic(AtlanticStage::Failed,"quota_or_radio_denied");return;}
+    ++mAtlantic.status.rollcallAttempts;mStateTimer=millis();mState=ControllerState::AtlanticRollCallWait;
+}
+void IoHomeController::processAtlanticRollCall()
+{
+    if(!atlanticContextMatches()){stopAtlantic(AtlanticStage::Timeout,"scan_context_expired");return;}
+    if(ensureReceiveAfterTransmit()!=RadioError::None)return;
+    serviceBackgroundRxScan(); // 2B may arrive on a different RF channel
+    if(uint32_t(millis()-mStateTimer)>=1500){mState=ControllerState::Idle;startReceive();}
+}
+void IoHomeController::processAtlanticRollCallFrame()
+{
+    if(!atlanticContextMatches()||uint32_t(millis()-mStateTimer)>1500||
+       mRxFrame.commandId!=IoHomeCommand::DiscoverSPEResponse||
+       (mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W)||mRxFrame.getDestNodeId()!=mOwnNodeId||
+       mRxFrame.getSrcNodeId()==mAtlantic.status.pairingNode)return;
+    auto identity=decodeAcceptedDiscoveryIdentity(mRxFrame.data,mRxFrame.dataLen);
+    if(!IoHomeHeating::actuator(identity)||getAddressClass(mRxFrame.getSrcNodeId())!=IoHomeAddressClass::Unicast)return;
+    if(mAtlantic.manualScan){
+        if(mRxFrame.getSrcNodeId()==mAtlantic.status.heaterNode)mAtlantic.status.reason="saved_key_rollcall_reply";
+        return;
+    }
+    // 2B itself is not a MAC proof. Require another challenged private read
+    // under the proven candidate key before enabling the explicit assignment.
+    identity.ioAddress=mRxFrame.getSrcNodeId();mAtlantic.identity=identity;
+    mState=ControllerState::Idle;
+    if(!queueAtlanticProbe(identity.ioAddress))stopAtlantic(AtlanticStage::Failed,"probe_after_rollcall_blocked");
+}
+
+bool IoHomeController::selectSavedHeatingKey()
+{
+    for(uint8_t c=mAtlantic.scanNext;c<16;++c){
+        mAtlantic.scanNext=c+1;auto *ch=mModule->getChannel(c);
+        if(!ch||ch->is1W()||!ch->isPaired()||!IoHomeHeating::actuator(ch->getProtocolIdentity()))continue;
+        bool duplicate=false;
+        for(uint8_t previous=0;previous<c;++previous){auto *p=mModule->getChannel(previous);
+            if(p&&!p->is1W()&&p->isPaired()&&IoHomeHeating::actuator(p->getProtocolIdentity())&&
+               !std::memcmp(p->getEncryptionKey(),ch->getEncryptionKey(),16)){duplicate=true;break;}}
+        if(duplicate)continue;
+        mAtlantic.status.channel=c;mAtlantic.status.heaterNode=ch->getNodeId();mAtlantic.revision=ch->productContextRevision();
+        std::memcpy(mAtlantic.key,ch->getEncryptionKey(),16);mAtlantic.status.rollcallAttempts=0;
+        mAtlantic.status.stage=AtlanticStage::RollCall;return true;
+    }
+    return false;
+}
+bool IoHomeController::scanSavedHeatingKeys()
+{
+    if(!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation())return false;
+    mAtlantic={};mAtlantic.manualScan=true;mAtlantic.gateway=mOwnNodeId;mAtlantic.startedMs=millis();
+    if(++mNextAtlanticSession==0)++mNextAtlanticSession;mAtlantic.status.session=mNextAtlanticSession;
+    std::memcpy(mAtlantic.globalKey,mSystemKey,16);
+    if(selectSavedHeatingKey())return true;stopAtlantic(AtlanticStage::None,"no_saved_heating_keys");return false;
+}
+void IoHomeController::printAtlanticStatus() const
+{
+    const auto &status=mAtlantic.status;
+    logInfoP("Atlantic stage=%u session=%lu channel=%u pairingNode=%06X heaterNode=%06X proofAttempts=%u rollcallAttempts=%u reason=%s",
+        unsigned(status.stage),(unsigned long)status.session,unsigned(status.channel+1),status.pairingNode,status.heaterNode,
+        status.proofAttempts,status.rollcallAttempts,status.reason);
 }

@@ -149,6 +149,7 @@ struct IoHomeQueueEntry
   uint32_t destNodeId;
   uint32_t observationGeneration;
   uint32_t productContextRevision;
+  uint32_t atlanticToken=0;
   uint32_t heatingToken=0;
   uint8_t heatingData[6]{};
   uint8_t heatingLength=0;
@@ -282,6 +283,7 @@ enum class ControllerState : uint8_t
   PairWaitSetConfig1FinalResponse,
   PairComplete,
   PairFailed,
+  AtlanticRollCallWait,
 
   // Receive-side authentication (unsolicited StatusUpdate)
   AuthSendChallenge,
@@ -322,6 +324,7 @@ enum class Pairing2WMode : uint8_t
   Normal = 0,                // default: 0x28 -> 0x29 -> 0x2C -> 0x2D? -> 0x31 -> 0x32 -> 0x33
   DiscoveryConfirmation = 1, // diagnostic alias for the normal confirmation step
   LaunchKeyTransfer = 2,     // experimental: 0x38 path
+  AtlanticPull = 4,          // explicit, staged AGILIA acquisition; never implicit push fallback
   PullKey = 3                // experimental: pull existing key from device
 };
 
@@ -371,7 +374,7 @@ public:
 
   enum class PullKeyResult : uint8_t
   {
-    NotRun, Received, VerifiedSameKey, VerifiedOtherKey, Unproven, Refused, Timeout
+    NotRun, Received, VerifiedSameKey, VerifiedOtherKey, Unproven, Refused, Timeout, Cancelled
   };
   static const char *pullKeyResultName(PullKeyResult result);
 
@@ -593,6 +596,17 @@ public:
   // engine. Only the payload is raw; addressing, power class, preamble,
   // retries, challenge-response authentication, and result handling remain
   // the same as for ordinary registered-device commands.
+  enum class AtlanticStage:uint8_t {None,Discovered,KeyVerified,Probing,RollCall,HeaterVerified,Persisted,Refused,NotProven,Timeout,Cancelled,Failed};
+  struct AtlanticStatus {
+    AtlanticStage stage=AtlanticStage::None;uint32_t session=0,pairingNode=0,heaterNode=0;
+    uint8_t channel=0xFF,proofAttempts=0,rollcallAttempts=0;const char *reason="none";
+  };
+  bool startAtlanticPairing(uint8_t channel,uint32_t pairingNode=0);
+  bool assignAtlanticHeater(uint8_t channel,uint32_t session);
+  void cancelAtlantic();
+  const AtlanticStatus &atlanticStatus() const {return mAtlantic.status;}
+  void printAtlanticStatus() const;
+  bool scanSavedHeatingKeys();
   bool requestHeatingRegister(IoHomecontrolChannel *channel,uint16_t reg,bool write=false,float value=0,bool background=false);
   bool configureHeatingPoll(uint8_t channel,uint16_t seconds);
   const IoHomeHeating::State &heatingState(uint8_t channel) const {return mHeating[channel<16?channel:16];}
@@ -1485,6 +1499,7 @@ private:
   IoHomeFrame mPairPulledKeyFrame;
   uint8_t mPairPulledKey[16];
   uint8_t mPairPullFrequency = 0xFF;
+  uint8_t mPairPullAttempts = 0;
   uint8_t mPairPullAuthChallenge[6];
   uint8_t mPairing1WStage = 0; // 0=announce, 1=add, 2=remove, 3=stop, 4=down
   Pairing1WMode mRequestedPairing1WMode = Pairing1WMode::RemoveAdd;
@@ -1670,6 +1685,19 @@ private:
 
   AttemptCounters *activeAttemptCounters();
   void logAttemptCounters(const char *scope, const AttemptCounters &counters) const;
+  struct AtlanticCandidate {
+    AtlanticStatus status;uint8_t key[16]{},globalKey[16]{};uint32_t gateway=0,startedMs=0,revision=0;
+    IoHomeProtocolIdentity identity{};bool keyProven=false,manualScan=false;uint8_t scanNext=0;
+  } mAtlantic;
+  uint32_t mNextAtlanticSession=0;
+  bool atlanticContextMatches() const;
+  bool queueAtlanticProbe(uint32_t node);
+  void finishAtlanticProbe(const IoHomeQueueEntry &entry,IoHomeCommandExchangeResult result);
+  void serviceAtlantic();
+  void processAtlanticRollCall();
+  void processAtlanticRollCallFrame();
+  bool selectSavedHeatingKey();
+  void stopAtlantic(AtlanticStage stage,const char *reason);
   IoHomeHeating::State mHeating[17]{}; // slot 16 is an immutable invalid-channel view
   uint32_t mNextHeatingToken=0,mHeatingNextAdmissionMs=0;
   bool heatingContextMatches(const IoHomeQueueEntry &entry) const;
