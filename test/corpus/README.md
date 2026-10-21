@@ -145,3 +145,32 @@ be used to invent the missing on-air authentication and response layout.
 Qualify `2E -> 3C -> 3D -> 2F` with Nina hardware before enabling a responder;
 any later `38 -> 32` remains a separate user-started acquisition workflow.
 Reference: Laberning `f9cb01641f8c61c0b2d36aae489f70e35a729215`, issue #162.
+
+## Checklist verification, 21 October 2026
+
+The 18 October checklist is implemented against existing OFM changes, rather
+than replaying fixes that are already in this branch. All authentication in new
+controller tests is synthetic; no new hardware qualification is claimed.
+
+| Items | Implementation / executable coverage |
+| --- | --- |
+| P0.1, BIN-1 | Separate ErrorResponse decoder; legacy FE 05 and ambiguous overlaps preserved; packed nonzero states tested. |
+| P0.2 | Definitive push refusals stop; wrong peer/channel, stale phase, changed key/identity and malformed DATA cannot decide success/refusal. |
+| P0.3/P0.4, BIN-2, TEST-F | Explicit pull diagnostic, original seven-byte IV and ciphertext-bound MAC; same/other/unproven/refused/timeout results; no automatic push or key assignment. Candidates are erased, including verified foreign keys. This intentionally differs from legacy committed_ram. |
+| P0.5 | Name-read fallback evaluated above; no key persistence from a locally produced MAC or bare 51. Independent peer proof remains a prerequisite. |
+| P1.1/P1.2, BIN-4 | MAIN-only for resolved garage profiles; opt-in MOTO endpoint restriction; binary subtype restriction; partial positioning retained for other garage models; rejected optimistic targets roll back. |
+| P1.3 | MOTO authenticated/silent exchange and late status regression; bounded resend, no actuation/target success from 3D. Existing independent status verification remains separate. |
+| P1.4, BIN-3, TEST-C/G | Config Open/Close decoder and armed peer-bound observation; Nina/PHY fixtures including synthetic CRC, negative lengths/CRC and both radio adapters. Unqualified responder withheld. |
+| P1.5 | Complete KLI enrollment repeat/sequence/finalizer test now interleaves signed foreign remote traffic without echo. Defaults remain unchanged; issue #74 does not measure a new preamble. |
+| BIN-5 | Separate synthetic 2W Config Open -> 1W enrollment -> 2W Config Close -> status/LastMaster integration. Not imposed on pure 1W products. |
+| P2.1, TEST-E | Existing real full-class RS100/Oximo fixtures plus labelled synthetic boundaries; latest unreported observation distinguished from historical evidence; 71 stays raw. |
+| P2.2 | No added polling; minute-spaced status regression adds no TX. BenchUnlimited remains a shielded-test policy, not production evidence. |
+| P2.3 | Existing low-battery KO and channel parameters retained. Full/Normal/Low/unknown appear in diagnostics; no unqualified percentage or additional KO. Pull remains an explicit diagnostic, not standard ETS pairing. |
+| P2.4 | Separate structured pairing/move counters; CRC count requires driver evidence, TX completion requires an observed completion event, cryptographic key proof differs from 33 installation confirmation. |
+| TEST-A/B/D, corpus integration | Existing public partial Atlantic/MOTO/Sunilus fixtures remain executable and sanitized; masked bytes and missing captures are not reconstructed. |
+
+Required hardware follow-up is still Atlantic pull after `6fdee1e7`, Nina's
+complete authenticated Config-State responder transcript and reply length,
+MOTO STOP/mid-travel behavior, and actual KLI/KUX wake-preamble measurements.
+The checklist's issue #165 attachments are not promoted to inspected golden
+captures. No new capture or secret-bearing diagnostic experiment was imported.
