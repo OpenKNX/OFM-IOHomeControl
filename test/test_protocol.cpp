@@ -9851,6 +9851,21 @@ TEST(controller_velux_1w_enrollment_serializes_multicast_add_stop_down)
     ASSERT_EQ(lFrame.getDestNodeId(), lReference.removeDestination);
     ASSERT_EQ(lFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER, 0);
     ASSERT_EQ(oneWaySequenceForTest(lFrame), 1U);
+    // A simultaneous, independently signed remote frame must not add an echo
+    // transmission or consume this identity's enrollment sequence.
+    IoHomeFrame foreign=lFrame;
+    foreign.setSrcNode(0x112233);
+    foreign.data[1]=0; foreign.data[2]=77;
+    const uint8_t transcript[]={static_cast<uint8_t>(IoHomeCommand::RemoveController),foreign.data[0]};
+    ASSERT_TRUE(IoHomeCrypto::createHmac1W(transcript,sizeof(transcript),77,lKey,foreign.hmac));
+    const auto sentBeforeForeign=lController.radio().testTransmitCount();
+    uint8_t foreignBytes[IOHC_FRAME_BUFFER_SIZE];
+    const auto foreignLength=serializeFrameForTest(foreign,foreignBytes,sizeof(foreignBytes));
+    ASSERT_TRUE(foreignLength>0);
+    lController.radio().testQueueReceivedPacket(foreignBytes,foreignLength);
+    lController.loop();
+    ASSERT_EQ(lController.radio().testTransmitCount(),sentBeforeForeign);
+    ASSERT_EQ(lChannel.getSequence1W(),1U);
     finishCurrentBlind1WPairingTxForTest(lController);
 
     for (uint8_t i = 0; i < lReference.addDestinationCount; ++i)
