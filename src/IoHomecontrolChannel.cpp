@@ -2797,6 +2797,10 @@ void IoHomecontrolChannel::printBatteryStatus() {
     logInfoP("  support=unverified-until-valid-response; unknown is neither zero-percent nor communication-error");
     logInfoP("  selected=%s source=%s age-ms=%lu conflict=%u",selected.valid?(selected.low?"yes":"no"):"unknown",
         ioHomeBatterySourceName(mBatteryInfo.source()),selected.valid?(unsigned long)(millis()-selected.timestampMs):0,mBatteryInfo.conflict());
+    logInfoP("  latest-status=%s raw=%02X command=%02X observed=%u timestamp-ms=%lu (categorical; no percent)",
+        mBatteryInfo.lastStatus.valid?ioHomeBatteryStateName(ioHomeBatteryState(mBatteryInfo.lastStatus.raw)):"unknown/not_reported",
+        mBatteryInfo.lastStatus.raw,mBatteryInfo.lastStatus.command,mBatteryInfo.lastStatus.valid,
+        (unsigned long)mBatteryInfo.lastStatus.timestampMs);
     static const char *coarseNames[]={"unknown","low","normal","full"};
     static const char *somfyNames[]={"very-low","low","mid","high","unknown"};
     logInfoP("  coarse historical=%s age-ms=%lu",mBatteryInfo.coarse.valid?coarseNames[mBatteryInfo.coarse.raw]:"unknown",

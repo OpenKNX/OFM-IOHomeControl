@@ -21648,3 +21648,18 @@ TEST(protocol_nina_config_state_is_distinct_from_key_transfer)
     ASSERT_EQ(strcmp(ioHomeConfigStateName(nullptr,1),"unknown"),0);
     ASSERT_EQ(strcmp(ioHomeConfigStateName(close,0),"unknown"),0);
 }
+
+TEST(protocol_battery_latest_not_reported_keeps_historical_alarm_evidence)
+{
+    IoHomeBatteryInfo info;
+    info.observeStatus(0x20,0x04,1);
+    info.observeStatus(0x80,0x04,2);
+    ASSERT_EQ(strcmp(ioHomeBatteryStateName(ioHomeBatteryState(info.lastStatus.raw)),"unknown/not_reported"),0);
+    ASSERT_EQ(info.lastStatus.timestampMs,2U); ASSERT_EQ(info.lastStatus.command,0x04);
+    ASSERT_TRUE(info.coarse.valid && info.coarse.low); ASSERT_EQ(info.coarse.timestampMs,1U);
+    info.observeStatus(0x61,0x04,3);
+    ASSERT_EQ(strcmp(ioHomeBatteryStateName(ioHomeBatteryState(info.lastStatus.raw)),"full"),0);
+    ASSERT_EQ(info.coarse.raw,3U); ASSERT_TRUE(!info.coarse.low); ASSERT_TRUE(!info.percentValid);
+    info.observeStatus(0x40,0x04,4);
+    ASSERT_EQ(strcmp(ioHomeBatteryStateName(ioHomeBatteryState(info.lastStatus.raw)),"normal"),0);
+}

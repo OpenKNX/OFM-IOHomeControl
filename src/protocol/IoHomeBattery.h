@@ -10,10 +10,15 @@ inline const char *ioHomeBatterySourceName(IoHomeBatterySource s){
  switch(s){case IoHomeBatterySource::StatusExecuteBits:return "StatusExecuteBits";case IoHomeBatterySource::A601Status:return "A601Status";case IoHomeBatterySource::BatteryError:return "BatteryError";default:return "unknown";}
 }
 inline IoHomeBatteryState ioHomeBatteryState(uint8_t status){return IoHomeBatteryState((status&0x60U)>>5U);}
+inline const char *ioHomeBatteryStateName(IoHomeBatteryState state){
+ switch(state){case IoHomeBatteryState::Low:return "low";case IoHomeBatteryState::Normal:return "normal";case IoHomeBatteryState::Full:return "full";default:return "unknown/not_reported";}
+}
 struct IoHomeBatteryEvidence {bool valid=false,low=false;uint8_t raw=0,command=0;uint32_t timestampMs=0;};
 inline bool ioHomeBatteryTimestampNewer(uint32_t a,uint32_t b){return int32_t(a-b)>0;}
 struct IoHomeBatteryInfo {
  IoHomeBatteryEvidence coarse,somfy,error;
+ // Latest qualified status observation is separate from historical alarm evidence.
+ IoHomeBatteryEvidence lastStatus;
  // No numeric converter is qualified. Raw/categorical inputs cannot set this.
  bool percentValid=false;uint8_t percent=0;uint32_t percentTimestampMs=0;
  struct Selection {const IoHomeBatteryEvidence *evidence;IoHomeBatterySource source;};
@@ -32,7 +37,9 @@ struct IoHomeBatteryInfo {
  const IoHomeBatteryEvidence &selected()const{return *selection().evidence;}
  bool conflict()const{return somfy.valid&&coarse.valid&&somfy.low!=coarse.low;}
  void observeStatus(uint8_t status,uint8_t command,uint32_t now){
-  const uint8_t state=uint8_t(ioHomeBatteryState(status));if(!state)return;
+  const uint8_t state=uint8_t(ioHomeBatteryState(status));
+  lastStatus={true,state==1,status,command,now};
+  if(!state)return;
   coarse={true,state==1,state,command,now};
  }
  void observeSomfy(unsigned state,uint8_t command,uint32_t now){if(state>3)return;somfy={true,state<2,uint8_t(state),command,now};}
