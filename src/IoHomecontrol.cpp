@@ -2460,6 +2460,12 @@ void IoHomecontrol::processInputKo(GroupObject &iKo)
 #ifdef LIM_KoBlockOffset
     if(LIM_KoCalcChannel(lAsap)>=0) {logDebugP("Limitation KO is output-only; input ignored");return;}
 #endif
+#ifdef HAW_KoBlockOffset
+    const int8_t presenceChannel=HAW_KoCalcChannel(lAsap);
+    if(presenceChannel>=0&&presenceChannel<mNumChannels&&mChannels[presenceChannel]){
+        mChannels[presenceChannel]->processHomeAwayInputKo((lAsap-HAW_KoBlockOffset)%HAW_KoBlockSize,iKo);return;
+    }
+#endif
 #ifdef HTG_KoBlockOffset
     const int8_t heatingChannel=HTG_KoCalcChannel(lAsap);
     if(heatingChannel>=0&&heatingChannel<mNumChannels&&mChannels[heatingChannel]){
@@ -4277,6 +4283,9 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc dynamic CH status|read", "Protocol-v4 raw capability objects 8100/8103");
     openknx.console.printHelpLine("iohc event trace on|off", "Trace owned-node RF payloads; event schema unresolved");
     openknx.console.printHelpLine("iohc 2wtrace [clear|csv]", "Dump bounded 2W TX/RX identity and timing evidence (no keys/auth bytes)");
+    openknx.console.printHelpLine("iohc heating pair CHANNEL [PAIRNODE]", "Atlantic production workflow; explicit verified assignment remains separate");
+    openknx.console.printHelpLine("iohc heating home|away CHANNEL", "AGILIA only: model confirmation and private-heating enable required; ACK is not occupancy");
+    openknx.console.printHelpLine("iohc heating presence-cancel CHANNEL", "Cancel pending Home/Away without replay; already sent RF cannot be undone");
     openknx.console.printHelpLine("iohc heating read NODE REGISTER", "Read-only Atlantic 52/1 register; paired per-channel key only");
     openknx.console.printHelpLine("iohc heating status CHANNEL", "Measured heating values, provenance and staged Atlantic session");
     openknx.console.printHelpLine("iohc heating refresh CHANNEL", "Stagger seven private reads; no default cyclic polling");
@@ -4377,13 +4386,20 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     if(iCmd.rfind("iohc heating ",0)==0){
         const auto args=trimSpaces(iCmd.substr(13));
         unsigned pairChannel=0;char pairNode[16]{},pairExtra=0;
-        if(sscanf(args.c_str(),"pair %u %15s %c",&pairChannel,pairNode,&pairExtra)>=1 && args.rfind("pair ",0)==0){
-            uint32_t node=0;const bool valid=pairChannel>=1&&pairChannel<=mNumChannels&&(!pairNode[0]||parseHex24(pairNode,node));
+        if(args.rfind("pair ",0)==0){
+            const int fields=sscanf(args.c_str(),"pair %u %15s %c",&pairChannel,pairNode,&pairExtra);
+            uint32_t node=0;const bool valid=(fields==1||fields==2)&&pairChannel>=1&&pairChannel<=mNumChannels&&(!pairNode[0]||parseHex24(pairNode,node));
             logInfoP("Atlantic pairing=%s",valid&&mController.startAtlanticPairing(pairChannel-1,node)?"started; inspect then explicitly assign":"blocked");return true;
         }
         if(args=="scan"){logInfoP("Heating saved-key scan=%s",mController.scanSavedHeatingKeys()?"started":"blocked");return true;}
         if(args=="cancel"){mController.cancelPairing();mController.cancelAtlantic();logInfoP("Atlantic candidate discarded");return true;}
         unsigned channel=0,seconds=0,session=0;char extra=0,nodeText[16]{},regText[16]{};
+        if(sscanf(args.c_str(),"home %u %c",&channel,&extra)==1||sscanf(args.c_str(),"away %u %c",&channel,&extra)==1){
+            const bool home=args.rfind("home ",0)==0;
+            logInfoP("HomeAway request=%s; ACK is command confirmation only",channel>=1&&channel<=mNumChannels&&mController.requestHomeAway(mChannels[channel-1],home)?"queued":"blocked (AGILIA model confirmation and private-heating enable required)");return true;
+        }
+        if(sscanf(args.c_str(),"presence-cancel %u %c",&channel,&extra)==1){logInfoP("HomeAway cancel=%s",channel>=1&&channel<=mNumChannels&&mController.cancelHomeAway(channel-1)?"cancelled":"no pending command");return true;}
+
         if(sscanf(args.c_str(),"status %u %c",&channel,&extra)==1&&channel>=1&&channel<=mNumChannels){
             mController.printHeatingStatus(channel-1);mController.printAtlanticStatus();return true;}
         if(sscanf(args.c_str(),"read %15s %15s %c",nodeText,regText,&extra)==2){

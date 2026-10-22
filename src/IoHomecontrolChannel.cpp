@@ -2898,9 +2898,43 @@ bool IoHomecontrolChannel::privateHeatingEnabled() const
     return false;
 #endif
 }
+bool IoHomecontrolChannel::agiliaHomeAwayEnabled() const
+{
+#ifdef ParamHTG_cAgiliaHomeAway
+    return privateHeatingEnabled()&&ParamHTG_cAgiliaHomeAway;
+#else
+    return false;
+#endif
+}
+void IoHomecontrolChannel::onHomeAwayCommandStatus()
+{
+#ifdef HAW_KocStatus
+    if(!knx.configured())return;
+    const auto &state=mController.heatingState(_channelIndex);
+    knx.getGroupObject(HAW_KoCalcNumber(HAW_KocStatus)).value(uint8_t(state.presenceResult),Dpt(5,10));
+    const auto &confirmed=state.values[IoHomeHeating::index(0x0110)];
+    if(agiliaHomeAwayEnabled() && confirmed.observed && confirmed.decoded.valid &&
+       (state.presenceResult==IoHomeHeating::PresenceResult::AcknowledgedEffectUnknown||
+        state.presenceResult==IoHomeHeating::PresenceResult::ReadbackVerifiedEffectUnknown||
+        state.presenceResult==IoHomeHeating::PresenceResult::ReadbackDifferent))
+        knx.getGroupObject(HAW_KoCalcNumber(HAW_KocConfirmedCommand)).value(bool(confirmed.decoded.raw),Dpt(1,1));
+#endif
+}
+void IoHomecontrolChannel::processHomeAwayInputKo(uint8_t index,GroupObject &ko)
+{
+#ifdef HAW_KocCommand
+    if(index==HAW_KocCommand&&isOperational()&&agiliaHomeAwayEnabled())mController.requestHomeAway(this,bool(ko.value(Dpt(1,1))));
+#else
+    (void)index;(void)ko;
+#endif
+}
 void IoHomecontrolChannel::invalidateHeatingFeedback()
 {
     mHeatingConfigSeen=false;
+    mController.invalidateHeatingChannel(_channelIndex);
+#ifdef HAW_KocStatus
+    if(knx.configured())knx.getGroupObject(HAW_KoCalcNumber(HAW_KocStatus)).value(uint8_t(0),Dpt(5,10));
+#endif
 #ifdef HTG_KocValid
     if(knx.configured())knx.getGroupObject(HTG_KoCalcNumber(HTG_KocValid)).value(uint8_t(0),Dpt(5,10));
 #endif

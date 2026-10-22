@@ -622,6 +622,9 @@ public:
   static const char *atlanticStageName(AtlanticStage stage);
   void printAtlanticStatus() const;
   bool scanSavedHeatingKeys();
+  void invalidateHeatingChannel(uint8_t channel);
+  bool requestHomeAway(IoHomecontrolChannel *channel,bool home);
+  bool cancelHomeAway(uint8_t channel);
   bool requestHeatingRegister(IoHomecontrolChannel *channel,uint16_t reg,bool write=false,float value=0,bool background=false);
   bool refreshHeating(uint8_t channel);
   bool configureHeatingPoll(uint8_t channel,uint16_t seconds);

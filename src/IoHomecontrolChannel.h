@@ -58,6 +58,9 @@ public:
   uint16_t mHeatingConfiguredPoll=0;
   void syncHeatingConfiguration();
   bool privateHeatingEnabled() const;
+  bool agiliaHomeAwayEnabled() const;
+  void onHomeAwayCommandStatus();
+  void processHomeAwayInputKo(uint8_t index,GroupObject &ko);
   void processHeatingInputKo(uint8_t index,GroupObject &ko);
   void invalidateHeatingFeedback();
   void onHeatingValue(uint16_t reg,const IoHomeHeating::Value &value);

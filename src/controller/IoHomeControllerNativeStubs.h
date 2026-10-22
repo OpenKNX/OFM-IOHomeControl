@@ -114,6 +114,9 @@ public:
   uint16_t profileRaw[17] = {};
   uint32_t profileFeedbackCount[17] = {};
   void onProfileParameterFeedback(uint8_t index,uint16_t raw) {if(index<17){profileRaw[index]=raw;++profileFeedbackCount[index];}}
+  bool homeAwayQualified=false;uint32_t homeAwayPublications=0;
+  bool agiliaHomeAwayEnabled()const{return homeAwayQualified;}
+  void onHomeAwayCommandStatus(){++homeAwayPublications;}
   uint32_t productContextRevision() const {return mProductContextRevision;}
   void invalidateProductContext() {mBatteryInfo={};mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
   IoHomePhysicalBounds &physicalBounds(){return mPhysicalBounds;}

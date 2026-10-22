@@ -10427,6 +10427,14 @@ TEST(controller_velux_1w_finalizer_down_failure_marks_operation_failed)
               IoHomeController::OneWayEnrollPhase::Failed);
 }
 
+// Pump until one accepted TX, allowing SX1262's bounded frequency/preamble
+// phases as well as SX1276's immediate configuration. No wall-clock advance.
+static void pumpControllerTransmit(IoHomeController &controller)
+{
+    const auto previous=controller.radio().testTransmitCount();
+    for(unsigned i=0;i<8&&controller.radio().testTransmitCount()==previous;++i)controller.loop();
+}
+
 TEST(controller_discovery_sends_standard_28_then_alt_2e_broadcast)
 {
     // Standard (non-encrypted) discovery mirrors a TaHoma box: it broadcasts the
@@ -10449,7 +10457,7 @@ TEST(controller_discovery_sends_standard_28_then_alt_2e_broadcast)
 
     // First transmit: classic 0x28 DiscoverRequest to 0x00003B.
     lController.radio().testClearTransmittedPacket();
-    lController.loop();
+    pumpControllerTransmit(lController);
     ASSERT_EQ(lController.state(), ControllerState::DiscoverySending);
 
     IoHomeFrame lStd;
@@ -10466,7 +10474,7 @@ TEST(controller_discovery_sends_standard_28_then_alt_2e_broadcast)
 
     // Second transmit: alternative 0x2E Discover2ERequest to 0x00003F.
     lController.radio().testClearTransmittedPacket();
-    lController.loop();
+    pumpControllerTransmit(lController);
     ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
 
     IoHomeFrame lAlt;
@@ -10506,7 +10514,7 @@ TEST(controller_spe_discovery_sends_single_2a_broadcast)
     ASSERT_EQ(lController.state(), ControllerState::DiscoverySending);
 
     lController.radio().testClearTransmittedPacket();
-    lController.loop();
+    pumpControllerTransmit(lController);
     // A single SPE frame moves straight to listening; no alternative 0x2E TX.
     ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
 
@@ -10537,7 +10545,7 @@ TEST(controller_spe_discovery_scans_both_power_classes_on_all_channels)
     for (uint8_t i = 0; i < 6; i++)
     {
         lController.radio().testClearTransmittedPacket();
-        lController.loop();
+        pumpControllerTransmit(lController);
         IoHomeFrame lFrame;
         const auto &lPacket = lController.radio().testLastTransmittedPacket();
         ASSERT_TRUE(!lPacket.empty());
@@ -10572,12 +10580,12 @@ TEST(controller_spe_discovery_listen_override_is_runtime_only)
     ASSERT_TRUE(!lController.setDiagnosticDiscoveryListenMs(99));
     ASSERT_TRUE(lController.setDiagnosticDiscoveryListenMs(4000));
     lController.startDiscovery(true);
-    lController.loop();
+    pumpControllerTransmit(lController);
     ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
     ASSERT_TRUE(!lController.setDiagnosticDiscoveryListenMs(3000));
     lController.loop(); // observe TX completion before the discovery deadline starts
         ioHomeTestAdvanceMillis(IOHC_DISCOVERY_LISTEN_MS + 1);
-    lController.loop();
+    pumpControllerTransmit(lController);
     ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
     ioHomeTestAdvanceMillis(3000);
     lController.loop();
@@ -10602,7 +10610,7 @@ TEST(controller_spe_discovery_extra_sweep_only_for_missing_import_metadata)
     lController.startDiscovery(true);
     for (uint8_t i = 0; i < 9; ++i)
     {
-        lController.loop();
+        pumpControllerTransmit(lController);
         ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
         ASSERT_EQ(lController.radio().testCurrentFrequency(), lExpected[i]);
         IoHomeFrame lFrame;
@@ -10635,7 +10643,7 @@ TEST(controller_spe_discovery_normal_preamble_uses_radio_start_default)
     lSettings.preamble = TwoWayDiscoveryPreambleMode::Normal;
     lController.setDiagnosticDiscoverySettings(lSettings);
     lController.startDiscovery(true);
-    lController.loop();
+    pumpControllerTransmit(lController);
 
     ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
     ASSERT_EQ(lController.radio().testLastPreambleLength(), 64);
@@ -11366,8 +11374,7 @@ static bool transmitQueuedControllerFrame(IoHomeController &iController,
                                           IoHomeFrame &oFrame)
 {
     iController.radio().testClearTransmittedPacket();
-    iController.loop();
-    iController.loop();
+    pumpControllerTransmit(iController);
 
     const auto &lPacket = iController.radio().testLastTransmittedPacket();
     if (lPacket.empty())
@@ -11542,7 +11549,7 @@ TEST(controller_post_import_spe_retry_enriches_assigned_channel_and_defers_flash
     const uint32_t lSavesBefore = openknx.flash.saveCount;
 
     lController.startDiscovery(true);
-    lController.loop();
+    pumpControllerTransmit(lController);
     IoHomeFrame lResponse;
     lResponse.init();
     lResponse.ctrlByte0 = IOHC_CTRL0_END;
@@ -11566,7 +11573,7 @@ TEST(controller_post_import_spe_retry_enriches_assigned_channel_and_defers_flash
 
     for (uint8_t i = 1; i < 6; ++i)
     {
-        lController.loop();
+        pumpControllerTransmit(lController);
         lController.loop(); // observe TX completion before the discovery deadline starts
         ioHomeTestAdvanceMillis(lController.diagnosticDiscoveryListenMs() + 1);
         lController.loop();
@@ -12611,7 +12618,7 @@ TEST(controller_spe_discovery_registers_same_complete_metadata_model)
     lController.setSystemKey(lKey);
     lController.init();
     lController.startDiscovery(true);
-    lController.loop();
+    pumpControllerTransmit(lController);
     ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
 
     IoHomeFrame lResponse;
@@ -12683,7 +12690,7 @@ TEST(controller_spe_discovery_defers_three_close_responses)
     lController.setSystemKey(lKey);
     lController.init();
     lController.startDiscovery(true);
-    lController.loop();
+    pumpControllerTransmit(lController);
     ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
     lController.loop(); // complete TX-to-RX transition
 
@@ -12733,7 +12740,7 @@ TEST(controller_spe_discovery_pending_queue_has_bounded_overflow)
     lController.setSystemKey(lKey);
     lController.init();
     lController.startDiscovery(true);
-    lController.loop();
+    pumpControllerTransmit(lController);
     lController.loop();
     ASSERT_EQ(lController.state(), ControllerState::DiscoveryListening);
 
@@ -12775,7 +12782,7 @@ TEST(controller_spe_discovery_duplicates_cannot_starve_unique_devices)
     lController.setSystemKey(lKey);
     lController.init();
     lController.startDiscovery(true);
-    lController.loop();
+    pumpControllerTransmit(lController);
     lController.loop();
 
     for (uint8_t i = 0; i < 30; ++i)
@@ -19999,7 +20006,7 @@ TEST(controller_discovery_session_collects_multiple_returns_without_erasing_sile
     ASSERT_TRUE(c.protocolIdentityForIoAddress(0x222222));
     ASSERT_TRUE(c.startDiscoveryFamily(IoHomeDiscoveryFamily::Sensor));
     for(uint8_t window=0;window<9;++window) {
-        ASSERT_TRUE(transmitQueuedControllerFrame(c,request));ioHomeTestAdvanceMillis(c.diagnosticDiscoveryListenMs()+1);c.loop();
+        ASSERT_TRUE(transmitQueuedControllerFrame(c,request));c.loop();ioHomeTestAdvanceMillis(c.diagnosticDiscoveryListenMs()+1);c.loop();
     }
     ASSERT_EQ(c.discoverySession().completion,IoHomeController::DiscoveryCompletion::Empty);
     ASSERT_EQ(c.discoverySession().silentSweeps,3U);ASSERT_TRUE(c.protocolIdentityForIoAddress(0x111111));
@@ -21999,7 +22006,7 @@ TEST(controller_atlantic_silent_probe_rollcall_diversity_and_cancel)
     ASSERT_TRUE(beginAtlanticPullForTest(c,m,ch,launch));const uint8_t key[16]={0x42};uint8_t ciphertext[16];
     ASSERT_TRUE(sendAtlanticCandidateForTest(c,launch,key,ciphertext,challenge));ASSERT_TRUE(proveAtlanticCandidateForTest(c,ciphertext,challenge,key));
     IoHomeFrame probe,response;ASSERT_TRUE(transmitQueuedControllerFrame(c,probe));
-    ioHomeTestAdvanceMillis(6000);c.loop();ioHomeTestAdvanceMillis(101);c.loop();
+    c.loop();ioHomeTestAdvanceMillis(6000);c.loop();ioHomeTestAdvanceMillis(101);c.loop();
     ASSERT_EQ(c.state(),ControllerState::AtlanticRollCallWait);
     IoHomeFrame rollcall;ASSERT_TRUE(lastTransmittedFrameForTest(c,rollcall));ASSERT_EQ(rollcall.commandId,IoHomeCommand::DiscoverSPERequest);
     const uint8_t transcript[]={0x2A};uint8_t expected[6];ASSERT_TRUE(IoHomeCrypto::createHmac2W(transcript,1,rollcall.data,key,expected));ASSERT_MEM_EQ(expected,rollcall.data+6,6);
@@ -22072,7 +22079,7 @@ TEST(controller_atlantic_full_silence_never_assigns_remote_or_sends_config)
     IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;IoHomeFrame launch,challenge;
     ASSERT_TRUE(beginAtlanticPullForTest(c,m,ch,launch));const uint8_t key[16]={0x42};uint8_t ciphertext[16];
     ASSERT_TRUE(sendAtlanticCandidateForTest(c,launch,key,ciphertext,challenge));ASSERT_TRUE(proveAtlanticCandidateForTest(c,ciphertext,challenge,key));
-    IoHomeFrame probe;ASSERT_TRUE(transmitQueuedControllerFrame(c,probe));ioHomeTestAdvanceMillis(6000);c.loop();ioHomeTestAdvanceMillis(101);
+    IoHomeFrame probe;ASSERT_TRUE(transmitQueuedControllerFrame(c,probe));c.loop();ioHomeTestAdvanceMillis(6000);c.loop();ioHomeTestAdvanceMillis(101);
     for(unsigned attempt=0;attempt<6;++attempt){c.loop();ASSERT_EQ(c.state(),ControllerState::AtlanticRollCallWait);
         c.loop();ioHomeTestAdvanceMillis(1501);c.loop();}
     c.loop();ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::Failed);
@@ -22344,10 +22351,10 @@ TEST(controller_discovery_atlantic_pairing_remote_is_an_advisory_offer_only)
     const uint8_t key[16]={0x77};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
     initPaired2WControllerForTest(c,m,ch,0x60F823,0,key);c.setSystemKey(key);
     c.startDiscovery(false);IoHomeFrame request,response;
-    ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,request));c.loop();c.loop();
     buildDiscoverResponseFrame(response,0x60F823,0xB6BDFB,false,IOHC_POWER_SAVE_ALWAYS_ALIVE);
     response.data[0]=0xFF;response.data[1]=0xC0;response.data[5]=12;
-    ASSERT_TRUE(queueControllerResponse(c,response));
+    ASSERT_TRUE(queueControllerResponse(c,response));c.loop();
     ioHomeTestAdvanceMillis(c.diagnosticDiscoveryListenMs()+1);c.loop();
     ASSERT_TRUE(c.atlanticPullOffered(0));ASSERT_EQ(c.atlanticPullOffer().node,0xB6BDFBU);
     ASSERT_TRUE(!ch.isPaired());ASSERT_TRUE(!ch.hasProtocolIdentity());ASSERT_MEM_EQ(c.getSystemKey(),key,16);
@@ -22416,7 +22423,7 @@ static bool beginAtlanticResetSearch(IoHomeController &c,IoHomecontrol &m,IoHome
     if(!beginAtlanticPullForTest(c,m,ch,launch,0xD6BC6C) || !sendAtlanticCandidateForTest(c,launch,key,ciphertext,challenge) ||
        !proveAtlanticCandidateForTest(c,ciphertext,challenge,key))return false;
     IoHomeFrame probe;if(!transmitQueuedControllerFrame(c,probe)||probe.getDestNodeId()!=0xD6BC6D)return false;
-    ioHomeTestAdvanceMillis(6000);c.loop();ioHomeTestAdvanceMillis(101);return true;
+    c.loop();ioHomeTestAdvanceMillis(6000);c.loop();ioHomeTestAdvanceMillis(101);return true;
 }
 static void atlanticCandidateReply(IoHomeFrame &response,uint32_t node)
 {
@@ -22482,4 +22489,169 @@ TEST(controller_atl176_multiple_responders_are_staged_and_spoof_cannot_block_rea
     ioHomeTestAdvanceMillis(101);c.loop();ASSERT_TRUE(transmitQueuedControllerFrame(c,probe));ASSERT_EQ(probe.getDestNodeId(),0xF519DDU);
     c.cancelAtlantic();ASSERT_TRUE(!ch.isPaired());ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::Cancelled);
     IoHomeController reboot;ASSERT_TRUE(!reboot.assignAtlanticHeater(0,c.atlanticStatus().session));
+}
+
+TEST(heating_home_away_codec_matches_public_commands_and_keeps_diagnostic_reads)
+{
+    uint8_t data[6];IoHomeHeating::Value decoded;
+    for(uint8_t value:{0,1}){
+        ASSERT_EQ(IoHomeHeating::build(0x0110,true,value,data),5U);
+        ASSERT_MEM_EQ(data,Atlantic176Corpus::presence[value?0:2].bytes+9,5);
+        ASSERT_TRUE(IoHomeHeating::decodeReply(data,5,Atlantic176Corpus::presence[value?1:3].bytes+9,5,decoded));ASSERT_EQ(decoded.raw,value);
+        data[4]^=1;ASSERT_TRUE(!IoHomeHeating::decodeReply(data,5,Atlantic176Corpus::presence[value?1:3].bytes+9,5,decoded));
+    }
+    for(float value:{-1.f,2.f,0.5f,NAN})ASSERT_EQ(IoHomeHeating::build(0x0110,true,value,data),0U);
+    ASSERT_EQ(IoHomeHeating::build(0x0101,true,1,data),0U);ASSERT_EQ(IoHomeHeating::build(0x012A,true,20,data),0U);
+    ASSERT_EQ(IoHomeHeating::build(0x0110,false,0,data),4U);
+    const uint8_t raw[]={0x0C,0x60,1,0x10,0xAB,0xCD};ASSERT_TRUE(IoHomeHeating::decodeReply(data,4,raw,6,decoded));
+    ASSERT_TRUE(!decoded.valid);ASSERT_EQ(decoded.length,2U);
+    ASSERT_EQ(IoHomeHeating::build(0x012A,false,0,data),4U);
+    static_assert(sizeof(IoHomeHeating::State)==580,"Home/Away may not grow the per-channel cache");
+}
+TEST(controller_home_away_normal_api_tracks_acknowledged_command_not_occupancy)
+{
+    using R=IoHomeHeating::PresenceResult;
+    for(bool home:{false,true}){
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initHeatingController(c,m,ch);ch.homeAwayQualified=true;
+        ASSERT_TRUE(c.requestHomeAway(&ch,home));ASSERT_EQ(c.heatingState(0).presenceResult,R::Queued);
+        IoHomeFrame tx,reply;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_EQ(tx.dataLen,5U);
+        ASSERT_EQ(tx.data[3],0x10);ASSERT_EQ(tx.data[4],home?1U:0U);c.loop();
+        ASSERT_EQ(c.heatingState(0).presenceResult,R::RfSent);
+        buildSimpleResponseFrame(reply,0x60F823,0xB6BDFC,IoHomeCommand::WritePrivateResponse,tx.data,tx.dataLen);
+        ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_TRUE(c.heatingState(0).busy); // unchallenged ACK is not accepted
+        ASSERT_TRUE(authenticateHeatingRequest(c));ASSERT_TRUE(queueControllerResponse(c,reply));
+        ASSERT_EQ(c.heatingState(0).presenceResult,R::AcknowledgedEffectUnknown);ASSERT_TRUE(!c.heatingState(0).busy);
+        const auto &o=c.heatingState(0).values[IoHomeHeating::index(0x0110)];ASSERT_TRUE(o.observed&&o.decoded.valid);ASSERT_EQ(o.decoded.raw,home?1U:0U);
+        ASSERT_EQ(ch.heatingPublications,0U); // no ordinary measurement publication
+        const auto packets=c.radio().testTransmitCount();ioHomeTestAdvanceMillis(1000);c.loop();ASSERT_EQ(c.radio().testTransmitCount(),packets); // no automatic GET or repeat
+        // A deliberate read can confirm only the register, never thermal effect.
+        ASSERT_TRUE(c.requestHeatingRegister(&ch,0x0110));ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(authenticateHeatingRequest(c));
+        uint8_t readback[]={0x0C,0x60,1,0x10,uint8_t(home)};
+        buildSimpleResponseFrame(reply,0x60F823,0xB6BDFC,IoHomeCommand::WritePrivateResponse,readback,5);ASSERT_TRUE(queueControllerResponse(c,reply));
+        ASSERT_EQ(c.heatingState(0).presenceResult,R::ReadbackVerifiedEffectUnknown);
+    }
+}
+TEST(controller_home_away_model_qualification_busy_quota_and_identity_guards)
+{
+    using R=IoHomeHeating::PresenceResult;
+    for(unsigned variant=0;variant<12;++variant){
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initHeatingController(c,m,ch);
+        if(variant==0){ASSERT_TRUE(!c.requestHomeAway(&ch,true));ASSERT_EQ(c.heatingState(0).presenceResult,R::QualificationBlocked);continue;}
+        ch.homeAwayQualified=true;
+        if(variant==1){auto id=ch.getProtocolIdentity();id.profile=22;ch.onProtocolIdentity(ch.getNodeId(),id);ASSERT_TRUE(!c.requestHomeAway(&ch,true));continue;}
+        if(variant==2){c.testChargeDuty(IOHC_FREQ_2,3600);c.testSimulationUnlimited();ASSERT_TRUE(!c.requestHomeAway(&ch,true));ASSERT_EQ(c.heatingState(0).presenceResult,R::QuotaBlocked);continue;}
+        ASSERT_TRUE(c.requestHomeAway(&ch,true));ASSERT_TRUE(!c.requestHomeAway(&ch,false));IoHomeFrame tx,reply;
+        ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+        if(variant==3)c.cancelHomeAway(0);
+        if(variant==4){uint8_t other[16]={0x43};ch.setEncryptionKey(other);}
+        if(variant==5){uint8_t other[16]={0x43};c.setSystemKey(other);} // unrelated global key does not substitute channel key
+        if(variant==6)ch.setNodeId(0x112233);
+        if(variant==7)ch.homeAwayQualified=false;
+        if(variant==8){ASSERT_TRUE(authenticateHeatingRequest(c));ioHomeTestAdvanceMillis(16000);c.loop();}
+        if(variant==9){ASSERT_TRUE(authenticateHeatingRequest(c));}
+        if(variant==10){ASSERT_TRUE(authenticateHeatingRequest(c));}
+        if(variant==11){ASSERT_TRUE(authenticateHeatingRequest(c));}
+        if(variant==5){ASSERT_TRUE(authenticateHeatingRequest(c));}
+        buildSimpleResponseFrame(reply,0x60F823,0xB6BDFC,IoHomeCommand::WritePrivateResponse,tx.data,5);
+        if(variant==9)reply.data[4]=0;if(variant==10)reply.setSrcNode(0x112233);if(variant==11)reply.dataLen=6;
+        ASSERT_TRUE(queueControllerResponse(c,reply));
+        ASSERT_EQ(c.heatingState(0).presenceResult==R::AcknowledgedEffectUnknown,variant==5);
+        if(variant!=5)ASSERT_TRUE(!c.heatingState(0).values[IoHomeHeating::index(0x0110)].observed);
+        if(variant==3)ASSERT_EQ(c.heatingState(0).presenceResult,R::Cancelled);
+    }
+}
+TEST(controller_home_away_rejected_timeout_lbt_cancel_and_reboot_are_not_success)
+{
+    using R=IoHomeHeating::PresenceResult;
+    for(unsigned variant=0;variant<4;++variant){
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initHeatingController(c,m,ch);ch.homeAwayQualified=true;
+        ASSERT_TRUE(c.requestHomeAway(&ch,false));
+        if(variant==2)c.radio().testInjectRxDiagnostics(false,false,false,0,0,-20);
+        IoHomeFrame tx,reply;
+        if(variant==2){for(unsigned i=0;i<5;++i)c.loop();ASSERT_EQ(c.radio().testTransmitCount(),0U);ioHomeTestAdvanceMillis(16000);c.loop();}
+        else {ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+            if(variant==0){buildErrorResponseFrame(reply,0x60F823,0xB6BDFC,0x05);ASSERT_TRUE(queueControllerResponse(c,reply));ASSERT_EQ(c.heatingState(0).presenceResult,R::Rejected);}
+            if(variant==1){ioHomeTestAdvanceMillis(16000);c.loop();ASSERT_EQ(c.heatingState(0).presenceResult,R::Timeout);}
+            if(variant==3){ASSERT_TRUE(c.cancelHomeAway(0));ASSERT_EQ(c.heatingState(0).presenceResult,R::Cancelled);}
+        }
+        ASSERT_TRUE(!c.heatingState(0).values[IoHomeHeating::index(0x0110)].observed);
+        IoHomeController reboot;ASSERT_EQ(reboot.heatingState(0).presenceResult,R::Unknown);ASSERT_TRUE(!reboot.heatingState(0).busy);
+    }
+}
+
+TEST(controller_atl176_rx_window_is_tx_complete_bound_and_accepts_610_938_1500_ms)
+{
+    for(unsigned delay:{610U,938U,1500U,1501U}){
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;ASSERT_TRUE(beginAtlanticResetSearch(c,m,ch));c.loop();c.loop();
+        ioHomeTestAdvanceMillis(delay);c.testSetRxScanFrequency(IOHC_FREQ_1);
+        IoHomeFrame response;atlanticCandidateReply(response,0xF519DD);
+        uint8_t raw[64];const auto length=serializeFrameForTest(response,raw,sizeof(raw));c.radio().testQueueReceivedPacket(raw,length);c.loop();
+        ASSERT_EQ(std::strcmp(c.atlanticStatus().reason,"heater_discovered_read_proof_pending")==0,delay<=1500);
+        ASSERT_TRUE(!ch.isPaired());
+        c.cancelAtlantic();
+    }
+}
+TEST(controller_atl176_unqualified_and_foreign_rollcall_replies_never_create_a_probe)
+{
+    for(unsigned variant=0;variant<6;++variant){
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;ASSERT_TRUE(beginAtlanticResetSearch(c,m,ch));c.loop();c.loop();IoHomeFrame response;
+        atlanticCandidateReply(response,0xF519DD);
+        if(variant==0)response.data[5]=2;
+        if(variant==1)response.data[1]=0;
+        if(variant==2)response.setDestNode(0x112233);
+        if(variant==3)response.dataLen=2;
+        if(variant==4)response.setSrcNode(0xD6BC6C);
+        if(variant==5)response.setSrcNode(0x00003B);
+        ASSERT_TRUE(queueControllerResponse(c,response));ioHomeTestAdvanceMillis(1501);c.loop();c.loop();
+        ASSERT_TRUE(c.atlanticStatus().stage!=IoHomeController::AtlanticStage::Probing);ASSERT_TRUE(!ch.isPaired());c.cancelAtlantic();
+    }
+}
+TEST(controller_home_away_two_channel_keys_are_isolated_and_old_acks_cannot_complete_new_commands)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel first,second;initHeatingController(c,m,first);first.homeAwayQualified=true;
+    const uint8_t other[16]={0x43};m.testSetChannel(1,&second);second.setNodeId(0x112233);second.setEncryptionKey(other);
+    auto identity=first.getProtocolIdentity();identity.ioAddress=0x112233;second.onProtocolIdentity(0x112233,identity);second.homeAwayQualified=true;
+    ASSERT_TRUE(c.requestHomeAway(&first,true));ASSERT_TRUE(c.requestHomeAway(&second,false));
+    for(unsigned channel=0;channel<2;++channel){
+        IoHomeFrame request,response,auth;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+        const uint8_t challenge[]={1,2,3,4,5,6};const uint32_t node=channel?0x112233:0xB6BDFC;
+        buildPairChallengeRequestFrame(response,0x60F823,node,challenge);ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_TRUE(lastTransmittedFrameForTest(c,auth));
+        uint8_t transcript[]={0x20,0x0C,0x61,1,0x10,uint8_t(channel?0:1)},mac[6];
+        ASSERT_TRUE(IoHomeCrypto::createHmac2W(transcript,6,challenge,channel?other:first.getEncryptionKey(),mac));ASSERT_MEM_EQ(auth.data,mac,6);
+        buildSimpleResponseFrame(response,0x60F823,node,IoHomeCommand::WritePrivateResponse,request.data,request.dataLen);
+        ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_EQ(c.heatingState(channel).presenceResult,IoHomeHeating::PresenceResult::AcknowledgedEffectUnknown);
+    }
+    ASSERT_TRUE(c.requestHomeAway(&first,false));IoHomeFrame request,response;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));ASSERT_TRUE(authenticateHeatingRequest(c));
+    uint8_t old[]={0x0C,0x61,1,0x10,1};buildSimpleResponseFrame(response,0x60F823,0xB6BDFC,IoHomeCommand::WritePrivateResponse,old,5);
+    ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_TRUE(c.heatingState(0).busy);ASSERT_TRUE(!c.heatingState(0).values[8].observed);
+    c.cancelHomeAway(0);ASSERT_EQ(c.heatingState(0).presenceResult,IoHomeHeating::PresenceResult::Cancelled);
+}
+TEST(log_redaction_hides_home_away_authentication_responses)
+{
+    uint8_t raw[]={0x0E,0,0x12,0x34,0x56,0xAB,0xCD,0xEF,0x3D,1,2,3,4,5,6};
+    const auto text=ioHomeFrameHexForLog(raw,sizeof(raw));ASSERT_TRUE(text.find("[6 bytes redacted]")!=std::string::npos);
+    ASSERT_TRUE(text.find("010203040506")==std::string::npos);
+}
+
+TEST(controller_atl176_overlap_and_lost_tx_done_cancellation_restore_receive)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    ASSERT_TRUE(beginAtlanticResetSearch(c,m,ch));
+    ASSERT_TRUE(!c.startDiscoveryFamily(IoHomeDiscoveryFamily::Sensor));
+    c.cancelAtlantic();ASSERT_EQ(c.state(),ControllerState::Idle);
+    ASSERT_EQ(c.radio().state(),RadioState::Receiving);ASSERT_TRUE(!ch.isPaired());
+    initHeatingController(c,m,ch);ch.homeAwayQualified=true;
+    c.radio().testHardwareTxDoneSemantics(true);
+    ASSERT_TRUE(c.requestHomeAway(&ch,true));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ASSERT_TRUE(c.cancelHomeAway(0));ASSERT_EQ(c.radio().state(),RadioState::Receiving);
+    ASSERT_EQ(c.state(),ControllerState::Idle);ASSERT_TRUE(!c.heatingState(0).busy);
+}
+
+TEST(controller_home_away_carrier_sense_reopens_receive_after_radio_configuration)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initHeatingController(c,m,ch);ch.homeAwayQualified=true;
+    c.radio().testRssiRequiresReceiveAfterConfiguration(true);
+    ASSERT_TRUE(c.requestHomeAway(&ch,true));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ASSERT_EQ(tx.commandId,IoHomeCommand::WritePrivate);ASSERT_EQ(tx.data[3],0x10);
+    c.cancelHomeAway(0);
 }

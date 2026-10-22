@@ -7,7 +7,7 @@
 // Atlantic ECL private registers, not the generic MP/FP or ObjectsArray API.
 // Source: Laberning 4824cf65/c1d57978 AGILIA captures and Velocet ECL classes.
 namespace IoHomeHeating {
-enum class Encoding : uint8_t {Byte,Boolean,Mode,Regulator,Tenths,SensorHundredths,Raw};
+enum class Encoding : uint8_t {Byte,Boolean,Mode,Regulator,Tenths,SensorHundredths,Presence,Raw};
 struct Descriptor {uint16_t reg; const char *name; Encoding encoding; uint8_t width; bool writable;};
 inline constexpr Descriptor registers[]={
  {0x0100,"mode",Encoding::Mode,1,true},
@@ -18,14 +18,17 @@ inline constexpr Descriptor registers[]={
  {0x0115,"room_temperature",Encoding::SensorHundredths,2,false},
  {0x0117,"regulator",Encoding::Regulator,1,false},
  {0x0101,"occupancy_raw",Encoding::Raw,0,false},
- {0x0110,"presence_raw",Encoding::Raw,0,false},
+ {0x0110,"home_away_command",Encoding::Presence,1,true},
  {0x012C,"power_on_list_raw",Encoding::Raw,0,false},
  {0x012D,"controller_address_raw",Encoding::Raw,0,false},
  {0x0130,"setpoint_block_raw",Encoding::Raw,0,false}
 };
 constexpr uint8_t count=sizeof(registers)/sizeof(registers[0]);
 inline int index(uint16_t reg){for(uint8_t i=0;i<count;++i)if(registers[i].reg==reg)return i;return -1;}
-inline const Descriptor *descriptor(uint16_t reg){const int i=index(reg);return i<0?nullptr:&registers[i];}
+inline const Descriptor *descriptor(uint16_t reg){
+ static constexpr Descriptor effective{0x012A,"effective_setpoint_raw",Encoding::Raw,0,false};
+ if(reg==0x012A)return &effective;const int i=index(reg);return i<0?nullptr:&registers[i];
+}
 inline bool actuator(const IoHomeProtocolIdentity &id){
  return id.valid&&id.manufacturerId==0x0C&&id.profile==52&&id.subProfile==1;
 }
@@ -40,7 +43,7 @@ inline bool nextNode(uint32_t pairing,uint32_t &node){
 struct Value {float value=0;uint16_t raw=0;uint8_t bytes[23]{},length=0;bool valid=false,sensorFault=false;};
 static_assert(sizeof(Value)==32,"Heating values must fit the ESP32 static RAM budget");
 inline bool decodeValue(const Descriptor &d,const uint8_t *data,uint8_t length,Value &out){
- if(!data||!length||length>sizeof(out.bytes)||(d.width&&length!=d.width))return false;
+ if(!data||!length||length>sizeof(out.bytes)||(d.width&&length!=d.width&&d.encoding!=Encoding::Presence))return false;
  Value v;v.length=length;std::memcpy(v.bytes,data,length);v.raw=data[0]|(length>1?uint16_t(data[1])<<8:0);
  v.valid=true;v.value=v.raw;
  switch(d.encoding){
@@ -50,6 +53,7 @@ inline bool decodeValue(const Descriptor &d,const uint8_t *data,uint8_t length,V
   v.value=static_cast<int16_t>(v.raw)/100.0f;
   if(v.value < -40 || v.value > 80)return false;break;
  case Encoding::Boolean:if(v.raw>1)return false;break;
+ case Encoding::Presence:v.valid=length==1&&v.raw<=1;break;
  case Encoding::Mode:if(v.raw>4)return false;break;
  case Encoding::Regulator:if(v.raw>2)return false;break;
  case Encoding::Raw:v.valid=false;break; // raw diagnostic, no fabricated units
@@ -66,6 +70,7 @@ inline uint8_t build(uint16_t reg,bool write,float value,uint8_t *data){
  if(scaled<0||scaled>65535)return 0;
  const uint16_t raw=uint16_t(std::lround(scaled));
  if(d->encoding!=Encoding::Tenths && scaled!=raw)return 0;
+ if(d->encoding==Encoding::Presence && raw>1)return 0;
  if(d->encoding==Encoding::Mode && raw==3)return 0; // readable, unqualified writer
  data[4]=uint8_t(raw);data[5]=uint8_t(raw>>8);Value decoded;
  return decodeValue(*d,data+4,d->width,decoded)?4+d->width:0;
@@ -78,16 +83,28 @@ inline bool decodeReply(const uint8_t *request,uint8_t requestLength,const uint8
  return decodeValue(*d,data+4,length-4,value);
 }
 struct Observation {Value decoded;uint32_t timestampMs=0,token=0;bool observed=false;};
+// An acknowledged Home/Away command is not an occupancy sensor or thermal effect.
+enum class PresenceResult:uint8_t {Unknown,Queued,RfSent,AcknowledgedEffectUnknown,Rejected,Timeout,QuotaBlocked,IdentityChanged,ReadbackVerifiedEffectUnknown,Invalid,Cancelled,QualificationBlocked,ReadbackDifferent,BusyBlocked,QueueBlocked};
+inline const char *presenceResultName(PresenceResult r){
+ switch(r){case PresenceResult::Unknown:return "unknown";case PresenceResult::Queued:return "queued";
+ case PresenceResult::RfSent:return "rf_sent";case PresenceResult::AcknowledgedEffectUnknown:return "acknowledged_effect_not_observed";
+ case PresenceResult::Rejected:return "rejected";case PresenceResult::Timeout:return "timeout";
+ case PresenceResult::QuotaBlocked:return "quota_blocked";case PresenceResult::IdentityChanged:return "identity_changed";
+ case PresenceResult::ReadbackVerifiedEffectUnknown:return "register_readback_agrees_effect_not_observed";
+ case PresenceResult::Invalid:return "invalid_response";case PresenceResult::Cancelled:return "cancelled";
+ case PresenceResult::ReadbackDifferent:return "register_readback_differs";case PresenceResult::BusyBlocked:return "busy_blocked";case PresenceResult::QueueBlocked:return "queue_blocked";default:return "agilia_qualification_required";}
+}
 struct State {
- enum class Result:uint8_t {Unknown,Queued,ReadbackPending,Observed,SensorFault,Rejected,Timeout,QuotaDenied,IdentityChanged,Invalid};
+ enum class Result:uint8_t {Unknown,Queued,ReadbackPending,Observed,SensorFault,Rejected,Timeout,QuotaDenied,IdentityChanged,Invalid,CommandAcknowledged};
  Observation values[count]{};Result result=Result::Unknown;
  uint32_t token=0,node=0,revision=0,gateway=0;uint8_t key[16]{};
  uint16_t pendingRegister=0;bool busy=false;
- uint32_t nextPollMs=0,pollIntervalMs=0;uint8_t pollIndex=0,refreshRemaining=0;bool initialRead=false;
+ uint32_t nextPollMs=0,pollIntervalMs=0;uint8_t pollIndex=0,refreshRemaining=0;bool initialRead=false;PresenceResult presenceResult=PresenceResult::Unknown;
  void invalidate(){*this=State();}
 };
+static_assert(sizeof(State)==580,"Reuse the existing presence slot; no per-channel RAM growth");
 inline const char *resultName(State::Result result){
- switch(result){case State::Result::Queued:return "queued";case State::Result::ReadbackPending:return "readback_pending";
+ switch(result){case State::Result::CommandAcknowledged:return "command_acknowledged_effect_unobserved";case State::Result::Queued:return "queued";case State::Result::ReadbackPending:return "readback_pending";
  case State::Result::Observed:return "observed";case State::Result::SensorFault:return "sensor_fault";
  case State::Result::Rejected:return "peer_rejected";case State::Result::Timeout:return "auth_or_response_timeout";
  case State::Result::QuotaDenied:return "quota_denied";case State::Result::IdentityChanged:return "identity_changed";

@@ -15,3 +15,5 @@ Evidence record: `ets_application_campaign` in `docs/release-evidence.template.j
 
 ATL-176 release cases (not physically performed): retain OFM/OAM commit IDs and hashes of redacted artifacts.
 - [ ] Application 4.6 → 4.7: fresh import, older saved/reopened project, preserved group addresses, full/partial download and reboot. Verify separate Atlantic pairing/heater identities and the explicit assignment buttons.
+
+- [ ] Application 4.7 Home/Away: new HAW objects 1960..2007; all 4.6 group addresses and parameters preserved; new AGILIA model flag off by default. Confirm unknown startup status, no write replay on full/partial download/reboot, and command-only confirmation/error feedback across two differently keyed heaters.

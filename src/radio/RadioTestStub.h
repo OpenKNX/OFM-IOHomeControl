@@ -30,6 +30,8 @@ public:
   static constexpr uint8_t PIN_NOT_CONNECTED = RADIO_PIN_NOT_CONNECTED;
 
   RadioTestStub() = default;
+  void testRssiRequiresReceiveAfterConfiguration(bool enabled){mRequireRxForRssi=enabled;mConfigurationStandby=enabled;}
+  bool mRequireRxForRssi=false,mConfigurationStandby=false;
 
   std::string logPrefix() { return "RadioTestStub"; }
 
@@ -50,6 +52,7 @@ public:
       return lErr;
     }
     mCurrentFreq = iFreqHz;
+    if(mConfigurationStandby)mState=RadioState::Idle;
     return RadioError::None;
   }
 
@@ -64,6 +67,7 @@ public:
       return lErr;
     }
     mLastPreambleLength = iSymbols;
+    if(mConfigurationStandby)mState=RadioState::Idle;
     return RadioError::None;
   }
   RadioError setPreambleLengthBlocking(uint16_t iSymbols) { return setPreambleLength(iSymbols); }
@@ -155,6 +159,7 @@ public:
 
   bool currentRssi(int16_t &oRssi)
   {
+    if(mRequireRxForRssi&&mState!=RadioState::Receiving)return false;
     oRssi = mCurrentRssi;
     return true;
   }

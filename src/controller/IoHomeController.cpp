@@ -2228,16 +2228,36 @@ bool IoHomeController::sendOneWayChannelRawExecute(IoHomecontrolChannel *iChanne
     return queuePush(lEntry);
 }
 
+void IoHomeController::invalidateHeatingChannel(uint8_t channel)
+{
+    if(channel>=16)return;mHeating[channel].invalidate();
+    if(mCurrentCmd.active&&mCurrentCmd.heatingToken&&mCurrentCmd.sourceChannelIndex==channel){mCurrentCmd.active=false;mRadio.standby();startReceive();mState=ControllerState::Idle;}
+}
+bool IoHomeController::requestHomeAway(IoHomecontrolChannel *channel,bool home)
+{
+    return requestHeatingRegister(channel,0x0110,true,home?1.f:0.f);
+}
+bool IoHomeController::cancelHomeAway(uint8_t c)
+{
+    if(c>=16)return false;auto &state=mHeating[c];
+    if(!state.busy||state.pendingRegister!=0x0110)return false;
+    state.busy=false;state.token=0;state.presenceResult=IoHomeHeating::PresenceResult::Cancelled;
+    if(mCurrentCmd.active&&mCurrentCmd.sourceChannelIndex==c&&mCurrentCmd.heatingToken){mCurrentCmd.active=false;mRadio.standby();startReceive();mState=ControllerState::Idle;}
+    auto *channel=mModule?mModule->getChannel(c):nullptr;if(channel)channel->onHomeAwayCommandStatus();return true;
+}
 bool IoHomeController::requestHeatingRegister(IoHomecontrolChannel *channel,uint16_t reg,bool write,float value,bool background)
 {
     const uint8_t c=channelIndexFor(channel);
     if(!channel||c>=16||!channel->isPaired()||channel->is1W()||
        !IoHomeHeating::actuator(channel->getProtocolIdentity())||channel->getProtocolIdentity().ioAddress!=channel->getNodeId()||!mModule||!mModule->managementRequestsAllowed())return false;
+    if(reg==0x0110&&write&&!channel->agiliaHomeAwayEnabled()){
+        mHeating[c].presenceResult=IoHomeHeating::PresenceResult::QualificationBlocked;channel->onHomeAwayCommandStatus();return false;
+    }
     uint8_t data[6]{};const uint8_t length=IoHomeHeating::build(reg,write,value,data);if(!length)return false;
     auto &state=mHeating[c];
     if(state.node && (state.node!=channel->getNodeId() || state.revision!=channel->productContextRevision() ||
         state.gateway!=mOwnNodeId || std::memcmp(state.key,channel->getEncryptionKey(),16)))state.invalidate();
-    if(state.busy)return false;
+    if(state.busy){if(reg==0x0110&&write){state.presenceResult=IoHomeHeating::PresenceResult::BusyBlocked;channel->onHomeAwayCommandStatus();}return false;}
     // Estimate both local transmissions before admission, independently of a
     // debug bypass. The central producer still enforces LBT and every actual TX.
     const uint16_t requestPreamble=channel->getProtocolIdentity().powerSaveMode==IoHomePowerMode::AlwaysAlive?48:
@@ -2246,7 +2266,8 @@ bool IoHomeController::requestHeatingRegister(IoHomecontrolChannel *channel,uint
     const uint8_t frequency=frequencyIndexForHz(kNormal2WTxFreqHz);
     mRfDutyBudget.advance(millis());
     if(mRfDutyBudget.used(kNormal2WTxFreqHz)+cost>IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(kNormal2WTxFreqHz))) {
-        state.result=IoHomeHeating::State::Result::QuotaDenied;state.nextPollMs=millis()+30000;return false;
+        state.result=IoHomeHeating::State::Result::QuotaDenied;state.nextPollMs=millis()+30000;
+        if(reg==0x0110&&write){state.presenceResult=IoHomeHeating::PresenceResult::QuotaBlocked;channel->onHomeAwayCommandStatus();}return false;
     }
     IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
     entry.command=IoHomeCommand::WritePrivate;entry.sourceChannelIndex=c;entry.twoWayTxFreqIdx=frequency;
@@ -2254,11 +2275,12 @@ bool IoHomeController::requestHeatingRegister(IoHomecontrolChannel *channel,uint
     std::memcpy(entry.managementKey,entry.encKey,16);entry.heatingLength=length;std::memcpy(entry.heatingData,data,length);
     if(++mNextHeatingToken==0)++mNextHeatingToken;entry.heatingToken=mNextHeatingToken;
     entry.maxAttempts=write?1:2;entry.active=true;entry.background=background;
-    if(!queuePush(entry))return false;
+    if(!queuePush(entry)){if(reg==0x0110&&write){state.presenceResult=IoHomeHeating::PresenceResult::QueueBlocked;channel->onHomeAwayCommandStatus();}return false;}
     state.node=channel->getNodeId();state.gateway=mOwnNodeId;state.revision=channel->productContextRevision();
     std::memcpy(state.key,entry.managementKey,16);state.token=entry.heatingToken;
     state.pendingRegister=reg;state.busy=true;state.initialRead=true;state.result=IoHomeHeating::State::Result::Queued;
-    if(write){
+    if(reg==0x0110&&write){state.presenceResult=IoHomeHeating::PresenceResult::Queued;channel->onHomeAwayCommandStatus();}
+    if(write && IoHomeHeating::index(reg)>=0){
         state.values[IoHomeHeating::index(reg)]={};
         channel->onHeatingValue(reg,IoHomeHeating::Value{}); // clear validity, never publish the requested value
     }
@@ -2271,6 +2293,7 @@ bool IoHomeController::heatingContextMatches(const IoHomeQueueEntry &entry) cons
     if(entry.sourceChannelIndex>=16)return false;
     const auto &state=mHeating[entry.sourceChannelIndex];
     const auto *ch=mModule?mModule->getChannel(entry.sourceChannelIndex):nullptr;
+    if(entry.heatingData[1]==0x61 && entry.heatingData[3]==0x10 && (!ch||!ch->agiliaHomeAwayEnabled()))return false;
     return ch&&!ch->is1W()&&IoHomeHeating::actuator(ch->getProtocolIdentity())&&ch->getProtocolIdentity().ioAddress==entry.destNodeId&&
         state.busy&&state.token==entry.heatingToken&&state.gateway==mOwnNodeId&&
         state.node==entry.destNodeId&&state.revision==ch->productContextRevision()&&
@@ -2281,16 +2304,36 @@ void IoHomeController::finishHeating(const IoHomeQueueEntry &entry,IoHomeCommand
 {
     if(!entry.heatingToken||entry.sourceChannelIndex>=16)return;
     auto &state=mHeating[entry.sourceChannelIndex];if(state.token!=entry.heatingToken)return;
-    if(!heatingContextMatches(entry)){state.invalidate();state.result=IoHomeHeating::State::Result::IdentityChanged;return;}
+    auto *channel=channelForQueueEntry(entry);
+    const bool presence=entry.heatingData[2]==1&&entry.heatingData[3]==0x10;
+    const bool presenceWrite=presence&&entry.heatingData[1]==0x61;
+    if(!heatingContextMatches(entry)){
+        state.invalidate();state.result=IoHomeHeating::State::Result::IdentityChanged;
+        if(presenceWrite){state.presenceResult=IoHomeHeating::PresenceResult::IdentityChanged;if(channel)channel->onHomeAwayCommandStatus();}return;
+    }
     state.busy=false;
     if(result!=IoHomeCommandExchangeResult::Completed){
         state.result=mLastTxDutyDenied?IoHomeHeating::State::Result::QuotaDenied:
             result==IoHomeCommandExchangeResult::ExplicitlyRejected?IoHomeHeating::State::Result::Rejected:
             state.result==IoHomeHeating::State::Result::Invalid?IoHomeHeating::State::Result::Invalid:IoHomeHeating::State::Result::Timeout;
-        state.nextPollMs=millis()+30000;return;
+        state.nextPollMs=millis()+30000;
+        if(presenceWrite){state.presenceResult=mLastTxDutyDenied?IoHomeHeating::PresenceResult::QuotaBlocked:
+            result==IoHomeCommandExchangeResult::ExplicitlyRejected?IoHomeHeating::PresenceResult::Rejected:
+            state.result==IoHomeHeating::State::Result::Invalid?IoHomeHeating::PresenceResult::Invalid:IoHomeHeating::PresenceResult::Timeout;
+            if(channel)channel->onHomeAwayCommandStatus();}
+        return;
     }
     const uint16_t reg=uint16_t(entry.heatingData[2])<<8|entry.heatingData[3];
-    auto *channel=channelForQueueEntry(entry);
+    if(presenceWrite){
+        IoHomeHeating::Value confirmed;
+        if(!IoHomeHeating::decodeReply(entry.heatingData,entry.heatingLength,mRxFrame.data,mRxFrame.dataLen,confirmed)||!confirmed.valid){
+            state.presenceResult=IoHomeHeating::PresenceResult::Invalid;
+        }else{
+            state.values[IoHomeHeating::index(0x0110)]={confirmed,static_cast<uint32_t>(millis()),entry.heatingToken,true};
+            state.presenceResult=IoHomeHeating::PresenceResult::AcknowledgedEffectUnknown;state.result=IoHomeHeating::State::Result::CommandAcknowledged;
+        }
+        if(channel)channel->onHomeAwayCommandStatus();return; // no unproven automatic presence read/poll
+    }
     if(entry.heatingData[1]==0x61){
         state.result=IoHomeHeating::State::Result::ReadbackPending;
         if(!requestHeatingRegister(channel,reg))state.result=IoHomeHeating::State::Result::Invalid;
@@ -2300,6 +2343,16 @@ void IoHomeController::finishHeating(const IoHomeQueueEntry &entry,IoHomeCommand
     IoHomeHeating::Value value;
     if(!IoHomeHeating::decodeReply(entry.heatingData,entry.heatingLength,mRxFrame.data,mRxFrame.dataLen,value)) {
         state.result=IoHomeHeating::State::Result::Invalid;return;
+    }
+    if(reg==0x012A){state.result=IoHomeHeating::State::Result::Observed;
+        logInfoP("Heating register=012A evidence=raw_read_not_setpoint_model bytes=%s",hexDump(value.bytes,value.length).c_str());return;} // opaque diagnostic, no extra per-channel slot
+    if(presence){
+        const auto &command=state.values[IoHomeHeating::index(0x0110)];
+        if(command.observed&&command.decoded.valid&&value.valid){
+            state.presenceResult=command.decoded.raw==value.raw?IoHomeHeating::PresenceResult::ReadbackVerifiedEffectUnknown:IoHomeHeating::PresenceResult::ReadbackDifferent;
+            if(channel)channel->onHomeAwayCommandStatus();
+        }
+        return; // GET reports only raw register evidence; never an occupancy sensor
     }
     auto &observation=state.values[IoHomeHeating::index(reg)];
     observation={value,static_cast<uint32_t>(millis()),entry.heatingToken,true};
@@ -2347,6 +2400,7 @@ void IoHomeController::serviceHeating()
 void IoHomeController::printHeatingStatus(uint8_t c) const
 {
     if(c>=16)return;const auto &state=mHeating[c];
+    logInfoP("HomeAway command_status=%s; last confirmed command is not measured occupancy or thermal effect",IoHomeHeating::presenceResultName(state.presenceResult));
     logInfoP("Heating channel=%u node=%06X result=%s busy=%u pollMs=%lu",c+1,state.node,
         IoHomeHeating::resultName(state.result),state.busy,(unsigned long)state.pollIntervalMs);
     for(uint8_t i=0;i<IoHomeHeating::count;++i){const auto &o=state.values[i];
@@ -4696,6 +4750,7 @@ bool IoHomeController::startDiscoveryFamily(IoHomeDiscoveryFamily family)
 
 void IoHomeController::startDiscovery(bool iEncrypted)
 {
+    if(mAtlantic.keyProven)return; // explicit acquisition owns RF until assignment/cancel
     if(mObjectRead.active())return;
     if (mKeyExtractArmed)
         return;
@@ -6559,7 +6614,7 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
     const bool admittedBypass=mRfAccessPolicy.bypass(millis());
     const uint32_t airtime = estimatedTxAirtimeMs(iLength, mCurrentTxPreambleSymbols);
     if(mCurrentFreqIdx<IOHC_NUM_FREQUENCIES)mRfNextAirtimeMs[IoHomeDutyBudget::band(IOHC_FREQUENCIES[mCurrentFreqIdx])]=airtime;
-    const bool productionAtlantic=(mPairing2WMode==Pairing2WMode::AtlanticPull && isPairDiagnosticState(mState)) ||
+    const bool productionAtlantic=(mCurrentCmd.active&&mCurrentCmd.heatingToken&&mCurrentCmd.heatingData[2]==1&&mCurrentCmd.heatingData[3]==0x10) || (mPairing2WMode==Pairing2WMode::AtlanticPull && isPairDiagnosticState(mState)) ||
         (mCurrentCmd.active&&mCurrentCmd.atlanticToken) ||
         (mAtlantic.status.stage==AtlanticStage::RollCall && iLength>8 && iData[8]==uint8_t(IoHomeCommand::DiscoverSPERequest));
     if (productionAtlantic ? !mRfDutyBudget.admits(IOHC_FREQUENCIES[mCurrentFreqIdx],airtime) : !isDutyCycleOk(mCurrentFreqIdx, airtime)) {
@@ -6579,6 +6634,11 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
         return RadioError::DutyCycleExceeded; // no timing exemptions, including 0x3D
     }
     if(productionAtlantic){
+        // SX1262 configuration enters standby; RSSI is valid only in RX on
+        // both drivers. Never abort a TX that is still completing to sense.
+        if(mRadio.state()==RadioState::Transmitting)return RadioError::Busy;
+        if(mRadio.state()!=RadioState::Receiving){const auto rx=startReceive(true);if(rx!=RadioError::None)return rx;}
+        delay(1); // bounded RX carrier-sense settling; physical qualification remains separate
         int16_t rssi=0;mLastLbtAttempts=1;mLastLbtBypassed=false;
         mLastLbtRssiValid=mRadio.currentRssi(rssi);mLastLbtRssi=rssi;
         if(!mLastLbtRssiValid||rssi>IOHC_LBT_RSSI_THRESHOLD_DBM){++mLbtBusyCount;return RadioError::Busy;}
@@ -6853,7 +6913,7 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
     lHealth.lastOpStatusAfter = 0;
     lHealth.lastTxSetStatus = 0;
     lHealth.lastTxIrqImmediate = 0;
-#if defined(RADIO_SX1262)
+#if defined(RADIO_SX1262) && !defined(TEST_NATIVE)
     lHealth.initError = static_cast<uint8_t>(mRadio.initError());
     lHealth.initStatusByte = mRadio.initStatusByte();
     lHealth.initCommandStatus = mRadio.initCommandStatus();
@@ -6930,7 +6990,7 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
 void IoHomeController::loop()
 {
     serviceAtlantic();
-    if(mCurrentCmd.active&&mCurrentCmd.atlanticToken&&uint32_t(millis()-mExchangeStartMs)>=15000U){
+    if(mCurrentCmd.active&&(mCurrentCmd.atlanticToken||(mCurrentCmd.heatingToken&&mCurrentCmd.heatingData[3]==0x10))&&uint32_t(millis()-mExchangeStartMs)>=15000U){
         notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::SessionExhausted);
         mCurrentCmd.active=false;mState=ControllerState::Idle;
     }
@@ -7830,6 +7890,10 @@ void IoHomeController::processIdle()
 
 void IoHomeController::processTxPending()
 {
+    if(mCurrentCmd.heatingToken && !heatingContextMatches(mCurrentCmd)){
+        notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+        mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+    }
     if(mCurrentCmd.atlanticToken && !atlanticContextMatches()){
         notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::FailedBeforeAuthentication);
         mCurrentCmd.active=false;mState=ControllerState::Idle;return;
@@ -8007,6 +8071,12 @@ void IoHomeController::processTxInProgress()
             mQueuedTxDoneMs = millis();
             if(lObservedDone) { if (auto *counters=activeAttemptCounters()) ++counters->rfTxCompleted; }
             if(lObservedDone)observeBatteryDiagnostic(mCurrentCmd,IoHomeBatteryDiagnostic::State::RfCompleted);
+        if(mCurrentCmd.active&&mCurrentCmd.heatingToken&&mCurrentCmd.heatingData[1]==0x61&&mCurrentCmd.heatingData[3]==0x10&&
+           lObservedDone&&mQueuedTxFrame.commandId==IoHomeCommand::WritePrivate){
+            mHeating[mCurrentCmd.sourceChannelIndex].presenceResult=IoHomeHeating::PresenceResult::RfSent;
+            auto *channel=channelForQueueEntry(mCurrentCmd);if(channel)channel->onHomeAwayCommandStatus();
+        }
+
             if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest &&
                 !mAuthResponseSent && mDirectedRequestTxEndUs == 0)
                 mDirectedRequestTxEndUs = micros();
@@ -13382,8 +13452,11 @@ void IoHomeController::stopAtlantic(AtlanticStage stage,const char *reason)
 {
     mAtlantic.status.stage=stage;mAtlantic.status.reason=reason;mAtlantic.keyProven=false;
     std::memset(mAtlantic.key,0,sizeof(mAtlantic.key));
-    if(mCurrentCmd.atlanticToken){mCurrentCmd.active=false;mState=ControllerState::Idle;}
-    if(mState==ControllerState::AtlanticRollCallWait)mState=ControllerState::Idle;
+    if(mCurrentCmd.atlanticToken || mState==ControllerState::AtlanticRollCallWait ||
+       (mPairing2WMode==Pairing2WMode::AtlanticPull && isPairDiagnosticState(mState))){
+        mCurrentCmd.active=false;mRadio.standby();startReceive();mState=ControllerState::Idle;
+        std::memset(mPairPulledKey,0,sizeof(mPairPulledKey));
+    }
 }
 void IoHomeController::cancelAtlantic()
 {
@@ -13529,6 +13602,8 @@ void IoHomeController::processAtlanticRollCall()
         logInfoP("Atlantic evidence=local_tx_end_observed attempt=%u tx_end_ms=%lu rx_window_ms=1500 dwell_us=%lu",
             mAtlantic.status.rollcallAttempts,(unsigned long)mAtlantic.status.txEndMs,(unsigned long)mRxScanIntervalUs);
     }
+    // An IRQ/packet arriving after the main RX check must be consumed before a retune.
+    if(mRadio.isPacketAvailable())return;
     serviceBackgroundRxScan();
     if(uint32_t(millis()-mAtlantic.listenStartedMs)>=1500){mState=ControllerState::Idle;mAtlantic.nextActionMs=0;startReceive();}
 }
@@ -13588,6 +13663,9 @@ const char *IoHomeController::atlanticStageName(AtlanticStage stage)
 void IoHomeController::printAtlanticStatus() const
 {
     const auto &status=mAtlantic.status;
+    logInfoP("Atlantic scan_pass=%c tx_hz=%lu rx_hz=%lu preamble=%u ctrl1=%02X tx_end_observed_ms=%lu response_age_ms=%lu candidate_overflow=%u evidence=local_observation",
+        status.rollcallAttempts<=3?'A':'B',(unsigned long)status.txHz,(unsigned long)status.lastRxHz,status.preamble,status.ctrl1,
+        (unsigned long)status.txEndMs,(unsigned long)status.responseAgeMs,status.candidateOverflow);
     logInfoP("Atlantic stage=%s session=%lu channel=%u pairingNode=%06X heaterNode=%06X proofAttempts=%u rollcallAttempts=%u reason=%s",
         atlanticStageName(status.stage),(unsigned long)status.session,unsigned(status.channel+1),status.pairingNode,status.heaterNode,
         status.proofAttempts,status.rollcallAttempts,status.reason);

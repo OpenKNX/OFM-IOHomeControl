@@ -1198,6 +1198,25 @@ class ChannelUiTest(unittest.TestCase):
         self.assertIsNone(re.search(r"\bKO\s*[-#:]?\s*\d+\b", documentation))
         self.assertIsNone(re.search(r"^\|\s*\d+\s*\|", documentation, re.MULTILINE))
 
+    def test_home_away_bank_is_command_only_opt_in_and_does_not_move_heating(self):
+        heating=parse("IoHomeHeating.templ.xml")
+        flag=heating.find(".//k:Parameter[@Name='c%C%AgiliaHomeAway']",NS)
+        self.assertEqual((flag.get("Value"),flag.get("Offset"),flag.get("BitOffset")),("0","0","2"))
+        self.assertEqual(heating.find(".//k:Union",NS).get("SizeInBit"),"24")
+        home=parse("IoHomeHomeAway.templ.xml")
+        objects=home.findall(".//k:ComObject",NS)
+        self.assertEqual([o.get("Number") for o in objects],["%K0%","%K1%","%K2%"])
+        self.assertEqual([o.get("WriteFlag") for o in objects],["Enabled","Disabled","Disabled"])
+        self.assertEqual([o.get("DatapointType") for o in objects],["DPST-1-1","DPST-1-1","DPST-5-10"])
+        self.assertIn("kein Sensor",objects[1].get("Text"))
+        ui=(ROOT/"src/IoHomeHeating.ui.xml").read_text()
+        self.assertIn('005_R-%TT%%PRODUCT_CC%00501',ui)
+        self.assertIn('prefix="HAW" IsInner="true"',ui)
+        baseline=json.loads((ROOT/"test/compatibility-46-baseline.json").read_text())
+        self.assertEqual(baseline["HTG_KoBlockSize"],"10")
+        self.assertEqual(baseline["HTG_KoBlockOffset"],"1800")
+        self.assertEqual(baseline["MAIN_ParameterSize"],"14733")
+
     def test_heating_bank_is_append_only_and_profile_qualified(self):
         heating=parse("IoHomeHeating.templ.xml")
         objects=heating.findall(".//k:ComObject",NS)

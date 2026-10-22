@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<KNX xmlns="http://knx.org/xml/project/20"><Dynamic>
+<KNX xmlns="http://knx.org/xml/project/20" xmlns:op="http://github.com/OpenKNX/OpenKNXproducer"><Dynamic>
 <choose ParamRefId="%AID%_P-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00401"><when test="1">
 <ParameterSeparator Id="%AID%_PS-nnn" Text="Private Heizregister: Atlantic 52/1"/>
 <ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101" HelpContext="IOHC-Geraetetyp"/>
@@ -7,6 +7,11 @@
 <ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00301" HelpContext="IOHC-Geraetetyp"/>
 <ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00201" HelpContext="IOHC-Geraetetyp"/>
 <ParameterSeparator Id="%AID%_PS-nnn" Text="Werte bleiben bis zur bestätigten Abfrage unbekannt. Gültigkeitsmaske beachten. Schreiben wird erst nach GET-Rücklesen als beobachteter Sollwert gemeldet. Funkbudget begrenzt Abfragen." UIHint="Information"/>
+<ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00501" HelpContext="IOHC-Geraetetyp"/>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00501"><when test="1">
+<ParameterSeparator Id="%AID%_PS-nnn" Text="Home/Away: 1=Home, 0=Away. Quittierung bestätigt nur den Befehl, keinen Anwesenheitssensor oder Heizeffekt. Status 0 bedeutet unbekannt; nach Neustart keine Wiederholung." UIHint="Information"/>
+<op:include href="IoHomeHomeAway.ui.xml" xpath="//Dynamic/*" prefix="HAW" IsInner="true"/>
+</when></choose>
 <ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00001"/>
 <ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"/>
 <ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00201"/>

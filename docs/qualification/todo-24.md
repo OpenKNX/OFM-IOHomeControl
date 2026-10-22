@@ -22,3 +22,5 @@ Evidence record: `sx1276_peer_campaign` in `docs/release-evidence.template.json`
 
 ATL-176 release cases (not physically performed): retain OFM/OAM commit IDs and hashes of redacted artifacts.
 - [ ] Both radios: six-attempt two-pass 2A search, CTRL1 30/00, 1024/48 actual on-air preambles; TX-end/RX-ready, dwell/retune, IRQ, RSSI, LBT, duty and TX/RX frequencies. Test cross-frequency replies at 610/938/1500 ms, delayed TX_DONE and multiple simultaneous responders. Do not infer actual timing from a native clock.
+
+- [ ] Original AGILIA: issue both 0110 Home/Away values in BASIC/AUTO/PROG; in AUTO observe at least 30 minutes after each change, including display, room/setpoint/effective setpoint, regulator, window sensor, local user input and unsupported combinations. ACK/register agreement alone is not thermal or occupancy evidence.

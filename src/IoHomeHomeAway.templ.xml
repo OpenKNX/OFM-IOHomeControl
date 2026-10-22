@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns="http://knx.org/xml/project/20"><ManufacturerData><Manufacturer RefId="M-00FA"><ApplicationPrograms>
+<ApplicationProgram Id="%AID%" ProgramType="ApplicationProgram" MaskVersion="MV-07B0" Name="IOHCHomeAway" LoadProcedureStyle="MergedProcedure" PeiType="0" DefaultLanguage="de" DynamicTableManagement="false" Linkable="true" MinEtsVersion="4.0" ApplicationNumber="0" ApplicationVersion="0"><Static><ComObjectTable>
+<ComObject Id="%AID%_O-%TT%%CC%000" Name="c%C%Command" Text="Kanal %C% Home/Away Befehl 1=Home 0=Away" FunctionText="Home/Away Befehl 1=Home 0=Away" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K0%"/>
+<ComObject Id="%AID%_O-%TT%%CC%001" Name="c%C%ConfirmedCommand" Text="Kanal %C% Letzter quittierter Home/Away Befehl (kein Sensor)" FunctionText="Letzter quittierter Home/Away Befehl (kein Sensor)" ObjectSize="1 Bit" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K1%"/>
+<ComObject Id="%AID%_O-%TT%%CC%002" Name="c%C%Status" Text="Kanal %C% Home/Away Befehlsstatus (0=unbekannt, 3=quittiert, Wirkung unbeobachtet)" FunctionText="Home/Away Befehlsstatus (0=unbekannt, 3=quittiert, Wirkung unbeobachtet)" ObjectSize="1 Byte" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-5-10" Number="%K2%"/>
+</ComObjectTable><ComObjectRefs>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" RefId="%AID%_O-%TT%%CC%000"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" RefId="%AID%_O-%TT%%CC%001"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" RefId="%AID%_O-%TT%%CC%002"/>
+</ComObjectRefs></Static><Dynamic/></ApplicationProgram></ApplicationPrograms></Manufacturer></ManufacturerData></KNX>
