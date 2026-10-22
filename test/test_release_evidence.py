@@ -48,6 +48,24 @@ class EvidenceTest(unittest.TestCase):
             self.assertFalse(gate['complete'])
             self.assertTrue(any('missing passed case' in p for p in gate['problems']))
 
+    def test_atlantic_model_and_ack_only_cannot_qualify_physical_behavior(self):
+        for identifier in ('atlantic176_radio_campaign', 'agilia_home_away_campaign', 'ets47_upgrade_campaign'):
+            record=dict(id=identifier, kind='model', outcome='passed', cases={'acknowledged':'passed'})
+            gate=next(r for r in module.check(dict(schema=1,records=[record]),'.') if r['id']==identifier)
+            self.assertFalse(gate['complete'])
+            self.assertTrue(any('missing passed case' in p for p in gate['problems']))
+            self.assertTrue(any('wrong evidence kind' in p for p in gate['problems']))
+
+    def test_public_atlantic176_fixtures_remain_byte_exact(self):
+        root=Path(__file__).resolve().parent/'corpus/atlantic-20261021'
+        fixtures={
+            'atlantic_agilia_exchange_presence_write.yaml':'0e8904c6813b081996504a07806cccea5b8eed7e7fe3d7eb0cb403cd98a8dd7c',
+            'atlantic_agilia_pairing_key_pull_heater_direct_read.yaml':'59a4a12c503d0475c592008990d69fecea2cae3a93254240ab5d53c3fb4be88f',
+            'atlantic_agilia_pairing_key_pull_heater_not_next_address.yaml':'30134bd66cf742de5bb1950ac7a958ed5e72f85bd6595e4b516a2e3cd08f7e4f',
+        }
+        for name,digest in fixtures.items():
+            self.assertEqual(hashlib.sha256((root/name).read_bytes()).hexdigest(),digest)
+
     def test_duplicate_records_are_rejected(self):
         with self.assertRaises(ValueError):module.check(dict(schema=1,records=[dict(id='x'),dict(id='x')]),'.')
 

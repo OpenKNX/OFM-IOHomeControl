@@ -177,6 +177,63 @@
         "reboot": "not_run"
       },
       "artifacts": []
+    },
+    {
+      "id": "atlantic176_radio_campaign",
+      "kind": "physical",
+      "outcome": "not_run",
+      "cases": {
+        "sx1262_factory": "not_run",
+        "sx1262_reset_unrelated_address": "not_run",
+        "sx1276_factory": "not_run",
+        "sx1276_reset_unrelated_address": "not_run",
+        "two_pass_waveform": "not_run",
+        "cross_channel_610ms": "not_run",
+        "cross_channel_938ms": "not_run",
+        "rx_1500ms_boundary": "not_run",
+        "multi_peer": "not_run",
+        "lbt_interference": "not_run",
+        "duty_deferral": "not_run",
+        "cancel_and_owner_change": "not_run",
+        "reset_before_assignment": "not_run"
+      },
+      "artifacts": []
+    },
+    {
+      "id": "agilia_home_away_campaign",
+      "kind": "physical",
+      "outcome": "not_run",
+      "cases": {
+        "home_basic": "not_run",
+        "away_basic": "not_run",
+        "home_auto": "not_run",
+        "away_auto_30min": "not_run",
+        "home_prog": "not_run",
+        "away_prog": "not_run",
+        "display_and_regulator": "not_run",
+        "effective_setpoint": "not_run",
+        "window_sensor": "not_run",
+        "readback": "not_run",
+        "reboot_unknown_no_replay": "not_run",
+        "powercut_no_replay": "not_run"
+      },
+      "artifacts": []
+    },
+    {
+      "id": "ets47_upgrade_campaign",
+      "kind": "ets",
+      "outcome": "not_run",
+      "cases": {
+        "fresh_import": "not_run",
+        "saved_reopen": "not_run",
+        "upgrade_from_46": "not_run",
+        "preserved_group_addresses": "not_run",
+        "full_download": "not_run",
+        "partial_download": "not_run",
+        "reboot_unknown": "not_run",
+        "model_flag_default_off": "not_run"
+      },
+      "artifacts": []
     }
   ]
 }

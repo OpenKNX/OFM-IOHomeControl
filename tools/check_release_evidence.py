@@ -33,6 +33,13 @@ QUALIFICATION_CASES = {
     'sx1276_edge_wiring': ('dio4_present', 'dio2_present', 'dio4_absent', 'dio2_absent', 'edges_after_restart'),
     'sx1276_peer_campaign': ('normal_2w', 'low_power_wake', 'actuator_discovery', 'spe_discovery', 'group_timing', 'directed_timing', 'challenge_key', 'version3', 'oneway', 'crc_fifo', 'scan_hold', 'interference_lbt', 'fault_restore'),}
 
+# Native and ACK-only evidence cannot qualify the new physical behavior.
+CORE.update(atlantic176_radio_campaign='physical', agilia_home_away_campaign='physical', ets47_upgrade_campaign='ets')
+QUALIFICATION_CASES.update(
+    atlantic176_radio_campaign=('sx1262_factory', 'sx1262_reset_unrelated_address', 'sx1276_factory', 'sx1276_reset_unrelated_address', 'two_pass_waveform', 'cross_channel_610ms', 'cross_channel_938ms', 'rx_1500ms_boundary', 'multi_peer', 'lbt_interference', 'duty_deferral', 'cancel_and_owner_change', 'reset_before_assignment'),
+    agilia_home_away_campaign=('home_basic', 'away_basic', 'home_auto', 'away_auto_30min', 'home_prog', 'away_prog', 'display_and_regulator', 'effective_setpoint', 'window_sensor', 'readback', 'reboot_unknown_no_replay', 'powercut_no_replay'),
+    ets47_upgrade_campaign=('fresh_import', 'saved_reopen', 'upgrade_from_46', 'preserved_group_addresses', 'full_download', 'partial_download', 'reboot_unknown', 'model_flag_default_off'))
+
 PRODUCT = {'rgb': 'rgb_binding_read_write_state', 'white': 'white_binding_read_write_state',
            'sensor': 'sensor_status_default_subscription_polling'}
 
