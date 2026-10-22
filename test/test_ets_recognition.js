@@ -581,3 +581,23 @@ test("recovery and optional metadata steps remain active in ETS status",function
  IOHC_applyStatusResponse(d,{channelIndex:1},r,null,null);
  check(value(d,"PairingLastResult")==="Pairing aktiv"&&value(d,"PairingDiag")==="Recovery: Warte Namen","recovery stage hidden");
 });
+
+test("Atlantic product workflow reads stage and requires separate explicit assignment",function(){
+ var d=deviceWith({Active:0,DeviceType:7}),calls=[],text="",r=[0,1,6,0,0,0,0,9,0xD6,0xBC,0x6C,0xF5,0x19,0xDD,4,1];
+ var online={connect:function(){},disconnect:function(){},invokeFunctionProperty:function(o,p,b){calls.push(b);return b[1]===1?r:[0];}};
+ var progress={setText:function(t){text=t;}};
+ IOHC_startAtlanticPairing(d,online,progress,{channelIndex:1});check(calls.length===1&&calls[0][1]===0,"start assigned candidate");
+ IOHC_readAtlanticPairing(d,online,progress,{channelIndex:1});check(text.indexOf("D6BC6C")>=0&&text.indexOf("F519DD")>=0,"pairing and heater identities conflated");
+ IOHC_assignAtlanticPairing(d,online,progress,{channelIndex:1});var command=calls[calls.length-1];
+ check(command.length===10&&command[1]===2&&command[6]===9&&command[7]===0xF5,"session/node binding lost");
+ check(value(d,"Active")===0&&value(d,"DeviceType")===7,"workflow silently changed project configuration");
+});
+test("Atlantic ETS assignment refuses discovery-only wrong-channel and old schemas",function(){
+ for(var variant=0;variant<4;variant++){
+  var r=[0,1,6,0,0,0,0,9,0xD6,0xBC,0x6C,0xF5,0x19,0xDD,4,1],writes=0,closed=false;
+  if(variant===0)r[2]=5;if(variant===1)r[3]=1;if(variant===2)r=[0];if(variant===3)r[11]=r[12]=r[13]=0;
+  var online={connect:function(){},disconnect:function(){closed=true;},invokeFunctionProperty:function(o,p,b){if(b[1]===2)writes++;return r;}};
+  var failed=false;try{IOHC_assignAtlanticPairing(deviceWith({}),online,{setText:function(){}},{channelIndex:1});}catch(e){failed=true;}
+  check(failed&&closed&&writes===0,"unsafe ETS assignment case "+variant);
+ }
+});

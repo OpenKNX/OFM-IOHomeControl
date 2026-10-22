@@ -21911,23 +21911,23 @@ TEST(controller_heating_legacy_sensor_write_and_unqualified_profiles_are_blocked
  ASSERT_EQ(c.radio().testTransmitCount(),0U);
 }
 
-static bool beginAtlanticPullForTest(IoHomeController &c,IoHomecontrol &m,IoHomecontrolChannel &ch,IoHomeFrame &launch)
+static bool beginAtlanticPullForTest(IoHomeController &c,IoHomecontrol &m,IoHomecontrolChannel &ch,IoHomeFrame &launch,uint32_t peer=0xB6BDFB)
 {
     const uint8_t global[16]={0x77};initPaired2WControllerForTest(c,m,ch,0x60F823,0,global);c.setSystemKey(global);
-    if(!c.startAtlanticPairing(0,0xB6BDFB))return false;
+    if(!c.startAtlanticPairing(0,peer))return false;
     IoHomeFrame request,response;if(!transmitQueuedControllerFrame(c,request))return false;
-    buildDiscoverResponseFrame(response,0x60F823,0xB6BDFB,false,IOHC_POWER_SAVE_ALWAYS_ALIVE);
+    buildDiscoverResponseFrame(response,0x60F823,peer,false,IOHC_POWER_SAVE_ALWAYS_ALIVE);
     response.data[0]=0xFF;response.data[1]=0xC0;response.data[5]=12;
     if(!queueControllerResponse(c,response))return false;
     if(!lastTransmittedFrameForTest(c,request)||request.commandId!=IoHomeCommand::Confirmation)return false;
-    buildDiscoveryConfirmationAckFrame(response,0x60F823,0xB6BDFB);
+    buildDiscoveryConfirmationAckFrame(response,0x60F823,peer);
     if(!queueControllerResponse(c,response))return false;
     return lastTransmittedFrameForTest(c,launch)&&launch.commandId==IoHomeCommand::LaunchKeyTransfer;
 }
 static bool sendAtlanticCandidateForTest(IoHomeController &c,const IoHomeFrame &launch,const uint8_t key[16],uint8_t ciphertext[16],IoHomeFrame &proofChallenge)
 {
     uint8_t input[7]={0x38};memcpy(input+1,launch.data,6);
-    IoHomeFrame reply;reply.init();reply.setSrcNode(0xB6BDFB);reply.setDestNode(0x60F823);
+    IoHomeFrame reply;reply.init();reply.setSrcNode(launch.getDestNodeId());reply.setDestNode(0x60F823);
     reply.commandId=IoHomeCommand::KeyTransfer;reply.dataLen=16;
     if(!IoHomeCrypto::crypt2WKeyXor(input,7,launch.data,key,IOHC_TRANSFER_KEY,reply.data))return false;
     memcpy(ciphertext,reply.data,16);
@@ -21937,7 +21937,7 @@ static bool sendAtlanticCandidateForTest(IoHomeController &c,const IoHomeFrame &
 static bool proveAtlanticCandidateForTest(IoHomeController &c,const uint8_t ciphertext[16],const IoHomeFrame &challenge,const uint8_t key[16],bool valid=true)
 {
     uint8_t input[17]={0x32};memcpy(input+1,ciphertext,16);
-    IoHomeFrame reply;reply.init();reply.setSrcNode(0xB6BDFB);reply.setDestNode(0x60F823);
+    IoHomeFrame reply;reply.init();reply.setSrcNode(challenge.getDestNodeId());reply.setDestNode(0x60F823);
     reply.commandId=IoHomeCommand::ChallengeResponse;reply.dataLen=6;
     if(!IoHomeCrypto::createHmac2W(input,17,challenge.data,key,reply.data))return false;
     if(!valid)reply.data[0]^=1;
@@ -21999,7 +21999,7 @@ TEST(controller_atlantic_silent_probe_rollcall_diversity_and_cancel)
     ASSERT_TRUE(beginAtlanticPullForTest(c,m,ch,launch));const uint8_t key[16]={0x42};uint8_t ciphertext[16];
     ASSERT_TRUE(sendAtlanticCandidateForTest(c,launch,key,ciphertext,challenge));ASSERT_TRUE(proveAtlanticCandidateForTest(c,ciphertext,challenge,key));
     IoHomeFrame probe,response;ASSERT_TRUE(transmitQueuedControllerFrame(c,probe));
-    ioHomeTestAdvanceMillis(6000);c.loop();c.loop();
+    ioHomeTestAdvanceMillis(6000);c.loop();ioHomeTestAdvanceMillis(101);c.loop();
     ASSERT_EQ(c.state(),ControllerState::AtlanticRollCallWait);
     IoHomeFrame rollcall;ASSERT_TRUE(lastTransmittedFrameForTest(c,rollcall));ASSERT_EQ(rollcall.commandId,IoHomeCommand::DiscoverSPERequest);
     const uint8_t transcript[]={0x2A};uint8_t expected[6];ASSERT_TRUE(IoHomeCrypto::createHmac2W(transcript,1,rollcall.data,key,expected));ASSERT_MEM_EQ(expected,rollcall.data+6,6);
@@ -22007,7 +22007,9 @@ TEST(controller_atlantic_silent_probe_rollcall_diversity_and_cancel)
     buildDiscoverResponseFrame(response,0x60F823,0xB6BDFC,true,IOHC_POWER_SAVE_ALWAYS_ALIVE);
     response.data[0]=0x0D;response.data[1]=1;response.data[5]=12;
     ASSERT_TRUE(queueControllerResponse(c,response));
-    ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::Probing);ASSERT_TRUE(!ch.isPaired());
+    ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::RollCall);ASSERT_TRUE(!ch.isPaired());
+    ioHomeTestAdvanceMillis(501);c.loop();c.loop();
+    ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::Probing);
     ASSERT_TRUE(transmitQueuedControllerFrame(c,probe));ASSERT_EQ(probe.commandId,IoHomeCommand::WritePrivate);
     c.cancelPairing();ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::Cancelled);
     ASSERT_TRUE(!c.assignAtlanticHeater(0,c.atlanticStatus().session));ASSERT_TRUE(!ch.isPaired());
@@ -22019,13 +22021,13 @@ TEST(controller_heating_saved_key_scan_deduplicates_without_global_key_changes)
     m.testSetChannel(1,&b);b.setNodeId(0xB6BDFF);b.setEncryptionKey(a.getEncryptionKey());b.onProtocolIdentity(0xB6BDFF,a.getProtocolIdentity());
     m.testSetChannel(2,&v);v.setNodeId(0x112233);v.setEncryptionKey(second);v.onProtocolIdentity(0x112233,a.getProtocolIdentity());
     ASSERT_TRUE(c.scanSavedHeatingKeys());
-    for(unsigned i=0;i<6;++i){
+    for(unsigned i=0;i<12;++i){
         c.loop();ASSERT_EQ(c.state(),ControllerState::AtlanticRollCallWait);
         IoHomeFrame tx;ASSERT_TRUE(lastTransmittedFrameForTest(c,tx));ASSERT_EQ(tx.commandId,IoHomeCommand::DiscoverSPERequest);
         const uint8_t transcript[]={0x2A};uint8_t expected[6];
-        ASSERT_TRUE(IoHomeCrypto::createHmac2W(transcript,1,tx.data,i<3?a.getEncryptionKey():second,expected));ASSERT_MEM_EQ(expected,tx.data+6,6);
+        ASSERT_TRUE(IoHomeCrypto::createHmac2W(transcript,1,tx.data,i<6?a.getEncryptionKey():second,expected));ASSERT_MEM_EQ(expected,tx.data+6,6);
         c.loop();ioHomeTestAdvanceMillis(1501);c.loop();
-        if(i==2)c.loop(); // finish first key, select the next unique channel key
+        if(i==5)c.loop(); // finish first key, select the next unique channel key
     }
     ASSERT_MEM_EQ(c.getSystemKey(),global,16);ASSERT_MEM_EQ(a.getEncryptionKey(),b.getEncryptionKey(),16);
     c.cancelAtlantic();
@@ -22063,15 +22065,15 @@ TEST(golden_rf_corpus_atlantic_private_heating_values_and_two_node_identity)
     ASSERT_TRUE(deserializeFrameForTest(heater,rawHeater->bytes,rawHeater->wireLen));
     ASSERT_TRUE(IoHomeHeating::pairingNode(decodeAcceptedDiscoveryIdentity(remote.data,remote.dataLen)));
     ASSERT_TRUE(IoHomeHeating::actuator(decodeAcceptedDiscoveryIdentity(heater.data,heater.dataLen)));
-    ASSERT_EQ(remote.getSrcNodeId()+1,heater.getSrcNodeId());ASSERT_EQ(heater.commandId,IoHomeCommand::DiscoverSPEResponse);
+    ASSERT_EQ(remote.getSrcNodeId(),0x986110U);ASSERT_EQ(heater.getSrcNodeId(),0x986111U);ASSERT_EQ(heater.commandId,IoHomeCommand::DiscoverSPEResponse);
 }
 TEST(controller_atlantic_full_silence_never_assigns_remote_or_sends_config)
 {
     IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;IoHomeFrame launch,challenge;
     ASSERT_TRUE(beginAtlanticPullForTest(c,m,ch,launch));const uint8_t key[16]={0x42};uint8_t ciphertext[16];
     ASSERT_TRUE(sendAtlanticCandidateForTest(c,launch,key,ciphertext,challenge));ASSERT_TRUE(proveAtlanticCandidateForTest(c,ciphertext,challenge,key));
-    IoHomeFrame probe;ASSERT_TRUE(transmitQueuedControllerFrame(c,probe));ioHomeTestAdvanceMillis(6000);c.loop();
-    for(unsigned attempt=0;attempt<3;++attempt){c.loop();ASSERT_EQ(c.state(),ControllerState::AtlanticRollCallWait);
+    IoHomeFrame probe;ASSERT_TRUE(transmitQueuedControllerFrame(c,probe));ioHomeTestAdvanceMillis(6000);c.loop();ioHomeTestAdvanceMillis(101);
+    for(unsigned attempt=0;attempt<6;++attempt){c.loop();ASSERT_EQ(c.state(),ControllerState::AtlanticRollCallWait);
         c.loop();ioHomeTestAdvanceMillis(1501);c.loop();}
     c.loop();ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::Failed);
     ASSERT_TRUE(!ch.isPaired());ASSERT_TRUE(!c.assignAtlanticHeater(0,c.atlanticStatus().session));
@@ -22387,4 +22389,97 @@ TEST(heating_cache_memory_budget_preserves_maximum_raw_reply_and_unknown_view)
     ASSERT_EQ(unknown.node,0U);ASSERT_TRUE(!unknown.busy);
     for(const auto &sample:unknown.values)ASSERT_TRUE(!sample.observed&&!sample.decoded.valid);
     for(uint8_t channel=0;channel<16;++channel)ASSERT_TRUE(&first.heatingState(channel)!=&unknown);
+}
+
+#include "corpus/atlantic176_corpus.h"
+TEST(golden_rf_corpus_atl176_reset_direct_and_presence_are_public_structural_evidence)
+{
+    for(const auto *frames:{Atlantic176Corpus::direct,Atlantic176Corpus::reset,Atlantic176Corpus::presence}){
+        const unsigned count=frames==Atlantic176Corpus::direct?9:frames==Atlantic176Corpus::reset?18:4;
+        for(unsigned i=0;i<count;++i){IoHomeFrame f;ASSERT_TRUE(f.deserializeRawWithOptionalCrc(frames[i].bytes,frames[i].length));
+            ASSERT_EQ(uint8_t(f.commandId),frames[i].command);ASSERT_TRUE(!(f.ctrlByte0&IOHC_CTRL0_MODE_1W));}
+    }
+    IoHomeFrame remote,heater,direct;
+    ASSERT_TRUE(remote.deserializeRawWithOptionalCrc(Atlantic176Corpus::reset[3].bytes,18));
+    ASSERT_EQ(remote.getSrcNodeId(),0xD6BC6CU);ASSERT_TRUE(IoHomeHeating::pairingNode(decodeAcceptedDiscoveryIdentity(remote.data,remote.dataLen)));
+    ASSERT_TRUE(heater.deserializeRawWithOptionalCrc(Atlantic176Corpus::reset[14].bytes,18));ASSERT_EQ(heater.getSrcNodeId(),0xF519DDU);
+    ASSERT_TRUE(heater.getSrcNodeId()!=remote.getSrcNodeId()+1);ASSERT_TRUE(IoHomeHeating::actuator(decodeAcceptedDiscoveryIdentity(heater.data,heater.dataLen)));
+    ASSERT_EQ(Atlantic176Corpus::reset[14].hz,869850000U);ASSERT_EQ(Atlantic176Corpus::reset[14].ms-Atlantic176Corpus::reset[13].ms,610U);
+    ASSERT_EQ(Atlantic176Corpus::reset[17].hz,868250000U);ASSERT_EQ(Atlantic176Corpus::reset[17].ms-Atlantic176Corpus::reset[16].ms,938U);
+    ASSERT_TRUE(direct.deserializeRawWithOptionalCrc(Atlantic176Corpus::direct[8].bytes,15));ASSERT_EQ(direct.getSrcNodeId(),0xB6BDFCU);
+    ASSERT_EQ(direct.data[4],0x18);ASSERT_EQ(direct.data[5],1);
+}
+
+static bool beginAtlanticResetSearch(IoHomeController &c,IoHomecontrol &m,IoHomecontrolChannel &ch)
+{
+    IoHomeFrame launch,challenge;const uint8_t key[16]={0x42};uint8_t ciphertext[16];
+    if(!beginAtlanticPullForTest(c,m,ch,launch,0xD6BC6C) || !sendAtlanticCandidateForTest(c,launch,key,ciphertext,challenge) ||
+       !proveAtlanticCandidateForTest(c,ciphertext,challenge,key))return false;
+    IoHomeFrame probe;if(!transmitQueuedControllerFrame(c,probe)||probe.getDestNodeId()!=0xD6BC6D)return false;
+    ioHomeTestAdvanceMillis(6000);c.loop();ioHomeTestAdvanceMillis(101);return true;
+}
+static void atlanticCandidateReply(IoHomeFrame &response,uint32_t node)
+{
+    buildDiscoverResponseFrame(response,0x60F823,node,true,IOHC_POWER_SAVE_ALWAYS_ALIVE);
+    response.data[0]=0x0D;response.data[1]=1;response.data[5]=12;
+}
+TEST(controller_atl176_two_pass_reset_search_checks_all_frequencies_and_authenticated_candidate)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;ASSERT_TRUE(beginAtlanticResetSearch(c,m,ch));
+    const uint32_t channels[]={IOHC_FREQ_2,IOHC_FREQ_1,IOHC_FREQ_3};
+    for(unsigned i=0;i<4;++i){
+        c.loop();ASSERT_EQ(c.state(),ControllerState::AtlanticRollCallWait);IoHomeFrame frame;ASSERT_TRUE(lastTransmittedFrameForTest(c,frame));
+        ASSERT_EQ(frame.commandId,IoHomeCommand::DiscoverSPERequest);ASSERT_EQ(frame.ctrlByte1,i<3?0x30:0);
+        ASSERT_EQ(c.radio().testCurrentFrequency(),channels[i%3]);ASSERT_EQ(c.radio().testLastPreambleLength(),i<3?1024:48);
+        c.loop();
+        if(i<3){ioHomeTestAdvanceMillis(1501);c.loop();}
+    }
+    ioHomeTestAdvanceMillis(610);c.testSetRxScanFrequency(IOHC_FREQ_3);c.radio().testInjectRxDiagnostics(true,true,false,0,0,-100);IoHomeFrame response;
+    atlanticCandidateReply(response,0xF519DD);ASSERT_TRUE(queueControllerResponse(c,response));
+    ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::RollCall);ASSERT_TRUE(!c.assignAtlanticHeater(0,c.atlanticStatus().session));
+    ASSERT_EQ(c.atlanticStatus().responseAgeMs,610U);ASSERT_EQ(c.atlanticStatus().lastRxHz,IOHC_FREQ_3);
+    ioHomeTestAdvanceMillis(891);c.loop();c.loop();IoHomeFrame probe;ASSERT_TRUE(transmitQueuedControllerFrame(c,probe));
+    ASSERT_EQ(probe.getDestNodeId(),0xF519DDU);ASSERT_EQ(probe.commandId,IoHomeCommand::WritePrivate);ASSERT_EQ(probe.data[3],2);
+    const uint8_t reply[]={0x0C,0x60,1,2,0x18,1},challenge[]={1,2,3,4,5,6};
+    buildSimpleResponseFrame(response,0x60F823,0xF519DD,IoHomeCommand::WritePrivateResponse,reply,6);
+    ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_TRUE(!ch.isPaired());
+    buildPairChallengeRequestFrame(response,0x60F823,0xF519DD,challenge);ASSERT_TRUE(queueControllerResponse(c,response));
+    buildSimpleResponseFrame(response,0x60F823,0xF519DD,IoHomeCommand::WritePrivateResponse,reply,6);
+    response.data[3]=3;ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_TRUE(!ch.isPaired());
+    response.data[3]=2;c.testSetRxScanFrequency(IOHC_FREQ_1);ASSERT_TRUE(queueControllerResponse(c,response));
+    ASSERT_TRUE(c.atlanticStatus().stage!=IoHomeController::AtlanticStage::HeaterVerified);
+    c.testSetRxScanFrequency(IOHC_FREQ_2);ASSERT_TRUE(queueControllerResponse(c,response));
+    ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::HeaterVerified);
+    ASSERT_EQ(c.atlanticStatus().rollcallAttempts,4U);ASSERT_TRUE(!ch.isPaired());
+    m.failAssignmentPersistence=true;ASSERT_TRUE(!c.assignAtlanticHeater(0,c.atlanticStatus().session));
+    m.failAssignmentPersistence=false;ASSERT_TRUE(c.assignAtlanticHeater(0,c.atlanticStatus().session));ASSERT_EQ(ch.getNodeId(),0xF519DDU);
+    const uint8_t key[16]={0x42};ASSERT_MEM_EQ(ch.getEncryptionKey(),key,16);
+}
+TEST(controller_atl176_busy_quota_expiry_and_cancel_do_not_consume_scan_attempts)
+{
+    for(unsigned variant=0;variant<4;++variant){
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;ASSERT_TRUE(beginAtlanticResetSearch(c,m,ch));
+        if(variant==0){c.testChargeDuty(IOHC_FREQ_2,3600);c.testSimulationUnlimited();}
+        if(variant==1)c.radio().testInjectRxDiagnostics(false,false,false,0,0,-20);
+        if(variant==2){uint8_t other[16]={9};c.setSystemKey(other);}
+        if(variant==3)ch.setNodeId(0x112233);
+        c.loop();ASSERT_EQ(c.atlanticStatus().rollcallAttempts,0U);
+        if(variant<2){
+            ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::RollCall);
+            ioHomeTestAdvanceMillis(180001);c.loop();ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::Timeout);
+        }else ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::Failed);
+        ASSERT_TRUE(!c.assignAtlanticHeater(0,c.atlanticStatus().session));
+    }
+}
+TEST(controller_atl176_multiple_responders_are_staged_and_spoof_cannot_block_real_heater)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;ASSERT_TRUE(beginAtlanticResetSearch(c,m,ch));c.loop();c.loop();
+    IoHomeFrame response;for(uint32_t node:{0x112233U,0xF519DDU,0xF519DDU}){
+        atlanticCandidateReply(response,node);ASSERT_TRUE(queueControllerResponse(c,response));
+    }
+    ioHomeTestAdvanceMillis(1501);c.loop();c.loop();IoHomeFrame probe;ASSERT_TRUE(transmitQueuedControllerFrame(c,probe));ASSERT_EQ(probe.getDestNodeId(),0x112233U);
+    buildErrorResponseFrame(response,0x60F823,0x112233,0x05);ASSERT_TRUE(queueControllerResponse(c,response));
+    ioHomeTestAdvanceMillis(101);c.loop();ASSERT_TRUE(transmitQueuedControllerFrame(c,probe));ASSERT_EQ(probe.getDestNodeId(),0xF519DDU);
+    c.cancelAtlantic();ASSERT_TRUE(!ch.isPaired());ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::Cancelled);
+    IoHomeController reboot;ASSERT_TRUE(!reboot.assignAtlanticHeater(0,c.atlanticStatus().session));
 }

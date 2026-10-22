@@ -14,3 +14,6 @@ Use a controlled power switch and phase-trigger GPIO or storage trace. Record bo
 - [ ] `wrap` — Exercise generation wrap policy; never select ambiguous/newer-by-guess records.
 
 Evidence record: `network_journal_powercut_campaign` in `docs/release-evidence.template.json`. Set each case to `passed` only after running it; record exact OFM/OAM revisions, operator, date, setup, expected/observed results and hashed retained artifacts. The checker rejects missing cases and model-only results. Never store secret keys in published captures.
+
+ATL-176 release cases (not physically performed): retain OFM/OAM commit IDs and hashes of redacted artifacts.
+- [ ] Reset heater D6BC6C/F519DD: preserve old binding/key, prove new key and heater read, explicitly assign to an empty channel, cut power before/after durable assignment and receipt acknowledgment. Check real NVS and reboot; native store tests do not qualify flash hardware.

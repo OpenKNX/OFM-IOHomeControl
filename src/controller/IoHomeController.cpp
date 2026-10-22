@@ -6559,7 +6559,10 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
     const bool admittedBypass=mRfAccessPolicy.bypass(millis());
     const uint32_t airtime = estimatedTxAirtimeMs(iLength, mCurrentTxPreambleSymbols);
     if(mCurrentFreqIdx<IOHC_NUM_FREQUENCIES)mRfNextAirtimeMs[IoHomeDutyBudget::band(IOHC_FREQUENCIES[mCurrentFreqIdx])]=airtime;
-    if (!isDutyCycleOk(mCurrentFreqIdx, airtime)) {
+    const bool productionAtlantic=(mPairing2WMode==Pairing2WMode::AtlanticPull && isPairDiagnosticState(mState)) ||
+        (mCurrentCmd.active&&mCurrentCmd.atlanticToken) ||
+        (mAtlantic.status.stage==AtlanticStage::RollCall && iLength>8 && iData[8]==uint8_t(IoHomeCommand::DiscoverSPERequest));
+    if (productionAtlantic ? !mRfDutyBudget.admits(IOHC_FREQUENCIES[mCurrentFreqIdx],airtime) : !isDutyCycleOk(mCurrentFreqIdx, airtime)) {
         mLbtPrepared=false;
         mLastTxDutyDenied=true;
         if (auto *counters=activeAttemptCounters()) ++counters->dutyRejected;
@@ -6574,6 +6577,12 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
             (unsigned long)mRfAccessPolicy.retryAfter(mRfDutyBudget,IOHC_FREQUENCIES[mCurrentFreqIdx],airtime,millis()));
         observeBatteryDiagnostic(mCurrentCmd,IoHomeBatteryDiagnostic::State::DutyBlocked);
         return RadioError::DutyCycleExceeded; // no timing exemptions, including 0x3D
+    }
+    if(productionAtlantic){
+        int16_t rssi=0;mLastLbtAttempts=1;mLastLbtBypassed=false;
+        mLastLbtRssiValid=mRadio.currentRssi(rssi);mLastLbtRssi=rssi;
+        if(!mLastLbtRssiValid||rssi>IOHC_LBT_RSSI_THRESHOLD_DBM){++mLbtBusyCount;return RadioError::Busy;}
+        ++mLbtClearCount;
     }
 #if defined(RADIO_SX1262)
     const auto result=blocking?mRadio.startTransmitBlocking(iData,iLength):mRadio.startTransmit(iData,iLength);
@@ -6921,6 +6930,10 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
 void IoHomeController::loop()
 {
     serviceAtlantic();
+    if(mCurrentCmd.active&&mCurrentCmd.atlanticToken&&uint32_t(millis()-mExchangeStartMs)>=15000U){
+        notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::SessionExhausted);
+        mCurrentCmd.active=false;mState=ControllerState::Idle;
+    }
     serviceHeating();
     serviceLimitationRefresh();
     for(uint8_t c=0;c<16;++c) {
@@ -7817,6 +7830,10 @@ void IoHomeController::processIdle()
 
 void IoHomeController::processTxPending()
 {
+    if(mCurrentCmd.atlanticToken && !atlanticContextMatches()){
+        notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+        mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+    }
     if (mRetryAtMs && uint32_t(millis()-mRetryAtMs)>=0x80000000UL) return;
     mRetryAtMs=0;
 
@@ -8344,7 +8361,7 @@ void IoHomeController::processResponse()
             mCurrentCmd.active=false;mState=ControllerState::Idle;return;
         }
         const bool expired=uint32_t(millis()-mStateTimer)>=mResponseTimeoutMs;
-        if(expired||(mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W)){mState=ControllerState::WaitResponse;return;}
+        if(expired||mLastResponseFreqIdx!=mCurrentCmd.twoWayTxFreqIdx||(mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W)){mState=ControllerState::WaitResponse;return;}
         if(mRxFrame.commandId==IoHomeCommand::WritePrivateResponse){
             IoHomeHeating::Value value;
             if(!mSawChallenge||!mAuthResponseSent ||
@@ -8362,7 +8379,7 @@ void IoHomeController::processResponse()
         }
         const bool expired=uint32_t(millis()-mExchangeStartMs)>=mCurrentCmd.sessionPolicy.totalBudgetMs ||
             uint32_t(millis()-mStateTimer)>=mResponseTimeoutMs;
-        if(expired || (mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W)){mState=ControllerState::WaitResponse;return;}
+        if(expired || mLastResponseFreqIdx!=mCurrentCmd.twoWayTxFreqIdx || (mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W)){mState=ControllerState::WaitResponse;return;}
         if(mRxFrame.commandId==IoHomeCommand::WritePrivateResponse){
             IoHomeHeating::Value value;
             if(!mSawChallenge||!mAuthResponseSent ||
@@ -8990,8 +9007,10 @@ void IoHomeController::finishPullKeyDiagnostic(PullKeyResult result)
     startReceive();
     if(atlantic&&proven&&mAtlantic.keyProven){
         uint32_t heater=0;
-        if(!IoHomeHeating::nextNode(mAtlantic.status.pairingNode,heater) || !queueAtlanticProbe(heater))
-            stopAtlantic(AtlanticStage::Failed,"no_heater_at_plus_one_or_quota");
+        if(IoHomeHeating::nextNode(mAtlantic.status.pairingNode,heater)){
+            mAtlantic.status.heaterNode=heater;
+            if(!queueAtlanticProbe(heater)){mAtlantic.status.stage=AtlanticStage::KeyVerified;mAtlantic.status.reason="direct_probe_deferred";}
+        }else {mAtlantic.status.stage=AtlanticStage::RollCall;mAtlantic.status.reason="no_plus_one_candidate";}
     }
 }
 
@@ -13344,6 +13363,7 @@ bool IoHomeController::startAtlanticPairing(uint8_t channel,uint32_t peer)
     mAtlantic.status.session=mNextAtlanticSession;mAtlantic.status.channel=channel;
     mAtlantic.status.stage=AtlanticStage::Discovering;mAtlantic.gateway=mOwnNodeId;
     mAtlantic.startedMs=millis();mAtlantic.revision=ch->productContextRevision();
+    mAtlantic.channelNode=ch->getNodeId();std::memcpy(mAtlantic.channelKey,ch->getEncryptionKey(),16);
     std::memcpy(mAtlantic.globalKey,mSystemKey,16);return true;
 }
 
@@ -13355,7 +13375,7 @@ bool IoHomeController::atlanticContextMatches() const
     if(!ch||ch->is1W()||ch->productContextRevision()!=mAtlantic.revision)return false;
     if(mAtlantic.manualScan)return ch->isPaired()&&IoHomeHeating::actuator(ch->getProtocolIdentity())&&
         ch->getNodeId()==mAtlantic.status.heaterNode&&!std::memcmp(ch->getEncryptionKey(),mAtlantic.key,16);
-    return !ch->isPaired(); // an occupied channel is never overwritten
+    return !ch->isPaired() && ch->getNodeId()==mAtlantic.channelNode && !std::memcmp(ch->getEncryptionKey(),mAtlantic.channelKey,16); // no replacement during acquisition
 }
 
 void IoHomeController::stopAtlantic(AtlanticStage stage,const char *reason)
@@ -13409,8 +13429,10 @@ void IoHomeController::finishAtlanticProbe(const IoHomeQueueEntry &entry,IoHomeC
             mAtlantic.status.reason="heater_address_verified_not_assigned";return;
         }
     }
-    if(mAtlantic.status.rollcallAttempts){stopAtlantic(AtlanticStage::Failed,"readback_invalid_after_rollcall");return;}
-    mAtlantic.status.stage=AtlanticStage::RollCall;mAtlantic.status.reason="no_heater_at_plus_one";
+    if(mLastTxDutyDenied){mAtlantic.status.stage=AtlanticStage::KeyVerified;mAtlantic.status.reason="quota_blocked";mAtlantic.nextActionMs=millis()+1000;return;}
+    mAtlantic.identity={};mAtlantic.status.stage=AtlanticStage::RollCall;
+    mAtlantic.status.reason=mAtlantic.status.rollcallAttempts?"candidate_read_not_verified":"no_heater_at_plus_one";
+    mAtlantic.nextActionMs=millis()+100;
 }
 
 bool IoHomeController::assignAtlanticHeater(uint8_t channel,uint32_t session)
@@ -13438,53 +13460,99 @@ void IoHomeController::serviceAtlantic()
        stage==AtlanticStage::Refused||stage==AtlanticStage::NotProven||stage==AtlanticStage::Timeout||stage==AtlanticStage::Failed)return;
     if(!atlanticContextMatches()){
         const bool expired=uint32_t(millis()-mAtlantic.startedMs)>180000;
-        stopAtlantic(expired?AtlanticStage::Timeout:AtlanticStage::Failed,expired?"session_expired":"identity_changed");return;
+        const char *reason=expired?(!strcmp(mAtlantic.status.reason,"quota_blocked")?"session_expired_quota_blocked":"session_expired"):"identity_changed";
+        stopAtlantic(expired?AtlanticStage::Timeout:AtlanticStage::Failed,reason);return;
     }
-    if(stage!=AtlanticStage::RollCall||mState!=ControllerState::Idle||mCurrentCmd.active||!queueEmpty())return;
+    if(mAtlantic.nextActionMs && int32_t(millis()-mAtlantic.nextActionMs)<0)return;
+    if(mState!=ControllerState::Idle||mCurrentCmd.active||!queueEmpty())return;
+    if(stage==AtlanticStage::KeyVerified){
+        if(!queueAtlanticProbe(mAtlantic.status.heaterNode)){mAtlantic.status.reason="quota_blocked";mAtlantic.nextActionMs=millis()+1000;}
+        return;
+    }
+    if(stage!=AtlanticStage::RollCall)return;
+    // Drain discovered candidates one at a time, after a full RX window. Other
+    // responders remain staged; a spoofed 2B cannot terminate the search.
+    if(!mAtlantic.manualScan && mAtlantic.candidateNext<mAtlantic.candidateCount){
+        const uint32_t node=mAtlantic.candidates[mAtlantic.candidateNext];
+        const auto *identity=protocolIdentityForIoAddress(node);
+        if(!identity||!IoHomeHeating::actuator(*identity)){++mAtlantic.candidateNext;return;}
+        mAtlantic.identity=*identity;
+        if(queueAtlanticProbe(node))++mAtlantic.candidateNext;
+        else {mAtlantic.status.reason="quota_blocked";mAtlantic.nextActionMs=millis()+1000;}
+        return;
+    }
     const uint8_t attempt=mAtlantic.status.rollcallAttempts;
-    if(attempt>=3){
+    if(attempt>=6){
         if(mAtlantic.manualScan&&selectSavedHeatingKey())return;
         stopAtlantic(mAtlantic.manualScan?AtlanticStage::None:AtlanticStage::Failed,
-            mAtlantic.manualScan?"saved_key_scan_complete":"rollcall_silent");return;
+            mAtlantic.manualScan?"saved_key_scan_complete":mAtlantic.status.candidateOverflow?"candidate_capacity_exceeded":"silent_after_6_attempts");return;
     }
-    const uint32_t frequency=IOHC_FREQUENCIES[attempt%IOHC_NUM_FREQUENCIES];
+    static constexpr uint32_t channels[]={IOHC_FREQ_2,IOHC_FREQ_1,IOHC_FREQ_3};
+    const uint32_t frequency=channels[attempt%3];const bool lowPower=attempt<3;
+    const uint16_t preamble=lowPower?1024:48;
     TwoWayDiscoveryFrameOptions options;options.command=IoHomeCommand::DiscoverSPERequest;
-    options.destination=0x00003B;options.lowPower=false;options.ackCapable=false;options.preamble=48;
-    IoHomeFrame frame;if(!buildTwoWayDiscoveryFrame(frame,mOwnNodeId,options,mAtlantic.key))return;
-    const uint8_t length=frame.serialize2W(mTxBuffer,sizeof(mTxBuffer));if(!length)return;
+    options.destination=0x00003B;options.lowPower=lowPower;options.ackCapable=lowPower;options.preamble=preamble;
+    IoHomeFrame frame;if(!buildTwoWayDiscoveryFrame(frame,mOwnNodeId,options,mAtlantic.key)){
+        stopAtlantic(AtlanticStage::Failed,"rollcall_build_error");return;
+    }
+    mTxLen=frame.serialize2W(mTxBuffer,sizeof(mTxBuffer));if(!mTxLen){stopAtlantic(AtlanticStage::Failed,"rollcall_build_error");return;}
     mRfDutyBudget.advance(millis());
-    if(mRfDutyBudget.used(frequency)+estimatedTxAirtimeMs(length,48)>
-       IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(frequency))){stopAtlantic(AtlanticStage::Failed,"quota_denied");return;}
-    const auto prepared=configureTxRadio(48,&frequency);if(prepared==RadioError::Busy)return;
-    if(prepared!=RadioError::None){stopAtlantic(AtlanticStage::Failed,"rx_or_tx_not_ready");return;}
-    const auto sent=startControllerTransmit(mTxBuffer,length);if(sent==RadioError::Busy)return;
-    if(sent!=RadioError::None){stopAtlantic(AtlanticStage::Failed,"quota_or_radio_denied");return;}
-    ++mAtlantic.status.rollcallAttempts;mStateTimer=millis();mState=ControllerState::AtlanticRollCallWait;
+    if(!mRfDutyBudget.admits(frequency,estimatedTxAirtimeMs(mTxLen,preamble))){
+        mAtlantic.status.reason="quota_blocked";mAtlantic.nextActionMs=millis()+1000;return;
+    }
+    const auto prepared=configureTxRadio(preamble,&frequency);
+    if(prepared==RadioError::Busy){mAtlantic.status.reason="radio_busy";mAtlantic.nextActionMs=millis()+100;return;}
+    if(prepared!=RadioError::None){stopAtlantic(AtlanticStage::Failed,"radio_error");return;}
+    const auto sent=startControllerTransmit(mTxBuffer,mTxLen);
+    if(sent==RadioError::Busy||sent==RadioError::DutyCycleExceeded){mAtlantic.status.reason=sent==RadioError::Busy?"lbt_or_radio_busy":"quota_blocked";mAtlantic.nextActionMs=millis()+100;return;}
+    if(sent!=RadioError::None){stopAtlantic(AtlanticStage::Failed,"radio_error");return;}
+    ++mAtlantic.status.rollcallAttempts;mAtlantic.status.txHz=frequency;mAtlantic.status.preamble=preamble;mAtlantic.status.ctrl1=frame.ctrlByte1;
+    mAtlantic.rxStarted=false;mAtlantic.nextActionMs=0;mStateTimer=millis();mState=ControllerState::AtlanticRollCallWait;
+    logInfoP("Atlantic evidence=local_tx pairing_node=%06X scan_pass=%c attempt=%u tx_hz=%lu preamble=%u ctrl1=%02X length=%u airtime_ms=%lu lbt=clear quota=admitted",
+        mAtlantic.status.pairingNode,lowPower?'A':'B',attempt+1,(unsigned long)frequency,preamble,frame.ctrlByte1,mTxLen,
+        (unsigned long)estimatedTxAirtimeMs(mTxLen,preamble));
 }
 void IoHomeController::processAtlanticRollCall()
 {
     if(!atlanticContextMatches()){stopAtlantic(AtlanticStage::Timeout,"scan_context_expired");return;}
-    if(ensureReceiveAfterTransmit()!=RadioError::None)return;
-    serviceBackgroundRxScan(); // 2B may arrive on a different RF channel
-    if(uint32_t(millis()-mStateTimer)>=1500){mState=ControllerState::Idle;startReceive();}
+    const auto rx=ensureReceiveAfterTransmit();
+    if(rx==RadioError::Busy){
+        if(uint32_t(millis()-mStateTimer)>currentTxTimeoutMs())stopAtlantic(AtlanticStage::Failed,"radio_tx_timeout");
+        return;
+    }
+    if(rx!=RadioError::None){stopAtlantic(AtlanticStage::Failed,"radio_rx_error");return;}
+    if(!mAtlantic.rxStarted){
+        mAtlantic.rxStarted=true;mAtlantic.listenStartedMs=millis();mAtlantic.status.txEndMs=millis();
+        mAttemptTxDoneUs=micros();mAttemptTxDoneValid=true;mAttemptRxReadyUs=micros();
+        recordTwoWayTrace("tx_done_observed",mQueuedTxFrame,mQueuedTxWireLength);
+        recordTwoWayTrace("rx_ready",mQueuedTxFrame,mQueuedTxWireLength);
+        logInfoP("Atlantic evidence=local_tx_end_observed attempt=%u tx_end_ms=%lu rx_window_ms=1500 dwell_us=%lu",
+            mAtlantic.status.rollcallAttempts,(unsigned long)mAtlantic.status.txEndMs,(unsigned long)mRxScanIntervalUs);
+    }
+    serviceBackgroundRxScan();
+    if(uint32_t(millis()-mAtlantic.listenStartedMs)>=1500){mState=ControllerState::Idle;mAtlantic.nextActionMs=0;startReceive();}
 }
 void IoHomeController::processAtlanticRollCallFrame()
 {
-    if(!atlanticContextMatches()||uint32_t(millis()-mStateTimer)>1500||
+    if(!atlanticContextMatches()||!mAtlantic.rxStarted||uint32_t(millis()-mAtlantic.listenStartedMs)>1500||
        mRxFrame.commandId!=IoHomeCommand::DiscoverSPEResponse||
        (mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W)||mRxFrame.getDestNodeId()!=mOwnNodeId||
        mRxFrame.getSrcNodeId()==mAtlantic.status.pairingNode)return;
     auto identity=decodeAcceptedDiscoveryIdentity(mRxFrame.data,mRxFrame.dataLen);
     if(!IoHomeHeating::actuator(identity)||getAddressClass(mRxFrame.getSrcNodeId())!=IoHomeAddressClass::Unicast)return;
+    mAtlantic.status.lastRxHz=IOHC_FREQUENCIES[mLastResponseFreqIdx];mAtlantic.status.responseAgeMs=millis()-mAtlantic.listenStartedMs;
+    logInfoP("Atlantic evidence=discovery_only pairing_node=%06X rollcall_heater=%06X scan_pass=%c attempt=%u tx_hz=%lu rx_hz=%lu response_age_ms=%lu rssi=%d",
+        mAtlantic.status.pairingNode,mRxFrame.getSrcNodeId(),mAtlantic.status.rollcallAttempts<=3?'A':'B',mAtlantic.status.rollcallAttempts,
+        (unsigned long)mAtlantic.status.txHz,(unsigned long)mAtlantic.status.lastRxHz,(unsigned long)mAtlantic.status.responseAgeMs,mRadio.lastRssi());
     if(mAtlantic.manualScan){
         if(mRxFrame.getSrcNodeId()==mAtlantic.status.heaterNode)mAtlantic.status.reason="saved_key_rollcall_reply";
         return;
     }
-    // 2B itself is not a MAC proof. Require another challenged private read
-    // under the proven candidate key before enabling the explicit assignment.
-    identity.ioAddress=mRxFrame.getSrcNodeId();mAtlantic.identity=identity;
-    mState=ControllerState::Idle;
-    if(!queueAtlanticProbe(identity.ioAddress))stopAtlantic(AtlanticStage::Failed,"probe_after_rollcall_blocked");
+    identity.ioAddress=mRxFrame.getSrcNodeId();rememberProtocolIdentity(identity.ioAddress,identity);
+    for(uint8_t i=0;i<mAtlantic.candidateCount;++i)if(mAtlantic.candidates[i]==identity.ioAddress)return;
+    if(mAtlantic.candidateCount==16){if(mAtlantic.status.candidateOverflow<255)++mAtlantic.status.candidateOverflow;return;}
+    mAtlantic.candidates[mAtlantic.candidateCount++]=identity.ioAddress;
+    mAtlantic.status.reason="heater_discovered_read_proof_pending";
 }
 
 bool IoHomeController::selectSavedHeatingKey()
@@ -13499,7 +13567,7 @@ bool IoHomeController::selectSavedHeatingKey()
         if(duplicate)continue;
         mAtlantic.status.channel=c;mAtlantic.status.heaterNode=ch->getNodeId();mAtlantic.revision=ch->productContextRevision();
         std::memcpy(mAtlantic.key,ch->getEncryptionKey(),16);mAtlantic.status.rollcallAttempts=0;
-        mAtlantic.status.stage=AtlanticStage::RollCall;return true;
+        mAtlantic.status.stage=AtlanticStage::RollCall;mAtlantic.candidateCount=mAtlantic.candidateNext=0;mAtlantic.nextActionMs=0;return true;
     }
     return false;
 }

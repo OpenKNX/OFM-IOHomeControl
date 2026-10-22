@@ -155,7 +155,7 @@ public:
 
   bool currentRssi(int16_t &oRssi)
   {
-    oRssi = mLastRssi;
+    oRssi = mCurrentRssi;
     return true;
   }
 
@@ -235,7 +235,7 @@ public:
       ++mCrcErrorCount;
     mLastIrqStatus = iLastIrq;
     mTestLastRxLen = iLastLen;
-    mLastRssi = iRssi;
+    mLastRssi = iRssi;mCurrentRssi=iRssi;
   }
   uint8_t testLastRxLen() const { return mTestLastRxLen; }
   uint32_t testTransmitCount() const { return mTxStartCount; }
@@ -257,7 +257,7 @@ private:
   bool mInitialized = false;
   bool mTxDonePending = false;
   RadioState mState = RadioState::Idle;
-  int16_t mLastRssi = -70;
+  int16_t mLastRssi = -70,mCurrentRssi=-100;
   uint32_t mCurrentFreq = 0;
   uint32_t mTxStartCount = 0;
   uint32_t mTxDoneCount = 0;

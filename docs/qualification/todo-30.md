@@ -12,3 +12,6 @@ Retain signed artifact hash, previous/current application revisions, exported be
 - [ ] `reboot` — Reboot after download; verify firmware configuration and commissioning status/history.
 
 Evidence record: `ets_application_campaign` in `docs/release-evidence.template.json`. Set each case to `passed` only after running it; record exact OFM/OAM revisions, operator, date, setup, expected/observed results and hashed retained artifacts. The checker rejects missing cases and model-only results. Never store secret keys in published captures.
+
+ATL-176 release cases (not physically performed): retain OFM/OAM commit IDs and hashes of redacted artifacts.
+- [ ] Application 4.6 → 4.7: fresh import, older saved/reopened project, preserved group addresses, full/partial download and reboot. Verify separate Atlantic pairing/heater identities and the explicit assignment buttons.

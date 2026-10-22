@@ -2717,6 +2717,31 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
     { resultData[0]=4; resultLength=1; return true; }
     switch (lCmd)
     {
+    case 0x40: // Explicit Atlantic product workflow: start / inspect / assign
+    {
+        if(length<3||data[2]>=mNumChannels)break;
+        const uint8_t action=data[1],channel=data[2];
+        resultData[0]=2;resultLength=1;
+        if(action==0 && length==3){
+            if(!commissioningCanStart()){resultData[0]=4;return true;}
+            const uint32_t peer=mController.atlanticPullOffered(channel)?mController.atlanticPullOffer().node:0;
+            resultData[0]=mController.startAtlanticPairing(channel,peer)?0:2;return true;
+        }
+        const auto &status=mController.atlanticStatus();
+        if(action==1 && length==3){
+            resultData[0]=0;resultData[1]=1;resultData[2]=uint8_t(status.stage);resultData[3]=status.channel;
+            for(uint8_t i=0;i<4;++i)resultData[4+i]=status.session>>(24-8*i);
+            for(uint8_t i=0;i<3;++i){resultData[8+i]=status.pairingNode>>(16-8*i);resultData[11+i]=status.heaterNode>>(16-8*i);}
+            resultData[14]=status.rollcallAttempts;resultData[15]=status.proofAttempts;resultLength=16;return true;
+        }
+        if(action==2 && length==10){
+            const uint32_t session=uint32_t(data[3])<<24|uint32_t(data[4])<<16|uint32_t(data[5])<<8|data[6];
+            const uint32_t heater=uint32_t(data[7])<<16|uint32_t(data[8])<<8|data[9];
+            resultData[0]=heater==status.heaterNode && mController.assignAtlanticHeater(channel,session)?0:2;
+            return true;
+        }
+        return true;
+    }
     case 0x10: // Start pairing
     {
         if (length < 2)
@@ -4351,6 +4376,11 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     }
     if(iCmd.rfind("iohc heating ",0)==0){
         const auto args=trimSpaces(iCmd.substr(13));
+        unsigned pairChannel=0;char pairNode[16]{},pairExtra=0;
+        if(sscanf(args.c_str(),"pair %u %15s %c",&pairChannel,pairNode,&pairExtra)>=1 && args.rfind("pair ",0)==0){
+            uint32_t node=0;const bool valid=pairChannel>=1&&pairChannel<=mNumChannels&&(!pairNode[0]||parseHex24(pairNode,node));
+            logInfoP("Atlantic pairing=%s",valid&&mController.startAtlanticPairing(pairChannel-1,node)?"started; inspect then explicitly assign":"blocked");return true;
+        }
         if(args=="scan"){logInfoP("Heating saved-key scan=%s",mController.scanSavedHeatingKeys()?"started":"blocked");return true;}
         if(args=="cancel"){mController.cancelPairing();mController.cancelAtlantic();logInfoP("Atlantic candidate discarded");return true;}
         unsigned channel=0,seconds=0,session=0;char extra=0,nodeText[16]{},regText[16]{};

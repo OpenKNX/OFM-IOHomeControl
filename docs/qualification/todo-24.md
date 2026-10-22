@@ -19,3 +19,6 @@ Use RF capture plus logic-analyzer TX/IRQ/SPI edges. Record preamble/sync/airtim
 - [ ] `fault_restore` — Force radio fault/reset; verify RX restoration and unchanged keys/counters; no command replay.
 
 Evidence record: `sx1276_peer_campaign` in `docs/release-evidence.template.json`. Set each case to `passed` only after running it; record exact OFM/OAM revisions, operator, date, setup, expected/observed results and hashed retained artifacts. The checker rejects missing cases and model-only results. Never store secret keys in published captures.
+
+ATL-176 release cases (not physically performed): retain OFM/OAM commit IDs and hashes of redacted artifacts.
+- [ ] Both radios: six-attempt two-pass 2A search, CTRL1 30/00, 1024/48 actual on-air preambles; TX-end/RX-ready, dwell/retune, IRQ, RSSI, LBT, duty and TX/RX frequencies. Test cross-frequency replies at 610/938/1500 ms, delayed TX_DONE and multiple simultaneous responders. Do not infer actual timing from a native clock.

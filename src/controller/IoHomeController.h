@@ -610,6 +610,7 @@ public:
   struct AtlanticStatus {
     AtlanticStage stage=AtlanticStage::None;uint32_t session=0,pairingNode=0,heaterNode=0;
     uint8_t channel=0xFF,proofAttempts=0,rollcallAttempts=0;const char *reason="none";
+    uint32_t txHz=0,txEndMs=0,lastRxHz=0,responseAgeMs=0;uint16_t preamble=0;uint8_t ctrl1=0,candidateOverflow=0;
   };
   struct AtlanticPullOffer { uint32_t node=0,owner=0,observedMs=0;uint8_t channel=0xFF; };
   const AtlanticPullOffer &atlanticPullOffer() const {return mAtlanticPullOffer;}
@@ -1709,6 +1710,8 @@ private:
   struct AtlanticCandidate {
     AtlanticStatus status;uint8_t key[16]{},globalKey[16]{};uint32_t gateway=0,startedMs=0,revision=0;
     IoHomeProtocolIdentity identity{};bool keyProven=false,manualScan=false;uint8_t scanNext=0;
+    uint32_t candidates[16]{},nextActionMs=0,listenStartedMs=0,channelNode=0;uint8_t channelKey[16]{};
+    uint8_t candidateCount=0,candidateNext=0;bool rxStarted=false;
   } mAtlantic;
   AtlanticPullOffer mAtlanticPullOffer{};
   void offerAtlanticPull(uint32_t node,uint8_t channel=0xFF);

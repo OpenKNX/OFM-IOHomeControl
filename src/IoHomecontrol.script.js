@@ -1468,3 +1468,32 @@ function IOHC_profileObjectsProfile(input, output, context) {
     var code=manual || (match ? Number(match[1])*64+Number(match[2]) : 0);
     output.Profile=Object.prototype.hasOwnProperty.call(IOHC_PRESENTATIONS,code) ? code : 0;
 }
+
+function /* internal helper */ IOHC_atlanticStatus(online) {
+ var r=IOHC_invokeFunctionProperty(online,[0x40,1,0]);
+ if(!r||r.length!==16||r[0]!==0||r[1]!==1)throw new Error("Atlantic-Status nicht verfügbar; Firmware aktualisieren");
+ return r;
+}
+function IOHC_startAtlanticPairing(device,online,progress,context) {
+ online.connect();try {
+  var r=IOHC_invokeFunctionProperty(online,[0x40,0,context.channelIndex-1]);
+  if(!r||r[0]!==0)throw new Error("Atlantic-Pairing blockiert; leeren 2W-Kanal wählen");
+  progress.setText("Atlantic-Suche gestartet. Status lesen; verifizierten Heizkörper anschließend ausdrücklich zuordnen.");
+ }finally{online.disconnect();}
+}
+function IOHC_readAtlanticPairing(device,online,progress,context) {
+ online.connect();try {
+  var r=IOHC_atlanticStatus(online);
+  progress.setText("Atlantic: Phase "+r[2]+", Kanal "+(r[3]+1)+", Pairing-Node "+IOHC_formatNodeId(IOHC_readNodeId(r,8))+", Heizkörper "+IOHC_formatNodeId(IOHC_readNodeId(r,11))+", Suchversuche "+r[14]+"/6. Keine automatische Zuordnung.");
+ }finally{online.disconnect();}
+}
+function IOHC_assignAtlanticPairing(device,online,progress,context) {
+ online.connect();try {
+  var r=IOHC_atlanticStatus(online),channel=context.channelIndex-1;
+  if(r[2]!==6||r[3]!==channel||!IOHC_readNodeId(r,11))throw new Error("Kein verifizierter Heizkörper für diesen Kanal");
+  var command=[0x40,2,channel];for(var i=4;i<8;i++)command.push(r[i]);for(var i=11;i<14;i++)command.push(r[i]);
+  var result=IOHC_invokeFunctionProperty(online,command);
+  if(!result||result[0]!==0)throw new Error("Zuordnung abgelehnt oder Speicherung fehlgeschlagen");
+  progress.setText("Heizkörper dauerhaft zugeordnet. Status / Erkennung lesen, ETS-Projekt sichern und Applikation programmieren.");
+ }finally{online.disconnect();}
+}

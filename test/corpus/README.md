@@ -205,3 +205,21 @@ Immutable SHA-256 values:
 - `atlantic_agilia_pairing_key_pull_heater_rollcall.yaml`: `d95e02323f4094e7a0f1c22ee548844eba270612ce2c1df3c21c4152eaec3e9e`
 - `atlantic_agilia_pairing_key_pull_own_key_heater_silent.yaml`: `2b7d1c85f0f4a051ebc36fd44bbd7b0db816fea38a4a2b65da679c6d29348fd6`
 - `atlantic_agilia_pairing_key_transfer_command_unknown.yaml`: `4b835cccc2d069291632051cc3f80126310522cd6b7a12f423d9191ce1651303`
+
+## Atlantic reset and Home/Away evidence, 21 October 2026
+
+The three unchanged YAML files in `atlantic-20261021/` are pinned to Laberning
+`b4b749353cfaa586868926e84d953eff6db4ff13` (PR #176). `atlantic176_corpus.h`
+contains their 31 visible frames, timestamps and RF frequencies. CRC is absent;
+masked 32/3C/3D and secret keys are not reconstructed. Public keyed 2A MACs
+are structural data with an unknown key, not independently verified MACs.
+A factory-state B6BDFB/B6BDFC direct read and a reset D6BC6C/F519DD search
+are separate scenarios. The reset heater is not +1. Presence fixtures prove
+only exact acknowledged command bytes, not occupancy or thermal effect.
+Synthetic controller tests separately exercise authentication and persistence.
+
+SHA-256:
+
+- `atlantic_agilia_exchange_presence_write.yaml`: `0e8904c6813b081996504a07806cccea5b8eed7e7fe3d7eb0cb403cd98a8dd7c`
+- `atlantic_agilia_pairing_key_pull_heater_direct_read.yaml`: `59a4a12c503d0475c592008990d69fecea2cae3a93254240ab5d53c3fb4be88f`
+- `atlantic_agilia_pairing_key_pull_heater_not_next_address.yaml`: `30134bd66cf742de5bb1950ac7a958ed5e72f85bd6595e4b516a2e3cd08f7e4f`

@@ -752,6 +752,9 @@
                             </when>
                           </choose>
                         </ParameterBlock>
+                        <Button Id="%AID%_B-%TT%%CC%028" Text="Atlantic AGILIA suchen (leerer 2W-Kanal)" EventHandler="IOHC_startAtlanticPairing" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                        <Button Id="%AID%_B-%TT%%CC%029" Text="Atlantic-Suche: Pairing-Node / Heizkörper lesen" EventHandler="IOHC_readAtlanticPairing" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
+                        <Button Id="%AID%_B-%TT%%CC%030" Text="Verifizierten Atlantic-Heizkörper diesem leeren Kanal zuordnen" EventHandler="IOHC_assignAtlanticPairing" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%012_R-%TT%%CC%01201" IndentLevel="1" HelpContext="IOHC-Pairing-Ergebnis" />
                         <ParameterRefRef RefId="%AID%_P-%TT%%CC%013_R-%TT%%CC%01301" IndentLevel="1" HelpContext="IOHC-Node-ID" />
                         <Button Id="%AID%_B-%TT%%CC%011" Text="Abgeschlossenes 2W-Pairing in ETS übernehmen" EventHandler="IOHC_applyPairingResult" EventHandlerOnline="ConnectionOriented" EventHandlerParameters="{ &quot;channelIndex&quot;: %C% }" />

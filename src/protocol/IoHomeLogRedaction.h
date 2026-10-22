@@ -7,7 +7,8 @@
 
 inline bool ioHomeCommandCarriesLogSensitiveKeyMaterial(IoHomeCommand iCommand)
 {
-    return iCommand == IoHomeCommand::SendKey1W ||
+    return iCommand == IoHomeCommand::ChallengeResponse ||
+           iCommand == IoHomeCommand::SendKey1W ||
            iCommand == IoHomeCommand::KeyTransfer;
 }
 
