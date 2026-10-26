@@ -4,6 +4,16 @@
 // Protocol classification only. Duty admission and radio readiness always apply.
 // The caller supplies a single-use grant from a validated receive handler;
 // START=0 by itself never gives a raw sender a carrier-sense exemption.
+enum class IoHomeReplyRole : uint8_t { None, OutboundAnswer, Pairing, InboundChallenge, VerifiedStatusAck };
+inline const char *ioHomeReplyRoleName(IoHomeReplyRole role) {
+    switch(role) {
+    case IoHomeReplyRole::OutboundAnswer:return "outbound_answer";
+    case IoHomeReplyRole::Pairing:return "pairing";
+    case IoHomeReplyRole::InboundChallenge:return "inbound_challenge";
+    case IoHomeReplyRole::VerifiedStatusAck:return "verified_status_ack";
+    default:return "none";
+    }
+}
 enum class IoHomeTransmitIntent { Malformed, OneWay, Start, ImmediateReply, Unqualified };
 inline IoHomeTransmitIntent ioHomeTransmitIntent(const IoHomeFrame &frame, bool parsed,
                                                 bool qualifiedReply) {

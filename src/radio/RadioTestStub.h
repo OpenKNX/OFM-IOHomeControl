@@ -31,6 +31,8 @@ public:
 
   RadioTestStub() = default;
   bool mTestRssiValid=true;
+  uint32_t mTestRssiReads=0;
+  bool mTestHoldTxDone=false;
   void testRssiRequiresReceiveAfterConfiguration(bool enabled){mRequireRxForRssi=enabled;mConfigurationStandby=enabled;}
   bool mRequireRxForRssi=false,mConfigurationStandby=false;
 
@@ -126,6 +128,7 @@ public:
   void testHardwareTxDoneSemantics(bool enabled){mHardwareTxDoneSemantics=enabled;}
   bool isTxDone()
   {
+    if(mTestHoldTxDone)return false;
     if (mTxDonePending)
     {
       mTxDonePending = false;
@@ -160,6 +163,7 @@ public:
 
   bool currentRssi(int16_t &oRssi)
   {
+    ++mTestRssiReads;
     if(!mTestRssiValid || (mRequireRxForRssi&&mState!=RadioState::Receiving))return false;
     oRssi = mCurrentRssi;
     return true;

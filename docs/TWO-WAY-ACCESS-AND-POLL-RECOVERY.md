@@ -73,3 +73,8 @@ only diagnostic history (8–64 entries); request queues, protocol timing and
 accounting are unaffected. OAM classic ESP32 IP release uses 16 entries because
 the current dependency set already exceeds that board's static DRAM segment
 with the unchanged OFM baseline. Compare actual linker margins in OAM validation.
+
+Inbound 0x71 authentication and verified 0x72 replies now have separate,
+identity-bound producer roles. See [Inbound status replies](INBOUND-STATUS-REPLIES.md)
+for nonce lifetime, receive-channel-first ACK copies, mutation coverage and the
+still-open RF capture/qualification gate.

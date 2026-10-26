@@ -251,7 +251,11 @@
         "low_power_wake": "not_run",
         "atlantic_pull_home_away": "not_run",
         "multi_device_duty": "not_run",
-        "spectrum_access_signoff": "not_run"
+        "spectrum_access_signoff": "not_run",
+        "unsolicited_status_handshake": "not_run",
+        "ack_channel_order_and_copies": "not_run",
+        "inbound_wrong_key_and_cancel": "not_run",
+        "inbound_peer_status_reliability": "not_run"
       }
     }
   ]

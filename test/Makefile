@@ -32,7 +32,7 @@ suite: $(TARGETS)
 $(BUILD_DIR):
 	mkdir -p $@
 
-$(PROTOCOL_TARGET): $(wildcard corpus/*.h ../src/protocol/*.h ../src/controller/*.h) $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h ../src/radio/IoHomeRfAccessPolicy.h ../src/radio/IoHomeDutyBudget.h ../src/protocol/IoHomeBatteryDiagnostics.h ../src/radio/RadioTestStub.h | $(BUILD_DIR)
+$(PROTOCOL_TARGET): $(wildcard corpus/*.h ../src/protocol/*.h ../src/controller/*.h) $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h ../src/radio/IoHomeTransmitIntent.h ../src/radio/IoHomeRfAccessPolicy.h ../src/radio/IoHomeDutyBudget.h ../src/protocol/IoHomeBatteryDiagnostics.h ../src/radio/RadioTestStub.h | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(PROTOCOL_SRCS)
 
 $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
@@ -41,7 +41,7 @@ $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
 $(SX1262_PHY_TARGET): $(SX1262_PHY_SRCS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(SX1262_PHY_SRCS)
 
-run: check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
+run: check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
 
 check-protocol: $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite protocol
@@ -131,3 +131,7 @@ check-heating-recovery:
 .PHONY: check-release-evidence
 check-release-evidence:
 	$(PYTHON) test_release_evidence.py
+
+.PHONY: check-inbound-replies
+check-inbound-replies: $(PROTOCOL_TARGET)
+	CXX="$(CXX)" $(PYTHON) test_inbound_reply_mutation.py

@@ -22803,3 +22803,249 @@ TEST(controller_atlantic_home_away_busy_after_challenge_still_replies_immediatel
         ASSERT_EQ(ch.heatingPublications,0U);
     }
 }
+
+
+static void inboundStatusFrame(IoHomeFrame &status)
+{
+    const uint8_t data[11]={1,0,0,0,0,0x27,0x10,0x27,0x10,0,0xFF};
+    buildStatusUpdateFrame(status,0x123456,0x654321,data,sizeof(data));
+}
+
+TEST(controller_inbound_status_busy_handshake_and_same_channel_ack_one_shot)
+{
+    const uint8_t key[16]={1};
+    for(bool standby:{false,true})for(uint8_t frequency=0;frequency<3;++frequency) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+        c.radio().testRssiRequiresReceiveAfterConfiguration(standby);
+        c.testSetRxScanFrequency(IOHC_FREQUENCIES[frequency]);
+        c.radio().testInjectRxDiagnostics(false,false,false,0,0,-30);
+        IoHomeFrame status,challenge,proof,ack;inboundStatusFrame(status);
+        c.loop();
+        const auto reads=c.radio().mTestRssiReads,rx=c.radio().rxStartCount();
+        ASSERT_TRUE(queueControllerResponse(c,status));ASSERT_TRUE(lastTransmittedFrameForTest(c,challenge));
+        ASSERT_EQ(challenge.commandId,IoHomeCommand::ChallengeRequest);
+        ASSERT_EQ(c.radio().testCurrentFrequency(),IOHC_FREQUENCIES[frequency]);
+        ASSERT_EQ(c.radio().mTestRssiReads,reads);ASSERT_EQ(c.radio().rxStartCount(),rx);
+        ASSERT_EQ(c.twoWayTracePoint(c.twoWayTraceCount()).replyRole,IoHomeReplyRole::InboundChallenge);
+        ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate());
+        buildChallengeResponseFrame(proof,0x123456,0x654321,status.data,status.dataLen,challenge.data,key);
+        c.loop(); // normal RX reentry to receive the proof is required
+        const auto proofRx=c.radio().rxStartCount();
+        const auto before=c.testTxAirtimeAccum(frequency);
+        ASSERT_TRUE(queueControllerResponse(c,proof));ASSERT_TRUE(lastTransmittedFrameForTest(c,ack));
+        ASSERT_EQ(ack.commandId,IoHomeCommand::StatusUpdateResponse);ASSERT_EQ(ack.dataLen,2U);
+        ASSERT_EQ(ack.data[0],5U);ASSERT_EQ(ack.data[1],0U);
+        ASSERT_TRUE((ack.ctrlByte0&IOHC_CTRL0_END) && !(ack.ctrlByte0&IOHC_CTRL0_START));
+        ASSERT_TRUE(ack.ctrlByte1&IOHC_CTRL1_LOW_POWER);
+        ASSERT_EQ(c.radio().testCurrentFrequency(),IOHC_FREQUENCIES[frequency]);
+        ASSERT_EQ(c.radio().mTestRssiReads,reads);ASSERT_EQ(c.radio().rxStartCount(),proofRx);
+        ASSERT_EQ(c.twoWayTracePoint(c.twoWayTraceCount()).replyRole,IoHomeReplyRole::VerifiedStatusAck);
+        ASSERT_TRUE(ch.testHasPositionFeedback()&&ch.testHasStatusUpdate());
+        ASSERT_TRUE(c.testTxAirtimeAccum(frequency)>before);
+        ASSERT_TRUE(!c.lastTwoWayOutcome().valid); // ACK never invents a command outcome
+        c.loop();c.loop(); // a second copy on another channel must sense even though the first skipped CCA
+        ASSERT_EQ(c.radio().testTransmitCount(),2U);ASSERT_TRUE(c.radio().mTestRssiReads>reads);
+        c.radio().testInjectRxDiagnostics(false,false,false,0,0,-100);ioHomeTestAdvanceMillis(5);
+        for(int i=0;i<12;++i)c.loop();
+        ASSERT_EQ(c.radio().testTransmitCount(),4U);ASSERT_EQ(c.state(),ControllerState::Idle);
+        const auto &frequencies=c.radio().testTransmitFrequencies();
+        ASSERT_EQ(frequencies[0],IOHC_FREQUENCIES[frequency]);ASSERT_EQ(frequencies[1],IOHC_FREQUENCIES[frequency]);
+        uint8_t ordinal=2;
+        for(uint8_t f=0;f<3;++f)if(f!=frequency)ASSERT_EQ(frequencies[ordinal++],IOHC_FREQUENCIES[f]);
+        const auto sent=c.radio().testTransmitCount();
+        ASSERT_TRUE(queueControllerResponse(c,proof));ASSERT_EQ(c.radio().testTransmitCount(),sent); // duplicate proof cannot repeat the ACK
+    }
+}
+
+TEST(controller_inbound_status_rejects_unqualified_status_before_challenge)
+{
+    const uint8_t key[16]={1};
+    for(uint8_t variant=0;variant<7;++variant) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+        IoHomeFrame status;inboundStatusFrame(status);
+        if(variant==0)ch.setPaired(false);
+        if(variant==1)ch.setIs1W(true);
+        if(variant==2)status.ctrlByte0|=IOHC_CTRL0_MODE_1W;
+        if(variant==3)status.setDestNode(0x112233);
+        if(variant==4)status.setSrcNode(0x112233);
+        if(variant==5)status.dataLen=10;
+        if(variant==6)status.setDestNode(0x3B);
+        ASSERT_TRUE(queueControllerResponse(c,status));
+        ASSERT_EQ(c.radio().testTransmitCount(),0U);
+        ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate());
+    }
+}
+
+TEST(controller_inbound_status_proof_binds_mac_identity_frequency_state_and_age)
+{
+    const uint8_t key[16]={1},otherKey[16]={2};
+    for(uint8_t variant=0;variant<15;++variant) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+        IoHomeFrame status,challenge,proof;inboundStatusFrame(status);
+        ASSERT_TRUE(queueControllerResponse(c,status));ASSERT_TRUE(lastTransmittedFrameForTest(c,challenge));
+        buildChallengeResponseFrame(proof,0x123456,0x654321,status.data,status.dataLen,challenge.data,key);
+        if(variant==0)proof.data[0]^=1;
+        if(variant==1)proof.setSrcNode(0x112233);
+        if(variant==2)proof.setDestNode(0x112233);
+        if(variant==3)proof.ctrlByte0|=IOHC_CTRL0_MODE_1W;
+        if(variant==4)proof.ctrlByte0|=IOHC_CTRL0_START;
+        if(variant==5)proof.dataLen=5;
+        if(variant==6)c.testSetRxScanFrequency(IOHC_FREQ_3);
+        if(variant==7)ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS+1);
+        if(variant==8)ch.setEncryptionKey(otherKey);
+        if(variant==9)ch.setNodeId(0x112233);
+        if(variant==10)ch.invalidateProductContext();
+        if(variant==11)ch.setPaired(false);
+        if(variant==12)m.testSetChannel(0,nullptr);
+        if(variant==13){c.setPassiveMode(true);c.setPassiveMode(false);}
+        if(variant==14)c.setOwnNodeId(0x112233);
+        ASSERT_TRUE(queueControllerResponse(c,proof));
+        ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate());
+        ASSERT_EQ(c.radio().testTransmitCount(),1U);
+    }
+}
+
+TEST(controller_inbound_reply_preparation_busy_keeps_original_25ms_deadline)
+{
+    const uint8_t key[16]={1};
+    for(bool ack:{false,true})for(uint32_t age:{24U,25U,26U})for(bool wrap:{false,true}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+        if(wrap)ioHomeTestSetMillis(UINT32_MAX-10U);
+        c.radio().testInjectRxDiagnostics(false,false,false,0,0,-30);
+        IoHomeFrame status,challenge,proof;inboundStatusFrame(status);
+        if(!ack)c.radio().testSetNextPreambleError(RadioError::Busy);
+        ASSERT_TRUE(queueControllerResponse(c,status));
+        if(ack) {
+            ASSERT_TRUE(lastTransmittedFrameForTest(c,challenge));
+            buildChallengeResponseFrame(proof,0x123456,0x654321,status.data,status.dataLen,challenge.data,key);
+            c.radio().testSetNextPreambleError(RadioError::Busy);ASSERT_TRUE(queueControllerResponse(c,proof));
+        }
+        const auto sent=c.radio().testTransmitCount();
+        ioHomeTestAdvanceMillis(age);c.loop();
+        ASSERT_EQ(c.radio().testTransmitCount(),sent+(age<=25?1U:0U));
+        ASSERT_EQ(c.radio().mTestRssiReads,0U);
+        if(age>25)ASSERT_EQ(c.state(),ControllerState::Idle);
+    }
+}
+
+TEST(controller_inbound_reply_raw_sender_cannot_borrow_grant)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    c.radio().testInjectRxDiagnostics(false,false,false,0,0,-30);
+    c.radio().testSetNextPreambleError(RadioError::Busy);
+    IoHomeFrame status;inboundStatusFrame(status);ASSERT_TRUE(queueControllerResponse(c,status));
+    IoHomeFrame raw;raw.init();raw.setSrcNode(0x123456);raw.setDestNode(0x654321);
+    raw.commandId=IoHomeCommand::ChallengeRequest;raw.dataLen=6;
+    uint8_t bytes[IOHC_FRAME_BUFFER_SIZE];auto len=raw.serialize2W(bytes,sizeof(bytes));
+    ASSERT_EQ(c.testDirectTransmit(bytes,len,8,IOHC_FREQ_2),RadioError::Busy);
+    c.loop();ASSERT_EQ(c.radio().testTransmitCount(),0U);ASSERT_EQ(c.state(),ControllerState::Idle);
+    ASSERT_TRUE(!ch.testHasPositionFeedback());
+}
+
+TEST(controller_cca_busy_samples_belong_to_candidate_and_frequency)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    c.radio().testInjectRxDiagnostics(false,false,false,0,0,-30);
+    IoHomeFrame frame;frame.init();frame.ctrlByte0=IOHC_CTRL0_START;
+    frame.setSrcNode(0x123456);frame.setDestNode(0x654321);frame.commandId=IoHomeCommand::Private;frame.dataLen=1;frame.data[0]=3;
+    uint8_t bytes[IOHC_FRAME_BUFFER_SIZE];auto len=frame.serialize2W(bytes,sizeof(bytes));
+    for(int i=0;i<4;++i){ASSERT_EQ(c.testDirectTransmit(bytes,len,8,IOHC_FREQ_1),RadioError::Busy);ioHomeTestAdvanceMillis(5);}
+    frame.data[0]=4;len=frame.serialize2W(bytes,sizeof(bytes));
+    ASSERT_EQ(c.testDirectTransmit(bytes,len,8,IOHC_FREQ_1),RadioError::Busy);
+    ASSERT_EQ(c.testDirectTransmit(bytes,len,8,IOHC_FREQ_3),RadioError::Busy); // different channel starts fresh without old retry timer
+    for(int i=0;i<3;++i){ioHomeTestAdvanceMillis(5);ASSERT_EQ(c.testDirectTransmit(bytes,len,8,IOHC_FREQ_3),RadioError::Busy);}
+    ioHomeTestAdvanceMillis(5);ASSERT_EQ(c.testDirectTransmit(bytes,len,8,IOHC_FREQ_3),RadioError::HardwareError);
+    ASSERT_EQ(c.radio().testTransmitCount(),0U);
+}
+
+TEST(controller_inbound_fast_reply_duty_denial_wins_and_never_refunds)
+{
+    const uint8_t key[16]={1};
+    for(bool ack:{false,true}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+        c.testSetRxScanFrequency(IOHC_FREQ_2);c.radio().testInjectRxDiagnostics(false,false,false,0,0,-30);
+        IoHomeFrame status,challenge,proof;inboundStatusFrame(status);
+        if(!ack)c.testChargeDuty(IOHC_FREQ_2,3600U);
+        ASSERT_TRUE(queueControllerResponse(c,status));
+        if(ack) {
+            ASSERT_TRUE(lastTransmittedFrameForTest(c,challenge));
+            buildChallengeResponseFrame(proof,0x123456,0x654321,status.data,status.dataLen,challenge.data,key);
+            c.testChargeDuty(IOHC_FREQ_2,3600U-c.testTxAirtimeAccum(0));
+            ASSERT_TRUE(queueControllerResponse(c,proof));
+        }
+        ASSERT_EQ(c.radio().testTransmitCount(),ack?1U:0U);
+        ASSERT_EQ(c.testTxAirtimeAccum(0),3600U);
+        ASSERT_EQ(c.state(),ControllerState::Idle);
+    }
+}
+
+TEST(controller_inbound_reply_faults_cancel_or_timeout_without_extra_copies)
+{
+    const uint8_t key[16]={1};
+    for(uint8_t variant=0;variant<5;++variant) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+        IoHomeFrame status,challenge,proof;inboundStatusFrame(status);
+        ASSERT_TRUE(queueControllerResponse(c,status));ASSERT_TRUE(lastTransmittedFrameForTest(c,challenge));
+        buildChallengeResponseFrame(proof,0x123456,0x654321,status.data,status.dataLen,challenge.data,key);
+        if(variant==0){c.radio().mTestHoldTxDone=true;ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS+1);c.loop();}
+        else {
+            if(variant==1)c.radio().testSetNextTransmitError(RadioError::HardwareError);
+            if(variant==2)c.radio().testSetNextPreambleError(RadioError::HardwareError);
+            ASSERT_TRUE(queueControllerResponse(c,proof));
+            if(variant==3){c.radio().mTestHoldTxDone=true;ioHomeTestAdvanceMillis(IOHC_TX_TIMEOUT_MS+1000U);c.loop();}
+            if(variant==4){ch.setPaired(false);c.loop();}
+        }
+        c.radio().mTestHoldTxDone=false;
+        for(int i=0;i<5;++i)c.loop();
+        ASSERT_EQ(c.state(),ControllerState::Idle);
+        ASSERT_EQ(c.radio().testTransmitCount(),variant>=3?2U:1U);
+        if(variant==0)ASSERT_TRUE(!ch.testHasPositionFeedback());
+    }
+}
+
+
+TEST(controller_inbound_new_rx_and_identity_changes_revoke_pending_challenge)
+{
+    const uint8_t key[16]={1},changed[16]={2};
+    for(uint8_t variant=0;variant<6;++variant) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+        c.radio().testSetNextPreambleError(RadioError::Busy);
+        IoHomeFrame status;inboundStatusFrame(status);ASSERT_TRUE(queueControllerResponse(c,status));
+        ASSERT_EQ(c.radio().testTransmitCount(),0U);
+        if(variant==0)ch.setEncryptionKey(changed);
+        if(variant==1)ch.invalidateProductContext();
+        if(variant==2){c.setPassiveMode(true);c.setPassiveMode(false);}
+        if(variant==3)c.sleep();
+        if(variant==4) {uint8_t malformed[]={0};c.radio().testQueueReceivedPacket(malformed,1);}
+        if(variant==5) {
+            IoHomeFrame foreign;foreign.init();foreign.setSrcNode(0x112233);foreign.setDestNode(0x123456);
+            foreign.commandId=IoHomeCommand::ChallengeResponse;foreign.dataLen=6;
+            uint8_t bytes[IOHC_FRAME_BUFFER_SIZE];auto len=foreign.serialize2W(bytes,sizeof(bytes));
+            c.radio().testQueueReceivedPacket(bytes,len);
+        }
+        c.loop();ASSERT_EQ(c.radio().testTransmitCount(),0U);
+        ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate());
+    }
+}
+
+TEST(controller_inbound_proof_cannot_follow_an_intervening_packet)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    IoHomeFrame status,challenge,proof;inboundStatusFrame(status);
+    ASSERT_TRUE(queueControllerResponse(c,status));ASSERT_TRUE(lastTransmittedFrameForTest(c,challenge));
+    buildChallengeResponseFrame(proof,0x123456,0x654321,status.data,status.dataLen,challenge.data,key);
+    uint8_t malformed[]={0};c.radio().testQueueReceivedPacket(malformed,1);c.loop();
+    ASSERT_TRUE(queueControllerResponse(c,proof));
+    ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate());
+    ASSERT_EQ(c.radio().testTransmitCount(),1U);
+}

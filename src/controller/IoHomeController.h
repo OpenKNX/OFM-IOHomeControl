@@ -6,6 +6,7 @@
 #include "../protocol/IoHomeReceiveConfiguration.h"
 #pragma once
 #include "../radio/IoHomeAirtime.h"
+#include "../radio/IoHomeTransmitIntent.h"
 #include "../radio/IoHomeDutyBudget.h"
 #include "../radio/IoHomeRfAccessPolicy.h"
 #include "../protocol/IoHomeBatteryDiagnostics.h"
@@ -1140,6 +1141,7 @@ public:
     bool txDoneValid=false,preambleEvidenceAvailable=false,syncEvidenceAvailable=false,softwarePhy=false;
     const char *failureReason="none";
     const char *event="none",*eventType="observation",*lbtResult="not_applied";
+    IoHomeReplyRole replyRole=IoHomeReplyRole::None;
     bool attemptFinished=false;
     char payload[129]{};
   };
@@ -1398,9 +1400,20 @@ private:
   bool mReservationPossibleDesync[16]{};
   bool mReservationFailed = false;
   OneWayRecovery mOneWayRecovery = OneWayRecovery::Ready;
-  void qualifyImmediateReply();
+  void qualifyImmediateReply(IoHomeReplyRole role, ControllerState state, IoHomeCommand command);
+  void invalidateImmediateReply();
+  bool replyIdentityValid() const;
+  bool inboundStatusContextValid() const;
+  void clearInboundStatus(const char *reason);
+  uint8_t statusAckFrequency() const;
   bool mReplyGrant=false;
-  bool mReplyGrantPairing=false;
+  IoHomeReplyRole mReplyRole=IoHomeReplyRole::None;
+  ControllerState mReplyState=ControllerState::Idle;
+  IoHomeCommand mReplyCommand=IoHomeCommand::ChallengeResponse;
+  uint8_t mReplyChannel=0xFF;
+  uint32_t mReplyRevision=0, mReplyChannelNode=0;
+  bool mReplyChannelPaired=false;
+  uint8_t mReplyKey[16]{};
   uint32_t mReplyReceivedMs=0, mLastRxReadMs=0, mReplyPeer=0, mReplyOwner=0;
   uint64_t mReplySession=0;
   uint8_t mReplyFrequency=0xFF;
@@ -1409,7 +1422,10 @@ private:
   bool mCcaWaiting=false;
   uint8_t mCcaBusySamples=0;
   bool mLastLbtQualifiedReply=false;
-  RadioError startControllerTransmit(const uint8_t *iData, uint8_t iLength, bool blocking = false);
+  uint64_t mCcaCandidate=0;
+  bool mCcaCandidateValid=false;
+  RadioError startControllerTransmit(const uint8_t *iData, uint8_t iLength, bool blocking = false,
+                                     IoHomeReplyRole allowedRole = IoHomeReplyRole::None);
   IoHomeFrame mTxFrame;
   IoHomeFrame mRxFrame;
   IoHomeFrame mPairSetConfigRequest;
@@ -1571,7 +1587,10 @@ private:
   uint32_t mAuthSrcNodeId;       // source node of the unsolicited frame
   uint8_t mAuthChannelIdx;       // channel index for the pending auth
 
-  // StatusUpdateResponse ACK broadcast state
+  bool mInboundActive=false, mInboundVerified=false;
+  uint8_t mInboundFrequency=0xFF;
+
+  // StatusUpdateResponse ACK copy state (receive channel, then remaining channels)
   uint32_t mStatusAckDestNodeId;
   uint8_t mStatusAckFreqIdx;
 
