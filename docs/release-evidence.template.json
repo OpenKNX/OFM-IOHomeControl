@@ -234,6 +234,25 @@
         "model_flag_default_off": "not_run"
       },
       "artifacts": []
+    },
+    {
+      "id": "two_way_access_recovery_campaign",
+      "kind": "physical",
+      "outcome": "not_run",
+      "artifacts": [],
+      "cases": {
+        "sx1276_oximo_lost_final": "not_run",
+        "sx1262_lost_final": "not_run",
+        "challenge_turnaround": "not_run",
+        "busy_start": "not_run",
+        "invalid_rssi": "not_run",
+        "wrong_key_backoff": "not_run",
+        "restored_position": "not_run",
+        "low_power_wake": "not_run",
+        "atlantic_pull_home_away": "not_run",
+        "multi_device_duty": "not_run",
+        "spectrum_access_signoff": "not_run"
+      }
     }
   ]
 }

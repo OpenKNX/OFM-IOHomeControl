@@ -1,6 +1,7 @@
 #include "protocol/IoHomeStandaloneDiag.h"
 #include "protocol/IoHomeProfileObjects.h"
 #include "IoHomecontrolChannel.h"
+#include "protocol/IoHomeStatusPollRetry.h"
 #include "IoHomecontrol.h"
 #include "controller/IoHomeController.h"
 #include "protocol/IoHomeCommands.h"
@@ -427,9 +428,7 @@ void IoHomecontrolChannel::loop()
     }
 
     if (mPollTrackingDeadlineMs != 0 &&
-        timeReached(lNow, mPollTrackingDeadlineMs) &&
-        mNextStatusPollMs == 0 &&
-        !mSingleFollowUpPollPending)
+        timeReached(lNow, mPollTrackingDeadlineMs))
     {
         clearStatusPollTracking();
     }
@@ -445,7 +444,7 @@ void IoHomecontrolChannel::loop()
         else
         {
             if(mRfPollWaiting)mNextStatusPollMs=mRfPollRetryAtMs;
-            else onStatusPollFailed(false);
+            else mNextStatusPollMs=lNow+1000U+uint32_t(_channelIndex+1)*250U; // queue pressure is not peer failure
         }
     }
 
@@ -1177,32 +1176,19 @@ void IoHomecontrolChannel::onStatusExpected()
 
 void IoHomecontrolChannel::onStatusPollFailed(bool iAfterChallenge)
 {
-    const uint32_t lBaseDelayMs = defaultTrackedStatusPollDelayMs();
     const uint32_t lNow = millis();
-    uint32_t lBackoffFactor = 1;
-
-    if (iAfterChallenge)
-    {
-        if (mAuthPollFailures < 0xFF)
-            mAuthPollFailures++;
-        lBackoffFactor = 2U + (static_cast<uint32_t>(mAuthPollFailures) * 2U);
-        if (lBackoffFactor > 8U)
-            lBackoffFactor = 8U;
-    }
-    else
-    {
-        if (mStatusPollFailures < 0xFF)
-            mStatusPollFailures++;
-        lBackoffFactor = 1U + static_cast<uint32_t>(mStatusPollFailures);
-        if (lBackoffFactor > 4U)
-            lBackoffFactor = 4U;
-    }
-
+    // Failures cannot create or renew a tracking epoch.
+    if (!mPaired || mPollTrackingDeadlineMs == 0 ||
+        timeReached(lNow, mPollTrackingDeadlineMs)) return;
+    const uint32_t lRetryDelayMs = IoHomeStatusPollRetry::failed(
+        iAfterChallenge, mAuthPollFailures, mStatusPollFailures,
+        effectiveLowPower2W() ? kLowPowerTrackedPollMinMs : 0);
     mStatusExpected = false;
-    if (mPollTrackingDeadlineMs == 0)
-        mPollTrackingDeadlineMs = lNow + kTrackedStatusPollWindowMs;
+    logInfoP("tracked_poll=1 channel=%u failure_kind=%s consecutive_auth_failures=%u consecutive_silent_failures=%u next_poll_ms=%lu tracking_deadline_ms=%lu status_valid=0",
+        unsigned(_channelIndex+1), iAfterChallenge ? "challenge_no_status" : "no_status",
+        unsigned(mAuthPollFailures), unsigned(mStatusPollFailures),
+        (unsigned long)(lNow+lRetryDelayMs), (unsigned long)mPollTrackingDeadlineMs);
 
-    const uint32_t lRetryDelayMs = lBaseDelayMs * lBackoffFactor;
     const uint32_t lRetryAtMs = lNow + lRetryDelayMs;
     if (timeReached(lRetryAtMs, mPollTrackingDeadlineMs))
     {
@@ -1624,9 +1610,8 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll)
     if (isTiltCapableDeviceType() && lOrientationIndex >= 1 &&
         lOrientationIndex <= 3)
     {
-        const bool lQueued = mController.sendBackgroundCommand(
-            mNodeId, mEncKey, IoHomeCommand::Private,
-            0x03, static_cast<uint8_t>(0x80U >> (lOrientationIndex - 1)),
+        const bool lQueued = mController.sendStatusPoll(
+            this, iTrackedPoll, static_cast<uint8_t>(0x80U >> (lOrientationIndex - 1)),
             0x01, lMaxAttempts);
         if (lQueued)
         {
@@ -1637,9 +1622,8 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll)
         return lQueued;
     }
 
-    const bool lQueued = mController.sendBackgroundCommand(
-        mNodeId, mEncKey, IoHomeCommand::Private,
-        0x03, 0xFF, 0xFF, lMaxAttempts);
+    const bool lQueued = mController.sendStatusPoll(
+        this, iTrackedPoll, 0xFF, 0xFF, lMaxAttempts);
     if (lQueued)
     {
         mStatusPollTimer = delayTimerInit();

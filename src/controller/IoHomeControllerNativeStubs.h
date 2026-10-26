@@ -497,6 +497,8 @@ public:
     mEstimate = iSeconds;
   }
   void onStatusExpected() { mStatusExpected = true; }
+  uint32_t statusPollEpoch() const { return mTestPollEpoch; }
+  uint32_t mTestPollEpoch = 600000U;
   void onStatusPollFailed(bool iAfterChallenge)
   {
     mHasStatusPollFailure = true;

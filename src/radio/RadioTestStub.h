@@ -30,6 +30,7 @@ public:
   static constexpr uint8_t PIN_NOT_CONNECTED = RADIO_PIN_NOT_CONNECTED;
 
   RadioTestStub() = default;
+  bool mTestRssiValid=true;
   void testRssiRequiresReceiveAfterConfiguration(bool enabled){mRequireRxForRssi=enabled;mConfigurationStandby=enabled;}
   bool mRequireRxForRssi=false,mConfigurationStandby=false;
 
@@ -159,7 +160,7 @@ public:
 
   bool currentRssi(int16_t &oRssi)
   {
-    if(mRequireRxForRssi&&mState!=RadioState::Receiving)return false;
+    if(!mTestRssiValid || (mRequireRxForRssi&&mState!=RadioState::Receiving))return false;
     oRssi = mCurrentRssi;
     return true;
   }

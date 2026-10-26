@@ -154,6 +154,10 @@ struct IoHomeQueueEntry
   uint8_t heatingData[6]{};
   uint8_t heatingLength=0;
   uint32_t objectReadToken;
+  bool ownedStatusPoll=false;
+  bool trackedStatusPoll=false;
+  bool statusPollRfStarted=false;
+  uint32_t statusPollEpoch=0;
   bool batteryDiagnostic=false;
   uint32_t keyPrimitiveToken;
   uint32_t limitationToken;
@@ -572,6 +576,8 @@ public:
                              IoHomeCommand iCmd, uint8_t iParam,
                              uint16_t iParam2 = 0xFF, uint8_t iParam3 = 0xFF,
                              uint8_t iMaxAttempts = 0);
+  bool sendStatusPoll(IoHomecontrolChannel *channel, bool tracked,
+                      uint16_t mask=0xFF, uint8_t value=0xFF, uint8_t attempts=1);
   bool verifyKnownNetworkNode(uint32_t iNodeId, const uint8_t *iKey,
                               uint8_t iFrequencyIndex);
   uint16_t normal2WStartPreamble() const;
@@ -1137,7 +1143,12 @@ public:
     bool attemptFinished=false;
     char payload[129]{};
   };
-  static constexpr uint8_t kTwoWayTraceCapacity=24;
+#ifndef IOHC_TWO_WAY_TRACE_CAPACITY
+#define IOHC_TWO_WAY_TRACE_CAPACITY 24
+#endif
+  static_assert(IOHC_TWO_WAY_TRACE_CAPACITY>=8 && IOHC_TWO_WAY_TRACE_CAPACITY<=64,
+                "2W trace capacity must be between 8 and 64");
+  static constexpr uint8_t kTwoWayTraceCapacity=IOHC_TWO_WAY_TRACE_CAPACITY;
   const TwoWayTracePoint &twoWayTracePoint(uint64_t id) const { return mTwoWayTrace[(id-1)%kTwoWayTraceCapacity]; }
   uint64_t twoWayTraceCount() const { return mTwoWayTraceCount; }
   void printTwoWayTrace() const;
@@ -1387,6 +1398,17 @@ private:
   bool mReservationPossibleDesync[16]{};
   bool mReservationFailed = false;
   OneWayRecovery mOneWayRecovery = OneWayRecovery::Ready;
+  void qualifyImmediateReply();
+  bool mReplyGrant=false;
+  bool mReplyGrantPairing=false;
+  uint32_t mReplyReceivedMs=0, mLastRxReadMs=0, mReplyPeer=0, mReplyOwner=0;
+  uint64_t mReplySession=0;
+  uint8_t mReplyFrequency=0xFF;
+  bool mCorrelatedStatusReply=false;
+  uint32_t mCcaRetryMs=0;
+  bool mCcaWaiting=false;
+  uint8_t mCcaBusySamples=0;
+  bool mLastLbtQualifiedReply=false;
   RadioError startControllerTransmit(const uint8_t *iData, uint8_t iLength, bool blocking = false);
   IoHomeFrame mTxFrame;
   IoHomeFrame mRxFrame;
@@ -1923,7 +1945,7 @@ private:
   bool sendCommandInternal(uint32_t iDestNodeId, const uint8_t *iEncKey,
                            IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2,
                            uint8_t iParam3, uint8_t iMaxAttempts, bool iBackground,
-                           uint8_t iFrequencyIndex = 0xFF);
+                           uint8_t iFrequencyIndex = 0xFF, IoHomecontrolChannel *pollOwner = nullptr, bool tracked = false);
   IoHomecontrolChannel *channelForNode(uint32_t iNodeId) const;
   uint8_t channelIndexFor(IoHomecontrolChannel *iChannel) const;
   IoHomecontrolChannel *channelForQueueEntry(const IoHomeQueueEntry &iEntry) const;

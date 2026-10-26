@@ -16,16 +16,19 @@ methods='\n'.join(method(channel,signature) for signature in [
     'TwoWayWakeBelief IoHomecontrolChannel::twoWayWakeBeliefAt(',
     'bool IoHomecontrolChannel::twoWayLastHeardAgeAt(',
     'void IoHomecontrolChannel::onStatusPollFailed(',
+    'void IoHomecontrolChannel::onStatusUpdate(',
     'bool IoHomecontrolChannel::requestStatus(bool'])
 harness=r'''#include <cassert>
 #include <cstdint>
 #include "protocol/IoHomeCommands.h"
 #include "protocol/IoHomeOptimisticPosition.h"
+#include "protocol/IoHomeStatusPollRetry.h"
 unsigned now=1000;unsigned millis(){return now;}
 #define logInfoP(...) ((void)0)
 #define logDebugP(...) ((void)0)
 #define logInfoP(...) ((void)0)
 constexpr uint32_t kTrackedStatusPollWindowMs=600000;
+constexpr uint32_t kLowPowerTrackedPollMinMs=10000;
 bool timeReached(uint32_t a,uint32_t b){return int32_t(a-b)>=0;}
 unsigned delayTimerInit(){return millis();}
 enum class ParameterSemantic {SlatOrientation,HangerOrientation};
@@ -34,15 +37,28 @@ uint8_t ioHomeParameterIndex(const IoHomeProfileDescriptor*,ParameterSemantic){r
 struct Controller {
  unsigned submissions=0;uint8_t maxAttempts=0;uint32_t rfWait=0;
  unsigned statusPollRetryAfterMs(){return rfWait;}
- bool sendBackgroundCommand(uint32_t,const uint8_t*,IoHomeCommand,uint8_t,uint8_t,uint8_t attemptsParam,uint8_t attempts) {
+ bool sendStatusPoll(void*,bool,uint16_t,uint8_t attemptsParam,uint8_t attempts) {
   (void)attemptsParam;++submissions;maxAttempts=attempts;return true;
  }
 };
+struct Knx {bool configured(){return false;}} knx;
+struct Dpt {Dpt(int,int){}};
+constexpr int IOHC_KoCHMovementStatus=0;
+struct Ko {void value(bool,Dpt){}};
 struct IoHomecontrolChannel {
+ struct {bool valid=false;} mStopTravelSnapshot;
+ bool mIsMoving=false;
+ bool isBinaryDeviceType(){return true;}
+ Ko getKo(int){return {};}
+ void onStatusUpdate(bool);
+ void clearStatusPollTracking(){mPollTrackingDeadlineMs=0;mNextStatusPollMs=0;mSingleFollowUpPollPending=false;}
+ void stopTravelEstimation(bool){mTravelDurationMs=0;}
+ void startTravelEstimation(float){}
  bool mHas2WHeardEvidence=false,mHas2WMovingEvidence=false,mConfirmsExecute=false,mStopSettlePollPending=false;
  uint32_t mLast2WHeardMs=0,mLast2WMovingEvidenceMs=0,m2WMovingEvidenceGeneration=0;
  bool snapshot=true;unsigned restores=0,polls=0;
- bool mIs1W=false,mStatusExpected=false,mSingleFollowUpPollPending=false;
+ bool mIs1W=false,mStatusExpected=false,mSingleFollowUpPollPending=false,mPaired=true,lowPower=false;
+ bool effectiveLowPower2W(){return lowPower;}
  unsigned _channelIndex=0;uint32_t mRfPollRetryAtMs=0;bool mRfPollWaiting=false;
  uint32_t mNodeId=0x123456,mStatusPollTimer=0,mPollTrackingDeadlineMs=0,mNextStatusPollMs=0;
  uint8_t mEncKey[16]{},mAuthPollFailures=0,mStatusPollFailures=0;
@@ -110,14 +126,32 @@ tests=r'''int main(){
  ch.mController.rfWait=0;assert(!ch.requestStatus(false));now=ch.mRfPollRetryAtMs;
  assert(ch.requestStatus(false)&&!ch.mRfPollWaiting&&ch.mController.submissions==before+1);
  ch.mIs1W=true;auto submissions=ch.mController.submissions;assert(!ch.requestStatus(true)&&ch.mController.submissions==submissions);
- ch.mIs1W=false;now=UINT32_MAX-100;
- ch.onStatusPollFailed(false);assert(ch.mStatusPollFailures==1&&uint32_t(ch.mNextStatusPollMs-now)==1000);
- ch.onStatusPollFailed(true);assert(ch.mAuthPollFailures==1&&uint32_t(ch.mNextStatusPollMs-now)==2000);
- ch.mPollTrackingDeadlineMs=now+500;ch.onStatusPollFailed(false);
+ ch.mIs1W=false;now=UINT32_MAX-100;ch.mPollTrackingDeadlineMs=now+600000;
+ // Test the production scheduler, including wrap, exact deadline and sleeping peers.
+ const uint32_t auth[]={5000,30000,120000,300000,300000};
+ for(auto delay:auth){ch.onStatusPollFailed(true);assert(uint32_t(ch.mNextStatusPollMs-now)==delay);}
+ const uint32_t silent[]={5000,15000,30000,60000,300000,300000};
+ for(auto delay:silent){ch.onStatusPollFailed(false);assert(uint32_t(ch.mNextStatusPollMs-now)==delay);}
+ assert(ch.mAuthPollFailures==0);
+ ch.onStatusPollFailed(true);assert(ch.mStatusPollFailures==0&&uint32_t(ch.mNextStatusPollMs-now)==5000);
+ ch.onStatusPollFailed(false);assert(ch.mAuthPollFailures==0&&uint32_t(ch.mNextStatusPollMs-now)==5000);
+ ch.mStatusPollFailures=255;ch.onStatusPollFailed(false);
+ assert(ch.mStatusPollFailures==255&&uint32_t(ch.mNextStatusPollMs-now)==300000);
+ ch.mAuthPollFailures=255;ch.onStatusPollFailed(true);
+ assert(ch.mAuthPollFailures==255&&ch.mStatusPollFailures==0&&uint32_t(ch.mNextStatusPollMs-now)==300000);
+ ch.onStatusUpdate(false);assert(ch.mAuthPollFailures==0&&ch.mStatusPollFailures==0);
+ ch.mPollTrackingDeadlineMs=now+600000;ch.onStatusPollFailed(true);
+ assert(uint32_t(ch.mNextStatusPollMs-now)==5000);
+ ch.lowPower=true;ch.mAuthPollFailures=0;ch.onStatusPollFailed(true);
+ assert(uint32_t(ch.mNextStatusPollMs-now)==10000);
+ ch.mPollTrackingDeadlineMs=now+5000;ch.onStatusPollFailed(false);
  assert(!ch.mSingleFollowUpPollPending&&ch.mNextStatusPollMs==0);
- ch.mStatusPollFailures=255;ch.mAuthPollFailures=255;ch.mPollTrackingDeadlineMs=now+600000;
- ch.onStatusPollFailed(false);assert(ch.mStatusPollFailures==255&&uint32_t(ch.mNextStatusPollMs-now)==2000);
- ch.onStatusPollFailed(true);assert(ch.mAuthPollFailures==255&&uint32_t(ch.mNextStatusPollMs-now)==4000);
+ auto streak=ch.mStatusPollFailures;ch.mPollTrackingDeadlineMs=now;
+ ch.onStatusPollFailed(false);assert(ch.mStatusPollFailures==streak);
+ ch.mPollTrackingDeadlineMs=0;ch.onStatusPollFailed(true);assert(ch.mPollTrackingDeadlineMs==0);
+ ch.mPaired=false;ch.mPollTrackingDeadlineMs=now+600000;ch.onStatusPollFailed(false);
+ assert(ch.mStatusPollFailures==streak);
+
 }
 '''
 radio=(root/'src/radio/RadioSX1262.cpp').read_text()

@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 CORE = {
+    'two_way_access_recovery_campaign': 'physical',
     'ets_application_campaign': 'ets',
     'storage_wear_filesystem_campaign': 'physical',
     'reservation_journal_powercut_campaign': 'physical',
@@ -25,6 +26,7 @@ CORE = {
     'ets_import_reopen_download_resume_upgrade': 'ets',
 }
 QUALIFICATION_CASES = {
+    'two_way_access_recovery_campaign': ('sx1276_oximo_lost_final', 'sx1262_lost_final', 'challenge_turnaround', 'busy_start', 'invalid_rssi', 'wrong_key_backoff', 'restored_position', 'low_power_wake', 'atlantic_pull_home_away', 'multi_device_duty', 'spectrum_access_signoff'),
     'ets_application_campaign': ('signed_import', 'new_device', 'upgrade', 'reopen', 'download', 'reboot'),
     'storage_wear_filesystem_campaign': ('esp_network_rate', 'esp_receipt_rate', 'esp_metadata_rate', 'esp_reservation_rate', 'nvs_margin', 'littlefs_partitions', 'littlefs_mount', 'littlefs_atomicity', 'littlefs_wear'),
     'reservation_journal_powercut_campaign': ('before_commit', 'inactive_write', 'lost_ack', 'before_rf', 'no_reuse', 'identity_mismatch', 'wrap', 'repeated_reboots'),

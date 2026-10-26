@@ -114,6 +114,7 @@ public:
   void onEstimate(uint8_t iSeconds);
   void onStatusExpected();
   void onStatusPollFailed(bool iAfterChallenge);
+  uint32_t statusPollEpoch() const { return mPollTrackingDeadlineMs; }
   void onCommandExchangeResult(IoHomeCommand iCommand, uint8_t iParam,
                                IoHomeCommandExchangeResult iResult);
   void observe2WMovingStatus(bool iIsMoving);

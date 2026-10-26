@@ -1,6 +1,7 @@
 #include "../protocol/IoHomeProfileObjects.h"
 #include "../protocol/IoHomeProductActivation.h"
 #include "IoHomeController.h"
+#include "../radio/IoHomeTransmitIntent.h"
 #include "../protocol/IoHomeLogRedaction.h"
 #include "../protocol/IoHomeProfileRegistry.h"
 
@@ -109,15 +110,14 @@ namespace
         if (!iModule || !isTrackedStatusPollCommand(iCmd))
             return;
 
-        for (uint8_t i = 0; i < IOHC_ChannelCount; i++)
-        {
-            IoHomecontrolChannel *lCh = iModule->getChannel(i);
-            if (lCh && lCh->getNodeId() == iCmd.destNodeId)
-            {
-                lCh->onStatusPollFailed(iAfterChallenge);
-                break;
-            }
-        }
+        if (!iCmd.trackedStatusPoll || !iCmd.statusPollRfStarted || iCmd.sourceChannelIndex>=IOHC_ChannelCount)
+            return;
+        auto *channel=iModule->getChannel(iCmd.sourceChannelIndex);
+        if (channel && channel->isPaired() && channel->getNodeId()==iCmd.destNodeId &&
+            channel->productContextRevision()==iCmd.productContextRevision &&
+            channel->statusPollEpoch()==iCmd.statusPollEpoch &&
+            !std::memcmp(channel->getEncryptionKey(),iCmd.managementKey,16))
+            channel->onStatusPollFailed(iAfterChallenge);
     }
 
     std::string hexDump(const uint8_t *iData, uint8_t iLen)
@@ -1907,6 +1907,15 @@ bool IoHomeController::sendBackgroundCommand(uint32_t iDestNodeId, const uint8_t
                                iParam3, iMaxAttempts, true);
 }
 
+bool IoHomeController::sendStatusPoll(IoHomecontrolChannel *channel, bool tracked,
+                                     uint16_t mask, uint8_t value, uint8_t attempts)
+{
+    if (!channel || !channel->isPaired() || channel->is1W() || channelIndexFor(channel)>=IOHC_ChannelCount)
+        return false;
+    return sendCommandInternal(channel->getNodeId(), channel->getEncryptionKey(),
+        IoHomeCommand::Private, 3, mask, value, attempts, true, 0xFF, channel, tracked);
+}
+
 bool IoHomeController::verifyKnownNetworkNode(uint32_t iNodeId, const uint8_t *iKey,
                                                uint8_t iFrequencyIndex)
 {
@@ -1918,7 +1927,7 @@ bool IoHomeController::sendCommandInternal(uint32_t iDestNodeId, const uint8_t *
                                            IoHomeCommand iCmd, uint8_t iParam,
                                            uint16_t iParam2, uint8_t iParam3,
                                            uint8_t iMaxAttempts, bool iBackground,
-                                           uint8_t iFrequencyIndex)
+                                           uint8_t iFrequencyIndex, IoHomecontrolChannel *pollOwner, bool tracked)
 {
     if(iCmd==IoHomeCommand::WritePrivate){
         auto *channel=channelForNode(iDestNodeId);
@@ -2020,6 +2029,15 @@ bool IoHomeController::sendCommandInternal(uint32_t iDestNodeId, const uint8_t *
     if (iCmd == IoHomeCommand::Execute && iParam == 0xD8)
         lEntry.maxAttempts = 1;
     lEntry.retryReason = TwoWayRetryReason::Initial;
+    if (pollOwner) {
+        lEntry.sourceChannelIndex=channelIndexFor(pollOwner);
+        lEntry.productContextRevision=pollOwner->productContextRevision();
+        lEntry.ownedStatusPoll=true;
+        lEntry.trackedStatusPoll=tracked;
+        lEntry.statusPollEpoch=pollOwner->statusPollEpoch();
+        std::memcpy(lEntry.managementKey,pollOwner->getEncryptionKey(),16);
+        lEntry.encKey=pollOwner->getEncryptionKey();
+    }
     lEntry.background = iBackground;
     lEntry.active = true;
     return queuePush(lEntry);
@@ -6448,7 +6466,7 @@ void IoHomeController::recordTwoWayTrace(const char *event,const IoHomeFrame &fr
     p.state=uint8_t(mState);p.sessionStartMs=mExchangeStartMs;p.attempt=mCurrentCmd.retries+1;
     p.preambleBytes=mCurrentTxPreambleSymbols;p.deadlineMs=mResponseTimeoutMs;
     p.lbtAttempts=mLastLbtAttempts;p.lbtRssi=mLastLbtRssi;p.lbtBypassed=mLastLbtBypassed;
-    p.lbtResult=mLastLbtAttempts==0 ? (mLastLbtBypassed?"policy_bypassed":"not_applied") :
+    p.lbtResult=mLastLbtQualifiedReply ? "qualified_reply" : mLastLbtAttempts==0 ? (mLastLbtBypassed?"policy_bypassed":"not_applied") :
         !mLastLbtRssiValid ? "unavailable" : mLastLbtBypassed ? "busy_bypassed" : "channel_clear";
     p.belief=mCurrentCmd.twoWayPreamblePlan.belief;
     p.beliefUse=mCurrentCmd.twoWayPreamblePlan.use;
@@ -6587,8 +6605,30 @@ void IoHomeController::printTwoWayAttemptCsv() const
     }
 }
 
+void IoHomeController::qualifyImmediateReply()
+{
+    mReplyGrant=true;
+    mReplyGrantPairing=!mCurrentCmd.active;
+    mReplyReceivedMs=mLastRxReadMs;
+    mReplyPeer=mRxFrame.getSrcNodeId();mReplyOwner=mOwnNodeId;
+    mReplySession=mTwoWaySessionId;mReplyFrequency=mLastResponseFreqIdx;
+}
+
 RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8_t iLength, bool blocking)
 {
+    IoHomeFrame frame;
+    const bool parsed=iData && iLength && frame.deserializeRawWithOptionalCrc(iData,iLength);
+    const bool exchangeValid=mReplyGrantPairing ?
+        isPairDiagnosticState(mState) && mDiscoveredNodeId==mReplyPeer :
+        mCurrentCmd.active && mCurrentCmd.destNodeId==mReplyPeer && !mAuthResponseSent;
+    const IoHomeReplyGrant grant{mReplyGrant,mReplyOwner,mReplyPeer,mReplyReceivedMs,mReplyFrequency,mReplySession};
+    const bool qualified=parsed && ioHomeReplyQualified(frame,grant,millis(),mOwnNodeId,
+                                                       mCurrentFreqIdx,mTwoWaySessionId,exchangeValid);
+    const auto intent=ioHomeTransmitIntent(frame,parsed,qualified);
+    if(intent==IoHomeTransmitIntent::Malformed) return RadioError::InvalidParam;
+    const bool twoWay=intent!=IoHomeTransmitIntent::OneWay;
+    const bool ccaRequired=twoWay && intent!=IoHomeTransmitIntent::ImmediateReply;
+    mLastLbtQualifiedReply=intent==IoHomeTransmitIntent::ImmediateReply;
     const bool lPrepared=mLbtPrepared;mLbtPrepared=false;
     if(!lPrepared) {
         mLastLbtAttempts=0; mLastLbtRssi=0; mLastLbtRssiValid=false;
@@ -6633,7 +6673,10 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
         observeBatteryDiagnostic(mCurrentCmd,IoHomeBatteryDiagnostic::State::DutyBlocked);
         return RadioError::DutyCycleExceeded; // no timing exemptions, including 0x3D
     }
-    if(productionAtlantic){
+    if(twoWay && mRadio.state()==RadioState::Transmitting && !mRadio.isTxDone())return RadioError::Busy;
+    if(ccaRequired){
+        if(mCcaWaiting && int32_t(millis()-mCcaRetryMs)<0)return RadioError::Busy;
+        mCcaWaiting=false;
         // SX1262 configuration enters standby; RSSI is valid only in RX on
         // both drivers. Never abort a TX that is still completing to sense.
         if(mRadio.state()==RadioState::Transmitting)return RadioError::Busy;
@@ -6641,7 +6684,19 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
         delay(1); // bounded RX carrier-sense settling; physical qualification remains separate
         int16_t rssi=0;mLastLbtAttempts=1;mLastLbtBypassed=false;
         mLastLbtRssiValid=mRadio.currentRssi(rssi);mLastLbtRssi=rssi;
-        if(!mLastLbtRssiValid||rssi>IOHC_LBT_RSSI_THRESHOLD_DBM){++mLbtBusyCount;return RadioError::Busy;}
+        if(!mLastLbtRssiValid||rssi>IOHC_LBT_RSSI_THRESHOLD_DBM){
+            ++mLbtBusyCount;mCcaWaiting=true;mCcaRetryMs=millis()+5U;
+            logDebugP("RF admission cca_required=1 cca_busy=1 cca_rssi_valid=%u rf_deferral_ms=5",mLastLbtRssiValid);
+            // Bound direct/pairing callers too, which may have no queued
+            // exchange deadline. Exhaustion never falls through to an unchecked send.
+            if (++mCcaBusySamples>=5) {
+                mCcaBusySamples=0;mCcaWaiting=false;
+                logInfoP("RF admission denied reason=cca_exhausted tx_hz=%lu",(unsigned long)IOHC_FREQUENCIES[mCurrentFreqIdx]);
+                return RadioError::HardwareError;
+            }
+            return RadioError::Busy;
+        }
+        mCcaBusySamples=0;
         ++mLbtClearCount;
     }
 #if defined(RADIO_SX1262)
@@ -6650,11 +6705,12 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
     (void)blocking;
     const auto result=mRadio.startTransmit(iData,iLength);
 #endif
-    IoHomeFrame frame;
-    const bool parsed=iData&&iLength&&frame.deserializeRawWithOptionalCrc(iData,iLength);
-    if(!parsed && iData && iLength)frame.ctrlByte0=iData[0];
-    const bool twoWay=parsed&&!(iData[0]&IOHC_CTRL0_MODE_1W);
     if (result == RadioError::None) {
+        mReplyGrant=false;mCcaWaiting=false;mCcaBusySamples=0;
+        logDebugP("RF admission frame_role=%u cca_required=%u cca_skipped_reason=%s tx_hz=%lu duty_admission=accepted",
+            unsigned(intent),ccaRequired,intent==IoHomeTransmitIntent::ImmediateReply?"qualified_reply":"none",
+            (unsigned long)IOHC_FREQUENCIES[mCurrentFreqIdx]);
+        if (mCurrentCmd.active) mCurrentCmd.statusPollRfStarted=true;
         // Authoritative accounting event: charge at acceptance, never at TX_DONE.
         // Includes queued/direct/pairing/1W/continuations, lost IRQs and aborts.
         mRfDutyBudget.advance(millis()); // charge at acceptance even across a programming-time boundary
@@ -7137,6 +7193,8 @@ void IoHomeController::loop()
     {
         uint8_t lLen = mRadio.readPacket(mRxBuffer, sizeof(mRxBuffer));
         mRxRawLen = lLen;
+        mReplyGrant=false; // a new RX cannot reuse an earlier reply grant
+        mLastRxReadMs=millis();
         bool lParsed = (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen));
         if (lLen > 0 && !lParsed)
         {
@@ -7327,7 +7385,8 @@ void IoHomeController::loop()
                             mPairingChallenge, mRxFrame.data, IOHC_TRANSFER_KEY, mPairPulledKey)) {
                         mPairPulledKeyFrame = mRxFrame;
                         mPairingTelemetry.pullResult = PullKeyResult::Received;
-                        mState = ControllerState::PairSendPullKeyChallenge;
+                        qualifyImmediateReply();
+                    mState = ControllerState::PairSendPullKeyChallenge;
                     } else finishPullKeyDiagnostic(PullKeyResult::Unproven);
                 }
                 else if(peer && mState==ControllerState::PairWaitPullKeyChallengeResponse &&
@@ -7361,6 +7420,7 @@ void IoHomeController::loop()
                     // Device sends its challenge — extract and store for key transfer
                     ++mPairingTelemetry.counters.challengeSeen;
                     memcpy(mPairingChallenge, mRxFrame.data, sizeof(mPairingChallenge));
+                    qualifyImmediateReply();
                     mState = ControllerState::PairSendKeyTransfer;
                 }
                 else if (mRxFrame.commandId == IoHomeCommand::KeyTransferConfirmation &&
@@ -7382,6 +7442,7 @@ void IoHomeController::loop()
                 {
                     ++mPairingTelemetry.counters.challengeSeen;
                     memcpy(mPairKeyTransferChallenge, mRxFrame.data, sizeof(mPairKeyTransferChallenge));
+                    qualifyImmediateReply();
                     mState = ControllerState::PairSendKeyTransferAuthResponse;
                 }
                 else if (mRxFrame.commandId == IoHomeCommand::KeyTransferConfirmation &&
@@ -7493,7 +7554,8 @@ void IoHomeController::loop()
                     if (mRxFrame.commandId == IoHomeCommand::ChallengeRequest && mRxFrame.dataLen >= 6)
                     {
                         memcpy(mPairSetConfigChallenge, mRxFrame.data, sizeof(mPairSetConfigChallenge));
-                        mState = ControllerState::PairSendSetConfig1AuthResponse;
+                        qualifyImmediateReply();
+                    mState = ControllerState::PairSendSetConfig1AuthResponse;
                     }
                     else if (mRxFrame.commandId == IoHomeCommand::SetConfig1Response ||
                              mRxFrame.commandId == IoHomeCommand::ErrorResponse)
@@ -7890,12 +7952,27 @@ void IoHomeController::processIdle()
 
 void IoHomeController::processTxPending()
 {
+    if (mCurrentCmd.ownedStatusPoll) {
+        auto *ch=mModule?mModule->getChannel(mCurrentCmd.sourceChannelIndex):nullptr;
+        if (!ch || !ch->isPaired() || ch->getNodeId()!=mCurrentCmd.destNodeId ||
+            ch->productContextRevision()!=mCurrentCmd.productContextRevision ||
+            (mCurrentCmd.trackedStatusPoll &&
+             (ch->statusPollEpoch()!=mCurrentCmd.statusPollEpoch ||
+              int32_t(millis()-mCurrentCmd.statusPollEpoch)>=0)) ||
+            std::memcmp(ch->getEncryptionKey(),mCurrentCmd.managementKey,16)) {
+            mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+        }
+    }
     if(mCurrentCmd.heatingToken && !heatingContextMatches(mCurrentCmd)){
         notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::FailedBeforeAuthentication);
         mCurrentCmd.active=false;mState=ControllerState::Idle;return;
     }
     if(mCurrentCmd.atlanticToken && !atlanticContextMatches()){
         notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+        mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+    }
+    if (mCurrentCmd.active && uint32_t(millis()-mExchangeStartMs)>=mCurrentCmd.sessionPolicy.totalBudgetMs) {
+        notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::MediaAccessFailed);
         mCurrentCmd.active=false;mState=ControllerState::Idle;return;
     }
     if (mRetryAtMs && uint32_t(millis()-mRetryAtMs)>=0x80000000UL) return;
@@ -8398,6 +8475,17 @@ void IoHomeController::processWaitResponse()
 
 void IoHomeController::processResponse()
 {
+    if (mCurrentCmd.ownedStatusPoll) {
+        auto *ch=mModule?mModule->getChannel(mCurrentCmd.sourceChannelIndex):nullptr;
+        if (!ch || !ch->isPaired() || ch->getNodeId()!=mCurrentCmd.destNodeId ||
+            ch->productContextRevision()!=mCurrentCmd.productContextRevision ||
+            (mCurrentCmd.trackedStatusPoll &&
+             (ch->statusPollEpoch()!=mCurrentCmd.statusPollEpoch ||
+              int32_t(millis()-mCurrentCmd.statusPollEpoch)>=0)) ||
+            std::memcmp(ch->getEncryptionKey(),mCurrentCmd.managementKey,16)) {
+            mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+        }
+    }
     // An active 2W exchange is unicast. An unrelated frame must neither answer
     // its challenge nor complete the queued command. Keep listening for the
     // expected peer until the normal timeout expires.
@@ -8648,6 +8736,7 @@ void IoHomeController::processResponse()
         // Device challenges our authenticated command — build and send ChallengeResponse (0x3D).
         // The centralized builder keeps 0x3D as a continuation frame and puts
         // the HMAC bytes into data[], never as appended 2W HMAC.
+        qualifyImmediateReply();
         uint8_t lChallenge[6];
         memcpy(lChallenge, mRxFrame.data, sizeof(lChallenge));
 
@@ -8736,6 +8825,8 @@ void IoHomeController::processResponse()
         (mRxFrame.ctrlByte0 & IOHC_CTRL0_START) == 0 &&
         mSawChallenge && mWaitingFinalResponse;
     const bool lExplicitFailure = disposition == IoHomeResponseDisposition::Rejected;
+    if (lExplicitFailure)
+        notifyTrackedStatusPollFailure(mModule,lCompletedCmd,mSawChallenge || mAuthResponseSent);
     const bool lPreviousTrustRxPosition = mTrustRxPosition;
     if (lCompletedCmd.command == IoHomeCommand::Execute)
     {
@@ -8751,7 +8842,9 @@ void IoHomeController::processResponse()
             }
         mTrustRxPosition = false;
     }
+    mCorrelatedStatusReply=!lExplicitFailure;
     dispatchRxFrame();
+    mCorrelatedStatusReply=false;
     mTrustRxPosition = lPreviousTrustRxPosition;
     if (lAuthenticatedDirectedDiscovery && mModule)
     {
@@ -10330,7 +10423,7 @@ void IoHomeController::processPairKeyRecoveryFrame()
     if(mState==ControllerState::PairWaitKeyRecoveryRead && mRxFrame.commandId==IoHomeCommand::ChallengeRequest &&
        mRxFrame.dataLen==IOHC_HMAC_SIZE){
         memcpy(mPairRecoveryChallenge,mRxFrame.data,IOHC_HMAC_SIZE);
-        ++mPairingTelemetry.counters.challengeSeen;mState=ControllerState::PairSendKeyRecoveryAuth;return;
+        ++mPairingTelemetry.counters.challengeSeen;qualifyImmediateReply();mState=ControllerState::PairSendKeyRecoveryAuth;return;
     }
     if(mState==ControllerState::PairWaitKeyRecoveryFinal && mPairRecoveryAuthSent &&
        mRxFrame.commandId==IoHomeCommand::GetNameResponse && mRxFrame.dataLen>0 && mRxFrame.dataLen<=IOHC_NAME_MAX_SIZE){
@@ -11223,10 +11316,14 @@ bool IoHomeController::waitForLbtClear(LbtContext iContext)
 
 RadioError IoHomeController::startRadioTransmit(const uint8_t *iBuffer, uint8_t iLen, LbtContext iLbtContext)
 {
-    if (!waitForLbtClear(iLbtContext))
-        return RadioError::Busy;
-
-    mLbtPrepared=true;
+    // 2W uses only central admission. Retain the specialized 1W wrapper.
+    IoHomeFrame candidate;
+    if (!iBuffer || !iLen || !candidate.deserializeRawWithOptionalCrc(iBuffer,iLen))
+        return RadioError::InvalidParam;
+    if (candidate.ctrlByte0 & IOHC_CTRL0_MODE_1W) {
+        if (!waitForLbtClear(iLbtContext)) return RadioError::Busy;
+        mLbtPrepared=true;
+    }
     const auto result=startControllerTransmit(iBuffer,iLen);
     if(result==RadioError::None&&mLastLbtBypassed){IoHomeFrame frame;if(frame.deserializeRawWithOptionalCrc(iBuffer,iLen))mHostRadioPolicy.forced(uint8_t(frame.commandId));}
     return result;
@@ -11938,6 +12035,8 @@ void IoHomeController::dispatchRxFrame()
         IoHomecontrolChannel *lCh = mModule->getChannel(i);
         if (lCh && lCh->isPaired() && lCh->getNodeId() == lSrcNode)
         {
+            if (mCorrelatedStatusReply && mCurrentCmd.ownedStatusPoll &&
+                i!=mCurrentCmd.sourceChannelIndex) continue;
             if (!mPassiveMode &&
                 mRxFrame.commandId == IoHomeCommand::StatusUpdate &&
                 mRxFrame.getDestNodeId() == mOwnNodeId &&
@@ -12179,7 +12278,7 @@ void IoHomeController::dispatchRxFrame()
                     const uint8_t lStopStatus[]={0xD2,0,mRxFrame.data[2],mRxFrame.data[3]};
                     dispatchPositionStatus(lCh,lStopStatus,sizeof(lStopStatus),true,0,2);
                 }
-                if (!mTrustRxPosition)
+                if (!mTrustRxPosition || !mCorrelatedStatusReply)
                     break;
                 // PrivateResponse (0x04) layout per reference:
                 //   data[0]:    flags (bit 0 = stopped)
