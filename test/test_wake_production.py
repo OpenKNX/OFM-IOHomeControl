@@ -65,7 +65,7 @@ struct IoHomecontrolChannel {
  void onEstimate(uint16_t);
  void onPositionFeedback(float);
  void onTargetPositionFeedback(float);
- bool mObservedPositiveRemaining=false,mTrustedPollMoving=false;
+ bool mObservedPositiveRemaining=false,mTrustedPollMoving=false;uint8_t mMovingPollMisses=0;
  void startTravelEstimation(float){}
  bool mHas2WHeardEvidence=false,mHas2WMovingEvidence=false,mConfirmsExecute=false,mStopSettlePollPending=false;
  uint32_t mLast2WHeardMs=0,mLast2WMovingEvidenceMs=0,m2WMovingEvidenceGeneration=0;
@@ -85,7 +85,7 @@ struct IoHomecontrolChannel {
  const IoHomeProfileDescriptor*getEffectiveProfileDescriptor(){return nullptr;}
  bool isTiltCapableDeviceType(){return false;}
  bool requestStatus(bool);
- void onStatusPollFailed(bool);
+ void onStatusPollFailed(bool,bool=true);
  void clearStopTravelSnapshot(){snapshot=false;}
  void restoreStopTravelSnapshot(){++restores;}
  void scheduleStatusPoll(unsigned){++polls;}
@@ -98,6 +98,22 @@ struct IoHomecontrolChannel {
 };
 '''
 tests=r'''int main(){
+ {
+  IoHomecontrolChannel c;c.mIsMoving=true;c.mPollTrackingDeadlineMs=now+600000;c.mTrustedPollMoving=true;
+  const auto deadline=c.mPollTrackingDeadlineMs;
+  c.onStatusPollFailed(false);assert(c.mMovingPollMisses==1&&c.mNextStatusPollMs==now+500&&!c.mStatusPollFailures);
+  c.onStatusPollFailed(true);assert(c.mMovingPollMisses==2&&c.mNextStatusPollMs==now+500&&!c.mAuthPollFailures);
+  c.onStatusPollFailed(false);assert(c.mMovingPollMisses==3&&c.mNextStatusPollMs==now+5000&&c.mStatusPollFailures==1);
+  c.onStatusPollFailed(true);assert(c.mMovingPollMisses==3&&c.mNextStatusPollMs==now+5000&&c.mAuthPollFailures==1);
+  c.onStatusPollFailed(true);assert(c.mNextStatusPollMs==now+30000&&c.mPollTrackingDeadlineMs==deadline);
+  c.onStatusUpdate(true);assert(!c.mMovingPollMisses&&!c.mAuthPollFailures&&!c.mStatusPollFailures);
+  c.lowPower=true;c.mTrustedPollMoving=true;c.onStatusPollFailed(false);assert(c.mNextStatusPollMs==now+10000);
+  c.onStatusUpdate(false);assert(!c.mTrustedPollMoving&&!c.mMovingPollMisses);
+  c.mIsMoving=true;c.mPollTrackingDeadlineMs=now+600000;c.onStatusPollFailed(false);assert(c.mNextStatusPollMs==now+10000&&c.mMovingPollMisses==3); // optimistic/unknown is not trusted motion
+  c.lowPower=false;c.mAuthPollFailures=c.mStatusPollFailures=0;c.mMovingPollMisses=0;c.mTrustedPollMoving=true;
+  c.onStatusPollFailed(false,false);assert(c.mMovingPollMisses==3&&c.mNextStatusPollMs==now+5000); // STOP-settle multi-try
+ }
+
  {
   IoHomecontrolChannel c;c.mIsMoving=true;c.mPollTrackingDeadlineMs=now+600000;c.mNextStatusPollMs=now+500;
   c.onTargetPositionFeedback(80);c.onPositionFeedback(20);c.staleEstimate=90;
@@ -176,7 +192,7 @@ tests=r'''int main(){
  ch.mPollTrackingDeadlineMs=now+5000;ch.onStatusPollFailed(false);
  assert(!ch.mSingleFollowUpPollPending&&ch.mNextStatusPollMs==0);
  auto streak=ch.mStatusPollFailures;ch.mPollTrackingDeadlineMs=now;
- ch.onStatusPollFailed(false);assert(ch.mStatusPollFailures==streak);
+ ch.onStatusPollFailed(false);assert(ch.mStatusPollFailures==0&&ch.mMovingPollMisses==0);streak=0;
  ch.mPollTrackingDeadlineMs=0;ch.onStatusPollFailed(true);assert(ch.mPollTrackingDeadlineMs==0);
  ch.mPaired=false;ch.mPollTrackingDeadlineMs=now+600000;ch.onStatusPollFailed(false);
  assert(ch.mStatusPollFailures==streak);

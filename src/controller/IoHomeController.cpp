@@ -117,7 +117,7 @@ namespace
             channel->productContextRevision()==iCmd.productContextRevision &&
             channel->statusPollEpoch()==iCmd.statusPollEpoch &&
             !std::memcmp(channel->getEncryptionKey(),iCmd.managementKey,16))
-            channel->onStatusPollFailed(iAfterChallenge);
+            channel->onStatusPollFailed(iAfterChallenge,iCmd.maxAttempts==1);
     }
 
     std::string hexDump(const uint8_t *iData, uint8_t iLen)

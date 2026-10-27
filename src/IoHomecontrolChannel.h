@@ -113,7 +113,7 @@ public:
 
   void onEstimate(uint16_t iSeconds);
   void onStatusExpected();
-  void onStatusPollFailed(bool iAfterChallenge);
+  void onStatusPollFailed(bool iAfterChallenge, bool iSingleAttempt=true);
   uint32_t statusPollEpoch() const { return mPollTrackingDeadlineMs; }
   void onCommandExchangeResult(IoHomeCommand iCommand, uint8_t iParam,
                                IoHomeCommandExchangeResult iResult);
@@ -315,6 +315,7 @@ private:
   uint8_t mStatusPollFailures = 0;
   uint8_t mAuthPollFailures = 0;
   bool mObservedPositiveRemaining=false,mTrustedPollMoving=false;
+  uint8_t mMovingPollMisses=0;
   char mDeviceName[21] = {}; // max 20 chars + null terminator
   uint16_t mProfile = 0;
   uint8_t mSubProfile = 0;

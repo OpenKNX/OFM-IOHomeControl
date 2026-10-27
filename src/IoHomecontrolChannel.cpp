@@ -670,6 +670,7 @@ void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
 {
     observe2WMovingStatus(iIsMoving);
     mRfPollWaiting=false;
+    mMovingPollMisses=0;
 
     mStatusPollTimer = delayTimerInit();
     mStatusPollFailures = 0;
@@ -1184,20 +1185,23 @@ void IoHomecontrolChannel::onStatusExpected()
     logDebugP("Device will auto-send status update");
 }
 
-void IoHomecontrolChannel::onStatusPollFailed(bool iAfterChallenge)
+void IoHomecontrolChannel::onStatusPollFailed(bool iAfterChallenge, bool iSingleAttempt)
 {
     const uint32_t lNow = millis();
-    // Failures cannot create or renew a tracking epoch.
-    if (!mPaired || mPollTrackingDeadlineMs == 0 ||
-        timeReached(lNow, mPollTrackingDeadlineMs)) return;
-    const uint32_t lRetryDelayMs = IoHomeStatusPollRetry::failed(
-        iAfterChallenge, mAuthPollFailures, mStatusPollFailures,
-        effectiveLowPower2W() ? kLowPowerTrackedPollMinMs : 0);
-    mStatusExpected = false;
-    logInfoP("tracked_poll=1 channel=%u failure_kind=%s consecutive_auth_failures=%u consecutive_silent_failures=%u next_poll_ms=%lu tracking_deadline_ms=%lu status_valid=0",
-        unsigned(_channelIndex+1), iAfterChallenge ? "challenge_no_status" : "no_status",
-        unsigned(mAuthPollFailures), unsigned(mStatusPollFailures),
-        (unsigned long)(lNow+lRetryDelayMs), (unsigned long)mPollTrackingDeadlineMs);
+    // Failures cannot create or renew an epoch. Admission failures are filtered
+    // by the controller's tracked ownership / actual-RF-start guard.
+    if(!mPaired||!mPollTrackingDeadlineMs)return;
+    if(timeReached(lNow,mPollTrackingDeadlineMs)){clearStatusPollTracking();return;}
+    const bool eligible=iSingleAttempt&&mTrustedPollMoving&&mIsMoving;
+    const bool grace=eligible&&mMovingPollMisses<2&&!mAuthPollFailures&&!mStatusPollFailures;
+    const uint32_t lRetryDelayMs=IoHomeStatusPollRetry::movingFailure(
+        iAfterChallenge,eligible,mMovingPollMisses,mAuthPollFailures,mStatusPollFailures,
+        defaultTrackedStatusPollDelayMs(),effectiveLowPower2W()?kLowPowerTrackedPollMinMs:0);
+    mStatusExpected=false;
+    logInfoP("tracked_poll=1 channel=%u moving_grace=%u moving_misses=%u grace_limit=2 single_attempt=%u failure_kind=%s consecutive_auth_failures=%u consecutive_silent_failures=%u requested_delay_ms=%lu next_poll_ms=%lu low_power=%u RF_denied=0 tracking_deadline_ms=%lu status_valid=0",
+        unsigned(_channelIndex+1),grace,unsigned(mMovingPollMisses),iSingleAttempt,iAfterChallenge?"challenge_no_status":"no_status",
+        unsigned(mAuthPollFailures),unsigned(mStatusPollFailures),(unsigned long)lRetryDelayMs,
+        (unsigned long)(lNow+lRetryDelayMs),effectiveLowPower2W(),(unsigned long)mPollTrackingDeadlineMs);
 
     const uint32_t lRetryAtMs = lNow + lRetryDelayMs;
     if (timeReached(lRetryAtMs, mPollTrackingDeadlineMs))
@@ -1207,6 +1211,7 @@ void IoHomecontrolChannel::onStatusPollFailed(bool iAfterChallenge)
         // polling resumes once the original deadline is reached.
         mSingleFollowUpPollPending = false;
         mNextStatusPollMs = 0;
+        mMovingPollMisses=0;mTrustedPollMoving=false;mObservedPositiveRemaining=false;
         logDebugP("Status poll failed%s, tracking window exhausted",
                   iAfterChallenge ? " after challenge" : "");
     }
@@ -1675,7 +1680,7 @@ void IoHomecontrolChannel::requestStatusPrivate()
 
 void IoHomecontrolChannel::startStatusPollTracking(uint32_t iDelayMs)
 {
-    mObservedPositiveRemaining=false;mTrustedPollMoving=false;
+    mObservedPositiveRemaining=false;mTrustedPollMoving=false;mMovingPollMisses=0;
     if (effectiveLowPower2W() && iDelayMs < kLowPowerTrackedPollMinMs)
         iDelayMs = kLowPowerTrackedPollMinMs;
     mStopSettlePollPending = false;
@@ -1694,7 +1699,7 @@ void IoHomecontrolChannel::startStatusPollTracking(uint32_t iDelayMs)
 
 void IoHomecontrolChannel::clearStatusPollTracking()
 {
-    mObservedPositiveRemaining=false;mTrustedPollMoving=false;
+    mObservedPositiveRemaining=false;mTrustedPollMoving=false;mMovingPollMisses=0;
     mStopSettlePollPending = false;
     mNextStatusPollMs = 0;
     mPollTrackingDeadlineMs = 0;

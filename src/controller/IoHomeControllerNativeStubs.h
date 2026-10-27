@@ -499,8 +499,9 @@ public:
   void onStatusExpected() { mStatusExpected = true; }
   uint32_t statusPollEpoch() const { return mTestPollEpoch; }
   uint32_t mTestPollEpoch = 600000U;
-  void onStatusPollFailed(bool iAfterChallenge)
+  void onStatusPollFailed(bool iAfterChallenge,bool singleAttempt=true)
   {
+    mFailureSingleAttempt=singleAttempt;
     mHasStatusPollFailure = true;
     mStatusPollFailureAfterChallenge = iAfterChallenge;
     mStatusPollFailureCount++;
@@ -603,6 +604,7 @@ public:
   uint16_t testEstimate() const { return mEstimate; }
   bool testStatusExpected() const { return mStatusExpected; }
   bool testHasStatusPollFailure() const { return mHasStatusPollFailure; }
+  bool mFailureSingleAttempt=false;
   bool testStatusPollFailureAfterChallenge() const { return mStatusPollFailureAfterChallenge; }
   uint8_t testStatusPollFailureCount() const { return mStatusPollFailureCount; }
   uint8_t testAuthPollFailureCount() const { return mAuthPollFailureCount; }

@@ -4,6 +4,15 @@
 // Application recovery policy, in milliseconds; independent of exchange timing.
 // Keep the counters in the channel and use no heap or per-channel delay table.
 struct IoHomeStatusPollRetry {
+    static uint32_t movingFailure(bool challenged,bool eligible,uint8_t &misses,
+                                  uint8_t &auth,uint8_t &silent,uint32_t cadence,uint32_t minimumMs) {
+        if(eligible&&misses<2&&auth==0&&silent==0) {
+            ++misses;
+            return cadence<minimumMs?minimumMs:cadence;
+        }
+        misses=3; // latch the ladder until a valid reply or a genuinely new epoch
+        return failed(challenged,auth,silent,minimumMs);
+    }
     static uint32_t failed(bool challenged, uint8_t &auth, uint8_t &silent,
                            uint32_t minimumMs = 0) {
         uint8_t &streak = challenged ? auth : silent;
