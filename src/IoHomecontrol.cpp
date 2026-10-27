@@ -4746,7 +4746,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                          lDevice && lDevice->speResponseSeen ? 1U : 0U,
                          lDevice && lDevice->protocolIdentity.fullMetadata ? "complete" :
                          lDevice && lDevice->protocolIdentity.valid ? "partial" : "pending",
-                         lDevice ? "verified" : "unverified");
+                         lDevice && lDevice->directedVerified ? "verified" : "unverified");
                 if (lSub == "keyimport trace")
                 {
                     logInfoP("  times 2e=%lu 3c=%lu 3d=%lu 2f=%lu",
@@ -4761,12 +4761,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                              static_cast<unsigned long>(lCandidate.finalFreqIdx < IOHC_NUM_FREQUENCIES ? IOHC_FREQUENCIES[lCandidate.finalFreqIdx] : 0));
                     if (lCandidate.challengeSeen)
                     {
-                        const std::string lChallenge = metadataHex(lCandidate.challenge, sizeof(lCandidate.challenge));
-                        const std::string lReceived = lCandidate.authSeen ? metadataHex(lCandidate.responseHmac, sizeof(lCandidate.responseHmac)) : "pending";
-                        const std::string lComputed = lCandidate.hmacComputed ? metadataHex(lCandidate.computedHmac, sizeof(lCandidate.computedHmac)) : "pending";
-                        logInfoP("  passiveHmac challenge=%s received=%s computed=%s match=%s",
-                                 lChallenge.c_str(), lReceived.c_str(), lComputed.c_str(),
-                                 lCandidate.authVerified ? "yes" : "no");
+                        logInfoP("  passiveAuth challenge_seen=%u response_seen=%u computed=%u match=%u bytes=redacted",
+                                 lCandidate.challengeSeen, lCandidate.authSeen,
+                                 lCandidate.hmacComputed, lCandidate.authVerified);
                     }
                 }
             }

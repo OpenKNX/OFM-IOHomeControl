@@ -45,3 +45,8 @@ with tempfile.TemporaryDirectory() as d:
  subprocess.run([os.environ.get('CXX','clang++'),'-std=c++17',str(p),'-o',str(binary)],check=True)
  subprocess.run([str(binary)],check=True)
 print('Production key-import branch preserves own NID, commits key before TX and rejects collision/storage failure')
+
+# The diagnostic endpoint must expose evidence, never authentication material.
+trace=source[source.index('if (lSub == "keyimport status"'):source.index('if (lSub == "discovery trace")')]
+assert 'metadataHex(' not in trace and 'responseHmac' not in trace and 'computedHmac' not in trace
+assert 'lDevice && lDevice->directedVerified' in trace
