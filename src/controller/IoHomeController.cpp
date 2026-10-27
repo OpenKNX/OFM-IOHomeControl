@@ -3,6 +3,9 @@
 #include "../protocol/IoHomeProductActivation.h"
 #include "IoHomeController.h"
 #include "../radio/IoHomeTransmitIntent.h"
+#if defined(RADIO_SX1262) && !defined(TEST_NATIVE)
+#include "../radio/sx1262Regs-Fsk.h"
+#endif
 #include "../protocol/IoHomeLogRedaction.h"
 #include "../protocol/IoHomeProfileRegistry.h"
 
