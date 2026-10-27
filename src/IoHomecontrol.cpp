@@ -3352,7 +3352,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
             logInfoP("IOHC_ETS session=%lu api=21 node=%06X fw_channel=%u ETS_readback=acknowledged download=unknown",(unsigned long)mDiscoveryEvidence.session,node,data[1]+1);
             const bool newlyApplied=!receipt.projectApplied;
             receipt.projectApplied=true;
-            if(!mAssignmentReceipts.save(data[1],receipt)) { resultData[0]=4;resultLength=1;return true; }
+            if(newlyApplied&&!mAssignmentReceipts.save(data[1],receipt)) { resultData[0]=4;resultLength=1;return true; }
             if(newlyApplied&&!mHistoryFailed) {
                 IoHomeCommissioningHistory::Entry e;e.boot=mCommissioningBootId;e.generation=receipt.generation;e.node=receipt.node;e.channel=data[1];
                 e.owner=mCommissioningJob.owner==IoHomeCommissioningJob::Owner::Import?2:1;e.stage=6;e.projectApplied=1;

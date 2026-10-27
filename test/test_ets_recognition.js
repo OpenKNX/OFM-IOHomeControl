@@ -365,8 +365,8 @@ test("automatic selection resets manual ownership and disabling preserves the pr
 function hostBytes(bytes) {
  var host={length:bytes.length};for(var i=0;i<bytes.length;i++)host[i]=String(bytes[i]);return host;
 }
-function importFixture() {
- var d=deviceWith({Active:0}),nodes=[0x155D81,0xE50470,0x562292],assigned=[0,0,0],acks=0,writes=0,closed=0,text="";
+function importFixture(existing) {
+ var d=deviceWith({Active:0}),nodes=[0x155D81,0xE50470,0x562292],assigned=existing?[0x155D81,0xE50470,0x562292]:[0,0,0],acks=0,writes=0,closed=0,text="";
  for(var c=2;c<=3;c++) {var extra=deviceWith({Active:0});for(var name in extra.params)d.params[name.replace("c1","c"+c)]=extra.params[name];}
  d.params.IOHC_AssignmentPreviewToken={value:""};
  var caps=[0,1,0,0,0,127,0,0,0,9],job=[0,1,2,4,0,0,0,2,255,0,0,0,0,0,0,1,0,0,0,0,0,0,0,9,0,3];
@@ -628,4 +628,24 @@ test("ETS readback report is capability gated and failure never ACKs receipt",fu
  IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});
  var rejected=false;try{IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});}catch(e){rejected=String(e).indexOf("Readbackbericht")>=0;}
  check(rejected&&reports===1&&f.acks()===0,"readback mismatch ACKed");
+});
+
+
+test("confirmed import reactivates flash-paired disabled channel without moving identities",function(){
+ var f=importFixture(true);
+ // Fixture order differs from physical channels; existing-channel lookup owns the mapping.
+ f.device.params.IOHC_c2Active.value=1;f.device.params.IOHC_c3Active.value=1;
+ IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});check(f.acks()===0&&f.writes()===0,"preview wrote state");
+ IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});
+ check(f.writes()===0&&f.acks()===3,"existing nodes were reassigned or skipped");
+ check(f.device.params.IOHC_c1Active.value===1&&f.device.params.IOHC_c1PairedNodeIdDisplay.value==="155D81","disabled existing node not restored");
+ for(var c=1;c<=3;c++)check(f.device.params["IOHC_c"+c+"Active"].value===1,"eligible channel missing");
+});
+test("already acknowledged assignment checks project without another persistent ACK",function(){
+ var d=deviceWith({}),acks=0,receipt=[0,1,0,0,0,0,8,0x12,0x34,0x56,1,0,0,3,2,0];
+ var online={invokeFunctionProperty:function(o,p,data){
+  if(data[0]===0x23)return [3];if(data[0]===0x1D)return snapshot(0x1C,1,0);
+  if(data.length>2)acks++;return receipt;
+ }};
+ check(IOHC_resumeAssignment(d,online,0)&&acks===0,"stable assignment sent another storage ACK");
 });

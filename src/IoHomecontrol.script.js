@@ -306,10 +306,12 @@ function /* internal helper */ IOHC_resumeAssignment(device,online,channel,trace
         var reported=IOHC_invokeFunctionProperty(online,report);
         if(!reported||reported[0]!==0)throw new Error("ETS-Readbackbericht abgelehnt; Zuordnungsbeleg bleibt offen");
     }
-    IOHC_setParameterValue(device,"IOHC_c"+(channel+1)+"SyncStatus","ETS gesetzt; Gerätebeleg offen");
-    var ack=[0x21,channel].concat(receipt.slice(3,10));
-    var response=IOHC_invokeFunctionProperty(online,ack);
-    if(!response || response[0]!==0) throw new Error("Zuordnung im Gerät gespeichert; ETS-Abgleich erneut ausführen.");
+    if((receipt[13]&2)===0) {
+        IOHC_setParameterValue(device,"IOHC_c"+(channel+1)+"SyncStatus","ETS gesetzt; Gerätebeleg offen");
+        var ack=[0x21,channel].concat(receipt.slice(3,10));
+        var response=IOHC_invokeFunctionProperty(online,ack);
+        if(!response || response[0]!==0) throw new Error("Zuordnung im Gerät gespeichert; ETS-Abgleich erneut ausführen.");
+    }
     IOHC_setParameterValue(device,"IOHC_c"+(channel+1)+"SyncStatus","Gerät+ETS gespeichert; Download offen");
     return true;
 }
