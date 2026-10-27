@@ -79,7 +79,9 @@ function /* internal helper */ IOHC_setParameterValue(device, name, value) {
         if (typeof value === "string" && value.length > 40) {
             value = value.substring(0, 40);
         }
-        parameter.value = value;
+        if (String(parameter.value) !== String(value)) parameter.value = value;
+        if (String(parameter.value) !== String(value))
+            throw new Error("ETS-Readback fehlgeschlagen: " + name);
     }
 }
 
@@ -309,7 +311,7 @@ function IOHC_applyRecognizedType(device, online, progress, context) {
     online.connect();
     try {
         IOHC_resumeAssignment(device,online,context.channelIndex-1);
-        IOHC_queryPairingInfo(device, online, progress, context, "Status gelesen", "Status direkt vom Gerät gelesen");
+        IOHC_queryPairingInfo(device, online, progress, context, "Status gelesen", "Gespeicherter Kanalstatus; kein RF-Poll");
         var applied = IOHC_queryRecognition(device, online, context, true);
         progress.setText(applied ? "Erkannten Gerätetyp übernommen. Applikation programmieren." :
                          "Keine Änderung: Erkennung fehlt oder manuelles Profil ist gesetzt.");
@@ -382,6 +384,14 @@ function /* internal helper */ IOHC_configureImportedChannel(device, channelNumb
                                : "Hersteller und Energieklasse unbekannt");
     // Keep both ETS visibility and downloaded channel activation explicit.
     IOHC_setParameterValue(device, prefix + "Active", 1);
+    var required = [["Active",1],["ProtocolMode",0],
+                    ["PairedNodeIdDisplay",IOHC_formatNodeId(discovery.nodeId)]];
+    for(var r=0;r<required.length;r++) {
+        var readback=IOHC_getParameter(device,prefix+required[r][0]);
+        if(!readback || String(readback.value)!==String(required[r][1]))
+            throw new Error("ETS-Readback fehlgeschlagen: "+prefix+required[r][0]);
+    }
+    if(!IOHC_getParameter(device,prefix+"DeviceType"))throw new Error("ETS-Gerätetyp fehlt: "+prefix);
 }
 
 // BEGIN GENERATED CHANNEL SELECTIONS
@@ -624,7 +634,7 @@ function IOHC_refreshAllPairingInfo(device, online, progress, context) {
         var channelIndex = activeChannels[activeIndex];
         online.connect();
         try {
-            IOHC_queryPairingInfo(device, online, null, { channelIndex: channelIndex }, "Status gelesen", "Status über Übersicht gelesen");
+            IOHC_queryPairingInfo(device, online, null, { channelIndex: channelIndex }, "Status gelesen", "Gespeicherter Kanalstatus; kein RF-Poll");
         } finally {
             online.disconnect();
         }
@@ -716,7 +726,7 @@ function IOHC_refreshPairingInfo(device, online, progress, context) {
     progress.setProgress(25);
     online.connect();
     try {
-        IOHC_queryPairingInfo(device, online, progress, context, "Status gelesen", "Status direkt vom Gerät gelesen");
+        IOHC_queryPairingInfo(device, online, progress, context, "Status gelesen", "Gespeicherter Kanalstatus; kein RF-Poll");
         var applied = IOHC_queryRecognition(device, online, context, true);
     } finally {
         online.disconnect();
@@ -1073,6 +1083,7 @@ function IOHC_startKeyExtract(device, online, progress, context) {
             }
             if(!preview.plan.length){progress.setText("Keine Zuordnung: "+preview.text);return;}
         }
+        var channelBefore=[];for(var cb=0;cb<channelCount;cb++)channelBefore[cb]=channelActive[cb];
         var configuredChannels = 0;
         var alreadyConfigured = 0;
         var unassigned = 0;
@@ -1085,6 +1096,8 @@ function IOHC_startKeyExtract(device, online, progress, context) {
         for (var d = 0; d < discoveries.length; d++) {
             var assignmentStatus = assignmentResponse[2 + (d * 2)];
             var assignedChannel = assignmentResponse[3 + (d * 2)];
+            if((assignmentStatus===0||assignmentStatus===1) && assignedChannel>=channelCount)
+                throw new Error("Ungültiger Zuordnungskanal für Ergebnis "+d);
             if (assignmentStatus == 0) {
                 trace.step="ETS-Kanalparameter / Zuordnungsbeleg";
                 if(job) {if(!IOHC_resumeAssignment(device,online,assignedChannel,trace))throw new Error("Zuordnungsbeleg nicht verfügbar; ETS-Abgleich erneut ausführen");}
@@ -1108,6 +1121,13 @@ function IOHC_startKeyExtract(device, online, progress, context) {
             } else {
                 throw new Error("io-homecontrol: Scan-Ergebnis " + (d + 1) + " ist nicht mehr verfügbar");
             }
+            var evidence=discoveries[d].speResponseSeen?"fresh_2b":discoveries[d].directedVerified?"directed_2f":discoveries[d].passiveAuthVerified?"passive_auth":"unknown";
+            var after=assignedChannel<channelCount?IOHC_getParameter(device,"IOHC_c"+(assignedChannel+1)+"Active"):null;
+            var line="IOHC_ETS index="+d+" node="+IOHC_formatNodeId(discoveries[d].nodeId)+" evidence="+evidence+
+                " fw_channel="+(assignedChannel<channelCount?assignedChannel+1:0)+" active_before="+(channelBefore[assignedChannel]?1:0)+
+                " active_after="+(after?after.value:"unknown")+" result="+assignmentStatus+" readback="+((assignmentStatus===0||assignmentStatus===1)?"ok":"not_applied");
+            progress.setText(line);
+            if(typeof console!=="undefined" && console.log)console.log(line);
             progress.setProgress(80 + Math.floor(((d + 1) * 15) / Math.max(1, discoveries.length)));
         }
 

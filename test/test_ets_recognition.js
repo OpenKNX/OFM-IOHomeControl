@@ -601,3 +601,17 @@ test("Atlantic ETS assignment refuses discovery-only wrong-channel and old schem
   check(failed&&closed&&writes===0,"unsafe ETS assignment case "+variant);
  }
 });
+
+
+test("ETS silent setter rejection fails readback before assignment ACK",function(){
+ var f=importFixture();IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});
+ Object.defineProperty(f.device.params.IOHC_c1Active,"value",{get:function(){return 0;},set:function(v){},configurable:true});
+ var failed=false;try{IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});}catch(e){failed=String(e).indexOf("Readback")>=0;}
+ check(failed&&f.acks()===0,"silent ETS setter acknowledged assignment");
+});
+test("ETS repeated configured-channel application has no redundant setters",function(){
+ var d=deviceWith({Active:0}),discovery={nodeId:0x155D81,metadataValid:true,protocolType:1,subtype:0,manufacturer:2,powerClass:1};
+ IOHC_configureImportedChannel(d,1,discovery);
+ var writes=0;for(var name in d.params)(function(p){var current=p.value;Object.defineProperty(p,"value",{get:function(){return current;},set:function(v){writes++;current=v;}});})(d.params[name]);
+ IOHC_configureImportedChannel(d,1,discovery);check(writes===0,"second configure changed stable ETS fields");
+});
