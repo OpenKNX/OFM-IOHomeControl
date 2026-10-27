@@ -10,13 +10,13 @@ struct IoHomeDiscoveryEvidence {
         uint8_t flags=0,freq=0xFF,request=0,response=0,channel=0;
         Failure failure=Failure::None;
         uint8_t optionalConfig=0xFF;
-        bool rxKnown=false;
+        bool rxKnown=false,assignable=false;
         const char *metadata() const {return flags&Active2b?"fresh_2b":flags&Directed2f?"directed_2f":flags&Persisted?"flash":"unknown";}
     };
     // Eight simultaneous nodes fit the smallest production target; overflow is explicit.
     static constexpr uint8_t Capacity=8;
     Node nodes[Capacity]{};
-    uint32_t session=0,activePackets=0,duplicates=0,overflow=0;
+    uint32_t session=0,activePackets=0,duplicates=0,overflow=0,originalHub=0,extractionNode=0;
     uint16_t candidateSkipped=0,candidateTimeout=0;
     uint8_t count=0;
     void reset(){uint32_t next=session+1;*this=IoHomeDiscoveryEvidence();session=next?next:1;}

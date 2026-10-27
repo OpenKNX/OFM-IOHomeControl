@@ -40,7 +40,7 @@ struct IoHomecontrol {
  void onDiagnosticFrame(const IoHomeFrame &,uint8_t,int16_t,uint32_t);
 };
 '''
-checks=r'''int main(){IoHomecontrol m;auto *p=m.mDiscoveryEvidence.touch(0x155D81,1);
+checks=r'''int main(){IoHomecontrol m;m.mDiscoveryEvidence.originalHub=0xE2D1FF;auto *p=m.mDiscoveryEvidence.touch(0x155D81,1);
  p->flags=IoHomeDiscoveryEvidence::PassiveAuth|IoHomeDiscoveryEvidence::Persisted;
  IoHomeFrame f;f.src=0x155D81;f.dst=0xE2D1FF;m.onDiagnosticFrame(f,2,-73,100);
  assert(p->flags&IoHomeDiscoveryEvidence::Passive2f);assert(!(p->flags&IoHomeDiscoveryEvidence::Directed2f));
@@ -53,3 +53,8 @@ with tempfile.TemporaryDirectory() as d:
  p=Path(d)/'production.cpp';p.write_text(harness+production+checks);b=Path(d)/'production'
  subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-I'+str(root/'src'),str(p),'-o',str(b)],check=True);subprocess.run([str(b)],check=True)
 print('Production observation hook keeps foreign hub, directed response and authentication proof independent')
+
+# Finalizing an import must not erase the only diagnostic record of passive nodes.
+reset=source[source.index('void IoHomecontrol::resetKeyImportWorkflow()'):source.index('IoHomecontrol::KeyImportDevice *IoHomecontrol::findKeyImportDevice')]
+assert 'mDiscoveryEvidence.reset' not in reset
+assert 'mDiscoveryEvidence.reset();\n            mKeyImportPhase = KeyImportPhase::Extracting' in source

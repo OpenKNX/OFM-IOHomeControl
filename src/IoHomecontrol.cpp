@@ -733,7 +733,7 @@ void IoHomecontrol::logDiagnosticHeader()
     logInfoP("IOHC_SETTINGS discovery_command=%u destination=%u ack=%u lowPower=%u preamble=%u listenChannels=%u scanCadenceUs=%lu",unsigned(settings.command),unsigned(settings.destination),unsigned(settings.ack),unsigned(settings.lowPower),unsigned(settings.preamble),unsigned(settings.listenChannels),(unsigned long)mController.diagnosticScanCadenceUs());
     logInfoP("IOHC_DIAG session=%lu boot=%lu ofm=%s MCU=%s RF=%s flash_schema=18 gateway=%06X key_present=%u original_hub=%06X extraction=%06X import_ids=session-only authorization=unknown listen_override_ms=%u preamble=%u",
         (unsigned long)mDiscoveryEvidence.session,(unsigned long)mCommissioningBootId,version().c_str(),mcu,rf,
-        mController.getOwnNodeId(),keyHasNonZeroByte(mController.getSystemKey()),mKeyImportHubNodeId,mKeyImportExtractionNodeId,
+        mController.getOwnNodeId(),keyHasNonZeroByte(mController.getSystemKey()),mDiscoveryEvidence.originalHub,mDiscoveryEvidence.extractionNode,
         mController.diagnosticDiscoveryListenMs(),mController.normal2WStartPreamble());
 }
 
@@ -751,9 +751,9 @@ void IoHomecontrol::onDiagnosticFrame(const IoHomeFrame &frame,uint8_t freq,int1
     if(frame.commandId==IoHomeCommand::StatusUpdate)p->flags|=128;
     if(frame.commandId==IoHomeCommand::Discover2EResponse) {
         if(dst==mController.getOwnNodeId()&&mDiagnosticVerifyNode==src)p->flags|=IoHomeDiscoveryEvidence::Directed2f;
-        else if(dst==mKeyImportHubNodeId&&mKeyImportHubNodeId)p->flags|=IoHomeDiscoveryEvidence::Passive2f;
+        else if(dst==mDiscoveryEvidence.originalHub&&mDiscoveryEvidence.originalHub)p->flags|=IoHomeDiscoveryEvidence::Passive2f;
     }
-    if(frame.commandId==IoHomeCommand::ChallengeRequest&&dst==mKeyImportHubNodeId&&mKeyImportHubNodeId)
+    if(frame.commandId==IoHomeCommand::ChallengeRequest&&dst==mDiscoveryEvidence.originalHub&&mDiscoveryEvidence.originalHub)
         p->flags|=IoHomeDiscoveryEvidence::PassiveChallenge;
 }
 
@@ -773,16 +773,19 @@ void IoHomecontrol::logDiagnosticSummary()
         if(!p)p=mDiscoveryEvidence.touch(mChannels[c]->getNodeId(),millis());
         if(p){p->flags|=IoHomeDiscoveryEvidence::Persisted;p->channel=c+1;}
     }
+    unsigned assignable=0;
     for(uint8_t i=0;i<mDiscoveryEvidence.count;i++) {
-        const auto &p=mDiscoveryEvidence.nodes[i];const auto *device=findKeyImportDevice(p.node);
+        auto &p=mDiscoveryEvidence.nodes[i];const auto *device=findKeyImportDevice(p.node);
+        if(device&&device->valid)p.assignable=true;
+        if(p.assignable)++assignable;
         logInfoP("IOHC_NODE session=%lu node=%06X passive_2f=%u passive_challenge=%u passive_auth=%u active_2b=%u directed_2f=%u directed_auth=%u flash=%u fw_channel=%u ets_assigned=unknown ets_active=unknown metadata=%s firstMs=%lu lastMs=%lu src=%06X dst=%06X request=%02X response=%02X rx_known=%u freqIdx=%u rssi=%d correlated=%u lastFailure=%u assignable=%u seen71=%u config6f=%u (255=unknown; 0=not_attempted; 1=accepted70; 2=rejectedFE; 3=timeout; 4=tx_failure)",
             (unsigned long)mDiscoveryEvidence.session,p.node,!!(p.flags&1),!!(p.flags&2),!!(p.flags&4),!!(p.flags&8),!!(p.flags&16),!!(p.flags&32),!!(p.flags&64),p.channel,p.metadata(),
             (unsigned long)p.firstSeen,(unsigned long)p.lastSeen,p.src,p.dst,p.request,p.response,p.rxKnown,p.freq,p.rssi,
-            !!(p.flags&(IoHomeDiscoveryEvidence::Active2b|IoHomeDiscoveryEvidence::DirectedAuth)),unsigned(p.failure),device&&device->valid,!!(p.flags&128),p.optionalConfig);
+            !!(p.flags&(IoHomeDiscoveryEvidence::Active2b|IoHomeDiscoveryEvidence::DirectedAuth)),unsigned(p.failure),p.assignable,!!(p.flags&128),p.optionalConfig);
     }
-    logInfoP("IOHC_SUMMARY session=%lu passiveUnique=%u passiveAuthUnique=%u activeUnique=%u activePackets=%lu directedUnique=%u persistedUnique=%u assignableUnique=%u duplicates=%lu overflow=%lu counters=since-session; ETS state requires project readback; flash status is stored, not live RF",
+    logInfoP("IOHC_SUMMARY session=%lu passiveUnique=%u passiveAuthUnique=%u activeUnique=%u activePackets=%lu directedUnique=%u persistedUnique=%u assignableUnique=%u duplicates=%lu overflow=%lu counters=since_last_scan_or_extraction; inherited_evidence_retained_across_verify; ETS state requires project readback; flash status is stored, not live RF",
         (unsigned long)mDiscoveryEvidence.session,mDiscoveryEvidence.unique(1),mDiscoveryEvidence.unique(4),mDiscoveryEvidence.unique(8),(unsigned long)mDiscoveryEvidence.activePackets,
-        mDiscoveryEvidence.unique(16),mDiscoveryEvidence.unique(64),mKeyImportDeviceCount,(unsigned long)mDiscoveryEvidence.duplicates,(unsigned long)mDiscoveryEvidence.overflow);
+        mDiscoveryEvidence.unique(16),mDiscoveryEvidence.unique(64),assignable,(unsigned long)mDiscoveryEvidence.duplicates,(unsigned long)mDiscoveryEvidence.overflow);
     const auto health=mController.radioHealth();const auto &rx=mController.rxScanMeasurements();
     logInfoP("IOHC_COUNTERS radioTxDone=%lu rxParsed=%lu rxCrcBad=%lu rxReadFailed=%lu rxOverflow=%lu parseRejected=%lu candidateSkipped=%u candidateTimeout=%u RF=since_boot candidates=since_session wrongDestination=RF_trace_wrong_peer (not equivalent) dropped=trace_overwrite_events",
         (unsigned long)health.txDoneCount,(unsigned long)rx.captures,(unsigned long)health.crcErrorCount,(unsigned long)health.rxReadFailCount,
@@ -803,6 +806,8 @@ void IoHomecontrol::onPassiveKeyCaptured(const IoHomeController::PassiveKeyResul
         if (mKeyImportHubNodeId == 0)
             mKeyImportHubNodeId = iResult.nodeId;
         mKeyImportExtractionNodeId = mController.keyExtractControllerNodeId();
+        mDiscoveryEvidence.originalHub=mKeyImportHubNodeId;
+        mDiscoveryEvidence.extractionNode=mKeyImportExtractionNodeId;
         mKeyImportPhase = KeyImportPhase::Verifying;
         verifyPassiveCandidates();
         logInfoP("ETS key import: captured network key; hub=0x%06X extractionDevice=0x%06X",
@@ -817,7 +822,6 @@ void IoHomecontrol::onPassiveKeyCaptured(const IoHomeController::PassiveKeyResul
 
 void IoHomecontrol::resetKeyImportWorkflow()
 {
-    mDiscoveryEvidence.reset();
     mDiagnosticScan=false;
     mKeyImportPhase = KeyImportPhase::Idle;
     mPendingImportMetadataRetry = false;
@@ -1150,7 +1154,7 @@ void IoHomecontrol::processKeyImportWorkflow()
             ++mDiscoveryEvidence.candidateSkipped;
             logInfoP("IOHC_CANDIDATE session=%lu node=%06X action=skip reason=%s diagnostic_verify_allowed=1",
                 (unsigned long)mDiscoveryEvidence.session,node,
-                device->speResponseSeen?"already_active_2b":device->directedVerified?"already_directed_verified":"already_in_inventory_unverified");
+                (mDiscoveryEvidence.find(node)&&(mDiscoveryEvidence.find(node)->flags&IoHomeDiscoveryEvidence::Active2b))?"already_active_2b":device->directedVerified?"already_directed_verified":"already_in_inventory_unverified");
             ++mKeyImportDirectedCandidateIndex;
         }
 
@@ -3492,6 +3496,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         if (resultData[0] == 0x00)
         {
             resetKeyImportWorkflow();
+            mDiscoveryEvidence.reset();
             mKeyImportPhase = KeyImportPhase::Extracting;
             mCommissioningJob.begin(IoHomeCommissioningJob::Owner::Import,0xFF,millis(),360000);
             logInfoP("ETS: active 2W key extraction armed");
@@ -3592,6 +3597,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         if (lCandidateCount > mNumChannels || length < static_cast<uint8_t>(2 + lCandidateCount))
             break;
 
+        logInfoP("IOHC_ASSIGN_BATCH session=%lu api=1C results=%u candidate_channels=%u",(unsigned long)mDiscoveryEvidence.session,mKeyImportDeviceCount,lCandidateCount);
         resultData[0] = 0x00;
         resultData[1] = mKeyImportDeviceCount;
         resultLength = static_cast<uint8_t>(2 + (mKeyImportDeviceCount * 2));
@@ -3631,6 +3637,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
                 }
             }
 
+            logInfoP("IOHC_ASSIGN session=%lu api=1C index=%u node=%06X fw_channel=%u result=%s ETS_active=unknown",(unsigned long)mDiscoveryEvidence.session,lResultIndex,lDevice.nodeId,lChannelIndex==0xFF?0:lChannelIndex+1,lStatus==0?"new":lStatus==1?"already_assigned":lStatus==2?"no_free_channel":"invalid_or_conflict");
             resultData[2 + (lResultIndex * 2)] = lStatus;
             resultData[3 + (lResultIndex * 2)] = lChannelIndex;
         }
@@ -3660,6 +3667,7 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         openknx.flash.save(true);
         resultData[0] = 0x00;
         resultLength = 1;
+        logDiagnosticSummary(); // retain evidence across successful import finalization
         resetKeyImportWorkflow();
         if (lRetryMetadata)
         {
