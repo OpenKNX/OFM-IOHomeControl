@@ -1130,7 +1130,7 @@ public:
     uint32_t sessionStartMs=0,rxReadUs=0,preambleUs=0,syncUs=0;
     uint16_t preambleBytes=0,irq=0,deadlineMs=0;
     uint8_t ctrl0=0,ctrl1=0,command=0,length=0,state=0,attempt=0,lbtAttempts=0;
-    int16_t lbtRssi=0;
+    int16_t lbtRssi=0,rxRssi=0;
     bool rxTimestampValid=false,activityTimestampValid=false,crcChecked=false,crcValid=false,lbtBypassed=false;
     TwoWayWakeBelief belief = TwoWayWakeBelief::Asleep;
     TwoWayWakeBeliefUse beliefUse = TwoWayWakeBeliefUse::NotLowPower;
@@ -1154,6 +1154,11 @@ public:
   const TwoWayTracePoint &twoWayTracePoint(uint64_t id) const { return mTwoWayTrace[(id-1)%kTwoWayTraceCapacity]; }
   uint64_t twoWayTraceCount() const { return mTwoWayTraceCount; }
   void printTwoWayTrace() const;
+  void configureDiagnosticStream(bool enabled,uint32_t node,uint8_t command) {
+    mDiagnosticStream=enabled;mDiagnosticStreamNode=node;mDiagnosticStreamCommand=command;mDiagnosticStreamCursor=mTwoWayTraceCount;
+  }
+  void streamDiagnosticTrace();
+  void setReadOnlyDiagnosticRf(bool enabled) {mReadOnlyDiagnosticRf=enabled;}
   void clearTwoWayTrace();
   void printTwoWayAttemptCsv() const;
   struct RfCounters {
@@ -1340,6 +1345,10 @@ private:
   TwoWayTracePoint mTwoWayTrace[kTwoWayTraceCapacity]{};
   TwoWayOutcome mLastTwoWayOutcome;
   uint64_t mTwoWayTraceCount=0,mTwoWayTraceFirst=1;
+  uint64_t mDiagnosticStreamCursor=0;
+  uint32_t mDiagnosticStreamNode=0;
+  uint8_t mDiagnosticStreamCommand=0xFF;
+  bool mDiagnosticStream=false,mReadOnlyDiagnosticRf=false;
   uint64_t mTwoWayTxId=0,mTwoWaySessionId=0;
   RfCounters mRfCounters;
   char mAttemptTxPayload[129]{};

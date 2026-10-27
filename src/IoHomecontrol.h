@@ -4,6 +4,7 @@
 #include "OpenKNX.h"
 #include "controller/IoHomeController.h"
 #include "protocol/IoHomePassiveAuth.h"
+#include "protocol/IoHomeDiscoveryEvidence.h"
 #include "protocol/IoHomeCommissioningJob.h"
 #include "protocol/IoHomeAssignmentReceipt.h"
 #include "protocol/IoHomeNetworkStore.h"
@@ -60,7 +61,7 @@ public:
   bool restorePower() override;
 
   IoHomeController &controller();
-  bool managementRequestsAllowed() const {return !mCommissioningJob.active()&&!mMetadataRefreshActive&&!mRadioDiagnostic.active;}
+  bool managementRequestsAllowed() const {return !mCommissioningJob.active()&&!mMetadataRefreshActive&&!mRadioDiagnostic.active&&!mDiagnosticScan&&!mDiagnosticVerifyNode;}
   const char *batteryDiagnosticBlockReason(IoHomecontrolChannel *channel) const;
   void serviceBatteryDiagnostic();
   struct PendingBatteryDiagnostic {
@@ -84,6 +85,11 @@ public:
                                uint8_t iFrequencyIndex, int16_t iRssi,
                                uint32_t iTimestampMs);
   bool hasKeyImportDevicesMissingSpeMetadata() const;
+  void onDiagnosticFrame(const IoHomeFrame &, uint8_t, int16_t, uint32_t);
+  void onDiagnosticConfig(uint32_t node, uint8_t result);
+  bool diagnosticScanActive() const {return mDiagnosticScan;}
+  uint32_t diagnosticSession() const {return mDiscoveryEvidence.session;}
+
   void onAuthenticatedDirectedDiscovery(uint32_t iNodeId);
 
 private:
@@ -208,6 +214,11 @@ private:
   uint16_t mKeyImportDirectedSuccesses = 0;
   uint16_t mKeyImportDirectedFailures = 0;
 
+  IoHomeDiscoveryEvidence mDiscoveryEvidence{};
+  uint32_t mDiagnosticVerifyNode=0;
+  bool mDiagnosticScan=false;
+  void logDiagnosticSummary();
+  void logDiagnosticHeader();
   void resetKeyImportWorkflow();
   void processKeyImportWorkflow();
   KeyImportDevice *findKeyImportDevice(uint32_t iNodeId);

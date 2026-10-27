@@ -46,7 +46,7 @@ $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
 $(SX1262_PHY_TARGET): $(SX1262_PHY_SRCS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(SX1262_PHY_SRCS)
 
-run: check-captured-motion-mutations check-original-captures check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
+run: check-discovery-evidence check-captured-motion-mutations check-original-captures check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
 
 check-protocol: $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite protocol
@@ -149,3 +149,8 @@ check-original-captures: $(CORPUS_GENERATED)
 .PHONY: check-captured-motion-mutations
 check-captured-motion-mutations: $(PROTOCOL_TARGET)
 	CXX="$(CXX)" $(PYTHON) test_original_capture_mutation.py
+
+.PHONY: check-discovery-evidence
+check-discovery-evidence:
+	$(PYTHON) test_discovery_evidence.py
+	$(PYTHON) test_diagnostic_commands.py

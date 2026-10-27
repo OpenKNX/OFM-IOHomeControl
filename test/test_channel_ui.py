@@ -318,7 +318,7 @@ class ChannelUiTest(unittest.TestCase):
             "void IoHomeController::processPendingDiscoveryResponses()", 1
         )[1].split("void IoHomeController::", 1)[0]
         self.assertIn(
-            "captureProtocolIdentity(pairingRemote?nullptr:channelForNode(lPending.source), lPending.frame,",
+            "captureProtocolIdentity(pairingRemote || (mModule && mModule->diagnosticScanActive())?nullptr:channelForNode(lPending.source), lPending.frame,",
             pending_discovery_handler,
         )
         self.assertIn(

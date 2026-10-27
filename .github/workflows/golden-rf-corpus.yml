@@ -83,3 +83,5 @@ jobs:
         run: make -C test check-wake-production
       - name: Reject previous motion/value behavior with original captures
         run: make -C test check-captured-motion-mutations
+      - name: Validate three-shutter diagnostic evidence and read-only console operations
+        run: make -C test check-discovery-evidence

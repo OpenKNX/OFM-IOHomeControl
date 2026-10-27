@@ -23384,3 +23384,32 @@ TEST(controller_original_klr_same_channel_returns_keep_pending_owners_distinct)
     ASSERT_EQ(module.testDiscoveryResponseNode(1),0x562292U);
     ASSERT_EQ(channel.getNodeId(),0U);ASSERT_TRUE(!channel.isPaired());
 }
+
+
+TEST(controller_read_only_diagnostics_cannot_bypass_duty_or_busy_channel)
+{
+    const uint8_t key[16]={1};
+    for(bool quota:{false,true}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+        c.testSimulationUnlimited();c.setReadOnlyDiagnosticRf(true);
+        c.hostRadioPolicy().configure(IoHomeRadioPolicy::Tx::Forced,0);
+        if(quota)c.testChargeDuty(IOHC_FREQ_2,3600);
+        else c.radio().testInjectRxDiagnostics(false,false,false,0,0,-20);
+        IoHomeFrame f;f.init();f.setStart2W();f.setSrcNode(0xE4E61D);f.setDestNode(0x155D81);
+        f.commandId=IoHomeCommand::Discover2ERequest;f.data[0]=2;f.dataLen=1;
+        uint8_t wire[64];const auto len=f.serialize(wire,sizeof(wire));
+        const auto result=c.testHelperTransmit(wire,len,1024,true);
+        ASSERT_EQ(result,quota?RadioError::DutyCycleExceeded:RadioError::Busy);
+        ASSERT_EQ(c.radio().testTransmitCount(),0U);ASSERT_EQ(c.testTxAirtimeAccum(0),quota?3600U:0U);
+    }
+}
+TEST(protocol_status71_optional_commander_boundaries_never_use_byte1)
+{
+    IoHomeFrame f;f.init();f.commandId=IoHomeCommand::StatusUpdate;
+    f.data[1]=2;f.data[11]=0xE2;f.data[12]=0xD1;f.data[13]=0xFF;f.data[14]=9;
+    for(unsigned n=0;n<15;n++){f.dataLen=n;ASSERT_TRUE(!ioHomeDecodeLastCommand(f).valid);}
+    f.dataLen=15;auto record=ioHomeDecodeLastCommand(f);
+    ASSERT_TRUE(record.valid);ASSERT_EQ(record.node,0xE2D1FFU);ASSERT_EQ(record.originator,9U);
+    f.data[11]=f.data[12]=f.data[13]=0;ASSERT_TRUE(!ioHomeDecodeLastCommand(f).valid);
+}

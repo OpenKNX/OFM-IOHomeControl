@@ -749,6 +749,10 @@ public:
   bool hasKeyImportDevicesMissingSpeMetadata() const { return mMissingSpeMetadata; }
   void testSetMissingSpeMetadata(bool iMissing) { mMissingSpeMetadata = iMissing; }
 
+  bool diagnosticScanActive() const {return false;}
+  uint32_t diagnosticSession() const {return 0;}
+  void onDiagnosticFrame(const IoHomeFrame &,uint8_t,int16_t,uint32_t) {}
+  void onDiagnosticConfig(uint32_t,uint8_t) {}
   void onKeyImportPassiveFrame(const IoHomeFrame &iFrame,
                                uint8_t, int16_t, uint32_t)
   {
