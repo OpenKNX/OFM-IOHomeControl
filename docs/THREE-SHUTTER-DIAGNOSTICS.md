@@ -81,7 +81,9 @@ not authorize our gateway. Active counts count unique accepted 2B sources and
 packets separately. Normal candidate skips report their exact inventory/evidence
 reason and remain separate from explicitly requested diagnostic verification.
 
-The ledger holds eight nodes (under 300 bytes) for the smallest REG1-IP target;
+For dual-controller isolation and updated trace semantics, see [Dual-controller diagnostics](DUAL-CONTROLLER-DIAGNOSTICS.md).
+
+The ledger holds eight nodes (at most 336 bytes) for the smallest REG1-IP target;
 `overflow` makes truncation explicit. It retains evidence when an import completes.
 A targeted verification increments the operation session but retains preceding
 passive/flash evidence; counters are labeled since the last scan/extraction reset.
