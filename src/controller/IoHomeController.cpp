@@ -4605,6 +4605,15 @@ void IoHomeController::beginExchangeDiagnosticsWindow()
 void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntry,
                                                    IoHomeCommandExchangeResult iResult)
 {
+    // Local admission/driver failures are not evidence of a missing peer reply.
+    // Requeue within the existing epoch without consuming moving grace/backoff.
+    if(iEntry.ownedStatusPoll&&iEntry.trackedStatusPoll&&iEntry.sourceChannelIndex<IOHC_ChannelCount&&
+       (iResult==IoHomeCommandExchangeResult::MediaAccessFailed||iResult==IoHomeCommandExchangeResult::FailedBeforeAuthentication)) {
+        auto *ch=mModule?mModule->getChannel(iEntry.sourceChannelIndex):nullptr;
+        if(ch&&ch->isPaired()&&ch->getNodeId()==iEntry.destNodeId&&ch->statusPollEpoch()==iEntry.statusPollEpoch&&
+           ch->productContextRevision()==iEntry.productContextRevision&&!std::memcmp(ch->getEncryptionKey(),iEntry.managementKey,16))
+            ch->onStatusPollDeferred(statusPollRetryAfterMs(),mLastTxDutyDenied||iResult==IoHomeCommandExchangeResult::MediaAccessFailed);
+    }
     if (iEntry.command == IoHomeCommand::Execute) logAttemptCounters("MoveDiagCounters",mExchangeDiagnostics.counters);
     finishAtlanticProbe(iEntry,iResult);
     finishHeating(iEntry,iResult);
@@ -8296,7 +8305,6 @@ void IoHomeController::processTxInProgress()
         if (lRxErr != RadioError::None)
         {
             notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
-            notifyTrackedStatusPollFailure(mModule, mCurrentCmd, mCurrentCmd.hadAuthenticatedAccept || mSawChallenge);
             mCurrentCmd.active = false;
             mState = ControllerState::Idle;
             return;
@@ -8322,7 +8330,6 @@ void IoHomeController::processTxInProgress()
         recordTwoWayTrace("tx_timeout", mQueuedTxFrame, mQueuedTxWireLength);
         mRadio.standby();
         notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
-        notifyTrackedStatusPollFailure(mModule, mCurrentCmd, mCurrentCmd.hadAuthenticatedAccept || mSawChallenge);
         mCurrentCmd.active = false;
         mState = ControllerState::Idle;
     }
@@ -8854,7 +8861,6 @@ void IoHomeController::processResponse()
             notifyCommandExchangeResult(lFailedCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
             mCurrentCmd.active = false;
             mState = ControllerState::Idle;
-            notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
             return;
         }
 
@@ -8877,7 +8883,6 @@ void IoHomeController::processResponse()
                 notifyCommandExchangeResult(lFailedCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
                 mCurrentCmd.active = false;
                 mState = ControllerState::Idle;
-                notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
                 return;
             }
             tracePairDiagnosticTx2W(lFrame, lPreamble);
@@ -8907,7 +8912,6 @@ void IoHomeController::processResponse()
                 notifyCommandExchangeResult(lFailedCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
                 mCurrentCmd.active = false;
                 mState = ControllerState::Idle;
-                notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
             }
         }
         else
@@ -8916,7 +8920,6 @@ void IoHomeController::processResponse()
             notifyCommandExchangeResult(lFailedCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
             mCurrentCmd.active = false;
             mState = ControllerState::Idle;
-            notifyTrackedStatusPollFailure(mModule, lFailedCmd, true);
         }
         return;
     }

@@ -10,6 +10,7 @@ def method(source,signature):
     return source[start:end]
 channel=(root/'src/IoHomecontrolChannel.cpp').read_text()
 methods='\n'.join(method(channel,signature) for signature in [
+    'void IoHomecontrolChannel::onStatusPollDeferred(',
     'void IoHomecontrolChannel::onEstimate(',
     'void IoHomecontrolChannel::onPositionFeedback(',
     'void IoHomecontrolChannel::onTargetPositionFeedback(',
@@ -86,6 +87,7 @@ struct IoHomecontrolChannel {
  bool isTiltCapableDeviceType(){return false;}
  bool requestStatus(bool);
  void onStatusPollFailed(bool,bool=true);
+ void onStatusPollDeferred(uint32_t,bool);
  void clearStopTravelSnapshot(){snapshot=false;}
  void restoreStopTravelSnapshot(){++restores;}
  void scheduleStatusPoll(unsigned){++polls;}
@@ -98,6 +100,14 @@ struct IoHomecontrolChannel {
 };
 '''
 tests=r'''int main(){
+ {
+  IoHomecontrolChannel c;c.mIsMoving=true;c.mTrustedPollMoving=true;c.mMovingPollMisses=1;c.mPollTrackingDeadlineMs=now+600000;
+  const auto epoch=c.mPollTrackingDeadlineMs;c.onStatusPollDeferred(1000,true);
+  assert(c.mNextStatusPollMs==now+1250&&c.mMovingPollMisses==1&&!c.mAuthPollFailures&&!c.mStatusPollFailures&&c.mPollTrackingDeadlineMs==epoch);
+  c.lowPower=true;c.onStatusPollDeferred(1,true);assert(c.mNextStatusPollMs==now+10250);
+  c.mPollTrackingDeadlineMs=now+1000;c.onStatusPollDeferred(1000,true);assert(!c.mNextStatusPollMs&&!c.mSingleFollowUpPollPending);
+ }
+
  {
   IoHomecontrolChannel c;c.mIsMoving=true;c.mPollTrackingDeadlineMs=now+600000;c.mTrustedPollMoving=true;
   const auto deadline=c.mPollTrackingDeadlineMs;

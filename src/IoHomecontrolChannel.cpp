@@ -1185,6 +1185,22 @@ void IoHomecontrolChannel::onStatusExpected()
     logDebugP("Device will auto-send status update");
 }
 
+void IoHomecontrolChannel::onStatusPollDeferred(uint32_t iDelayMs,bool iRfDenied)
+{
+    const uint32_t now=millis();
+    if(!mPaired||!mPollTrackingDeadlineMs)return;
+    if(timeReached(now,mPollTrackingDeadlineMs)){clearStatusPollTracking();return;}
+    uint32_t delay=iDelayMs==UINT32_MAX?60000U:iDelayMs;
+    if(delay<1000U)delay=1000U;
+    if(effectiveLowPower2W()&&delay<kLowPowerTrackedPollMinMs)delay=kLowPowerTrackedPollMinMs;
+    delay+=uint32_t(_channelIndex+1)*250U;
+    const uint32_t at=now+delay;
+    mSingleFollowUpPollPending=!timeReached(at,mPollTrackingDeadlineMs);
+    mNextStatusPollMs=mSingleFollowUpPollPending?at:0;
+    logInfoP("tracked_poll=1 channel=%u RF_denied=%u local_fault=%u peer_miss=0 moving_grace=0 next_poll_ms=%lu deadline=%lu",
+        unsigned(_channelIndex+1),iRfDenied,!iRfDenied,(unsigned long)mNextStatusPollMs,(unsigned long)mPollTrackingDeadlineMs);
+}
+
 void IoHomecontrolChannel::onStatusPollFailed(bool iAfterChallenge, bool iSingleAttempt)
 {
     const uint32_t lNow = millis();

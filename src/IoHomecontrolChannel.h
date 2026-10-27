@@ -114,6 +114,7 @@ public:
   void onEstimate(uint16_t iSeconds);
   void onStatusExpected();
   void onStatusPollFailed(bool iAfterChallenge, bool iSingleAttempt=true);
+  void onStatusPollDeferred(uint32_t iDelayMs, bool iRfDenied);
   uint32_t statusPollEpoch() const { return mPollTrackingDeadlineMs; }
   void onCommandExchangeResult(IoHomeCommand iCommand, uint8_t iParam,
                                IoHomeCommandExchangeResult iResult);

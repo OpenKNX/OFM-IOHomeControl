@@ -16771,7 +16771,7 @@ TEST(controller_general_info2_response_uses_selector_before_tilt_decode)
     }
 }
 
-TEST(controller_status_poll_failure_after_challenge_notifies_channel)
+TEST(controller_status_poll_local_auth_tx_failure_defers_without_peer_miss)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
     const uint32_t lDeviceNodeId = 0x7E9E6E;
@@ -16802,10 +16802,10 @@ TEST(controller_status_poll_failure_after_challenge_notifies_channel)
     lController.radio().testSetNextTransmitError(RadioError::HardwareError);
     ASSERT_TRUE(queueControllerResponse(lController, lChallengeRequest));
 
-    ASSERT_TRUE(lChannel.testHasStatusPollFailure());
-    ASSERT_TRUE(lChannel.testStatusPollFailureAfterChallenge());
-    ASSERT_EQ(lChannel.testStatusPollFailureCount(), 1);
-    ASSERT_EQ(lChannel.testAuthPollFailureCount(), 1);
+    ASSERT_TRUE(!lChannel.testHasStatusPollFailure());
+    ASSERT_EQ(lChannel.mPollDeferrals,1U);
+    ASSERT_EQ(lChannel.testStatusPollFailureCount(), 0);
+    ASSERT_EQ(lChannel.testAuthPollFailureCount(), 0);
     ASSERT_EQ(lChannel.testDirectPollFailureCount(), 0);
     ASSERT_EQ(lController.state(), ControllerState::Idle);
 }
@@ -19291,7 +19291,7 @@ int main()
     RUN(controller_status_update_requires_11_bytes_for_position);
     RUN(controller_private_response_requires_8_bytes_for_position);
     RUN(controller_general_info2_response_uses_selector_before_tilt_decode);
-    RUN(controller_status_poll_failure_after_challenge_notifies_channel);
+    RUN(controller_status_poll_local_auth_tx_failure_defers_without_peer_miss);
     RUN(controller_1w_key_frame_uses_profile_manufacturer_without_hmac);
     RUN(controller_2w_command_defaults_to_always_alive);
     RUN(controller_2w_command_can_clear_low_power_for_mains_device);
@@ -23431,4 +23431,25 @@ TEST(controller_remaining_time_only_owned_correlated_main_info_poll)
         ASSERT_EQ(ch.testHasEstimate(),mode==0);
         if(mode==0)ASSERT_EQ(ch.testEstimate(),raw);
     }
+}
+
+
+TEST(controller_tracked_poll_admission_failure_is_deferred_without_peer_miss)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ASSERT_TRUE(c.sendStatusPoll(&ch,true));c.testChargeDuty(IOHC_FREQ_2,3600);
+    for(unsigned n=0;n<8;n++)c.loop();
+    ASSERT_EQ(c.radio().testTransmitCount(),0U);ASSERT_EQ(ch.testStatusPollFailureCount(),0U);
+    ASSERT_EQ(ch.mPollDeferrals,1U);ASSERT_TRUE(ch.mPollRfDenied);
+}
+TEST(controller_tracked_poll_lost_authenticated_final_is_peer_miss)
+{
+    const uint8_t key[16]={1},challenge[6]={1,2,3,4,5,6};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ASSERT_TRUE(c.sendStatusPoll(&ch,true));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));c.loop();
+    IoHomeFrame reply;buildPairChallengeRequestFrame(reply,0x123456,0x654321,challenge);ASSERT_TRUE(queueControllerResponse(c,reply));c.loop();
+    ioHomeTestAdvanceMillis(c.lastResponseTimingSample().selectedTimeoutMs+1);c.loop();
+    ASSERT_EQ(ch.testStatusPollFailureCount(),1U);ASSERT_TRUE(ch.testStatusPollFailureAfterChallenge()&&ch.mFailureSingleAttempt);
+    ASSERT_EQ(ch.mPollDeferrals,0U);
 }

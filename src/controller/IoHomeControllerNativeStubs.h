@@ -499,6 +499,8 @@ public:
   void onStatusExpected() { mStatusExpected = true; }
   uint32_t statusPollEpoch() const { return mTestPollEpoch; }
   uint32_t mTestPollEpoch = 600000U;
+  unsigned mPollDeferrals=0;uint32_t mPollDeferredMs=0;bool mPollRfDenied=false;
+  void onStatusPollDeferred(uint32_t delay,bool denied){++mPollDeferrals;mPollDeferredMs=delay;mPollRfDenied=denied;}
   void onStatusPollFailed(bool iAfterChallenge,bool singleAttempt=true)
   {
     mFailureSingleAttempt=singleAttempt;
