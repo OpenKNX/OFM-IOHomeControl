@@ -13,6 +13,7 @@
 #include <cstdint>
 
 #include "test_registry.h"
+#include "protocol/IoHomeRemainingTime.h"
 #include "build/laberning_captures.h"
 
 // Pull in the modules under test
@@ -23417,7 +23418,7 @@ TEST(protocol_status71_optional_commander_boundaries_never_use_byte1)
 TEST(controller_remaining_time_only_owned_correlated_main_info_poll)
 {
     const uint8_t key[16]={1};
-    for(unsigned mode=0;mode<8;mode++)for(uint16_t raw:{uint16_t(1),uint16_t(255),uint16_t(256),uint16_t(0xFFFE),uint16_t(0xFFFF),uint16_t(0)}) {
+    for(unsigned mode=0;mode<10;mode++)for(uint16_t raw:{uint16_t(1),uint16_t(255),uint16_t(256),uint16_t(0xFFFE),uint16_t(0xFFFF),uint16_t(0)}) {
         IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
         initPaired2WControllerForTest(c,m,ch,0x831F2A,0x7E9E6E,key);
         if(mode==1)ASSERT_TRUE(c.sendCommand(0x7E9E6E,key,IoHomeCommand::Execute,50));
@@ -23425,11 +23426,13 @@ TEST(controller_remaining_time_only_owned_correlated_main_info_poll)
         else ASSERT_TRUE(c.sendStatusPoll(&ch,mode!=3));
         IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
         if(mode==6)++ch.mTestPollEpoch;
-        uint8_t data[8]={0,0,0,0,0x10,0,uint8_t(raw>>8),uint8_t(raw)};
+        if(mode==8){const uint8_t changedKey[16]={2};ch.setEncryptionKey(changedKey);}
+        uint8_t data[8]={uint8_t(mode==9?1:0),uint8_t(mode==9?0x80:0),0,0,0x10,0,uint8_t(raw>>8),uint8_t(raw)};
         IoHomeFrame reply;buildPrivateResponseFrame(reply,0x831F2A,mode==7?0x123456:0x7E9E6E,data,mode==4?6:mode==5?7:8);
         ASSERT_TRUE(queueControllerResponse(c,reply));
-        ASSERT_EQ(ch.testHasEstimate(),mode==0);
-        if(mode==0)ASSERT_EQ(ch.testEstimate(),raw);
+        ASSERT_EQ(ch.testHasEstimate(),mode==0||mode==9);
+        if(mode==0||mode==9)ASSERT_EQ(ch.testEstimate(),raw);
+        if(mode==9)ASSERT_TRUE(!ch.testStatusExpected());
     }
 }
 
@@ -23452,4 +23455,16 @@ TEST(controller_tracked_poll_lost_authenticated_final_is_peer_miss)
     ioHomeTestAdvanceMillis(c.lastResponseTimingSample().selectedTimeoutMs+1);c.loop();
     ASSERT_EQ(ch.testStatusPollFailureCount(),1U);ASSERT_TRUE(ch.testStatusPollFailureAfterChallenge()&&ch.mFailureSingleAttempt);
     ASSERT_EQ(ch.mPollDeferrals,0U);
+}
+
+
+TEST(protocol_remaining_time_integer_and_sentinel_boundaries)
+{
+    uint8_t data[8]{};
+    ASSERT_TRUE(IoHomeRemainingTime::decode(nullptr,8).kind==IoHomeRemainingTime::Kind::Unavailable);
+    for(uint8_t len:{uint8_t(0),uint8_t(6),uint8_t(7)})ASSERT_TRUE(IoHomeRemainingTime::decode(data,len).kind==IoHomeRemainingTime::Kind::Unavailable);
+    for(uint16_t value:{uint16_t(0),uint16_t(1),uint16_t(255),uint16_t(256),uint16_t(0xFFFE),uint16_t(0xFFFF)}) {
+        data[6]=value>>8;data[7]=value;const auto result=IoHomeRemainingTime::decode(data,8);
+        ASSERT_EQ(result.raw,value);ASSERT_EQ(result.known(),value>0&&value<0xFFFE);
+    }
 }

@@ -12389,8 +12389,10 @@ void IoHomeController::dispatchRxFrame()
                     const uint8_t lStopStatus[]={0xD2,0,mRxFrame.data[2],mRxFrame.data[3]};
                     dispatchPositionStatus(lCh,lStopStatus,sizeof(lStopStatus),true,0,2);
                 }
-                if (!mTrustRxPosition || !mCorrelatedStatusReply)
+                if (!mTrustRxPosition || !mCorrelatedStatusReply) {
+                    logDebugP("remaining_time source=unsupported layout_available=0 remainingTimeKnown=0");
                     break;
+                }
                 // PrivateResponse (0x04) layout per reference:
                 //   data[0]:    flags (bit 0 = stopped)
                 //   data[1]:    flags (bit 7 = status-expected)
@@ -12398,6 +12400,15 @@ void IoHomeController::dispatchRxFrame()
                 //   data[4:5]:  current position (16-bit BE)
                 //   data[6:7]: remaining seconds, only qualified native main-info status polls
                 //   Minimum 8 bytes for full position+estimate payload
+                // Freeze ownership before STOPPED feedback clears the channel epoch.
+                const bool lRemainingPoll=mTrustRxPosition && mCorrelatedStatusReply &&
+                    mCurrentCmd.active && mCurrentCmd.ownedStatusPoll &&
+                    mCurrentCmd.command==IoHomeCommand::Private && mCurrentCmd.param==3 &&
+                    mCurrentCmd.param2==0xFF && mCurrentCmd.param3==0xFF &&
+                    mCurrentCmd.destNodeId==lSrcNode && lDestNode==mOwnNodeId &&
+                    mCurrentCmd.sourceChannelIndex==i &&
+                    mCurrentCmd.statusPollEpoch==lCh->statusPollEpoch() &&
+                    sampleIdentityMatches(i,lSrcNode,mCurrentCmd.managementKey,mCurrentCmd.productContextRevision);
                 bool lMeasuredStatus=false;
                 if (mTrustRxPosition && mRxFrame.dataLen >= 8)
                 {
@@ -12410,18 +12421,10 @@ void IoHomeController::dispatchRxFrame()
                     lMeasuredStatus=dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 2, 4);
                 }
                 // Status-expected flag
-                if (mRxFrame.dataLen >= 2 && (mRxFrame.data[1] & 0x80))
+                if (mRxFrame.dataLen >= 2 && !(mRxFrame.data[0]&1) && (mRxFrame.data[1] & 0x80))
                     lCh->onStatusExpected();
                 // A length match alone cannot qualify EXECUTE ACKs, tilt/FP probes,
                 // unsolicited updates or another channel's private transaction.
-                const bool lRemainingPoll=mTrustRxPosition && mCorrelatedStatusReply &&
-                    mCurrentCmd.active && mCurrentCmd.ownedStatusPoll &&
-                    mCurrentCmd.command==IoHomeCommand::Private && mCurrentCmd.param==3 &&
-                    mCurrentCmd.param2==0xFF && mCurrentCmd.param3==0xFF &&
-                    mCurrentCmd.destNodeId==lSrcNode && lDestNode==mOwnNodeId &&
-                    mCurrentCmd.sourceChannelIndex==i &&
-                    mCurrentCmd.statusPollEpoch==lCh->statusPollEpoch() &&
-                    sampleIdentityMatches(i,lSrcNode,mCurrentCmd.managementKey,mCurrentCmd.productContextRevision);
                 const auto lRemaining=lRemainingPoll?IoHomeRemainingTime::decode(mRxFrame.data,mRxFrame.dataLen):IoHomeRemainingTime{};
                 logDebugP("remaining_time node=%06X source=%s layout_available=%u rawRemainingTime=%u remainingTimeKnown=%u kind=%u",
                     lSrcNode,lRemainingPoll?"correlated_0x03_status_poll":"unsupported",lRemaining.kind!=IoHomeRemainingTime::Kind::Unavailable,
