@@ -159,6 +159,7 @@ public:
     return lLen;
   }
 
+  bool testRxCrcChecked=false,testRxCrcValid=false,testRxFifoOverrun=false,testRxTruncated=false;
   int16_t lastRssi() const { return mLastRssi; }
 
   bool currentRssi(int16_t &oRssi)

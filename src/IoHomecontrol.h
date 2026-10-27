@@ -89,6 +89,7 @@ public:
   void onDiagnosticConfig(uint32_t node, uint8_t result);
   bool diagnosticScanActive() const {return mDiagnosticScan;}
   uint32_t diagnosticSession() const {return mDiscoveryEvidence.session;}
+  uint32_t diagnosticBootId() const {return mCommissioningBootId;}
 
   void onAuthenticatedDirectedDiscovery(uint32_t iNodeId);
 

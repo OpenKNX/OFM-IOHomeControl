@@ -1535,11 +1535,68 @@ uint32_t IoHomeController::getOwnNodeId() const
 
 void IoHomeController::observeForeignController(uint32_t node)
 {
-    if (node && node == mOwnNodeId && !twoWayIdentityCollision()) {
-        mRfAccessPolicy.off();
-        mIdentityCollisionNode=node;
-        logInfoP("2W identity collision gateway=%06X foreign=%06X; active 2W TX blocked, no automatic NID change",mOwnNodeId,node);
+    if(node&&node==mOwnNodeId&&!twoWayIdentityCollision()) {
+        mRfAccessPolicy.off();mIdentityCollisionNode=node;
+        if(!mCollisionFirst.valid) {
+            mCollisionFirst.valid=true;mCollisionFirst.own=mOwnNodeId;mCollisionFirst.src=node;
+            mCollisionFirst.timeMs=millis();mCollisionFirst.controllerState=uint8_t(mState);
+            mCollisionFirst.boot=mModule?mModule->diagnosticBootId():0;
+            mCollisionFirst.session=mModule?mModule->diagnosticSession():0;
+        }
+        printCollisionFirst(); // explicit known provisioning conflict; PHY provenance remains false
     }
+}
+
+RadioReceiveEvidence IoHomeController::receiveEvidence(uint8_t length) const
+{
+#if defined(RADIO_SX1276) && !defined(TEST_NATIVE)
+    return mRadio.lastReceiveEvidence();
+#else
+    RadioReceiveEvidence e;e.length=length;e.rssiDbm=mRadio.lastRssi();e.irq=mRadio.lastIrqStatus();
+    e.frequencyHz=mCurrentFreqIdx<IOHC_NUM_FREQUENCIES?IOHC_FREQUENCIES[mCurrentFreqIdx]:0;
+    e.readTimestampUs=micros();e.timestampValid=true;e.controllerProtocolByteContract=true;
+#ifdef TEST_NATIVE
+    e.hardwareCrcChecked=mRadio.testRxCrcChecked;e.hardwareCrcValid=mRadio.testRxCrcValid;
+    e.fifoOverrun=mRadio.testRxFifoOverrun;e.truncated=mRadio.testRxTruncated;
+#else
+    // SX1262 readPacket returns a software-CRC validated frame in soft-PHY,
+    // or a hardware CRC/RX_DONE accepted frame. Do not claim unchecked RX valid.
+    e.hardwareCrcEnabled=!mRadio.softwarePhyEnabled();
+    e.hardwareCrcChecked=mRadio.softwarePhyEnabled() || (e.irq&SX1262_IRQ_RX_DONE);
+    e.hardwareCrcValid=e.hardwareCrcChecked && !(e.irq&SX1262_IRQ_CRC_ERR);
+#endif
+    return e;
+#endif
+}
+
+void IoHomeController::observeReceivedIdentity(const IoHomeFrame &frame,const RadioReceiveEvidence &rx,RadioState state)
+{
+    if((frame.ctrlByte0&IOHC_CTRL0_MODE_1W)||frame.getSrcNodeId()!=mOwnNodeId||!mOwnNodeId||twoWayIdentityCollision())return;
+    if(!rx.admissible()||!rx.timestampValid||!rx.controllerProtocolByteContract||!rx.hardwareCrcChecked||!rx.hardwareCrcValid) {
+        logInfoP("IOHC_COLLISION_REJECTED src=%06X reason=unqualified_RX checked=%u valid=%u fifo=%u truncated=%u",frame.getSrcNodeId(),rx.hardwareCrcChecked,rx.hardwareCrcValid,rx.fifoOverrun,rx.truncated);
+        return;
+    }
+    mIdentityCollisionNode=mOwnNodeId;mRfAccessPolicy.off();
+    if(!mCollisionFirst.valid) {
+        auto &p=mCollisionFirst;p.valid=true;p.phyRx=true;p.timeMs=millis();p.own=mOwnNodeId;p.src=frame.getSrcNodeId();p.dst=frame.getDestNodeId();
+        p.command=uint8_t(frame.commandId);p.ctrl0=frame.ctrlByte0;p.ctrl1=frame.ctrlByte1;p.frequency=rx.frequencyHz;p.rssi=rx.rssiDbm;p.length=rx.length;
+        p.irq=rx.irq;p.rxReadUs=rx.readTimestampUs;p.crcChecked=rx.hardwareCrcChecked;p.crcValid=rx.hardwareCrcValid;p.fifoOverrun=rx.fifoOverrun;p.truncated=rx.truncated;
+        p.radioState=uint8_t(state);p.controllerState=uint8_t(mState);p.localTransaction=mTwoWaySessionId;
+        p.recentOwnTx=mAttemptTxDoneValid&&uint32_t(micros()-mAttemptTxDoneUs)<100000U;
+        p.boot=mModule?mModule->diagnosticBootId():0;p.session=mModule?mModule->diagnosticSession():0;
+#if defined(RADIO_SX1262) && !defined(TEST_NATIVE)
+        p.softwarePhy=mRadio.softwarePhyEnabled();
+#endif
+    }
+    printCollisionFirst(); // synchronous once, before the ordinary ring can overwrite this RX
+}
+
+void IoHomeController::printCollisionFirst() const
+{
+    const auto &p=mCollisionFirst;
+    if(!p.valid){logInfoP("IOHC_COLLISION_FIRST available=0 collision=%u",twoWayIdentityCollision());return;}
+    logInfoP("IOHC_COLLISION_FIRST boot=%lu session=%lu ms=%lu own=%06X src=%06X dst=%06X cmd=%02X ctrl=%02X/%02X RF=%lu RSSI=%d crc_checked=%u crc_valid=%u software_phy=%u irq=%04X fifo_overrun=%u truncated=%u len=%u radio_state=%u controller_state=%u recent_own_tx=%u transaction=%llu rx_read_us=%lu is_phy_rx=%u origin=%s immutable=1 action=block_2W_no_autoclear",
+        (unsigned long)p.boot,(unsigned long)p.session,(unsigned long)p.timeMs,p.own,p.src,p.dst,p.command,p.ctrl0,p.ctrl1,(unsigned long)p.frequency,p.rssi,p.crcChecked,p.crcValid,p.softwarePhy,p.irq,p.fifoOverrun,p.truncated,p.length,p.radioState,p.controllerState,p.recentOwnTx,(unsigned long long)p.localTransaction,(unsigned long)p.rxReadUs,p.phyRx,p.phyRx?"rx_observed":"explicit_known_identity_conflict");
 }
 
 void IoHomeController::setSystemKey(const uint8_t *iKey)
@@ -7319,6 +7376,7 @@ void IoHomeController::loop()
     // Check for incoming packets in any state
     if (mRadio.isPacketAvailable())
     {
+        const auto receivedRadioState=mRadio.state();
         uint8_t lLen = mRadio.readPacket(mRxBuffer, sizeof(mRxBuffer));
         mRxRawLen = lLen;
         invalidateImmediateReply(); // a new RX cannot reuse an earlier reply grant
@@ -7337,7 +7395,7 @@ void IoHomeController::loop()
         if (lParsed)
         {
             if (!(mRxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W))
-                observeForeignController(mRxFrame.getSrcNodeId());
+                observeReceivedIdentity(mRxFrame,receiveEvidence(lLen),receivedRadioState);
             recordTwoWayTrace("rx_observed",mRxFrame,lLen);
             if(mModule)mModule->onDiagnosticFrame(mRxFrame,mCurrentFreqIdx,mRadio.lastRssi(),millis());
             ++mRxScanMeasurements.captures;

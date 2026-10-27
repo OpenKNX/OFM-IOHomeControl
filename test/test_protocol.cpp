@@ -23469,3 +23469,19 @@ TEST(protocol_remaining_time_integer_and_sentinel_boundaries)
         ASSERT_EQ(result.raw,value);ASSERT_EQ(result.known(),value>0&&value<0xFFFE);
     }
 }
+
+
+TEST(controller_collision_distinct_AABBCC_and_credible_duplicate_first_evidence)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+    RadioReceiveEvidence e;e.length=12;e.timestampValid=true;e.controllerProtocolByteContract=true;e.hardwareCrcChecked=true;e.hardwareCrcValid=true;e.frequencyHz=868950000;e.rssiDbm=-72;e.irq=4;e.readTimestampUs=123;
+    IoHomeFrame f;f.init();f.setSrcNode(0xAABBCC);f.setDestNode(0x155D81);f.commandId=IoHomeCommand::Private;
+    c.observeReceivedIdentity(f,e,RadioState::Receiving);ASSERT_TRUE(!c.twoWayIdentityCollision());
+    f.setSrcNode(0xE4E61D);
+    for(unsigned mode=0;mode<4;mode++){auto bad=e;if(mode==0)bad.hardwareCrcChecked=false;if(mode==1)bad.hardwareCrcValid=false;if(mode==2)bad.fifoOverrun=true;if(mode==3)bad.timestampValid=false;c.observeReceivedIdentity(f,bad,RadioState::Receiving);ASSERT_TRUE(!c.twoWayIdentityCollision());}
+    c.observeReceivedIdentity(f,e,RadioState::Receiving);ASSERT_TRUE(c.twoWayIdentityCollision());
+    const auto first=c.collisionFirst();ASSERT_TRUE(first.valid&&first.phyRx&&first.crcValid);ASSERT_EQ(first.src,0xE4E61DU);ASSERT_EQ(first.dst,0x155D81U);ASSERT_EQ(first.rxReadUs,123U);
+    e.readTimestampUs=999;c.observeReceivedIdentity(f,e,RadioState::Transmitting);c.clearTwoWayTrace();ASSERT_EQ(c.collisionFirst().rxReadUs,123U);
+    uint8_t wire[32];f.setStart2W();f.dataLen=1;f.data[0]=3;auto len=f.serialize2W(wire,sizeof(wire));ASSERT_EQ(c.testHelperTransmit(wire,len,32,true),RadioError::HardwareError);
+}

@@ -767,6 +767,7 @@ void IoHomecontrol::onDiagnosticConfig(uint32_t node,uint8_t result)
 void IoHomecontrol::logDiagnosticSummary()
 {
     logDiagnosticHeader();
+    mController.printCollisionFirst();
     // Flash knowledge is independent of fresh discovery. No storage or RF writes.
     for(uint8_t c=0;c<mNumChannels;c++)if(mChannels[c]&&mChannels[c]->isPaired()&&!mChannels[c]->is1W()) {
         auto *p=mDiscoveryEvidence.find(mChannels[c]->getNodeId());

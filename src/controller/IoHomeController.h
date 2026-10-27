@@ -15,6 +15,7 @@
 #include "../protocol/IoHomeTransactionTiming.h"
 #include "../protocol/IoHomeLimitation.h"
 #include "../protocol/IoHomeRainLimitation.h"
+#include "../protocol/IoHomeCollisionEvidence.h"
 #include "../protocol/IoHomeSessionPolicy.h"
 #include "../protocol/IoHomeResponseDescriptor.h"
 #include "../radio/Radio.h"
@@ -1165,7 +1166,11 @@ public:
     uint64_t transmittedPackets=0,timeoutAttempts=0,correlatedReplies=0,completedStatusPolls=0,wrongPeerFrames=0;
   };
   const RfCounters &rfCounters() const { return mRfCounters; }
-  void observeForeignController(uint32_t node);
+  void observeForeignController(uint32_t node); // explicit known identity conflict, not an RF snapshot
+  void observeReceivedIdentity(const IoHomeFrame &,const RadioReceiveEvidence &,RadioState);
+  RadioReceiveEvidence receiveEvidence(uint8_t length) const;
+  void printCollisionFirst() const;
+  const IoHomeCollisionEvidence &collisionFirst() const {return mCollisionFirst;}
   bool twoWayIdentityCollision() const { return mIdentityCollisionNode == mOwnNodeId && mOwnNodeId != 0; }
 
   // Set system key (16 bytes AES-128)
@@ -1342,6 +1347,7 @@ private:
   // Own identity
   uint32_t mOwnNodeId;
   uint32_t mIdentityCollisionNode=0;
+  IoHomeCollisionEvidence mCollisionFirst{};
   TwoWayTracePoint mTwoWayTrace[kTwoWayTraceCapacity]{};
   TwoWayOutcome mLastTwoWayOutcome;
   uint64_t mTwoWayTraceCount=0,mTwoWayTraceFirst=1;
