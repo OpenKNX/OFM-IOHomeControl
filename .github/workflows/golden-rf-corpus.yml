@@ -85,3 +85,5 @@ jobs:
         run: make -C test check-captured-motion-mutations
       - name: Validate three-shutter diagnostic evidence and read-only console operations
         run: make -C test check-discovery-evidence
+      - name: Reject remaining-time truncation, unqualified ACKs and position rewrites
+        run: make -C test check-remaining-time-mutations

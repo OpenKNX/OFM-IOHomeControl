@@ -10,6 +10,9 @@ def method(source,signature):
     return source[start:end]
 channel=(root/'src/IoHomecontrolChannel.cpp').read_text()
 methods='\n'.join(method(channel,signature) for signature in [
+    'void IoHomecontrolChannel::setNodeId(',
+    'void IoHomecontrolChannel::setEncryptionKey(',
+    'void IoHomecontrolChannel::startStatusPollTracking(',
     'void IoHomecontrolChannel::onStatusPollDeferred(',
     'void IoHomecontrolChannel::onEstimate(',
     'void IoHomecontrolChannel::onPositionFeedback(',
@@ -64,6 +67,9 @@ struct IoHomecontrolChannel {
  void stopTravelEstimation(bool);
  float staleEstimate=-1;float estimateCurrentPosition(){return staleEstimate>=0?staleEstimate:mCurrentPosition;}
  void onEstimate(uint16_t);
+ void setNodeId(uint32_t);void setEncryptionKey(const uint8_t*);void startStatusPollTracking(uint32_t);
+ void invalidateHeatingFeedback(){}
+ struct {void bind(uint32_t,const uint8_t*){}}mProductRuntime;
  void onPositionFeedback(float);
  void onTargetPositionFeedback(float);
  bool mObservedPositiveRemaining=false,mTrustedPollMoving=false;uint8_t mMovingPollMisses=0;
@@ -91,7 +97,7 @@ struct IoHomecontrolChannel {
  void clearStopTravelSnapshot(){snapshot=false;}
  void restoreStopTravelSnapshot(){++restores;}
  void scheduleStatusPoll(unsigned){++polls;}
- unsigned defaultTrackedStatusPollDelayMs(){return 500;}
+ uint32_t trackedDelay=500;unsigned defaultTrackedStatusPollDelayMs(){return trackedDelay;}
  void observe2WMovingStatus(bool);
  void onCommandExchangeResult(IoHomeCommand,uint8_t,IoHomeCommandExchangeResult);
  void onUnanswered2WWake(uint32_t,uint32_t);
@@ -100,6 +106,18 @@ struct IoHomecontrolChannel {
 };
 '''
 tests=r'''int main(){
+ {
+  const auto saved=now;now=UINT32_MAX-500;
+  IoHomecontrolChannel c;c.trackedDelay=2000;c.mIsMoving=true;c.startStatusPollTracking(2000);
+  const auto epoch=c.mPollTrackingDeadlineMs;c.onEstimate(3);assert(uint32_t(c.mNextStatusPollMs-now)==2000);
+  c.mNextStatusPollMs=0;c.onEstimate(0);assert(uint32_t(c.mNextStatusPollMs-now)==1000&&c.mPollTrackingDeadlineMs==epoch);
+  c.mMovingPollMisses=2;c.setNodeId(0x654321);assert(!c.mObservedPositiveRemaining&&!c.mTrustedPollMoving&&!c.mMovingPollMisses&&!c.mPollTrackingDeadlineMs);
+  c.mObservedPositiveRemaining=true;c.mTrustedPollMoving=true;c.mMovingPollMisses=2;c.mPollTrackingDeadlineMs=now+600000;
+  const uint8_t key[16]={2};c.setEncryptionKey(key);assert(!c.mObservedPositiveRemaining&&!c.mMovingPollMisses&&!c.mPollTrackingDeadlineMs);
+  c.mObservedPositiveRemaining=true;c.startStatusPollTracking(1000);assert(!c.mObservedPositiveRemaining);
+  now=saved;
+ }
+
  {
   IoHomecontrolChannel c;c.mIsMoving=true;c.mTrustedPollMoving=true;c.mMovingPollMisses=1;c.mPollTrackingDeadlineMs=now+600000;
   const auto epoch=c.mPollTrackingDeadlineMs;c.onStatusPollDeferred(1000,true);

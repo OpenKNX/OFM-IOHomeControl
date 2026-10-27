@@ -46,7 +46,7 @@ $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
 $(SX1262_PHY_TARGET): $(SX1262_PHY_SRCS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(SX1262_PHY_SRCS)
 
-run: check-discovery-evidence check-captured-motion-mutations check-original-captures check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
+run: check-remaining-time-mutations check-discovery-evidence check-captured-motion-mutations check-original-captures check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
 
 check-protocol: $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite protocol
@@ -154,3 +154,7 @@ check-captured-motion-mutations: $(PROTOCOL_TARGET)
 check-discovery-evidence:
 	$(PYTHON) test_discovery_evidence.py
 	$(PYTHON) test_diagnostic_commands.py
+
+.PHONY: check-remaining-time-mutations
+check-remaining-time-mutations:
+	CXX="$(CXX)" $(PYTHON) test_remaining_time_mutation.py
