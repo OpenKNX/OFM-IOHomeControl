@@ -1,4 +1,5 @@
 #include "protocol/IoHomeStandaloneDiag.h"
+#include "protocol/IoHomeRemainingTime.h"
 #include "protocol/IoHomeProfileObjects.h"
 #include "IoHomecontrolChannel.h"
 #include "protocol/IoHomeStatusPollRetry.h"
@@ -686,9 +687,10 @@ void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
     }
     else if (mStopTravelSnapshot.valid)
     {
-        // A real moving status resolves an ambiguous STOP in favour of the
-        // pre-STOP trajectory.
-        restoreStopTravelSnapshot();
+        // Fresh measured current/target supersede an optimistic pre-STOP trajectory.
+        clearStopTravelSnapshot();
+        mTravelDurationMs=0;mTravelStartTime=0;mTravelStartPosition=mCurrentPosition;
+        if(mTargetPosition!=mCurrentPosition)startTravelEstimation(mTargetPosition);
     }
     else if (mTravelDurationMs == 0 && mTargetPosition != mCurrentPosition)
         startTravelEstimation(mTargetPosition);
@@ -1127,33 +1129,38 @@ void IoHomecontrolChannel::onBatteryLevel(uint8_t iPercent)
 
 void IoHomecontrolChannel::onEstimate(uint16_t iSeconds)
 {
-    // Qualified native main-info 16-bit remaining seconds; zero is ambiguous.
-    if (iSeconds > 0 && iSeconds < 0xFFFE)
-    {
-        logDebugP("Estimate: %d seconds remaining", iSeconds);
-        mStatusPollTimer = delayTimerInit();
-
-        uint32_t lDelayMs = static_cast<uint32_t>(iSeconds) * 1000UL + kTrackedStatusEstimateBiasMs;
-        const uint32_t lConfiguredPollMs = configuredStatusPollIntervalMs();
-        if (lConfiguredPollMs > 0 && lConfiguredPollMs < lDelayMs)
-            lDelayMs = lConfiguredPollMs;
-        if (effectiveLowPower2W() && lDelayMs < kLowPowerTrackedPollMinMs)
-            lDelayMs = kLowPowerTrackedPollMinMs;
-
-        mSingleFollowUpPollPending = true;
-        mStatusPollFailures = 0;
-        mAuthPollFailures = 0;
-        const uint32_t lNow = millis();
-        mNextStatusPollMs = lNow + lDelayMs;
-        if (mPollTrackingDeadlineMs == 0)
-            mPollTrackingDeadlineMs = lNow + kTrackedStatusPollWindowMs;
-
-        // Restart travel-time position estimation with the device-provided remaining time.
-        mCurrentPosition = clampPercent(estimateCurrentPosition());
-        mTravelStartPosition = mCurrentPosition;
-        mTravelDurationMs = (uint32_t)iSeconds * 1000;
-        mTravelStartTime = millis();
+    const auto remaining=IoHomeRemainingTime::fromRaw(iSeconds);
+    const uint32_t now=millis();
+    // An estimate never creates/renews an epoch or resurrects a stopped report.
+    if(!mPaired||mIs1W||!mPollTrackingDeadlineMs||timeReached(now,mPollTrackingDeadlineMs)||!mIsMoving)
+        return;
+    mTrustedPollMoving=true; // only the qualified controller callback reaches here
+    uint32_t delay=defaultTrackedStatusPollDelayMs();
+    if(remaining.kind==IoHomeRemainingTime::Kind::Positive) {
+        mObservedPositiveRemaining=true;
+        const uint32_t duration=uint32_t(iSeconds)*1000UL;
+        const uint32_t estimateDelay=duration+kTrackedStatusEstimateBiasMs;
+        if(estimateDelay<delay)delay=estimateDelay;
+        // The measured current and target were just published. Start from that
+        // current, never from an older interpolation or an optimistic STOP snapshot.
+        if(duration<=uint32_t(mPollTrackingDeadlineMs-now)) {
+            mTravelStartPosition=mCurrentPosition;
+            mTravelDurationMs=duration;
+            mTravelStartTime=now;
+        }
+    } else if(remaining.kind==IoHomeRemainingTime::Kind::Zero && mObservedPositiveRemaining) {
+        if(delay>1000U)delay=1000U;
+    } else {
+        if(remaining.kind!=IoHomeRemainingTime::Kind::Zero)mObservedPositiveRemaining=false;
+        return; // undefined/unbounded or a never-counting zero has no timing meaning
     }
+    if(effectiveLowPower2W()&&delay<kLowPowerTrackedPollMinMs)delay=kLowPowerTrackedPollMinMs;
+    const uint32_t at=now+delay;
+    if(timeReached(at,mPollTrackingDeadlineMs))return;
+    if(!mNextStatusPollMs||int32_t(at-mNextStatusPollMs)<0)mNextStatusPollMs=at;
+    mSingleFollowUpPollPending=true;
+    logDebugP("remaining_time channel=%u rawRemainingTime=%u remainingTimeKnown=%u requested_delay_ms=%lu next_poll_ms=%lu low_power=%u deadline=%lu",
+        unsigned(_channelIndex+1),iSeconds,remaining.known(),(unsigned long)delay,(unsigned long)mNextStatusPollMs,effectiveLowPower2W(),(unsigned long)mPollTrackingDeadlineMs);
 }
 
 float IoHomecontrolChannel::estimateCurrentPosition() const
@@ -1238,7 +1245,7 @@ bool IoHomecontrolChannel::isOperational() const
 void IoHomecontrolChannel::setNodeId(uint32_t iNodeId)
 {
     if (mNodeId != (iNodeId & 0x00FFFFFF)) mOptimisticPosition={};
-    if(mNodeId!=(iNodeId&0x00FFFFFF))invalidateHeatingFeedback();
+    if(mNodeId!=(iNodeId&0x00FFFFFF)){clearStatusPollTracking();invalidateHeatingFeedback();}
     mNodeId = iNodeId & 0x00FFFFFF; // 24-bit
     mPaired = (mNodeId != 0);
     mProductRuntime.bind(mNodeId,mEncKey);
@@ -1251,7 +1258,7 @@ uint32_t IoHomecontrolChannel::getNodeId() const
 
 void IoHomecontrolChannel::setEncryptionKey(const uint8_t *iKey)
 {
-    if (memcmp(mEncKey, iKey, 16)) {mOptimisticPosition={};invalidateHeatingFeedback();}
+    if (memcmp(mEncKey, iKey, 16)) {clearStatusPollTracking();mOptimisticPosition={};invalidateHeatingFeedback();}
     memcpy(mEncKey, iKey, 16);
     mProductRuntime.bind(mNodeId,mEncKey);
 }
@@ -1406,7 +1413,7 @@ bool IoHomecontrolChannel::hasOneWayControllerIdentity() const
 void IoHomecontrolChannel::setConfigured1WProfileChannel(uint8_t iChannelIndex) { mConfigured1WProfileChannel = iChannelIndex; }
 uint8_t IoHomecontrolChannel::getConfigured1WProfileChannel() const { return mConfigured1WProfileChannel; }
 bool IoHomecontrolChannel::is1W() const { return mIs1W; }
-void IoHomecontrolChannel::setIs1W(bool iIs1W) { mIs1W = iIs1W; }
+void IoHomecontrolChannel::setIs1W(bool iIs1W) { if(mIs1W!=iIs1W)clearStatusPollTracking();mIs1W = iIs1W; }
 void IoHomecontrolChannel::setConfigured1WTargetNodeId(uint32_t iNodeId) { mConfigured1WTargetNodeId = iNodeId & 0x00FFFFFF; }
 uint32_t IoHomecontrolChannel::getConfigured1WTargetNodeId() const { return mConfigured1WTargetNodeId; }
 void IoHomecontrolChannel::setConfigured1WBroadcastType(uint8_t iBroadcastType) { mConfigured1WBroadcastType = iBroadcastType & 0x3F; }
@@ -1668,6 +1675,7 @@ void IoHomecontrolChannel::requestStatusPrivate()
 
 void IoHomecontrolChannel::startStatusPollTracking(uint32_t iDelayMs)
 {
+    mObservedPositiveRemaining=false;mTrustedPollMoving=false;
     if (effectiveLowPower2W() && iDelayMs < kLowPowerTrackedPollMinMs)
         iDelayMs = kLowPowerTrackedPollMinMs;
     mStopSettlePollPending = false;
@@ -1686,6 +1694,7 @@ void IoHomecontrolChannel::startStatusPollTracking(uint32_t iDelayMs)
 
 void IoHomecontrolChannel::clearStatusPollTracking()
 {
+    mObservedPositiveRemaining=false;mTrustedPollMoving=false;
     mStopSettlePollPending = false;
     mNextStatusPollMs = 0;
     mPollTrackingDeadlineMs = 0;

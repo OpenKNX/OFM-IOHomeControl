@@ -66,7 +66,7 @@ public:
   void onHeatingValue(uint16_t reg,const IoHomeHeating::Value &value);
   void onPositionFeedback(float iPositionPercent);
   uint32_t productContextRevision() const {return mProductContextRevision;}
-  void invalidateProductContext() {invalidateHeatingFeedback();mOptimisticPosition={};invalidateBattery();mProfileReceivedMask=0;mRequestedSpeedIndex=0;mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
+  void invalidateProductContext() {clearStatusPollTracking();invalidateHeatingFeedback();mOptimisticPosition={};invalidateBattery();mProfileReceivedMask=0;mRequestedSpeedIndex=0;mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
   IoHomePhysicalBounds &physicalBounds(){return mPhysicalBounds;}
   const IoHomePhysicalBounds &physicalBounds()const{return mPhysicalBounds;}
   IoHomeProductRuntime &productRuntime() {return mProductRuntime;}
@@ -314,6 +314,7 @@ private:
   bool mSingleFollowUpPollPending = false;
   uint8_t mStatusPollFailures = 0;
   uint8_t mAuthPollFailures = 0;
+  bool mObservedPositiveRemaining=false,mTrustedPollMoving=false;
   char mDeviceName[21] = {}; // max 20 chars + null terminator
   uint16_t mProfile = 0;
   uint8_t mSubProfile = 0;

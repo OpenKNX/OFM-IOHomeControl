@@ -483,7 +483,7 @@ namespace
                       static_cast<unsigned>(iRaw));
     }
 
-    void dispatchPositionStatus(IoHomecontrolChannel *iChannel,
+    bool dispatchPositionStatus(IoHomecontrolChannel *iChannel,
                                 const uint8_t *iData,
                                 uint8_t iDataLen,
                                 bool iStopped,
@@ -494,7 +494,7 @@ namespace
             iDataLen < iTargetOffset + 2 ||
             iDataLen < iCurrentOffset + 2)
         {
-            return;
+            return false;
         }
 
         const IoHomeProfileDescriptor *lDescriptor =
@@ -504,13 +504,13 @@ namespace
             logDebug("IoHC-Ctrl", "Unknown profile MP target/current raw=0x%04X/0x%04X",
                       static_cast<unsigned>(readU16BE(iData, iTargetOffset)),
                       static_cast<unsigned>(readU16BE(iData, iCurrentOffset)));
-            return;
+            return false;
         }
         const ParameterSemantic lMpSemantic =
             ioHomeParameterSemantic(lDescriptor, 0);
         if (lDescriptor && (lMpSemantic == ParameterSemantic::Unsupported ||
                             lMpSemantic == ParameterSemantic::Unknown))
-            return;
+            return false;
         // MP interpretation and polarity come from the discovered profile.
         logDebug("IoHC-Ctrl", "Status MP semantic=%s profile=%u/%u",
                   ioHomeParameterSemanticName(lMpSemantic),
@@ -565,6 +565,7 @@ namespace
         iChannel->logStatusSummary(lCurrentPercent, lHasCurrentPosition,
                                    lTargetPercent, lHasTargetPosition,
                                    lMoving);
+        return lPosition && lHasCurrentPosition && lHasTargetPosition;
     }
 
     void applyPrivateFpInfo(IoHomecontrolChannel *iChannel, const uint8_t *iData,
@@ -12394,6 +12395,7 @@ void IoHomeController::dispatchRxFrame()
                 //   data[4:5]:  current position (16-bit BE)
                 //   data[6:7]: remaining seconds, only qualified native main-info status polls
                 //   Minimum 8 bytes for full position+estimate payload
+                bool lMeasuredStatus=false;
                 if (mTrustRxPosition && mRxFrame.dataLen >= 8)
                 {
                     const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
@@ -12402,7 +12404,7 @@ void IoHomeController::dispatchRxFrame()
                        mCurrentCmd.param2==0xFF&&mCurrentCmd.param3==0xFF&&mCurrentCmd.destNodeId==lSrcNode&&lDestNode==mOwnNodeId&&
                        sampleIdentityMatches(mCurrentCmd.sourceChannelIndex,lSrcNode,mCurrentCmd.managementKey,mCurrentCmd.productContextRevision))
                         lCh->onBatteryStatus(mRxFrame.data[1],0x04);
-                    dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 2, 4);
+                    lMeasuredStatus=dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 2, 4);
                 }
                 // Status-expected flag
                 if (mRxFrame.dataLen >= 2 && (mRxFrame.data[1] & 0x80))
@@ -12421,7 +12423,7 @@ void IoHomeController::dispatchRxFrame()
                 logDebugP("remaining_time node=%06X source=%s layout_available=%u rawRemainingTime=%u remainingTimeKnown=%u kind=%u",
                     lSrcNode,lRemainingPoll?"correlated_0x03_status_poll":"unsupported",lRemaining.kind!=IoHomeRemainingTime::Kind::Unavailable,
                     lRemaining.raw,lRemaining.known(),unsigned(lRemaining.kind));
-                if(lRemainingPoll && mCurrentCmd.trackedStatusPoll && mRxFrame.dataLen>=8)
+                if(lRemainingPoll && lMeasuredStatus && mCurrentCmd.trackedStatusPoll && mRxFrame.dataLen>=8)
                     lCh->onEstimate(lRemaining.raw);
                 // Execute-status bits 6:5 describe battery class, not RF power
                 // class. Discovery MIB / explicit configuration owns power mode.

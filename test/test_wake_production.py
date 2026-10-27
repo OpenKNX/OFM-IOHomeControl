@@ -10,6 +10,9 @@ def method(source,signature):
     return source[start:end]
 channel=(root/'src/IoHomecontrolChannel.cpp').read_text()
 methods='\n'.join(method(channel,signature) for signature in [
+    'void IoHomecontrolChannel::onEstimate(',
+    'void IoHomecontrolChannel::onPositionFeedback(',
+    'void IoHomecontrolChannel::onTargetPositionFeedback(',
     'void IoHomecontrolChannel::observe2WMovingStatus(',
     'void IoHomecontrolChannel::onCommandExchangeResult(',
     'void IoHomecontrolChannel::onUnanswered2WWake(',
@@ -25,11 +28,12 @@ harness=r'''#include <cassert>
 #include "protocol/IoHomeCommands.h"
 #include "protocol/IoHomeOptimisticPosition.h"
 #include "protocol/IoHomeStatusPollRetry.h"
+#include "protocol/IoHomeRemainingTime.h"
 unsigned now=1000;unsigned millis(){return now;}
 #define logInfoP(...) ((void)0)
 #define logDebugP(...) ((void)0)
 #define logInfoP(...) ((void)0)
-constexpr uint32_t kTrackedStatusPollWindowMs=600000;
+constexpr uint32_t kTrackedStatusPollWindowMs=600000,kTrackedStatusEstimateBiasMs=1000;
 constexpr uint32_t kLowPowerTrackedPollMinMs=10000;
 bool timeReached(uint32_t a,uint32_t b){return int32_t(a-b)>=0;}
 unsigned delayTimerInit(){return millis();}
@@ -57,7 +61,11 @@ struct IoHomecontrolChannel {
  void onStatusUpdate(bool);
  void clearStatusPollTracking();
  void stopTravelEstimation(bool);
- float estimateCurrentPosition(){return mCurrentPosition;}
+ float staleEstimate=-1;float estimateCurrentPosition(){return staleEstimate>=0?staleEstimate:mCurrentPosition;}
+ void onEstimate(uint16_t);
+ void onPositionFeedback(float);
+ void onTargetPositionFeedback(float);
+ bool mObservedPositiveRemaining=false,mTrustedPollMoving=false;
  void startTravelEstimation(float){}
  bool mHas2WHeardEvidence=false,mHas2WMovingEvidence=false,mConfirmsExecute=false,mStopSettlePollPending=false;
  uint32_t mLast2WHeardMs=0,mLast2WMovingEvidenceMs=0,m2WMovingEvidenceGeneration=0;
@@ -90,6 +98,22 @@ struct IoHomecontrolChannel {
 };
 '''
 tests=r'''int main(){
+ {
+  IoHomecontrolChannel c;c.mIsMoving=true;c.mPollTrackingDeadlineMs=now+600000;c.mNextStatusPollMs=now+500;
+  c.onTargetPositionFeedback(80);c.onPositionFeedback(20);c.staleEstimate=90;
+  c.onEstimate(256);assert(c.mCurrentPosition==20&&c.mTargetPosition==80&&c.mTravelStartPosition==20&&c.mTravelDurationMs==256000&&c.publications==1);
+  assert(c.mNextStatusPollMs==now+500&&c.mPollTrackingDeadlineMs==now+600000);
+  for(uint16_t raw:{uint16_t(3),uint16_t(2),uint16_t(1)})c.onEstimate(raw);
+  c.mNextStatusPollMs=0;c.onEstimate(0);assert(c.mNextStatusPollMs==now+500); // configured cadence already shorter
+  c.mObservedPositiveRemaining=false;c.mNextStatusPollMs=0;c.onEstimate(0);assert(!c.mNextStatusPollMs);
+  for(uint16_t raw:{uint16_t(0xFFFE),uint16_t(0xFFFF)}){c.mNextStatusPollMs=0;c.mTravelDurationMs=42;c.onEstimate(raw);assert(!c.mNextStatusPollMs&&c.mTravelDurationMs==42&&!c.mObservedPositiveRemaining);}
+  c.lowPower=true;c.mNextStatusPollMs=0;c.onEstimate(255);assert(c.mNextStatusPollMs==now+10000&&c.mTravelDurationMs==255000);
+  c.mNextStatusPollMs=0;c.onEstimate(0);assert(c.mNextStatusPollMs==now+10000);
+  c.onStatusUpdate(false);assert(!c.mObservedPositiveRemaining&&!c.mTrustedPollMoving);c.onEstimate(1);assert(!c.mNextStatusPollMs&&!c.mTravelDurationMs);
+  c.mIsMoving=true;c.mPollTrackingDeadlineMs=0;c.onEstimate(1);assert(!c.mPollTrackingDeadlineMs&&!c.mNextStatusPollMs);
+  c.mPollTrackingDeadlineMs=now+600000;c.mIsMoving=false;c.onEstimate(1);assert(!c.mNextStatusPollMs);
+ }
+
  IoHomecontrolChannel ch;
  ch.onCommandExchangeResult(IoHomeCommand::Execute,50,IoHomeCommandExchangeResult::Completed);
  assert(ch.twoWayWakeBeliefAt(now)==TwoWayWakeBelief::Asleep);
