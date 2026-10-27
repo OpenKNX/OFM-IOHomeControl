@@ -67,8 +67,10 @@ hopping, active sessions, parse failures and hardware limitations can leave gaps
 `0x71` not observed never proves reporting is disabled or unsupported. Streaming
 is opt-in and may affect loop latency; compare timing with streaming disabled.
 The hot-path evidence hook performs only bounded memory updates, without logs or
-additional radio reads. RF-only operations enforce the real duty budget even in
-a bench/debug build, retain central CCA and identity checks, require idle RF and
+additional radio reads. RF-only operations enforce real duty/CCA admission in
+release or explicitly debug-off builds. Active OPENKNX_DEBUG bench mode bypasses
+duty/CCA/quotas, including diagnostic admission (see [RF policy](rf-access-policy.md));
+all modes retain identity checks, require idle RF and
 commissioning ownership, and require a matching already-committed network snapshot.
 Their persistence preflight compares state without writing it.
 

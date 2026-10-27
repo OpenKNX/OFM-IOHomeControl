@@ -4515,7 +4515,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         } else if(iCmd=="iohc duty mode qualified") {
             mController.qualifiedDuty();logInfoP("QualifiedPoliteAccess denied: no PHY/region qualification; mode=DutyLimited");
         } else if(iCmd=="iohc duty debug on CONFIRM_SHIELDED_BENCH"&&!iDebugKo) {
-            logInfoP("%s",mController.enableBenchDuty(true)?"BENCH ONLY - RF duty check bypassed; no expiry; all other guards retained":"RF bench debug unavailable in this build");
+            logInfoP("%s",mController.enableBenchDuty(true)?"SHIELDED BENCH ONLY - RF duty/CCA/LBT/quotas bypassed; no expiry; accounting/protocol/authentication/collision guards retained":"RF bench debug unavailable in this build");
         } else logInfoP("RF debug denied: console command, debug build and CONFIRM_SHIELDED_BENCH required");
         return true;
     }
@@ -4868,7 +4868,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if(!scan && (!parseHex24(trimSpaces(lSub.substr(strlen("keyimport verify "))),node) || !node || getAddressClass(node)!=IoHomeAddressClass::Unicast)) {
             logInfoP("Usage: iohc keyimport verify NODE_HEX");return true;
         }
-        if(!mController.normalDutyMode()){logInfoP("IOHC_DIAGNOSTIC blocked reason=duty_bypass_active use=iohc_duty_debug_off_then_status budget_not_refunded=1");return true;}
+        if(!mController.diagnosticRfAdmissionAllowed()){logInfoP("IOHC_DIAGNOSTIC blocked reason=duty_bypass_active use=iohc_duty_debug_off_then_status budget_not_refunded=1");return true;}
         if(mController.twoWayIdentityCollision()) {
             if(!scan){mController.setVerificationBlocked(node,IoHomeVerificationEvidence::Result::Collision);mController.printVerificationEvidence();}
             mController.printCollisionFirst();return true;
@@ -4894,7 +4894,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             mController.setReadOnlyDiagnosticRf(true);
             if(mController.verifyKnownNetworkNode(node,mController.getSystemKey(),0xFF)) {
                 mDiagnosticVerifyNode=node;
-                logInfoP("IOHC_VERIFY session=%lu node=%06X queued cmd=2E attempts=1 frequency=868950000 preamble=production-plan CCA_duty=normal membership_writes=none",(unsigned long)mDiscoveryEvidence.session,node);
+                logInfoP("IOHC_VERIFY session=%lu node=%06X queued cmd=2E attempts=1 frequency=868950000 preamble=production-plan CCA_duty=%s membership_writes=none",(unsigned long)mDiscoveryEvidence.session,node,mController.debugRfLimitsBypassed()?"debug_bench_bypass":"normal");
             } else {mController.setReadOnlyDiagnosticRf(false);if(p)p->failure=IoHomeDiscoveryEvidence::Failure::QueueBusy;}
         }
         return true;

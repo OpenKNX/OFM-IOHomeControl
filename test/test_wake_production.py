@@ -66,7 +66,7 @@ struct IoHomecontrolChannel {
  void clearStatusPollTracking();
  void stopTravelEstimation(bool);
  float staleEstimate=-1;float estimateCurrentPosition(){return staleEstimate>=0?staleEstimate:mCurrentPosition;}
- void logTrackingEvent(const char*)const{}
+ void logTrackingEvent(const char*){}
  void onEstimate(uint16_t);
  void setNodeId(uint32_t);void setEncryptionKey(const uint8_t*);void startStatusPollTracking(uint32_t);
  void invalidateHeatingFeedback(){}

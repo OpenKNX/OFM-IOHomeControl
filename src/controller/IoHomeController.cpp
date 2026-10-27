@@ -1978,6 +1978,8 @@ bool IoHomeController::pauseBackgroundPolls(uint32_t durationMs)
     return true;
 }
 bool IoHomeController::normalDutyMode() const {return !mRfAccessPolicy.bypass(millis());}
+bool IoHomeController::debugRfLimitsBypassed() const {return mRfAccessPolicy.debugBypass(millis());}
+bool IoHomeController::diagnosticRfAdmissionAllowed() const {return normalDutyMode() || debugRfLimitsBypassed();}
 
 bool IoHomeController::sendBackgroundCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                              IoHomeCommand iCmd, uint8_t iParam,
@@ -2367,14 +2369,14 @@ bool IoHomeController::requestHeatingRegister(IoHomecontrolChannel *channel,uint
     if(state.node && (state.node!=channel->getNodeId() || state.revision!=channel->productContextRevision() ||
         state.gateway!=mOwnNodeId || std::memcmp(state.key,channel->getEncryptionKey(),16)))state.invalidate();
     if(state.busy){if(reg==0x0110&&write){state.presenceResult=IoHomeHeating::PresenceResult::BusyBlocked;channel->onHomeAwayCommandStatus();}return false;}
-    // Estimate both local transmissions before admission, independently of a
-    // debug bypass. The central producer still enforces LBT and every actual TX.
+    // Estimate both local transmissions before admission. Only the debug bench
+    // mode bypasses this quota; every accepted TX remains centrally accounted.
     const uint16_t requestPreamble=channel->getProtocolIdentity().powerSaveMode==IoHomePowerMode::AlwaysAlive?48:
         resolveLowPower2W(channel->getNodeId())?IOHC_PREAMBLE_LONG:normal2WStartPreamble();
     const uint32_t cost=estimatedTxAirtimeMs(9+length,requestPreamble)+estimatedTxAirtimeMs(15,authResponsePreamble());
     const uint8_t frequency=frequencyIndexForHz(kNormal2WTxFreqHz);
     mRfDutyBudget.advance(millis());
-    if(mRfDutyBudget.used(kNormal2WTxFreqHz)+cost>IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(kNormal2WTxFreqHz))) {
+    if(!debugRfLimitsBypassed() && mRfDutyBudget.used(kNormal2WTxFreqHz)+cost>IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(kNormal2WTxFreqHz))) {
         state.result=IoHomeHeating::State::Result::QuotaDenied;state.nextPollMs=millis()+30000;
         if(reg==0x0110&&write){state.presenceResult=IoHomeHeating::PresenceResult::QuotaBlocked;channel->onHomeAwayCommandStatus();}return false;
     }
@@ -2479,7 +2481,7 @@ bool IoHomeController::refreshHeating(uint8_t c)
 bool IoHomeController::configureHeatingPoll(uint8_t c,uint16_t seconds)
 {
     auto *ch=mModule&&c<16?mModule->getChannel(c):nullptr;
-    if(!ch||ch->is1W()||!ch->isPaired()||!IoHomeHeating::actuator(ch->getProtocolIdentity())||(seconds&&seconds<60))return false;
+    if(!ch||ch->is1W()||!ch->isPaired()||!IoHomeHeating::actuator(ch->getProtocolIdentity())||(seconds&&seconds<60&&!debugRfLimitsBypassed()))return false;
     mHeating[c].pollIntervalMs=uint32_t(seconds)*1000;mHeating[c].nextPollMs=millis()+1000;return true;
 }
 
@@ -2493,14 +2495,14 @@ void IoHomeController::serviceHeating()
         if(state.node&&(!ch||!IoHomeHeating::actuator(ch->getProtocolIdentity())||state.gateway!=mOwnNodeId||
             !sampleIdentityMatches(c,state.node,state.key,state.revision))) {state.invalidate();continue;}
         if(!ch||ch->is1W()||!ch->isPaired()||!IoHomeHeating::actuator(ch->getProtocolIdentity())||ch->getProtocolIdentity().ioAddress!=ch->getNodeId())continue;
-        if(state.busy||!idleForManagedOperation()||(mHeatingNextAdmissionMs&&int32_t(millis()-mHeatingNextAdmissionMs)<0))continue;
+        if(state.busy||!idleForManagedOperation()||(!debugRfLimitsBypassed()&&mHeatingNextAdmissionMs&&int32_t(millis()-mHeatingNextAdmissionMs)<0))continue;
         if((state.refreshRemaining || state.pollIntervalMs) &&
            (!state.nextPollMs || int32_t(millis()-state.nextPollMs)>=0)){
             const uint16_t reg=(!state.initialRead&&!state.refreshRemaining)?0x0115:IoHomeHeating::registers[state.pollIndex%7].reg;
             const bool queued=requestHeatingRegister(ch,reg,false,0,true);
             mHeatingNextAdmissionMs=millis()+10000;mHeatingNextChannel=(c+1)%16; // global spacing, including 16-channel startup
             if(queued){if(state.refreshRemaining)--state.refreshRemaining;state.pollIndex=(state.pollIndex+1)%7;state.nextPollMs=millis()+
-                (state.refreshRemaining?10000:state.pollIntervalMs?state.pollIntervalMs/7:30000);}
+                (state.refreshRemaining?(debugRfLimitsBypassed()?0:10000):state.pollIntervalMs?state.pollIntervalMs/7:30000);}
             return;
         }
     }
@@ -6938,7 +6940,8 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
     mRfDutyBudget.advance(millis());
     mRfAccessPolicy.advance(millis());
     [[maybe_unused]] const auto admittedMode=mRfAccessPolicy.mode(millis());
-    const bool admittedBypass=!mReadOnlyDiagnosticRf && mRfAccessPolicy.bypass(millis());
+    const bool debugBypass=debugRfLimitsBypassed();
+    const bool admittedBypass=debugBypass || (!mReadOnlyDiagnosticRf && mRfAccessPolicy.bypass(millis()));
     const uint32_t airtime = estimatedTxAirtimeMs(iLength, mCurrentTxPreambleSymbols);
     if(mCurrentFreqIdx<IOHC_NUM_FREQUENCIES)mRfNextAirtimeMs[IoHomeDutyBudget::band(IOHC_FREQUENCIES[mCurrentFreqIdx])]=airtime;
     const bool productionAtlantic=(mCurrentCmd.active&&mCurrentCmd.heatingToken&&mCurrentCmd.heatingData[2]==1&&mCurrentCmd.heatingData[3]==0x10) || (mPairing2WMode==Pairing2WMode::AtlanticPull && isPairDiagnosticState(mState)) ||
@@ -6946,9 +6949,9 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
         (mAtlantic.status.stage==AtlanticStage::RollCall && iLength>8 && iData[8]==uint8_t(IoHomeCommand::DiscoverSPERequest));
     if(mCurrentCmd.active&&mCurrentCmd.command==IoHomeCommand::Discover2ERequest&&mCurrentCmd.destNodeId==mVerification.node) {
         mVerification.frequency=IOHC_FREQUENCIES[mCurrentFreqIdx];mVerification.usedMs=mRfDutyBudget.used(mVerification.frequency);
-        mVerification.limitMs=IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(mVerification.frequency));mVerification.mode=uint8_t(mReadOnlyDiagnosticRf?IoHomeRfAccessPolicy::Mode::DutyLimited:admittedMode);
+        mVerification.limitMs=IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(mVerification.frequency));mVerification.mode=uint8_t(mReadOnlyDiagnosticRf&&!debugBypass?IoHomeRfAccessPolicy::Mode::DutyLimited:admittedMode);
     }
-    if ((productionAtlantic || mReadOnlyDiagnosticRf) ? !mRfDutyBudget.admits(IOHC_FREQUENCIES[mCurrentFreqIdx],airtime) : !isDutyCycleOk(mCurrentFreqIdx, airtime)) {
+    if (!debugBypass && ((productionAtlantic || mReadOnlyDiagnosticRf) ? !mRfDutyBudget.admits(IOHC_FREQUENCIES[mCurrentFreqIdx],airtime) : !isDutyCycleOk(mCurrentFreqIdx, airtime))) {
         mLbtPrepared=false;
         mLastTxDutyDenied=true;
         if(mCurrentCmd.command==IoHomeCommand::Discover2ERequest&&mCurrentCmd.destNodeId==mVerification.node)mVerification.result=IoHomeVerificationEvidence::Result::DutyDenied;
@@ -6967,7 +6970,12 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
         return RadioError::DutyCycleExceeded; // no timing exemptions, including 0x3D
     }
     if(twoWay && mRadio.state()==RadioState::Transmitting && !mRadio.isTxDone())return RadioError::Busy;
-    if(ccaRequired){
+    if(debugBypass) {
+        mCcaWaiting=false;mCcaBusySamples=0;mCcaCandidateValid=false;
+        if(!mLastLbtBypassed)++mLbtBypassCount;
+        mLastLbtBypassed=true;
+    }
+    if(ccaRequired&&!debugBypass){
         uint64_t candidate=14695981039346656037ULL;
         const auto mix=[&candidate](uint64_t value){candidate^=value;candidate*=1099511628211ULL;};
         for(uint8_t i=0;i<iLength;++i)mix(iData[i]);
@@ -7009,7 +7017,7 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
     if (result == RadioError::None) {
         invalidateImmediateReply();
         logDebugP("RF admission frame_role=%u reply_role=%s cca_required=%u cca_skipped_reason=%s tx_hz=%lu duty_admission=accepted",
-            unsigned(intent),ioHomeReplyRoleName(qualified?allowedRole:IoHomeReplyRole::None),ccaRequired,intent==IoHomeTransmitIntent::ImmediateReply?"qualified_reply":"none",
+            unsigned(intent),ioHomeReplyRoleName(qualified?allowedRole:IoHomeReplyRole::None),ccaRequired,debugBypass?"debug_bench":intent==IoHomeTransmitIntent::ImmediateReply?"qualified_reply":"none",
             (unsigned long)IOHC_FREQUENCIES[mCurrentFreqIdx]);
         if (mCurrentCmd.active) mCurrentCmd.statusPollRfStarted=true;
         // Authoritative accounting event: charge at acceptance, never at TX_DONE.
@@ -11585,7 +11593,7 @@ bool IoHomeController::waitForLbtClear(LbtContext iContext)
     mLastLbtBypassed = false;
     mLastLbtAuthResponse = (iContext == LbtContext::AuthResponse);
 
-    if (iContext == LbtContext::Bypass || mHostRadioPolicy.tx()==IoHomeRadioPolicy::Tx::Forced)
+    if (debugRfLimitsBypassed() || iContext == LbtContext::Bypass || mHostRadioPolicy.tx()==IoHomeRadioPolicy::Tx::Forced)
     {
         mLbtBypassCount++;
         mLastLbtBypassed = true;
@@ -13822,7 +13830,7 @@ uint32_t IoHomeController::statusPollRetryAfterMs()
 void IoHomeController::resetDutyToBuildDefault() {
     mRfAccessPolicy.resetToDefault();
 #ifdef OPENKNX_DEBUG
-    logInfoP("DEBUG RF duty check bypassed by default; no expiry; airtime and other guards retained");
+    logInfoP("DEBUG SHIELDED BENCH ONLY: RF duty/CCA/LBT/quotas bypassed by default; no expiry; accounting/protocol/authentication/collision guards retained");
 #endif
 }
 bool IoHomeController::enableBenchDuty(bool confirmed) {return mRfAccessPolicy.bench(millis(),confirmed);}
@@ -13935,7 +13943,7 @@ bool IoHomeController::queueAtlanticProbe(uint32_t node)
     if(!mAtlantic.keyProven||!atlanticContextMatches()||!node||node>0xFFFFFF)return false;
     const uint32_t cost=estimatedTxAirtimeMs(13,48)+estimatedTxAirtimeMs(15,authResponsePreamble());
     mRfDutyBudget.advance(millis());
-    if(mRfDutyBudget.used(kNormal2WTxFreqHz)+cost>IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(kNormal2WTxFreqHz)))return false;
+    if(!debugRfLimitsBypassed() && mRfDutyBudget.used(kNormal2WTxFreqHz)+cost>IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(kNormal2WTxFreqHz)))return false;
     IoHomeQueueEntry entry{};entry.destNodeId=node;entry.encKey=mAtlantic.key;
     entry.command=IoHomeCommand::WritePrivate;entry.atlanticToken=mAtlantic.status.session;
     entry.sourceChannelIndex=mAtlantic.status.channel;entry.heatingLength=IoHomeHeating::build(0x0102,false,0,entry.heatingData);
@@ -14034,7 +14042,7 @@ void IoHomeController::serviceAtlantic()
     }
     mTxLen=frame.serialize2W(mTxBuffer,sizeof(mTxBuffer));if(!mTxLen){stopAtlantic(AtlanticStage::Failed,"rollcall_build_error");return;}
     mRfDutyBudget.advance(millis());
-    if(!mRfDutyBudget.admits(frequency,estimatedTxAirtimeMs(mTxLen,preamble))){
+    if(!debugRfLimitsBypassed() && !mRfDutyBudget.admits(frequency,estimatedTxAirtimeMs(mTxLen,preamble))){
         mAtlantic.status.reason="quota_blocked";mAtlantic.nextActionMs=millis()+1000;return;
     }
     const auto prepared=configureTxRadio(preamble,&frequency);
@@ -14045,9 +14053,9 @@ void IoHomeController::serviceAtlantic()
     if(sent!=RadioError::None){stopAtlantic(AtlanticStage::Failed,"radio_error");return;}
     ++mAtlantic.status.rollcallAttempts;mAtlantic.status.txHz=frequency;mAtlantic.status.preamble=preamble;mAtlantic.status.ctrl1=frame.ctrlByte1;
     mAtlantic.rxStarted=false;mAtlantic.nextActionMs=0;mStateTimer=millis();mState=ControllerState::AtlanticRollCallWait;
-    logInfoP("Atlantic evidence=local_tx pairing_node=%06X scan_pass=%c attempt=%u tx_hz=%lu preamble=%u ctrl1=%02X length=%u airtime_ms=%lu lbt=clear quota=admitted",
+    logInfoP("Atlantic evidence=local_tx pairing_node=%06X scan_pass=%c attempt=%u tx_hz=%lu preamble=%u ctrl1=%02X length=%u airtime_ms=%lu lbt=%s quota=admitted",
         mAtlantic.status.pairingNode,lowPower?'A':'B',attempt+1,(unsigned long)frequency,preamble,frame.ctrlByte1,mTxLen,
-        (unsigned long)estimatedTxAirtimeMs(mTxLen,preamble));
+        (unsigned long)estimatedTxAirtimeMs(mTxLen,preamble),debugRfLimitsBypassed()?"debug_bypassed":"clear");
 }
 void IoHomeController::processAtlanticRollCall()
 {

@@ -34,6 +34,15 @@ public:
     void advance(uint32_t now) { (void)now; } // No time-based expiry.
     Mode mode(uint32_t now) const { (void)now; return active; }
     bool bypass(uint32_t now) const {auto m=mode(now);return m==Mode::BenchUnlimited||m==Mode::SimulationUnlimited;}
+    // Deliberately narrower than simulation/general duty bypass: release RF
+    // safeguards must not inherit the debug-only CCA/quota exemptions.
+    bool debugBypass(uint32_t now) const {
+#ifdef OPENKNX_DEBUG
+        return bypass(now);
+#else
+        (void)now;return false;
+#endif
+    }
     bool bench(uint32_t now,bool confirmed) {
 #if defined(IOHC_ENABLE_RF_BENCH_UNLIMITED)
         (void)now;
@@ -53,7 +62,9 @@ public:
     void off() {active=Mode::DutyLimited;}
     uint32_t sessionId() const {return session;}
     bool admits(const IoHomeDutyBudget &budget,uint32_t hz,uint32_t airtime,uint32_t now)const {
-        if(IoHomeDutyBudget::band(hz)>=3||airtime>36000U)return false;
+        if(IoHomeDutyBudget::band(hz)>=3)return false; // unsupported frequency remains invalid
+        if(debugBypass(now))return true;
+        if(airtime>36000U)return false;
         if(bypass(now))return true;
         return budget.admits(hz,airtime);
     }

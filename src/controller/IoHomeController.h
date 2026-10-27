@@ -1169,6 +1169,8 @@ public:
   bool pauseBackgroundPolls(uint32_t durationMs);
   uint32_t backgroundPollPauseRemaining() const;
   bool normalDutyMode() const;
+  bool debugRfLimitsBypassed() const;
+  bool diagnosticRfAdmissionAllowed() const;
   void setVerificationBlocked(uint32_t node,IoHomeVerificationEvidence::Result result) {mVerification=IoHomeVerificationEvidence{};mVerification.node=node;mVerification.result=result;}
   void clearTwoWayTrace();
   void printTwoWayAttemptCsv() const;

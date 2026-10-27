@@ -1191,7 +1191,7 @@ void IoHomecontrolChannel::onStatusExpected()
     logTrackingEvent("status_expected_scheduled");
 }
 
-void IoHomecontrolChannel::logTrackingEvent(const char *reason) const
+void IoHomecontrolChannel::logTrackingEvent(const char *reason)
 {
     logDebugP("IOHC_TRACK tracking_start_reason=%s owner_node=%06X gateway=%06X epoch=%lu deadline=%lu transaction=%llu evidence_ms=%lu inbound_src=%06X inbound_dst=%06X status_source=%s evidence_is_current=%u moving=%u status_expected=%u",
         reason,mNodeId,mController.getOwnNodeId(),(unsigned long)mPollTrackingDeadlineMs,(unsigned long)mPollTrackingDeadlineMs,(unsigned long long)mController.currentTransactionId(),

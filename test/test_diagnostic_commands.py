@@ -23,7 +23,15 @@ struct IoHomeNetworkStore {static bool equal(int a,int b){return a==b;}};
 struct Channel {unsigned node=0x155D81;bool isPaired()const{return true;}bool is1W()const{return false;}unsigned getNodeId()const{return node;}};
 struct Controller {
  bool idle=true,collision=false,queued=true,strict=false;unsigned verifies=0,scans=0;unsigned char key[16]{7};
- bool normalDutyMode()const{return true;}void setVerificationBlocked(unsigned,IoHomeVerificationEvidence::Result){}void printVerificationEvidence(){}void printCollisionFirst(){}bool pauseBackgroundPolls(unsigned){return true;}
+ bool normal=true;
+ bool debugRfLimitsBypassed()const{
+#ifdef OPENKNX_DEBUG
+ return !normal;
+#else
+ return false;
+#endif
+ }
+ bool diagnosticRfAdmissionAllowed()const{return normal||debugRfLimitsBypassed();}void setVerificationBlocked(unsigned,IoHomeVerificationEvidence::Result){}void printVerificationEvidence(){}void printCollisionFirst(){}bool pauseBackgroundPolls(unsigned){return true;}
  bool idleForManagedOperation()const{return idle;}bool twoWayIdentityCollision()const{return collision;}
  const unsigned char *getSystemKey()const{return key;}unsigned getOwnNodeId()const{return 0xE4E61D;}
  void setReadOnlyDiagnosticRf(bool v){strict=v;}
@@ -50,11 +58,18 @@ checks=r'''int main(){
   if(mode==3)f.snapshot=2;if(mode==4)f.channel.node=0x562292;if(mode==5)f.allowed=false;
   assert(f.command("keyimport verify 155D81"));assert(!f.mController.verifies&&!f.mController.scans&&!f.mController.strict);
  }
+ IoHomecontrol bypass;bypass.mController.normal=false;bypass.command("keyimport scan");
+#ifdef OPENKNX_DEBUG
+ assert(bypass.mController.scans==1);
+#else
+ assert(bypass.mController.scans==0);
+#endif
  IoHomecontrol q;q.mController.queued=false;q.command("keyimport verify 155D81");assert(!q.mController.strict&&!q.mDiagnosticVerifyNode);
  IoHomecontrol scan;scan.command("keyimport scan");assert(scan.mController.scans==1&&scan.mDiagnosticScan&&scan.mController.strict);
  assert(scan.channel.node==0x155D81&&scan.mController.key[0]==7);
 }'''
 with tempfile.TemporaryDirectory() as d:
  p=Path(d)/'console.cpp';p.write_text(harness+parsers+'bool IoHomecontrol::command(std::string lSub){'+branch+'return false;}'+checks);b=Path(d)/'console'
- subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-I'+str(root/'src'),str(p),'-o',str(b)],check=True);subprocess.run([str(b)],check=True)
+ for flags in [[],['-DOPENKNX_DEBUG']]:
+  subprocess.run([os.environ.get('CXX','c++'),'-std=c++17',*flags,'-I'+str(root/'src'),str(p),'-o',str(b)],check=True);subprocess.run([str(b)],check=True)
 print('Production read-only verify accepts flash-known 155D81, preserves identity/evidence and rejects busy, collision, unknown and uncommitted state')

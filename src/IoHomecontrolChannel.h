@@ -343,7 +343,7 @@ private:
   void requestStatusPrivate();
   bool requestStatus(bool iTrackedPoll, bool iManual=false);
   void publishPositionFeedback(float iPositionPercent, bool iLogMessage);
-  void logTrackingEvent(const char *reason) const;
+  void logTrackingEvent(const char *reason);
   void startStatusPollTracking(uint32_t iDelayMs);
   void clearStatusPollTracking();
   uint32_t configuredStatusPollIntervalMs() const;

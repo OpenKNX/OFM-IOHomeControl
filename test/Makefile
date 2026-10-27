@@ -50,7 +50,7 @@ $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
 $(SX1262_PHY_TARGET): $(SX1262_PHY_SRCS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(SX1262_PHY_SRCS)
 
-run: check-dual-controller-tools check-remaining-time-evidence check-remaining-time-mutations check-discovery-evidence check-captured-motion-mutations check-original-captures check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
+run: check-rf-build-modes check-dual-controller-tools check-remaining-time-evidence check-remaining-time-mutations check-discovery-evidence check-captured-motion-mutations check-original-captures check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
 
 check-protocol: $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite protocol
@@ -170,3 +170,16 @@ check-remaining-time-evidence:
 .PHONY: check-dual-controller-tools
 check-dual-controller-tools:
 	$(PYTHON) test_dual_controller_tools.py
+
+# Run identical real-controller admission/protocol cases with both build modes.
+DEBUG_PROTOCOL_TARGET = $(BUILD_DIR)/test_suite_debug
+$(DEBUG_PROTOCOL_TARGET): $(STEFAN_GENERATED) $(CORPUS_GENERATED) $(wildcard corpus/*.h ../src/protocol/*.h ../src/controller/*.h ../src/radio/*.h) $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -DOPENKNX_DEBUG -o $@ $(PROTOCOL_SRCS)
+
+.PHONY: check-rf-build-modes
+check-rf-build-modes: $(PROTOCOL_TARGET) $(DEBUG_PROTOCOL_TARGET)
+	./$(PROTOCOL_TARGET) --filter controller_rf_build_mode_
+	./$(DEBUG_PROTOCOL_TARGET) --filter controller_rf_build_mode_
+	./$(DEBUG_PROTOCOL_TARGET) --filter controller_verify_direct_2f_is_not_authenticated_success
+	./$(DEBUG_PROTOCOL_TARGET) --filter controller_inbound_status_proof_binds_mac_identity_frequency_state_and_age
+	./$(DEBUG_PROTOCOL_TARGET) --filter controller_inbound_reply_preparation_busy_keeps_original_25ms_deadline

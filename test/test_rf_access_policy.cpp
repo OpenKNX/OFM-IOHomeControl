@@ -6,15 +6,17 @@ int main() {
     IoHomeRfAccessPolicy p;
 #ifdef OPENKNX_DEBUG
     assert(p.mode(0)==IoHomeRfAccessPolicy::Mode::BenchUnlimited);
+    assert(p.debugBypass(0));assert(p.admits(b,868950000,36001,0));
     assert(p.admits(b,868950000,279,0));
     p.advance(300001U);assert(p.admits(b,868950000,279,300001U));
     p.advance(UINT32_MAX);assert(p.admits(b,868950000,279,UINT32_MAX));
     p.advance(0);assert(p.admits(b,868950000,279,0));
 #else
     assert(p.mode(0)==IoHomeRfAccessPolicy::Mode::DutyLimited);
+    assert(!p.debugBypass(0));
     assert(!p.admits(b,868950000,279,0));
 #endif
-    p.off();assert(!p.admits(b,868950000,279,0));
+    p.off();assert(!p.debugBypass(0));assert(!p.admits(b,868950000,279,0));
     p.resetToDefault();
 #ifdef OPENKNX_DEBUG
     assert(p.admits(b,868950000,279,0));

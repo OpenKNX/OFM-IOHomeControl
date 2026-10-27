@@ -91,3 +91,5 @@ jobs:
         run: make -C test check-remaining-time-evidence
       - name: Validate two-controller trace analysis and sanitized configuration tools
         run: make -C test check-dual-controller-tools
+      - name: Validate debug-only RF bypass and unchanged release admission
+        run: make -C test check-rf-access-policy check-rf-build-modes

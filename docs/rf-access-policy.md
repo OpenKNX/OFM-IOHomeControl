@@ -7,7 +7,8 @@ are pending. This document does not certify a higher production RF allowance.
 
 `DutyLimited` is the production default. Existing allowances remain 3600 ms
 for 868.7–869.2 MHz and 36000 ms for each other supported band (868.0–868.6 and
-869.7–870 MHz). Unsupported frequencies and packets over 36000 ms are rejected.
+869.7–870 MHz). Unsupported frequencies are rejected in every mode. Packets over 36000 ms are
+rejected under release/normal admission; debug bench mode bypasses this software airtime cap.
 All channels in one sub-band share one ledger. Two aligned buckets deliberately
 retain more history than an exact rolling hour. Every accepted TX is charged
 once, including retries, ACKs, authentication replies and RF diagnostics; no
@@ -37,8 +38,25 @@ no activation command is required after boot. Manual off/reset-debug, later
 identity/key changes, collision and observed radio errors revoke bypass.
 Reinitialization/reboot restores the debug build default; the ledger is never
 refunded by a mode change. No ETS/flash/NVS flag controls the default.
-Authentication, key ownership, configured frequency, radio power/setup, existing
-LBT checks and timeout/correlation rules are retained. Accounting is never reset.
+In active debug bench mode, all software RF admission limits are bypassed:
+per-band duty/packet-airtime caps, central CCA (including busy or unavailable
+RSSI), 1W helper LBT even under host Strict policy, heating/Atlantic TX quotas,
+and the read-only `keyimport scan/verify` normal-duty gate and hard budget checks.
+Heating's admission spacing and minimum polling interval are also relaxed;
+configured polling cadence, explicit pauses and bounded protocol sessions remain.
+Airtime accounting and bypass/verification/trace logging remain active, including
+when a diagnostic has `mReadOnlyDiagnosticRf` set. Logs identify `debug_bench`
+rather than claiming a clear channel or normal duty admission.
+
+Release builds retain every prior admission check and cannot activate this
+exemption. Native simulation alone does not bypass release CCA, diagnostic or
+heating/Atlantic strict quotas. `iohc duty debug off` restores normal admission
+in a debug build without refunding accumulated airtime. Startup and the explicit
+confirmed bench command identify shielded bench use.
+
+Authentication, key ownership, configured frequency, radio power/setup, hardware
+busy/errors, persistence/counter reservation, collision blocking and protocol
+timeout/correlation rules are retained. Accounting is never reset.
 
 Console command (serial or debug web console; KNX diagnostic commands cannot enable it):
 
@@ -68,7 +86,7 @@ pairing/key extraction, ACK/status responses and challenge 0x3D also use the
 central admission/accounting point. isDutyCycleOk prechecks use the same policy.
 No direct radio TX is left in IoHomecontrol.cpp.
 
-Existing startRadioTransmit helper paths run their LBT checks. Queued/direct
+Outside active debug bench mode, existing startRadioTransmit helper paths run their LBT checks. Queued/direct
 startControllerTransmit paths, immediate 2W/auth responses, blocking discovery
 and module diagnostic TX do **not** establish a qualified access scheme merely
 by sharing the budget gate. Existing RSSI-unavailable/host-force behavior is
@@ -99,3 +117,15 @@ debug/production gates, debug web-console support, default bypass without expiry
 The native controller suite checks duty admission for direct/queued/1W/ACK/
 auth/discovery paths, LBT behavior, no refund on lost TX_DONE and simulated bypass.
 Hardware acceptance remains pending; only ordinary builds may leave the lab.
+
+### Debug/release regression matrix
+
+`make -C test check-rf-access-policy check-rf-build-modes check-discovery-evidence`
+compiles policy gates without TEST_NATIVE in release/debug/debug-web/explicit-bench
+variants, and runs the same real-controller fixtures in release and OPENKNX_DEBUG.
+Fixtures cover saturated duty budgets with continued accounting, busy/invalid CCA,
+1W Strict LBT, read-only scans and verification, heating/Atlantic quotas, explicit
+off without refunds, timeout expiry, full authentication requirements, collision
+blocking and driver errors. The console diagnostic entry branch runs in both modes.
+Existing MAC/identity/frequency/age rejection and 25 ms reply deadlines also run in
+debug mode. These tests use a non-emitting radio stub; no RF bench test is claimed.

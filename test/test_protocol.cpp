@@ -23608,3 +23608,137 @@ TEST(controller_verification_busy_CCA_remains_local_not_peer_silence)
     for(unsigned i=0;i<300;i++){c.loop();ioHomeTestAdvanceMillis(25);}
     ASSERT_TRUE(c.verificationEvidence().result==IoHomeVerificationEvidence::Result::CcaDenied);ASSERT_TRUE(!c.verificationEvidence().peerNoReply());ASSERT_EQ(c.radio().testTransmitCount(),0U);
 }
+
+
+// Compile/run these same production-controller scenarios in release and debug.
+TEST(controller_rf_build_mode_default_admission_accounts_every_accepted_TX)
+{
+    const uint8_t key[16]={1};
+    for(bool diagnostic:{false,true})for(bool invalidRssi:{false,true}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+        c.setReadOnlyDiagnosticRf(diagnostic);c.testChargeDuty(IOHC_FREQ_2,3651);
+        c.hostRadioPolicy().configure(IoHomeRadioPolicy::Tx::Strict,0);
+        c.radio().testInjectRxDiagnostics(false,false,false,0,0,-20);
+        if(invalidRssi)c.radio().mTestRssiValid=false;
+        IoHomeFrame f;f.init();f.ctrlByte0=IOHC_CTRL0_START;f.commandId=IoHomeCommand::Private;f.data[0]=3;f.dataLen=1;
+        f.setSrcNode(0xE4E61D);f.setDestNode(0x155D81);uint8_t raw[64];const auto len=f.serialize(raw,sizeof(raw));
+#ifdef OPENKNX_DEBUG
+        ASSERT_TRUE(c.debugRfLimitsBypassed()&&c.diagnosticRfAdmissionAllowed());
+        for(unsigned n=0;n<20;n++){c.radio().standby();ASSERT_EQ(c.testDirectTransmit(raw,len,1024,IOHC_FREQ_2),RadioError::None);}
+        ASSERT_EQ(c.radio().testTransmitCount(),20U);
+        ASSERT_EQ(c.testTxAirtimeAccum(0),3651U+20U*IoHomeController::estimatedTxAirtimeMs(len,1024));
+        ASSERT_TRUE(!std::strcmp(c.twoWayTracePoint(c.twoWayTraceCount()).lbtResult,"policy_bypassed"));
+        c.disableDebugDuty();c.radio().standby();ASSERT_EQ(c.testDirectTransmit(raw,len,1024,IOHC_FREQ_2),RadioError::DutyCycleExceeded);
+        ASSERT_TRUE(c.normalDutyMode()&&!c.debugRfLimitsBypassed());
+#else
+        ASSERT_TRUE(!c.debugRfLimitsBypassed()&&c.diagnosticRfAdmissionAllowed());
+        ASSERT_EQ(c.testDirectTransmit(raw,len,1024,IOHC_FREQ_2),RadioError::DutyCycleExceeded);
+        ASSERT_EQ(c.radio().testTransmitCount(),0U);ASSERT_EQ(c.testTxAirtimeAccum(0),3651U);
+#endif
+    }
+}
+TEST(controller_rf_build_mode_CCA_and_1W_LBT_without_budget_pressure)
+{
+    const uint8_t key[16]={1};
+    for(bool oneWay:{false,true})for(bool invalidRssi:{false,true}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+        c.hostRadioPolicy().configure(IoHomeRadioPolicy::Tx::Strict,0);c.radio().testInjectRxDiagnostics(false,false,false,0,0,-20);
+        if(invalidRssi)c.radio().mTestRssiValid=false;
+        IoHomeFrame f;f.init();f.ctrlByte0=IOHC_CTRL0_START|(oneWay?IOHC_CTRL0_MODE_1W:0);f.commandId=IoHomeCommand::Execute;f.dataLen=1;f.data[0]=0;
+        f.setSrcNode(0xE4E61D);f.setDestNode(0x155D81);uint8_t raw[64];const auto len=f.serialize(raw,sizeof(raw));ASSERT_TRUE(len>0);
+        const auto result=c.testHelperTransmit(raw,len,32);
+#ifdef OPENKNX_DEBUG
+        ASSERT_EQ(result,RadioError::None);ASSERT_EQ(c.radio().testTransmitCount(),1U);ASSERT_TRUE(c.testTxAirtimeAccum(0)>0);
+        c.disableDebugDuty();c.radio().standby();ASSERT_EQ(c.testHelperTransmit(raw,len,32),RadioError::Busy);
+#else
+        ASSERT_EQ(result,RadioError::Busy);ASSERT_EQ(c.radio().testTransmitCount(),0U);ASSERT_EQ(c.testTxAirtimeAccum(0),0U);
+#endif
+    }
+}
+TEST(controller_rf_build_mode_diagnostic_verify_requires_real_auth_and_keeps_timeout)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+    c.setReadOnlyDiagnosticRf(true);c.testChargeDuty(IOHC_FREQ_2,3651);c.radio().testInjectRxDiagnostics(false,false,false,0,0,-20);
+    ASSERT_TRUE(c.verifyKnownNetworkNode(0x155D81,key,0xFF));IoHomeFrame tx;
+#ifdef OPENKNX_DEBUG
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));c.loop();
+    const auto &v=c.verificationEvidence();ASSERT_TRUE(v.flags&IoHomeVerificationEvidence::TxStarted);
+    ASSERT_EQ(v.mode,uint8_t(IoHomeRfAccessPolicy::Mode::BenchUnlimited));ASSERT_TRUE(v.usedMs>3651&&v.chargedMs>0);
+    IoHomeFrame response;buildDirectedDiscoveryResponse(response,0xE4E61D,0x155D81);ASSERT_TRUE(queueControllerResponse(c,response));
+    ASSERT_EQ(m.testAuthenticatedDirectedCount(),0);ASSERT_TRUE(c.verificationEvidence().result==IoHomeVerificationEvidence::Result::ResponseUnverified);
+    for(unsigned i=0;i<80;i++){ioHomeTestAdvanceMillis(1000);c.loop();}
+    ASSERT_TRUE(c.idleForManagedOperation());ASSERT_EQ(m.testAuthenticatedDirectedCount(),0);
+    ASSERT_TRUE(c.verificationEvidence().result!=IoHomeVerificationEvidence::Result::Authenticated);
+#else
+    for(unsigned i=0;i<12;i++)c.loop();
+    ASSERT_TRUE(c.verificationEvidence().result==IoHomeVerificationEvidence::Result::DutyDenied);ASSERT_EQ(c.radio().testTransmitCount(),0U);
+#endif
+}
+TEST(controller_rf_build_mode_scan_keeps_family_and_bypasses_only_debug_limits)
+{
+    const uint8_t key[16]={1};
+    for(bool spe:{false,true}){
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+        for(auto hz:IOHC_FREQUENCIES)c.testChargeDuty(hz,40000);
+        c.radio().testInjectRxDiagnostics(false,false,false,0,0,-20);c.setReadOnlyDiagnosticRf(true);c.startDiscovery(spe);pumpControllerTransmit(c);
+#ifdef OPENKNX_DEBUG
+        IoHomeFrame tx;ASSERT_TRUE(lastTransmittedFrameForTest(c,tx));ASSERT_EQ(tx.commandId,spe?IoHomeCommand::DiscoverSPERequest:IoHomeCommand::DiscoverRequest);
+        ASSERT_TRUE(c.radio().testTransmitCount()>0);
+#else
+        ASSERT_EQ(c.radio().testTransmitCount(),0U);
+#endif
+        c.cancelDiscovery(); // release may already have ended on denied admission
+    }
+}
+TEST(controller_rf_build_mode_heating_and_Atlantic_quotas)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initHeatingController(c,m,ch);c.testChargeDuty(IOHC_FREQ_2,3651);
+#ifdef OPENKNX_DEBUG
+    ASSERT_TRUE(c.configureHeatingPoll(0,1));ASSERT_TRUE(c.requestHeatingRegister(&ch,0x0102));
+    c.radio().testInjectRxDiagnostics(false,false,false,0,0,-20);IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(c.testTxAirtimeAccum(0)>3651);
+#else
+    ASSERT_TRUE(!c.configureHeatingPoll(0,1));ASSERT_TRUE(!c.requestHeatingRegister(&ch,0x0102));ASSERT_EQ(c.radio().testTransmitCount(),0U);
+#endif
+    IoHomeController a;IoHomecontrol am;IoHomecontrolChannel ac;ASSERT_TRUE(beginAtlanticResetSearch(a,am,ac));
+    a.resetDutyToBuildDefault(); // pull setup changes identity and deliberately revokes the previous mode
+    const auto before=a.radio().testTransmitCount();a.testChargeDuty(IOHC_FREQ_2,3651);a.radio().testInjectRxDiagnostics(false,false,false,0,0,-20);a.loop();
+#ifdef OPENKNX_DEBUG
+    ASSERT_EQ(a.atlanticStatus().rollcallAttempts,1U);ASSERT_EQ(a.radio().testTransmitCount(),before+1);
+#else
+    ASSERT_EQ(a.atlanticStatus().rollcallAttempts,0U);ASSERT_EQ(a.radio().testTransmitCount(),before);
+#endif
+}
+TEST(controller_rf_build_mode_collision_and_driver_failure_are_never_bypassed)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+    c.observeForeignController(0xE4E61D);ASSERT_TRUE(c.sendCommand(0x155D81,key,IoHomeCommand::Execute,50));pumpControllerTransmit(c);ASSERT_EQ(c.radio().testTransmitCount(),0U);
+    IoHomeController d;IoHomecontrol dm;IoHomecontrolChannel dc;initPaired2WControllerForTest(d,dm,dc,0xE4E61D,0x155D81,key);
+    IoHomeFrame f;f.init();f.ctrlByte0=IOHC_CTRL0_START;f.commandId=IoHomeCommand::Private;f.dataLen=1;f.data[0]=3;f.setSrcNode(0xE4E61D);f.setDestNode(0x155D81);
+    uint8_t raw[64];const auto len=f.serialize(raw,sizeof(raw));d.radio().testSetNextTransmitError(RadioError::HardwareError);
+    ASSERT_EQ(d.testDirectTransmit(raw,len,32,IOHC_FREQ_2),RadioError::HardwareError);ASSERT_EQ(d.testTxAirtimeAccum(0),0U);ASSERT_EQ(d.radio().testTransmitCount(),0U);
+}
+
+TEST(controller_rf_build_mode_heating_refresh_spacing_and_direct_Atlantic_probe)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initHeatingController(c,m,ch);
+    ASSERT_TRUE(c.refreshHeating(0));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ASSERT_EQ(c.heatingState(0).refreshRemaining,6U);ASSERT_TRUE(authenticateHeatingRequest(c));
+    const uint8_t value[]={0x0C,0x60,1,0x00,0};IoHomeFrame response;
+    buildSimpleResponseFrame(response,0x60F823,0xB6BDFC,IoHomeCommand::WritePrivateResponse,value,sizeof(value));ASSERT_TRUE(queueControllerResponse(c,response));
+    c.loop();
+#ifdef OPENKNX_DEBUG
+    ASSERT_EQ(c.heatingState(0).refreshRemaining,5U);
+#else
+    ASSERT_EQ(c.heatingState(0).refreshRemaining,6U);
+#endif
+    IoHomeController a;IoHomecontrol am;IoHomecontrolChannel ac;IoHomeFrame launch,challenge;const uint8_t key[16]={0x42};uint8_t ciphertext[16];
+    ASSERT_TRUE(beginAtlanticPullForTest(a,am,ac,launch));ASSERT_TRUE(sendAtlanticCandidateForTest(a,launch,key,ciphertext,challenge));
+    // Select the build default after the pairing setup's identity changes.
+    a.resetDutyToBuildDefault();a.testChargeDuty(IOHC_FREQ_2,3651);
+    ASSERT_TRUE(proveAtlanticCandidateForTest(a,ciphertext,challenge,key));
+#ifdef OPENKNX_DEBUG
+    ASSERT_TRUE(a.atlanticStatus().stage==IoHomeController::AtlanticStage::Probing);
+#else
+    ASSERT_TRUE(a.atlanticStatus().stage==IoHomeController::AtlanticStage::KeyVerified);
+#endif
+}
