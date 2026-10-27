@@ -87,3 +87,5 @@ jobs:
         run: make -C test check-discovery-evidence
       - name: Reject remaining-time truncation, unqualified ACKs and position rewrites
         run: make -C test check-remaining-time-mutations
+      - name: Keep native remaining-time evidence separate from synthetic vectors
+        run: make -C test check-remaining-time-evidence
