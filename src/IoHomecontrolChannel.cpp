@@ -668,6 +668,8 @@ void IoHomecontrolChannel::observe2WMovingStatus(bool iIsMoving)
 
 void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
 {
+    const bool wasTracking=mPollTrackingDeadlineMs!=0&&!timeReached(millis(),mPollTrackingDeadlineMs);
+    mTrustedPollMoving=false; // only a fresh qualified main-info callback renews this proof
     observe2WMovingStatus(iIsMoving);
     mRfPollWaiting=false;
     mMovingPollMisses=0;
@@ -700,9 +702,9 @@ void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
     {
         const uint32_t lDelayMs = defaultTrackedStatusPollDelayMs();
         const uint32_t lNow = millis();
-        if (mPollTrackingDeadlineMs == 0)
+        if (mPollTrackingDeadlineMs == 0 && (mSingleFollowUpPollPending || mStatusExpected))
             mPollTrackingDeadlineMs = lNow + kTrackedStatusPollWindowMs;
-        if (mNextStatusPollMs == 0 && (mSingleFollowUpPollPending || mStatusExpected))
+        if (mNextStatusPollMs == 0 && (wasTracking || mSingleFollowUpPollPending || mStatusExpected))
             mNextStatusPollMs = lNow + lDelayMs;
     }
 

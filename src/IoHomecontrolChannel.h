@@ -112,6 +112,7 @@ public:
   const IoHomeBatteryInfo &batteryInfo()const{return mBatteryInfo;}
 
   void onEstimate(uint16_t iSeconds);
+  void onTrustedMotionStatus(bool moving) {mTrustedPollMoving=moving&&mPollTrackingDeadlineMs!=0;}
   void onStatusExpected();
   void onStatusPollFailed(bool iAfterChallenge, bool iSingleAttempt=true);
   void onStatusPollDeferred(uint32_t iDelayMs, bool iRfDenied);

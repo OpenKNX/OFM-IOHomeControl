@@ -107,6 +107,15 @@ struct IoHomecontrolChannel {
 '''
 tests=r'''int main(){
  {
+  IoHomecontrolChannel c;c.trackedDelay=2000;c.mPollTrackingDeadlineMs=now+600000;c.mIsMoving=true;
+  const auto epoch=c.mPollTrackingDeadlineMs;c.onTargetPositionFeedback(80);c.onPositionFeedback(20);
+  c.onStatusUpdate(true);c.onEstimate(0);assert(c.mNextStatusPollMs==now+2000&&!c.mObservedPositiveRemaining&&c.mPollTrackingDeadlineMs==epoch);
+  c.onEstimate(3);c.mNextStatusPollMs=0;c.onStatusUpdate(true);c.onEstimate(0);assert(c.mNextStatusPollMs==now+1000);
+  c.mNextStatusPollMs=0;c.onStatusUpdate(true);c.onEstimate(0xFFFF);assert(c.mNextStatusPollMs==now+2000&&!c.mObservedPositiveRemaining);
+  c.clearStatusPollTracking();c.onStatusUpdate(true);c.onEstimate(1);assert(!c.mPollTrackingDeadlineMs&&!c.mNextStatusPollMs&&!c.mTrustedPollMoving);
+ }
+
+ {
   const auto saved=now;now=UINT32_MAX-500;
   IoHomecontrolChannel c;c.trackedDelay=2000;c.mIsMoving=true;c.startStatusPollTracking(2000);
   const auto epoch=c.mPollTrackingDeadlineMs;c.onEstimate(3);assert(uint32_t(c.mNextStatusPollMs-now)==2000);

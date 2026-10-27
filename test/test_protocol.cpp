@@ -16346,6 +16346,7 @@ TEST(controller_status_update_receive_auth_uses_saved_command_data)
     ASSERT_EQ(lAckFrame.data[1], 0x00);
     ASSERT_TRUE((lAckFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
 
+    ASSERT_TRUE(lChannel.mTrustedMotionObserved&&!lChannel.mTrustedMotionMoving);
     ASSERT_TRUE(lChannel.testHasStatusUpdate());
     ASSERT_TRUE(!lChannel.testStatusMoving());
     ASSERT_TRUE(lChannel.testHasPositionFeedback());

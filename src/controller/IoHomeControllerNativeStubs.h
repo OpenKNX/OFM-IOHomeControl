@@ -491,6 +491,8 @@ public:
     mHasBatteryLevel = true;
     mBatteryLevel = iPercent;
   }
+  bool mTrustedMotionObserved=false,mTrustedMotionMoving=false;
+  void onTrustedMotionStatus(bool moving){mTrustedMotionObserved=true;mTrustedMotionMoving=moving;}
   void onEstimate(uint16_t iSeconds)
   {
     mHasEstimate = true;

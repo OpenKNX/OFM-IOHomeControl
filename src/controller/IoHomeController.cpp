@@ -488,7 +488,7 @@ namespace
                                 uint8_t iDataLen,
                                 bool iStopped,
                                 uint8_t iTargetOffset,
-                                uint8_t iCurrentOffset)
+                                uint8_t iCurrentOffset, bool iTrustedMotion=false)
     {
         if (!iChannel || !iData ||
             iDataLen < iTargetOffset + 2 ||
@@ -562,6 +562,7 @@ namespace
         }
 
         iChannel->onStatusUpdate(lMoving);
+        if(iTrustedMotion&&lHasCurrentPosition&&lHasTargetPosition)iChannel->onTrustedMotionStatus(lMoving);
         iChannel->logStatusSummary(lCurrentPercent, lHasCurrentPosition,
                                    lTargetPercent, lHasTargetPosition,
                                    lMoving);
@@ -12266,7 +12267,7 @@ void IoHomeController::dispatchRxFrame()
                     const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
                     recordTwoWayTrace("status_received", mRxFrame, mRxRawLen);
                     observeRainStatus(lCh);
-                    dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 5, 7);
+                    dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 5, 7,mInboundVerified);
                 }
                 // Status-expected flag: device will auto-send StatusUpdate
                 if (mTrustRxPosition && mRxFrame.dataLen >= 2 && (mRxFrame.data[1] & 0x80))
@@ -12418,7 +12419,7 @@ void IoHomeController::dispatchRxFrame()
                        mCurrentCmd.param2==0xFF&&mCurrentCmd.param3==0xFF&&mCurrentCmd.destNodeId==lSrcNode&&lDestNode==mOwnNodeId&&
                        sampleIdentityMatches(mCurrentCmd.sourceChannelIndex,lSrcNode,mCurrentCmd.managementKey,mCurrentCmd.productContextRevision))
                         lCh->onBatteryStatus(mRxFrame.data[1],0x04);
-                    lMeasuredStatus=dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 2, 4);
+                    lMeasuredStatus=dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 2, 4,lRemainingPoll);
                 }
                 // Status-expected flag
                 if (mRxFrame.dataLen >= 2 && !(mRxFrame.data[0]&1) && (mRxFrame.data[1] & 0x80))

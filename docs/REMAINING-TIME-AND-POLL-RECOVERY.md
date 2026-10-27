@@ -46,7 +46,9 @@ A fresh measured moving report supersedes a pre-STOP optimistic snapshot.
 
 A zero may request a short confirmation only after a positive count in the same
 live moving epoch. Unknown/unbounded observations clear that counting provenance.
-The request only shortens an existing follow-up; it cannot create/extend tracking,
+An already tracked moving report retains normal cadence when its countdown is
+unavailable or a never-counting zero. An untracked moving report cannot create a
+new polling epoch merely by reporting motion. The estimate only shortens an existing follow-up; it cannot create/extend tracking,
 revive a stop, or exceed the earlier scheduled cadence. The normal default is 2 s;
 configured shorter intervals remain honored. The low-power floor remains 10 s and
 the original tracking deadline remains finite. Peer/key/profile/mode changes,
@@ -56,7 +58,7 @@ All milliseconds use wide intermediates and wrap-safe comparisons.
 ## Recovery and RF admission
 
 Two missed single-attempt tracked polls can keep normal cadence only after a
-qualified measured moving response. Optimistic commands or current/target mismatch
+qualified measured moving response or authenticated owned 71 update. Optimistic commands or current/target mismatch
 alone cannot qualify. The third miss enters the existing silence/authentication
 ladder; its latch cannot be reset by changing motion or failure classification.
 A valid status reply or genuinely new epoch resets grace. STOP-settle multi-try
