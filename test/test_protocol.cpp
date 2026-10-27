@@ -14595,8 +14595,7 @@ TEST(controller_private_response_does_not_guess_power_class_or_percent_and_decod
         ASSERT_TRUE(lChannel.testHasStatusUpdate());
         ASSERT_TRUE(lChannel.testStatusMoving());
         ASSERT_TRUE(lChannel.testStatusExpected());
-        ASSERT_TRUE(lChannel.testHasEstimate());
-        ASSERT_EQ(lChannel.testEstimate(), 4);
+        ASSERT_TRUE(!lChannel.testHasEstimate()); // tilt/FP layout is not qualified main-info time
         ASSERT_TRUE(lChannel.testHasSlatFeedback());
         ASSERT_FLOAT_EQ(lChannel.testTargetPositionFeedback(), 50.0f, 0.01f);
         ASSERT_FLOAT_EQ(lChannel.testSlatFeedback(), 25.0f, 0.01f);
@@ -23412,4 +23411,24 @@ TEST(protocol_status71_optional_commander_boundaries_never_use_byte1)
     f.dataLen=15;auto record=ioHomeDecodeLastCommand(f);
     ASSERT_TRUE(record.valid);ASSERT_EQ(record.node,0xE2D1FFU);ASSERT_EQ(record.originator,9U);
     f.data[11]=f.data[12]=f.data[13]=0;ASSERT_TRUE(!ioHomeDecodeLastCommand(f).valid);
+}
+
+
+TEST(controller_remaining_time_only_owned_correlated_main_info_poll)
+{
+    const uint8_t key[16]={1};
+    for(unsigned mode=0;mode<8;mode++)for(uint16_t raw:{uint16_t(1),uint16_t(255),uint16_t(256),uint16_t(0xFFFE),uint16_t(0xFFFF),uint16_t(0)}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x831F2A,0x7E9E6E,key);
+        if(mode==1)ASSERT_TRUE(c.sendCommand(0x7E9E6E,key,IoHomeCommand::Execute,50));
+        else if(mode==2)ASSERT_TRUE(c.sendTiltStatusQuery(0x7E9E6E,key));
+        else ASSERT_TRUE(c.sendStatusPoll(&ch,mode!=3));
+        IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+        if(mode==6)++ch.mTestPollEpoch;
+        uint8_t data[8]={0,0,0,0,0x10,0,uint8_t(raw>>8),uint8_t(raw)};
+        IoHomeFrame reply;buildPrivateResponseFrame(reply,0x831F2A,mode==7?0x123456:0x7E9E6E,data,mode==4?6:mode==5?7:8);
+        ASSERT_TRUE(queueControllerResponse(c,reply));
+        ASSERT_EQ(ch.testHasEstimate(),mode==0);
+        if(mode==0)ASSERT_EQ(ch.testEstimate(),raw);
+    }
 }

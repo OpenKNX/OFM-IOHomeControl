@@ -1125,11 +1125,10 @@ void IoHomecontrolChannel::onBatteryLevel(uint8_t iPercent)
     logDebugP("Battery level: %d%%", iPercent);
 }
 
-void IoHomecontrolChannel::onEstimate(uint8_t iSeconds)
+void IoHomecontrolChannel::onEstimate(uint16_t iSeconds)
 {
-    // Estimate byte from PrivateResponse (data[7]): travel time remaining in seconds
-    // 0xFF or 0x00 = unknown; reference uses this to schedule next status poll
-    if (iSeconds != 0xFF && iSeconds != 0x00)
+    // Qualified native main-info 16-bit remaining seconds; zero is ambiguous.
+    if (iSeconds > 0 && iSeconds < 0xFFFE)
     {
         logDebugP("Estimate: %d seconds remaining", iSeconds);
         mStatusPollTimer = delayTimerInit();

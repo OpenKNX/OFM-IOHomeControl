@@ -111,7 +111,7 @@ public:
   void updateBatteryKo();
   const IoHomeBatteryInfo &batteryInfo()const{return mBatteryInfo;}
 
-  void onEstimate(uint8_t iSeconds);
+  void onEstimate(uint16_t iSeconds);
   void onStatusExpected();
   void onStatusPollFailed(bool iAfterChallenge);
   uint32_t statusPollEpoch() const { return mPollTrackingDeadlineMs; }

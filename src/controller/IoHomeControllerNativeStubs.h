@@ -491,7 +491,7 @@ public:
     mHasBatteryLevel = true;
     mBatteryLevel = iPercent;
   }
-  void onEstimate(uint8_t iSeconds)
+  void onEstimate(uint16_t iSeconds)
   {
     mHasEstimate = true;
     mEstimate = iSeconds;
@@ -600,7 +600,7 @@ public:
   bool testHasBatteryLevel() const { return mHasBatteryLevel; }
   uint8_t testBatteryLevel() const { return mBatteryLevel; }
   bool testHasEstimate() const { return mHasEstimate; }
-  uint8_t testEstimate() const { return mEstimate; }
+  uint16_t testEstimate() const { return mEstimate; }
   bool testStatusExpected() const { return mStatusExpected; }
   bool testHasStatusPollFailure() const { return mHasStatusPollFailure; }
   bool testStatusPollFailureAfterChallenge() const { return mStatusPollFailureAfterChallenge; }
@@ -682,7 +682,7 @@ private:
   bool mHasBatteryLevel = false;
   uint8_t mBatteryLevel = 0xFF;
   bool mHasEstimate = false;
-  uint8_t mEstimate = 0xFF;
+  uint16_t mEstimate = 0xFFFF;
   bool mStatusExpected = false;
   bool mHasStatusPollFailure = false;
   bool mStatusPollFailureAfterChallenge = false;

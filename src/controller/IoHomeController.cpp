@@ -1,4 +1,5 @@
 #include "../protocol/IoHomeProfileObjects.h"
+#include "../protocol/IoHomeRemainingTime.h"
 #include "../protocol/IoHomeProductActivation.h"
 #include "IoHomeController.h"
 #include "../radio/IoHomeTransmitIntent.h"
@@ -12391,7 +12392,7 @@ void IoHomeController::dispatchRxFrame()
                 //   data[1]:    flags (bit 7 = status-expected)
                 //   data[2:3]:  target position (16-bit BE)
                 //   data[4:5]:  current position (16-bit BE)
-                //   data[7]:    estimate (travel time in seconds; 0xFF/0x00 = unknown)
+                //   data[6:7]: remaining seconds, only qualified native main-info status polls
                 //   Minimum 8 bytes for full position+estimate payload
                 if (mTrustRxPosition && mRxFrame.dataLen >= 8)
                 {
@@ -12406,12 +12407,22 @@ void IoHomeController::dispatchRxFrame()
                 // Status-expected flag
                 if (mRxFrame.dataLen >= 2 && (mRxFrame.data[1] & 0x80))
                     lCh->onStatusExpected();
-                // Estimate byte: travel time remaining in seconds
-                if (mTrustRxPosition && mRxFrame.dataLen >= 8)
-                {
-                    uint8_t lEstimate = mRxFrame.data[7];
-                    lCh->onEstimate(lEstimate);
-                }
+                // A length match alone cannot qualify EXECUTE ACKs, tilt/FP probes,
+                // unsolicited updates or another channel's private transaction.
+                const bool lRemainingPoll=mTrustRxPosition && mCorrelatedStatusReply &&
+                    mCurrentCmd.active && mCurrentCmd.ownedStatusPoll &&
+                    mCurrentCmd.command==IoHomeCommand::Private && mCurrentCmd.param==3 &&
+                    mCurrentCmd.param2==0xFF && mCurrentCmd.param3==0xFF &&
+                    mCurrentCmd.destNodeId==lSrcNode && lDestNode==mOwnNodeId &&
+                    mCurrentCmd.sourceChannelIndex==i &&
+                    mCurrentCmd.statusPollEpoch==lCh->statusPollEpoch() &&
+                    sampleIdentityMatches(i,lSrcNode,mCurrentCmd.managementKey,mCurrentCmd.productContextRevision);
+                const auto lRemaining=lRemainingPoll?IoHomeRemainingTime::decode(mRxFrame.data,mRxFrame.dataLen):IoHomeRemainingTime{};
+                logDebugP("remaining_time node=%06X source=%s layout_available=%u rawRemainingTime=%u remainingTimeKnown=%u kind=%u",
+                    lSrcNode,lRemainingPoll?"correlated_0x03_status_poll":"unsupported",lRemaining.kind!=IoHomeRemainingTime::Kind::Unavailable,
+                    lRemaining.raw,lRemaining.known(),unsigned(lRemaining.kind));
+                if(lRemainingPoll && mCurrentCmd.trackedStatusPoll && mRxFrame.dataLen>=8)
+                    lCh->onEstimate(lRemaining.raw);
                 // Execute-status bits 6:5 describe battery class, not RF power
                 // class. Discovery MIB / explicit configuration owns power mode.
                 uint8_t lPrivateFpIndex = 3;
