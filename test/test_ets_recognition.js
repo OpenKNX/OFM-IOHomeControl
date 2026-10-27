@@ -95,6 +95,7 @@ test("assignment resume acknowledges only after project application",function() 
     var d=deviceWith({Name:"Office",RecognitionTypeAuto:0,DeviceType:7});var ack=false;
     var receipt=[0,1,0,0,0,0,8,0x12,0x34,0x56,6,0,58,1,2,0];
     var online={invokeFunctionProperty:function(o,p,data) {
+        if(data[0]===0x23)return [3]; // older firmware has no readback-report capability
         if(data[0]===0x1D)return snapshot(6,58,2);
         if(data.length===2)return receipt;
         check(value(d,"Active")===1 && value(d,"Name")==="Office" && value(d,"DeviceType")===7,"manual/project state");
@@ -614,4 +615,17 @@ test("ETS repeated configured-channel application has no redundant setters",func
  IOHC_configureImportedChannel(d,1,discovery);
  var writes=0;for(var name in d.params)(function(p){var current=p.value;Object.defineProperty(p,"value",{get:function(){return current;},set:function(v){writes++;current=v;}});})(d.params[name]);
  IOHC_configureImportedChannel(d,1,discovery);check(writes===0,"second configure changed stable ETS fields");
+});
+
+
+test("ETS readback report is capability gated and failure never ACKs receipt",function(){
+ var f=importFixture(),base=f.online.invokeFunctionProperty,reports=0;
+ f.online.invokeFunctionProperty=function(o,p,data){
+  if(data[0]===0x23)return hostBytes([0,1,0,0,1,127,0,0,0,9]);
+  if(data[0]===0x41){reports++;check(data.length===8&&data[5]===1&&data[7]===0,"invalid readback report");return hostBytes([4]);}
+  return base(o,p,data);
+ };
+ IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});
+ var rejected=false;try{IOHC_startKeyExtract(f.device,f.online,f.progress,{channelCount:3});}catch(e){rejected=String(e).indexOf("Readbackbericht")>=0;}
+ check(rejected&&reports===1&&f.acks()===0,"readback mismatch ACKed");
 });

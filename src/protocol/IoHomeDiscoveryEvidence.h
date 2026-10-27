@@ -11,6 +11,7 @@ struct IoHomeDiscoveryEvidence {
         Failure failure=Failure::None;
         uint8_t optionalConfig=0xFF;
         bool rxKnown=false,assignable=false;
+        uint8_t etsActive=0; // 0 unknown, 1 reported inactive, 2 reported active; volatile
         const char *metadata() const {return flags&Active2b?"fresh_2b":flags&Directed2f?"directed_2f":flags&Persisted?"flash":"unknown";}
     };
     // Eight simultaneous nodes fit the smallest production target; overflow is explicit.

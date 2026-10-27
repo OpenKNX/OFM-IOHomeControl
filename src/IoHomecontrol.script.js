@@ -299,6 +299,13 @@ function /* internal helper */ IOHC_resumeAssignment(device,online,channel,trace
        IOHC_readNodeId(current,3)!==discovery.nodeId || (current[11]&0x20)!==0) return false;
     if(trace)trace.step="ETS-Kanalparameter";
     IOHC_configureImportedChannel(device,channel+1,discovery);
+    var caps=IOHC_invokeFunctionProperty(online,[0x23]);
+    if(caps&&caps.length===10&&caps[0]===0&&caps[1]===1&&(caps[4]&1)) {
+        var prefix="IOHC_c"+(channel+1),report=[0x41,channel];IOHC_appendNodeId(report,discovery.nodeId);
+        report.push(Number(IOHC_getParameter(device,prefix+"Active").value),Number(IOHC_getParameter(device,prefix+"DeviceType").value),Number(IOHC_getParameter(device,prefix+"ProtocolMode").value));
+        var reported=IOHC_invokeFunctionProperty(online,report);
+        if(!reported||reported[0]!==0)throw new Error("ETS-Readbackbericht abgelehnt; Zuordnungsbeleg bleibt offen");
+    }
     IOHC_setParameterValue(device,"IOHC_c"+(channel+1)+"SyncStatus","ETS gesetzt; Gerätebeleg offen");
     var ack=[0x21,channel].concat(receipt.slice(3,10));
     var response=IOHC_invokeFunctionProperty(online,ack);
@@ -384,6 +391,11 @@ function /* internal helper */ IOHC_configureImportedChannel(device, channelNumb
                                : "Hersteller und Energieklasse unbekannt");
     // Keep both ETS visibility and downloaded channel activation explicit.
     IOHC_setParameterValue(device, prefix + "Active", 1);
+    IOHC_checkImportedReadback(device,channelNumber,discovery);
+}
+
+function /* internal helper */ IOHC_checkImportedReadback(device,channelNumber,discovery) {
+    var prefix="IOHC_c"+channelNumber;
     var required = [["Active",1],["ProtocolMode",0],
                     ["PairedNodeIdDisplay",IOHC_formatNodeId(discovery.nodeId)]];
     for(var r=0;r<required.length;r++) {
@@ -1121,6 +1133,8 @@ function IOHC_startKeyExtract(device, online, progress, context) {
             } else {
                 throw new Error("io-homecontrol: Scan-Ergebnis " + (d + 1) + " ist nicht mehr verfügbar");
             }
+            if(assignmentStatus===0||assignmentStatus===1)
+                IOHC_checkImportedReadback(device,assignedChannel+1,discoveries[d]);
             var evidence=discoveries[d].speResponseSeen?"fresh_2b":discoveries[d].directedVerified?"directed_2f":discoveries[d].passiveAuthVerified?"passive_auth":"unknown";
             var after=assignedChannel<channelCount?IOHC_getParameter(device,"IOHC_c"+(assignedChannel+1)+"Active"):null;
             var line="IOHC_ETS index="+d+" node="+IOHC_formatNodeId(discoveries[d].nodeId)+" evidence="+evidence+

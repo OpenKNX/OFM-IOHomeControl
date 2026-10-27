@@ -778,8 +778,8 @@ void IoHomecontrol::logDiagnosticSummary()
         auto &p=mDiscoveryEvidence.nodes[i];const auto *device=findKeyImportDevice(p.node);
         if(device&&device->valid)p.assignable=true;
         if(p.assignable)++assignable;
-        logInfoP("IOHC_NODE session=%lu node=%06X passive_2f=%u passive_challenge=%u passive_auth=%u active_2b=%u directed_2f=%u directed_auth=%u flash=%u fw_channel=%u ets_assigned=unknown ets_active=unknown metadata=%s firstMs=%lu lastMs=%lu src=%06X dst=%06X request=%02X response=%02X rx_known=%u freqIdx=%u rssi=%d correlated=%u lastFailure=%u assignable=%u seen71=%u config6f=%u (255=unknown; 0=not_attempted; 1=accepted70; 2=rejectedFE; 3=timeout; 4=tx_failure)",
-            (unsigned long)mDiscoveryEvidence.session,p.node,!!(p.flags&1),!!(p.flags&2),!!(p.flags&4),!!(p.flags&8),!!(p.flags&16),!!(p.flags&32),!!(p.flags&64),p.channel,p.metadata(),
+        logInfoP("IOHC_NODE session=%lu node=%06X passive_2f=%u passive_challenge=%u passive_auth=%u active_2b=%u directed_2f=%u directed_auth=%u flash=%u fw_channel=%u ets_assigned=%s ets_active=%s metadata=%s firstMs=%lu lastMs=%lu src=%06X dst=%06X request=%02X response=%02X rx_known=%u freqIdx=%u rssi=%d correlated=%u lastFailure=%u assignable=%u seen71=%u config6f=%u (255=unknown; 0=not_attempted; 1=accepted70; 2=rejectedFE; 3=timeout; 4=tx_failure)",
+            (unsigned long)mDiscoveryEvidence.session,p.node,!!(p.flags&1),!!(p.flags&2),!!(p.flags&4),!!(p.flags&8),!!(p.flags&16),!!(p.flags&32),!!(p.flags&64),p.channel,p.etsActive?"project_readback_report":"unknown",p.etsActive==2?"reported_1":p.etsActive==1?"reported_0":"unknown",p.metadata(),
             (unsigned long)p.firstSeen,(unsigned long)p.lastSeen,p.src,p.dst,p.request,p.response,p.rxKnown,p.freq,p.rssi,
             !!(p.flags&(IoHomeDiscoveryEvidence::Active2b|IoHomeDiscoveryEvidence::DirectedAuth)),unsigned(p.failure),p.assignable,!!(p.flags&128),p.optionalConfig);
     }
@@ -2853,6 +2853,17 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
     { resultData[0]=4; resultLength=1; return true; }
     switch (lCmd)
     {
+    case 0x41: // Volatile ETS readback report; no assignment, persistence or RF side effect
+    {
+        if(length!=8||data[1]>=mNumChannels||data[5]>1||data[7]!=0)break;
+        const uint32_t node=uint32_t(data[2])<<16|uint32_t(data[3])<<8|data[4];
+        const auto *channel=mChannels[data[1]];
+        if(!channel||channel->is1W()||!channel->isPaired()||channel->getNodeId()!=node)
+        {resultData[0]=4;resultLength=1;return true;}
+        if(auto *p=mDiscoveryEvidence.touch(node,millis())){p->etsActive=data[5]+1;p->channel=data[1]+1;}
+        logInfoP("IOHC_ETS session=%lu api=41 node=%06X fw_channel=%u Active_readback=%u DeviceType_readback=%u ProtocolMode_readback=%u source=ETS_project_report download=unknown",(unsigned long)mDiscoveryEvidence.session,node,data[1]+1,data[5],data[6],data[7]);
+        resultData[0]=0;resultLength=1;return true;
+    }
     case 0x40: // Explicit Atlantic product workflow: start / inspect / assign
     {
         if(length<3||data[2]>=mNumChannels)break;
@@ -3256,7 +3267,8 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
     {
         if(length!=1)break;
         resultData[0]=0;resultData[1]=1;
-        const uint32_t flags=255; // bit4: individual MP/FP GET, bit5: persistence evidence API, bit6: combined MP/FP GET
+        const uint32_t flags=511; // bit8: volatile ETS readback report API41;
+        // // bit4: individual MP/FP GET, bit5: persistence evidence API, bit6: combined MP/FP GET
         for(uint8_t i=0;i<4;i++){resultData[2+i]=flags>>(24-8*i);resultData[6+i]=mCommissioningBootId>>(24-8*i);}
         resultLength=10;return true;
     }
