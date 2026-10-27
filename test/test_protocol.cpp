@@ -13,6 +13,7 @@
 #include <cstdint>
 
 #include "test_registry.h"
+#include "build/laberning_captures.h"
 
 // Pull in the modules under test
 #include "protocol/IoHomeCrypto.h"
@@ -12365,10 +12366,12 @@ TEST(controller_2w_pairing_continuations_match_klr300_ctrl1)
 
 static bool queueKeyTransferConfirmationAndAdvanceToSetConfig1(IoHomeController &iController,
                                                                uint32_t iRemoteNodeId,
-                                                               uint32_t iDeviceNodeId)
+                                                               uint32_t iDeviceNodeId,
+                                                               const IoHomeFrame *iOriginalConfirmation = nullptr)
 {
     IoHomeFrame lKeyConfirm;
     buildKeyTransferConfirmationFrame(lKeyConfirm, iRemoteNodeId, iDeviceNodeId);
+    if(iOriginalConfirmation)lKeyConfirm=*iOriginalConfirmation;
     iController.radio().testClearTransmittedPacket();
     if (!queueControllerResponse(iController, lKeyConfirm))
         return false;
@@ -14570,7 +14573,7 @@ TEST(controller_private_response_does_not_guess_power_class_or_percent_and_decod
         ASSERT_TRUE(transmitQueuedControllerFrame(lController, lTxFrame));
 
         uint8_t lData[16] = {};
-        lData[0] = 0x00; // moving flag set, but raw current/target are within tolerance
+        lData[0] = 0x00; // reported moving, even while current is close to target
         lData[1] = 0x80; // status expected
         const uint16_t lTargetRaw = IOHC_POSITION_MAX / 2;
         const uint16_t lCurrentRaw = lTargetRaw + 50;
@@ -14590,7 +14593,7 @@ TEST(controller_private_response_does_not_guess_power_class_or_percent_and_decod
         ASSERT_TRUE(lChannel.testHasPositionFeedback());
         ASSERT_TRUE(lChannel.testHasTargetPositionFeedback());
         ASSERT_TRUE(lChannel.testHasStatusUpdate());
-        ASSERT_TRUE(!lChannel.testStatusMoving());
+        ASSERT_TRUE(lChannel.testStatusMoving());
         ASSERT_TRUE(lChannel.testStatusExpected());
         ASSERT_TRUE(lChannel.testHasEstimate());
         ASSERT_EQ(lChannel.testEstimate(), 4);
@@ -23048,4 +23051,336 @@ TEST(controller_inbound_proof_cannot_follow_an_intervening_packet)
     ASSERT_TRUE(queueControllerResponse(c,proof));
     ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate());
     ASSERT_EQ(c.radio().testTransmitCount(),1U);
+}
+
+
+static const LaberningOriginal::Frame *originalCaptureFrame(const char *id, unsigned index)
+{
+    for(const auto &f:LaberningOriginal::frames)if(!std::strcmp(f.capture,id)&&f.index==index)return &f;
+    return nullptr;
+}
+static bool originalCaptureDecode(const char *id,unsigned index,IoHomeFrame &frame)
+{
+    const auto *f=originalCaptureFrame(id,index);
+    return f && frame.deserializeRawWithOptionalCrc(f->bytes,f->length);
+}
+
+TEST(golden_rf_corpus_original_laberning_headers_crc_and_flags)
+{
+    ASSERT_EQ(sizeof(LaberningOriginal::captures)/sizeof(LaberningOriginal::captures[0]),177U);
+    for(const auto &f:LaberningOriginal::frames) {
+        IoHomeFrame frame;
+        if(!frame.deserializeRawWithOptionalCrc(f.bytes,f.length)) {
+            std::printf("Original capture parse failure: %s frame=%u\n",f.capture,f.index);
+            ASSERT_TRUE(false);
+        }
+        if(f.expectedCommand>=0)ASSERT_EQ(unsigned(frame.commandId),unsigned(f.expectedCommand));
+        ASSERT_EQ(frame.ctrlByte0&f.flagMask,f.flags);
+        ASSERT_EQ(frame.getDestNodeId(),(uint32_t(f.bytes[2])<<16)|(uint32_t(f.bytes[3])<<8)|f.bytes[4]);
+        ASSERT_EQ(frame.getSrcNodeId(),(uint32_t(f.bytes[5])<<16)|(uint32_t(f.bytes[6])<<8)|f.bytes[7]);
+        if(f.crc) {
+            const auto crc=IoHomeCrypto::crc16Kermit(f.bytes,f.length-2);
+            ASSERT_EQ(crc,uint16_t(f.bytes[f.length-2])|(uint16_t(f.bytes[f.length-1])<<8));
+        }
+    }
+}
+
+TEST(golden_rf_corpus_original_public_rekeyed_hmac_matches_production_crypto)
+{
+    ASSERT_TRUE(sizeof(LaberningOriginal::publicHmacs)/sizeof(LaberningOriginal::publicHmacs[0])>0);
+    for(const auto &proof:LaberningOriginal::publicHmacs) {
+        uint8_t actual[6]{};
+        ASSERT_TRUE(IoHomeCrypto::createHmac2W(proof.transcript,proof.length,proof.challenge,LaberningOriginal::publicCorpusKey,actual));
+        ASSERT_MEM_EQ(actual,proof.mac,6);
+    }
+}
+
+TEST(controller_original_ssl_stopped_off_target_poll_keeps_current_target_and_motion_distinct)
+{
+    const char *id="velux_ssl_statuspoll_stopped_off_target";
+    const uint8_t syntheticContextKey[16]={1}; // polls were omitted; this request context is synthetic
+    for(unsigned index=0;index<6;++index) {
+        IoHomeFrame reply;ASSERT_TRUE(originalCaptureDecode(id,index,reply));
+        const auto current=uint16_t(reply.data[4])<<8|reply.data[5];
+        const auto target=uint16_t(reply.data[2])<<8|reply.data[3];
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,reply.getDestNodeId(),reply.getSrcNodeId(),syntheticContextKey);
+        ch.setManualProfileOverride(0x0080);ch.setConfigured2WPowerClass(TwoWayPowerClass::LowPower);
+        ioHomeTestSetMillis(originalCaptureFrame(id,index)->timeMs);
+        ASSERT_TRUE(c.sendBackgroundCommand(ch.getNodeId(),syntheticContextKey,IoHomeCommand::Private,3));
+        IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+        ASSERT_TRUE(queueControllerResponse(c,reply));
+        ASSERT_TRUE(ch.testHasStatusUpdate()&&ch.testHasPositionFeedback()&&ch.testHasTargetPositionFeedback());
+        ASSERT_FLOAT_EQ(ch.testPositionFeedback(),current/512.0f,0.0001f);
+        ASSERT_FLOAT_EQ(ch.testTargetPositionFeedback(),target/512.0f,0.0001f);
+        const bool moving=(reply.data[0]&1)==0;
+        ASSERT_EQ(ch.testStatusMoving(),moving);
+        ASSERT_EQ(ch.twoWayWakeBeliefAt(ioHomeTestMillis()),moving?TwoWayWakeBelief::Awake:TwoWayWakeBelief::Asleep);
+        if(index==0||index==2)ASSERT_EQ(current-target,119);
+        if(index==4||index==5)ASSERT_EQ(target-current,171);
+        ASSERT_TRUE(!ch.testHasSlatFeedback());
+    }
+}
+
+TEST(controller_original_ssl_values_in_synthetic_authenticated_71_stay_off_target)
+{
+    // Only the MP/state values derive from the 0x04 capture. This constructed
+    // 0x71 and its MAC use a public synthetic key; no captured-key proof is claimed.
+    const uint8_t syntheticKey[16]={1};
+    for(unsigned index=0;index<6;++index) {
+        IoHomeFrame original;ASSERT_TRUE(originalCaptureDecode("velux_ssl_statuspoll_stopped_off_target",index,original));
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,original.getDestNodeId(),original.getSrcNodeId(),syntheticKey);
+        ch.setManualProfileOverride(0x0080);ch.setConfigured2WPowerClass(TwoWayPowerClass::LowPower);
+        uint8_t body[11]{};body[0]=original.data[0];body[1]=original.data[1];
+        std::memcpy(body+5,original.data+2,4);body[10]=0xFF;
+        IoHomeFrame update,challenge,proof;
+        buildStatusUpdateFrame(update,c.getOwnNodeId(),ch.getNodeId(),body,sizeof(body));
+        ASSERT_TRUE(queueControllerResponse(c,update));ASSERT_TRUE(!ch.testHasStatusUpdate());
+        ASSERT_TRUE(lastTransmittedFrameForTest(c,challenge));ASSERT_EQ(challenge.commandId,IoHomeCommand::ChallengeRequest);
+        buildChallengeResponseFrame(proof,c.getOwnNodeId(),ch.getNodeId(),body,sizeof(body),challenge.data,syntheticKey);
+        ASSERT_TRUE(queueControllerResponse(c,proof));
+        ASSERT_EQ(ch.testStatusMoving(),(original.data[0]&1)==0);
+        ASSERT_FLOAT_EQ(ch.testPositionFeedback(),((uint16_t(body[7])<<8)|body[8])/512.0f,0.0001f);
+        ASSERT_FLOAT_EQ(ch.testTargetPositionFeedback(),((uint16_t(body[5])<<8)|body[6])/512.0f,0.0001f);
+    }
+}
+
+TEST(controller_original_moto_refusal_is_rejection_even_when_upstream_accepts_transport)
+{
+    for(const char *id:{"wisniowski_moto1000_exchange_execute_partial_position_refused","wisniowski_moto1000_exchange_execute_parameter_unknown"}) {
+        IoHomeFrame request,reject;ASSERT_TRUE(originalCaptureDecode(id,0,request));ASSERT_TRUE(originalCaptureDecode(id,1,reject));
+        ASSERT_EQ(reject.commandId,IoHomeCommand::ErrorResponse);ASSERT_EQ(reject.data[0],0x28);
+        const auto result=ioHomeDecodeErrorResponse(reject.data[0]);ASSERT_EQ(result.raw,0x28);
+        const uint8_t syntheticKey[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,request.getSrcNodeId(),request.getDestNodeId(),syntheticKey);
+        ch.setManualProfileOverride(0x0140);
+        ASSERT_TRUE(c.sendRawTwoWayExecute(&ch,request.data,request.dataLen,true));
+        IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(queueControllerResponse(c,reject));
+        ASSERT_EQ(ch.testLastCommandExchangeResult(),IoHomeCommandExchangeResult::ExplicitlyRejected);
+        ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasTargetPositionFeedback());
+        ASSERT_EQ(c.exchangeDiagnostics().counters.actuationObserved,0U);
+        for(bool explicitMoto:{false,true}) {
+            ASSERT_EQ(ioHomeGarageCommandAllowed(ioHomeProfileDescriptor(5,0),explicitMoto,50),!explicitMoto);
+            ASSERT_TRUE(!ioHomeGarageCommandAllowed(ioHomeProfileDescriptor(5,58),explicitMoto,50));
+            ASSERT_TRUE(!ioHomeGarageCommandAllowed(ioHomeProfileDescriptor(5,58),explicitMoto,0xD8));
+            for(uint8_t target:{0,100,0xD2})ASSERT_TRUE(ioHomeGarageCommandAllowed(ioHomeProfileDescriptor(5,58),explicitMoto,target));
+        }
+    }
+}
+
+TEST(controller_original_execute_ack_does_not_publish_stale_position_or_tilt)
+{
+    const uint8_t syntheticKey[16]={1};
+    for(const char *id:{"somfy_awning_exchange_ack_reports_stale_target_open","somfy_awning_exchange_ack_reports_stale_target_close","velux_ssl_exchange_set_position_ack_stale_target","tilt_cover_exchange_ack_echoes_precommand_tilt","tilt_cover_exchange_ack_tilt_block","tilt_cover_exchange_ack_tilt_block_second_device"}) {
+        IoHomeFrame originalRequest,reply;ASSERT_TRUE(originalCaptureDecode(id,0,originalRequest));
+        const LaberningOriginal::Frame *last=nullptr;
+        for(const auto &f:LaberningOriginal::frames)if(!std::strcmp(f.capture,id)&&!f.tx&&f.bytes[8]==4)last=&f;
+        ASSERT_TRUE(last);ASSERT_TRUE(reply.deserializeRawWithOptionalCrc(last->bytes,last->length));
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,originalRequest.getSrcNodeId(),originalRequest.getDestNodeId(),syntheticKey);
+        ch.setManualProfileOverride(0x0440); // explicit synthetic exterior-blind context, not discovered evidence
+        ASSERT_TRUE(c.sendRawTwoWayExecute(&ch,originalRequest.data,originalRequest.dataLen,true));
+        IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+        ASSERT_TRUE(queueControllerResponse(c,reply));
+        ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasTargetPositionFeedback()&&!ch.testHasSlatFeedback());
+        ASSERT_TRUE(c.lastTwoWayOutcome().transportComplete);
+    }
+}
+
+TEST(controller_original_tilt_followup_poll_updates_orientation_after_stale_ack)
+{
+    const char *id="tilt_cover_statuspoll_reports_settled_tilt_after";
+    IoHomeFrame reply;ASSERT_TRUE(originalCaptureDecode(id,3,reply));
+    const uint8_t syntheticKey[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,reply.getDestNodeId(),reply.getSrcNodeId(),syntheticKey);
+    ch.setManualProfileOverride(0x0440);
+    ASSERT_TRUE(c.sendCommand(ch.getNodeId(),syntheticKey,IoHomeCommand::Private,3,0x20,1));
+    IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));ASSERT_TRUE(queueControllerResponse(c,reply));
+    ASSERT_TRUE(ch.testHasPositionFeedback()&&ch.testHasSlatFeedback());
+    ASSERT_FLOAT_EQ(ch.testPositionFeedback(),100.0f,0.0001f);
+    ASSERT_FLOAT_EQ(ch.testSlatFeedback(),100.0f-0x372C/512.0f,0.0001f);
+}
+
+TEST(golden_rf_corpus_original_klr_rollcall_retains_two_replies_and_three_distinct_nodes)
+{
+    IoHomeFrame first,second,unheard;
+    ASSERT_TRUE(originalCaptureDecode("velux_klr300_discovery_rollcall_node_verification",1,first));
+    ASSERT_TRUE(originalCaptureDecode("velux_klr300_discovery_rollcall_node_verification",2,second));
+    ASSERT_EQ(first.commandId,IoHomeCommand::DiscoverSPEResponse);ASSERT_EQ(second.commandId,IoHomeCommand::DiscoverSPEResponse);
+    const auto a=decodeAcceptedDiscoveryIdentity(first.data,first.dataLen),b=decodeAcceptedDiscoveryIdentity(second.data,second.dataLen);
+    ASSERT_EQ(a.multiInfoByte,0x8D);ASSERT_EQ(b.multiInfoByte,0xCD);
+    ASSERT_EQ(a.responseTimeClass,2U);ASSERT_EQ(b.responseTimeClass,3U);
+    ASSERT_EQ(a.powerSaveModeRaw,1U);ASSERT_EQ(b.powerSaveModeRaw,1U);
+    ASSERT_EQ(first.getSrcNodeId(),0x155D81U);ASSERT_EQ(second.getSrcNodeId(),0x562292U);
+    ASSERT_TRUE(originalCaptureDecode("velux_klr300_discovery_rollcall_node_verification",4,unheard));
+    ASSERT_EQ(unheard.getDestNodeId(),0xE50470U); // directed request is observation, not proof of a heard reply
+    unsigned replies=0;
+    for(const auto &f:LaberningOriginal::frames)if(!std::strcmp(f.capture,"velux_klr300_discovery_rollcall_node_verification")) {
+        ASSERT_EQ(f.frequency,868950000U);
+        ASSERT_TRUE(f.bytes[8]!=0x3C && f.bytes[8]!=0x3D); // masked frames stay absent
+        if(f.bytes[8]==0x2B)++replies;
+    }
+    ASSERT_EQ(replies,2U);
+}
+
+TEST(controller_original_foreign_unsolicited_status_never_gains_reply_or_publication)
+{
+    const uint8_t syntheticKey[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel owned;
+    initPaired2WControllerForTest(c,m,owned,0x123456,0x654321,syntheticKey);
+    for(unsigned index=0;index<3;++index) {
+        IoHomeFrame frame;ASSERT_TRUE(originalCaptureDecode("multi_somfy_unsolicited_status_burst",index,frame));
+        ASSERT_EQ(frame.commandId,IoHomeCommand::StatusUpdate);
+        c.testSetRxScanFrequency(originalCaptureFrame("multi_somfy_unsolicited_status_burst",index)->frequency);
+        ASSERT_TRUE(queueControllerResponse(c,frame));
+        ASSERT_EQ(c.radio().testTransmitCount(),0U);
+        ASSERT_TRUE(!owned.testHasPositionFeedback()&&!owned.testHasStatusUpdate());
+    }
+}
+
+TEST(golden_rf_corpus_original_klf_observer_samples_are_bounded_and_read_only)
+{
+    unsigned sampled=0;bool frequencies[3]{};unsigned longFrames=0;
+    for(const auto &f:LaberningOriginal::frames)if(!std::strcmp(f.capture,"velux_klf200_statuspoll_roundrobin_868_sx1262")) {
+        ++sampled;IoHomeFrame frame;ASSERT_TRUE(frame.deserializeRawWithOptionalCrc(f.bytes,f.length));
+        ASSERT_TRUE(frame.commandId==IoHomeCommand::Private || frame.commandId==IoHomeCommand::PrivateResponse);
+        if(frame.commandId==IoHomeCommand::Private) {
+            const uint8_t payload[]={1,0xFE,1,1,1,1,1,1,1,0};
+            ASSERT_EQ(frame.dataLen,sizeof(payload));ASSERT_MEM_EQ(frame.data,payload,sizeof(payload));
+        } else if(frame.dataLen>=8)++longFrames;
+        for(uint8_t i=0;i<3;++i)if(f.frequency==IOHC_FREQUENCIES[i])frequencies[i]=true;
+    }
+    ASSERT_TRUE(sampled<=32 && longFrames>0);
+    ASSERT_TRUE(frequencies[0]&&frequencies[1]&&frequencies[2]);
+}
+
+TEST(golden_rf_corpus_original_velux_preamble_contrasts_remain_explicit)
+{
+    const auto *shortStop=originalCaptureFrame("velux_ssl_exchange_stop_mid_motion_short_preamble",0);
+    const auto *longStop=originalCaptureFrame("velux_ssl_exchange_stop_mid_motion_unanswered",0);
+    const auto *firstPoll=originalCaptureFrame("velux_ssl_statuspoll_stop_settle_preamble_escalation",0);
+    const auto *retryPoll=originalCaptureFrame("velux_ssl_statuspoll_stop_settle_preamble_escalation",1);
+    ASSERT_TRUE(shortStop&&longStop&&firstPoll&&retryPoll);
+    ASSERT_EQ(shortStop->preamble,32U);ASSERT_EQ(longStop->preamble,1024U);
+    ASSERT_EQ(firstPoll->preamble,32U);ASSERT_EQ(retryPoll->preamble,1024U);
+    ASSERT_EQ(shortStop->frequency,longStop->frequency);
+    ASSERT_EQ(shortStop->length,longStop->length);ASSERT_MEM_EQ(shortStop->bytes,longStop->bytes,shortStop->length);
+}
+
+TEST(golden_rf_corpus_original_enrollment_public_kat_keeps_trailer_and_recovers_only_documented_key)
+{
+    const auto *wire=originalCaptureFrame("reference_1w_enrollment_add_controller_kat",0);ASSERT_TRUE(wire);
+    IoHomeFrame frame;ASSERT_TRUE(frame.deserializeRawWithOptionalCrc(wire->bytes,wire->length));
+    ASSERT_EQ(wire->length,37U);ASSERT_TRUE(frame.hasTrailerMac);ASSERT_TRUE(!frame.hasHmac);ASSERT_EQ(frame.commandId,IoHomeCommand::SendKey1W);
+    const uint8_t published[16]={1,2,3,4,5,6,7,8,9,0x10,0x11,0x12,0x13,0x14,0x15,0x16};
+    const uint8_t node[]={0xAB,0xCD,0xEF};uint8_t decrypted[16]{};
+    ASSERT_TRUE(IoHomeCrypto::decrypt1WKey(frame.data,IOHC_TRANSFER_KEY,node,decrypted));
+    ASSERT_MEM_EQ(decrypted,published,16);
+}
+
+
+TEST(controller_original_sensor_favorite_is_protection_traffic_not_user_favorite)
+{
+    const uint8_t key[16]={1};
+    for(const char *id:{"wind_sensor_oneway_favorite_wind_originator_sx1276","wind_sensor_oneway_favorite_rain_originator_sx1276"}) {
+        IoHomeFrame frame;ASSERT_TRUE(originalCaptureDecode(id,0,frame));
+        ASSERT_EQ(frame.commandId,IoHomeCommand::Execute);ASSERT_TRUE(frame.ctrlByte0&IOHC_CTRL0_MODE_1W);
+        const uint8_t origin=std::strstr(id,"rain")?IOHC_ORIGINATOR_RAIN:IOHC_ORIGINATOR_WIND;
+        ASSERT_EQ(frame.data[0],origin);ASSERT_EQ((frame.data[1]&IOHC_ACEI_PRIORITY_MASK)>>5,IOHC_PRIORITY_SENSOR);
+        ASSERT_EQ(frame.data[2],0xD8);ASSERT_TRUE(frame.data[0]!=IOHC_ORIGINATOR_USER);
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+        ASSERT_TRUE(c.sendBackgroundCommand(ch.getNodeId(),key,IoHomeCommand::Private,3,0xFF,0xFF,1));
+        IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+        ASSERT_TRUE(queueControllerResponse(c,frame));ASSERT_EQ(c.state(),ControllerState::WaitResponse);
+        ASSERT_EQ(c.radio().testTransmitCount(),1U);ASSERT_EQ(ch.getNodeId(),0x654321U);
+        ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasSlatFeedback());
+    }
+}
+
+TEST(controller_original_ssl_confirmed_key_survives_optional_config_silence)
+{
+    IoHomeFrame confirmation;ASSERT_TRUE(originalCaptureDecode("velux_ssl_pairing_key_exchange_setconfig_unanswered",1,confirmation));
+    ASSERT_EQ(confirmation.commandId,IoHomeCommand::KeyTransferConfirmation);
+    const uint8_t syntheticKey[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    const auto owner=confirmation.getDestNodeId(),peer=confirmation.getSrcNodeId();
+    initPaired2WControllerForTest(c,m,ch,owner,0,syntheticKey);c.setSystemKey(syntheticKey);
+    // Omitted real 0x3C/0x32 are NOT reconstructed; this is the established
+    // synthetic/public-key prefix followed by the original 0x33.
+    ASSERT_TRUE(advancePairingToWaitKeyTransferConfirmation(c,owner,peer));
+    ASSERT_TRUE(queueKeyTransferConfirmationAndAdvanceToSetConfig1(c,owner,peer,&confirmation));
+    c.loop();ASSERT_EQ(c.state(),ControllerState::PairWaitSetConfig1Response);
+    ioHomeTestAdvanceMillis(2001);c.loop();
+    ASSERT_EQ(c.state(),ControllerState::PairComplete);
+    ASSERT_EQ(c.pairingTelemetry().outcome,IoHomeController::PairingOutcome::Success);
+    ASSERT_EQ(c.pairingTelemetry().optionalConfig,IoHomeController::PairingOptionalConfigResult::NoReply);
+    ASSERT_EQ(ch.getNodeId(),peer);ASSERT_TRUE(ch.isPaired());
+    ASSERT_MEM_EQ(ch.getEncryptionKey(),syntheticKey,16);
+}
+
+TEST(golden_rf_corpus_original_rs100_timeout_does_not_invent_a_confirmation)
+{
+    unsigned confirmations=0,transfers=0;
+    for(const auto &f:LaberningOriginal::frames)if(!std::strcmp(f.capture,"somfy_rs100_pairing_key_transfer_timeout")) {
+        confirmations+=f.bytes[8]==0x33;transfers+=f.bytes[8]==0x32;
+    }
+    ASSERT_EQ(confirmations,0U);ASSERT_EQ(transfers,1U);
+    IoHomeFrame reconstructed;ASSERT_TRUE(originalCaptureDecode("somfy_rs100_pairing_key_exchange_retry_success",4,reconstructed));
+    // The original source explicitly calls these flags an unverified reconstruction.
+    // Preserve the bytes; do not promote them into a new device-role builder rule.
+    ASSERT_EQ(reconstructed.commandId,IoHomeCommand::KeyTransferConfirmation);
+    ASSERT_TRUE(!(reconstructed.ctrlByte0&IOHC_CTRL0_END));
+}
+
+TEST(controller_original_velux_stop_payload_keeps_production_preamble_plan_and_duty)
+{
+    IoHomeFrame captured;ASSERT_TRUE(originalCaptureDecode("velux_ssl_exchange_stop_mid_motion_short_preamble",0,captured));
+    const uint8_t syntheticKey[16]={1};
+    for(bool awake:{false,true}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,captured.getSrcNodeId(),captured.getDestNodeId(),syntheticKey);
+        ch.setConfigured2WPowerClass(TwoWayPowerClass::LowPower);
+        ch.setConfigured2WAcei(captured.data[1]); // preserve the captured request context
+        c.radio().testSetDefaultStartPreamble(32); // captured SX1262 driver profile, not an RF qualification
+        ch.onStatusUpdate(awake); // synthetic prior motion evidence
+        ASSERT_TRUE(c.sendCommand(ch.getNodeId(),syntheticKey,IoHomeCommand::Execute,0xD2));
+        IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+        ASSERT_EQ(c.radio().testLastPreambleLength(),awake?32U:1024U);
+        ASSERT_EQ(request.dataLen,captured.dataLen);ASSERT_MEM_EQ(request.data,captured.data,captured.dataLen);
+        ASSERT_EQ(c.radio().testCurrentFrequency(),868950000U);
+        ASSERT_TRUE(c.testTxAirtimeAccum(0)>0);
+    }
+}
+
+TEST(controller_original_thermor_reference_does_not_enable_a_generic_heating_writer)
+{
+    IoHomeFrame reference;ASSERT_TRUE(originalCaptureDecode("atlantic_thermor_exchange_write_private_param",0,reference));
+    ASSERT_EQ(reference.commandId,IoHomeCommand::WritePrivate);ASSERT_EQ(reference.data[2],1);ASSERT_EQ(reference.data[3],0x29);
+    const uint8_t syntheticKey[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,reference.getSrcNodeId(),reference.getDestNodeId(),syntheticKey);
+    ASSERT_TRUE(!c.requestHeatingRegister(&ch,0x0129,true,1));
+    ASSERT_EQ(c.radio().testTransmitCount(),0U);ASSERT_EQ(ch.heatingPublications,0U);
+}
+
+
+TEST(controller_original_klr_same_channel_returns_keep_pending_owners_distinct)
+{
+    IoHomeFrame first,second;
+    ASSERT_TRUE(originalCaptureDecode("velux_klr300_discovery_rollcall_node_verification",1,first));
+    ASSERT_TRUE(originalCaptureDecode("velux_klr300_discovery_rollcall_node_verification",2,second));
+    const uint8_t syntheticKey[16]={1};IoHomeController c;IoHomecontrol module;IoHomecontrolChannel channel;
+    initPaired2WControllerForTest(c,module,channel,first.getDestNodeId(),0,syntheticKey);
+    channel.setPaired(false);c.setSystemKey(syntheticKey);
+    ASSERT_TRUE(c.setDiagnosticDiscoveryListenMs(1200));
+    c.startDiscovery(true);pumpControllerTransmit(c);ASSERT_EQ(c.state(),ControllerState::DiscoveryListening);
+    for(const auto *reply:{&first,&second}) {
+        c.testSetRxScanFrequency(868950000U); // original observer RX channel, not a new PHY claim
+        ASSERT_TRUE(queueControllerResponse(c,*reply));
+    }
+    ASSERT_EQ(module.testDiscoveryResponseCount(),0U); // RF hot path owns two pending records
+    ASSERT_TRUE(c.cancelDiscovery()); // flush once, preserving each source/recipient record
+    ASSERT_EQ(module.testDiscoveryResponseCount(),2U);
+    ASSERT_EQ(module.testDiscoveryResponseNode(0),0x155D81U);
+    ASSERT_EQ(module.testDiscoveryResponseNode(1),0x562292U);
+    ASSERT_EQ(channel.getNodeId(),0U);ASSERT_TRUE(!channel.isPaired());
 }

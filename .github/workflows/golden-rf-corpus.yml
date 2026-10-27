@@ -3,7 +3,13 @@ name: Native protocol suites
 on:
   pull_request:
     paths:
+      - 'tools/laberning_corpus.py'
+      - 'test/test_laberning_corpus.py'
+      - 'test/test_original_capture_mutation.py'
+      - 'test/requirements-corpus.txt'
       - 'test/corpus/**'
+      - 'src/IoHomecontrolChannel.cpp'
+      - 'test/test_wake_production.py'
       - 'test/test_protocol.cpp'
       - 'test/test_registry.h'
       - 'test/test_suite_main.cpp'
@@ -24,7 +30,13 @@ on:
   push:
     branches: [v1dev, v1dev-KLFDocumentation]
     paths:
+      - 'tools/laberning_corpus.py'
+      - 'test/test_laberning_corpus.py'
+      - 'test/test_original_capture_mutation.py'
+      - 'test/requirements-corpus.txt'
       - 'test/corpus/**'
+      - 'src/IoHomecontrolChannel.cpp'
+      - 'test/test_wake_production.py'
       - 'test/test_protocol.cpp'
       - 'test/test_registry.h'
       - 'test/test_suite_main.cpp'
@@ -55,11 +67,19 @@ jobs:
         suite: [protocol, controller, exchange, radio, ui, storage]
     steps:
       - uses: actions/checkout@v4
+      - name: Install host corpus dependencies
+        run: python3 -m pip install -r test/requirements-corpus.txt
       - name: Run ${{ matrix.suite }} suite
         run: make -C test check-${{ matrix.suite }}
   golden-rf-corpus:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Install host corpus dependencies
+        run: python3 -m pip install -r test/requirements-corpus.txt
       - name: Validate golden RF corpus
         run: make -C test corpus
+      - name: Validate production status callbacks
+        run: make -C test check-wake-production
+      - name: Reject previous motion/value behavior with original captures
+        run: make -C test check-captured-motion-mutations

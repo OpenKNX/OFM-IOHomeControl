@@ -678,7 +678,11 @@ void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
     {
         clearStopTravelSnapshot();
         clearStatusPollTracking();
-        stopTravelEstimation(false);
+        // Current and target have just been decoded independently. Do not snap
+        // the measured current or replace a distinct reported target on STOPPED.
+        mTravelDurationMs = 0;
+        mTravelStartTime = 0;
+        mTravelStartPosition = mCurrentPosition;
     }
     else if (mStopTravelSnapshot.valid)
     {

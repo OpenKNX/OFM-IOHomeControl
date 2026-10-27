@@ -17,6 +17,8 @@ methods='\n'.join(method(channel,signature) for signature in [
     'bool IoHomecontrolChannel::twoWayLastHeardAgeAt(',
     'void IoHomecontrolChannel::onStatusPollFailed(',
     'void IoHomecontrolChannel::onStatusUpdate(',
+    'void IoHomecontrolChannel::clearStatusPollTracking(',
+    'void IoHomecontrolChannel::stopTravelEstimation(',
     'bool IoHomecontrolChannel::requestStatus(bool'])
 harness=r'''#include <cassert>
 #include <cstdint>
@@ -31,6 +33,7 @@ constexpr uint32_t kTrackedStatusPollWindowMs=600000;
 constexpr uint32_t kLowPowerTrackedPollMinMs=10000;
 bool timeReached(uint32_t a,uint32_t b){return int32_t(a-b)>=0;}
 unsigned delayTimerInit(){return millis();}
+float clampPercent(float v){return v<0?0:v>100?100:v;}
 enum class ParameterSemantic {SlatOrientation,HangerOrientation};
 struct IoHomeProfileDescriptor{};
 uint8_t ioHomeParameterIndex(const IoHomeProfileDescriptor*,ParameterSemantic){return 3;}
@@ -41,18 +44,20 @@ struct Controller {
   (void)attemptsParam;++submissions;maxAttempts=attempts;return true;
  }
 };
-struct Knx {bool configured(){return false;}} knx;
+struct Knx {bool enabled=false;bool configured(){return enabled;}} knx;
+bool movementKo=false;unsigned movementPublications=0;
 struct Dpt {Dpt(int,int){}};
 constexpr int IOHC_KoCHMovementStatus=0;
-struct Ko {void value(bool,Dpt){}};
+struct Ko {void value(bool value,Dpt){movementKo=value;++movementPublications;}};
 struct IoHomecontrolChannel {
  struct {bool valid=false;} mStopTravelSnapshot;
  bool mIsMoving=false;
- bool isBinaryDeviceType(){return true;}
+ bool isBinaryDeviceType(){return false;}
  Ko getKo(int){return {};}
  void onStatusUpdate(bool);
- void clearStatusPollTracking(){mPollTrackingDeadlineMs=0;mNextStatusPollMs=0;mSingleFollowUpPollPending=false;}
- void stopTravelEstimation(bool){mTravelDurationMs=0;}
+ void clearStatusPollTracking();
+ void stopTravelEstimation(bool);
+ float estimateCurrentPosition(){return mCurrentPosition;}
  void startTravelEstimation(float){}
  bool mHas2WHeardEvidence=false,mHas2WMovingEvidence=false,mConfirmsExecute=false,mStopSettlePollPending=false;
  uint32_t mLast2WHeardMs=0,mLast2WMovingEvidenceMs=0,m2WMovingEvidenceGeneration=0;
@@ -154,6 +159,24 @@ tests=r'''int main(){
 
 }
 '''
+import sys
+sys.path.insert(0,str(root/'tools'))
+import laberning_corpus
+_, originals=laberning_corpus.load_captures()
+ssl=next(d for e,d in originals if d['id']=='velux_ssl_statuspoll_stopped_off_target')
+rows=[]
+for frame in ssl['frames']:
+    raw=bytes.fromhex(frame['hex']);body=raw[9:]
+    rows.append((body[0]&1,int.from_bytes(body[4:6],'big'),int.from_bytes(body[2:4],'big')))
+checks='\n knx.enabled=true;ch.mPaired=true;\n'
+for stopped,current,target in rows:
+    checks+=f" ch.mCurrentPosition={current}/512.f;ch.mTargetPosition={target}/512.f;ch.mPollTrackingDeadlineMs=now+600000;ch.mNextStatusPollMs=now+2000;ch.mSingleFollowUpPollPending=true;ch.mTravelDurationMs=10000;ch.onStatusUpdate({'false' if stopped else 'true'});\n"
+    checks+=f" assert(ch.mCurrentPosition=={current}/512.f&&ch.mTargetPosition=={target}/512.f);assert(movementKo=={'false' if stopped else 'true'});\n"
+    if stopped:
+        checks+=" assert(!ch.mIsMoving&&ch.mTravelDurationMs==0&&ch.mPollTrackingDeadlineMs==0&&ch.mNextStatusPollMs==0&&!ch.mSingleFollowUpPollPending);ch.onStatusPollFailed(true);assert(ch.mPollTrackingDeadlineMs==0&&!ch.mSingleFollowUpPollPending);\n"
+checks+=' assert(movementPublications==6);\n'
+last=tests.rfind('}')
+tests=tests[:last]+checks+tests[last:]
 radio=(root/'src/radio/RadioSX1262.cpp').read_text()
 radio_methods='\n'.join(method(radio,s) for s in ['RadioError RadioSX1262::setPreambleLengthInternal(', 'bool RadioSX1262::applyPacketParams('])
 radio_harness=r'''#include <cassert>

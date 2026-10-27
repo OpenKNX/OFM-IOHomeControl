@@ -78,7 +78,6 @@ namespace
     constexpr uint16_t kGatewayInfoDeviceType = 0x0002;
     constexpr uint8_t kGatewayDiscoverManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Overkiz);
     constexpr uint8_t kGatewayInfoManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
-    constexpr uint16_t kPositionRawTolerance = 100;
     constexpr uint16_t kExtractDeviceType = static_cast<uint16_t>(IoHomeDeviceType::RollerShutter);
     constexpr uint8_t kExtractDeviceSubtype = 0x00;
     constexpr uint8_t kExtractManufacturer = static_cast<uint8_t>(IoHomeManufacturer::Somfy);
@@ -421,11 +420,6 @@ namespace
         return lLen;
     }
 
-    bool rawPositionNear(uint16_t iA, uint16_t iB)
-    {
-        return (iA > iB) ? ((iA - iB) <= kPositionRawTolerance) : ((iB - iA) <= kPositionRawTolerance);
-    }
-
     uint32_t passivePairNodeFromFrame(const IoHomeFrame &iFrame)
     {
         const uint32_t lDestNode = iFrame.getDestNodeId();
@@ -551,13 +545,9 @@ namespace
             lHasCurrentPosition = true;
         }
 
-        bool lMoving = !iStopped;
-        if (lMoving && lHasCurrentPosition && lHasTargetPosition &&
-            lTargetRaw <= IOHC_POSITION_MAX &&
-            rawPositionNear(lCurrentRaw, lTargetRaw))
-        {
-            lMoving = false;
-        }
+        // Real VELUX SSL replies can be moving within 100 raw of target, or
+        // stopped a little off target. Motion is reported explicitly by the peer.
+        const bool lMoving = !iStopped;
 
         const bool lPosition = !lDescriptor || ioHomeIsPositionSemantic(lMpSemantic);
         if (lPosition && lHasTargetPosition)

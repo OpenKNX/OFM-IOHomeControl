@@ -223,3 +223,82 @@ SHA-256:
 - `atlantic_agilia_exchange_presence_write.yaml`: `0e8904c6813b081996504a07806cccea5b8eed7e7fe3d7eb0cb403cd98a8dd7c`
 - `atlantic_agilia_pairing_key_pull_heater_direct_read.yaml`: `59a4a12c503d0475c592008990d69fecea2cae3a93254240ab5d53c3fb4be88f`
 - `atlantic_agilia_pairing_key_pull_heater_not_next_address.yaml`: `30134bd66cf742de5bb1950ac7a958ed5e72f85bd6595e4b516a2e3cd08f7e4f`
+
+## Original laberning source inventory (27 October 2026)
+
+Source: [laberning/home_io_control c82d38f](https://github.com/laberning/home_io_control/tree/c82d38f47901b71c1c63413e638241dbe1aa2d06/tests/corpus/captures),
+including #183 STOPPED-off-target and #182 MOTO1000 percentage refusal. MIT
+copyright/permission are retained in `LABERNING-LICENSE`; four original host
+helpers and their license are retained unchanged in `laberning_tools/`.
+
+All 177 pinned YAMLs are accounted for in `laberning-manifest.json`: 17 existing
+byte-identical copies are reused and 160 missing originals live under
+`laberning-c82d38f/`. Every artifact has its upstream path, Git blob SHA-1,
+SHA-256, key mode, origin, original radio attribution, CRC mode and explicit
+coverage. The three existing derived audit excerpts are separate from these
+originals. Synthetic/bootstrap/reference sources stay labeled as such; LR1121
+labels provide protocol coverage only and do not add an OFM radio driver.
+
+Install host dependencies once (Python 3.10+):
+
+```sh
+python3 -m pip install -r test/requirements-corpus.txt
+make -C test run check-storage corpus
+```
+
+Use `PYTHON=/path/to/venv/bin/python` when using a virtual environment. ETS
+JavaScript additionally needs Node.js or quickjs, as before.
+
+`tools/laberning_corpus.py` checks original hashes and runs the pinned upstream
+schema/CRC/crypto-safety validator offline. The validator rejects recoverable
+0x30/0x32 key material unless it is rekeyed to the public corpus key (or the
+explicitly documented public enrollment known-answer example). `key: unknown`
+never becomes verified authentication. Original redactions, omitted frames,
+reconstructed/assumed headers, descriptions and timestamps are retained, not
+repaired or reinterpreted. Additional raw credential/key fields are rejected.
+
+```sh
+python3 tools/laberning_corpus.py
+python3 tools/laberning_corpus.py --compare-upstream /path/to/home_io_control
+```
+
+The comparison reports newly added upstream files without failing the pinned
+local inventory; silently missing or modified expected originals fail. Moving
+the source pin is an explicit manifest review, not a background sync.
+
+The generator creates only `test/build/laberning_captures.h`, never firmware
+assets. All 1,104 frames receive host shape/CRC/key-safety checks. Native tests
+parse 897 original frames and cross-check 43 public rekeyed 2W HMAC cases with
+OFM crypto. The 239-frame, 24-minute KLF200 observer file is preserved verbatim
+but bounded to 32 diverse native samples. Missing timing has an explicit
+`hasTime=false`; preamble values are copied only from explicit frame notes.
+Captured packet bytes and upstream `expect` values are never synthesized.
+
+The focused production-controller regressions cover SSL current/target and
+STOPPED/moving state, a separately labeled synthetic authenticated 0x71 feed,
+MOTO refusal and 0140/017A restrictions, stale EXECUTE position/tilt, subsequent
+tilt polling, KLR300 MIB/source/channel distinctions, foreign-keyed 0x71,
+wind/rain FAVORITE isolation, original 0x33 plus optional 0x6F silence,
+32/1024 preamble choices, timeout evidence and a guarded Thermor reference.
+The production channel callback harness checks the movement KO, preservation
+of reported current/target and tracking termination using the original SSL
+values. Mutation tests prove the previous near-target motion override and the
+stopped-value rewrite fail those original-value regressions.
+
+Behavior tests may create a clearly labeled synthetic public-key request or
+pairing prefix around a captured reply when original preceding frames are
+absent/redacted. The constructed 0x71 case maps original 0x04 MP/state values
+into a synthetic authenticated envelope. Neither technique verifies an unknown
+installation key or invents missing captured authentication. Synthetic warm vs
+cold preamble context does not prove physical radio necessity.
+
+`coverage` records in the manifest distinguish parser/public-crypto checks from
+selected controller behavior. The remaining broad fixtures are not claimed as
+complete transaction replays. In particular, upstream `classification: ACCEPT`
+and `outcome: success` do not turn `FE 28` into successful actuation. Foreign
+probe/metadata bytes remain read-only or RAW/UNKNOWN. The KLF200 observation
+contains no 0x71 and establishes neither subscription nor an OFM polling cadence.
+
+No new on-air capture, hardware replay, motion measurement or spectrum-access
+qualification was performed. Firmware release acceptance stays false; original
+hardware, power-cut and signed ETS migration gates remain open.

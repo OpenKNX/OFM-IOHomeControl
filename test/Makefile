@@ -32,7 +32,12 @@ suite: $(TARGETS)
 $(BUILD_DIR):
 	mkdir -p $@
 
-$(PROTOCOL_TARGET): $(wildcard corpus/*.h ../src/protocol/*.h ../src/controller/*.h) $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h ../src/radio/IoHomeTransmitIntent.h ../src/radio/IoHomeRfAccessPolicy.h ../src/radio/IoHomeDutyBudget.h ../src/protocol/IoHomeBatteryDiagnostics.h ../src/radio/RadioTestStub.h | $(BUILD_DIR)
+CORPUS_GENERATED = build/laberning_captures.h
+
+$(CORPUS_GENERATED): $(shell find corpus -name "*.yaml") corpus/laberning-manifest.json $(wildcard corpus/laberning_tools/*.py) ../tools/laberning_corpus.py
+	$(PYTHON) ../tools/laberning_corpus.py --generate $@
+
+$(PROTOCOL_TARGET): $(CORPUS_GENERATED) $(wildcard corpus/*.h ../src/protocol/*.h ../src/controller/*.h) $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h ../src/radio/IoHomeTransmitIntent.h ../src/radio/IoHomeRfAccessPolicy.h ../src/radio/IoHomeDutyBudget.h ../src/protocol/IoHomeBatteryDiagnostics.h ../src/radio/RadioTestStub.h | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(PROTOCOL_SRCS)
 
 $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
@@ -41,7 +46,7 @@ $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
 $(SX1262_PHY_TARGET): $(SX1262_PHY_SRCS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(SX1262_PHY_SRCS)
 
-run: check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
+run: check-captured-motion-mutations check-original-captures check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
 
 check-protocol: $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite protocol
@@ -61,7 +66,7 @@ check-ui:
 	$(PYTHON) ../tools/generate_channel_selections.py --check
 	$(PYTHON) test_channel_ui.py
 
-corpus: $(PROTOCOL_TARGET)
+corpus: check-original-captures $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite protocol --filter golden_rf_corpus
 
 list: $(PROTOCOL_TARGET)
@@ -135,3 +140,12 @@ check-release-evidence:
 .PHONY: check-inbound-replies
 check-inbound-replies: $(PROTOCOL_TARGET)
 	CXX="$(CXX)" $(PYTHON) test_inbound_reply_mutation.py
+
+.PHONY: check-original-captures
+check-original-captures: $(CORPUS_GENERATED)
+	$(PYTHON) ../tools/laberning_corpus.py
+	$(PYTHON) test_laberning_corpus.py
+
+.PHONY: check-captured-motion-mutations
+check-captured-motion-mutations: $(PROTOCOL_TARGET)
+	CXX="$(CXX)" $(PYTHON) test_original_capture_mutation.py
