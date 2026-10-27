@@ -37,7 +37,11 @@ CORPUS_GENERATED = build/laberning_captures.h
 $(CORPUS_GENERATED): $(shell find corpus -name "*.yaml") corpus/laberning-manifest.json $(wildcard corpus/laberning_tools/*.py) ../tools/laberning_corpus.py
 	$(PYTHON) ../tools/laberning_corpus.py --generate $@
 
-$(PROTOCOL_TARGET): $(CORPUS_GENERATED) $(wildcard corpus/*.h ../src/protocol/*.h ../src/controller/*.h) $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h ../src/radio/IoHomeTransmitIntent.h ../src/radio/IoHomeRfAccessPolicy.h ../src/radio/IoHomeDutyBudget.h ../src/protocol/IoHomeBatteryDiagnostics.h ../src/radio/RadioTestStub.h | $(BUILD_DIR)
+STEFAN_GENERATED = build/stefan_dual_controller.h
+$(STEFAN_GENERATED): corpus/stefan-dual-controller-20261027.json ../tools/generate_stefan_vectors.py
+	$(PYTHON) ../tools/generate_stefan_vectors.py $@
+
+$(PROTOCOL_TARGET): $(STEFAN_GENERATED) $(CORPUS_GENERATED) $(wildcard corpus/*.h ../src/protocol/*.h ../src/controller/*.h) $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h ../src/radio/IoHomeTransmitIntent.h ../src/radio/IoHomeRfAccessPolicy.h ../src/radio/IoHomeDutyBudget.h ../src/protocol/IoHomeBatteryDiagnostics.h ../src/radio/RadioTestStub.h | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(PROTOCOL_SRCS)
 
 $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
@@ -46,7 +50,7 @@ $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
 $(SX1262_PHY_TARGET): $(SX1262_PHY_SRCS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(SX1262_PHY_SRCS)
 
-run: check-remaining-time-evidence check-remaining-time-mutations check-discovery-evidence check-captured-motion-mutations check-original-captures check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
+run: check-dual-controller-tools check-remaining-time-evidence check-remaining-time-mutations check-discovery-evidence check-captured-motion-mutations check-original-captures check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
 
 check-protocol: $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite protocol
@@ -162,3 +166,7 @@ check-remaining-time-mutations:
 .PHONY: check-remaining-time-evidence
 check-remaining-time-evidence:
 	$(PYTHON) ../tools/audit_remaining_time_corpus.py --check ../docs/remaining-time-corpus-audit-2026-10-27.json
+
+.PHONY: check-dual-controller-tools
+check-dual-controller-tools:
+	$(PYTHON) test_dual_controller_tools.py

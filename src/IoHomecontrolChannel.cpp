@@ -458,7 +458,7 @@ void IoHomecontrolChannel::loop()
             lPollMs = kLowPowerBackgroundPollMinMs;
         if (delayCheck(mStatusPollTimer, lPollMs))
         {
-            requestStatus();
+            requestStatus(false);
             mStatusPollTimer = delayTimerInit();
         }
     }
@@ -668,6 +668,7 @@ void IoHomecontrolChannel::observe2WMovingStatus(bool iIsMoving)
 
 void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
 {
+    logDebugP("IOHC_TRACK event=status_feedback owner_node=%06X epoch=%lu deadline=%lu transport_proof=see_controller_status_source",mNodeId,(unsigned long)mPollTrackingDeadlineMs,(unsigned long)mPollTrackingDeadlineMs);
     const bool wasTracking=mPollTrackingDeadlineMs!=0&&!timeReached(millis(),mPollTrackingDeadlineMs);
     mTrustedPollMoving=false; // only a fresh qualified main-info callback renews this proof
     observe2WMovingStatus(iIsMoving);
@@ -712,6 +713,7 @@ void IoHomecontrolChannel::onStatusUpdate(bool iIsMoving)
     if (!isBinaryDeviceType())
         if(knx.configured())getKo(IOHC_KoCHMovementStatus).value(iIsMoving, Dpt(1, 11));
     logDebugP("Status: %s", iIsMoving ? "moving" : "idle");
+    logTrackingEvent("status_applied");
 }
 
 void IoHomecontrolChannel::logStatusSummary(float iCurrentPositionPercent, bool iHasCurrentPosition,
@@ -1177,6 +1179,7 @@ float IoHomecontrolChannel::estimateCurrentPosition() const
 
 void IoHomecontrolChannel::onStatusExpected()
 {
+    logDebugP("IOHC_TRACK event=status_expected owner_node=%06X epoch=%lu deadline=%lu transport_proof=see_controller_status_source",mNodeId,(unsigned long)mPollTrackingDeadlineMs,(unsigned long)mPollTrackingDeadlineMs);
     const uint32_t lDelayMs = defaultTrackedStatusPollDelayMs();
     if (mPollTrackingDeadlineMs == 0)
         mPollTrackingDeadlineMs = millis() + kTrackedStatusPollWindowMs;
@@ -1185,6 +1188,15 @@ void IoHomecontrolChannel::onStatusExpected()
 
     mStatusExpected = true;
     logDebugP("Device will auto-send status update");
+    logTrackingEvent("status_expected_scheduled");
+}
+
+void IoHomecontrolChannel::logTrackingEvent(const char *reason) const
+{
+    logDebugP("IOHC_TRACK tracking_start_reason=%s owner_node=%06X gateway=%06X epoch=%lu deadline=%lu transaction=%llu evidence_ms=%lu inbound_src=%06X inbound_dst=%06X status_source=%s evidence_is_current=%u moving=%u status_expected=%u",
+        reason,mNodeId,mController.getOwnNodeId(),(unsigned long)mPollTrackingDeadlineMs,(unsigned long)mPollTrackingDeadlineMs,(unsigned long long)mController.currentTransactionId(),
+        (unsigned long)mController.statusAttribution().timeMs,mController.statusAttribution().transportSrc,mController.statusAttribution().transportDst,mController.statusAttribution().sourceName(),
+        mController.statusAttribution().valid&&mController.statusAttribution().timeMs==millis()&&mController.statusAttribution().transportSrc==mNodeId,mIsMoving,mStatusExpected);
 }
 
 void IoHomecontrolChannel::onStatusPollDeferred(uint32_t iDelayMs,bool iRfDenied)
@@ -1201,6 +1213,7 @@ void IoHomecontrolChannel::onStatusPollDeferred(uint32_t iDelayMs,bool iRfDenied
     mNextStatusPollMs=mSingleFollowUpPollPending?at:0;
     logInfoP("tracked_poll=1 channel=%u RF_denied=%u local_fault=%u peer_miss=0 moving_grace=0 next_poll_ms=%lu deadline=%lu",
         unsigned(_channelIndex+1),iRfDenied,!iRfDenied,(unsigned long)mNextStatusPollMs,(unsigned long)mPollTrackingDeadlineMs);
+    logTrackingEvent("deferred");
 }
 
 void IoHomecontrolChannel::onStatusPollFailed(bool iAfterChallenge, bool iSingleAttempt)
@@ -1241,6 +1254,7 @@ void IoHomecontrolChannel::onStatusPollFailed(bool iAfterChallenge, bool iSingle
                   iAfterChallenge ? " after challenge" : "",
                   static_cast<unsigned long>(lRetryDelayMs));
     }
+    logTrackingEvent("peer_failure");
 }
 
 // --- Pairing data ---
@@ -1605,10 +1619,10 @@ void IoHomecontrolChannel::sendSlatCommand(float iPercent)
 
 bool IoHomecontrolChannel::requestStatus()
 {
-    return requestStatus(false);
+    return requestStatus(false,true);
 }
 
-bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll)
+bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll,bool iManual)
 {
     // 1W is one-way: the device cannot answer a 2W status request, so never
     // emit one (it would only trigger an endless failed-poll/retry loop).
@@ -1631,6 +1645,7 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll)
     // spread retries across the channel backoff policy. A STOP-settle check is
     // deliberately allowed the full exchange budget because it resolves an
     // ambiguous safety-relevant command outcome.
+    const uint8_t pollReason=iManual?3:iTrackedPoll?mPollTrackingReason:0;
     const bool lStopSettlePoll = iTrackedPoll && mStopSettlePollPending;
     const uint8_t lMaxAttempts = lStopSettlePoll ? IOHC_EXCHANGE_MAX_ATTEMPTS : 1U;
     const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor();
@@ -1645,7 +1660,7 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll)
     {
         const bool lQueued = mController.sendStatusPoll(
             this, iTrackedPoll, static_cast<uint8_t>(0x80U >> (lOrientationIndex - 1)),
-            0x01, lMaxAttempts);
+            0x01, lMaxAttempts,pollReason);
         if (lQueued)
         {
             mStatusPollTimer = delayTimerInit();
@@ -1656,7 +1671,7 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll)
     }
 
     const bool lQueued = mController.sendStatusPoll(
-        this, iTrackedPoll, 0xFF, 0xFF, lMaxAttempts);
+        this, iTrackedPoll, 0xFF, 0xFF, lMaxAttempts,pollReason);
     if (lQueued)
     {
         mStatusPollTimer = delayTimerInit();
@@ -1668,6 +1683,8 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll)
 
 void IoHomecontrolChannel::scheduleStatusPoll(uint32_t iDelayMs)
 {
+    logDebugP("IOHC_TRACK event=remote_followup owner_node=%06X epoch=%lu deadline=%lu transport_proof=see_controller_status_source",mNodeId,(unsigned long)mPollTrackingDeadlineMs,(unsigned long)mPollTrackingDeadlineMs);
+    mPollTrackingReason=2;
     if (!mPaired)
         return;
 
@@ -1687,6 +1704,7 @@ void IoHomecontrolChannel::scheduleStatusPoll(uint32_t iDelayMs)
 
     if (mPollTrackingDeadlineMs == 0)
         mPollTrackingDeadlineMs = lNow + kTrackedStatusPollWindowMs;
+    logTrackingEvent("remote_followup_scheduled");
 }
 
 void IoHomecontrolChannel::requestStatusPrivate()
@@ -1698,6 +1716,8 @@ void IoHomecontrolChannel::requestStatusPrivate()
 
 void IoHomecontrolChannel::startStatusPollTracking(uint32_t iDelayMs)
 {
+    logDebugP("IOHC_TRACK event=start_local_command owner_node=%06X epoch=%lu deadline=%lu transport_proof=see_controller_status_source",mNodeId,(unsigned long)mPollTrackingDeadlineMs,(unsigned long)mPollTrackingDeadlineMs);
+    mPollTrackingReason=1;
     mObservedPositiveRemaining=false;mTrustedPollMoving=false;mMovingPollMisses=0;
     if (effectiveLowPower2W() && iDelayMs < kLowPowerTrackedPollMinMs)
         iDelayMs = kLowPowerTrackedPollMinMs;
@@ -1713,10 +1733,12 @@ void IoHomecontrolChannel::startStatusPollTracking(uint32_t iDelayMs)
     mAuthPollFailures = 0;
     mNextStatusPollMs = lNow + iDelayMs;
     mPollTrackingDeadlineMs = lNow + ((lTrackingWindowMs > iDelayMs) ? lTrackingWindowMs : iDelayMs);
+    logTrackingEvent("local_command_started");
 }
 
 void IoHomecontrolChannel::clearStatusPollTracking()
 {
+    logDebugP("IOHC_TRACK event=clear owner_node=%06X epoch=%lu deadline=%lu transport_proof=see_controller_status_source",mNodeId,(unsigned long)mPollTrackingDeadlineMs,(unsigned long)mPollTrackingDeadlineMs);
     mObservedPositiveRemaining=false;mTrustedPollMoving=false;mMovingPollMisses=0;
     mStopSettlePollPending = false;
     mNextStatusPollMs = 0;
@@ -1725,6 +1747,7 @@ void IoHomecontrolChannel::clearStatusPollTracking()
     mStatusPollFailures = 0;
     mAuthPollFailures = 0;
     mStatusExpected = false;
+    logTrackingEvent("cleared");
 }
 
 uint32_t IoHomecontrolChannel::configuredStatusPollIntervalMs() const

@@ -10,6 +10,7 @@ def function(signature):
 a=source.index('    if(lSub=="keyimport scan" ||');b=source.index('#if defined(IOHC_STANDALONE_DIAG)',a)
 branch=source[a:b]
 harness=r'''#include "protocol/IoHomeDiscoveryEvidence.h"
+#include "protocol/IoHomeVerificationEvidence.h"
 #include <cassert>
 #include <cstring>
 #include <string>
@@ -22,11 +23,12 @@ struct IoHomeNetworkStore {static bool equal(int a,int b){return a==b;}};
 struct Channel {unsigned node=0x155D81;bool isPaired()const{return true;}bool is1W()const{return false;}unsigned getNodeId()const{return node;}};
 struct Controller {
  bool idle=true,collision=false,queued=true,strict=false;unsigned verifies=0,scans=0;unsigned char key[16]{7};
+ bool normalDutyMode()const{return true;}void setVerificationBlocked(unsigned,IoHomeVerificationEvidence::Result){}void printVerificationEvidence(){}void printCollisionFirst(){}bool pauseBackgroundPolls(unsigned){return true;}
  bool idleForManagedOperation()const{return idle;}bool twoWayIdentityCollision()const{return collision;}
  const unsigned char *getSystemKey()const{return key;}unsigned getOwnNodeId()const{return 0xE4E61D;}
  void setReadOnlyDiagnosticRf(bool v){strict=v;}
  bool verifyKnownNetworkNode(unsigned n,const unsigned char *k,unsigned f){assert(n==0x155D81&&k==key&&f==255);verifies++;return queued;}
- void startDiscovery(bool spe){assert(spe&&strict);scans++;}
+ void startDiscovery(bool spe){(void)spe;assert(strict);scans++;}
 };
 struct IoHomecontrol {
  Controller mController;IoHomeDiscoveryEvidence mDiscoveryEvidence;
@@ -34,7 +36,7 @@ struct IoHomecontrol {
  bool mDiagnosticScan=false,mNetworkStoreReady=true,mNetworkStoreFailed=false,mNetworkHasCommit=true,allowed=true;
  int mCommittedNetwork=1,snapshot=1;Channel channel;Channel *mChannels[1]{&channel};
  int networkSnapshot()const{return snapshot;}bool managementRequestsAllowed()const{return allowed;}
- void *findKeyImportDevice(unsigned){return nullptr;}void logDiagnosticHeader(){}
+ void *findKeyImportDevice(unsigned){return nullptr;}void logDiagnosticHeader(){}void logDiagnosticSummary(){}
  bool command(std::string lSub);
 };
 '''

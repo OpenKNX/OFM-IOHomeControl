@@ -317,7 +317,7 @@ private:
   uint8_t mStatusPollFailures = 0;
   uint8_t mAuthPollFailures = 0;
   bool mObservedPositiveRemaining=false,mTrustedPollMoving=false;
-  uint8_t mMovingPollMisses=0;
+  uint8_t mMovingPollMisses=0,mPollTrackingReason=1;
   char mDeviceName[21] = {}; // max 20 chars + null terminator
   uint16_t mProfile = 0;
   uint8_t mSubProfile = 0;
@@ -341,8 +341,9 @@ private:
   void sendSlatCommand(float iPercent);
   void sendVentilationPosition();
   void requestStatusPrivate();
-  bool requestStatus(bool iTrackedPoll);
+  bool requestStatus(bool iTrackedPoll, bool iManual=false);
   void publishPositionFeedback(float iPositionPercent, bool iLogMessage);
+  void logTrackingEvent(const char *reason) const;
   void startStatusPollTracking(uint32_t iDelayMs);
   void clearStatusPollTracking();
   uint32_t configuredStatusPollIntervalMs() const;

@@ -15,7 +15,9 @@ int main(){
  p=e.find(0x155D81);p->failure=IoHomeDiscoveryEvidence::Failure::NoReply;assert(p->flags&IoHomeDiscoveryEvidence::PassiveAuth);
  p->flags|=IoHomeDiscoveryEvidence::Directed2f|IoHomeDiscoveryEvidence::DirectedAuth;assert(e.unique(IoHomeDiscoveryEvidence::DirectedAuth)==1);
  for(unsigned i=0;i<20;i++)e.touch(0x100000+i,100);assert(e.count==e.Capacity&&e.overflow==15);
- e.reset();assert(e.session==2&&e.count==0&&e.activePackets==0&&e.overflow==0);
+ e.reset();e.standard(0xE50470,1);e.standard(0x562292,2);e.standard(0xE50470,3);
+ assert(e.standardPackets==3&&e.duplicates==1&&e.unique(IoHomeDiscoveryEvidence::Active2b)==0&&e.find(0xE50470)->active29);
+ e.reset();assert(e.session==3&&e.count==0&&e.activePackets==0&&e.overflow==0);
 }
 '''
 with tempfile.TemporaryDirectory() as d:

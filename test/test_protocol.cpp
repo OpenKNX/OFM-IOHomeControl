@@ -13,6 +13,7 @@
 #include <cstdint>
 
 #include "test_registry.h"
+#include "build/stefan_dual_controller.h"
 #include "protocol/IoHomeRemainingTime.h"
 #include "build/laberning_captures.h"
 
@@ -23484,4 +23485,126 @@ TEST(controller_collision_distinct_AABBCC_and_credible_duplicate_first_evidence)
     const auto first=c.collisionFirst();ASSERT_TRUE(first.valid&&first.phyRx&&first.crcValid);ASSERT_EQ(first.src,0xE4E61DU);ASSERT_EQ(first.dst,0x155D81U);ASSERT_EQ(first.rxReadUs,123U);
     e.readTimestampUs=999;c.observeReceivedIdentity(f,e,RadioState::Transmitting);c.clearTwoWayTrace();ASSERT_EQ(c.collisionFirst().rxReadUs,123U);
     uint8_t wire[32];f.setStart2W();f.dataLen=1;f.data[0]=3;auto len=f.serialize2W(wire,sizeof(wire));ASSERT_EQ(c.testHelperTransmit(wire,len,32,true),RadioError::HardwareError);
+}
+
+
+TEST(controller_verify_duty_denied_never_claims_peer_timeout)
+{
+    const uint8_t key[16]={1};
+    for(uint32_t used:{3600U,3500U,3651U}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+        c.testSimulationUnlimited();c.setReadOnlyDiagnosticRf(true);c.testChargeDuty(IOHC_FREQ_2,used);
+        ASSERT_TRUE(c.verifyKnownNetworkNode(0x155D81,key,0xFF));for(unsigned i=0;i<12;i++)c.loop();
+        const auto &v=c.verificationEvidence();ASSERT_TRUE(v.result==IoHomeVerificationEvidence::Result::DutyDenied);ASSERT_TRUE(!v.peerNoReply());ASSERT_EQ(v.flags&1,0U);ASSERT_EQ(v.chargedMs,0U);ASSERT_EQ(c.radio().testTransmitCount(),0U);
+    }
+}
+TEST(controller_verify_direct_2f_is_not_authenticated_success)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+    ASSERT_TRUE(c.verifyKnownNetworkNode(0x155D81,key,0xFF));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));c.loop();
+    uint8_t data[]={2};IoHomeFrame f;buildSimpleResponseFrame(f,0xE4E61D,0x155D81,IoHomeCommand::Discover2EResponse,data,1);ASSERT_TRUE(queueControllerResponse(c,f));
+    ASSERT_TRUE(c.verificationEvidence().result==IoHomeVerificationEvidence::Result::ResponseUnverified);ASSERT_TRUE(!c.verificationEvidence().peerNoReply());
+    const uint8_t challenge[6]={1,2,3,4,5,6};buildPairChallengeRequestFrame(f,0xE4E61D,0x155D81,challenge);ASSERT_TRUE(queueControllerResponse(c,f));
+    ASSERT_TRUE(lastTransmittedFrameForTest(c,tx));ASSERT_EQ(tx.commandId,IoHomeCommand::ChallengeResponse);
+    buildDirectedDiscoveryResponse(f,0xE4E61D,0x155D81);ASSERT_TRUE(queueControllerResponse(c,f));
+    ASSERT_TRUE(c.verificationEvidence().result==IoHomeVerificationEvidence::Result::Authenticated);
+    ASSERT_TRUE(c.verificationEvidence().flags&IoHomeVerificationEvidence::AuthTx);ASSERT_EQ(m.testAuthenticatedDirectedCount(),1);
+}
+
+
+TEST(controller_bounded_background_pause_revalidates_queue_and_preserves_budget)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+    ASSERT_TRUE(c.sendStatusPoll(&ch,true));ASSERT_TRUE(c.pauseBackgroundPolls(2000));ASSERT_TRUE(!c.pauseBackgroundPolls(300001));
+    for(unsigned i=0;i<8;i++)c.loop();ASSERT_EQ(c.radio().testTransmitCount(),0U);ASSERT_EQ(ch.mPollDeferrals,1U);ASSERT_EQ(ch.testStatusPollFailureCount(),0U);
+    ASSERT_TRUE(!c.sendStatusPoll(&ch,true));ASSERT_EQ(c.testTxAirtimeAccum(0),0U);
+    ioHomeTestAdvanceMillis(2001);ASSERT_EQ(c.backgroundPollPauseRemaining(),0U);ASSERT_TRUE(c.sendStatusPoll(&ch,true));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_EQ(tx.commandId,IoHomeCommand::Private);
+}
+
+
+TEST(controller_status_foreign_then_local_preserves_AABBCC_command_attribution)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+    IoHomeFrame f;const uint8_t poll[]={3,0,0};
+    // Synthetic transport around supplied field payloads; no live CRC/MAC claim.
+    const uint8_t execute[]={1,0x63,0x9E,0,0x80,0,0,0};
+    buildSimpleResponseFrame(f,0x155D81,0xAABBCC,IoHomeCommand::Execute,execute,8);f.setStart2W();ASSERT_TRUE(queueControllerResponse(c,f));
+    buildSimpleResponseFrame(f,0x155D81,0xAABBCC,IoHomeCommand::Private,poll,3);f.setStart2W();ASSERT_TRUE(queueControllerResponse(c,f));
+    for(const auto &payload:stefanSlowPayloads) {
+        buildPrivateResponseFrame(f,0xAABBCC,0x155D81,payload,14);ASSERT_TRUE(queueControllerResponse(c,f));
+        ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasEstimate());ASSERT_EQ(ch.mStatusUpdateCalls,0U);
+        const auto &a=c.statusAttribution();ASSERT_TRUE(a.source==IoHomeStatusAttribution::Source::ForeignPassive&&a.layoutKnown);ASSERT_EQ(a.lastController,0xAABBCCU);ASSERT_TRUE(!a.authenticatedLocalCommand);ASSERT_EQ(a.localTransaction,0U);
+    }
+    ASSERT_EQ(c.radio().testTransmitCount(),0U);
+    ASSERT_TRUE(c.sendStatusPoll(&ch,true));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));c.loop();
+    buildPrivateResponseFrame(f,0xE4E61D,0x155D81,stefanSlowPayloads[0],14);ASSERT_TRUE(queueControllerResponse(c,f));
+    ASSERT_TRUE(ch.testHasPositionFeedback()&&ch.testHasTargetPositionFeedback());ASSERT_EQ(ch.testEstimate(),64U);
+    ASSERT_FLOAT_EQ(ch.testPositionFeedback(),1660.f/512.f,0.01f);ASSERT_FLOAT_EQ(ch.testTargetPositionFeedback(),79.f,0.01f);
+    const auto &local=c.statusAttribution();ASSERT_EQ(local.transportDst,0xE4E61DU);ASSERT_EQ(local.lastController,0xAABBCCU);ASSERT_TRUE(local.source==IoHomeStatusAttribution::Source::LocalCorrelated&&!local.authenticatedLocalCommand);ASSERT_TRUE(local.localTransaction>0);
+    ASSERT_TRUE(c.sendStatusPoll(&ch,true));ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));c.loop();
+    uint8_t stopped[14];std::memcpy(stopped,stefanSlowPayloads[2],14);stopped[0]=5;stopped[2]=stopped[4]=0xC8;stopped[3]=stopped[5]=stopped[6]=stopped[7]=0;
+    buildPrivateResponseFrame(f,0xE4E61D,0x155D81,stopped,14);ASSERT_TRUE(queueControllerResponse(c,f));ASSERT_TRUE(!ch.testStatusMoving());
+    const auto calls=ch.mStatusUpdateCalls,estimates=ch.mEstimateCalls;const auto epoch=ch.mTestPollEpoch;
+    for(unsigned i=0;i<3;i++){ioHomeTestAdvanceMillis(3000);buildSimpleResponseFrame(f,0x155D81,0xAABBCC,IoHomeCommand::Private,poll,3);f.setStart2W();ASSERT_TRUE(queueControllerResponse(c,f));buildPrivateResponseFrame(f,0xAABBCC,0x155D81,stefanSlowPayloads[1],14);ASSERT_TRUE(queueControllerResponse(c,f));}
+    ASSERT_EQ(ch.mStatusUpdateCalls,calls);ASSERT_EQ(ch.mEstimateCalls,estimates);ASSERT_EQ(ch.mTestPollEpoch,epoch);
+}
+TEST(protocol_stefan_slow_native_payload_countdown_and_optional_record)
+{
+    const uint16_t expected[]={64,61,52};
+    for(unsigned i=0;i<3;i++) {
+        const auto value=IoHomeRemainingTime::decode(stefanSlowPayloads[i],14);ASSERT_EQ(value.raw,expected[i]);
+        IoHomeFrame f;f.init();f.commandId=IoHomeCommand::PrivateResponse;f.dataLen=14;std::memcpy(f.data,stefanSlowPayloads[i],14);
+        const auto last=ioHomeDecodeLastCommand(f);ASSERT_TRUE(last.valid);ASSERT_EQ(last.node,0xAABBCCU);ASSERT_EQ(last.originator,1U);
+    }
+    // No target-change bytes were supplied: this separate envelope is synthetic.
+    uint8_t changed[14];std::memcpy(changed,stefanSlowPayloads[2],14);changed[2]=0xC8;changed[3]=0;
+    ASSERT_EQ((uint16_t(changed[2])<<8)|changed[3],IOHC_POSITION_MAX);
+}
+TEST(controller_collision_local_TX_snapshot_cannot_latch_without_credible_RX)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+    ASSERT_TRUE(c.sendStatusPoll(&ch,true));IoHomeFrame sent;ASSERT_TRUE(transmitQueuedControllerFrame(c,sent));c.loop();ASSERT_TRUE(!c.twoWayIdentityCollision());
+    // An injected echo carrying physical CRC proof remains conservatively blocked;
+    // proximity to our TX is evidence, not permission to suppress a real duplicate.
+    c.radio().testRxCrcChecked=true;c.radio().testRxCrcValid=true;ASSERT_TRUE(queueControllerResponse(c,sent));
+    ASSERT_TRUE(c.twoWayIdentityCollision());ASSERT_TRUE(c.collisionFirst().recentOwnTx);
+}
+TEST(controller_capture_filters_replace_without_changing_receive_policy)
+{
+    IoHomeController c;c.configureDiagnosticStream(true,0,0x71);auto epoch=c.diagnosticFilterEpoch();
+    c.configureDiagnosticStream(true,0x155D81,0xFF);ASSERT_EQ(c.diagnosticFilterEpoch(),epoch+1);
+    c.configureDiagnosticStream(false,0,0xFF);ASSERT_EQ(c.diagnosticFilterEpoch(),epoch+2);
+}
+
+
+TEST(controller_read_only_discovery_modes_keep_2A_and_28_distinct)
+{
+    const uint8_t key[16]={1};
+    for(bool spe:{true,false}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+        TwoWayDiscoverySettings settings;settings.command=spe?TwoWayDiscoveryCommandMode::Discover28:TwoWayDiscoveryCommandMode::DiscoverSPE;c.setDiagnosticDiscoverySettings(settings);
+        c.setReadOnlyDiagnosticRf(true);c.startDiscovery(spe);pumpControllerTransmit(c);
+        IoHomeFrame tx;ASSERT_TRUE(lastTransmittedFrameForTest(c,tx));ASSERT_EQ(tx.commandId,spe?IoHomeCommand::DiscoverSPERequest:IoHomeCommand::DiscoverRequest);
+        ASSERT_EQ(tx.getDestNodeId(),0x3BU);ASSERT_TRUE(!c.twoWayIdentityCollision());
+        ASSERT_TRUE(c.cancelDiscovery());
+    }
+}
+
+
+TEST(controller_verification_recovers_only_after_actual_budget_recovery)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+    c.setReadOnlyDiagnosticRf(true);c.testChargeDuty(IOHC_FREQ_2,3651);ASSERT_TRUE(c.verifyKnownNetworkNode(0x155D81,key,0xFF));for(unsigned i=0;i<12;i++)c.loop();
+    ASSERT_TRUE(c.verificationEvidence().result==IoHomeVerificationEvidence::Result::DutyDenied);ASSERT_TRUE(!c.verificationEvidence().peerNoReply());
+    // The conservative two-bucket ledger retains the previous complete bucket.
+    ioHomeTestAdvanceMillis(2*IoHomeDutyBudget::bucketMs+1);ASSERT_TRUE(c.verifyKnownNetworkNode(0x155D81,key,0xFF));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(c.verificationEvidence().flags&IoHomeVerificationEvidence::TxStarted);
+    c.observeForeignController(0xE4E61D);ASSERT_TRUE(!c.verifyKnownNetworkNode(0x155D81,key,0xFF));ASSERT_TRUE(c.verificationEvidence().result==IoHomeVerificationEvidence::Result::Collision&&!c.verificationEvidence().peerNoReply());
+}
+TEST(controller_verification_busy_CCA_remains_local_not_peer_silence)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+    c.setReadOnlyDiagnosticRf(true);c.radio().testInjectRxDiagnostics(false,false,false,0,0,-20);ASSERT_TRUE(c.verifyKnownNetworkNode(0x155D81,key,0xFF));
+    for(unsigned i=0;i<300;i++){c.loop();ioHomeTestAdvanceMillis(25);}
+    ASSERT_TRUE(c.verificationEvidence().result==IoHomeVerificationEvidence::Result::CcaDenied);ASSERT_TRUE(!c.verificationEvidence().peerNoReply());ASSERT_EQ(c.radio().testTransmitCount(),0U);
 }

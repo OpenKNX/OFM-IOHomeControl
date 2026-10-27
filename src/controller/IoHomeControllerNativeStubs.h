@@ -259,8 +259,10 @@ public:
     mHasTargetPositionFeedback = true;
     mTargetPositionFeedback = iPercent;
   }
+  unsigned mStatusUpdateCalls=0,mEstimateCalls=0;
   void onStatusUpdate(bool iMoving)
   {
+    ++mStatusUpdateCalls;
     mHasStatusUpdate = true;
     mStatusMoving = iMoving;
     mHas2WHeardEvidence = true;
@@ -495,6 +497,7 @@ public:
   void onTrustedMotionStatus(bool moving){mTrustedMotionObserved=true;mTrustedMotionMoving=moving;}
   void onEstimate(uint16_t iSeconds)
   {
+    ++mEstimateCalls;
     mHasEstimate = true;
     mEstimate = iSeconds;
   }

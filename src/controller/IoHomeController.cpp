@@ -1599,6 +1599,14 @@ void IoHomeController::printCollisionFirst() const
         (unsigned long)p.boot,(unsigned long)p.session,(unsigned long)p.timeMs,p.own,p.src,p.dst,p.command,p.ctrl0,p.ctrl1,(unsigned long)p.frequency,p.rssi,p.crcChecked,p.crcValid,p.softwarePhy,p.irq,p.fifoOverrun,p.truncated,p.length,p.radioState,p.controllerState,p.recentOwnTx,(unsigned long long)p.localTransaction,(unsigned long)p.rxReadUs,p.phyRx,p.phyRx?"rx_observed":"explicit_known_identity_conflict");
 }
 
+void IoHomeController::printVerificationEvidence() const
+{
+    const auto &v=mVerification;
+    logInfoP("IOHC_VERIFY session=%lu node=%06X result=%s tx_start=%u tx_done=%u rx_ready=%u challenge=%u auth_tx=%u final_2f=%u peer_no_reply=%u transaction=%llu tx_id_low32=%lu frequency=%lu charged_airtime_own_ms=%lu duty_used_own_ms=%lu duty_limit_ms=%lu admission_mode=%u sinceMs=%lu",
+        (unsigned long)(mModule?mModule->diagnosticSession():0),v.node,v.name(),!!(v.flags&1),!!(v.flags&2),!!(v.flags&4),!!(v.flags&8),!!(v.flags&16),!!(v.flags&32),v.peerNoReply(),(unsigned long long)v.transaction,(unsigned long)v.txIdLow,
+        (unsigned long)v.frequency,(unsigned long)v.chargedMs,(unsigned long)v.usedMs,(unsigned long)v.limitMs,v.mode,(unsigned long)v.startMs);
+}
+
 void IoHomeController::setSystemKey(const uint8_t *iKey)
 {
     if(std::memcmp(mSystemKey,iKey,16))mRfAccessPolicy.off();
@@ -1953,36 +1961,59 @@ bool IoHomeController::sendCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                iParam3, iMaxAttempts, false);
 }
 
+uint32_t IoHomeController::backgroundPollPauseRemaining() const
+{
+    const uint32_t now=millis();
+    return mBackgroundPollPauseUntil&&int32_t(now-mBackgroundPollPauseUntil)<0?mBackgroundPollPauseUntil-now:0;
+}
+bool IoHomeController::pauseBackgroundPolls(uint32_t durationMs)
+{
+    if(durationMs>300000U)return false;
+    if(!durationMs)mBackgroundPollPauseUntil=0;
+    else if(durationMs>backgroundPollPauseRemaining())mBackgroundPollPauseUntil=millis()+durationMs;
+    logInfoP("IOHC_POLL_PAUSE remaining_ms=%lu volatile=1 duty_budget_unchanged=1 resume=owner_epoch_revalidated",(unsigned long)backgroundPollPauseRemaining());
+    return true;
+}
+bool IoHomeController::normalDutyMode() const {return !mRfAccessPolicy.bypass(millis());}
+
 bool IoHomeController::sendBackgroundCommand(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                              IoHomeCommand iCmd, uint8_t iParam,
                                              uint16_t iParam2, uint8_t iParam3,
                                              uint8_t iMaxAttempts)
 {
+    if(iCmd==IoHomeCommand::Private&&iParam==3&&backgroundPollPauseRemaining())return false;
     return sendCommandInternal(iDestNodeId, iEncKey, iCmd, iParam, iParam2,
                                iParam3, iMaxAttempts, true);
 }
 
 bool IoHomeController::sendStatusPoll(IoHomecontrolChannel *channel, bool tracked,
-                                     uint16_t mask, uint8_t value, uint8_t attempts)
+                                     uint16_t mask, uint8_t value, uint8_t attempts, uint8_t reason)
 {
+    if(reason==0xFF)reason=tracked?1:0;
+    if(reason!=3&&backgroundPollPauseRemaining())return false;
     if (!channel || !channel->isPaired() || channel->is1W() || channelIndexFor(channel)>=IOHC_ChannelCount)
         return false;
     return sendCommandInternal(channel->getNodeId(), channel->getEncryptionKey(),
-        IoHomeCommand::Private, 3, mask, value, attempts, true, 0xFF, channel, tracked);
+        IoHomeCommand::Private, 3, mask, value, attempts, true, 0xFF, channel, tracked,reason);
 }
 
 bool IoHomeController::verifyKnownNetworkNode(uint32_t iNodeId, const uint8_t *iKey,
                                                uint8_t iFrequencyIndex)
 {
-    return sendCommandInternal(iNodeId, iKey, IoHomeCommand::Discover2ERequest,
+    mVerification=IoHomeVerificationEvidence{};mVerification.node=iNodeId;mVerification.startMs=millis();
+    mVerification.result=IoHomeVerificationEvidence::Result::Queued;
+    if(twoWayIdentityCollision()){mVerification.result=IoHomeVerificationEvidence::Result::Collision;return false;}
+    const bool queued=sendCommandInternal(iNodeId, iKey, IoHomeCommand::Discover2ERequest,
                                0x02, 0xFF, 0xFF, 1, true, iFrequencyIndex);
+    if(!queued)mVerification.result=IoHomeVerificationEvidence::Result::QueueBusy;
+    return queued;
 }
 
 bool IoHomeController::sendCommandInternal(uint32_t iDestNodeId, const uint8_t *iEncKey,
                                            IoHomeCommand iCmd, uint8_t iParam,
                                            uint16_t iParam2, uint8_t iParam3,
                                            uint8_t iMaxAttempts, bool iBackground,
-                                           uint8_t iFrequencyIndex, IoHomecontrolChannel *pollOwner, bool tracked)
+                                           uint8_t iFrequencyIndex, IoHomecontrolChannel *pollOwner, bool tracked, uint8_t pollReason)
 {
     if(iCmd==IoHomeCommand::WritePrivate){
         auto *channel=channelForNode(iDestNodeId);
@@ -2085,6 +2116,8 @@ bool IoHomeController::sendCommandInternal(uint32_t iDestNodeId, const uint8_t *
         lEntry.maxAttempts = 1;
     lEntry.retryReason = TwoWayRetryReason::Initial;
     if (pollOwner) {
+        lEntry.pollReason=pollReason==0xFF?(tracked?1:0):pollReason;
+        logInfoP("IOHC_POLL event=queued node=%06X poll_reason=%s epoch=%lu tx_started=0",pollOwner->getNodeId(),lEntry.pollReason==0?"scheduled":lEntry.pollReason==1?"tracking":lEntry.pollReason==2?"remote_followup":"manual",(unsigned long)pollOwner->statusPollEpoch());
         lEntry.sourceChannelIndex=channelIndexFor(pollOwner);
         lEntry.productContextRevision=pollOwner->productContextRevision();
         lEntry.ownedStatusPoll=true;
@@ -4663,6 +4696,15 @@ void IoHomeController::beginExchangeDiagnosticsWindow()
 void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntry,
                                                    IoHomeCommandExchangeResult iResult)
 {
+    if(iEntry.command==IoHomeCommand::Discover2ERequest&&iEntry.destNodeId==mVerification.node) {
+        auto &v=mVerification;
+        if(v.result!=IoHomeVerificationEvidence::Result::Authenticated&&v.result!=IoHomeVerificationEvidence::Result::DutyDenied&&v.result!=IoHomeVerificationEvidence::Result::CcaDenied&&v.result!=IoHomeVerificationEvidence::Result::Collision) {
+            v.result=twoWayIdentityCollision()?IoHomeVerificationEvidence::Result::Collision:
+                iResult==IoHomeCommandExchangeResult::MediaAccessFailed||iResult==IoHomeCommandExchangeResult::FailedBeforeAuthentication?IoHomeVerificationEvidence::Result::DriverError:
+                (v.flags&IoHomeVerificationEvidence::ResponseSeen)?IoHomeVerificationEvidence::Result::ResponseUnverified:
+                ((v.flags&(IoHomeVerificationEvidence::TxStarted|IoHomeVerificationEvidence::TxDone|IoHomeVerificationEvidence::RxReady))==(IoHomeVerificationEvidence::TxStarted|IoHomeVerificationEvidence::TxDone|IoHomeVerificationEvidence::RxReady))?IoHomeVerificationEvidence::Result::TxNoReply:IoHomeVerificationEvidence::Result::DriverError;
+        }
+    }
     // Local admission/driver failures are not evidence of a missing peer reply.
     // Requeue within the existing epoch without consuming moving grace/backoff.
     if(iEntry.ownedStatusPoll&&iEntry.trackedStatusPoll&&iEntry.sourceChannelIndex<IOHC_ChannelCount&&
@@ -6387,6 +6429,12 @@ void IoHomeController::logPairDiagnosticStatus() const
 void IoHomeController::resetDiscoveryTimingTrace()
 {
     memset(&mDiscoveryTimingTrace, 0, sizeof(mDiscoveryTimingTrace));
+    mDiscoveryTimingTrace.parseBefore=mRxParseFailCount;mDiscoveryTimingTrace.retunesBefore=mRxScanMeasurements.retunes;mDiscoveryTimingTrace.overflowBefore=mPendingDiscoveryOverflow;
+#if defined(RADIO_SX1276) && !defined(TEST_NATIVE)
+    mDiscoveryTimingTrace.crcBefore=mRadio.rxCrcFailCount();
+#else
+    mDiscoveryTimingTrace.crcBefore=mRadio.crcErrorCount();
+#endif
 }
 
 void IoHomeController::enqueueDiscoveryResponse()
@@ -6513,6 +6561,9 @@ void IoHomeController::recordTwoWayTrace(const char *event,const IoHomeFrame &fr
     if(frame.ctrlByte0&IOHC_CTRL0_MODE_1W)return;
     auto &p=mTwoWayTrace[mTwoWayTraceCount%kTwoWayTraceCapacity];p={};
     p.id=++mTwoWayTraceCount;p.event=event;
+    p.trustedStatus=!std::strcmp(event,"status_local_correlated")||!std::strcmp(event,"status_inbound_authenticated");
+    p.authenticatedStatus=p.trustedStatus&&(mInboundVerified||(mSawChallenge&&mAuthResponseSent));
+    p.statusLayoutKnown=mStatusAttribution.valid&&mStatusAttribution.timeMs==millis()&&mStatusAttribution.transportSrc==frame.getSrcNodeId()&&mStatusAttribution.transportDst==frame.getDestNodeId()&&mStatusAttribution.layoutKnown;
     p.eventType=!std::strcmp(event,"tx_started")?"attempt_started":
         !std::strcmp(event,"response_timeout")?"response_timeout":
         !std::strcmp(event,"rx_correlated")?"response_received":
@@ -6521,8 +6572,8 @@ void IoHomeController::recordTwoWayTrace(const char *event,const IoHomeFrame &fr
     p.attemptFinished=!std::strcmp(event,"response_timeout")||!std::strcmp(event,"tx_timeout")||
         (!std::strcmp(event,"rx_correlated")&&frame.commandId!=IoHomeCommand::ChallengeRequest);
     p.requestSnapshot=!std::strcmp(event,"exchange_completed")||!std::strcmp(event,"exchange_failed")||!std::strcmp(event,"status_poll_completed");
-    const bool rxEvent=!std::strncmp(event,"rx_",3)||!std::strcmp(event,"status_received");
-    p.associated=!rxEvent || !std::strcmp(event,"rx_ready") || !std::strcmp(event,"rx_correlated");
+    const bool rxEvent=!std::strncmp(event,"rx_",3)||!std::strncmp(event,"status_",7);
+    p.associated=!rxEvent || !std::strcmp(event,"rx_ready") || !std::strcmp(event,"rx_correlated") || p.trustedStatus;
     if (!std::strcmp(event,"tx_rejected")) p.associated=false;
     if (p.requestSnapshot && (!mExchangeRequestWireLength || mExchangeRequestSessionId!=mTwoWaySessionId))p.associated=false;
     if(p.associated){p.txId=mTwoWayTxId;p.sessionId=mTwoWaySessionId;}
@@ -6556,6 +6607,24 @@ void IoHomeController::recordTwoWayTrace(const char *event,const IoHomeFrame &fr
     }
     if (!std::strcmp(event,"rx_ready") && p.txDoneValid)
         p.rxReadyDelayUs=p.timeUs-p.txDoneUs;
+    if(mCurrentCmd.active&&mCurrentCmd.command==IoHomeCommand::Discover2ERequest&&mCurrentCmd.destNodeId==mVerification.node) {
+        auto &v=mVerification;
+        if(!std::strcmp(event,"tx_started")&&p.src==mOwnNodeId&&p.dst==v.node) {
+            if(frame.commandId==IoHomeCommand::Discover2ERequest)v.flags|=IoHomeVerificationEvidence::TxStarted;
+            if(frame.commandId==IoHomeCommand::ChallengeResponse)v.flags|=IoHomeVerificationEvidence::AuthTx;
+            v.transaction=mTwoWaySessionId;v.txIdLow=uint32_t(mTwoWayTxId);v.frequency=p.frequencyHz;
+            v.chargedMs+=estimatedTxAirtimeMs(p.length,p.preambleBytes);
+        }
+        if(!std::strcmp(event,"tx_done_observed"))v.flags|=IoHomeVerificationEvidence::TxDone;
+        if(!std::strcmp(event,"rx_ready"))v.flags|=IoHomeVerificationEvidence::RxReady;
+        if(!std::strcmp(event,"rx_observed")&&p.src==v.node&&p.dst==mOwnNodeId) {
+            if(frame.commandId==IoHomeCommand::ChallengeRequest)v.flags|=IoHomeVerificationEvidence::ChallengeSeen;
+            if(frame.commandId==IoHomeCommand::Discover2EResponse){v.flags|=IoHomeVerificationEvidence::ResponseSeen;v.result=IoHomeVerificationEvidence::Result::ResponseUnverified;}
+        }
+    }
+    if(mCurrentCmd.ownedStatusPoll&&!std::strcmp(event,"tx_started"))
+        logInfoP("IOHC_POLL event=tx_started node=%06X poll_reason=%s epoch=%lu transaction=%llu frequency=%lu airtime_own_ms=%lu admitted=1 collision_gate=%u",
+            mCurrentCmd.destNodeId,mCurrentCmd.pollReason==0?"scheduled":mCurrentCmd.pollReason==1?"tracking":mCurrentCmd.pollReason==2?"remote_followup":"manual",(unsigned long)mCurrentCmd.statusPollEpoch,(unsigned long long)mTwoWaySessionId,(unsigned long)p.frequencyHz,(unsigned long)estimatedTxAirtimeMs(p.length,p.preambleBytes),twoWayIdentityCollision());
     // Cached observations only: no SPI/RSSI read or console output between
     // TX done and RX reentry.
     p.parseFailures=mRxParseFailCount;
@@ -6586,14 +6655,58 @@ void IoHomeController::recordTwoWayTrace(const char *event,const IoHomeFrame &fr
     if(std::strcmp(event,"rx_observed") && std::strcmp(event,"rx_correlated")) {
         p.preambleUs=0;p.syncUs=0;p.activityTimestampValid=false;
     }
+    if(rxEvent&&!std::strcmp(event,"rx_observed")) {
+        const auto evidence=receiveEvidence(wireLength);p.crcChecked=evidence.hardwareCrcChecked;p.crcValid=evidence.hardwareCrcValid;p.rxReadUs=evidence.readTimestampUs;p.rxTimestampValid=evidence.timestampValid;
+    }
+    const bool critical=frame.commandId==IoHomeCommand::DiscoverSPERequest||frame.commandId==IoHomeCommand::DiscoverSPEResponse||frame.commandId==IoHomeCommand::Discover2ERequest||frame.commandId==IoHomeCommand::Discover2EResponse||frame.commandId==IoHomeCommand::ChallengeRequest||frame.commandId==IoHomeCommand::ChallengeResponse||frame.commandId==IoHomeCommand::PrivateResponse||frame.commandId==IoHomeCommand::StatusUpdate||frame.commandId==IoHomeCommand::StatusUpdateResponse;
+    if(mCriticalStream&&critical&&(!std::strcmp(event,"rx_observed")||!std::strcmp(event,"tx_started"))) {
+        if(uint32_t(millis()-mCriticalWindowMs)>=1000U){mCriticalWindowMs=millis();mCriticalTokens=4;}
+        if(mCriticalTokens) {
+            --mCriticalTokens;
+            logInfoP("IOHC_CRITICAL epoch=%lu event=%s ms=%lu src=%06X dst=%06X cmd=%02X ctrl=%02X/%02X RF=%lu len=%u dropped=%lu payload=redacted",
+                (unsigned long)mDiagnosticFilterEpoch,event,(unsigned long)p.timeMs,p.src,p.dst,p.command,p.ctrl0,p.ctrl1,(unsigned long)p.frequencyHz,p.length,(unsigned long)mCriticalDropped);
+        } else ++mCriticalDropped;
+    }
     // Allowlist functional evidence only: no challenges, HMACs, keys or object chunks.
     if(!std::strcmp(event,"tx_done_observed") || !std::strcmp(event,"rx_ready")) {
         std::memcpy(p.payload,mAttemptTxPayload,sizeof(p.payload));
-    } else if(frame.commandId==IoHomeCommand::Execute||frame.commandId==IoHomeCommand::StatusUpdate||
+    } else if((frame.commandId==IoHomeCommand::Private&&frame.dataLen==3&&frame.data[0]==3&&frame.data[1]==0&&frame.data[2]==0)||
+       frame.commandId==IoHomeCommand::Execute||frame.commandId==IoHomeCommand::StatusUpdate||
        frame.commandId==IoHomeCommand::PrivateResponse||frame.commandId==IoHomeCommand::ErrorResponse) {
         const auto hex=ioHomeBytesToHexForLog(frame.data,frame.dataLen);
         std::snprintf(p.payload,sizeof(p.payload),"%s",hex.c_str());
     } else std::snprintf(p.payload,sizeof(p.payload),"[redacted]");
+}
+
+void IoHomeController::configureDiagnosticStream(bool enabled,uint32_t node,uint8_t command)
+{
+    mDiagnosticStream=enabled;mDiagnosticStreamNode=node;mDiagnosticStreamCommand=command;mDiagnosticStreamCursor=mTwoWayTraceCount;
+    ++mDiagnosticFilterEpoch;if(!mDiagnosticFilterEpoch)++mDiagnosticFilterEpoch;
+    mDiagnosticFiltered=0;mDiagnosticDropped=0;
+    logInfoP("IOHC_CAPTURE_FILTER epoch=%lu enabled=%u node=%06X command=%02X replacement=1 additive=0 reporting_71=unknown",(unsigned long)mDiagnosticFilterEpoch,enabled,node,command);
+}
+
+void IoHomeController::observeStatusAttribution(const IoHomeFrame &frame,IoHomeStatusAttribution::Source source,bool layoutKnown)
+{
+    if(frame.commandId!=IoHomeCommand::PrivateResponse&&frame.commandId!=IoHomeCommand::StatusUpdate)return;
+    auto &a=mStatusAttribution;a=IoHomeStatusAttribution{};a.valid=true;a.timeMs=millis();a.transportSrc=frame.getSrcNodeId();a.transportDst=frame.getDestNodeId();a.source=source;
+    const uint8_t target=frame.commandId==IoHomeCommand::StatusUpdate?5:2,current=frame.commandId==IoHomeCommand::StatusUpdate?7:4;
+    a.layoutKnown=layoutKnown&&frame.dataLen>=current+2;
+    if(source==IoHomeStatusAttribution::Source::LocalCorrelated||source==IoHomeStatusAttribution::Source::Inbound71Authenticated)a.localTransaction=mTwoWaySessionId;
+    a.authenticatedLocalCommand=source==IoHomeStatusAttribution::Source::LocalCorrelated&&mCurrentCmd.command==IoHomeCommand::Execute&&mSawChallenge&&mAuthResponseSent;
+    if(a.layoutKnown) {
+        a.stateFlags=frame.data[0];a.target=(uint16_t(frame.data[target])<<8)|frame.data[target+1];a.current=(uint16_t(frame.data[current])<<8)|frame.data[current+1];
+        const auto last=ioHomeDecodeLastCommand(frame);a.lastController=last.node;a.originator=last.originator;a.lastControllerKnown=last.valid;
+        if(frame.commandId==IoHomeCommand::PrivateResponse&&frame.dataLen>=8) {
+            a.remaining=(uint16_t(frame.data[6])<<8)|frame.data[7];a.remainingKnown=a.remaining>0&&a.remaining<0xFFFE;
+        }
+    }
+}
+void IoHomeController::printStatusAttribution() const
+{
+    const auto &a=mStatusAttribution;
+    logInfoP("IOHC_STATUSATTR valid=%u ms=%lu transport_src=%06X transport_dst=%06X last_command_controller=%06X last_controller_known=%u originator=%u authenticated_local_command=%u local_transaction=%llu status_source=%s layout_known=%u target_raw=%u current_raw=%u remaining_raw=%u remaining_known=%u reporting_71=unknown",
+        a.valid,(unsigned long)a.timeMs,a.transportSrc,a.transportDst,a.lastController,a.lastControllerKnown,a.originator,a.authenticatedLocalCommand,(unsigned long long)a.localTransaction,a.sourceName(),a.layoutKnown,a.target,a.current,a.remaining,a.remainingKnown);
 }
 
 void IoHomeController::streamDiagnosticTrace()
@@ -6602,25 +6715,28 @@ void IoHomeController::streamDiagnosticTrace()
     const uint64_t first=mTwoWayTraceCount>kTwoWayTraceCapacity?mTwoWayTraceCount-kTwoWayTraceCapacity+1:1;
     if(mDiagnosticStreamCursor+1<first) {
         logInfoP("IOHC_CAPTURE droppedEvents=%llu reason=ring_overwrite",(unsigned long long)(first-mDiagnosticStreamCursor-1));
+        mDiagnosticDropped+=uint32_t(first-mDiagnosticStreamCursor-1);
         mDiagnosticStreamCursor=first-1;
     }
     const auto &p=twoWayTracePoint(++mDiagnosticStreamCursor);
-    if(mDiagnosticStreamNode && p.src!=mDiagnosticStreamNode && p.dst!=mDiagnosticStreamNode)return;
-    if(mDiagnosticStreamCommand!=0xFF && p.command!=mDiagnosticStreamCommand)return;
-    logInfoP("IOHC_CAPTURE importSession=%lu id=%llu transaction=%llu event=%s ms=%lu RF=%lu RSSI=%d src=%06X dst=%06X cmd=%02X ctrl=%02X/%02X len=%u payload=%s disposition=%s crc_checked=%u crc_valid=%u parsed=yes state=%u rxReadyUs=%lu txStartUs=%lu txDoneUs=%lu preamble=%u duty=%lu/%lu",
-        (unsigned long)(mModule?mModule->diagnosticSession():0),(unsigned long long)p.id,(unsigned long long)p.sessionId,p.event,(unsigned long)p.timeMs,(unsigned long)p.frequencyHz,p.rxRssi,p.src,p.dst,p.command,p.ctrl0,p.ctrl1,p.length,p.payload,
-        p.dst!=mOwnNodeId?"foreign_destination_passive_only":p.associated?"correlated_or_local_tx":"observation_only",p.crcChecked,p.crcValid,p.state,
+    if((mDiagnosticStreamNode&&p.src!=mDiagnosticStreamNode&&p.dst!=mDiagnosticStreamNode)||(mDiagnosticStreamCommand!=0xFF&&p.command!=mDiagnosticStreamCommand)){++mDiagnosticFiltered;return;}
+    const bool phy=!std::strcmp(p.event,"rx_observed"),tx=!std::strcmp(p.event,"tx_started")||!std::strcmp(p.event,"tx_done_observed");
+    const bool rearm=!std::strcmp(p.event,"rx_ready");
+    const char *disposition=rearm?"radio_rearmed":tx?"local_tx":p.requestSnapshot?"request_snapshot":p.dst!=mOwnNodeId?"foreign_destination_passive_only":p.trustedStatus?"trusted_status":"observation_only";
+    logInfoP("IOHC_CAPTURE filter_epoch=%lu filtered=%lu dropped_total=%lu is_local_tx=%u is_phy_rx=%u authenticated_trust=%u trusted_status=%u importSession=%lu id=%llu transaction=%llu event=%s ms=%lu RF=%lu RSSI=%d src=%06X dst=%06X cmd=%02X ctrl=%02X/%02X len=%u payload=%s disposition=%s crc_checked=%u crc_valid=%u parsed=yes state=%u rxReadyUs=%lu txStartUs=%lu txDoneUs=%lu preamble=%u duty=%lu/%lu",
+        (unsigned long)mDiagnosticFilterEpoch,(unsigned long)mDiagnosticFiltered,(unsigned long)mDiagnosticDropped,tx,phy,p.authenticatedStatus,p.trustedStatus,(unsigned long)(mModule?mModule->diagnosticSession():0),(unsigned long long)p.id,(unsigned long long)p.sessionId,p.event,(unsigned long)p.timeMs,(unsigned long)p.frequencyHz,p.rxRssi,p.src,p.dst,p.command,p.ctrl0,p.ctrl1,p.length,p.payload,
+        disposition,p.crcChecked,p.crcValid,p.state,
         (unsigned long)p.rxReadyUs,(unsigned long)p.txStartUs,(unsigned long)p.txDoneUs,p.preambleBytes,(unsigned long)p.dutyUsedMs,(unsigned long)p.dutyLimitMs);
-    if(p.command==0x71 && p.payload[0]!='[') {
+    if((p.command==0x71||p.command==0x04) && p.payload[0]!='[') {
         // Diagnostic decoding only; trusted application remains behind inbound auth.
-        IoHomeFrame frame;frame.init();frame.commandId=IoHomeCommand::StatusUpdate;
+        IoHomeFrame frame;frame.init();frame.commandId=static_cast<IoHomeCommand>(p.command);
         const size_t length=std::strlen(p.payload)/2;
         for(size_t i=0;i<length && i<sizeof(frame.data);i++) {
             unsigned byte=0;if(std::sscanf(p.payload+2*i,"%2x",&byte)!=1)break;
             frame.data[frame.dataLen++]=uint8_t(byte);
         }
-        const auto last=ioHomeDecodeLastCommand(frame);
-        logInfoP("IOHC_STATUS71 lastController=%06X originator=%u record_known=%u evidence=diagnostic_only_reporting_enablement_unknown",last.node,last.originator,last.valid);
+        const auto last=p.statusLayoutKnown?ioHomeDecodeLastCommand(frame):IoHomeLastCommand{};
+        logInfoP("IOHC_STATUS_RECORD lastController=%06X originator=%u record_known=%u evidence=diagnostic_only_reporting_enablement_unknown",last.node,last.originator,last.valid);
     }
 }
 
@@ -6825,9 +6941,14 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
     const bool productionAtlantic=(mCurrentCmd.active&&mCurrentCmd.heatingToken&&mCurrentCmd.heatingData[2]==1&&mCurrentCmd.heatingData[3]==0x10) || (mPairing2WMode==Pairing2WMode::AtlanticPull && isPairDiagnosticState(mState)) ||
         (mCurrentCmd.active&&mCurrentCmd.atlanticToken) ||
         (mAtlantic.status.stage==AtlanticStage::RollCall && iLength>8 && iData[8]==uint8_t(IoHomeCommand::DiscoverSPERequest));
+    if(mCurrentCmd.active&&mCurrentCmd.command==IoHomeCommand::Discover2ERequest&&mCurrentCmd.destNodeId==mVerification.node) {
+        mVerification.frequency=IOHC_FREQUENCIES[mCurrentFreqIdx];mVerification.usedMs=mRfDutyBudget.used(mVerification.frequency);
+        mVerification.limitMs=IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(mVerification.frequency));mVerification.mode=uint8_t(mReadOnlyDiagnosticRf?IoHomeRfAccessPolicy::Mode::DutyLimited:admittedMode);
+    }
     if ((productionAtlantic || mReadOnlyDiagnosticRf) ? !mRfDutyBudget.admits(IOHC_FREQUENCIES[mCurrentFreqIdx],airtime) : !isDutyCycleOk(mCurrentFreqIdx, airtime)) {
         mLbtPrepared=false;
         mLastTxDutyDenied=true;
+        if(mCurrentCmd.command==IoHomeCommand::Discover2ERequest&&mCurrentCmd.destNodeId==mVerification.node)mVerification.result=IoHomeVerificationEvidence::Result::DutyDenied;
         if (auto *counters=activeAttemptCounters()) ++counters->dutyRejected;
         if(mCurrentFreqIdx<IOHC_NUM_FREQUENCIES)++mRfBlockedTxCount[IoHomeDutyBudget::band(IOHC_FREQUENCIES[mCurrentFreqIdx])];
         logInfoP("RF TX denied: duty_budget_exceeded frequency=%lu usedMs=%lu nextMs=%lu limitMs=%lu",
@@ -6867,6 +6988,7 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
             // exchange deadline. Exhaustion never falls through to an unchecked send.
             if (++mCcaBusySamples>=5) {
                 mCcaBusySamples=0;mCcaWaiting=false;
+                if(mCurrentCmd.command==IoHomeCommand::Discover2ERequest&&mCurrentCmd.destNodeId==mVerification.node)mVerification.result=IoHomeVerificationEvidence::Result::CcaDenied;
                 logInfoP("RF admission denied reason=cca_exhausted tx_hz=%lu",(unsigned long)IOHC_FREQUENCIES[mCurrentFreqIdx]);
                 return RadioError::HardwareError;
             }
@@ -6891,6 +7013,7 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
         // Includes queued/direct/pairing/1W/continuations, lost IRQs and aborts.
         mRfDutyBudget.advance(millis()); // charge at acceptance even across a programming-time boundary
         mRfDutyBudget.charge(IOHC_FREQUENCIES[mCurrentFreqIdx], airtime);
+        if(mCurrentCmd.active&&mCurrentCmd.command==IoHomeCommand::Discover2ERequest&&mCurrentCmd.destNodeId==mVerification.node)mVerification.usedMs=mRfDutyBudget.used(IOHC_FREQUENCIES[mCurrentFreqIdx]);
         if(admittedBypass)logInfoP("RF TX benchBypass=%u simulationBypass=%u frequency=%lu preamble=%u frameSize=%u airtimeMs=%lu totalMs=%lu session=%lu",
             admittedMode==IoHomeRfAccessPolicy::Mode::BenchUnlimited,
             admittedMode==IoHomeRfAccessPolicy::Mode::SimulationUnlimited,
@@ -7396,6 +7519,14 @@ void IoHomeController::loop()
         {
             if (!(mRxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W))
                 observeReceivedIdentity(mRxFrame,receiveEvidence(lLen),receivedRadioState);
+            if(mRxFrame.commandId==IoHomeCommand::Private&&mRxFrame.dataLen==3&&mRxFrame.data[0]==3&&mRxFrame.data[1]==0&&mRxFrame.data[2]==0&&mRxFrame.getSrcNodeId()!=mOwnNodeId) {
+                mForeignPollController=mRxFrame.getSrcNodeId();mForeignPollNode=mRxFrame.getDestNodeId();mForeignPollAtMs=millis();
+            }
+            if(mRxFrame.commandId==IoHomeCommand::PrivateResponse||mRxFrame.commandId==IoHomeCommand::StatusUpdate) {
+                const bool foreign=mRxFrame.getDestNodeId()!=mOwnNodeId;
+                const bool known=foreign&&mRxFrame.commandId==IoHomeCommand::PrivateResponse&&mRxFrame.getSrcNodeId()==mForeignPollNode&&mRxFrame.getDestNodeId()==mForeignPollController&&uint32_t(millis()-mForeignPollAtMs)<=2000U;
+                observeStatusAttribution(mRxFrame,foreign?IoHomeStatusAttribution::Source::ForeignPassive:IoHomeStatusAttribution::Source::Unknown,known);
+            }
             recordTwoWayTrace("rx_observed",mRxFrame,lLen);
             if(mModule)mModule->onDiagnosticFrame(mRxFrame,mCurrentFreqIdx,mRadio.lastRssi(),millis());
             ++mRxScanMeasurements.captures;
@@ -8095,6 +8226,7 @@ void IoHomeController::processIdle()
             mRetryAtMs = 0;
             mExchangeStartMs = millis();
             ++mTwoWaySessionId;
+            if(mCurrentCmd.command==IoHomeCommand::Discover2ERequest&&mCurrentCmd.destNodeId==mVerification.node)mVerification.transaction=mTwoWaySessionId;
             mExchangeRequestWireLength = 0;
             mLastTxDutyDenied=false;
             beginExchangeDiagnosticsWindow();
@@ -8125,6 +8257,13 @@ void IoHomeController::processIdle()
 
 void IoHomeController::processTxPending()
 {
+    if(mCurrentCmd.ownedStatusPoll&&mCurrentCmd.pollReason!=3&&backgroundPollPauseRemaining()) {
+        auto *ch=mModule?mModule->getChannel(mCurrentCmd.sourceChannelIndex):nullptr;
+        if(ch&&ch->getNodeId()==mCurrentCmd.destNodeId&&ch->statusPollEpoch()==mCurrentCmd.statusPollEpoch&&
+           ch->productContextRevision()==mCurrentCmd.productContextRevision&&!std::memcmp(ch->getEncryptionKey(),mCurrentCmd.managementKey,16))
+            ch->onStatusPollDeferred(backgroundPollPauseRemaining(),false);
+        mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+    }
     if (mCurrentCmd.ownedStatusPoll) {
         auto *ch=mModule?mModule->getChannel(mCurrentCmd.sourceChannelIndex):nullptr;
         if (!ch || !ch->isPaired() || ch->getNodeId()!=mCurrentCmd.destNodeId ||
@@ -9015,6 +9154,7 @@ void IoHomeController::processResponse()
     mTrustRxPosition = lPreviousTrustRxPosition;
     if (lAuthenticatedDirectedDiscovery && mModule)
     {
+        if(mVerification.node==lCompletedCmd.destNodeId)mVerification.result=IoHomeVerificationEvidence::Result::Authenticated;
         logInfoP("KeyImport directed RX: candidate=%06X stage=verified final2F=1 rxFreqIdx=%u rxFreqHz=%lu",
                  lCompletedCmd.destNodeId, static_cast<unsigned>(mCurrentFreqIdx),
                  static_cast<unsigned long>(mCurrentFreqIdx < IOHC_NUM_FREQUENCIES
@@ -10997,8 +11137,10 @@ void IoHomeController::processDiscovery()
         if(mDiscoveryFamily==IoHomeDiscoveryFamily::Sensor)lRequestedCommand=IoHomeCommand::DiscoverSensorRequest;
         if(mDiscoveryFamily==IoHomeDiscoveryFamily::SensorInSystem)lRequestedCommand=IoHomeCommand::DiscoverSensorInSystemRequest;
         if(mDiscoveryFamily==IoHomeDiscoveryFamily::PrivateSomfy)lRequestedCommand=IoHomeCommand::WritePrivate;
+        auto diagnosticSettings=mDiagnosticDiscoverySettings;
+        if(mReadOnlyDiagnosticRf)diagnosticSettings.command=mDiscoverySPE?TwoWayDiscoveryCommandMode::DiscoverSPE:TwoWayDiscoveryCommandMode::Discover28;
         const TwoWayDiscoveryFrameOptions lDiscoveryOptions =
-            resolveTwoWayDiscoveryOptions(lRequestedCommand, mDiagnosticDiscoverySettings);
+            resolveTwoWayDiscoveryOptions(lRequestedCommand, diagnosticSettings);
         TwoWayDiscoveryFrameOptions lEffectiveOptions = lDiscoveryOptions;
         if (mDiscoverySPE && (mDiscoverySweep & 1U) != 0)
         {
@@ -11225,6 +11367,17 @@ void IoHomeController::processDiscovery()
             const bool lMoreSweeps = (mDiscoverySweep + 1 < lSweepCount) || lExtraSpeSweep;
             if (!lMoreFreqs && lExtraSpeSweep)
                 logInfoP("KeyImport scan: authenticated device metadata still pending; one extra SPE sweep");
+#if defined(RADIO_SX1276) && !defined(TEST_NATIVE)
+            const uint32_t crcNow=mRadio.rxCrcFailCount();
+#else
+            const uint32_t crcNow=mRadio.crcErrorCount();
+#endif
+            logInfoP("IOHC_DISCOVERY_WINDOW session=%lu family=%s sweep=%u tx_cmd=%02X ctrl=%02X/%02X dst=%06X payload_len=%u auth_bytes=redacted requested_listen_override_ms=%u effective_listen_ms=%u elapsed_ms=%lu tx_done_us=%lu rx_ready_us=%lu rx_ready_gap_us=%lu RXorder=existing_family_policy dwell_us=%lu retunes=%lu first_preamble_us=%lu first_sync_us=%lu first_packet_us=%lu packets=%lu crc_rejected=%lu parse_rejected=%lu dropped=%lu close=deadline rx_missed_by_retune=unknown",
+                (unsigned long)(mModule?mModule->diagnosticSession():0),mDiscoverySPE?"SPE_2A_2B":"standard_28_29",mDiscoverySweep,unsigned(mQueuedTxFrame.commandId),mQueuedTxFrame.ctrlByte0,mQueuedTxFrame.ctrlByte1,mQueuedTxFrame.getDestNodeId(),mQueuedTxFrame.dataLen,
+                mDiagnosticDiscoveryListenMs,mDiscoveryBudgetMs,(unsigned long)lListenElapsedMs,(unsigned long)mDiscoveryTimingTrace.txDoneUs,(unsigned long)mDiscoveryTimingTrace.rxReadyUs,
+                (unsigned long)(mDiscoveryTimingTrace.rxReadyUs-mDiscoveryTimingTrace.txDoneUs),(unsigned long)mRxScanIntervalUs,(unsigned long)(mRxScanMeasurements.retunes-mDiscoveryTimingTrace.retunesBefore),
+                (unsigned long)mDiscoveryTimingTrace.firstPreambleUs,(unsigned long)mDiscoveryTimingTrace.firstSyncUs,(unsigned long)mDiscoveryTimingTrace.firstPacketUs,(unsigned long)mDiscoveryTimingTrace.packets,
+                (unsigned long)(crcNow-mDiscoveryTimingTrace.crcBefore),(unsigned long)(mRxParseFailCount-mDiscoveryTimingTrace.parseBefore),(unsigned long)(mPendingDiscoveryOverflow-mDiscoveryTimingTrace.overflowBefore));
             logInfoP("Discovery window TXendUs=%lu firstReplyUs=%lu lastReplyUs=%lu closeUs=%lu budgetMs=%u graceMs=%u",
                 static_cast<unsigned long>(mDiscoveryTimingTrace.txDoneUs),
                 static_cast<unsigned long>(mDiscoveryTimingTrace.firstPacketUs),
@@ -12325,6 +12478,10 @@ void IoHomeController::dispatchRxFrame()
                     const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
                     recordTwoWayTrace("status_received", mRxFrame, mRxRawLen);
                     observeRainStatus(lCh);
+                    if(mInboundVerified) {
+                        observeStatusAttribution(mRxFrame,IoHomeStatusAttribution::Source::Inbound71Authenticated,true);
+                        recordTwoWayTrace("status_inbound_authenticated",mRxFrame,mRxRawLen);
+                    }
                     dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 5, 7,mInboundVerified);
                 }
                 // Status-expected flag: device will auto-send StatusUpdate
@@ -12468,6 +12625,8 @@ void IoHomeController::dispatchRxFrame()
                     mCurrentCmd.sourceChannelIndex==i &&
                     mCurrentCmd.statusPollEpoch==lCh->statusPollEpoch() &&
                     sampleIdentityMatches(i,lSrcNode,mCurrentCmd.managementKey,mCurrentCmd.productContextRevision);
+                observeStatusAttribution(mRxFrame,IoHomeStatusAttribution::Source::LocalCorrelated,lRemainingPoll);
+                recordTwoWayTrace("status_local_correlated",mRxFrame,mRxRawLen);
                 bool lMeasuredStatus=false;
                 if (mTrustRxPosition && mRxFrame.dataLen >= 8)
                 {

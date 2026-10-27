@@ -89,3 +89,5 @@ jobs:
         run: make -C test check-remaining-time-mutations
       - name: Keep native remaining-time evidence separate from synthetic vectors
         run: make -C test check-remaining-time-evidence
+      - name: Validate two-controller trace analysis and sanitized configuration tools
+        run: make -C test check-dual-controller-tools

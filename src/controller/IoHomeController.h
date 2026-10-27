@@ -16,6 +16,8 @@
 #include "../protocol/IoHomeLimitation.h"
 #include "../protocol/IoHomeRainLimitation.h"
 #include "../protocol/IoHomeCollisionEvidence.h"
+#include "../protocol/IoHomeVerificationEvidence.h"
+#include "../protocol/IoHomeStatusAttribution.h"
 #include "../protocol/IoHomeSessionPolicy.h"
 #include "../protocol/IoHomeResponseDescriptor.h"
 #include "../radio/Radio.h"
@@ -172,7 +174,7 @@ struct IoHomeQueueEntry
   uint16_t param2;           // second parameter; widened for Cozy LE16 temperature, 0xFF = unused elsewhere
   uint8_t param3;            // third parameter (for _p0x00_16 extended format); 0xFF = unused
   bool oneWayButton;         // true: 1W button-style Execute command
-  uint16_t oneWayButtonCode; // 0x0000=up, 0x0001=down, 0x0002=stop, 0x0003=my/prog, 0x00FE=release, 0x00FF=stop2
+  union { uint16_t oneWayButtonCode; uint16_t pollReason; }; // mutually exclusive 1W button / owned 2W poll context // 0x0000=up, 0x0001=down, 0x0002=stop, 0x0003=my/prog, 0x00FE=release, 0x00FF=stop2
   bool oneWayRawExecute;     // true: send exact raw Execute payload bytes before sequence/HMAC
   uint8_t oneWayRawData[IOHC_1W_RAW_EXEC_MAX_DATA];
   uint8_t oneWayRawLen;
@@ -579,7 +581,7 @@ public:
                              uint16_t iParam2 = 0xFF, uint8_t iParam3 = 0xFF,
                              uint8_t iMaxAttempts = 0);
   bool sendStatusPoll(IoHomecontrolChannel *channel, bool tracked,
-                      uint16_t mask=0xFF, uint8_t value=0xFF, uint8_t attempts=1);
+                      uint16_t mask=0xFF, uint8_t value=0xFF, uint8_t attempts=1, uint8_t reason=0xFF);
   bool verifyKnownNetworkNode(uint32_t iNodeId, const uint8_t *iKey,
                               uint8_t iFrequencyIndex);
   uint16_t normal2WStartPreamble() const;
@@ -1143,7 +1145,7 @@ public:
     const char *failureReason="none";
     const char *event="none",*eventType="observation",*lbtResult="not_applied";
     IoHomeReplyRole replyRole=IoHomeReplyRole::None;
-    bool attemptFinished=false;
+    bool attemptFinished=false,trustedStatus=false,authenticatedStatus=false,statusLayoutKnown=false;
     char payload[129]{};
   };
 #ifndef IOHC_TWO_WAY_TRACE_CAPACITY
@@ -1155,11 +1157,19 @@ public:
   const TwoWayTracePoint &twoWayTracePoint(uint64_t id) const { return mTwoWayTrace[(id-1)%kTwoWayTraceCapacity]; }
   uint64_t twoWayTraceCount() const { return mTwoWayTraceCount; }
   void printTwoWayTrace() const;
-  void configureDiagnosticStream(bool enabled,uint32_t node,uint8_t command) {
-    mDiagnosticStream=enabled;mDiagnosticStreamNode=node;mDiagnosticStreamCommand=command;mDiagnosticStreamCursor=mTwoWayTraceCount;
-  }
+  void configureDiagnosticStream(bool enabled,uint32_t node,uint8_t command);
+  void configureCriticalDiagnosticStream(bool enabled) {mCriticalStream=enabled;}
+  uint64_t currentTransactionId() const {return mTwoWaySessionId;}
+  uint32_t diagnosticFilterEpoch() const {return mDiagnosticFilterEpoch;}
+  const IoHomeStatusAttribution &statusAttribution() const {return mStatusAttribution;}
+  void observeStatusAttribution(const IoHomeFrame &,IoHomeStatusAttribution::Source,bool layoutKnown);
+  void printStatusAttribution() const;
   void streamDiagnosticTrace();
   void setReadOnlyDiagnosticRf(bool enabled) {mReadOnlyDiagnosticRf=enabled;}
+  bool pauseBackgroundPolls(uint32_t durationMs);
+  uint32_t backgroundPollPauseRemaining() const;
+  bool normalDutyMode() const;
+  void setVerificationBlocked(uint32_t node,IoHomeVerificationEvidence::Result result) {mVerification=IoHomeVerificationEvidence{};mVerification.node=node;mVerification.result=result;}
   void clearTwoWayTrace();
   void printTwoWayAttemptCsv() const;
   struct RfCounters {
@@ -1170,6 +1180,8 @@ public:
   void observeReceivedIdentity(const IoHomeFrame &,const RadioReceiveEvidence &,RadioState);
   RadioReceiveEvidence receiveEvidence(uint8_t length) const;
   void printCollisionFirst() const;
+  const IoHomeVerificationEvidence &verificationEvidence() const {return mVerification;}
+  void printVerificationEvidence() const;
   const IoHomeCollisionEvidence &collisionFirst() const {return mCollisionFirst;}
   bool twoWayIdentityCollision() const { return mIdentityCollisionNode == mOwnNodeId && mOwnNodeId != 0; }
 
@@ -1308,6 +1320,7 @@ private:
     uint32_t maxRxHotPathUs;
     uint32_t maxProcessingUs;
     uint32_t packets;
+    uint32_t crcBefore,parseBefore,retunesBefore,overflowBefore;
   };
 
   struct PendingDiscoveryResponse
@@ -1348,6 +1361,7 @@ private:
   uint32_t mOwnNodeId;
   uint32_t mIdentityCollisionNode=0;
   IoHomeCollisionEvidence mCollisionFirst{};
+  IoHomeVerificationEvidence mVerification{};
   TwoWayTracePoint mTwoWayTrace[kTwoWayTraceCapacity]{};
   TwoWayOutcome mLastTwoWayOutcome;
   uint64_t mTwoWayTraceCount=0,mTwoWayTraceFirst=1;
@@ -1355,6 +1369,12 @@ private:
   uint32_t mDiagnosticStreamNode=0;
   uint8_t mDiagnosticStreamCommand=0xFF;
   bool mDiagnosticStream=false,mReadOnlyDiagnosticRf=false;
+  uint32_t mBackgroundPollPauseUntil=0;
+  uint32_t mDiagnosticFilterEpoch=0,mDiagnosticFiltered=0,mDiagnosticDropped=0;
+  uint32_t mCriticalWindowMs=0,mCriticalDropped=0;
+  uint8_t mCriticalTokens=4;bool mCriticalStream=false;
+  IoHomeStatusAttribution mStatusAttribution{};
+  uint32_t mForeignPollNode=0,mForeignPollController=0,mForeignPollAtMs=0;
   uint64_t mTwoWayTxId=0,mTwoWaySessionId=0;
   RfCounters mRfCounters;
   char mAttemptTxPayload[129]{};
@@ -1979,7 +1999,7 @@ private:
   bool sendCommandInternal(uint32_t iDestNodeId, const uint8_t *iEncKey,
                            IoHomeCommand iCmd, uint8_t iParam, uint16_t iParam2,
                            uint8_t iParam3, uint8_t iMaxAttempts, bool iBackground,
-                           uint8_t iFrequencyIndex = 0xFF, IoHomecontrolChannel *pollOwner = nullptr, bool tracked = false);
+                           uint8_t iFrequencyIndex = 0xFF, IoHomecontrolChannel *pollOwner = nullptr, bool tracked = false, uint8_t pollReason=0xFF);
   IoHomecontrolChannel *channelForNode(uint32_t iNodeId) const;
   uint8_t channelIndexFor(IoHomecontrolChannel *iChannel) const;
   IoHomecontrolChannel *channelForQueueEntry(const IoHomeQueueEntry &iEntry) const;

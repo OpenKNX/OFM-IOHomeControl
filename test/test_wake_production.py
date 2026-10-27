@@ -48,7 +48,7 @@ uint8_t ioHomeParameterIndex(const IoHomeProfileDescriptor*,ParameterSemantic){r
 struct Controller {
  unsigned submissions=0;uint8_t maxAttempts=0;uint32_t rfWait=0;
  unsigned statusPollRetryAfterMs(){return rfWait;}
- bool sendStatusPoll(void*,bool,uint16_t,uint8_t attemptsParam,uint8_t attempts) {
+ bool sendStatusPoll(void*,bool,uint16_t,uint8_t attemptsParam,uint8_t attempts,uint8_t=0xFF) {
   (void)attemptsParam;++submissions;maxAttempts=attempts;return true;
  }
 };
@@ -66,13 +66,14 @@ struct IoHomecontrolChannel {
  void clearStatusPollTracking();
  void stopTravelEstimation(bool);
  float staleEstimate=-1;float estimateCurrentPosition(){return staleEstimate>=0?staleEstimate:mCurrentPosition;}
+ void logTrackingEvent(const char*)const{}
  void onEstimate(uint16_t);
  void setNodeId(uint32_t);void setEncryptionKey(const uint8_t*);void startStatusPollTracking(uint32_t);
  void invalidateHeatingFeedback(){}
  struct {void bind(uint32_t,const uint8_t*){}}mProductRuntime;
  void onPositionFeedback(float);
  void onTargetPositionFeedback(float);
- bool mObservedPositiveRemaining=false,mTrustedPollMoving=false;uint8_t mMovingPollMisses=0;
+ bool mObservedPositiveRemaining=false,mTrustedPollMoving=false;uint8_t mMovingPollMisses=0,mPollTrackingReason=1;
  void startTravelEstimation(float){}
  bool mHas2WHeardEvidence=false,mHas2WMovingEvidence=false,mConfirmsExecute=false,mStopSettlePollPending=false;
  uint32_t mLast2WHeardMs=0,mLast2WMovingEvidenceMs=0,m2WMovingEvidenceGeneration=0;
@@ -91,7 +92,7 @@ struct IoHomecontrolChannel {
  bool allowsActuatorControls(){return true;}
  const IoHomeProfileDescriptor*getEffectiveProfileDescriptor(){return nullptr;}
  bool isTiltCapableDeviceType(){return false;}
- bool requestStatus(bool);
+ bool requestStatus(bool,bool=false);
  void onStatusPollFailed(bool,bool=true);
  void onStatusPollDeferred(uint32_t,bool);
  void clearStopTravelSnapshot(){snapshot=false;}
