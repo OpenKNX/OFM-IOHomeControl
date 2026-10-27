@@ -816,6 +816,21 @@ function /* internal helper */ IOHC_jobSnapshot(online) {
     return {owner:job[2],stage:job[3],channel:job[8],node:IOHC_readNodeId(job,9),generation:IOHC_read32(job,4),revision:IOHC_read32(job,12),
             remainingMs:IOHC_read32(job,16),error:job[24],count:job[25],token:token};
 }
+// Read-only radio evidence; a local denial never becomes a peer reachability verdict.
+function /* internal helper */ IOHC_verificationEvidenceText(online) {
+    var caps=IOHC_invokeFunctionProperty(online,[0x23]);
+    if(!caps||caps.length!==10||caps[0]!==0||caps[1]!==1||(caps[4]&2)===0)return "";
+    var v=IOHC_invokeFunctionProperty(online,[0x42]);
+    if(!v||v.length!==25||v[0]!==0||v[1]!==1)throw new Error("RF-Verifikationsbeleg ungültig");
+    if(v[2]===0)return "";
+    var labels=["inaktiv","eingereiht","TX gestartet; keine Antwort","2F gesehen; Authentifizierung unvollständig","authentifiziert","lokal durch Duty-Budget abgelehnt","lokal durch CCA abgelehnt","Identitätskollision","lokaler Treiberfehler","Warteschlange belegt"];
+    if(v[2]>=labels.length||((v[2]>=5||v[2]===3)&&v[7]!==0)||(v[7]===1&&(v[3]&7)!==7))throw new Error("RF-Beleg verwechselt lokale Ablehnung und Gegenstellen-Timeout");
+    return "RF "+IOHC_formatNodeId(IOHC_readNodeId(v,4))+": "+labels[v[2]]+"; TX-Start="+((v[3]&1)?1:0)+"; Peer-Timeout="+v[7];
+}
+function IOHC_readRadioVerification(device,online,progress,context) {
+    online.connect();try{var text=IOHC_verificationEvidenceText(online);progress.setText(text||"Kein RF-Verifikationsbeleg; gespeicherter Kanalstatus ist kein Live-RF-Test.");}finally{online.disconnect();}
+}
+
 function IOHC_readCommissioningStatus(device,online,progress,context) {
     var trace={step:"Vorbereitung"};online=IOHC_traceOnline(online,trace);
     try {
@@ -850,7 +865,7 @@ function IOHC_readCommissioningStatus(device,online,progress,context) {
         }
         if(job.owner===3||job.owner===4) text+=". Aufzeichnung/Kopie bestätigt keine Aktor-Anmeldung";
         text+=". Statuslesen ändert keine ETS-Einstellungen und bestätigt keinen Geräte-Download.";
-        progress.setText(text);
+        var rfEvidence=IOHC_verificationEvidenceText(online);progress.setText(text+(rfEvidence?". "+rfEvidence:""));
     } catch(error) {IOHC_commissioningFailure(progress,trace,error);throw error;} finally {online.disconnect();}
 }
 // Project settings and permission ownership only; no fabricated adoption history.

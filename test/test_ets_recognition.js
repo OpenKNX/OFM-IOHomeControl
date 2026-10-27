@@ -251,7 +251,7 @@ test("channel evidence refuses same-node profile change during reads",function()
 test("guided continuation reads active job without starting another operation",function(){
  var calls=[],closed=0,online={connect:function(){},disconnect:function(){closed++;},invokeFunctionProperty:function(o,p,d){calls.push(d[0]);if(d[0]===0x23)return [0,1,0,0,0,127,0,0,0,1];var a=[0,1,1,2,0,0,0,1,0,0x12,0x34,0x56,0,0,0,0,0,0,1,0,0,0,0,1,0,0];return a;}};
  var text="";IOHC_continueCommissioning(deviceWith({}),online,{setText:function(t){text=t;}},{});
- check(calls.join(",")==="35,36,35,36"&&closed===2&&text.indexOf("Suche")>=0,"continuation restarted RF");
+ check(calls.join(",")==="35,36,35,36,35"&&closed===2&&text.indexOf("Suche")>=0,"continuation restarted RF");
 });
 test("assignment preview does not write and detects occupied target",function(){
  var d=deviceWith({Active:0}),job={token:[0,0,0,1,0,0,0,1,0,0,0,1],stage:4,count:1};
@@ -648,4 +648,17 @@ test("already acknowledged assignment checks project without another persistent 
   if(data.length>2)acks++;return receipt;
  }};
  check(IOHC_resumeAssignment(d,online,0)&&acks===0,"stable assignment sent another storage ACK");
+});
+
+
+test("radio verification duty denial stays local in ETS diagnostics",function(){
+ var v=new Array(25).fill(0);v[1]=1;v[2]=5;v[4]=0x15;v[5]=0x5D;v[6]=0x81;
+ var online={invokeFunctionProperty:function(o,p,data){return data[0]===0x23?[0,1,0,0,2,0,0,0,0,1]:v;}};
+ var text=IOHC_verificationEvidenceText(online);check(text.indexOf("Duty-Budget")>=0&&text.indexOf("TX-Start=0")>=0&&text.indexOf("Peer-Timeout=0")>=0,"duty denial mislabeled");
+ v[7]=1;var rejected=false;try{IOHC_verificationEvidenceText(online);}catch(e){rejected=true;}check(rejected,"local denial accepted as peer timeout");
+});
+test("radio verification unproven 2F is distinct from authentication",function(){
+ var v=new Array(25).fill(0);v[1]=1;v[2]=3;v[3]=35;v[4]=0x15;v[5]=0x5D;v[6]=0x81;
+ var online={invokeFunctionProperty:function(o,p,data){return data[0]===0x23?[0,1,0,0,2,0,0,0,0,1]:v;}};
+ var text=IOHC_verificationEvidenceText(online);check(text.indexOf("unvollständig")>=0&&text.indexOf("Peer-Timeout=0")>=0,"2F treated as authenticated");
 });
