@@ -1,3 +1,4 @@
+#include "../protocol/IoHomeForeignActivity.h"
 #pragma once
 #include "../protocol/IoHomeHeatingRegisters.h"
 
@@ -583,11 +584,18 @@ public:
     if (lCounter != UINT16_MAX)
       ++lCounter;
   }
-  void scheduleStatusPoll(uint32_t iDelayMs)
+  IoHomeFollowUpState mTestFollowUp{};
+  IoHomeFollowUpDecision scheduleStatusPoll(uint32_t iDelayMs, bool foreignActivity=false)
   {
+    if (foreignActivity) {
+      if (!mPaired || mIs1W) return IoHomeFollowUpDecision::Ignored;
+      const auto decision=ioHomeScheduleFollowUp(mTestFollowUp, ioHomeTestMillis(), iDelayMs);
+      if (decision != IoHomeFollowUpDecision::Scheduled) return decision;
+    }
     mHasScheduledStatusPoll = true;
     mScheduledStatusPollCount++;
     mLastScheduledStatusPollMs = iDelayMs;
+    return IoHomeFollowUpDecision::Scheduled;
   }
   void onRssiUpdate(uint8_t) {}
   void logStatusSummary(float, bool, float, bool, bool) {}

@@ -1,3 +1,4 @@
+#include "protocol/IoHomeForeignActivity.h"
 #include "protocol/IoHomeProductRuntime.h"
 #include "protocol/IoHomePhysicalBounds.h"
 #pragma once
@@ -207,7 +208,7 @@ public:
   void setConfigured1WPowerClass(OneWayPowerClass iPowerClass);
   OneWayPowerClass getConfigured1WPowerClass() const;
   bool requestStatus();
-  void scheduleStatusPoll(uint32_t iDelayMs);
+  IoHomeFollowUpDecision scheduleStatusPoll(uint32_t iDelayMs, bool foreignActivity=false);
 
   // Lock control (P2)
   void setLocked(bool iLocked);

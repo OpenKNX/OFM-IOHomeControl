@@ -14747,7 +14747,9 @@ static void buildPassiveExecuteFrame(IoHomeFrame &oFrame,
     oFrame.setSrcNode(iRemoteNodeId);
     oFrame.setDestNode(iDeviceNodeId);
     oFrame.commandId = IoHomeCommand::Execute;
-    oFrame.dataLen = 0;
+    const uint8_t payload[]={1,0x63,0x96,0,0,0};
+    memcpy(oFrame.data,payload,sizeof(payload));
+    oFrame.dataLen = sizeof(payload);
     oFrame.hasHmac = false;
 }
 
@@ -16057,6 +16059,7 @@ TEST(controller_linked_remote_activity_schedules_follow_up_poll_for_linked_devic
 
     IoHomeFrame lFrame;
     buildPassiveExecuteFrame(lFrame, lRemoteNodeId, lOtherNodeId);
+    lFrame.set1WMode(); lFrame.dataLen=8; lFrame.hasHmac=true;
     ASSERT_TRUE(queueControllerPassiveFrame(lController, lFrame));
 
     ASSERT_TRUE(lChannel.testHasScheduledStatusPoll());
@@ -23741,4 +23744,69 @@ TEST(controller_rf_build_mode_heating_refresh_spacing_and_direct_Atlantic_probe)
 #else
     ASSERT_TRUE(a.atlanticStatus().stage==IoHomeController::AtlanticStage::KeyVerified);
 #endif
+}
+
+TEST(controller_foreign_polling_read_reply_unknown_and_continuations_do_not_schedule)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    const uint8_t key[16]={};
+    initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+    ASSERT_TRUE(m.remoteMap().addRemote(0xAABBCC,"remote"));
+    ASSERT_TRUE(m.remoteMap().linkDevice(0xAABBCC,0x155D81));
+    for (auto cmd:{IoHomeCommand::Private,IoHomeCommand::PrivateResponse,
+                   IoHomeCommand::ChallengeRequest,IoHomeCommand::ChallengeResponse,
+                   IoHomeCommand::ErrorResponse,IoHomeCommand(0xEF)}) {
+        IoHomeFrame f;buildPassiveExecuteFrame(f,0xAABBCC,0x155D81);
+        f.commandId=cmd;ASSERT_TRUE(queueControllerPassiveFrame(c,f));
+    }
+    IoHomeFrame f;buildPassiveExecuteFrame(f,0x155D81,0xAABBCC);
+    f.commandId=IoHomeCommand::PrivateResponse;ASSERT_TRUE(queueControllerPassiveFrame(c,f));
+    ASSERT_EQ(ch.testScheduledStatusPollCount(),0);
+    ASSERT_EQ(c.foreignPollCounters().readIgnored,1);
+}
+
+TEST(controller_foreign_polling_execute_coalesces_and_preserves_backoff)
+{
+    ioHomeTestSetMillis(1000);
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={};
+    initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+    IoHomeFrame f;buildPassiveExecuteFrame(f,0xAABBCC,0x155D81);
+    ASSERT_TRUE(queueControllerPassiveFrame(c,f));ASSERT_EQ(ch.testScheduledStatusPollCount(),1);
+    auto &state=ch.mTestFollowUp;state.nextPoll=61000;state.silentFailures=4;state.authFailures=2;state.movingMisses=1;
+    const auto deadline=state.deadline;
+    ASSERT_TRUE(queueControllerPassiveFrame(c,f));
+    ioHomeTestSetMillis(5000);f.data[2]=0xC8;ASSERT_TRUE(queueControllerPassiveFrame(c,f));
+    ASSERT_EQ(ch.testScheduledStatusPollCount(),1);
+    ASSERT_EQ(state.deadline,deadline);ASSERT_EQ(state.nextPoll,61000);
+    ASSERT_EQ(state.silentFailures,4);ASSERT_EQ(state.authFailures,2);ASSERT_EQ(state.movingMisses,1);
+    ASSERT_EQ(c.foreignPollCounters().coalesced,2);
+    // A fresh action after expiry starts a new bounded epoch; replies do not.
+    ioHomeTestSetMillis(deadline+1);f.commandId=IoHomeCommand::PrivateResponse;
+    ASSERT_TRUE(queueControllerPassiveFrame(c,f));ASSERT_EQ(ch.testScheduledStatusPollCount(),1);
+    f.commandId=IoHomeCommand::Execute;ASSERT_TRUE(queueControllerPassiveFrame(c,f));
+    ASSERT_EQ(ch.testScheduledStatusPollCount(),2);ASSERT_TRUE(state.deadline!=deadline);
+}
+
+TEST(controller_foreign_polling_linked_group_is_one_way_action_only)
+{
+    ioHomeTestSetMillis(1000);
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={};
+    initPaired2WControllerForTest(c,m,ch,0xE4E61D,0x155D81,key);
+    ASSERT_TRUE(m.remoteMap().addRemote(0xAABBCC,"remote"));ASSERT_TRUE(m.remoteMap().linkDevice(0xAABBCC,0x155D81));
+    IoHomeFrame f;buildPassiveExecuteFrame(f,0xAABBCC,0x00003F);
+    ASSERT_TRUE(queueControllerPassiveFrame(c,f));ASSERT_EQ(ch.testScheduledStatusPollCount(),0);
+    f.set1WMode();f.dataLen=0;ASSERT_TRUE(queueControllerPassiveFrame(c,f));ASSERT_EQ(ch.testScheduledStatusPollCount(),0);
+    buildPassiveExecuteFrame(f,0xAABBCC,0x00003F);f.set1WMode();f.dataLen=8;f.hasHmac=true;
+    ASSERT_TRUE(queueControllerPassiveFrame(c,f));ASSERT_EQ(ch.testScheduledStatusPollCount(),1);
+    ASSERT_EQ(c.foreignPollCounters().linked,1);
+}
+
+TEST(protocol_foreign_followup_real_policy_preserves_active_state_and_wrap)
+{
+    IoHomeFollowUpState state{0x1000,0x500,true,true,4,2,1};
+    ASSERT_EQ(ioHomeScheduleFollowUp(state,0xFFFFFFF0U,2000),IoHomeFollowUpDecision::Coalesced);
+    ASSERT_EQ(state.nextPoll,0x500);ASSERT_EQ(state.silentFailures,4);ASSERT_TRUE(state.statusExpected);
+    ASSERT_EQ(ioHomeScheduleFollowUp(state,0x1001,10000),IoHomeFollowUpDecision::Scheduled);
+    ASSERT_EQ(state.deadline,0x1001+600000);ASSERT_EQ(state.nextPoll,0x1001+10000);
+    ASSERT_EQ(state.silentFailures,0);ASSERT_EQ(state.authFailures,0);ASSERT_EQ(state.movingMisses,0);
 }

@@ -1,3 +1,4 @@
+#include "../protocol/IoHomeForeignActivity.h"
 #include "../protocol/IoHomeManagementCodecs.h"
 #include "../protocol/IoHomeObjectTransfer.h"
 #include "../protocol/IoHomeDynamicActuator.h"
@@ -1164,6 +1165,13 @@ public:
   const IoHomeStatusAttribution &statusAttribution() const {return mStatusAttribution;}
   void observeStatusAttribution(const IoHomeFrame &,IoHomeStatusAttribution::Source,bool layoutKnown);
   void printStatusAttribution() const;
+  struct ForeignPollCounters {
+    uint32_t readIgnored=0, replyIgnored=0, unknownIgnored=0, scheduled=0, coalesced=0, linked=0, backoffPreserved=0;
+    uint32_t source=0, destination=0;
+    uint8_t command=0;
+    IoHomeFollowUpDecision decision=IoHomeFollowUpDecision::Ignored;
+  };
+  const ForeignPollCounters &foreignPollCounters() const {return mForeignPollCounters;}
   void streamDiagnosticTrace();
   void setReadOnlyDiagnosticRf(bool enabled) {mReadOnlyDiagnosticRf=enabled;}
   bool pauseBackgroundPolls(uint32_t durationMs);
@@ -1281,6 +1289,10 @@ public:
   const Radio &radio() const;
 
 private:
+  ForeignPollCounters mForeignPollCounters;
+  struct ForeignPollObservation {uint32_t fingerprint=0, timeMs=0; bool valid=false;};
+  ForeignPollObservation mForeignPollObservations[16]{};
+
   enum class TxContext : uint8_t
   {
     InitialStartFrame,

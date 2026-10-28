@@ -6709,6 +6709,11 @@ void IoHomeController::observeStatusAttribution(const IoHomeFrame &frame,IoHomeS
 }
 void IoHomeController::printStatusAttribution() const
 {
+    const auto &f=mForeignPollCounters;
+    logInfoP("IOHC_FOREIGN read_ignored=%lu reply_ignored=%lu unknown_ignored=%lu write_scheduled=%lu coalesced=%lu linked=%lu backoff_preserved=%lu last_src=%06X last_dst=%06X cmd=%02X decision=%u",
+        (unsigned long)f.readIgnored,(unsigned long)f.replyIgnored,(unsigned long)f.unknownIgnored,
+        (unsigned long)f.scheduled,(unsigned long)f.coalesced,(unsigned long)f.linked,(unsigned long)f.backoffPreserved,
+        f.source,f.destination,f.command,unsigned(f.decision));
     const auto &a=mStatusAttribution;
     logInfoP("IOHC_STATUSATTR valid=%u ms=%lu transport_src=%06X transport_dst=%06X last_command_controller=%06X last_controller_known=%u originator=%u authenticated_local_command=%u local_transaction=%llu status_source=%s layout_known=%u target_raw=%u current_raw=%u remaining_raw=%u remaining_known=%u reporting_71=unknown",
         a.valid,(unsigned long)a.timeMs,a.transportSrc,a.transportDst,a.lastController,a.lastControllerKnown,a.originator,a.authenticatedLocalCommand,(unsigned long long)a.localTransaction,a.sourceName(),a.layoutKnown,a.target,a.current,a.remaining,a.remainingKnown);
@@ -12336,28 +12341,61 @@ void IoHomeController::dispatchRxFrame()
         return;
     }
 
-    const auto lScheduleStatusPollForDevice = [this](uint32_t iNodeId) -> bool
-    {
-        IoHomecontrolChannel *lCh = channelForNode(iNodeId);
-        if (!lCh || !lCh->isPaired())
-            return false;
-
-        lCh->scheduleStatusPoll(2000UL);
-        return true;
+    const bool foreignSource=lSrcNode!=mOwnNodeId &&
+        getAddressClass(lSrcNode)==IoHomeAddressClass::Unicast;
+    const IoHomeRemoteEntry *lRemote=foreignSource ? mModule->remoteMap().findRemote(lSrcNode) : nullptr;
+    const auto kind=ioHomeForeignKind(mRxFrame);
+    auto count=[](uint32_t &value){if(value!=UINT32_MAX)++value;};
+    if (foreignSource && lDestNode!=mOwnNodeId) {
+        mForeignPollCounters.source=lSrcNode; mForeignPollCounters.destination=lDestNode;
+        mForeignPollCounters.command=uint8_t(mRxFrame.commandId);
+        mForeignPollCounters.decision=IoHomeFollowUpDecision::Ignored;
+        if (kind==IoHomeForeignKind::Read) count(mForeignPollCounters.readIgnored);
+        else if (kind==IoHomeForeignKind::Reply) count(mForeignPollCounters.replyIgnored);
+        else if (kind==IoHomeForeignKind::Unknown) count(mForeignPollCounters.unknownIgnored);
+    }
+    const auto schedule=[&](uint32_t node,bool linked) -> bool {
+        auto *channel=channelForNode(node);
+        if (!channel || !channel->isPaired() || channel->is1W()) return false;
+        const uint8_t index=channelIndexFor(channel);
+        if (index>=16) return false;
+        // Ignore order/copy bits: repeated copies of one action are observations
+        // of one write. Bounded per-channel cache uses wrap-safe elapsed time.
+        uint32_t fingerprint=2166136261U;
+        auto hash=[&](uint8_t b){fingerprint=(fingerprint^b)*16777619U;};
+        for (uint8_t b:mRxFrame.srcNode) hash(b);
+        for (uint8_t b:mRxFrame.destNode) hash(b);
+        for (uint8_t i=0;i<mRxFrame.dataLen;++i) hash(mRxFrame.data[i]);
+        auto &last=mForeignPollObservations[index];
+        const uint32_t now=millis();
+        const bool duplicate=last.valid && last.fingerprint==fingerprint && uint32_t(now-last.timeMs)<2000U;
+        auto decision=duplicate ? IoHomeFollowUpDecision::Coalesced : channel->scheduleStatusPoll(2000U,true);
+        if (!duplicate) last={fingerprint,now,true};
+        mForeignPollCounters.decision=decision;
+        if (decision==IoHomeFollowUpDecision::Scheduled) {
+            count(mForeignPollCounters.scheduled);
+            if (linked) count(mForeignPollCounters.linked);
+            logDebugP("IOHC_FOREIGN decision=schedule_write node=%06X foreign_src=%06X cmd=%02X epoch=%lu",
+                node,lSrcNode,uint8_t(mRxFrame.commandId),(unsigned long)channel->statusPollEpoch());
+        } else if (decision==IoHomeFollowUpDecision::Coalesced) {
+            count(mForeignPollCounters.coalesced); count(mForeignPollCounters.backoffPreserved);
+        }
+        return decision!=IoHomeFollowUpDecision::Ignored;
     };
-
-    if (lSrcNode != mOwnNodeId && lScheduleStatusPollForDevice(lDestNode))
-        return;
-
-    const IoHomeRemoteEntry *lRemote = mModule->remoteMap().findRemote(lSrcNode);
-    if (lRemote)
-    {
-        bool lScheduled = false;
-        for (uint8_t i = 0; i < lRemote->linkCount; i++)
-            lScheduled = lScheduleStatusPollForDevice(lRemote->linkedDevices[i]) || lScheduled;
-
-        if (lScheduled)
-            return;
+    // A paired actuator is not a remote action originator. A 2W action must
+    // target its actual paired destination; only mapped 1W group actions fan out.
+    auto *sourceChannel=channelForNode(lSrcNode);
+    if (foreignSource && kind==IoHomeForeignKind::Write &&
+        !(sourceChannel && sourceChannel->isPaired())) {
+        if (getAddressClass(lDestNode)==IoHomeAddressClass::Unicast) {
+            if (schedule(lDestNode,false)) return;
+        } else if ((mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W) && lRemote &&
+                   (lDestNode & 0x3FU)==0x3FU && lDestNode<=0xFFFFU) {
+            bool scheduled=false;
+            for (uint8_t i=0;i<lRemote->linkCount;++i)
+                scheduled=schedule(lRemote->linkedDevices[i],true)||scheduled;
+            if (scheduled) return;
+        }
     }
 
     // Find the channel that matches this source node

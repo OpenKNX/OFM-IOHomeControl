@@ -1681,12 +1681,30 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll,bool iManual)
     return lQueued;
 }
 
-void IoHomecontrolChannel::scheduleStatusPoll(uint32_t iDelayMs)
+IoHomeFollowUpDecision IoHomecontrolChannel::scheduleStatusPoll(uint32_t iDelayMs, bool foreignActivity)
 {
+    if (foreignActivity) {
+        if (!mPaired || mIs1W || !allowsActuatorControls()) return IoHomeFollowUpDecision::Ignored;
+        uint32_t delay=iDelayMs ? iDelayMs : defaultTrackedStatusPollDelayMs();
+        if (effectiveLowPower2W() && delay < kLowPowerTrackedPollMinMs) delay=kLowPowerTrackedPollMinMs;
+        IoHomeFollowUpState state{mPollTrackingDeadlineMs,mNextStatusPollMs,mSingleFollowUpPollPending,
+            mStatusExpected,mStatusPollFailures,mAuthPollFailures,mMovingPollMisses};
+        const auto decision=ioHomeScheduleFollowUp(state,millis(),delay);
+        if (decision != IoHomeFollowUpDecision::Scheduled) return decision;
+        // A fresh qualified action starts a new epoch; old queued entries no
+        // longer match statusPollEpoch(). An active epoch is never rewritten.
+        mPollTrackingDeadlineMs=state.deadline; mNextStatusPollMs=state.nextPoll;
+        mSingleFollowUpPollPending=state.pending; mStatusExpected=state.statusExpected;
+        mStatusPollFailures=state.silentFailures; mAuthPollFailures=state.authFailures;
+        mMovingPollMisses=state.movingMisses; mObservedPositiveRemaining=false;
+        mTrustedPollMoving=false; mStopSettlePollPending=false; mPollTrackingReason=2;
+        logTrackingEvent("qualified_remote_execute");
+        return decision;
+    }
     logDebugP("IOHC_TRACK event=remote_followup owner_node=%06X epoch=%lu deadline=%lu transport_proof=see_controller_status_source",mNodeId,(unsigned long)mPollTrackingDeadlineMs,(unsigned long)mPollTrackingDeadlineMs);
     mPollTrackingReason=2;
     if (!mPaired)
-        return;
+        return IoHomeFollowUpDecision::Ignored;
 
     uint32_t lDelayMs = (iDelayMs > 0) ? iDelayMs : defaultTrackedStatusPollDelayMs();
     if (effectiveLowPower2W() && lDelayMs < kLowPowerTrackedPollMinMs)
@@ -1705,6 +1723,7 @@ void IoHomecontrolChannel::scheduleStatusPoll(uint32_t iDelayMs)
     if (mPollTrackingDeadlineMs == 0)
         mPollTrackingDeadlineMs = lNow + kTrackedStatusPollWindowMs;
     logTrackingEvent("remote_followup_scheduled");
+    return IoHomeFollowUpDecision::Scheduled;
 }
 
 void IoHomecontrolChannel::requestStatusPrivate()
