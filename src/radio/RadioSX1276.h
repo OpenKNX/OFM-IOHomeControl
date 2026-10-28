@@ -11,6 +11,11 @@
 #endif
 #endif
 
+#include "IoHomeRadioTiming.h"
+#if IOHC_SX1276_TIMING && defined(ESP32)
+#include <freertos/FreeRTOS.h>
+#endif
+
 // SX1276 radio driver for io-homecontrol
 // Adapted from https://github.com/nicolas5000/io-rts-esp32 for Arduino SPI
 // Non-blocking design: TX/RX state polled via DIO0 pin
@@ -33,7 +38,25 @@ public:
   static constexpr uint8_t PIN_NOT_CONNECTED = RADIO_PIN_NOT_CONNECTED;
 
   RadioSX1276();
+  bool setTimingRecording(bool enabled);
+  void setTimingContext(uint64_t transaction,uint8_t attempt);
+  void timingEvent(IoHomeTimingEvent event);
+  bool popTiming(IoHomeRadioTiming::Entry &entry);
+  uint32_t timingDrops() const;
+  bool timingRecording() const;
+  bool timingPreambleAvailable() const {return mCaptureEdges && preambleEvidenceAvailable();}
+  bool timingSyncAvailable() const {return mCaptureEdges && syncEvidenceAvailable();}
+  static constexpr bool timingCompiled() {return IOHC_SX1276_TIMING!=0;}
+  static constexpr uint32_t timingBufferBytes() {
+#if IOHC_SX1276_TIMING
+    return sizeof(IoHomeRadioTiming);
+#else
+    return 0;
+#endif
+  }
 #ifdef TEST_NATIVE
+  void nativeDio0Edge(uint32_t us);
+  void setNativeTimingClock(uint32_t (*clock)()) {mNativeTimingClock=clock;}
   void nativeReceiveEdge(bool sync,uint32_t time){if(!mCaptureEdges||mState!=RadioState::Receiving)return;if(sync){mSyncEdgeUs=time;mSyncEdgeValid=true;}else{mPreambleEdgeUs=time;mPreambleEdgeValid=true;}}
   using ReadRegister = uint8_t (*)(void *,uint8_t);
   using WriteRegister = void (*)(void *,uint8_t,uint8_t);
@@ -107,7 +130,16 @@ public:
   RadioError sendEms2Wake();
 
 private:
+#if IOHC_SX1276_TIMING
+  IoHomeRadioTiming mTiming;
+#ifdef ESP32
+  portMUX_TYPE mTimingMux=portMUX_INITIALIZER_UNLOCKED;
+#endif
+  void IRAM_ATTR timingAt(IoHomeTimingEvent event,uint32_t us,bool isr=false);
+  uint32_t timingClock() const;
+#endif
 #ifdef TEST_NATIVE
+  uint32_t (*mNativeTimingClock)()=nullptr;
   void *mNativeContext=nullptr;ReadRegister mNativeRead=nullptr;WriteRegister mNativeWrite=nullptr;
 #endif
   uint32_t mHealthCheckedMs=0,mWatchdogTriggers=0;uint8_t mRecoveryAttempts=0,mRecoverySuccesses=0;

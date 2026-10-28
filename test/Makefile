@@ -61,10 +61,13 @@ check-controller: $(PROTOCOL_TARGET)
 check-exchange: $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite exchange
 
-check-radio: $(SX1262_ERROR_TARGET) $(SX1262_PHY_TARGET) $(BUILD_DIR)/test_sx1276_adapter
+check-radio: $(SX1262_ERROR_TARGET) $(SX1262_PHY_TARGET) $(BUILD_DIR)/test_sx1276_adapter $(BUILD_DIR)/test_sx1276_timing $(BUILD_DIR)/test_sx1276_timing_disabled
 	./$(SX1262_ERROR_TARGET)
 	./$(SX1262_PHY_TARGET)
 	./$(BUILD_DIR)/test_sx1276_adapter
+	./$(BUILD_DIR)/test_sx1276_timing
+	./$(BUILD_DIR)/test_sx1276_timing_disabled
+	$(PYTHON) test_radio_timing_analysis.py
 
 check-ui:
 	$(PYTHON) ../tools/generate_channel_selections.py --check
@@ -86,6 +89,12 @@ check-ets:
 SX1276_TARGET = $(BUILD_DIR)/test_sx1276_adapter
 $(SX1276_TARGET): test_sx1276_adapter.cpp ../src/radio/RadioSX1276.cpp ../src/radio/RadioSX1276.h | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ test_sx1276_adapter.cpp ../src/radio/RadioSX1276.cpp
+
+$(BUILD_DIR)/test_sx1276_timing: test_sx1276_timing.cpp ../src/radio/RadioSX1276.cpp ../src/radio/RadioSX1276.h ../src/radio/IoHomeRadioTiming.h | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -DIOHC_SX1276_TIMING=1 -o $@ test_sx1276_timing.cpp ../src/radio/RadioSX1276.cpp
+
+$(BUILD_DIR)/test_sx1276_timing_disabled: test_sx1276_timing.cpp ../src/radio/RadioSX1276.cpp ../src/radio/RadioSX1276.h ../src/radio/IoHomeRadioTiming.h | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -o $@ test_sx1276_timing.cpp ../src/radio/RadioSX1276.cpp
 
 ESP32_STORAGE_TARGET = $(BUILD_DIR)/test_esp32_storage
 STORAGE_TARGET = $(BUILD_DIR)/test_rp2040_storage

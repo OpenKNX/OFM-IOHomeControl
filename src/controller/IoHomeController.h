@@ -22,6 +22,7 @@
 #include "../protocol/IoHomeSessionPolicy.h"
 #include "../protocol/IoHomeResponseDescriptor.h"
 #include "../radio/Radio.h"
+#include "../radio/IoHomeRadioTiming.h"
 #include "../protocol/IoHomeFrame.h"
 #include "../protocol/IoHomeCrypto.h"
 #include "../protocol/IoHomeCommands.h"
@@ -1165,6 +1166,9 @@ public:
   const IoHomeStatusAttribution &statusAttribution() const {return mStatusAttribution;}
   void observeStatusAttribution(const IoHomeFrame &,IoHomeStatusAttribution::Source,bool layoutKnown);
   void printStatusAttribution() const;
+  bool configureRadioTiming(bool enabled);
+  void printRadioTiming();
+  void recordRadioTiming(IoHomeTimingEvent event);
   struct ForeignPollCounters {
     uint32_t readIgnored=0, replyIgnored=0, unknownIgnored=0, scheduled=0, coalesced=0, linked=0, backoffPreserved=0;
     uint32_t source=0, destination=0;

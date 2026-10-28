@@ -4478,6 +4478,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc gateway clear", "Clear all paired devices in gateway mode");
     openknx.console.printHelpLine("iohc scan start", "Start passive network scan (0x30/0x32 key payloads are redacted)");
     openknx.console.printHelpLine("iohc scan stop", "Stop network scan");
+    openknx.console.printHelpLine("iohc radio timing on|off|dump", "Gated SX1276 MCU trace; idle only, dump stops recording");
     openknx.console.printHelpLine("iohc scan dump", "Dump captured packets with key payload redaction");
     openknx.console.printHelpLine("iohc scan stats", "Show per-node statistics");
     openknx.console.printHelpLine("iohc duty status|limits|mode status", "Per-band conservative airtime accounting and access mode");
@@ -4508,6 +4509,12 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         logInfoP("Standalone startup/identity restore not ready yet");return true;
     }
 #endif
+    if(iCmd=="iohc radio timing on" || iCmd=="iohc radio timing off" || iCmd=="iohc radio timing dump") {
+        if(iDebugKo) {logInfoP("Radio timing requires local console");return true;}
+        if(iCmd=="iohc radio timing dump") mController.printRadioTiming();
+        else logInfoP("Radio timing %s",mController.configureRadioTiming(iCmd=="iohc radio timing on") ? "configured (MCU timestamps only)" : "unavailable or busy");
+        return true;
+    }
     if(iCmd.rfind("iohc duty ",0)==0) {
         if(iCmd=="iohc duty status"||iCmd=="iohc duty limits"||iCmd=="iohc duty mode status")mController.printDutyStatus();
         else if(iCmd=="iohc duty debug off"||iCmd=="iohc duty reset-debug") {

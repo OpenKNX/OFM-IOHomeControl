@@ -12,6 +12,7 @@
 #ifdef ESP32
 #include <SPI.h>
 #include <Arduino.h>
+#include <esp_timer.h>
 #else
 // Stubs for non-ESP32 compilation
 #include <stdint.h>
@@ -66,18 +67,131 @@ RadioSX1276::RadioSX1276()
 {
 }
 
+bool RadioSX1276::timingRecording() const {
+#if IOHC_SX1276_TIMING
+    return mTiming.enabled;
+#else
+    return false;
+#endif
+}
+uint32_t RadioSX1276::timingDrops() const {
+#if IOHC_SX1276_TIMING
+    return mTiming.drops;
+#else
+    return 0;
+#endif
+}
+bool RadioSX1276::setTimingRecording(bool enabled) {
+#if IOHC_SX1276_TIMING
+    if (mState==RadioState::Transmitting) return false;
+#ifdef ESP32
+    portENTER_CRITICAL(&mTimingMux);
+#endif
+    mTiming.enabled=false;
+    if (enabled) mTiming.reset();
+    mTiming.enabled=enabled;
+#ifdef ESP32
+    portEXIT_CRITICAL(&mTimingMux);
+#endif
+    return true;
+#else
+    (void)enabled; return false;
+#endif
+}
+void RadioSX1276::setTimingContext(uint64_t transaction,uint8_t attempt) {
+#if IOHC_SX1276_TIMING
+    if (!mTiming.enabled || mState==RadioState::Transmitting) return;
+#ifdef ESP32
+    portENTER_CRITICAL(&mTimingMux);
+#endif
+    mTiming.transaction=transaction;mTiming.attempt=attempt;
+#ifdef ESP32
+    portEXIT_CRITICAL(&mTimingMux);
+#endif
+#else
+    (void)transaction;(void)attempt;
+#endif
+}
+bool RadioSX1276::popTiming(IoHomeRadioTiming::Entry &entry) {
+#if IOHC_SX1276_TIMING
+#ifdef ESP32
+    portENTER_CRITICAL(&mTimingMux);
+#endif
+    const bool available=mTiming.pop(entry);
+#ifdef ESP32
+    portEXIT_CRITICAL(&mTimingMux);
+#endif
+    return available;
+#else
+    (void)entry;return false;
+#endif
+}
+#if IOHC_SX1276_TIMING
+uint32_t RadioSX1276::timingClock() const {
+#ifdef TEST_NATIVE
+    return mNativeTimingClock ? mNativeTimingClock() : 0;
+#elif defined(ESP32)
+    return micros();
+#else
+    return 0;
+#endif
+}
+void RadioSX1276::timingAt(IoHomeTimingEvent event,uint32_t us,bool isr) {
+    if (!mTiming.enabled) return;
+#ifdef ESP32
+    if (isr) portENTER_CRITICAL_ISR(&mTimingMux); else portENTER_CRITICAL(&mTimingMux);
+#else
+    (void)isr;
+#endif
+    mTiming.push(event,us,mCurrentFreq,uint8_t(mState),mLastIrqStatus);
+#ifdef ESP32
+    if (isr) portEXIT_CRITICAL_ISR(&mTimingMux); else portEXIT_CRITICAL(&mTimingMux);
+#endif
+}
+#endif
+void RadioSX1276::timingEvent(IoHomeTimingEvent event) {
+#if IOHC_SX1276_TIMING
+    if (mTiming.enabled) timingAt(event,timingClock());
+#else
+    (void)event;
+#endif
+}
+#ifdef TEST_NATIVE
+void RadioSX1276::nativeDio0Edge(uint32_t us) {
+    mDio0Fired=true;++mIrqCount;
+#if IOHC_SX1276_TIMING
+    if (mState==RadioState::Transmitting || mState==RadioState::Receiving)
+        timingAt(mState==RadioState::Transmitting ? IoHomeTimingEvent::TxDoneIsr : IoHomeTimingEvent::PayloadIsr,us,true);
+#else
+    (void)us;
+#endif
+}
+#endif
+
 #ifdef ESP32
 void IRAM_ATTR RadioSX1276::dio0Isr(void *arg)
 {
     RadioSX1276 *self = static_cast<RadioSX1276 *>(arg);
     self->mDio0Fired = true;
     self->mIrqCount++;
+#if IOHC_SX1276_TIMING
+    if (self->mTiming.enabled && (self->mState==RadioState::Transmitting || self->mState==RadioState::Receiving))
+        self->timingAt(self->mState==RadioState::Transmitting ? IoHomeTimingEvent::TxDoneIsr : IoHomeTimingEvent::PayloadIsr,uint32_t(esp_timer_get_time()),true);
+#endif
 }
 #endif
 
 #ifdef ESP32
-void IRAM_ATTR RadioSX1276::preambleIsr(void *arg){auto *self=static_cast<RadioSX1276*>(arg);if(self->mState==RadioState::Receiving&&!self->mPreambleEdgeValid){self->mPreambleEdgeUs=micros();self->mPreambleEdgeValid=true;}}
-void IRAM_ATTR RadioSX1276::syncIsr(void *arg){auto *self=static_cast<RadioSX1276*>(arg);if(self->mState==RadioState::Receiving&&!self->mSyncEdgeValid){self->mSyncEdgeUs=micros();self->mSyncEdgeValid=true;}}
+void IRAM_ATTR RadioSX1276::preambleIsr(void *arg){auto *self=static_cast<RadioSX1276*>(arg);if(self->mState==RadioState::Receiving&&!self->mPreambleEdgeValid){self->mPreambleEdgeUs=uint32_t(esp_timer_get_time());self->mPreambleEdgeValid=true;
+#if IOHC_SX1276_TIMING
+self->timingAt(IoHomeTimingEvent::PreambleIsr,self->mPreambleEdgeUs,true);
+#endif
+}}
+void IRAM_ATTR RadioSX1276::syncIsr(void *arg){auto *self=static_cast<RadioSX1276*>(arg);if(self->mState==RadioState::Receiving&&!self->mSyncEdgeValid){self->mSyncEdgeUs=uint32_t(esp_timer_get_time());self->mSyncEdgeValid=true;
+#if IOHC_SX1276_TIMING
+self->timingAt(IoHomeTimingEvent::SyncIsr,self->mSyncEdgeUs,true);
+#endif
+}}
 #endif
 
 void RadioSX1276::init(uint8_t iCsPin, uint8_t iResetPin, uint8_t iDio0Pin, uint8_t iDio4Pin,uint8_t iDio2Pin,bool captureEdges)
@@ -379,6 +493,17 @@ RadioError RadioSX1276::startTransmit(const uint8_t *iData, uint8_t iLen)
     if (mState == RadioState::Transmitting)
         return RadioError::Busy;
 
+#if IOHC_SX1276_TIMING
+    if (mTiming.enabled) {
+#ifdef ESP32
+    portENTER_CRITICAL(&mTimingMux);
+#endif
+    mTiming.beginTx(mTxStartCount+1,mCurrentFreq);
+#ifdef ESP32
+    portEXIT_CRITICAL(&mTimingMux);
+#endif
+    }
+#endif
     // Enter standby to load FIFO
     setMode(RF_OPMODE_STANDBY);
 
@@ -406,6 +531,7 @@ RadioError RadioSX1276::startTransmit(const uint8_t *iData, uint8_t iLen)
     setMode(RF_OPMODE_TX);
     mState = RadioState::Transmitting;
     mTxStartCount++;
+    timingEvent(IoHomeTimingEvent::TxStart);
     mLastTxSetStatus = mLastOpStatusAfter;
     mLastTxIrqImmediate = readIrqStatus();
     mLastIrqStatus = mLastTxIrqImmediate;
@@ -418,52 +544,49 @@ RadioError RadioSX1276::startReceive()
     if (!mInitialized)
         return RadioError::NotInitialized;
 
+    timingEvent(IoHomeTimingEvent::RxSetupBegin);
     // Restore the variable-length RX ceiling after TX-specific payload lengths.
     writeRegister(REG_PAYLOADLENGTH, 0xFF);
 
     mPreambleEdgeValid=false;mSyncEdgeValid=false;
     mDio0Fired = false; // clear stale interrupt before RX
+    timingEvent(IoHomeTimingEvent::RxRegistersDone);
     setMode(RF_OPMODE_RX);
+    timingEvent(IoHomeTimingEvent::RxModeWritten);
     mState = RadioState::Receiving;
     mRxStartCount++;
     mLastIrqStatus = readIrqStatus();
+    timingEvent(IoHomeTimingEvent::RxReturn);
 
     return RadioError::None;
 }
 
 bool RadioSX1276::isTxDone()
 {
-    if (mState != RadioState::Transmitting)
-        return false;
-
-    const uint16_t lIrqStatus = readIrqStatus();
-    // Always reflect the most recent live IRQ read so a TX-timeout diagnostic
-    // shows the radio's actual state instead of the stale value captured right
-    // after startTransmit(). Without this the timeout log reported the
-    // immediate-after-start IRQ (e.g. 0x1020) even when the radio had since
-    // changed state, masking the real cause of a non-completing TX.
-    mLastIrqStatus = lIrqStatus;
-    if (mDio0Fired)
-    {
-        mDio0Fired = false;
-        mLastIrqStatus = lIrqStatus;
-        // TX complete, return to standby
-        setMode(RF_OPMODE_STANDBY);
-        mState = RadioState::Idle;
-        mTxDoneCount++;
-        return true;
-    }
-
-    if ((lIrqStatus & RF_IRQFLAGS2_PACKETSENT) != 0)
-    {
-        mLastIrqStatus = lIrqStatus;
-        setMode(RF_OPMODE_STANDBY);
-        mState = RadioState::Idle;
-        mTxDoneCount++;
-        return true;
-    }
-
-    return false;
+    if (mState != RadioState::Transmitting) return false;
+#if IOHC_SX1276_TIMING
+    const uint32_t entry=mTiming.enabled ? timingClock() : 0;
+    timingAt(IoHomeTimingEvent::FirstTxPoll,entry);
+#endif
+    const uint16_t irq=readIrqStatus();
+#if IOHC_SX1276_TIMING
+    const uint32_t readDone=mTiming.enabled ? timingClock() : 0;
+#endif
+    mLastIrqStatus=irq;
+    if (!mDio0Fired && !(irq & RF_IRQFLAGS2_PACKETSENT)) return false;
+#if IOHC_SX1276_TIMING
+    timingAt(IoHomeTimingEvent::CompletionPollEntry,entry);
+    timingAt(IoHomeTimingEvent::IrqRead,readDone);
+    if (!mTiming.firstEdge) timingAt(IoHomeTimingEvent::TxDonePolled,readDone);
+#endif
+    mDio0Fired=false;
+    timingEvent(IoHomeTimingEvent::StandbyBegin);
+    setMode(RF_OPMODE_STANDBY);
+    timingEvent(IoHomeTimingEvent::StandbyEnd);
+    mState=RadioState::Idle;
+    ++mTxDoneCount;
+    timingEvent(IoHomeTimingEvent::CompletionReturn);
+    return true;
 }
 
 bool RadioSX1276::isPacketAvailable()
@@ -524,6 +647,7 @@ bool RadioSX1276::isSyncDetected() const
 
 uint8_t RadioSX1276::readPacket(uint8_t *oBuffer, uint8_t iMaxLen)
 {
+    timingEvent(IoHomeTimingEvent::PacketRead);
     if (!mInitialized)
         return 0;
 

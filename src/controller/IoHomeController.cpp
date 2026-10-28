@@ -6707,6 +6707,41 @@ void IoHomeController::observeStatusAttribution(const IoHomeFrame &frame,IoHomeS
         }
     }
 }
+bool IoHomeController::configureRadioTiming(bool enabled)
+{
+#if defined(RADIO_SX1276) && !defined(TEST_NATIVE)
+    return idleForManagedOperation() && mRadio.setTimingRecording(enabled);
+#else
+    (void)enabled;return false;
+#endif
+}
+void IoHomeController::recordRadioTiming(IoHomeTimingEvent event)
+{
+#if defined(RADIO_SX1276) && IOHC_SX1276_TIMING && !defined(TEST_NATIVE)
+    mRadio.timingEvent(event);
+#else
+    (void)event;
+#endif
+}
+void IoHomeController::printRadioTiming()
+{
+#if defined(RADIO_SX1276) && !defined(TEST_NATIVE)
+    if (!idleForManagedOperation()) {logInfoP("Radio timing dump requires idle ownership");return;}
+    mRadio.setTimingRecording(false); // freeze before deferred formatting
+    logInfoP("IOHC_TIMING compiled=%u enabled=0 bytes=%lu capacity=64 dropped=%lu time_source=micros physical_edge=unavailable rx_acquisition=unavailable preamble_isr=%s sync_isr=%s packet_association=observational_only",
+        mRadio.timingCompiled(),(unsigned long)mRadio.timingBufferBytes(),(unsigned long)mRadio.timingDrops(),
+        mRadio.timingPreambleAvailable()?"available":"not_available",mRadio.timingSyncAvailable()?"available":"not_available");
+    logInfoP("IOHC_TIMING_HEADER us,window_transaction,tx_id,attempt,event,tx_hz,rx_hz,state,cached_irq");
+    IoHomeRadioTiming::Entry entry;
+    for (unsigned n=0;n<IoHomeRadioTiming::capacity && mRadio.popTiming(entry);++n)
+        logInfoP("IOHC_TIMING_CSV %lu,%llu,%lu,%u,%u,%lu,%lu,%u,%u",(unsigned long)entry.us,
+            (unsigned long long)entry.transaction,(unsigned long)entry.txId,entry.attempt,entry.event,
+            (unsigned long)entry.txHz,(unsigned long)entry.rxHz,entry.state,entry.cachedIrq);
+#else
+    logInfoP("Radio timing unavailable: requires SX1276 and IOHC_SX1276_TIMING=1");
+#endif
+}
+
 void IoHomeController::printStatusAttribution() const
 {
     const auto &f=mForeignPollCounters;
@@ -7013,6 +7048,10 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
         mCcaBusySamples=0;
         ++mLbtClearCount;
     }
+#if defined(RADIO_SX1276) && IOHC_SX1276_TIMING && !defined(TEST_NATIVE)
+    if (mRadio.state()!=RadioState::Transmitting)
+        mRadio.setTimingContext(mCurrentCmd.active ? mTwoWaySessionId : 0,mCurrentCmd.active ? mCurrentCmd.retries+1 : 0);
+#endif
 #if defined(RADIO_SX1262)
     const auto result=blocking?mRadio.startTransmitBlocking(iData,iLength):mRadio.startTransmit(iData,iLength);
 #else
@@ -7524,6 +7563,7 @@ void IoHomeController::loop()
         }
         mLastRxReadMs=millis();
         bool lParsed = (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen));
+        if(lParsed) recordRadioTiming(IoHomeTimingEvent::PacketParsed);
         if(!lParsed && mInboundActive) {clearInboundStatus("malformed_rx");mState=ControllerState::Idle;startReceive();}
         if (lLen > 0 && !lParsed)
         {
@@ -8466,10 +8506,12 @@ void IoHomeController::processTxPending()
 
 void IoHomeController::processTxInProgress()
 {
+    recordRadioTiming(IoHomeTimingEvent::ControllerCheck);
     const bool lObservedDone=mRadio.isTxDone(); // consumes the hardware completion event only once
     const bool lDone = mRadio.state() != RadioState::Transmitting || lObservedDone;
     if (lDone)
     {
+        recordRadioTiming(IoHomeTimingEvent::ControllerDone);
         if (!mQueuedTxDoneObserved)
         {
             mQueuedTxDoneObserved = true;
@@ -8509,7 +8551,9 @@ void IoHomeController::processTxInProgress()
             }
             return;
         }
+        recordRadioTiming(IoHomeTimingEvent::ControllerRxBegin);
         const RadioError lRxErr = startReceive();
+        recordRadioTiming(IoHomeTimingEvent::ControllerRxReturn);
         if (lRxErr == RadioError::Busy)
         {
             // RX reentry is bounded too; never reserve the owner indefinitely.
@@ -11504,6 +11548,7 @@ void IoHomeController::processScanWaitResponse()
     {
         uint8_t lLen = mRadio.readPacket(mRxBuffer, sizeof(mRxBuffer));
         bool lParsed = (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen));
+        if(lParsed) recordRadioTiming(IoHomeTimingEvent::PacketParsed);
         if (lLen > 0 && !lParsed)
             mRxParseFailCount++;
         if (lParsed)
