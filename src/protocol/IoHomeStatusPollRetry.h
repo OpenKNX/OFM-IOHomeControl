@@ -4,6 +4,7 @@
 // Application recovery policy, in milliseconds; independent of exchange timing.
 // Keep the counters in the channel and use no heap or per-channel delay table.
 struct IoHomeStatusPollRetry {
+    static bool paused(uint32_t pauseRemaining,bool manual=false) {return pauseRemaining && !manual;}
     static uint32_t movingFailure(bool challenged,bool eligible,uint8_t &misses,
                                   uint8_t &auth,uint8_t &silent,uint32_t cadence,uint32_t minimumMs) {
         if(eligible&&misses<2&&auth==0&&silent==0) {

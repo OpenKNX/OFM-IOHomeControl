@@ -5,7 +5,7 @@ are pending. This document does not certify a higher production RF allowance.
 
 ## Modes and accounting
 
-`DutyLimited` is the production default. Existing allowances remain 3600 ms
+`DutyLimited` applies to release builds. OPENKNX_DEBUG builds, including web-console builds, always bypass RF admission limits. Release allowances remain 3600 ms
 for 868.7–869.2 MHz and 36000 ms for each other supported band (868.0–868.6 and
 869.7–870 MHz). Unsupported frequencies are rejected in every mode. Packets over 36000 ms are
 rejected under release/normal admission; debug bench mode bypasses this software airtime cap.
@@ -17,27 +17,22 @@ refund is made for aborts or lost TX_DONE. Counters saturate instead of wrapping
 Boot/reinitialization has no RF startup holdoff. Commands can transmit as soon as
 radio initialization and normal protocol checks finish. The accounting ledger
 is RAM-resident; a reboot starts with an empty ledger, while reinitialization
-within the same controller preserves its existing charged airtime. Debug builds
-activate bypass at initialization and once after startup identity restoration;
-release builds start in DutyLimited.
+within the same controller preserves its existing charged airtime. Boot, reinitialization and identity restoration preserve the build policy: debug is always unlimited; release is DutyLimited.
 
 `QualifiedPoliteAccess` is represented but **cannot be selected**. The prospective
 36000 ms CH2 fairness target is not an enabled/legal duty limit. The console
-refuses qualification requests and retains DutyLimited. There is no free-form
+refuses qualification requests and retains the build policy. There is no free-form
 percentage, ETS setting or persistence switch to enable a higher allowance.
 
 `SimulationUnlimited` exists only with `TEST_NATIVE`, whose Radio type is the
 non-emitting RadioTestStub. Admission can exceed quota while the same ledger
 continues charging. Normal firmware cannot select this mode.
 
-`BenchUnlimited` is active by default in every OPENKNX_DEBUG build, including IP/web-console
-builds. OPENKNX_DEBUG automatically enables IOHC_ENABLE_RF_BENCH_UNLIMITED.
-An explicit bypass flag without a debug build is rejected in production.
-Use only a shielded/conducted authorized RF lab setup. There is no expiry and
-no activation command is required after boot. Manual off/reset-debug, later
-identity/key changes, collision and observed radio errors revoke bypass.
-Reinitialization/reboot restores the debug build default; the ledger is never
-refunded by a mode change. No ETS/flash/NVS flag controls the default.
+`BenchUnlimited` is permanent in OPENKNX_DEBUG builds, including debug IP/web-console
+builds. No opt-in or special build flag is required. Off/reset, identity/key changes,
+collisions, radio errors, reboot and elapsed time cannot enable RF limits in debug.
+An explicit bypass flag without a debug build is rejected in production. Accounting
+is never refunded by a mode change; no ETS/flash/NVS switch controls this build policy.
 In active debug bench mode, all software RF admission limits are bypassed:
 per-band duty/packet-airtime caps, central CCA (including busy or unavailable
 RSSI), 1W helper LBT even under host Strict policy, heating/Atlantic TX quotas,
@@ -50,9 +45,7 @@ rather than claiming a clear channel or normal duty admission.
 
 Release builds retain every prior admission check and cannot activate this
 exemption. Native simulation alone does not bypass release CCA, diagnostic or
-heating/Atlantic strict quotas. `iohc duty debug off` restores normal admission
-in a debug build without refunding accumulated airtime. Startup and the explicit
-confirmed bench command identify shielded bench use.
+heating/Atlantic strict quotas. `iohc duty debug off` and `reset-debug` leave debug bypass active and retain accumulated airtime. Startup and console responses identify the actual build policy.
 
 Authentication, key ownership, configured frequency, radio power/setup, hardware
 busy/errors, persistence/counter reservation, collision blocking and protocol
@@ -69,7 +62,7 @@ iohc duty debug off
 iohc duty reset-debug
 ```
 
-The confirmed `debug on` command can re-enable bypass after manual off or a fault.
+The confirmed `debug on` command remains accepted for compatibility; debug bypass is already active.
 Bare `debug on` still refuses. The status reports mode,
 used/limit/current/previous bucket milliseconds, blocked count, latest required
 TX airtime, reservedMs=0, session ID and conservative earliestEligibleMs as a
@@ -113,7 +106,7 @@ Source references (not a certification):
 ## Regression checks
 
 From OFM: `python3 test/test_rf_access_policy.py` checks production/simulation/
-debug/production gates, debug web-console support, default bypass without expiry, uint32 wrap, saturation and immediate startup.
+debug/production gates, debug web-console support, permanent debug bypass, limited release defaults and off/reboot/reset coverage, uint32 wrap, saturation and immediate startup.
 The native controller suite checks duty admission for direct/queued/1W/ACK/
 auth/discovery paths, LBT behavior, no refund on lost TX_DONE and simulated bypass.
 Hardware acceptance remains pending; only ordinary builds may leave the lab.

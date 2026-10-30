@@ -7,7 +7,7 @@ prove an actuator received a request, or measure physical RX acquisition.
 
 Add `-D IOHC_SX1276_TIMING=1` to the selected SX1276 environment. The default is
 zero, including release builds: no recorder member, ISR instrumentation or clock
-reads are included. The enabled recorder has 64 fixed 32-byte entries (2,080 bytes
+reads are included. The enabled recorder has 64 fixed 32-byte entries (2,104 bytes
 including metadata, plus the ESP32 portMUX). There is no dynamic allocation.
 When compiled in it still starts disabled at runtime. Disabled runtime recording
 does not enter the timing lock or read the clock in the hot event hooks.
@@ -20,14 +20,25 @@ iohc radio timing off
 iohc radio timing dump
 ```
 
-`on` clears the old buffer/drop count. `off` preserves records. `dump` first stops
+`on` clears the old buffer/drop count and arms for the next accepted TX.
+Armed background scans are ignored without clock reads or timing-lock contention.
+The first TX starts one RF-attempt capture. Only its same-logical-transaction,
+same-attempt `3D` authentication continuation can add another TX, with a distinct
+TX ID. No-challenge/post-answer timeout, correlated04, peer rejection, driver
+failure or the next non-continuation TX freezes it. Later retries require a new
+`on`; they cannot overwrite the first attempt. An active capture also has a
+10-second diagnostic cap, independent of protocol deadlines. `off` preserves
+records and marks an interrupted active capture as partial. `dump` first stops
 recording, then prints at most 64 rows. Busy/KNX debug-KO requests cannot change
 the recorder. None of these commands transmits RF or changes radio settings.
 SX1262 reports unavailable. Enabling this build flag does not enable RF admission
 bypass; retain production safety policy for field use.
 
-The status line reports compile support, memory, drops and optional timestamp
-availability. Preamble/sync ISR evidence additionally requires the existing
+The status line reports compile support, memory, in-scope drops, ignored scan
+events and capture state (0 off,1 armed,2 active,3 frozen), plus optional timestamp
+availability. `ignored_scan_events` are intentionally excluded RX-setup events,
+not buffer loss. Post-outcome scans cannot fill the frozen capture. Header-only,
+armed or zero-TX captures remain unavailable, not zero-latency success. Preamble/sync ISR evidence additionally requires the existing
 `IOHC_RX_EDGE_TIMESTAMPS=1` option and genuinely wired DIO4/optional DIO2. The
 recorder does not attach extra interrupts or invent absent timestamps.
 
@@ -87,6 +98,14 @@ is visible in `rx_hz`; a frame from another controller remains observational.
 | 19 PayloadIsr | DIO0 ISR while Receiving |
 | 20 PacketRead | Packet-read entry |
 | 21 PacketParsed | Parser accepted a frame; no trust assertion |
+| 22 NoChallenge | No correlated3C after Execute before timeout |
+| 23 PostAuthNoReply |3C observed and3D sent; no final04 observed |
+| 24 Response04 | Correlated04 received; not proof of physical movement |
+| 25 / 26 CrcError / Unmatched | In-window CRC/correlation observations, not peer identity proof |
+| 27 / 28 AdmissionDeferred / DriverError | Local admission or TX/RX servicing failure |
+| 29 / 30 AttemptEnd / CaptureExpired | Capture boundary or10s diagnostic cap; incomplete if no outcome |
+| 31 PeerRejected | Correlated error response |
+| 32 / 33 NoResponse / CaptureStopped | Non-Execute timeout / interrupted capture |
 
 Earlier `rx_ready_delay_us` traces retain their software-observation meaning.
 Use the new distinct events to expose previously hidden observer delay. Missing
@@ -98,7 +117,7 @@ Export a console capture and summarize it offline:
 python3 tools/analyze_radio_timing.py capture.txt > timing-summary.json
 ```
 
-The tool separates dump segments/attempts, handles wrap/zero, reports missing
+The tool separates dump segments/attempts, groups a request and3D by their logical owner, detects conflicting TX IDs, rejects unowned scan rows from latency statistics, handles wrap/zero, and reports missing
 intervals as JSON null/unavailable, and provides min/median/max (p95 only with
 at least 20 samples). It does not infer peer silence, CRC success or trusted
 response ownership. Full/drop-affected captures are incomplete. Combine the
@@ -144,10 +163,25 @@ exercise delayed service, repeated edges/polls, missing optional pins, RX/TX
 ownership, IRQ-only fallback, wraparound and overflow. The offline parser has
 separate wrap/missing/segment tests. Existing protocol/radio/corpus checks remain
 applicable. ESP32-S3 instrumented SX1276, ungated release and SX1262 module-harness
-builds are checked separately; see ROOT-CAUSE for the full-app dependency limit.
+builds are checked separately; see ROOT-CAUSE for the pinned-dependency integration details.
 
 Hardware A/B latency/overhead remains unmeasured. With recording on, clock reads,
 short critical sections and writes have bounded but nonzero overhead; do not
 claim a numeric latency bound from native tests. With the build gate off, the
 recorder and event path are removed. Only after synchronized captures establish
 a causal delay should a separate minimal RX servicing repair be proposed.
+
+## Tester handoff regression (2026-10-30)
+
+The supplied third log retained64unowned RX-scan rows spanning80,593us and
+reported24,649drops. Those rows cannot measure TX_DONE/RX latency. The regression
+simulates65seconds of5ms scans before the TX and65seconds after its terminal
+marker, with zero in-scope loss. Auth continuations, polling fallback, frozen
+captures, wrap, exhaustion and serialized ISR/task writing are tested separately.
+The writer is forced inline into the driver's IRAM function to avoid Xtensa
+COMDAT literal-pool placement errors; final ELF section/call checks remain part
+of target validation.
+
+The OAM dedicated environment is `timing_OpenKNX_ESP32_S3_DEV_SX1276_IP`. It
+includes Logic/FunctionBlocks using the revisions declared by dependencies.txt.
+Do not substitute newer shared module checkouts while retaining an old knxprod.h.

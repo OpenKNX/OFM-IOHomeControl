@@ -199,6 +199,13 @@ ETS parameters, communication objects, DPTs, pairing workflows, scenes and user-
 
 The firmware provides an `iohc` serial console for commissioning, service and bench diagnostics. The commands intended for normal commissioning and service are documented in the application description to avoid duplicating ETS/user documentation here.
 
+Debug builds always bypass RF duty, CCA/LBT and application admission quotas,
+including after off/reset/reboot. Release builds retain DutyLimited admission.
+The [SX1276 timing recorder](docs/diagnostics/SX1276-TX-RX-TIMING.md) captures one
+owned RF attempt including its authentication continuation, ignoring background
+scans. It is build-gated and disabled at runtime by default; no physical timing
+correction is inferred from software timestamps.
+
 Useful diagnostic entry points include:
 
 - `iohc status` / `iohcNN status` — show 2W identity and per-channel 1W remote identity separately.

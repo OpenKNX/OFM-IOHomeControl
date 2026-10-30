@@ -13,12 +13,13 @@ are synthetic and must not be reported as hardware measurements.
 
 Validation: native protocol/controller/exchange suite, actual SX1276 adapter and
 timing gate on/off tests, SX1262 PHY/error tests, offline timing analysis, wake/UI
-checks and pinned RF corpus. Isolated ESP32-S3 module integration builds cover
-instrumented SX1276, timing-disabled release and SX1262. The unmodified full OAM
-integration is independently blocked by its existing LogicModule/knxprod version
-mismatch. The disposable harness excludes Logic/FunctionBlocks and its generated
-holiday hook; those validation-only edits are not production changes. Resolve
-the full-app dependency mismatch before publishing/releasing a new OAM pin.
+checks and pinned RF corpus. Complete pinned-dependency OAM builds cover instrumented SX1276, timing-disabled
+release and SX1262. Earlier full OAM integration failed with newer shared Logic/Common checkouts than the
+manifest pins. The2026-10-30integration now uses the actual pinned Logic/Common
+revisions and includes Logic/FunctionBlocks, with no holiday-hook exclusions or
+ETS/schema changes. The recorder flood was independently confirmed from tester
+logs and corrected; it was not evidence of a physical RX delay. See
+[tester handoff results](TESTER-HANDOFF-2026-10-30.md).
 
 Follow [the capture procedure](SX1276-TX-RX-TIMING.md). Required decision evidence:
 

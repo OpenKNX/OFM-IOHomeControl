@@ -1,0 +1,192 @@
+{
+  "identities": [
+    {
+      "path": "OFM-Tester-Results-Summary-and-TODO-2026-10-30.md",
+      "sha256": "1d53559abaecfeb1698195b6c518a8a9981539a6de9825c5917b8c5a06e9f11d",
+      "bytes": 28988
+    },
+    {
+      "path": "tester-logs/1_neuefirmware.txt",
+      "sha256": "cccb16eaca422fe7b63737fda94b420d0053202a95dbdfe91785ec6ab59edfe6",
+      "bytes": 116506
+    },
+    {
+      "path": "tester-logs/2_neuefirmware.txt",
+      "sha256": "fb6476d371657c1bf34f3e4048946ad3b01cd668ea1f4349f4d5e6412c1ccee6",
+      "bytes": 46675
+    },
+    {
+      "path": "tester-logs/3_neuefirmware.txt",
+      "sha256": "78363f36d4f379331afc851de67272fb4a4aa3c6471c6166bae631219124be90",
+      "bytes": 16496
+    },
+    {
+      "path": "tester-logs/IoHomecontrol (3).txt",
+      "sha256": "48b0401592c138b1aa4bdc5178dce086eaaaba55291b8cf5310acee45031c4bb",
+      "bytes": 114025
+    }
+  ],
+  "execute_155D81_new_build": {
+    "user_exchanges": 8,
+    "complete": 6,
+    "first_attempt_complete": 3,
+    "physical_movement": "user observations remain separate; not inferred",
+    "sessions": [
+      {
+        "session": 1,
+        "target_percent": 50,
+        "request_attempts": [
+          1
+        ],
+        "answer_attempts": [
+          1
+        ],
+        "complete": true,
+        "lines": [
+          9,
+          12,
+          15
+        ],
+        "completed_attempt": 1
+      },
+      {
+        "session": 2,
+        "target_percent": 0,
+        "request_attempts": [
+          1,
+          2
+        ],
+        "answer_attempts": [
+          2
+        ],
+        "complete": true,
+        "lines": [
+          95,
+          99,
+          102,
+          105
+        ],
+        "completed_attempt": 2
+      },
+      {
+        "session": 3,
+        "target_percent": 100,
+        "request_attempts": [
+          1,
+          2
+        ],
+        "answer_attempts": [
+          2
+        ],
+        "complete": true,
+        "lines": [
+          122,
+          127,
+          130,
+          133
+        ],
+        "completed_attempt": 2
+      },
+      {
+        "session": 4,
+        "target_percent": 75,
+        "request_attempts": [
+          1,
+          2,
+          3
+        ],
+        "answer_attempts": [],
+        "complete": false,
+        "lines": [
+          163,
+          167,
+          172
+        ]
+      },
+      {
+        "session": 5,
+        "target_percent": 75,
+        "request_attempts": [
+          1
+        ],
+        "answer_attempts": [
+          1
+        ],
+        "complete": true,
+        "lines": [
+          182,
+          185,
+          187
+        ],
+        "completed_attempt": 1
+      },
+      {
+        "session": 6,
+        "target_percent": 50,
+        "request_attempts": [
+          1,
+          2
+        ],
+        "answer_attempts": [
+          2
+        ],
+        "complete": true,
+        "lines": [
+          205,
+          209,
+          212,
+          215
+        ],
+        "completed_attempt": 2
+      },
+      {
+        "session": 7,
+        "target_percent": 25,
+        "request_attempts": [
+          1,
+          2
+        ],
+        "answer_attempts": [
+          1
+        ],
+        "complete": false,
+        "lines": [
+          225,
+          228,
+          233
+        ]
+      },
+      {
+        "session": 8,
+        "target_percent": 0,
+        "request_attempts": [
+          1
+        ],
+        "answer_attempts": [
+          1
+        ],
+        "complete": true,
+        "lines": [
+          244,
+          247,
+          249
+        ],
+        "completed_attempt": 1
+      }
+    ]
+  },
+  "timing_scan_flood": {
+    "rows": 64,
+    "all_unowned": true,
+    "events": [
+      12,
+      13,
+      14,
+      15
+    ],
+    "dropped": 24649,
+    "retained_span_us": 80593,
+    "physical_tx_to_rx_latency": "unavailable"
+  },
+  "historical_log": "IoHomecontrol (3).txt: E50470/older build, excluded from new-build totals"
+}

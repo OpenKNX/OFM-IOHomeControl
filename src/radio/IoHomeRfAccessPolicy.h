@@ -1,7 +1,7 @@
 #pragma once
 #include "IoHomeDutyBudget.h"
 
-// All OpenKNX debug builds expose the default, non-expiring bypass.
+// Debug builds always bypass RF admission limits, including after off/reset/faults.
 #if defined(OPENKNX_DEBUG) && !defined(IOHC_ENABLE_RF_BENCH_UNLIMITED)
 #define IOHC_ENABLE_RF_BENCH_UNLIMITED
 #endif
@@ -24,21 +24,22 @@ public:
         }
     }
     IoHomeRfAccessPolicy() { resetToDefault(); }
-    void resetToDefault() {
+    void resetToDefault() { off(); }
+    void advance(uint32_t now) { (void)now; } // No time-based expiry.
+    Mode mode(uint32_t now) const {
+        (void)now;
 #ifdef OPENKNX_DEBUG
-        bench(0,true);
+        return Mode::BenchUnlimited;
 #else
-        off();
+        return active;
 #endif
     }
-    void advance(uint32_t now) { (void)now; } // No time-based expiry.
-    Mode mode(uint32_t now) const { (void)now; return active; }
     bool bypass(uint32_t now) const {auto m=mode(now);return m==Mode::BenchUnlimited||m==Mode::SimulationUnlimited;}
     // Deliberately narrower than simulation/general duty bypass: release RF
     // safeguards must not inherit the debug-only CCA/quota exemptions.
     bool debugBypass(uint32_t now) const {
 #ifdef OPENKNX_DEBUG
-        return bypass(now);
+        (void)now;return true;
 #else
         (void)now;return false;
 #endif
@@ -59,7 +60,13 @@ public:
         return false;
 #endif
     }
-    void off() {active=Mode::DutyLimited;}
+    void off() {
+#ifdef OPENKNX_DEBUG
+        active=Mode::BenchUnlimited;
+#else
+        active=Mode::DutyLimited;
+#endif
+    }
     uint32_t sessionId() const {return session;}
     bool admits(const IoHomeDutyBudget &budget,uint32_t hz,uint32_t airtime,uint32_t now)const {
         if(IoHomeDutyBudget::band(hz)>=3)return false; // unsupported frequency remains invalid

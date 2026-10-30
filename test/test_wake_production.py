@@ -46,7 +46,8 @@ enum class ParameterSemantic {SlatOrientation,HangerOrientation};
 struct IoHomeProfileDescriptor{};
 uint8_t ioHomeParameterIndex(const IoHomeProfileDescriptor*,ParameterSemantic){return 3;}
 struct Controller {
- unsigned submissions=0;uint8_t maxAttempts=0;uint32_t rfWait=0;
+ unsigned submissions=0;uint8_t maxAttempts=0;uint32_t rfWait=0,pauseRemaining=0;
+ unsigned backgroundPollPauseRemaining(){return pauseRemaining;}
  unsigned statusPollRetryAfterMs(){return rfWait;}
  bool sendStatusPoll(void*,bool,uint16_t,uint8_t attemptsParam,uint8_t attempts,uint8_t=0xFF) {
   (void)attemptsParam;++submissions;maxAttempts=attempts;return true;
@@ -107,6 +108,17 @@ struct IoHomecontrolChannel {
 };
 '''
 tests=r'''int main(){
+ {
+  IoHomecontrolChannel c;c.mPollTrackingDeadlineMs=now+600000;c.mNextStatusPollMs=now+1000;
+  c.mAuthPollFailures=2;c.mStatusPollFailures=3;c.mController.pauseRemaining=300000;
+  const auto deadline=c.mPollTrackingDeadlineMs,next=c.mNextStatusPollMs;
+  assert(!c.requestStatus(true,false)&&!c.requestStatus(false,false));
+  assert(!c.mController.submissions&&c.mPollTrackingDeadlineMs==deadline&&c.mNextStatusPollMs==next);
+  assert(c.mAuthPollFailures==2&&c.mStatusPollFailures==3);
+  assert(c.requestStatus(false,true)&&c.mController.submissions==1);
+  c.mController.pauseRemaining=0;assert(c.requestStatus(true,false)&&c.mController.submissions==2);
+ }
+
  {
   IoHomecontrolChannel c;c.trackedDelay=2000;c.mPollTrackingDeadlineMs=now+600000;c.mIsMoving=true;
   const auto epoch=c.mPollTrackingDeadlineMs;c.onTargetPositionFeedback(80);c.onPositionFeedback(20);

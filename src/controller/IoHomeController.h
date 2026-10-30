@@ -1144,7 +1144,7 @@ public:
     uint32_t dutyUsedMs=0,dutyLimitMs=0;
     uint32_t preambleIrqs=0,syncIrqs=0,crcErrors=0,parseFailures=0;
     bool txDoneValid=false,preambleEvidenceAvailable=false,syncEvidenceAvailable=false,softwarePhy=false;
-    const char *failureReason="none";
+    const char *failureReason="none",*attemptOutcome="observation";
     const char *event="none",*eventType="observation",*lbtResult="not_applied";
     IoHomeReplyRole replyRole=IoHomeReplyRole::None;
     bool attemptFinished=false,trustedStatus=false,authenticatedStatus=false,statusLayoutKnown=false;

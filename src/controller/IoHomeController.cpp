@@ -1,3 +1,4 @@
+#include "../protocol/IoHomeAttemptEvidence.h"
 #include "../protocol/IoHomeProfileObjects.h"
 #include "../protocol/IoHomeRemainingTime.h"
 #include "../protocol/IoHomeProductActivation.h"
@@ -6672,6 +6673,16 @@ void IoHomeController::recordTwoWayTrace(const char *event,const IoHomeFrame &fr
                 (unsigned long)mDiagnosticFilterEpoch,event,(unsigned long)p.timeMs,p.src,p.dst,p.command,p.ctrl0,p.ctrl1,(unsigned long)p.frequencyHz,p.length,(unsigned long)mCriticalDropped);
         } else ++mCriticalDropped;
     }
+    const auto timingEvent=ioHomeAttemptEvent(mCurrentCmd.command,event,mSawChallenge,mAuthResponseSent,
+        frame.commandId,p.requestSnapshot ? mLastTwoWayOutcome.failureReason : "none");
+    p.attemptOutcome=ioHomeAttemptOutcomeName(timingEvent);
+    if(std::strcmp(p.attemptOutcome,"observation")) {
+        recordRadioTiming(timingEvent);
+        logInfoP("IOHC_ATTEMPT event=%s outcome=%s transaction=%llu attempt=%u tx_id=%llu request_src=%06X request_dst=%06X request_cmd=%02X request_param=%u preamble=%u frequency=%lu challenge_seen=%u answer_sent=%u state=%u irq=%04X crc_checked=%u crc_valid=%u physical_peer_tx=unknown physical_movement=unknown",
+            event,p.attemptOutcome,(unsigned long long)mTwoWaySessionId,p.attempt,(unsigned long long)mTwoWayTxId,
+            mOwnNodeId,mCurrentCmd.destNodeId,unsigned(mCurrentCmd.command),mCurrentCmd.param,p.preambleBytes,
+            (unsigned long)p.frequencyHz,mSawChallenge,mAuthResponseSent,p.state,p.irq,p.crcChecked,p.crcValid);
+    } else if(timingEvent==IoHomeTimingEvent::AttemptEnd) recordRadioTiming(timingEvent);
     // Allowlist functional evidence only: no challenges, HMACs, keys or object chunks.
     if(!std::strcmp(event,"tx_done_observed") || !std::strcmp(event,"rx_ready")) {
         std::memcpy(p.payload,mAttemptTxPayload,sizeof(p.payload));
@@ -6728,8 +6739,8 @@ void IoHomeController::printRadioTiming()
 #if defined(RADIO_SX1276) && !defined(TEST_NATIVE)
     if (!idleForManagedOperation()) {logInfoP("Radio timing dump requires idle ownership");return;}
     mRadio.setTimingRecording(false); // freeze before deferred formatting
-    logInfoP("IOHC_TIMING compiled=%u enabled=0 bytes=%lu capacity=64 dropped=%lu time_source=micros physical_edge=unavailable rx_acquisition=unavailable preamble_isr=%s sync_isr=%s packet_association=observational_only",
-        mRadio.timingCompiled(),(unsigned long)mRadio.timingBufferBytes(),(unsigned long)mRadio.timingDrops(),
+    logInfoP("IOHC_TIMING compiled=%u enabled=0 bytes=%lu capacity=64 dropped=%lu ignored_scan_events=%lu capture_state=%u time_source=micros physical_edge=unavailable rx_acquisition=unavailable preamble_isr=%s sync_isr=%s packet_association=observational_only",
+        mRadio.timingCompiled(),(unsigned long)mRadio.timingBufferBytes(),(unsigned long)mRadio.timingDrops(),(unsigned long)mRadio.timingIgnoredScans(),mRadio.timingCaptureState(),
         mRadio.timingPreambleAvailable()?"available":"not_available",mRadio.timingSyncAvailable()?"available":"not_available");
     logInfoP("IOHC_TIMING_HEADER us,window_transaction,tx_id,attempt,event,tx_hz,rx_hz,state,cached_irq");
     IoHomeRadioTiming::Entry entry;
@@ -6800,8 +6811,8 @@ void IoHomeController::printTwoWayTrace() const
     const uint64_t first=retainedFirst>mTwoWayTraceFirst?retainedFirst:mTwoWayTraceFirst;
     for(uint64_t id=first;id<=mTwoWayTraceCount;++id) {
         [[maybe_unused]] const auto &p=twoWayTracePoint(id);
-        logInfoP("2WTrace id=%llu localTX=%llu session=%llu association=%s frameRole=%s event=%s eventType=%s attempt_finished=%u ms=%lu us=%lu sessionMs=%lu src=%06X dst=%06X gateway=%06X cmd=%02X ctrl=%02X/%02X RF=%lu state=%u attempt=%u deadlineMs=%u payload=%s",
-            (unsigned long long)p.id,(unsigned long long)p.txId,(unsigned long long)p.sessionId,p.associated?"attempt":"none",p.requestSnapshot?"request_snapshot":"event_frame",p.event,p.eventType,p.attemptFinished,(unsigned long)p.timeMs,(unsigned long)p.timeUs,(unsigned long)p.sessionStartMs,
+        logInfoP("2WTrace id=%llu localTX=%llu session=%llu association=%s frameRole=%s event=%s eventType=%s attempt_outcome=%s attempt_finished=%u ms=%lu us=%lu sessionMs=%lu src=%06X dst=%06X gateway=%06X cmd=%02X ctrl=%02X/%02X RF=%lu state=%u attempt=%u deadlineMs=%u payload=%s",
+            (unsigned long long)p.id,(unsigned long long)p.txId,(unsigned long long)p.sessionId,p.associated?"attempt":"none",p.requestSnapshot?"request_snapshot":"event_frame",p.event,p.eventType,p.attemptOutcome,p.attemptFinished,(unsigned long)p.timeMs,(unsigned long)p.timeUs,(unsigned long)p.sessionStartMs,
             p.src,p.dst,p.gateway,p.command,p.ctrl0,p.ctrl1,(unsigned long)p.frequencyHz,p.state,p.attempt,p.deadlineMs,p.payload);
         [[maybe_unused]] const auto airtime=ioHomeAirtime(p.length,p.preambleBytes);
         [[maybe_unused]] char preambleCounter[16]="n/a",syncCounter[16]="n/a";
@@ -13913,10 +13924,14 @@ uint32_t IoHomeController::statusPollRetryAfterMs()
 void IoHomeController::resetDutyToBuildDefault() {
     mRfAccessPolicy.resetToDefault();
 #ifdef OPENKNX_DEBUG
-    logInfoP("DEBUG SHIELDED BENCH ONLY: RF duty/CCA/LBT/quotas bypassed by default; no expiry; accounting/protocol/authentication/collision guards retained");
+    logInfoP("RF default=BenchUnlimited (debug build); duty/CCA/LBT/quotas always bypassed; accounting retained");
 #endif
 }
-bool IoHomeController::enableBenchDuty(bool confirmed) {return mRfAccessPolicy.bench(millis(),confirmed);}
+bool IoHomeController::enableBenchDuty(bool confirmed) {
+    const bool enabled=mRfAccessPolicy.bench(millis(),confirmed);
+    if(enabled)logInfoP("Debug build: RF limits always bypassed; accounting retained across policy resets");
+    return enabled;
+}
 
 RadioError IoHomeController::startDiagnosticTransmit(const uint8_t *data,uint8_t len,uint16_t preamble,uint32_t hz,bool blocking)
 {

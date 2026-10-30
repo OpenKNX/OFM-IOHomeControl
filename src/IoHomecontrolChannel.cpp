@@ -434,7 +434,8 @@ void IoHomecontrolChannel::loop()
         clearStatusPollTracking();
     }
 
-    if (mNextStatusPollMs != 0 && timeReached(lNow, mNextStatusPollMs))
+    const bool pollPaused=IoHomeStatusPollRetry::paused(mController.backgroundPollPauseRemaining());
+    if (!pollPaused && mNextStatusPollMs != 0 && timeReached(lNow, mNextStatusPollMs))
     {
         if (requestStatus(true))
         {
@@ -451,7 +452,7 @@ void IoHomecontrolChannel::loop()
 
     // Periodic status polling based on ETS config
     uint16_t lPollSec = ParamIOHC_cPollInterval;
-    if (lPollSec > 0 && !isStatusPollTrackingActive(lNow))
+    if (!pollPaused && lPollSec > 0 && !isStatusPollTrackingActive(lNow))
     {
         uint32_t lPollMs = (uint32_t)lPollSec * 1000;
         if (effectiveLowPower2W() && lPollMs < kLowPowerBackgroundPollMinMs)
@@ -1629,6 +1630,7 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll,bool iManual)
     if (mIs1W || !allowsActuatorControls())
         return false;
 
+    if (IoHomeStatusPollRetry::paused(mController.backgroundPollPauseRemaining(),iManual)) return false;
     const uint32_t now=millis();
     if(mRfPollWaiting&&!timeReached(now,mRfPollRetryAtMs))return false;
     const uint32_t wait=mController.statusPollRetryAfterMs();

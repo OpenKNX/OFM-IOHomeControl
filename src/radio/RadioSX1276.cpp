@@ -81,12 +81,28 @@ uint32_t RadioSX1276::timingDrops() const {
     return 0;
 #endif
 }
+uint32_t RadioSX1276::timingIgnoredScans() const {
+#if IOHC_SX1276_TIMING
+    return mTiming.ignoredScans;
+#else
+    return 0;
+#endif
+}
+uint8_t RadioSX1276::timingCaptureState() const {
+#if IOHC_SX1276_TIMING
+    return uint8_t(mTiming.capture);
+#else
+    return 0;
+#endif
+}
 bool RadioSX1276::setTimingRecording(bool enabled) {
 #if IOHC_SX1276_TIMING
     if (mState==RadioState::Transmitting) return false;
 #ifdef ESP32
     portENTER_CRITICAL(&mTimingMux);
 #endif
+    if (!enabled && mTiming.enabled && mTiming.capture==IoHomeRadioTiming::Capture::Active)
+        mTiming.push(IoHomeTimingEvent::CaptureStopped,timingClock(),mCurrentFreq,uint8_t(mState),mLastIrqStatus);
     mTiming.enabled=false;
     if (enabled) mTiming.reset();
     mTiming.enabled=enabled;
@@ -104,7 +120,7 @@ void RadioSX1276::setTimingContext(uint64_t transaction,uint8_t attempt) {
 #ifdef ESP32
     portENTER_CRITICAL(&mTimingMux);
 #endif
-    mTiming.transaction=transaction;mTiming.attempt=attempt;
+    mTiming.pendingTransaction=transaction;mTiming.pendingAttempt=attempt;
 #ifdef ESP32
     portEXIT_CRITICAL(&mTimingMux);
 #endif
@@ -137,7 +153,7 @@ uint32_t RadioSX1276::timingClock() const {
 #endif
 }
 void RadioSX1276::timingAt(IoHomeTimingEvent event,uint32_t us,bool isr) {
-    if (!mTiming.enabled) return;
+    if (!mTiming.enabled || mTiming.capture!=IoHomeRadioTiming::Capture::Active) return;
 #ifdef ESP32
     if (isr) portENTER_CRITICAL_ISR(&mTimingMux); else portENTER_CRITICAL(&mTimingMux);
 #else
@@ -151,19 +167,30 @@ void RadioSX1276::timingAt(IoHomeTimingEvent event,uint32_t us,bool isr) {
 #endif
 void RadioSX1276::timingEvent(IoHomeTimingEvent event) {
 #if IOHC_SX1276_TIMING
-    if (mTiming.enabled) timingAt(event,timingClock());
+    if (mTiming.enabled) {
+        if (mTiming.capture!=IoHomeRadioTiming::Capture::Active ||
+            ((event==IoHomeTimingEvent::RxSetupBegin || event==IoHomeTimingEvent::RxRegistersDone ||
+              event==IoHomeTimingEvent::RxModeWritten || event==IoHomeTimingEvent::RxReturn) && mCurrentFreq!=mTiming.txHz)) {
+            // Task-owned scan counter. No lock, timestamp or ISR writes here.
+            if (event==IoHomeTimingEvent::RxSetupBegin || event==IoHomeTimingEvent::RxRegistersDone ||
+                event==IoHomeTimingEvent::RxModeWritten || event==IoHomeTimingEvent::RxReturn)
+                if(mTiming.ignoredScans!=UINT32_MAX)++mTiming.ignoredScans;
+            return;
+        }
+        timingAt(event,timingClock());
+    }
 #else
     (void)event;
 #endif
 }
 #ifdef TEST_NATIVE
-void RadioSX1276::nativeDio0Edge(uint32_t us) {
+void RadioSX1276::nativeDio0Edge(uint32_t us,bool recorded) {
     mDio0Fired=true;++mIrqCount;
 #if IOHC_SX1276_TIMING
-    if (mState==RadioState::Transmitting || mState==RadioState::Receiving)
+    if (recorded && (mState==RadioState::Transmitting || mState==RadioState::Receiving))
         timingAt(mState==RadioState::Transmitting ? IoHomeTimingEvent::TxDoneIsr : IoHomeTimingEvent::PayloadIsr,us,true);
 #else
-    (void)us;
+    (void)us;(void)recorded;
 #endif
 }
 #endif
@@ -175,7 +202,7 @@ void IRAM_ATTR RadioSX1276::dio0Isr(void *arg)
     self->mDio0Fired = true;
     self->mIrqCount++;
 #if IOHC_SX1276_TIMING
-    if (self->mTiming.enabled && (self->mState==RadioState::Transmitting || self->mState==RadioState::Receiving))
+    if (self->mTiming.enabled && self->mTiming.capture==IoHomeRadioTiming::Capture::Active && (self->mState==RadioState::Transmitting || self->mState==RadioState::Receiving))
         self->timingAt(self->mState==RadioState::Transmitting ? IoHomeTimingEvent::TxDoneIsr : IoHomeTimingEvent::PayloadIsr,uint32_t(esp_timer_get_time()),true);
 #endif
 }
@@ -493,17 +520,6 @@ RadioError RadioSX1276::startTransmit(const uint8_t *iData, uint8_t iLen)
     if (mState == RadioState::Transmitting)
         return RadioError::Busy;
 
-#if IOHC_SX1276_TIMING
-    if (mTiming.enabled) {
-#ifdef ESP32
-    portENTER_CRITICAL(&mTimingMux);
-#endif
-    mTiming.beginTx(mTxStartCount+1,mCurrentFreq);
-#ifdef ESP32
-    portEXIT_CRITICAL(&mTimingMux);
-#endif
-    }
-#endif
     // Enter standby to load FIFO
     setMode(RF_OPMODE_STANDBY);
 
@@ -528,6 +544,18 @@ RadioError RadioSX1276::startTransmit(const uint8_t *iData, uint8_t iLen)
 
     // Start TX
     mDio0Fired = false; // clear stale interrupt before TX
+#if IOHC_SX1276_TIMING
+    if (mTiming.enabled && mTiming.capture!=IoHomeRadioTiming::Capture::Frozen) {
+#ifdef ESP32
+    portENTER_CRITICAL(&mTimingMux);
+#endif
+    const uint8_t commandOffset=iLen>1 && (iData[1]&3)==3 ? 10 : 8;
+    mTiming.beginTx(mTxStartCount+1,mCurrentFreq,timingClock(),iLen>commandOffset ? iData[commandOffset] : 0xFF);
+#ifdef ESP32
+    portEXIT_CRITICAL(&mTimingMux);
+#endif
+    }
+#endif
     setMode(RF_OPMODE_TX);
     mState = RadioState::Transmitting;
     mTxStartCount++;
@@ -565,19 +593,20 @@ bool RadioSX1276::isTxDone()
 {
     if (mState != RadioState::Transmitting) return false;
 #if IOHC_SX1276_TIMING
-    const uint32_t entry=mTiming.enabled ? timingClock() : 0;
+    const uint32_t entry=mTiming.enabled && mTiming.capture==IoHomeRadioTiming::Capture::Active ? timingClock() : 0;
     timingAt(IoHomeTimingEvent::FirstTxPoll,entry);
 #endif
     const uint16_t irq=readIrqStatus();
 #if IOHC_SX1276_TIMING
-    const uint32_t readDone=mTiming.enabled ? timingClock() : 0;
+    const uint32_t readDone=mTiming.enabled && mTiming.capture==IoHomeRadioTiming::Capture::Active ? timingClock() : 0;
 #endif
     mLastIrqStatus=irq;
     if (!mDio0Fired && !(irq & RF_IRQFLAGS2_PACKETSENT)) return false;
 #if IOHC_SX1276_TIMING
     timingAt(IoHomeTimingEvent::CompletionPollEntry,entry);
     timingAt(IoHomeTimingEvent::IrqRead,readDone);
-    if (!mTiming.firstEdge) timingAt(IoHomeTimingEvent::TxDonePolled,readDone);
+    if (!mTiming.firstEdge && (irq & RF_IRQFLAGS2_PACKETSENT))
+        timingAt(IoHomeTimingEvent::TxDonePolled,readDone);
 #endif
     mDio0Fired=false;
     timingEvent(IoHomeTimingEvent::StandbyBegin);
@@ -682,6 +711,7 @@ uint8_t RadioSX1276::readPacket(uint8_t *oBuffer, uint8_t iMaxLen)
         (lIrqStatus & RF_IRQFLAGS2_CRCOK) == 0)
     {
         mRxCrcFailCount++;
+        timingEvent(IoHomeTimingEvent::CrcError);
     }
 
     // Read packet from FIFO (with IoHomeOn=1, read until FIFO empty).

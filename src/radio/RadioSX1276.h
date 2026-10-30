@@ -43,6 +43,8 @@ public:
   void timingEvent(IoHomeTimingEvent event);
   bool popTiming(IoHomeRadioTiming::Entry &entry);
   uint32_t timingDrops() const;
+  uint32_t timingIgnoredScans() const;
+  uint8_t timingCaptureState() const;
   bool timingRecording() const;
   bool timingPreambleAvailable() const {return mCaptureEdges && preambleEvidenceAvailable();}
   bool timingSyncAvailable() const {return mCaptureEdges && syncEvidenceAvailable();}
@@ -55,7 +57,7 @@ public:
 #endif
   }
 #ifdef TEST_NATIVE
-  void nativeDio0Edge(uint32_t us);
+  void nativeDio0Edge(uint32_t us,bool recorded=true);
   void setNativeTimingClock(uint32_t (*clock)()) {mNativeTimingClock=clock;}
   void nativeReceiveEdge(bool sync,uint32_t time){if(!mCaptureEdges||mState!=RadioState::Receiving)return;if(sync){mSyncEdgeUs=time;mSyncEdgeValid=true;}else{mPreambleEdgeUs=time;mPreambleEdgeValid=true;}}
   using ReadRegister = uint8_t (*)(void *,uint8_t);

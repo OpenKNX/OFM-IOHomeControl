@@ -4482,8 +4482,8 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc scan dump", "Dump captured packets with key payload redaction");
     openknx.console.printHelpLine("iohc scan stats", "Show per-node statistics");
     openknx.console.printHelpLine("iohc duty status|limits|mode status", "Per-band conservative airtime accounting and access mode");
-    openknx.console.printHelpLine("iohc duty debug on CONFIRM_SHIELDED_BENCH", "Debug default is ON without expiry; re-enable after off/fault");
-    openknx.console.printHelpLine("iohc duty debug off|reset-debug", "End debug; never reset/refund actual airtime");
+    openknx.console.printHelpLine("iohc duty debug on CONFIRM_SHIELDED_BENCH", "Debug builds always bypass RF limits; release builds remain limited");
+    openknx.console.printHelpLine("iohc duty debug off|reset-debug", "Reset policy; debug RF bypass remains active; accounting retained");
     openknx.console.printHelpLine("iohc radio", "Show radio health summary");
 #if defined(RADIO_SX1262)
     openknx.console.printHelpLine("iohc radio txtest", "Send a minimal SX1262 TX test payload");
@@ -4518,9 +4518,9 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     if(iCmd.rfind("iohc duty ",0)==0) {
         if(iCmd=="iohc duty status"||iCmd=="iohc duty limits"||iCmd=="iohc duty mode status")mController.printDutyStatus();
         else if(iCmd=="iohc duty debug off"||iCmd=="iohc duty reset-debug") {
-            mController.disableDebugDuty();logInfoP("RF mode=DutyLimited; accounting history retained");
+            mController.disableDebugDuty();logInfoP("RF mode=%s; accounting history retained",mController.debugRfLimitsBypassed()?"BenchUnlimited (debug build; limits remain bypassed)":"DutyLimited");
         } else if(iCmd=="iohc duty mode qualified") {
-            mController.qualifiedDuty();logInfoP("QualifiedPoliteAccess denied: no PHY/region qualification; mode=DutyLimited");
+            mController.qualifiedDuty();logInfoP("QualifiedPoliteAccess denied: no PHY/region qualification; build RF policy retained");
         } else if(iCmd=="iohc duty debug on CONFIRM_SHIELDED_BENCH"&&!iDebugKo) {
             logInfoP("%s",mController.enableBenchDuty(true)?"SHIELDED BENCH ONLY - RF duty/CCA/LBT/quotas bypassed; no expiry; accounting/protocol/authentication/collision guards retained":"RF bench debug unavailable in this build");
         } else logInfoP("RF debug denied: console command, debug build and CONFIRM_SHIELDED_BENCH required");

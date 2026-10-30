@@ -91,10 +91,10 @@ $(SX1276_TARGET): test_sx1276_adapter.cpp ../src/radio/RadioSX1276.cpp ../src/ra
 	$(CXX) $(CXXFLAGS) -o $@ test_sx1276_adapter.cpp ../src/radio/RadioSX1276.cpp
 
 $(BUILD_DIR)/test_sx1276_timing: test_sx1276_timing.cpp ../src/radio/RadioSX1276.cpp ../src/radio/RadioSX1276.h ../src/radio/IoHomeRadioTiming.h | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -DIOHC_SX1276_TIMING=1 -o $@ test_sx1276_timing.cpp ../src/radio/RadioSX1276.cpp
+	$(CXX) $(CXXFLAGS) -pthread -DIOHC_SX1276_TIMING=1 -o $@ test_sx1276_timing.cpp ../src/radio/RadioSX1276.cpp
 
 $(BUILD_DIR)/test_sx1276_timing_disabled: test_sx1276_timing.cpp ../src/radio/RadioSX1276.cpp ../src/radio/RadioSX1276.h ../src/radio/IoHomeRadioTiming.h | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -o $@ test_sx1276_timing.cpp ../src/radio/RadioSX1276.cpp
+	$(CXX) $(CXXFLAGS) -pthread -o $@ test_sx1276_timing.cpp ../src/radio/RadioSX1276.cpp
 
 ESP32_STORAGE_TARGET = $(BUILD_DIR)/test_esp32_storage
 STORAGE_TARGET = $(BUILD_DIR)/test_rp2040_storage
