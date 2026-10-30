@@ -1,5 +1,6 @@
 #pragma once
 #include "IoHomeLimitation.h"
+#include "IoHomeStatusUpdate.h"
 #include <cmath>
 
 // Evidence and request: laberning/home_io_control
@@ -33,6 +34,8 @@ struct IoHomeLastCommand {
 };
 inline IoHomeLastCommand ioHomeDecodeLastCommand(const IoHomeFrame &frame) {
     IoHomeLastCommand out;
+    if(frame.commandId==IoHomeCommand::StatusUpdate&&
+       ioHomeStatusUpdateKind(frame)!=IoHomeStatusUpdateKind::Position)return out;
     // Only ordinary position/status replies. Request-derived replies must be excluded by caller.
     const uint8_t offset=frame.commandId==IoHomeCommand::PrivateResponse?8:
         frame.commandId==IoHomeCommand::StatusUpdate?11:0;

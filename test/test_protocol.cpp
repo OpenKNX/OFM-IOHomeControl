@@ -16,6 +16,7 @@
 #include "test_registry.h"
 #include "build/stefan_dual_controller.h"
 #include "protocol/IoHomeRemainingTime.h"
+#include "protocol/IoHomeStatusUpdate.h"
 #include "build/laberning_captures.h"
 
 // Pull in the modules under test
@@ -4960,6 +4961,9 @@ TEST(status_update_originator_uses_optional_data14_only)
     lFrame.init();
     lFrame.commandId = IoHomeCommand::StatusUpdate;
     lFrame.dataLen = 15;
+    lFrame.data[2] = 0x10;
+    lFrame.data[3] = 0x0A;
+    lFrame.data[4] = 10;
     lFrame.data[1] = 0x60;
     lFrame.data[IOHC_STATUS_UPDATE_ORIGINATOR_OFFSET] = IOHC_ORIGINATOR_USER;
 
@@ -16289,7 +16293,9 @@ TEST(controller_status_update_receive_auth_uses_saved_command_data)
     uint8_t lStatusData[11] = {};
     lStatusData[0] = 0x01;
     lStatusData[1] = 0x80;
-    lStatusData[3] = 55;
+    lStatusData[2] = 0x10;
+    lStatusData[3] = 0x0A;
+    lStatusData[4] = 6;
     const uint16_t lTargetRaw = (40UL * IOHC_POSITION_MAX) / 100UL;
     const uint16_t lCurrentRaw = (38UL * IOHC_POSITION_MAX) / 100UL;
     lStatusData[5] = (lTargetRaw >> 8) & 0xFF;
@@ -16356,7 +16362,7 @@ TEST(controller_status_update_receive_auth_uses_saved_command_data)
     ASSERT_TRUE(!lChannel.testStatusMoving());
     ASSERT_TRUE(lChannel.testHasPositionFeedback());
     ASSERT_TRUE(lChannel.testHasTargetPositionFeedback());
-    // data[3] is not a validated battery field in a generic 0x71 status.
+    // data[3] is the event ID low byte, not a battery percentage.
     ASSERT_TRUE(!lChannel.testHasBatteryLevel());
     ASSERT_EQ(lChannel.testBatteryLevel(), 0xFF);
     ASSERT_TRUE(lChannel.testStatusExpected());
@@ -20338,7 +20344,8 @@ TEST(protocol_rain_short_records_do_not_refresh_retained_originator) {
     IoHomeFrame f;f.init();f.commandId=IoHomeCommand::PrivateResponse;f.dataLen=11;
     ASSERT_TRUE(!ioHomeDecodeLastCommand(f).valid);f.dataLen=12;f.data[10]=0x32;f.data[11]=2;
     auto record=ioHomeDecodeLastCommand(f);ASSERT_TRUE(record.valid);ASSERT_EQ(record.node,0x32U);ASSERT_EQ(record.originator,2);
-    f.commandId=IoHomeCommand::StatusUpdate;f.dataLen=15;std::memset(f.data,0,sizeof(f.data));f.data[13]=0x33;f.data[14]=9;
+    f.commandId=IoHomeCommand::StatusUpdate;f.dataLen=15;std::memset(f.data,0,sizeof(f.data));
+    f.data[2]=0x10;f.data[3]=0x0A;f.data[4]=10;f.data[13]=0x33;f.data[14]=9;
     record=ioHomeDecodeLastCommand(f);ASSERT_TRUE(record.valid);ASSERT_EQ(record.node,0x33U);ASSERT_EQ(record.originator,9);
     f.commandId=IoHomeCommand::Execute;ASSERT_TRUE(!ioHomeDecodeLastCommand(f).valid);
 }
@@ -20414,7 +20421,7 @@ TEST(controller_rain_clamp_requires_followup_status_and_clears_on_match) {
 
 TEST(controller_rain_status_update_uses_its_own_last_commander_offsets) {
     IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);
-    const uint8_t data[15]={5,0,0,0,0,0xBA,0,0xBA,0,0,0,0,0,0x32,2};
+    const uint8_t data[15]={5,0,0x10,0x0A,10,0xBA,0,0xBA,0,0,0,0,0,0x32,2};
     IoHomeFrame status;buildStatusUpdateFrame(status,0x123456,0x654321,data,sizeof(data));
     ASSERT_TRUE(queueControllerResponse(c,status));ASSERT_TRUE(!c.rainState(0).evidence.hasRainEvidence);
     const auto &packet=c.radio().testLastTransmittedPacket();IoHomeFrame challenge;
@@ -20598,10 +20605,10 @@ TEST(controller_battery_object_transfer_rejects_profile_context_change) {
 }
 
 TEST(status_update_does_not_guess_battery_percentage) {
-    const uint8_t values[]={0,15,50,75,100,255};
+    const uint8_t values[]={0,10,15,50,75,100,255};
     for(auto value:values) {
         IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initRainController(c,m,ch);ch.setBatteryMonitoring(1);IoHomeFrame f;
-        uint8_t data[11]{};data[0]=1;data[3]=value;
+        uint8_t data[11]{};data[0]=1;data[2]=0x10;data[3]=value;data[4]=6;
         buildStatusUpdateFrame(f,0x123456,ch.getNodeId(),data,sizeof(data));
         ASSERT_TRUE(queueControllerResponse(c,f));
         const auto &packet=c.radio().testLastTransmittedPacket();IoHomeFrame challenge;
@@ -20610,7 +20617,7 @@ TEST(status_update_does_not_guess_battery_percentage) {
         IoHomeFrame authenticated;
         buildChallengeResponseFrame(authenticated,0x123456,ch.getNodeId(),data,sizeof(data),challenge.data,ch.getEncryptionKey());
         ASSERT_TRUE(queueControllerResponse(c,authenticated));
-        ASSERT_TRUE(ch.testHasPositionFeedback()); // prove the authenticated status was dispatched
+        ASSERT_EQ(ch.testHasPositionFeedback(),value==0x0A); // only event100A has a position layout
         ASSERT_TRUE(!ch.batteryInfo().percentValid&&!ch.testHasBatteryLevel());
         ASSERT_EQ(ch.testBatteryLevel(),0xFF);ASSERT_EQ(ch.testBatteryLevelCalls(),0U);
     }
@@ -22816,7 +22823,7 @@ TEST(controller_atlantic_home_away_busy_after_challenge_still_replies_immediatel
 
 static void inboundStatusFrame(IoHomeFrame &status)
 {
-    const uint8_t data[11]={1,0,0,0,0,0x27,0x10,0x27,0x10,0,0xFF};
+    const uint8_t data[11]={1,0,0x10,0x0A,6,0x27,0x10,0x27,0x10,0,0xFF};
     buildStatusUpdateFrame(status,0x123456,0x654321,data,sizeof(data));
 }
 
@@ -23139,6 +23146,7 @@ TEST(controller_original_ssl_values_in_synthetic_authenticated_71_stay_off_targe
         initPaired2WControllerForTest(c,m,ch,original.getDestNodeId(),original.getSrcNodeId(),syntheticKey);
         ch.setManualProfileOverride(0x0080);ch.setConfigured2WPowerClass(TwoWayPowerClass::LowPower);
         uint8_t body[11]{};body[0]=original.data[0];body[1]=original.data[1];
+        body[2]=0x10;body[3]=0x0A;body[4]=6;
         std::memcpy(body+5,original.data+2,4);body[10]=0xFF;
         IoHomeFrame update,challenge,proof;
         buildStatusUpdateFrame(update,c.getOwnNodeId(),ch.getNodeId(),body,sizeof(body));
@@ -23414,6 +23422,7 @@ TEST(protocol_status71_optional_commander_boundaries_never_use_byte1)
 {
     IoHomeFrame f;f.init();f.commandId=IoHomeCommand::StatusUpdate;
     f.data[1]=2;f.data[11]=0xE2;f.data[12]=0xD1;f.data[13]=0xFF;f.data[14]=9;
+    f.data[2]=0x10;f.data[3]=0x0A;f.data[4]=10;
     for(unsigned n=0;n<15;n++){f.dataLen=n;ASSERT_TRUE(!ioHomeDecodeLastCommand(f).valid);}
     f.dataLen=15;auto record=ioHomeDecodeLastCommand(f);
     ASSERT_TRUE(record.valid);ASSERT_EQ(record.node,0xE2D1FFU);ASSERT_EQ(record.originator,9U);
@@ -23872,4 +23881,107 @@ TEST(protocol_poll_pause_preserves_manual_and_retry_state)
     const auto before=tracking;
     if(!IoHomeStatusPollRetry::paused(1000))ioHomeScheduleFollowUp(tracking,1000,2000);
     ASSERT_EQ(tracking.nextPoll,before.nextPoll);ASSERT_EQ(tracking.silentFailures,3);ASSERT_EQ(tracking.authFailures,2);
+}
+
+TEST(controller_status_event_nonposition_and_malformed_never_publish)
+{
+    const uint8_t key[16] = {1};
+    for (uint16_t eventId : {uint16_t(0x2005), uint16_t(0x2001), uint16_t(0x9999), uint16_t(0x100A)})
+        for (uint8_t declared : {uint8_t(5), uint8_t(6), uint8_t(7)})
+        {
+            if (eventId == 0x100A && declared == 6) continue;
+            IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+            initPaired2WControllerForTest(c, m, ch, 0x123456, 0x654321, key);
+            // Synthetic longer event: nonzero position-like bytes and status-expected.
+            const uint8_t data[11] = {4, 0xE0, uint8_t(eventId >> 8), uint8_t(eventId), declared,
+                                      6, 0, 0x64, 0, 0, 0};
+            IoHomeFrame status, challenge, proof, ack;
+            buildStatusUpdateFrame(status, 0x123456, 0x654321, data, sizeof(data));
+            ASSERT_TRUE(queueControllerResponse(c, status));
+            ASSERT_TRUE(!ch.testHasPositionFeedback() && !ch.testHasStatusUpdate());
+            ASSERT_TRUE(lastTransmittedFrameForTest(c, challenge));
+            ASSERT_EQ(challenge.commandId, IoHomeCommand::ChallengeRequest);
+            buildChallengeResponseFrame(proof, 0x123456, 0x654321, data, sizeof(data), challenge.data, key);
+            c.loop();
+            ASSERT_TRUE(queueControllerResponse(c, proof));
+            ASSERT_TRUE(!ch.testHasPositionFeedback() && !ch.testHasTargetPositionFeedback());
+            ASSERT_TRUE(!ch.testHasStatusUpdate() && !ch.testStatusExpected());
+            ASSERT_TRUE(!ch.testHasScheduledStatusPoll() && !ch.mTrustedMotionObserved);
+            ASSERT_EQ(ch.twoWayMovingEvidenceGeneration(), 0U);
+            ASSERT_TRUE(!c.rainState(0).evidence.hasRainEvidence);
+            ASSERT_TRUE(!c.statusAttribution().layoutKnown);
+            ASSERT_TRUE(lastTransmittedFrameForTest(c, ack));
+            ASSERT_EQ(ack.commandId, IoHomeCommand::StatusUpdateResponse);
+            ASSERT_EQ(ack.dataLen, 2U);
+            ASSERT_EQ(ack.data[0], 5U); ASSERT_EQ(ack.data[1], 0U);
+        }
+}
+
+TEST(controller_status_event_captured_100a_keeps_position_feedback)
+{
+    // Community KIG300/Somfy RS100 statuspoll DATA; identities/key below synthetic.
+    const uint8_t data[] = {4,0x60,0x10,0x0A,11,0,0,0xAC,0x9E,0,15,0xBE,0xFE,0xDB,1,0};
+    const uint8_t key[16] = {1};
+    IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c, m, ch, 0x123456, 0x654321, key);
+    IoHomeFrame status, challenge, proof;
+    buildStatusUpdateFrame(status, 0x123456, 0x654321, data, sizeof(data));
+    ASSERT_TRUE(ioHomeStatusUpdateKind(status) == IoHomeStatusUpdateKind::Position);
+    ASSERT_TRUE(queueControllerResponse(c, status));
+    ASSERT_TRUE(!ch.testHasPositionFeedback());
+    ASSERT_TRUE(lastTransmittedFrameForTest(c, challenge));
+    buildChallengeResponseFrame(proof, 0x123456, 0x654321, data, sizeof(data), challenge.data, key);
+    c.loop(); ASSERT_TRUE(queueControllerResponse(c, proof));
+    ASSERT_TRUE(ch.testHasPositionFeedback() && ch.testHasTargetPositionFeedback());
+    ASSERT_FLOAT_EQ(ch.testTargetPositionFeedback(), 0.0f, 0.0001f);
+    ASSERT_FLOAT_EQ(ch.testPositionFeedback(), float(0xAC9E) * 100 / IOHC_POSITION_MAX, 0.001f);
+    ASSERT_TRUE(ch.testHasStatusUpdate() && ch.testStatusMoving());
+}
+
+TEST(status_event_envelope_rejects_truncation_padding_and_unknown_position_layout)
+{
+    IoHomeFrame frame;
+    frame.init(); frame.commandId = IoHomeCommand::StatusUpdate;
+    const uint8_t captured[] = {5,0x60,0x20,5,5,6,0,0,0,0};
+    memcpy(frame.data, captured, sizeof(captured)); frame.dataLen = sizeof(captured);
+    ASSERT_TRUE(ioHomeStatusUpdateKind(frame) == IoHomeStatusUpdateKind::DeviceEvent);
+    for (uint8_t len=0; len<sizeof(captured); ++len) {
+        frame.dataLen = len;
+        ASSERT_TRUE(ioHomeStatusUpdateKind(frame) == IoHomeStatusUpdateKind::Invalid);
+    }
+    frame.dataLen = 11; // Padding cannot turn a ten-byte sensor event into position.
+    ASSERT_TRUE(ioHomeStatusUpdateKind(frame) == IoHomeStatusUpdateKind::Invalid);
+    frame.data[2]=0x10; frame.data[3]=0x0A; frame.data[4]=6;
+    ASSERT_TRUE(ioHomeStatusUpdateKind(frame) == IoHomeStatusUpdateKind::Position);
+    frame.commandId = IoHomeCommand::SetConfig1Response;
+    ASSERT_TRUE(ioHomeStatusUpdateKind(frame) == IoHomeStatusUpdateKind::Invalid);
+    frame.commandId = IoHomeCommand::StatusUpdate; frame.dataLen=IOHC_FRAME_MAX_DATA+1;
+    ASSERT_TRUE(ioHomeStatusUpdateKind(frame) == IoHomeStatusUpdateKind::Invalid);
+}
+
+TEST(controller_status_event_short_capture_keeps_existing_admission)
+{
+    const uint8_t data[] = {5,0x60,0x20,5,5,6,0,0,0,0};
+    const uint8_t key[16] = {1};
+    IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    IoHomeFrame frame;
+    buildStatusUpdateFrame(frame,0x123456,0x654321,data,sizeof(data));
+    ASSERT_TRUE(queueControllerResponse(c,frame));
+    ASSERT_EQ(c.radio().testTransmitCount(),0U);
+    ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate()&&!ch.testStatusExpected());
+}
+
+TEST(status_event_opaque_body_never_supplies_originator_or_last_controller)
+{
+    IoHomeFrame frame; frame.init(); frame.commandId=IoHomeCommand::StatusUpdate;
+    frame.dataLen=15; frame.data[2]=0x20; frame.data[3]=5; frame.data[4]=10;
+    frame.data[11]=0x12; frame.data[12]=0x34; frame.data[13]=0x56; frame.data[14]=2;
+    for (bool validLength : {true,false}) {
+        frame.data[4]=validLength?10:9;
+        uint8_t originator=0xA5;
+        ASSERT_TRUE(!IoHomeController::decodeStatusUpdateOriginator(frame,originator));
+        ASSERT_EQ(originator,0xA5);
+        ASSERT_TRUE(!ioHomeDecodeLastCommand(frame).valid);
+    }
 }

@@ -9,6 +9,7 @@
 #endif
 #include "../protocol/IoHomeLogRedaction.h"
 #include "../protocol/IoHomeProfileRegistry.h"
+#include "../protocol/IoHomeStatusUpdate.h"
 
 #ifdef TEST_NATIVE
 #include "IoHomeControllerNativeStubs.h"
@@ -1395,7 +1396,7 @@ bool IoHomeController::buildTwoWayPrivateProbePayload(
 
 bool IoHomeController::decodeStatusUpdateOriginator(const IoHomeFrame &iFrame, uint8_t &oOriginator)
 {
-    if (iFrame.commandId != IoHomeCommand::StatusUpdate ||
+    if (ioHomeStatusUpdateKind(iFrame) != IoHomeStatusUpdateKind::Position ||
         iFrame.dataLen <= IOHC_STATUS_UPDATE_ORIGINATOR_OFFSET)
         return false;
     oOriginator = iFrame.data[IOHC_STATUS_UPDATE_ORIGINATOR_OFFSET];
@@ -6707,7 +6708,8 @@ void IoHomeController::observeStatusAttribution(const IoHomeFrame &frame,IoHomeS
     if(frame.commandId!=IoHomeCommand::PrivateResponse&&frame.commandId!=IoHomeCommand::StatusUpdate)return;
     auto &a=mStatusAttribution;a=IoHomeStatusAttribution{};a.valid=true;a.timeMs=millis();a.transportSrc=frame.getSrcNodeId();a.transportDst=frame.getDestNodeId();a.source=source;
     const uint8_t target=frame.commandId==IoHomeCommand::StatusUpdate?5:2,current=frame.commandId==IoHomeCommand::StatusUpdate?7:4;
-    a.layoutKnown=layoutKnown&&frame.dataLen>=current+2;
+    a.layoutKnown=layoutKnown&&frame.dataLen>=current+2&&
+        (frame.commandId!=IoHomeCommand::StatusUpdate||ioHomeStatusUpdateKind(frame)==IoHomeStatusUpdateKind::Position);
     if(source==IoHomeStatusAttribution::Source::LocalCorrelated||source==IoHomeStatusAttribution::Source::Inbound71Authenticated)a.localTransaction=mTwoWaySessionId;
     a.authenticatedLocalCommand=source==IoHomeStatusAttribution::Source::LocalCorrelated&&mCurrentCmd.command==IoHomeCommand::Execute&&mSawChallenge&&mAuthResponseSent;
     if(a.layoutKnown) {
@@ -9210,7 +9212,7 @@ void IoHomeController::processResponse()
         // Command ACK positions may be stale, but its observed moving flag
         // outranks a blanket STOP reset. Do not publish its positions here.
         if ((mRxFrame.commandId == IoHomeCommand::PrivateResponse && mRxFrame.dataLen >= 8) ||
-            (mRxFrame.commandId == IoHomeCommand::StatusUpdate && mRxFrame.dataLen >= 11))
+            (ioHomeStatusUpdateKind(mRxFrame) == IoHomeStatusUpdateKind::Position))
             if (auto *channel = channelForQueueEntry(lCompletedCmd))
             {
                 const bool moving=(mRxFrame.data[0] & 0x01) == 0;
@@ -9232,7 +9234,7 @@ void IoHomeController::processResponse()
                                                 ? IOHC_FREQUENCIES[mCurrentFreqIdx] : 0));
         mModule->onAuthenticatedDirectedDiscovery(lCompletedCmd.destNodeId);
     }
-    const bool lStatusSeen = mRxFrame.commandId == IoHomeCommand::StatusUpdate ||
+    const bool lStatusSeen = ioHomeStatusUpdateKind(mRxFrame) == IoHomeStatusUpdateKind::Position ||
                              mRxFrame.commandId == IoHomeCommand::PrivateResponse;
     logInfoP("2W result cmd=0x%02X result=%s authenticated_exchange=%s challenge_response=%s final_response=yes status=%s device_accepted=%s actuation_started=unknown target_reached=unknown",
              static_cast<unsigned>(lCompletedCmd.command),
@@ -12569,7 +12571,8 @@ void IoHomeController::dispatchRxFrame()
                 // Keep 0x71 battery candidates raw until its execute-status
                 // placement is independently tied to the native status field.
                 if(mTrustRxPosition&&lDestNode==mOwnNodeId)lCh->onBatteryEventRaw(mRxFrame);
-                // StatusUpdate (0x71) layout per reference (io-rts-esp32):
+                const bool lPositionEvent = ioHomeStatusUpdateKind(mRxFrame) == IoHomeStatusUpdateKind::Position;
+                // Position event 0x100A only; other events have opaque bodies.
                 //   data[0]:    flags (bit 0 = stopped)
                 //   data[1]:    flags (bit 7 = status-expected: device will auto-send updates)
                 //   data[5:6]:  target position (16-bit BE)
@@ -12578,7 +12581,7 @@ void IoHomeController::dispatchRxFrame()
                 //   data[14]:   command originator when this optional field is present
                 //   Position encoding: raw * 100 / IOHC_POSITION_MAX (0xC800)
                 //   Minimum 11 bytes for full status
-                if (mTrustRxPosition && mRxFrame.dataLen >= 11)
+                if (mTrustRxPosition && lPositionEvent)
                 {
                     const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
                     recordTwoWayTrace("status_received", mRxFrame, mRxRawLen);
@@ -12590,7 +12593,7 @@ void IoHomeController::dispatchRxFrame()
                     dispatchPositionStatus(lCh, mRxFrame.data, mRxFrame.dataLen, lStopped, 5, 7,mInboundVerified);
                 }
                 // Status-expected flag: device will auto-send StatusUpdate
-                if (mTrustRxPosition && mRxFrame.dataLen >= 2 && (mRxFrame.data[1] & 0x80))
+                if (mTrustRxPosition && lPositionEvent && (mRxFrame.data[1] & 0x80))
                     lCh->onStatusExpected();
                 uint8_t lOriginator = 0;
                 if (decodeStatusUpdateOriginator(mRxFrame, lOriginator))
