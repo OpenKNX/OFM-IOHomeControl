@@ -5,6 +5,7 @@
 #include "protocol/IoHomeOptimisticPosition.h"
 #include "protocol/IoHomeLimitation.h"
 #include "protocol/IoHomeBattery.h"
+#include "protocol/IoHomeDeviceEvent.h"
 #include "protocol/IoHomeHeatingRegisters.h"
 #include <vector>
 #include "OpenKNX.h"
@@ -67,7 +68,7 @@ public:
   void onHeatingValue(uint16_t reg,const IoHomeHeating::Value &value);
   void onPositionFeedback(float iPositionPercent);
   uint32_t productContextRevision() const {return mProductContextRevision;}
-  void invalidateProductContext() {clearStatusPollTracking();invalidateHeatingFeedback();mOptimisticPosition={};invalidateBattery();mProfileReceivedMask=0;mRequestedSpeedIndex=0;mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
+  void invalidateProductContext() {clearStatusPollTracking();invalidateHeatingFeedback();mOptimisticPosition={};invalidateBattery();clearLastDeviceEvent();mProfileReceivedMask=0;mRequestedSpeedIndex=0;mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
   IoHomePhysicalBounds &physicalBounds(){return mPhysicalBounds;}
   const IoHomePhysicalBounds &physicalBounds()const{return mPhysicalBounds;}
   IoHomeProductRuntime &productRuntime() {return mProductRuntime;}
@@ -111,6 +112,13 @@ public:
   void printBatteryStatus();
   void updateBatteryKo();
   const IoHomeBatteryInfo &batteryInfo()const{return mBatteryInfo;}
+  // Called only by the controller after the saved inbound frame's proof passes.
+  bool onAuthenticatedDeviceEvent(const IoHomeFrame &frame,uint8_t frequency,uint32_t now) {
+    return mPaired&&!mIs1W&&frame.getSrcNodeId()==mNodeId&&mLastDeviceEvent.record(frame,frequency,now);
+  }
+  const IoHomeDeviceEvent &lastDeviceEvent()const{return mLastDeviceEvent;}
+  void clearLastDeviceEvent(){mLastDeviceEvent.clear();}
+  void printLastDeviceEvent();
 
   void onEstimate(uint16_t iSeconds);
   void onTrustedMotionStatus(bool moving) {mTrustedPollMoving=moving&&mPollTrackingDeadlineMs!=0;}
@@ -280,6 +288,7 @@ private:
   bool mStopSettlePollPending = false;
   bool mStatusExpected = false; // device will auto-send StatusUpdate while tracking
   IoHomeBatteryInfo mBatteryInfo;
+  IoHomeDeviceEvent mLastDeviceEvent;
   bool mBatteryAlarmPublished = false; // current context; independent of cached KNX value
   struct BatteryObject {std::vector<uint8_t> data;uint32_t timestampMs=0;};
   BatteryObject mBatteryObjects[5]; // allocation only after explicit diagnostics

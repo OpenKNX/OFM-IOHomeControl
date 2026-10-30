@@ -1529,7 +1529,11 @@ void IoHomeController::setModule(IoHomecontrol *iModule)
 void IoHomeController::setOwnNodeId(uint32_t iNodeId)
 {
     if(iNodeId!=mOwnNodeId){clearInboundStatus("local_identity_changed");invalidateImmediateReply();}
-    if(mOwnNodeId!=(iNodeId&0x00FFFFFF))mRfAccessPolicy.off();
+    if(mOwnNodeId!=(iNodeId&0x00FFFFFF)) {
+        mRfAccessPolicy.off();
+        if(mModule)for(uint8_t i=0;i<IOHC_ChannelCount;++i)
+            if(auto *channel=mModule->getChannel(i))channel->clearLastDeviceEvent();
+    }
     mOwnNodeId = iNodeId & 0x00FFFFFF;
 }
 
@@ -12468,7 +12472,8 @@ void IoHomeController::dispatchRxFrame()
             {
                 if(mCurrentCmd.active || mState!=ControllerState::Idle || lCh->is1W() ||
                     (mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W) || lDestNode!=mOwnNodeId ||
-                    mRxFrame.dataLen<11 || getAddressClass(lSrcNode)!=IoHomeAddressClass::Unicast)
+                    (mRxFrame.dataLen<11&&ioHomeStatusUpdateKind(mRxFrame)!=IoHomeStatusUpdateKind::DeviceEvent) ||
+                    getAddressClass(lSrcNode)!=IoHomeAddressClass::Unicast)
                     return;
                 mPendingAuthFrame=mRxFrame;mAuthSrcNodeId=lSrcNode;mAuthChannelIdx=i;
                 mInboundFrequency=mLastResponseFreqIdx;
@@ -12572,6 +12577,13 @@ void IoHomeController::dispatchRxFrame()
                 // placement is independently tied to the native status field.
                 if(mTrustRxPosition&&lDestNode==mOwnNodeId)lCh->onBatteryEventRaw(mRxFrame);
                 const bool lPositionEvent = ioHomeStatusUpdateKind(mRxFrame) == IoHomeStatusUpdateKind::Position;
+                // Raw events never borrow position trust or an outbound exchange:
+                // require the existing saved-frame inbound challenge proof.
+                if(mTrustRxPosition&&mInboundVerified&&inboundStatusContextValid()&&lDestNode==mOwnNodeId&&
+                   ioHomeStatusUpdateKind(mRxFrame)==IoHomeStatusUpdateKind::DeviceEvent)
+                    if(lCh->onAuthenticatedDeviceEvent(mRxFrame,mInboundFrequency,millis()))
+                        logDebugP("Device event authenticated src=%06X event=%04X payloadLen=%u",lSrcNode,
+                            unsigned(lCh->lastDeviceEvent().eventId),unsigned(mRxFrame.dataLen));
                 // Position event 0x100A only; other events have opaque bodies.
                 //   data[0]:    flags (bit 0 = stopped)
                 //   data[1]:    flags (bit 7 = status-expected: device will auto-send updates)

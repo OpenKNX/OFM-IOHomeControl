@@ -4466,6 +4466,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc heating scan|cancel", "Bounded deduplicated saved-heater-key scans / discard temporary acquisition");
     openknx.console.printHelpLine("iohc heating assign CHANNEL SESSION", "Explicitly persist verified heater to selected EMPTY channel; back up ETS first");
     openknx.console.printHelpLine("iohc battery CH status|probe|probe09|objects", "Battery evidence and manual raw reads (Extended diagnostics)");
+    openknx.console.printHelpLine("iohc event CH status|clear", "Last authenticated device event (raw, session-only, local console)");
     openknx.console.printHelpLine("iohc sniff start [S]", "Start passive key sniff for S seconds");
     openknx.console.printHelpLine("iohc sniff stop|status|clear", "Manage passive key sniff result");
     openknx.console.printHelpLine("iohc extract start [S]", "Arm active key extraction for S seconds");
@@ -4538,6 +4539,18 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if(!std::strcmp(action,"status"))mController.printDynamicActuatorStatus(index-1);
         else if(!std::strcmp(action,"read"))logInfoP("Dynamic capability reads queued=%u",mController.requestDynamicCapabilities(mChannels[index-1]));
         else logInfoP("Usage: iohc dynamic CHANNEL status|read");
+        return true;
+    }
+    if(iCmd.rfind("iohc event ",0)==0) {
+        if(iDebugKo){logInfoP("Last Device Event requires local console");return true;}
+        unsigned index=0;char action[16]{};char extra=0;
+        if(sscanf(iCmd.c_str(),"iohc event %u %15s %c",&index,action,&extra)!=2||index<1||index>mNumChannels){
+            logInfoP("Usage: iohc event CHANNEL status|clear");return true;
+        }
+        auto *channel=mChannels[index-1];if(!channel)return true;
+        if(!std::strcmp(action,"status"))channel->printLastDeviceEvent();
+        else if(!std::strcmp(action,"clear")){channel->clearLastDeviceEvent();logInfoP("Last Device Event cleared ch=%u (no RF)",index);}
+        else logInfoP("Usage: iohc event CHANNEL status|clear");
         return true;
     }
     if(iCmd.rfind("iohc battery ",0)==0) {

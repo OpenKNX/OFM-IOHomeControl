@@ -12,6 +12,7 @@ channel=(root/'src/IoHomecontrolChannel.cpp').read_text()
 methods='\n'.join(method(channel,signature) for signature in [
     'void IoHomecontrolChannel::setNodeId(',
     'void IoHomecontrolChannel::setEncryptionKey(',
+    'void IoHomecontrolChannel::setIs1W(',
     'void IoHomecontrolChannel::startStatusPollTracking(',
     'void IoHomecontrolChannel::onStatusPollDeferred(',
     'void IoHomecontrolChannel::onEstimate(',
@@ -33,6 +34,7 @@ harness=r'''#include <cassert>
 #include "protocol/IoHomeOptimisticPosition.h"
 #include "protocol/IoHomeStatusPollRetry.h"
 #include "protocol/IoHomeRemainingTime.h"
+#include "protocol/IoHomeDeviceEvent.h"
 unsigned now=1000;unsigned millis(){return now;}
 #define logInfoP(...) ((void)0)
 #define logDebugP(...) ((void)0)
@@ -69,7 +71,9 @@ struct IoHomecontrolChannel {
  float staleEstimate=-1;float estimateCurrentPosition(){return staleEstimate>=0?staleEstimate:mCurrentPosition;}
  void logTrackingEvent(const char*){}
  void onEstimate(uint16_t);
- void setNodeId(uint32_t);void setEncryptionKey(const uint8_t*);void startStatusPollTracking(uint32_t);
+ void setNodeId(uint32_t);void setEncryptionKey(const uint8_t*);void setIs1W(bool);void startStatusPollTracking(uint32_t);
+ IoHomeDeviceEvent mLastDeviceEvent;
+ void clearLastDeviceEvent(){mLastDeviceEvent.clear();}
  void invalidateHeatingFeedback(){}
  struct {void bind(uint32_t,const uint8_t*){}}mProductRuntime;
  void onPositionFeedback(float);
@@ -108,6 +112,15 @@ struct IoHomecontrolChannel {
 };
 '''
 tests=r'''int main(){
+ {
+  IoHomecontrolChannel c;const uint8_t key[16]={2};
+  c.mLastDeviceEvent.valid=true;c.setNodeId(c.mNodeId);assert(c.mLastDeviceEvent.valid);
+  c.setNodeId(0x654321);assert(!c.mLastDeviceEvent.valid);
+  c.mLastDeviceEvent.valid=true;c.setEncryptionKey(key);assert(!c.mLastDeviceEvent.valid);
+  c.mLastDeviceEvent.valid=true;c.setEncryptionKey(key);assert(c.mLastDeviceEvent.valid);
+  c.setIs1W(false);assert(c.mLastDeviceEvent.valid);
+  c.setIs1W(true);assert(!c.mLastDeviceEvent.valid);
+ }
  {
   IoHomecontrolChannel c;c.mPollTrackingDeadlineMs=now+600000;c.mNextStatusPollMs=now+1000;
   c.mAuthPollFailures=2;c.mStatusPollFailures=3;c.mController.pauseRemaining=300000;

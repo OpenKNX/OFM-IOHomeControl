@@ -23959,7 +23959,7 @@ TEST(status_event_envelope_rejects_truncation_padding_and_unknown_position_layou
     ASSERT_TRUE(ioHomeStatusUpdateKind(frame) == IoHomeStatusUpdateKind::Invalid);
 }
 
-TEST(controller_status_event_short_capture_keeps_existing_admission)
+TEST(controller_status_event_short_capture_requires_proof_before_recording)
 {
     const uint8_t data[] = {5,0x60,0x20,5,5,6,0,0,0,0};
     const uint8_t key[16] = {1};
@@ -23968,8 +23968,29 @@ TEST(controller_status_event_short_capture_keeps_existing_admission)
     IoHomeFrame frame;
     buildStatusUpdateFrame(frame,0x123456,0x654321,data,sizeof(data));
     ASSERT_TRUE(queueControllerResponse(c,frame));
-    ASSERT_EQ(c.radio().testTransmitCount(),0U);
+    ASSERT_EQ(c.radio().testTransmitCount(),1U);
     ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate()&&!ch.testStatusExpected());
+    ASSERT_TRUE(!ch.lastDeviceEvent().valid);
+    IoHomeFrame challenge,proof,ack;
+    ASSERT_TRUE(lastTransmittedFrameForTest(c,challenge));
+    ASSERT_EQ(challenge.commandId,IoHomeCommand::ChallengeRequest);
+    buildChallengeResponseFrame(proof,0x123456,0x654321,data,sizeof(data),challenge.data,key);
+    c.loop();ASSERT_TRUE(queueControllerResponse(c,proof));
+    const auto &event=ch.lastDeviceEvent();
+    ASSERT_TRUE(event.valid);ASSERT_EQ(event.count,1U);ASSERT_EQ(event.eventId,0x2005);
+    ASSERT_EQ(event.source,0x654321U);ASSERT_EQ(event.destination,0x123456U);
+    ASSERT_EQ(event.length,sizeof(data));ASSERT_MEM_EQ(event.data,data,sizeof(data));
+    ASSERT_EQ(event.verifiedAtMs,ioHomeTestMillis());
+    ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasTargetPositionFeedback());
+    ASSERT_TRUE(!ch.testHasStatusUpdate()&&!ch.testStatusExpected()&&!ch.testHasScheduledStatusPoll());
+    ASSERT_EQ(ch.twoWayMovingEvidenceGeneration(),0U);
+    ASSERT_TRUE(!ch.batteryInfo().percentValid&&!ch.testHasBatteryLevel());
+    ASSERT_TRUE(lastTransmittedFrameForTest(c,ack));
+    ASSERT_EQ(ack.commandId,IoHomeCommand::StatusUpdateResponse);
+    ASSERT_EQ(ack.data[0],5U);ASSERT_EQ(ack.data[1],0U);
+    const auto sent=c.radio().testTransmitCount();
+    ASSERT_TRUE(queueControllerResponse(c,proof));
+    ASSERT_EQ(ch.lastDeviceEvent().count,1U);ASSERT_EQ(c.radio().testTransmitCount(),sent);
 }
 
 TEST(status_event_opaque_body_never_supplies_originator_or_last_controller)
@@ -23984,4 +24005,121 @@ TEST(status_event_opaque_body_never_supplies_originator_or_last_controller)
         ASSERT_EQ(originator,0xA5);
         ASSERT_TRUE(!ioHomeDecodeLastCommand(frame).valid);
     }
+}
+
+static void shortDeviceEventFrame(IoHomeFrame &frame)
+{
+    const uint8_t data[]={5,0x60,0x20,5,5,6,0,0,0,0};
+    buildStatusUpdateFrame(frame,0x123456,0x654321,data,sizeof(data));
+}
+
+TEST(controller_device_event_rejects_unqualified_and_malformed_before_challenge)
+{
+    const uint8_t key[16]={1};
+    for(unsigned variant=0;variant<12;++variant) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+        IoHomeFrame frame;shortDeviceEventFrame(frame);
+        switch(variant) {
+        case 0: ch.setPaired(false);break;
+        case 1: ch.setIs1W(true);break;
+        case 2: frame.ctrlByte0|=IOHC_CTRL0_MODE_1W;break;
+        case 3: frame.setDestNode(0x112233);break;
+        case 4: frame.setSrcNode(0x112233);break;
+        case 5: frame.setDestNode(0x3B);break;
+        case 6: frame.data[4]=4;break;
+        case 7: frame.data[4]=6;break;
+        case 8: frame.dataLen=4;break;
+        case 9: frame.data[2]=0x10;frame.data[3]=0x0A;break; // too short for position
+        case 10: ASSERT_TRUE(c.sendCommand(ch.getNodeId(),key,IoHomeCommand::Execute,50));
+                 {IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));}break;
+        case 11: c.setPassiveMode(true);break;
+        }
+        const auto sent=c.radio().testTransmitCount();
+        ASSERT_TRUE(queueControllerResponse(c,frame));
+        ASSERT_EQ(c.radio().testTransmitCount(),sent);
+        ASSERT_TRUE(!ch.lastDeviceEvent().valid&&!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate());
+    }
+}
+
+TEST(controller_device_event_proof_binds_saved_payload_identity_frequency_and_age)
+{
+    const uint8_t key[16]={1},otherKey[16]={2};
+    for(unsigned variant=0;variant<16;++variant) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+        IoHomeFrame frame,challenge,proof;shortDeviceEventFrame(frame);
+        ASSERT_TRUE(queueControllerResponse(c,frame));
+        ASSERT_TRUE(lastTransmittedFrameForTest(c,challenge));
+        ASSERT_EQ(challenge.commandId,IoHomeCommand::ChallengeRequest);
+        uint8_t transcript[IOHC_FRAME_MAX_DATA];memcpy(transcript,frame.data,frame.dataLen);
+        if(variant==15)transcript[5]^=1; // proof for a different event body must fail
+        buildChallengeResponseFrame(proof,0x123456,0x654321,transcript,frame.dataLen,challenge.data,key);
+        if(variant==0)proof.data[0]^=1;
+        if(variant==1)proof.setSrcNode(0x112233);
+        if(variant==2)proof.setDestNode(0x112233);
+        if(variant==3)proof.ctrlByte0|=IOHC_CTRL0_MODE_1W;
+        if(variant==4)proof.ctrlByte0|=IOHC_CTRL0_START;
+        if(variant==5)proof.dataLen=5;
+        if(variant==6)c.testSetRxScanFrequency(IOHC_FREQ_3);
+        if(variant==7)ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS+1);
+        if(variant==8)ch.setEncryptionKey(otherKey);
+        if(variant==9)ch.setNodeId(0x112233);
+        if(variant==10)ch.invalidateProductContext();
+        if(variant==11)ch.setPaired(false);
+        if(variant==12)m.testSetChannel(0,nullptr);
+        if(variant==13){c.setPassiveMode(true);c.setPassiveMode(false);}
+        if(variant==14)c.setOwnNodeId(0x112233);
+        ASSERT_TRUE(queueControllerResponse(c,proof));
+        ASSERT_TRUE(!ch.lastDeviceEvent().valid&&!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate());
+        ASSERT_EQ(c.radio().testTransmitCount(),1U);
+    }
+}
+
+TEST(controller_device_event_records_only_authenticated_nonposition_and_clears_identity)
+{
+    const uint8_t key[16]={1},otherKey[16]={2};
+    for(uint8_t frequency=0;frequency<3;++frequency)for(unsigned reset=0;reset<6;++reset) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+        c.testSetRxScanFrequency(IOHC_FREQUENCIES[frequency]);
+        IoHomeFrame frame,challenge,proof;shortDeviceEventFrame(frame);
+        frame.data[2]=0x99;frame.data[3]=0x88; // opaque unknown event is diagnostic only
+        ASSERT_TRUE(queueControllerResponse(c,frame));ASSERT_TRUE(lastTransmittedFrameForTest(c,challenge));
+        buildChallengeResponseFrame(proof,0x123456,0x654321,frame.data,frame.dataLen,challenge.data,key);
+        c.loop();ASSERT_TRUE(queueControllerResponse(c,proof));
+        ASSERT_TRUE(ch.lastDeviceEvent().valid);ASSERT_EQ(ch.lastDeviceEvent().eventId,0x9988);
+        ASSERT_EQ(ch.lastDeviceEvent().frequencyIndex,frequency);
+        ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate()&&!ch.testStatusExpected());
+        switch(reset) {
+        case 0:ch.setNodeId(0x112233);ch.setNodeId(0x654321);break;
+        case 1:ch.setEncryptionKey(otherKey);ch.setEncryptionKey(key);break;
+        case 2:ch.setIs1W(true);ch.setIs1W(false);break;
+        case 3:ch.invalidateProductContext();break;
+        case 4:c.setOwnNodeId(0x112233);c.setOwnNodeId(0x123456);break;
+        case 5:ch.clearLastDeviceEvent();break;
+        }
+        ASSERT_TRUE(!ch.lastDeviceEvent().valid);ASSERT_EQ(ch.lastDeviceEvent().count,0U);
+    }
+}
+
+TEST(protocol_device_event_bounded_raw_storage_zero_time_counter_and_invalid_preservation)
+{
+    IoHomeFrame frame;shortDeviceEventFrame(frame);IoHomeDeviceEvent event;
+    ASSERT_TRUE(event.record(frame,1,0));ASSERT_TRUE(event.valid);ASSERT_EQ(event.verifiedAtMs,0U);
+    ASSERT_EQ(event.count,1U);ASSERT_MEM_EQ(event.data,frame.data,frame.dataLen);
+    for(unsigned mode=0;mode<3;++mode) {
+        IoHomeFrame bad=frame;
+        if(mode==0)bad.data[4]=0;
+        if(mode==1)bad.ctrlByte0|=IOHC_CTRL0_MODE_1W;
+        if(mode==2){bad.data[2]=0x10;bad.data[3]=0x0A;bad.dataLen=11;bad.data[4]=6;}
+        ASSERT_TRUE(!event.record(bad,0,100));ASSERT_EQ(event.count,1U);ASSERT_EQ(event.verifiedAtMs,0U);
+        ASSERT_MEM_EQ(event.data,frame.data,frame.dataLen);
+    }
+    frame.data[2]=0x20;frame.data[3]=1;frame.data[4]=IOHC_FRAME_MAX_DATA-5;frame.dataLen=IOHC_FRAME_MAX_DATA;
+    ASSERT_TRUE(event.record(frame,2,UINT32_MAX));ASSERT_EQ(event.length,IOHC_FRAME_MAX_DATA);
+    ASSERT_EQ(event.eventId,0x2001);ASSERT_EQ(event.count,2U);ASSERT_EQ(event.verifiedAtMs,UINT32_MAX);
+    event.count=UINT32_MAX;ASSERT_TRUE(event.record(frame,2,0));ASSERT_EQ(event.count,UINT32_MAX);
+    frame.dataLen=5;frame.data[4]=0;ASSERT_TRUE(event.record(frame,0,1));
+    for(unsigned i=frame.dataLen;i<IOHC_FRAME_MAX_DATA;++i)ASSERT_EQ(event.data[i],0U);
 }

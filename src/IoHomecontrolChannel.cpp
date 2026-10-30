@@ -1283,7 +1283,7 @@ bool IoHomecontrolChannel::isOperational() const
 void IoHomecontrolChannel::setNodeId(uint32_t iNodeId)
 {
     if (mNodeId != (iNodeId & 0x00FFFFFF)) mOptimisticPosition={};
-    if(mNodeId!=(iNodeId&0x00FFFFFF)){clearStatusPollTracking();invalidateHeatingFeedback();}
+    if(mNodeId!=(iNodeId&0x00FFFFFF)){clearStatusPollTracking();invalidateHeatingFeedback();clearLastDeviceEvent();}
     mNodeId = iNodeId & 0x00FFFFFF; // 24-bit
     mPaired = (mNodeId != 0);
     mProductRuntime.bind(mNodeId,mEncKey);
@@ -1296,7 +1296,7 @@ uint32_t IoHomecontrolChannel::getNodeId() const
 
 void IoHomecontrolChannel::setEncryptionKey(const uint8_t *iKey)
 {
-    if (memcmp(mEncKey, iKey, 16)) {clearStatusPollTracking();mOptimisticPosition={};invalidateHeatingFeedback();}
+    if (memcmp(mEncKey, iKey, 16)) {clearStatusPollTracking();mOptimisticPosition={};invalidateHeatingFeedback();clearLastDeviceEvent();}
     memcpy(mEncKey, iKey, 16);
     mProductRuntime.bind(mNodeId,mEncKey);
 }
@@ -1451,7 +1451,7 @@ bool IoHomecontrolChannel::hasOneWayControllerIdentity() const
 void IoHomecontrolChannel::setConfigured1WProfileChannel(uint8_t iChannelIndex) { mConfigured1WProfileChannel = iChannelIndex; }
 uint8_t IoHomecontrolChannel::getConfigured1WProfileChannel() const { return mConfigured1WProfileChannel; }
 bool IoHomecontrolChannel::is1W() const { return mIs1W; }
-void IoHomecontrolChannel::setIs1W(bool iIs1W) { if(mIs1W!=iIs1W)clearStatusPollTracking();mIs1W = iIs1W; }
+void IoHomecontrolChannel::setIs1W(bool iIs1W) { if(mIs1W!=iIs1W){clearStatusPollTracking();clearLastDeviceEvent();}mIs1W = iIs1W; }
 void IoHomecontrolChannel::setConfigured1WTargetNodeId(uint32_t iNodeId) { mConfigured1WTargetNodeId = iNodeId & 0x00FFFFFF; }
 uint32_t IoHomecontrolChannel::getConfigured1WTargetNodeId() const { return mConfigured1WTargetNodeId; }
 void IoHomecontrolChannel::setConfigured1WBroadcastType(uint8_t iBroadcastType) { mConfigured1WBroadcastType = iBroadcastType & 0x3F; }
@@ -2940,6 +2940,18 @@ void IoHomecontrolChannel::onBatteryEventRaw(const IoHomeFrame &frame) {
     logInfoP("Battery unclassified RX src=%06lX dst=%06lX cmd=%02X payload=%s time-ms=%lu",
         (unsigned long)frame.getSrcNodeId(),(unsigned long)frame.getDestNodeId(),unsigned(frame.commandId),raw.c_str(),(unsigned long)millis());
     logInfoP("  RAW / UNIT UNKNOWN; no event2001 attribution");
+}
+
+void IoHomecontrolChannel::printLastDeviceEvent()
+{
+    const auto &event=lastDeviceEvent();
+    if(!event.valid){logInfoP("Last Device Event ch=%u none (session-only)",unsigned(_channelIndex+1));return;}
+    char raw[IOHC_FRAME_MAX_DATA*3+1]{};
+    for(uint8_t i=0;i<event.length;++i)snprintf(raw+i*3,4,"%02X ",event.data[i]);
+    logInfoP("Last Device Event ch=%u event_id=%04X count=%lu src=%06lX dst=%06lX cmd=71 rx_freq_idx=%u verified_ms=%lu age_ms=%lu raw=%s proof=inbound_challenge RAW / UNIT UNKNOWN",
+        unsigned(_channelIndex+1),unsigned(event.eventId),(unsigned long)event.count,
+        (unsigned long)event.source,(unsigned long)event.destination,unsigned(event.frequencyIndex),
+        (unsigned long)event.verifiedAtMs,(unsigned long)(uint32_t(millis()-event.verifiedAtMs)),raw);
 }
 
 void IoHomecontrolChannel::syncHeatingConfiguration()

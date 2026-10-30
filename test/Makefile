@@ -50,7 +50,7 @@ $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
 $(SX1262_PHY_TARGET): $(SX1262_PHY_SRCS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(SX1262_PHY_SRCS)
 
-run: check-rf-build-modes check-dual-controller-tools check-remaining-time-evidence check-remaining-time-mutations check-discovery-evidence check-captured-motion-mutations check-original-captures check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
+run: check-device-events check-rf-build-modes check-dual-controller-tools check-remaining-time-evidence check-remaining-time-mutations check-discovery-evidence check-captured-motion-mutations check-original-captures check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
 
 check-protocol: $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite protocol
@@ -124,6 +124,10 @@ check-battery-diagnostics:
 .PHONY: check-key-import-identity
 check-key-import-identity:
 	$(PYTHON) test_key_import_identity.py
+
+.PHONY: check-device-events
+check-device-events:
+	$(PYTHON) test_device_event_console.py
 
 .PHONY: check-wake-production check-wake-trials
 check-wake-production:

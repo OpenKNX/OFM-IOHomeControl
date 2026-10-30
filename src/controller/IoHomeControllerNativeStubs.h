@@ -14,6 +14,7 @@
 
 #include "../protocol/IoHomeSequence.h"
 #include "../protocol/IoHomeBattery.h"
+#include "../protocol/IoHomeDeviceEvent.h"
 #include "../protocol/IoHomeProductRuntime.h"
 #include "../protocol/IoHomePhysicalBounds.h"
 #include "../protocol/IoHomeAssignmentReceipt.h"
@@ -119,16 +120,16 @@ public:
   bool agiliaHomeAwayEnabled()const{return homeAwayQualified;}
   void onHomeAwayCommandStatus(){++homeAwayPublications;}
   uint32_t productContextRevision() const {return mProductContextRevision;}
-  void invalidateProductContext() {mBatteryInfo={};mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
+  void invalidateProductContext() {mBatteryInfo={};clearLastDeviceEvent();mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
   IoHomePhysicalBounds &physicalBounds(){return mPhysicalBounds;}
   IoHomeProductRuntime &productRuntime() {mProductRuntime.bind(mIoAddress,mEncKey);return mProductRuntime;}
   bool is1W() const { return mIs1W; }
-  void setIs1W(bool iIs1W) { mIs1W = iIs1W; }
+  void setIs1W(bool iIs1W) { if(mIs1W!=iIs1W)clearLastDeviceEvent();mIs1W = iIs1W; }
   bool isPaired() const { return mPaired; }
   bool isOneWayEnrolled() const { return mOneWayEnrolled; }
   void setOneWayEnrolled(bool iEnrolled) { mOneWayEnrolled = iEnrolled; }
   bool isOperational() const { return mIs1W ? mOneWayEnrolled : mPaired; }
-  void setPaired(bool iPaired) { mPaired = iPaired; }
+  void setPaired(bool iPaired) { if(!iPaired)clearLastDeviceEvent();mPaired = iPaired; }
 
   void setConfigured1WTargetNodeId(uint32_t iNodeId) { mConfigured1WTargetNodeId = iNodeId; }
   uint32_t getConfigured1WTargetNodeId() const { return mConfigured1WTargetNodeId; }
@@ -153,6 +154,7 @@ public:
 
   void setNodeId(uint32_t iNodeId)
   {
+    if(mNodeId!=iNodeId)clearLastDeviceEvent();
     mNodeId = iNodeId;
     mPaired = (iNodeId != 0);
   }
@@ -160,6 +162,7 @@ public:
 
   void setEncryptionKey(const uint8_t *iKey)
   {
+    if(iKey&&memcmp(mEncKey,iKey,sizeof(mEncKey)))clearLastDeviceEvent();
     if (iKey)
       memcpy(mEncKey, iKey, sizeof(mEncKey));
   }
@@ -482,6 +485,12 @@ public:
   void onBatteryStatus(uint8_t status,uint8_t command){if(mBatteryMonitoring)mBatteryInfo.observeStatus(status,command,0);}
   void onBatteryError(uint8_t code,uint8_t command){if(mBatteryMonitoring)mBatteryInfo.observeError(code,command,0);}
   void onBatteryEventRaw(const IoHomeFrame &){}
+  IoHomeDeviceEvent mLastDeviceEvent;
+  bool onAuthenticatedDeviceEvent(const IoHomeFrame &frame,uint8_t frequency,uint32_t now) {
+    return mPaired&&!mIs1W&&frame.getSrcNodeId()==mNodeId&&mLastDeviceEvent.record(frame,frequency,now);
+  }
+  const IoHomeDeviceEvent &lastDeviceEvent()const{return mLastDeviceEvent;}
+  void clearLastDeviceEvent(){mLastDeviceEvent.clear();}
   void onBatteryPrivate(uint8_t,const IoHomeFrame &,int,uint8_t,uint32_t){++mBatteryPrivateReplies;}
   void onBatteryObject(uint8_t,uint16_t,const uint8_t *,unsigned){++mBatteryObjectReplies;}
   unsigned testBatteryPrivateReplies()const{return mBatteryPrivateReplies;}
