@@ -1497,11 +1497,15 @@ bool RadioSX1262::waitBusy(bool iBlocking)
     if (!iBlocking)
         return false;
 
-    unsigned long lStart = millis();
+    const uint32_t lStart = millis();
     while (digitalRead(mBusyPin) == HIGH)
     {
-        if (millis() - lStart > SX1262_BUSY_TIMEOUT_MS)
+        if (uint32_t(millis() - lStart) > SX1262_BUSY_TIMEOUT_MS)
         {
+            // A task/SPI stall may outlive the deadline after the HIGH sample.
+            // Decide failure on a fresh read, without extending the deadline.
+            if (digitalRead(mBusyPin) != HIGH)
+                break;
             mBusyTimedOut = true;
             return false;
         }
