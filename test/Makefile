@@ -170,6 +170,7 @@ check-captured-motion-mutations: $(PROTOCOL_TARGET)
 
 .PHONY: check-discovery-evidence
 check-discovery-evidence:
+	$(PYTHON) test_atlantic_issue_guards.py
 	$(PYTHON) test_discovery_evidence.py
 	$(PYTHON) test_diagnostic_commands.py
 

@@ -2049,6 +2049,9 @@ bool IoHomeController::sendCommandInternal(uint32_t iDestNodeId, const uint8_t *
     }
 
     const auto *targetChannel = channelForNode(iDestNodeId);
+    if (iCmd == IoHomeCommand::Execute && targetChannel &&
+        targetChannel->getProtocolIdentity().valid &&
+        ioHomeRequiresQualifiedApplianceControls(targetChannel->getProtocolIdentity().profile)) return false;
     if (iCmd == IoHomeCommand::Execute && targetChannel && !targetChannel->is1W() &&
         !ioHomeGarageCommandAllowed(targetChannel->getEffectiveProfileDescriptor(),
                                    targetChannel->garageEndpointsOnly(), iParam)) return false;
@@ -3854,6 +3857,10 @@ bool IoHomeController::captureProtocolIdentity(
 
     if (lNewDiscovery)
     {
+        if(ioHomeRequiresQualifiedApplianceControls(lMetadata.profile))
+            logInfoP("DISCOVERED: ioAddress=%06X deviceType=%s profile=%u subtype=%u controls=unqualified",
+                iFrame.getSrcNodeId(),ioHomeUnqualifiedApplianceTypeName(lMetadata.profile),
+                unsigned(lMetadata.profile),unsigned(lMetadata.subProfile));
         const uint8_t lFreqIdx = iFrequencyIndex < IOHC_NUM_FREQUENCIES
                                      ? iFrequencyIndex : mLastResponseFreqIdx;
         const uint32_t lFreqHz = lFreqIdx < IOHC_NUM_FREQUENCIES
@@ -7602,6 +7609,14 @@ void IoHomeController::loop()
         {
             if (!(mRxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W))
                 observeReceivedIdentity(mRxFrame,receiveEvidence(lLen),receivedRadioState);
+            if(mDynamicEventTrace) {
+                const auto atlantic21=ioHomeObserveAtlantic21(mRxFrame.commandId,mRxFrame.data,mRxFrame.dataLen);
+                if(atlantic21.valid)
+                    logInfoP("Atlantic unknown function=21 value_raw=%02X src=%06X dst=%06X ctrl0=%02X ctrl1=%02X freq=%lu raw=%s proof=unverified source_role=unknown action=observe_only",
+                        unsigned(atlantic21.value),mRxFrame.getSrcNodeId(),mRxFrame.getDestNodeId(),
+                        unsigned(mRxFrame.ctrlByte0),unsigned(mRxFrame.ctrlByte1),
+                        static_cast<unsigned long>(mCurrentFreqIdx<IOHC_NUM_FREQUENCIES?IOHC_FREQUENCIES[mCurrentFreqIdx]:0),hexDump(mRxFrame.data,mRxFrame.dataLen).c_str());
+            }
             if(mRxFrame.commandId==IoHomeCommand::Private&&mRxFrame.dataLen==3&&mRxFrame.data[0]==3&&mRxFrame.data[1]==0&&mRxFrame.data[2]==0&&mRxFrame.getSrcNodeId()!=mOwnNodeId) {
                 mForeignPollController=mRxFrame.getSrcNodeId();mForeignPollNode=mRxFrame.getDestNodeId();mForeignPollAtMs=millis();
             }

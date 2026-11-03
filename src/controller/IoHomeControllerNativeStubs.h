@@ -476,6 +476,7 @@ public:
   }
   bool allowsActuatorControls() const
   {
+    if(mProtocolIdentity.valid&&ioHomeRequiresQualifiedApplianceControls(mProtocolIdentity.profile))return false;
     return mProtocolIdentity.nodeClass == IoHomeNodeClass::Unknown ||
            mProtocolIdentity.nodeClass == IoHomeNodeClass::Actuator;
   }

@@ -370,8 +370,44 @@ enum class IoHomeDeviceType : uint8_t
     ExteriorHeating = 0x15,
     HeatPump = 0x16,
     IntrusionAlarm = 0x17,
-    SwingingShutter = 0x18
+    SwingingShutter = 0x18,
+    DomesticHotWater = 0x33,
+    ElectricalHeater = 0x34
 };
+
+// Discovery taxonomy only. These labels do not qualify appliance controls.
+inline const char *ioHomeUnqualifiedApplianceTypeName(uint16_t profile)
+{
+    switch (profile)
+    {
+    case static_cast<uint16_t>(IoHomeDeviceType::DomesticHotWater): return "domestic_hot_water";
+    case static_cast<uint16_t>(IoHomeDeviceType::ElectricalHeater): return "electrical_heater";
+    default: return "unknown";
+    }
+}
+
+inline bool ioHomeRequiresQualifiedApplianceControls(uint16_t profile)
+{
+    return profile == static_cast<uint16_t>(IoHomeDeviceType::DomesticHotWater) ||
+           profile == static_cast<uint16_t>(IoHomeDeviceType::ElectricalHeater);
+}
+
+// Issue199 records this exact six-byte Atlantic family. The value is opaque:
+// selector0x21 is not established key export/import, temperature or mode.
+struct IoHomeAtlantic21Observation
+{
+    bool valid = false;
+    uint8_t value = 0;
+};
+inline IoHomeAtlantic21Observation ioHomeObserveAtlantic21(
+    IoHomeCommand command, const uint8_t *data, uint8_t length)
+{
+    if (command != IoHomeCommand::WritePrivate || !data || length != 6 ||
+        data[0] != 0x0C || data[1] != 0x61 || data[2] != 0x01 ||
+        data[3] != 0x21 || data[5] != 0)
+        return {};
+    return {true, data[4]};
+}
 
 // io-homecontrol manufacturer IDs
 enum class IoHomeManufacturer : uint8_t

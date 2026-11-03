@@ -1,0 +1,483 @@
+{
+  "schema": 1,
+  "retrieved_date": "2026-11-03",
+  "issues": {
+    "198": {
+      "url": "https://github.com/laberning/home_io_control/issues/198",
+      "updated_at": "2026-11-02T23:36:01Z",
+      "comments_at_retrieval": 0,
+      "body_sha256": "7853b09f9fbfbf39ae2a846656472e59be2b939c4bc949c30daa7a1e2a3060b4",
+      "evidence_class": "message-level report, not packet-byte capture",
+      "metadata": {
+        "node": "F9CF0F",
+        "manufacturer": 12,
+        "device_type": 51,
+        "subtype": 0,
+        "power_class": "always_alive",
+        "turnaround_ms": 40,
+        "discovery_flags": 220
+      },
+      "trace": [
+        {
+          "source_body_line": 8,
+          "text": "[00:00:43.000][I][home_io_control:702]: Starting device discovery..."
+        },
+        {
+          "source_body_line": 9,
+          "text": "[00:00:43.011][I][home_io_control:703]: Tuning: defaults active"
+        },
+        {
+          "source_body_line": 10,
+          "text": "[00:00:43.014][D][home_io_control:433]: Discovery: initial dwell 300 ms"
+        },
+        {
+          "source_body_line": 11,
+          "text": "[00:00:43.311][D][home_io_control:447]: Discovery command 1/1: cmd=0x28 dst=00003B"
+        },
+        {
+          "source_body_line": 12,
+          "text": "[00:00:43.982][I][home_io_control:376]: Discovery: device F9CF0F manufacturer=12 (Atlantic Group)"
+        },
+        {
+          "source_body_line": 13,
+          "text": "[00:00:43.986][D][home_io_control:385]: Discovery: backbone=F9CF0F"
+        },
+        {
+          "source_body_line": 14,
+          "text": "[00:00:43.990][I][home_io_control:390]: Discovery: device F9CF0F turnaround=40ms power_save=always_alive flags=0xDC"
+        },
+        {
+          "source_body_line": 15,
+          "text": "[00:00:43.993][I][home_io_control:412]: Discovery: device F9CF0F: domestic hot water (0x33/0) (not supported yet)"
+        },
+        {
+          "source_body_line": 16,
+          "text": "[00:00:44.017][I][home_io_control:539]: Discover confirm: 0x2D from F9CF0F on freq=868950000 after 9 ms (try 1/3)"
+        },
+        {
+          "source_body_line": 17,
+          "text": "[00:00:44.324][I][home_io_control:917]: Key transfer: auto -> push (F9CF0F answered discovery as domestic hot water)"
+        },
+        {
+          "source_body_line": 18,
+          "text": "[00:00:44.608][I][home_io_control:627]: Challenge (0x3C) received: data_len=6 freq=868950000 rssi=-46"
+        },
+        {
+          "source_body_line": 19,
+          "text": "[00:00:44.635][I][home_io_control.exchange:424]: Try 1 answered: cmd=KEY_TRANSFER(0x32) wait_ms=21 preamble=12 age_ms=n/a"
+        },
+        {
+          "source_body_line": 20,
+          "text": "[00:00:44.920][I][home_io_control.exchange:424]: Try 1 answered: cmd=SET_CONFIG1(0x6F) wait_ms=282 preamble=1024 age_ms=n/a"
+        },
+        {
+          "source_body_line": 21,
+          "text": "[00:00:44.924][W][home_io_control:763]: Device F9CF0F paired successfully (domestic hot water), but no ESPHome platform drives it yet: type=domestic_hot_water (0x33) class=unknown subtype=0."
+        },
+        {
+          "source_body_line": 22,
+          "text": "[00:00:44.927][W][home_io_control:768]: No ready-to-paste YAML was generated. If you want to experiment manually, choose the most likely platform and set io_device_type: 0x33."
+        },
+        {
+          "source_body_line": 23,
+          "text": "[00:00:44.930][W][home_io_control:772]: Please file a GitHub issue with this device type, subtype, model, and the pairing log so support can be added."
+        },
+        {
+          "source_body_line": 24,
+          "text": "[00:00:44.942][I][home_io_control.pairing:192]: Pairing attempt summary: outcome=paired phase=complete attempts=1 lbt=0 dur_ms=1944 heard=3 hops=55 events=18"
+        },
+        {
+          "source_body_line": 25,
+          "text": "[00:00:44.956][I][home_io_control.pairing:212]:   [ 313 ms] phase -> tx_discover"
+        },
+        {
+          "source_body_line": 26,
+          "text": "[00:00:44.959][I][home_io_control.pairing:210]:   [ 585 ms] tx cmd=0x28"
+        },
+        {
+          "source_body_line": 27,
+          "text": "[00:00:44.965][I][home_io_control.pairing:212]:   [ 585 ms] phase -> wait_discover_response"
+        },
+        {
+          "source_body_line": 28,
+          "text": "[00:00:44.976][I][home_io_control.pairing:207]:   [ 981 ms] rx cmd=0x29 src=F9CF0F rssi=-84"
+        },
+        {
+          "source_body_line": 29,
+          "text": "[00:00:44.988][I][home_io_control.pairing:212]:   [ 995 ms] phase -> tx_discover_confirm"
+        },
+        {
+          "source_body_line": 30,
+          "text": "[00:00:44.994][I][home_io_control.pairing:210]:   [1009 ms] tx cmd=0x2C"
+        },
+        {
+          "source_body_line": 31,
+          "text": "[00:00:44.999][I][home_io_control.pairing:212]:   [1009 ms] phase -> wait_discover_confirm"
+        },
+        {
+          "source_body_line": 32,
+          "text": "[00:00:45.010][I][home_io_control.pairing:207]:   [1018 ms] rx cmd=0x2D src=F9CF0F rssi=-89"
+        },
+        {
+          "source_body_line": 33,
+          "text": "[00:00:45.014][I][home_io_control.pairing:212]:   [1325 ms] phase -> tx_key_init"
+        },
+        {
+          "source_body_line": 34,
+          "text": "[00:00:45.023][I][home_io_control.pairing:210]:   [1597 ms] tx cmd=0x31"
+        },
+        {
+          "source_body_line": 35,
+          "text": "[00:00:45.024][I][home_io_control.pairing:212]:   [1597 ms] phase -> wait_key_challenge"
+        },
+        {
+          "source_body_line": 36,
+          "text": "[00:00:45.036][I][home_io_control.pairing:207]:   [1607 ms] rx cmd=0x3C src=F9CF0F rssi=-46"
+        },
+        {
+          "source_body_line": 37,
+          "text": "[00:00:45.044][I][home_io_control.pairing:212]:   [1611 ms] phase -> tx_key_transfer"
+        },
+        {
+          "source_body_line": 38,
+          "text": "[00:00:45.047][I][home_io_control.pairing:212]:   [1612 ms] phase -> wait_key_confirm"
+        },
+        {
+          "source_body_line": 39,
+          "text": "[00:00:45.054][I][home_io_control.pairing:210]:   [1624 ms] tx cmd=0x32"
+        },
+        {
+          "source_body_line": 40,
+          "text": "[00:00:45.066][I][home_io_control.pairing:210]:   [1910 ms] tx cmd=0x6F"
+        },
+        {
+          "source_body_line": 41,
+          "text": "[00:00:45.068][I][home_io_control.pairing:212]:   [1922 ms] phase -> register_device"
+        },
+        {
+          "source_body_line": 42,
+          "text": "[00:00:45.076][I][home_io_control.pairing:212]:   [1944 ms] phase -> complete"
+        },
+        {
+          "source_body_line": 43,
+          "text": "[00:00:45.087][I][home_io_control.pairing:220]:   paired node=F9CF0F type=domestic_hot_water"
+        },
+        {
+          "source_body_line": 44,
+          "text": "[00:00:45.094][S][text_sensor]: 'Last Pairing Result' >> 'v1; outcome=paired; phase=complete; node=F9CF0F; type=domestic_hot_water; attempts=1; lbt=0; dur_ms=1944; heard=3; advice=none'"
+        }
+      ],
+      "missing": [
+        "raw discovery payload",
+        "raw 0x33 key confirmation",
+        "physical OFM pairing or controls qualification"
+      ],
+      "message_events": [
+        {
+          "elapsed_ms": 585,
+          "direction": "TX",
+          "command": 40,
+          "source_body_line": 26,
+          "raw_frame_supplied": false
+        },
+        {
+          "elapsed_ms": 981,
+          "direction": "RX",
+          "command": 41,
+          "source_body_line": 28,
+          "raw_frame_supplied": false
+        },
+        {
+          "elapsed_ms": 1009,
+          "direction": "TX",
+          "command": 44,
+          "source_body_line": 30,
+          "raw_frame_supplied": false
+        },
+        {
+          "elapsed_ms": 1018,
+          "direction": "RX",
+          "command": 45,
+          "source_body_line": 32,
+          "raw_frame_supplied": false
+        },
+        {
+          "elapsed_ms": 1597,
+          "direction": "TX",
+          "command": 49,
+          "source_body_line": 34,
+          "raw_frame_supplied": false
+        },
+        {
+          "elapsed_ms": 1607,
+          "direction": "RX",
+          "command": 60,
+          "source_body_line": 36,
+          "raw_frame_supplied": false
+        },
+        {
+          "elapsed_ms": 1624,
+          "direction": "TX",
+          "command": 50,
+          "source_body_line": 39,
+          "raw_frame_supplied": false
+        },
+        {
+          "elapsed_ms": 1910,
+          "direction": "TX",
+          "command": 111,
+          "source_body_line": 40,
+          "raw_frame_supplied": false
+        }
+      ],
+      "reported_pairing_duration_ms": 1944,
+      "reported_pairing_success": true,
+      "raw_key_confirmation_supplied": false
+    },
+    "199": {
+      "url": "https://github.com/laberning/home_io_control/issues/199",
+      "updated_at": "2026-11-02T23:41:44Z",
+      "comments_at_retrieval": 0,
+      "body_sha256": "d0bf5e6ce78f4bb58d48e8ffe9407630a80639632a8a86b10f367d8f984b7015",
+      "observations": [
+        {
+          "id": "ATL_199_WRITE_PRIVATE_21_01",
+          "source_url": "https://github.com/laberning/home_io_control/issues/199",
+          "source_body_line": 6,
+          "timestamp": "23:52:25.672",
+          "capture_uptime_ms": 429009,
+          "frequency_hz": 868950000,
+          "direction": "RX",
+          "hex": "CE 20 00 00 3F D4 6F F6 20 0C 61 01 21 01 00",
+          "source": "D46FF6",
+          "destination": "00003F",
+          "ctrl0": 206,
+          "ctrl1": 32,
+          "command": 32,
+          "data_length": 6,
+          "expected": "unknown_atlantic_function_21",
+          "confidence": "issue-published real RF observation; CRC/MAC not supplied"
+        },
+        {
+          "id": "ATL_199_WRITE_PRIVATE_21_09",
+          "source_url": "https://github.com/laberning/home_io_control/issues/199",
+          "source_body_line": 8,
+          "timestamp": "23:52:33.648",
+          "capture_uptime_ms": 436984,
+          "frequency_hz": 868950000,
+          "direction": "RX",
+          "hex": "CE 20 00 00 3F D4 6F F6 20 0C 61 01 21 09 00",
+          "source": "D46FF6",
+          "destination": "00003F",
+          "ctrl0": 206,
+          "ctrl1": 32,
+          "command": 32,
+          "data_length": 6,
+          "expected": "unknown_atlantic_function_21",
+          "confidence": "issue-published real RF observation; CRC/MAC not supplied"
+        },
+        {
+          "id": "ATL_199_WRITE_PRIVATE_21_0A",
+          "source_url": "https://github.com/laberning/home_io_control/issues/199",
+          "source_body_line": 10,
+          "timestamp": "23:52:34.647",
+          "capture_uptime_ms": 437983,
+          "frequency_hz": 868950000,
+          "direction": "RX",
+          "hex": "CE 20 00 00 3F D4 6F F6 20 0C 61 01 21 0A 00",
+          "source": "D46FF6",
+          "destination": "00003F",
+          "ctrl0": 206,
+          "ctrl1": 32,
+          "command": 32,
+          "data_length": 6,
+          "expected": "unknown_atlantic_function_21",
+          "confidence": "issue-published real RF observation; CRC/MAC not supplied"
+        },
+        {
+          "id": "ATL_199_WRITE_PRIVATE_21_0B",
+          "source_url": "https://github.com/laberning/home_io_control/issues/199",
+          "source_body_line": 12,
+          "timestamp": "23:52:35.646",
+          "capture_uptime_ms": 438982,
+          "frequency_hz": 868950000,
+          "direction": "RX",
+          "hex": "CE 20 00 00 3F D4 6F F6 20 0C 61 01 21 0B 00",
+          "source": "D46FF6",
+          "destination": "00003F",
+          "ctrl0": 206,
+          "ctrl1": 32,
+          "command": 32,
+          "data_length": 6,
+          "expected": "unknown_atlantic_function_21",
+          "confidence": "issue-published real RF observation; CRC/MAC not supplied"
+        },
+        {
+          "id": "ATL_199_WRITE_PRIVATE_21_0C",
+          "source_url": "https://github.com/laberning/home_io_control/issues/199",
+          "source_body_line": 14,
+          "timestamp": "23:52:36.628",
+          "capture_uptime_ms": 439964,
+          "frequency_hz": 868950000,
+          "direction": "RX",
+          "hex": "CE 20 00 00 3F D4 6F F6 20 0C 61 01 21 0C 00",
+          "source": "D46FF6",
+          "destination": "00003F",
+          "ctrl0": 206,
+          "ctrl1": 32,
+          "command": 32,
+          "data_length": 6,
+          "expected": "unknown_atlantic_function_21",
+          "confidence": "issue-published real RF observation; CRC/MAC not supplied"
+        },
+        {
+          "id": "ATL_199_WRITE_PRIVATE_21_0E",
+          "source_url": "https://github.com/laberning/home_io_control/issues/199",
+          "source_body_line": 16,
+          "timestamp": "23:52:38.633",
+          "capture_uptime_ms": 441968,
+          "frequency_hz": 868950000,
+          "direction": "RX",
+          "hex": "CE 20 00 00 3F D4 6F F6 20 0C 61 01 21 0E 00",
+          "source": "D46FF6",
+          "destination": "00003F",
+          "ctrl0": 206,
+          "ctrl1": 32,
+          "command": 32,
+          "data_length": 6,
+          "expected": "unknown_atlantic_function_21",
+          "confidence": "issue-published real RF observation; CRC/MAC not supplied"
+        },
+        {
+          "id": "ATL_199_WRITE_PRIVATE_21_0F",
+          "source_url": "https://github.com/laberning/home_io_control/issues/199",
+          "source_body_line": 18,
+          "timestamp": "23:52:39.631",
+          "capture_uptime_ms": 442968,
+          "frequency_hz": 868950000,
+          "direction": "RX",
+          "hex": "CE 20 00 00 3F D4 6F F6 20 0C 61 01 21 0F 00",
+          "source": "D46FF6",
+          "destination": "00003F",
+          "ctrl0": 206,
+          "ctrl1": 32,
+          "command": 32,
+          "data_length": 6,
+          "expected": "unknown_atlantic_function_21",
+          "confidence": "issue-published real RF observation; CRC/MAC not supplied"
+        },
+        {
+          "id": "ATL_199_WRITE_PRIVATE_21_10",
+          "source_url": "https://github.com/laberning/home_io_control/issues/199",
+          "source_body_line": 20,
+          "timestamp": "23:52:40.630",
+          "capture_uptime_ms": 443967,
+          "frequency_hz": 868950000,
+          "direction": "RX",
+          "hex": "CE 20 00 00 3F D4 6F F6 20 0C 61 01 21 10 00",
+          "source": "D46FF6",
+          "destination": "00003F",
+          "ctrl0": 206,
+          "ctrl1": 32,
+          "command": 32,
+          "data_length": 6,
+          "expected": "unknown_atlantic_function_21",
+          "confidence": "issue-published real RF observation; CRC/MAC not supplied"
+        },
+        {
+          "id": "ATL_199_WRITE_PRIVATE_21_11",
+          "source_url": "https://github.com/laberning/home_io_control/issues/199",
+          "source_body_line": 22,
+          "timestamp": "23:52:41.612",
+          "capture_uptime_ms": 444949,
+          "frequency_hz": 868950000,
+          "direction": "RX",
+          "hex": "CE 20 00 00 3F D4 6F F6 20 0C 61 01 21 11 00",
+          "source": "D46FF6",
+          "destination": "00003F",
+          "ctrl0": 206,
+          "ctrl1": 32,
+          "command": 32,
+          "data_length": 6,
+          "expected": "unknown_atlantic_function_21",
+          "confidence": "issue-published real RF observation; CRC/MAC not supplied"
+        },
+        {
+          "id": "ATL_199_WRITE_PRIVATE_21_13",
+          "source_url": "https://github.com/laberning/home_io_control/issues/199",
+          "source_body_line": 24,
+          "timestamp": "23:52:43.614",
+          "capture_uptime_ms": 446951,
+          "frequency_hz": 868950000,
+          "direction": "RX",
+          "hex": "CE 20 00 00 3F D4 6F F6 20 0C 61 01 21 13 00",
+          "source": "D46FF6",
+          "destination": "00003F",
+          "ctrl0": 206,
+          "ctrl1": 32,
+          "command": 32,
+          "data_length": 6,
+          "expected": "unknown_atlantic_function_21",
+          "confidence": "issue-published real RF observation; CRC/MAC not supplied"
+        },
+        {
+          "id": "ATL_199_WRITE_PRIVATE_21_17",
+          "source_url": "https://github.com/laberning/home_io_control/issues/199",
+          "source_body_line": 26,
+          "timestamp": "23:52:47.604",
+          "capture_uptime_ms": 450938,
+          "frequency_hz": 868950000,
+          "direction": "RX",
+          "hex": "CE 20 00 00 3F D4 6F F6 20 0C 61 01 21 17 00",
+          "source": "D46FF6",
+          "destination": "00003F",
+          "ctrl0": 206,
+          "ctrl1": 32,
+          "command": 32,
+          "data_length": 6,
+          "expected": "unknown_atlantic_function_21",
+          "confidence": "issue-published real RF observation; CRC/MAC not supplied"
+        },
+        {
+          "id": "ATL_199_DISCOVER_868250000",
+          "source_url": "https://github.com/laberning/home_io_control/issues/199",
+          "source_body_line": 58,
+          "timestamp": "23:47:04.717",
+          "capture_uptime_ms": 108057,
+          "frequency_hz": 868250000,
+          "direction": "RX",
+          "hex": "C8 00 00 FF FB D4 6F F6 28",
+          "source": "D46FF6",
+          "destination": "00FFFB",
+          "ctrl0": 200,
+          "ctrl1": 0,
+          "command": 40,
+          "data_length": 0,
+          "expected": "foreign_discover_request_not_pairing_response",
+          "confidence": "issue-published real RF observation; CRC/MAC not supplied"
+        },
+        {
+          "id": "ATL_199_DISCOVER_869850000",
+          "source_url": "https://github.com/laberning/home_io_control/issues/199",
+          "source_body_line": 60,
+          "timestamp": "23:47:06.092",
+          "capture_uptime_ms": 109429,
+          "frequency_hz": 869850000,
+          "direction": "RX",
+          "hex": "C8 00 00 FF FB D4 6F F6 28",
+          "source": "D46FF6",
+          "destination": "00FFFB",
+          "ctrl0": 200,
+          "ctrl1": 0,
+          "command": 40,
+          "data_length": 0,
+          "expected": "foreign_discover_request_not_pairing_response",
+          "confidence": "issue-published real RF observation; CRC/MAC not supplied"
+        }
+      ],
+      "role_of_D46FF6": "unknown",
+      "semantics_of_0x21": "unknown; not key material",
+      "raw_frame_credentials": "No16-byte key appears in these13frames; raw CRC and proof absent"
+    }
+  }
+}

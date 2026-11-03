@@ -156,6 +156,8 @@ namespace
 
     const char *iohcDeviceTypeLabel(uint16_t iType)
     {
+        // Discovery profiles are10-bit; do not alias 0x133 to enum value0x33.
+        if (iType > 0xFF) return "unknown";
         switch (static_cast<IoHomeDeviceType>(iType))
         {
         case IoHomeDeviceType::VenetianBlind:
@@ -206,6 +208,10 @@ namespace
             return "intrusion_alarm";
         case IoHomeDeviceType::SwingingShutter:
             return "swinging_shutter";
+        case IoHomeDeviceType::DomesticHotWater:
+            return "domestic_hot_water";
+        case IoHomeDeviceType::ElectricalHeater:
+            return "electrical_heater";
         case IoHomeDeviceType::Unknown:
         default:
             return "unknown";
@@ -1121,6 +1127,9 @@ bool IoHomecontrolChannel::allowsActuatorControls() const
     // Detailed diagnosis-only selections occupy ETS categories 15 and above.
     // A restored actuator identity must not enable movement on these channels.
     if (ParamIOHC_cDeviceType >= 15) return false;
+    // New appliance taxonomy cannot inherit a configured shutter/Cozy control
+    // path. No ordinary 0x33/0x34 command set is qualified by discovery alone.
+    if (mProtocolIdentity.valid && ioHomeRequiresQualifiedApplianceControls(mProtocolIdentity.profile)) return false;
     return mProtocolIdentity.nodeClass == IoHomeNodeClass::Unknown ||
            mProtocolIdentity.nodeClass == IoHomeNodeClass::Actuator;
 }

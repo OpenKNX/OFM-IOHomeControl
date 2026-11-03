@@ -24133,3 +24133,5 @@ TEST(protocol_device_event_bounded_raw_storage_zero_time_counter_and_invalid_pre
 #include "corpus/object_cancel_tests.inc"
 
 #include "corpus/issue156_transfer_tests.inc"
+
+#include "corpus/atlantic_issue_tests.inc"
