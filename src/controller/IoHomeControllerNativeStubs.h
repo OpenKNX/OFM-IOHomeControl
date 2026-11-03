@@ -486,8 +486,8 @@ public:
   void onBatteryError(uint8_t code,uint8_t command){if(mBatteryMonitoring)mBatteryInfo.observeError(code,command,0);}
   void onBatteryEventRaw(const IoHomeFrame &){}
   IoHomeDeviceEvent mLastDeviceEvent;
-  bool onAuthenticatedDeviceEvent(const IoHomeFrame &frame,uint8_t frequency,uint32_t now) {
-    return mPaired&&!mIs1W&&frame.getSrcNodeId()==mNodeId&&mLastDeviceEvent.record(frame,frequency,now);
+  bool onAuthenticatedDeviceEvent(const IoHomeFrame &frame,uint8_t frequency,uint32_t received,uint32_t verified) {
+    return mPaired&&!mIs1W&&frame.getSrcNodeId()==mNodeId&&mLastDeviceEvent.record(frame,frequency,received,verified);
   }
   const IoHomeDeviceEvent &lastDeviceEvent()const{return mLastDeviceEvent;}
   void clearLastDeviceEvent(){mLastDeviceEvent.clear();}

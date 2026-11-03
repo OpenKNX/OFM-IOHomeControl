@@ -43,10 +43,10 @@ int main(){
  IoHomeFrame frame;frame.init();frame.commandId=IoHomeCommand::StatusUpdate;
  frame.setSrcNode(0x654321);frame.setDestNode(0x123456);
  const uint8_t data[]={5,0x60,0x20,5,5,6,0,0,0,0};memcpy(frame.data,data,sizeof(data));frame.dataLen=sizeof(data);
- assert(channel.event.record(frame,2,UINT32_MAX-9));
+ assert(channel.event.record(frame,2,UINT32_MAX-19,UINT32_MAX-9));
  messages.clear();assert(module.run("iohc event 1 status"));
  for(const char*expected:{"Last Device Event ch=1","event_id=2005","count=1","src=654321","dst=123456",
-      "cmd=71","rx_freq_idx=2","age_ms=20","raw=05 60 20 05 05 06 00 00 00 00 ","proof=inbound_challenge","UNIT UNKNOWN"})
+      "cmd=71","rx_freq_idx=2","rx_age_ms=30","age_ms=20","raw=05 60 20 05 05 06 00 00 00 00 ","proof=inbound_challenge","UNIT UNKNOWN"})
      assert(messages.find(expected)!=std::string::npos);
  for(const char*bad:{"iohc event 0 clear","iohc event 17 clear","iohc event 1 clear extra","iohc event x clear","iohc event 1 subscribe"}){
      messages.clear();assert(module.run(bad));assert(channel.event.valid);

@@ -23967,6 +23967,7 @@ TEST(controller_status_event_short_capture_requires_proof_before_recording)
     initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
     IoHomeFrame frame;
     buildStatusUpdateFrame(frame,0x123456,0x654321,data,sizeof(data));
+    const uint32_t receivedAt=ioHomeTestMillis();
     ASSERT_TRUE(queueControllerResponse(c,frame));
     ASSERT_EQ(c.radio().testTransmitCount(),1U);
     ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate()&&!ch.testStatusExpected());
@@ -23975,12 +23976,14 @@ TEST(controller_status_event_short_capture_requires_proof_before_recording)
     ASSERT_TRUE(lastTransmittedFrameForTest(c,challenge));
     ASSERT_EQ(challenge.commandId,IoHomeCommand::ChallengeRequest);
     buildChallengeResponseFrame(proof,0x123456,0x654321,data,sizeof(data),challenge.data,key);
+    ioHomeTestAdvanceMillis(7);
     c.loop();ASSERT_TRUE(queueControllerResponse(c,proof));
     const auto &event=ch.lastDeviceEvent();
     ASSERT_TRUE(event.valid);ASSERT_EQ(event.count,1U);ASSERT_EQ(event.eventId,0x2005);
     ASSERT_EQ(event.source,0x654321U);ASSERT_EQ(event.destination,0x123456U);
     ASSERT_EQ(event.length,sizeof(data));ASSERT_MEM_EQ(event.data,data,sizeof(data));
     ASSERT_EQ(event.verifiedAtMs,ioHomeTestMillis());
+    ASSERT_EQ(event.receivedAtMs,receivedAt);ASSERT_EQ(uint32_t(event.verifiedAtMs-event.receivedAtMs),7U);
     ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasTargetPositionFeedback());
     ASSERT_TRUE(!ch.testHasStatusUpdate()&&!ch.testStatusExpected()&&!ch.testHasScheduledStatusPoll());
     ASSERT_EQ(ch.twoWayMovingEvidenceGeneration(),0U);
@@ -24106,22 +24109,23 @@ TEST(controller_device_event_records_only_authenticated_nonposition_and_clears_i
 TEST(protocol_device_event_bounded_raw_storage_zero_time_counter_and_invalid_preservation)
 {
     IoHomeFrame frame;shortDeviceEventFrame(frame);IoHomeDeviceEvent event;
-    ASSERT_TRUE(event.record(frame,1,0));ASSERT_TRUE(event.valid);ASSERT_EQ(event.verifiedAtMs,0U);
+    ASSERT_TRUE(event.record(frame,1,0,0));ASSERT_TRUE(event.valid);ASSERT_EQ(event.verifiedAtMs,0U);ASSERT_EQ(event.receivedAtMs,0U);
     ASSERT_EQ(event.count,1U);ASSERT_MEM_EQ(event.data,frame.data,frame.dataLen);
     for(unsigned mode=0;mode<3;++mode) {
         IoHomeFrame bad=frame;
         if(mode==0)bad.data[4]=0;
         if(mode==1)bad.ctrlByte0|=IOHC_CTRL0_MODE_1W;
         if(mode==2){bad.data[2]=0x10;bad.data[3]=0x0A;bad.dataLen=11;bad.data[4]=6;}
-        ASSERT_TRUE(!event.record(bad,0,100));ASSERT_EQ(event.count,1U);ASSERT_EQ(event.verifiedAtMs,0U);
+        ASSERT_TRUE(!event.record(bad,0,90,100));ASSERT_EQ(event.count,1U);ASSERT_EQ(event.verifiedAtMs,0U);ASSERT_EQ(event.receivedAtMs,0U);
         ASSERT_MEM_EQ(event.data,frame.data,frame.dataLen);
     }
     frame.data[2]=0x20;frame.data[3]=1;frame.data[4]=IOHC_FRAME_MAX_DATA-5;frame.dataLen=IOHC_FRAME_MAX_DATA;
-    ASSERT_TRUE(event.record(frame,2,UINT32_MAX));ASSERT_EQ(event.length,IOHC_FRAME_MAX_DATA);
+    ASSERT_TRUE(event.record(frame,2,UINT32_MAX-10,UINT32_MAX));ASSERT_EQ(event.length,IOHC_FRAME_MAX_DATA);
     ASSERT_EQ(event.eventId,0x2001);ASSERT_EQ(event.count,2U);ASSERT_EQ(event.verifiedAtMs,UINT32_MAX);
-    event.count=UINT32_MAX;ASSERT_TRUE(event.record(frame,2,0));ASSERT_EQ(event.count,UINT32_MAX);
-    frame.dataLen=5;frame.data[4]=0;ASSERT_TRUE(event.record(frame,0,1));
+    event.count=UINT32_MAX;ASSERT_TRUE(event.record(frame,2,UINT32_MAX,0));ASSERT_EQ(event.count,UINT32_MAX);
+    frame.dataLen=5;frame.data[4]=0;ASSERT_TRUE(event.record(frame,0,0,1));
     for(unsigned i=frame.dataLen;i<IOHC_FRAME_MAX_DATA;++i)ASSERT_EQ(event.data[i],0U);
 }
 
 #include "corpus/issue156_capture_tests.inc"
+#include "corpus/issue156_demux_tests.inc"

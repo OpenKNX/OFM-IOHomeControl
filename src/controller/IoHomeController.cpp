@@ -6939,6 +6939,7 @@ void IoHomeController::clearInboundStatus(const char *reason)
 {
     if(mInboundActive)logDebugP("Inbound status discarded reason=%s role=%s",reason,ioHomeReplyRoleName(mReplyRole));
     mInboundActive=false;mInboundVerified=false;
+    mInboundReceivedMs=0;
     std::memset(mAuthChallenge,0,sizeof(mAuthChallenge));
     std::memset(mReplyKey,0,sizeof(mReplyKey));
     mPendingAuthFrame.init();
@@ -9021,7 +9022,11 @@ void IoHomeController::processResponse()
         }
     }
 
-    const auto disposition=ioHomeResponseDisposition(mCurrentCmd.command,mRxFrame.commandId,mRxFrame.dataLen);
+    auto disposition=ioHomeResponseDisposition(mCurrentCmd.command,mRxFrame);
+    if(disposition==IoHomeResponseDisposition::Accepted&&mRxFrame.commandId==IoHomeCommand::StatusUpdate) {
+        const auto last=ioHomeDecodeLastCommand(mRxFrame);
+        if(last.valid&&last.node!=mOwnNodeId)disposition=IoHomeResponseDisposition::Ignore;
+    }
     if(disposition==IoHomeResponseDisposition::Ignore) {if (auto *counters=activeAttemptCounters()) ++counters->rxUnmatched;mCurrentCmd.sawUnexpectedResponse=true;recordTwoWayTrace("rx_unexpected",mRxFrame,mRxRawLen);dispatchRxFrame();mState=ControllerState::WaitResponse;return;}
     if (mCurrentCmd.background && mCurrentCmd.command == IoHomeCommand::Private &&
         mCurrentCmd.param == 3 && mRxFrame.commandId == IoHomeCommand::PrivateResponse &&
@@ -12477,6 +12482,7 @@ void IoHomeController::dispatchRxFrame()
                     return;
                 mPendingAuthFrame=mRxFrame;mAuthSrcNodeId=lSrcNode;mAuthChannelIdx=i;
                 mInboundFrequency=mLastResponseFreqIdx;
+                mInboundReceivedMs=mLastRxReadMs;
                 ++mTwoWaySessionId;
                 IoHomeCrypto::generateChallenge(mAuthChallenge);
                 mInboundActive=true;mInboundVerified=false;
@@ -12581,7 +12587,7 @@ void IoHomeController::dispatchRxFrame()
                 // require the existing saved-frame inbound challenge proof.
                 if(mTrustRxPosition&&mInboundVerified&&inboundStatusContextValid()&&lDestNode==mOwnNodeId&&
                    ioHomeStatusUpdateKind(mRxFrame)==IoHomeStatusUpdateKind::DeviceEvent)
-                    if(lCh->onAuthenticatedDeviceEvent(mRxFrame,mInboundFrequency,millis()))
+                    if(lCh->onAuthenticatedDeviceEvent(mRxFrame,mInboundFrequency,mInboundReceivedMs,millis()))
                         logDebugP("Device event authenticated src=%06X event=%04X payloadLen=%u",lSrcNode,
                             unsigned(lCh->lastDeviceEvent().eventId),unsigned(mRxFrame.dataLen));
                 // Position event 0x100A only; other events have opaque bodies.

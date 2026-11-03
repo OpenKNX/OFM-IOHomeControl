@@ -49,12 +49,30 @@ IDs may be recorded as opaque data; bytes are never coerced into sensor units,
 battery percentage, position, movement, status-expected or polling activity.
 
 The bounded slot retains source/destination, event ID, the entire DATA envelope,
-frequency index, time of successful verification and a saturating counter. It
+frequency index, MCU packet-read time (`received_ms`), time of successful
+verification (`verified_ms`) and a saturating counter. `rx_age_ms` measures
+age from packet read; `age_ms` measures age from verification. Both use unsigned
+MCU milliseconds, not UTC or an on-air timestamp. It
 contains no keys. Node/key/mode/product-context/gateway changes clear the slot,
 as do restart and explicit diagnostic clear. Position events do not replace it.
 Proof replay cannot increment it. An event can be recorded even if the existing
 ACK subsequently fails admission; the record confirms proof, not ACK delivery.
 
-This feature handles the authenticated inbound path only. It does not add `0x73`
-subscription writes, change final-response association, or claim the complete
-original vendor host-event/authentication policy has been reconstructed.
+## Concurrent outgoing Execute
+
+An opcode-only `0x71` match previously completed a pending Execute even for an
+opaque sensor event from the same peer. The frame-aware descriptor now requires
+a valid `0x100A` position envelope, END set, START/1W clear, and, where the
+supported last-command field is available, this controller's identity. Other
+`0x71` frames leave the outgoing transaction and deadline intact. They cannot
+open a second inbound challenge or publish an unverified event during that
+exchange. This deliberately conservative association is not proof that every
+vendor final-response variant has been recovered.
+
+The public RS100 remote frames in `corpus/issue156_rs100_fixtures.h` have START
+set and name another controller; the real ten-byte `0x2005` body is a distinct
+opaque event. Tests cover these roles before and after outbound challenge,
+malformed/1W/foreign frames and a supported final position response.
+
+No `0x73` subscription is sent automatically. The complete original vendor
+host-event/authentication policy remains unresolved.

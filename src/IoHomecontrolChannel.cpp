@@ -2948,10 +2948,11 @@ void IoHomecontrolChannel::printLastDeviceEvent()
     if(!event.valid){logInfoP("Last Device Event ch=%u none (session-only)",unsigned(_channelIndex+1));return;}
     char raw[IOHC_FRAME_MAX_DATA*3+1]{};
     for(uint8_t i=0;i<event.length;++i)snprintf(raw+i*3,4,"%02X ",event.data[i]);
-    logInfoP("Last Device Event ch=%u event_id=%04X count=%lu src=%06lX dst=%06lX cmd=71 rx_freq_idx=%u verified_ms=%lu age_ms=%lu raw=%s proof=inbound_challenge RAW / UNIT UNKNOWN",
+    logInfoP("Last Device Event ch=%u event_id=%04X count=%lu src=%06lX dst=%06lX cmd=71 rx_freq_idx=%u received_ms=%lu verified_ms=%lu rx_age_ms=%lu age_ms=%lu raw=%s proof=inbound_challenge RAW / UNIT UNKNOWN",
         unsigned(_channelIndex+1),unsigned(event.eventId),(unsigned long)event.count,
         (unsigned long)event.source,(unsigned long)event.destination,unsigned(event.frequencyIndex),
-        (unsigned long)event.verifiedAtMs,(unsigned long)(uint32_t(millis()-event.verifiedAtMs)),raw);
+        (unsigned long)event.receivedAtMs,(unsigned long)event.verifiedAtMs,
+        (unsigned long)(uint32_t(millis()-event.receivedAtMs)),(unsigned long)(uint32_t(millis()-event.verifiedAtMs)),raw);
 }
 
 void IoHomecontrolChannel::syncHeatingConfiguration()

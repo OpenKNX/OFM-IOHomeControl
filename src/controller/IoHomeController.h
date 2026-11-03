@@ -1642,6 +1642,7 @@ private:
 
   bool mInboundActive=false, mInboundVerified=false;
   uint8_t mInboundFrequency=0xFF;
+  uint32_t mInboundReceivedMs=0; // Original event MCU packet-read time, not proof arrival.
 
   // StatusUpdateResponse ACK copy state (receive channel, then remaining channels)
   uint32_t mStatusAckDestNodeId;

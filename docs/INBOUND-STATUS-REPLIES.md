@@ -2,9 +2,11 @@
 
 A directed, parsed 2W StatusUpdate (0x71) from a paired actuator starts its own
 inbound transaction while the controller is idle. A 1W peer, foreign recipient,
-unknown source, short payload or an existing outgoing exchange cannot obtain a
+unknown source, malformed event envelope or an existing outgoing exchange cannot obtain a
 fast reply or publish that status. Receipt of 0x71 and transmission of the 0x3C
-challenge leave the saved payload untrusted.
+challenge leave the saved payload untrusted. Valid non-position events may have
+less than eleven DATA bytes; the exact declared envelope length is required.
+They enter raw Last Device Event storage only after the same existing proof.
 
 The controller records a fixed channel/key/revision/node snapshot, local
 identity, transaction generation, actual receive frequency and MCU packet-read

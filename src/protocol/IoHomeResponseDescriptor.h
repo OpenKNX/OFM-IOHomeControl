@@ -1,5 +1,6 @@
 #pragma once
 #include "IoHomeCommands.h"
+#include "IoHomeStatusUpdate.h"
 
 // Descriptor acceptance is separate from application interpretation/key proof.
 enum class IoHomeResponseDisposition : uint8_t { Ignore, Challenge, Accepted, Rejected, FoldedWithoutKeyProof };
@@ -29,8 +30,19 @@ inline IoHomeResponseDisposition ioHomeResponseDisposition(IoHomeCommand request
     for(const auto &d:descriptors) if(d.request==request) {
         if(response==IoHomeCommand::ChallengeRequest&&d.challenge&&length>=6) return IoHomeResponseDisposition::Challenge;
         if(uint8_t(response)==d.response) return IoHomeResponseDisposition::Accepted;
-        if(request==IoHomeCommand::Execute&&response==IoHomeCommand::StatusUpdate) return IoHomeResponseDisposition::Accepted;
         return IoHomeResponseDisposition::Ignore;
     }
     return IoHomeResponseDisposition::Ignore;
+}
+
+// 0x71 also transports unsolicited/device events. Opcode alone cannot complete
+// Execute: require the supported position envelope and a 2W final response.
+inline IoHomeResponseDisposition ioHomeResponseDisposition(IoHomeCommand request,const IoHomeFrame &frame) {
+    if(frame.commandId==IoHomeCommand::StatusUpdate) {
+        return request==IoHomeCommand::Execute&&
+            ioHomeStatusUpdateKind(frame)==IoHomeStatusUpdateKind::Position&&
+            (frame.ctrlByte0&IOHC_CTRL0_END)&&!(frame.ctrlByte0&(IOHC_CTRL0_START|IOHC_CTRL0_MODE_1W))
+                ?IoHomeResponseDisposition::Accepted:IoHomeResponseDisposition::Ignore;
+    }
+    return ioHomeResponseDisposition(request,frame.commandId,frame.dataLen);
 }
