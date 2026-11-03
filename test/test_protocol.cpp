@@ -24123,3 +24123,5 @@ TEST(protocol_device_event_bounded_raw_storage_zero_time_counter_and_invalid_pre
     frame.dataLen=5;frame.data[4]=0;ASSERT_TRUE(event.record(frame,0,1));
     for(unsigned i=frame.dataLen;i<IOHC_FRAME_MAX_DATA;++i)ASSERT_EQ(event.data[i],0U);
 }
+
+#include "corpus/issue156_capture_tests.inc"
