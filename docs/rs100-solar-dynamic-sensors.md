@@ -89,3 +89,21 @@ passed; SX1262/TP and SX1276/IP release firmware builds passed. Tests include
 authenticated object transport, raw-byte preservation, protocol/class gates,
 timeout recovery, key/context invalidation, commissioning cancellation, restart
 reads and trace key redaction. Physical RS100 validation is still outstanding.
+
+## 2026-11-03 capture reconciliation
+
+The normalized scalar APIs above remain synthetic model APIs, with no live RF
+bridge or KNX publication. They do not justify assigning units to received
+`0x2005` bytes. See [capture provenance](ISSUE156-CAPTURE-PROVENANCE.md) for
+byte-exact RS100 evidence: object 8100 is complete at 150 bytes, while object
+8103 contains only 54 of its advertised 67 bytes. Candidate IDs are diagnostic
+observations, not proven subscription capabilities. Partial data never becomes
+a completed object snapshot.
+
+[Last Device Event](STATUS-UPDATE-EVENTS.md) now provides authenticated raw
+non-position events, including the ten-byte 2005 envelope, with separate packet
+read and proof times. Experimental 73 is still explicit opt-in; no automatic
+subscription, unsubscribe semantics, sensor-unit mapping or percentage is
+qualified. Provider-00 identity objects 8001/8002 are explicit read-only options.
+See [the implementation ledger](TODO20-IMPLEMENTATION-2026-11-03.md) for tests
+and physical evidence still required.
