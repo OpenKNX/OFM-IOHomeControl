@@ -2878,7 +2878,7 @@ bool IoHomeController::requestObjectRead(IoHomecontrolChannel *channel,uint8_t p
     // Metadata/database views plus explicit opt-in battery objects. A607 can
     // contain keys: its full buffer is blocked from ETS slice readback;
     // battery diagnostics only print non-key fields. No object writes.
-    const bool allowed=(provider==0&&(key<=3||key==0x030A||key==0x8100||key==0x8103||key==0x4300||key==0x4302))||(provider==0x0B&&key==0xC000);
+    const bool allowed=(provider==0&&(key<=3||key==0x030A||key==0x8001||key==0x8002||key==0x8100||key==0x8103||key==0x4300||key==0x4302))||(provider==0x0B&&key==0xC000);
     if(!allowed&&!(channel->batteryMonitoring()==2&&ioHomeBatteryObject(provider,key)&&offset==0))return false;
     const uint8_t index=channelIndexFor(channel);if(index>=16)return false;
     if(!mObjectRead.begin(IoHomeObjectTransfer::Direction::Read,channel->getNodeId(),mObjectReadToken+1,provider,key,offset,span,millis(),30000))return false;

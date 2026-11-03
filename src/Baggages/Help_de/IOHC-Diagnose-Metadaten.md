@@ -2,7 +2,7 @@
 
 Metadaten sind Geräteinformationen bzw. Datenbankbytes, keine normalen Positionen oder Temperaturen. Hier wird ausschließlich gelesen. Nur für einen gepaarten 2W-Aktor und während kein anderer Verwaltungsauftrag läuft.
 
-1. Provider und Objektkey wählen: Provider 00 erlaubt 0000, 0001, 0002, 0003, 030A, 8100, 8103, 4300, 4302; Provider 0B erlaubt C000. Alle Kennungen sind Hex.
+1. Provider und Objektkey wählen: Provider 00 erlaubt 0000, 0001, 0002, 0003, 030A, 8001, 8002, 8100, 8103, 4300, 4302; Provider 0B erlaubt C000. Alle Kennungen sind Hex.
 2. Leseoffset und Lesespanne dezimal angeben. Beispiel: 0 und 64 für die ersten 64 Bytes.
 3. „Metadatenobjekt lesen“ startet den Auftrag und trägt Boot / Token / Node ein.
 4. „Objektstatus lesen“ zeigt den Fortschritt. Erst bei Stufe 4 und Identität gültig = 1 sind die Ergebnisbytes verfügbar.
