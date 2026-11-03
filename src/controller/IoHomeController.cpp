@@ -2907,7 +2907,16 @@ void IoHomeController::serviceObjectRead()
             if(mRadio.state()==RadioState::Transmitting&&!mRadio.isTxDone())return;
             mCurrentCmd.active=false;mState=ControllerState::Idle;
         }
-        if(!queueEmpty()&&mCmdQueue[mQueueTail].objectReadToken==mObjectReadToken)mQueueTail=mQueueHead;
+        // Cancellation can be followed by newly admitted unrelated work before
+        // this service runs. Remove only this transfer's queued parts, keeping
+        // the ring's remaining entries in order (at most seven bounded copies).
+        uint8_t write=mQueueTail;
+        for(uint8_t read=mQueueTail;read!=mQueueHead;read=(read+1)%IOHC_CMD_QUEUE_SIZE) {
+            if(mCmdQueue[read].objectReadToken==mObjectReadToken)continue;
+            if(write!=read)mCmdQueue[write]=mCmdQueue[read];
+            write=(write+1)%IOHC_CMD_QUEUE_SIZE;
+        }
+        mQueueHead=write;
         return;
     }
     if(mObjectRead.stage()==IoHomeObjectTransfer::Stage::Ready&&mState==ControllerState::Idle&&queueEmpty()) {
