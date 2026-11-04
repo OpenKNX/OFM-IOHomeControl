@@ -1433,6 +1433,9 @@ private:
   uint8_t mDynamicSequenceChannel=0xFF,mDynamicSequenceIndex=0;
   uint32_t mDynamicSequenceToken=0;
   bool mDynamicEventTrace=false;
+  uint32_t mStatusProbeOwner=0,mStatusProbeGeneration=0;
+  uint8_t mStatusProbeSystemKey[16]{};
+  bool statusProbeContextMatches(const IoHomeQueueEntry &) const;
   IoHomeObjectTransfer mObjectRead;
   uint32_t mObjectReadToken=0,mObjectReadPeer=0,mObjectReadRevision=0;
   uint8_t mObjectReadChannel=0xFF,mObjectReadKey[16]{};

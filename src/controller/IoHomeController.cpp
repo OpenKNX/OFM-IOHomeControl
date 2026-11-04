@@ -3052,6 +3052,10 @@ IoHomeLimitationDecision IoHomeController::limitationDecision(uint8_t channel) c
     return ioHomeMergeLimitation(limitationValid(channel),limitationState(channel).snapshot.limitationActive,
         state.errorValid&&uint32_t(now-state.errorMs)<IOHC_LIMITATION_FRESH_MS,state.evidence,now);
 }
+bool IoHomeController::statusProbeContextMatches(const IoHomeQueueEntry &entry) const {
+    return entry.statusMpFpProbe&&entry.observationGeneration==mStatusProbeGeneration&&mStatusProbeOwner==mOwnNodeId&&
+        !std::memcmp(mStatusProbeSystemKey,mSystemKey,16)&&managementIdentityMatches(entry);
+}
 bool IoHomeController::requestStatusFpHighRead(IoHomecontrolChannel *channel,uint8_t bitmap) {
     uint8_t data[10]{},length=0;
     return ioHomeBuildStatusFpHighRead(bitmap,data,length)&&requestStatusMpFpProbe(channel,bitmap);
@@ -3062,8 +3066,11 @@ bool IoHomeController::requestStatusMpFpProbe(IoHomecontrolChannel *channel,uint
     IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
     entry.productContextRevision=channel->productContextRevision();entry.managementRead=true;
     std::memcpy(entry.managementKey,entry.encKey,16);entry.statusMpFpProbe=true;entry.statusFpHigh=highBitmap;
-    entry.command=IoHomeCommand::Private;entry.sourceChannelIndex=channelIndexFor(channel);
-    entry.maxAttempts=1;entry.background=true;entry.active=true;return queuePush(entry);
+    entry.command=IoHomeCommand::Private;entry.twoWayTxFreqIdx=frequencyIndexForHz(kNormal2WTxFreqHz);entry.sourceChannelIndex=channelIndexFor(channel);
+    entry.maxAttempts=1;entry.background=true;entry.active=true;
+    if(!queuePush(entry))return false;
+    mStatusProbeOwner=mOwnNodeId;mStatusProbeGeneration=mNextObservationGeneration;
+    std::memcpy(mStatusProbeSystemKey,mSystemKey,16);return true;
 }
 void IoHomeController::observeRainStatus(IoHomecontrolChannel *channel) {
     if(!mTrustRxPosition||!channel||!channel->productContextRevision()||channel->is1W()||channelIndexFor(channel)>=16)return;
@@ -9189,7 +9196,15 @@ void IoHomeController::processResponse()
     }
     // These recovered read services cannot complete on an unrelated opcode
     // or the legacy descriptor's too-short Priority ACK.
-    if(mCurrentCmd.statusMpFpProbe&&!managementIdentityMatches(mCurrentCmd)){mCurrentCmd.active=false;mState=ControllerState::Idle;return;}
+    if(mCurrentCmd.statusMpFpProbe) {
+        if(!statusProbeContextMatches(mCurrentCmd)){mCurrentCmd.active=false;mState=ControllerState::Idle;return;}
+        const bool expired=uint32_t(millis()-mStateTimer)>=mResponseTimeoutMs||
+            uint32_t(millis()-mExchangeStartMs)>=mCurrentCmd.sessionPolicy.totalBudgetMs;
+        if(expired||mLastResponseFreqIdx!=mCurrentCmd.twoWayTxFreqIdx||(mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W)) {mState=ControllerState::WaitResponse;return;}
+        if(mCurrentCmd.statusFpHigh&&mRxFrame.commandId==IoHomeCommand::PrivateResponse&&
+           (!(mRxFrame.ctrlByte0&IOHC_CTRL0_END)||(mRxFrame.ctrlByte0&IOHC_CTRL0_START)||
+            !ioHomeHighFpReplyMatches(mCurrentCmd.statusFpHigh,mRxFrame.data,mRxFrame.dataLen))) {mState=ControllerState::WaitResponse;return;}
+    }
     if(mCurrentCmd.managementRead&&!mCurrentCmd.heatingToken&&!mCurrentCmd.registerReadToken&&!mCurrentCmd.statusMpFpProbe&&!mCurrentCmd.limitationToken&&!mCurrentCmd.objectReadToken&&!mCurrentCmd.mpFpRead&&!mCurrentCmd.productActivationLength) {
         if(!managementIdentityMatches(mCurrentCmd)) {
             const auto failed=mCurrentCmd;
@@ -12245,6 +12260,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         //   03 00 00       = status
         //   03 20 01 00    = tilt status
         if(iEntry.statusMpFpProbe) {
+            if(!statusProbeContextMatches(iEntry))return false;
             if(!ioHomeBuildStatusMpFpProbe(mTxFrame,mOwnNodeId,iEntry.destNodeId,resolveLowPower2W(iEntry.destNodeId)))return false;
             if(iEntry.statusFpHigh&&!ioHomeBuildStatusFpHighRead(iEntry.statusFpHigh,mTxFrame.data,mTxFrame.dataLen))return false;
             logInfoP("status_mp_fp request cmd=03 node=%06X bytes=%s",iEntry.destNodeId,hexDump(mTxFrame.data,mTxFrame.dataLen).c_str());
@@ -12706,7 +12722,7 @@ void IoHomeController::dispatchRxFrame()
                     ioHomeDynamicTracePayload(mRxFrame.commandId,mRxFrame.data,mRxFrame.dataLen,dynamicObject).c_str(),mRadio.lastRssi(),unsigned(mCurrentFreqIdx),
                     static_cast<unsigned long>(millis()),lVerifiedReplyMac);
             }
-            if(mCurrentCmd.statusMpFpProbe&&mRxFrame.commandId!=IoHomeCommand::StatusUpdate&&mCurrentCmd.destNodeId==lSrcNode&&
+            if(mCurrentCmd.active&&mCurrentCmd.statusMpFpProbe&&statusProbeContextMatches(mCurrentCmd)&&(mCorrelatedStatusReply||mRxFrame.commandId==IoHomeCommand::ErrorResponse)&&mRxFrame.commandId!=IoHomeCommand::StatusUpdate&&mCurrentCmd.destNodeId==lSrcNode&&
                lDestNode==mOwnNodeId) {
                 logInfoP("status_mp_fp reply cmd=%02X raw=%s rssi=%d CH=%u frequency=%lu timestamp=%lu",
                     unsigned(mRxFrame.commandId),hexDump(mRxFrame.data,mRxFrame.dataLen).c_str(),mRadio.lastRssi(),

@@ -48,3 +48,12 @@ inline bool ioHomeDecodeMpFpReply(const uint8_t *data,size_t length,IoHomeMpFpRe
     if(cursor!=length)return false;
     out=result;return true;
 }
+
+// Captured function-01 compact reply: opaque four-byte prefix, first mask,
+// then sparse raw words, second mask and raw words. No physical units inferred.
+// This does not replace the separate fixed-prefix function-03 decoder above.
+inline bool ioHomeHighFpReplyMatches(uint8_t bitmap,const uint8_t *data,size_t length) {
+    if(!data||!bitmap||length<6||data[4]!=0||data[5]!=bitmap)return false;
+    unsigned count=0;for(uint8_t bits=bitmap;bits;bits>>=1)count+=bits&1;
+    return count<=7&&length==6+2*count;
+}
