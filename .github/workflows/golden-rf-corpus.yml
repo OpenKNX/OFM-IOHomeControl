@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - 'tools/laberning_corpus.py'
+      - 'tools/import_*.py'
+      - 'test/test_*.py'
+      - 'src/IoHomecontrol.cpp'
       - 'test/test_laberning_corpus.py'
       - 'test/test_original_capture_mutation.py'
       - 'test/requirements-corpus.txt'
@@ -31,6 +34,9 @@ on:
     branches: [v1dev, v1dev-KLFDocumentation]
     paths:
       - 'tools/laberning_corpus.py'
+      - 'tools/import_*.py'
+      - 'test/test_*.py'
+      - 'src/IoHomecontrol.cpp'
       - 'test/test_laberning_corpus.py'
       - 'test/test_original_capture_mutation.py'
       - 'test/requirements-corpus.txt'
@@ -93,3 +99,5 @@ jobs:
         run: make -C test check-dual-controller-tools
       - name: Validate debug-only RF bypass and unchanged release admission
         run: make -C test check-rf-access-policy check-rf-build-modes
+      - name: Validate capture importers and observations in both build modes
+        run: make -C test check-issue156-import check-recovery-traces check-capture-build-modes
