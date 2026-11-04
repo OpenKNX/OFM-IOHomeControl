@@ -4587,6 +4587,22 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         serviceBatteryDiagnostic();
         return true;
     }
+    if(iCmd.rfind("iohc registers ",0)==0) {
+        const auto args=trimSpaces(iCmd.substr(15));
+        if(args=="status"){mController.printAtlanticRegisterRead();return true;}
+        unsigned token=0;char extra=0;
+        if(sscanf(args.c_str(),"cancel %u %c",&token,&extra)==1) {
+            logInfoP("Atlantic read cancel=%s",mController.cancelAtlanticRegisterRead(token)?"cancelled":"not active");return true;
+        }
+        unsigned channel=0,count=0;char familyText[16]{},indexText[16]{},modelText[16]{};uint32_t family=0,index=0;
+        const int fields=sscanf(args.c_str(),"read %u %15s %15s %u %15s %c",&channel,familyText,indexText,&count,modelText,&extra);
+        const bool valid=(fields==4||fields==5)&&channel>=1&&channel<=mNumChannels&&count>=1&&count<=16&&
+            parseHex24(familyText,family)&&family<=1&&parseHex24(indexText,index)&&index<=255&&
+            (fields==4||!std::strcmp(modelText,"calypso"));
+        logInfoP("Atlantic register read=%s; CHANNEL HEX_FAMILY HEX_INDEX COUNT [calypso]; no writes",
+            valid&&mController.startAtlanticRegisterRead(mChannels[channel-1],family,index,count,
+                fields==5?IoHomeAtlanticRead::Model::Calypso:IoHomeAtlanticRead::Model::Raw)?"started":"blocked");return true;
+    }
     if(iCmd.rfind("iohc heating ",0)==0){
         const auto args=trimSpaces(iCmd.substr(13));
         unsigned pairChannel=0;char pairNode[16]{},pairExtra=0;

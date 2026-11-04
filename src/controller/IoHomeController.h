@@ -27,6 +27,7 @@
 #include "../protocol/IoHomeCrypto.h"
 #include "../protocol/IoHomeCommands.h"
 #include "../protocol/IoHomeHeatingRegisters.h"
+#include "../protocol/IoHomeAtlanticRead.h"
 #include "../protocol/IoHomeProfileRegistry.h"
 #include <stdint.h>
 #include <string>
@@ -156,6 +157,7 @@ struct IoHomeQueueEntry
   uint32_t observationGeneration;
   uint32_t productContextRevision;
   uint32_t atlanticToken=0;
+  uint32_t registerReadToken=0;
   uint32_t heatingToken=0;
   uint8_t heatingData[6]{};
   uint8_t heatingLength=0;
@@ -638,6 +640,10 @@ public:
   void invalidateHeatingChannel(uint8_t channel);
   bool requestHomeAway(IoHomecontrolChannel *channel,bool home);
   bool cancelHomeAway(uint8_t channel);
+  bool startAtlanticRegisterRead(IoHomecontrolChannel *channel,uint8_t family,uint8_t first,uint8_t count=1,IoHomeAtlanticRead::Model model=IoHomeAtlanticRead::Model::Raw);
+  bool cancelAtlanticRegisterRead(uint32_t token);
+  const IoHomeAtlanticRead::State &atlanticRegisterRead() const {return mRegisterRead;}
+  void printAtlanticRegisterRead() const;
   bool requestHeatingRegister(IoHomecontrolChannel *channel,uint16_t reg,bool write=false,float value=0,bool background=false);
   bool refreshHeating(uint8_t channel);
   bool configureHeatingPoll(uint8_t channel,uint16_t seconds);
@@ -1234,7 +1240,7 @@ public:
   IoHomeRadioPolicy &hostRadioPolicy(){return mHostRadioPolicy;}
   bool idleForManagedOperation() const {
     return mState==ControllerState::Idle&&queueEmpty()&&!mCurrentCmd.active&&!mPassiveMode&&!mGatewayMode&&
-        !mOneWayKeyReceiveActive&&!mKeyExtractArmed&&!mNetworkScanActive&&!mObjectRead.active()&&!mReceiveConfiguration.active()&&
+        !mOneWayKeyReceiveActive&&!mKeyExtractArmed&&!mNetworkScanActive&&!mRegisterRead.active&&!mObjectRead.active()&&!mReceiveConfiguration.active()&&
         mGetKeyOfNode.stage!=GetKeyStage::Waiting&&mGetKeyOfNode.authentication!=GetKeyAuthentication::Pending&&mLimitationOwner==0xFF;
   }
   ControllerState state() const;
@@ -1425,6 +1431,13 @@ private:
   uint32_t mObjectReadToken=0,mObjectReadPeer=0,mObjectReadRevision=0;
   uint8_t mObjectReadChannel=0xFF,mObjectReadKey[16]{};
   void serviceObjectRead();
+  void serviceAtlanticRegisterRead();
+  void finishAtlanticRegisterRead(const IoHomeQueueEntry &,IoHomeCommandExchangeResult);
+  bool atlanticRegisterContextMatches(const IoHomeQueueEntry &) const;
+  IoHomeAtlanticRead::State mRegisterRead{};
+  uint32_t mRegisterReadPeer=0,mRegisterReadRevision=0,mRegisterReadGateway=0,mRegisterReadStarted=0,mRegisterReadNext=0,mRegisterReadLastStart=0,mNextRegisterReadToken=0;
+  uint8_t mRegisterReadKey[16]{},mRegisterReadSystemKey[16]{};
+  bool mRegisterReadPending=false,mRegisterReadCooldown=false;
   bool enqueueObjectReadPart(bool opening);
   PrioritySample mPrioritySamples[16][8]{};
   SensorInformationSample mSensorInformationSamples[16]{};

@@ -2365,6 +2365,85 @@ bool IoHomeController::cancelHomeAway(uint8_t c)
     if(mCurrentCmd.active&&mCurrentCmd.sourceChannelIndex==c&&mCurrentCmd.heatingToken){mCurrentCmd.active=false;mRadio.standby();startReceive();mState=ControllerState::Idle;}
     auto *channel=mModule?mModule->getChannel(c):nullptr;if(channel)channel->onHomeAwayCommandStatus();return true;
 }
+bool IoHomeController::startAtlanticRegisterRead(IoHomecontrolChannel *channel,uint8_t family,uint8_t first,uint8_t count,IoHomeAtlanticRead::Model model)
+{
+    const uint8_t c=channelIndexFor(channel);const uint32_t now=millis();
+    if(!channel||c>=16||!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||
+       !channel->isPaired()||channel->is1W()||!channel->productContextRevision()||!count||count>16||uint16_t(first)+count>256||
+       (!debugRfLimitsBypassed()&&mRegisterReadCooldown&&uint32_t(now-mRegisterReadLastStart)<180000)||mNextRegisterReadToken==UINT32_MAX)return false;
+    const auto &id=channel->getProtocolIdentity();
+    if(!id.valid||id.ioAddress!=channel->getNodeId()||id.manufacturerId!=0x0C||family>1)return false;
+    if(family==0 ? (id.profile!=0x33||id.subProfile!=0) : !IoHomeHeating::actuator(id))return false;
+    if(model==IoHomeAtlanticRead::Model::AdelisClassic||(model==IoHomeAtlanticRead::Model::Calypso&&family!=0))return false;
+    mRegisterRead=IoHomeAtlanticRead::State();mRegisterRead.active=true;mRegisterRead.channel=c;mRegisterRead.count=count;mRegisterRead.model=model;
+    mRegisterRead.token=++mNextRegisterReadToken;
+    for(uint8_t i=0;i<count;++i)mRegisterRead.samples[i].reg=uint16_t(family)<<8|(first+i);
+    mRegisterReadPeer=channel->getNodeId();mRegisterReadRevision=channel->productContextRevision();mRegisterReadGateway=mOwnNodeId;
+    std::memcpy(mRegisterReadKey,channel->getEncryptionKey(),16);std::memcpy(mRegisterReadSystemKey,mSystemKey,16);
+    mRegisterReadStarted=now;mRegisterReadNext=now;mRegisterReadPending=false;mRegisterReadLastStart=now;mRegisterReadCooldown=true;
+    return true;
+}
+bool IoHomeController::atlanticRegisterContextMatches(const IoHomeQueueEntry &e) const
+{
+    return e.registerReadToken&&mRegisterRead.active&&e.registerReadToken==mRegisterRead.token&&mRegisterReadGateway==mOwnNodeId&&
+        !std::memcmp(mRegisterReadSystemKey,mSystemKey,16)&&e.sourceChannelIndex==mRegisterRead.channel&&mRegisterReadPeer==e.destNodeId&&
+        sampleIdentityMatches(mRegisterRead.channel,mRegisterReadPeer,mRegisterReadKey,mRegisterReadRevision);
+}
+bool IoHomeController::cancelAtlanticRegisterRead(uint32_t token)
+{
+    if(!mRegisterRead.active||token!=mRegisterRead.token)return false;
+    mRegisterRead.samples[mRegisterRead.completed].result=IoHomeAtlanticRead::Result::Cancelled;mRegisterRead.active=false;return true;
+}
+void IoHomeController::serviceAtlanticRegisterRead()
+{
+    using R=IoHomeAtlanticRead::Result;
+    if(!mRegisterRead.active)return;
+    auto &sample=mRegisterRead.samples[mRegisterRead.completed];const uint32_t now=millis();
+    if(mRegisterReadGateway!=mOwnNodeId||std::memcmp(mRegisterReadSystemKey,mSystemKey,16)||!sampleIdentityMatches(mRegisterRead.channel,mRegisterReadPeer,mRegisterReadKey,mRegisterReadRevision)) {
+        sample.result=R::IdentityChanged;mRegisterRead.active=false;return;
+    }
+    if(uint32_t(now-mRegisterReadStarted)>=120000){sample.result=R::NoReply;mRegisterRead.active=false;return;}
+    if(mRegisterReadPending||mState!=ControllerState::Idle||!queueEmpty()||mCurrentCmd.active||
+       int32_t(now-mRegisterReadNext)<0||!mModule||!mModule->managementRequestsAllowed()||mPassiveMode||mGatewayMode||
+       mOneWayKeyReceiveActive||mKeyExtractArmed||mNetworkScanActive||mObjectRead.active()||mReceiveConfiguration.active())return;
+    IoHomeQueueEntry e{};e.destNodeId=mRegisterReadPeer;e.encKey=mRegisterReadKey;e.productContextRevision=mRegisterReadRevision;
+    e.command=IoHomeCommand::WritePrivate;e.sourceChannelIndex=mRegisterRead.channel;e.managementRead=true;e.twoWayTxFreqIdx=frequencyIndexForHz(kNormal2WTxFreqHz);
+    std::memcpy(e.managementKey,mRegisterReadKey,16);e.registerReadToken=mRegisterRead.token;e.heatingLength=4;
+    IoHomeAtlanticRead::build(sample.reg>>8,sample.reg,e.heatingData);e.maxAttempts=1;e.active=true;e.background=true;
+    if(queuePush(e)){sample.result=R::Queued;mRegisterReadPending=true;}
+}
+void IoHomeController::finishAtlanticRegisterRead(const IoHomeQueueEntry &e,IoHomeCommandExchangeResult result)
+{
+    using R=IoHomeAtlanticRead::Result;
+    if(!e.registerReadToken||!mRegisterRead.active||e.registerReadToken!=mRegisterRead.token)return;
+    auto &sample=mRegisterRead.samples[mRegisterRead.completed];
+    if(!atlanticRegisterContextMatches(e)){sample.result=R::IdentityChanged;mRegisterRead.active=false;return;}
+    if(result!=IoHomeCommandExchangeResult::Completed) {
+        sample.result=result==IoHomeCommandExchangeResult::ExplicitlyRejected?R::Rejected:
+            (mSawChallenge&&mAuthResponseSent)?R::Unconfirmed:R::NoReply;
+        mRegisterRead.active=false;mRegisterReadPending=false;return;
+    }
+    if(!IoHomeAtlanticRead::reply(sample.reg,mRxFrame.data,mRxFrame.dataLen,sample)) {
+        sample.result=R::Failed;mRegisterRead.active=false;return;
+    }
+    sample.receivedMs=mLastRxReadMs;
+    ++mRegisterRead.completed;mRegisterReadPending=false;
+    if(mRegisterRead.completed==mRegisterRead.count)mRegisterRead.active=false;
+    else mRegisterReadNext=millis()+1000;
+}
+void IoHomeController::printAtlanticRegisterRead() const
+{
+    logInfoP("Atlantic read token=%lu active=%u completed=%u count=%u; read-only session diagnostics",(unsigned long)mRegisterRead.token,mRegisterRead.active,mRegisterRead.completed,mRegisterRead.count);
+    if(mRegisterRead.token&&(mRegisterReadGateway!=mOwnNodeId||std::memcmp(mRegisterReadSystemKey,mSystemKey,16)||!sampleIdentityMatches(mRegisterRead.channel,mRegisterReadPeer,mRegisterReadKey,mRegisterReadRevision))) {
+        logInfoP("Atlantic read identity changed; values withheld");return;
+    }
+    for(uint8_t i=0;i<mRegisterRead.count;++i) {
+        const auto &sample=mRegisterRead.samples[i];const auto value=IoHomeAtlanticRead::decode(mRegisterRead.model,sample);
+        logInfoP("Atlantic read reg=%04X result=%u len=%u received_ms=%lu raw=%s decoded=%u candidate=%u scaled=%lld unit=%s physical_effect=unknown",
+            sample.reg,unsigned(sample.result),sample.length,(unsigned long)sample.receivedMs,hexDump(sample.data,sample.length).c_str(),value.known,value.candidate,(long long)value.scaled,value.unit);
+    }
+}
+
 bool IoHomeController::requestHeatingRegister(IoHomecontrolChannel *channel,uint16_t reg,bool write,float value,bool background)
 {
     const uint8_t c=channelIndexFor(channel);
@@ -3139,6 +3218,7 @@ bool IoHomeController::sampleIdentityMatches(uint8_t channel,uint32_t node,const
 
 bool IoHomeController::managementIdentityMatches(const IoHomeQueueEntry &entry) const
 {
+    if(entry.registerReadToken&&!atlanticRegisterContextMatches(entry))return false;
     if(entry.productContextRevision) {
         const auto *channel=mModule?mModule->getChannel(entry.sourceChannelIndex):nullptr;
         if(!channel||channel->productContextRevision()!=entry.productContextRevision)return false;
@@ -4748,6 +4828,7 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
     if (iEntry.command == IoHomeCommand::Execute) logAttemptCounters("MoveDiagCounters",mExchangeDiagnostics.counters);
     finishAtlanticProbe(iEntry,iResult);
     finishHeating(iEntry,iResult);
+    finishAtlanticRegisterRead(iEntry,iResult);
     finishLimitation(iEntry,iResult);
     if(iEntry.batteryDiagnostic) {
         const auto state=iResult==IoHomeCommandExchangeResult::Completed?IoHomeBatteryDiagnostic::State::Complete:
@@ -4819,7 +4900,7 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
         (iResult == IoHomeCommandExchangeResult::Unknown ||
          iResult == IoHomeCommandExchangeResult::SessionExhausted))
         lChannel->onUnanswered2WWake(mExchangeStartMs, iEntry.twoWayPreamblePlan.movingEvidenceGeneration);
-    if (lChannel&&!iEntry.statusMpFpProbe)
+    if (lChannel&&!iEntry.statusMpFpProbe&&!iEntry.registerReadToken)
         lChannel->onCommandExchangeResult(iEntry.command, iEntry.param, iResult);
 }
 
@@ -4830,7 +4911,7 @@ void IoHomeController::recordExchangeFailure(const IoHomeQueueEntry &iEntry,
     if(iEntry.objectReadToken==mObjectReadToken&&iEntry.objectReadToken)mObjectRead.fail();
     const bool lAuthenticatedUnconfirmed = iAuthenticatedUnconfirmed || iEntry.hadAuthenticatedAccept;
     IoHomecontrolChannel *lChannel = channelForQueueEntry(iEntry);
-    if (lChannel&&!iEntry.statusMpFpProbe)
+    if (lChannel&&!iEntry.statusMpFpProbe&&!iEntry.registerReadToken)
         lChannel->onExchangeTimeout(lAuthenticatedUnconfirmed);
 
     if (lAuthenticatedUnconfirmed)
@@ -7480,6 +7561,7 @@ void IoHomeController::loop()
         mReceiveConfiguration.tick(millis());
     }
     serviceObjectRead();
+    serviceAtlanticRegisterRead();
     serviceBatteryObjects();
     serviceDynamicActuators();
     if (!mRadio.isInitialized())
@@ -9090,7 +9172,7 @@ void IoHomeController::processResponse()
     // These recovered read services cannot complete on an unrelated opcode
     // or the legacy descriptor's too-short Priority ACK.
     if(mCurrentCmd.statusMpFpProbe&&!managementIdentityMatches(mCurrentCmd)){mCurrentCmd.active=false;mState=ControllerState::Idle;return;}
-    if(mCurrentCmd.managementRead&&!mCurrentCmd.heatingToken&&!mCurrentCmd.statusMpFpProbe&&!mCurrentCmd.limitationToken&&!mCurrentCmd.objectReadToken&&!mCurrentCmd.mpFpRead&&!mCurrentCmd.productActivationLength) {
+    if(mCurrentCmd.managementRead&&!mCurrentCmd.heatingToken&&!mCurrentCmd.registerReadToken&&!mCurrentCmd.statusMpFpProbe&&!mCurrentCmd.limitationToken&&!mCurrentCmd.objectReadToken&&!mCurrentCmd.mpFpRead&&!mCurrentCmd.productActivationLength) {
         if(!managementIdentityMatches(mCurrentCmd)) {
             const auto failed=mCurrentCmd;
             mCurrentCmd.active=false;mState=ControllerState::Idle;
@@ -9117,6 +9199,21 @@ void IoHomeController::processResponse()
             }
         }
         if(mRxFrame.commandId==IoHomeCommand::ChallengeRequest&&mRxFrame.dataLen<6){mState=ControllerState::WaitResponse;return;}
+    }
+    if(mCurrentCmd.registerReadToken) {
+        const bool expired=uint32_t(millis()-mExchangeStartMs)>=mCurrentCmd.sessionPolicy.totalBudgetMs||
+            uint32_t(millis()-mStateTimer)>=mResponseTimeoutMs;
+        if(expired||mLastResponseFreqIdx!=mCurrentCmd.twoWayTxFreqIdx||(mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W)) {mState=ControllerState::WaitResponse;return;}
+        if(!atlanticRegisterContextMatches(mCurrentCmd)) {
+            notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::FailedBeforeAuthentication);
+            mCurrentCmd.active=false;mState=ControllerState::Idle;return;
+        }
+        if(mRxFrame.commandId!=IoHomeCommand::ChallengeRequest&&mRxFrame.commandId!=IoHomeCommand::ErrorResponse) {
+            IoHomeAtlanticRead::Sample sample;
+            const uint16_t reg=uint16_t(mCurrentCmd.heatingData[2])<<8|mCurrentCmd.heatingData[3];
+            if(mRxFrame.commandId!=IoHomeCommand::WritePrivateResponse||!mSawChallenge||!mAuthResponseSent||
+               !IoHomeAtlanticRead::reply(reg,mRxFrame.data,mRxFrame.dataLen,sample)) {mState=ControllerState::WaitResponse;return;}
+        }
     }
     if(mCurrentCmd.objectReadToken) {
         if(mCurrentCmd.objectReadToken!=mObjectReadToken||!mObjectRead.active()||!managementIdentityMatches(mCurrentCmd)) {
@@ -12299,6 +12396,10 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 
     case IoHomeCommand::WritePrivate:
     {
+        if(iEntry.registerReadToken) {
+            if(!atlanticRegisterContextMatches(iEntry)||iEntry.heatingLength!=4||iEntry.heatingData[1]!=0x60)return false;
+            std::memcpy(mTxFrame.data,iEntry.heatingData,4);mTxFrame.dataLen=4;mTxFrame.hasHmac=false;mAuthResponseSent=false;break;
+        }
         if(iEntry.heatingToken||iEntry.atlanticToken){
             if(!heatingContextMatches(iEntry)||iEntry.heatingLength<4||iEntry.heatingLength>6)return false;
             std::memcpy(mTxFrame.data,iEntry.heatingData,iEntry.heatingLength);mTxFrame.dataLen=iEntry.heatingLength;
