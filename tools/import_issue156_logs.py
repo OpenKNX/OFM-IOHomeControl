@@ -13,12 +13,12 @@ import json
 import re
 
 SAFE_COMMANDS = {0x47, 0x55, 0x57, 0x71}
-SAFE_OBJECTS = {0x8001, 0x8002, 0x8100, 0x8103}
+SAFE_OBJECTS = {0x8005, 0x8001, 0x8002, 0x8100, 0x8103}
 TIME = re.compile(r"\[(\d\d:\d\d:\d\d\.\d{3})\]")
 CAPTURE = re.compile(r"\bio_capture:\d+\].*?\bstage=(\w+).*?\bfreq=(\d+).*?\bts=(\d+).*?\blen=(\d+)(.*)")
 FIELD = re.compile(r"\b(cmd|src|dst)=((?:0x)?[0-9A-Fa-f]+)\b")
 HEX = re.compile(r"\bpayload=((?:[0-9A-Fa-f]{2}(?:\s+|$))+)" )
-SUMMARY = re.compile(r"read_object ([0-9A-Fa-f]{6}) object 0x([0-9A-Fa-f]{4}): (\d+) of (\d+) bytes(.*)")
+SUMMARY = re.compile(r"read_object ([0-9A-Fa-f]{6}) object 0x([0-9A-Fa-f]{4})(?: class (\d+))?: (\d+) of (\d+) bytes(.*)")
 DUMP = re.compile(r":\s+\+([0-9A-Fa-f]{3,4}):\s+((?:[0-9A-Fa-f]{2}(?:\s+|$))+)")
 ATTEMPT = re.compile(r"Try (\d+) (answered|ended):.*?cmd=[A-Z0-9_]+\(0x([0-9A-Fa-f]{2})\)(.*)")
 CHALLENGE = re.compile(r"Auth challenge try=(\d+).*?req_cmd=0x([0-9A-Fa-f]{2})")
@@ -93,7 +93,8 @@ def import_log(raw, filename, url, published_at=None, capture_date=None):
             continue
         summary = SUMMARY.search(line)
         if summary:
-            node, key, reported, declared, suffix = summary.groups()
+            node, key, object_class, reported, declared, suffix = summary.groups()
+            object_class = int(object_class or 0)
             key, reported, declared = int(key, 16), int(reported), int(declared)
             data, last = bytearray(), number
             for offset in range(number, len(lines)):
@@ -105,11 +106,11 @@ def import_log(raw, filename, url, published_at=None, capture_date=None):
                 data.extend(chunk); last = offset + 1
             if len(data) != reported or len(data) > declared:
                 raise ValueError(f"line {number}: object dump byte count disagrees with summary")
-            obj = dict(common, line_end=last, node=int(node, 16), object_id=key,
+            obj = dict(common, line_end=last, node=int(node, 16), object_id=key, object_class=object_class,
                        reported_length=reported, declared_length=declared, available_length=len(data),
                        complete=(len(data) == declared and "incomplete" not in suffix.lower()),
                        confidence="captured_object_dump_no_chunk_packets_inferred")
-            if key in SAFE_OBJECTS:
+            if object_class == 0 and key in SAFE_OBJECTS:
                 obj["hex"] = bytes(data).hex(" ").upper()
                 obj["sha256"] = sha256(data)
             else:

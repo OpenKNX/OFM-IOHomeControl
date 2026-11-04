@@ -202,3 +202,4 @@ check-rf-build-modes: $(PROTOCOL_TARGET) $(DEBUG_PROTOCOL_TARGET)
 .PHONY: check-issue156-import
 check-issue156-import:
 	$(PYTHON) test_issue156_import.py
+	$(PYTHON) test_register_capture_import.py

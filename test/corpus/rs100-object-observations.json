@@ -1,0 +1,322 @@
+[
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 24,
+    "object_id": 33027,
+    "object_class": 0,
+    "handle": 1,
+    "status": 0,
+    "declared_length": 67
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 34,
+    "object_id": 42497,
+    "object_class": 2,
+    "handle": 2,
+    "status": 0,
+    "declared_length": 366
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 41,
+    "object_id": 42515,
+    "object_class": 2,
+    "handle": 3,
+    "status": 0,
+    "declared_length": 431
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 71,
+    "object_id": 42498,
+    "object_class": 2,
+    "handle": 5,
+    "status": 0,
+    "declared_length": 144
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 78,
+    "object_id": 24837,
+    "object_class": 2,
+    "handle": 0,
+    "status": 7,
+    "declared_length": 0
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 88,
+    "object_id": 42514,
+    "object_class": 2,
+    "handle": 6,
+    "status": 0,
+    "declared_length": 6
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 98,
+    "object_id": 33026,
+    "object_class": 0,
+    "handle": 7,
+    "status": 0,
+    "declared_length": 15
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 115,
+    "object_id": 33028,
+    "object_class": 0,
+    "handle": 8,
+    "status": 0,
+    "declared_length": 118
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 125,
+    "object_id": 32771,
+    "object_class": 0,
+    "handle": 9,
+    "status": 0,
+    "declared_length": 16
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 137,
+    "object_id": 32768,
+    "object_class": 0,
+    "handle": 10,
+    "status": 0,
+    "declared_length": 10
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 145,
+    "object_id": 32773,
+    "object_class": 0,
+    "handle": 11,
+    "status": 0,
+    "declared_length": 16
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 154,
+    "object_id": 49153,
+    "object_class": 0,
+    "handle": 12,
+    "status": 0,
+    "declared_length": 4
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 161,
+    "object_id": 24835,
+    "object_class": 2,
+    "handle": 13,
+    "status": 0,
+    "declared_length": 6
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 182,
+    "object_id": 42499,
+    "object_class": 2,
+    "handle": 14,
+    "status": 0,
+    "declared_length": 70
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 191,
+    "object_id": 42500,
+    "object_class": 2,
+    "handle": 15,
+    "status": 0,
+    "declared_length": 13
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 202,
+    "object_id": 42503,
+    "object_class": 2,
+    "handle": 16,
+    "status": 0,
+    "declared_length": 37
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 217,
+    "object_id": 42505,
+    "object_class": 2,
+    "handle": 17,
+    "status": 0,
+    "declared_length": 25
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 226,
+    "object_id": 42507,
+    "object_class": 2,
+    "handle": 18,
+    "status": 0,
+    "declared_length": 5
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 235,
+    "object_id": 42509,
+    "object_class": 2,
+    "handle": 19,
+    "status": 0,
+    "declared_length": 4
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 248,
+    "object_id": 42512,
+    "object_class": 2,
+    "handle": 20,
+    "status": 0,
+    "declared_length": 31
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 259,
+    "object_id": 42513,
+    "object_class": 2,
+    "handle": 21,
+    "status": 0,
+    "declared_length": 3
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 293,
+    "object_id": 42516,
+    "object_class": 2,
+    "handle": 22,
+    "status": 0,
+    "declared_length": 247
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 300,
+    "object_id": 42517,
+    "object_class": 2,
+    "handle": 23,
+    "status": 0,
+    "declared_length": 341
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 310,
+    "object_id": 42519,
+    "object_class": 2,
+    "handle": 24,
+    "status": 0,
+    "declared_length": 8
+  },
+  {
+    "source": "somfy-io-hub-logs-4.txt",
+    "sha256": "0a14ccde02c414c06949445271873a6c0fc3952f57fe4063848331d4d2a767b7",
+    "line": 320,
+    "object_id": 42520,
+    "object_class": 2,
+    "handle": 25,
+    "status": 0,
+    "declared_length": 30
+  },
+  {
+    "source": "somfy-io-hub-logs-5.txt",
+    "sha256": "0ba4700608e4c2b1977f232d408d0068c2fc31e61cce1f310ad8f6f48a0182ab",
+    "line": 15,
+    "object_id": 32773,
+    "object_class": 0,
+    "handle": 1,
+    "status": 0,
+    "declared_length": 16
+  },
+  {
+    "source": "somfy-io-hub-logs-5.txt",
+    "sha256": "0ba4700608e4c2b1977f232d408d0068c2fc31e61cce1f310ad8f6f48a0182ab",
+    "line": 31,
+    "object_id": 33027,
+    "object_class": 0,
+    "handle": 2,
+    "status": 0,
+    "declared_length": 67
+  },
+  {
+    "source": "somfy-io-hub-logs-5.txt",
+    "sha256": "0ba4700608e4c2b1977f232d408d0068c2fc31e61cce1f310ad8f6f48a0182ab",
+    "line": 84,
+    "object_id": 42497,
+    "object_class": 2,
+    "handle": 3,
+    "status": 0,
+    "declared_length": 366
+  },
+  {
+    "source": "somfy-io-hub-logs-5.txt",
+    "sha256": "0ba4700608e4c2b1977f232d408d0068c2fc31e61cce1f310ad8f6f48a0182ab",
+    "line": 108,
+    "object_id": 42515,
+    "object_class": 2,
+    "handle": 4,
+    "status": 0,
+    "declared_length": 431
+  },
+  {
+    "source": "somfy-io-hub-logs-5.txt",
+    "sha256": "0ba4700608e4c2b1977f232d408d0068c2fc31e61cce1f310ad8f6f48a0182ab",
+    "line": 156,
+    "object_id": 42517,
+    "object_class": 2,
+    "handle": 5,
+    "status": 0,
+    "declared_length": 341
+  },
+  {
+    "source": "somfy-io-hub-logs-5.txt",
+    "sha256": "0ba4700608e4c2b1977f232d408d0068c2fc31e61cce1f310ad8f6f48a0182ab",
+    "line": 168,
+    "object_id": 42502,
+    "object_class": 2,
+    "handle": 6,
+    "status": 0,
+    "declared_length": 33
+  },
+  {
+    "source": "somfy-io-hub-logs-5.txt",
+    "sha256": "0ba4700608e4c2b1977f232d408d0068c2fc31e61cce1f310ad8f6f48a0182ab",
+    "line": 181,
+    "object_id": 24836,
+    "object_class": 2,
+    "handle": 7,
+    "status": 0,
+    "declared_length": 19
+  }
+]
