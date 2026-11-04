@@ -375,6 +375,15 @@ enum class IoHomeDeviceType : uint8_t
     ElectricalHeater = 0x34
 };
 
+// Typed discovery uses class 00, a ten-bit profile, and the exact 0x3B suffix.
+// Zero means open/unsupported, never a claim about the request sender's role.
+inline uint16_t ioHomeDiscoveryTargetType(uint32_t destination)
+{
+    if ((destination & 0xFF003F) != 0x00003B || destination > 0xFFFFFF) return 0;
+    const uint16_t type = (destination >> 6) & 0x3FF;
+    return (type >= 1 && type <= 0x18) || type == 0x33 || type == 0x34 || type == 1023 ? type : 0;
+}
+
 // Discovery taxonomy only. These labels do not qualify appliance controls.
 inline const char *ioHomeUnqualifiedApplianceTypeName(uint16_t profile)
 {

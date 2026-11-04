@@ -13390,9 +13390,13 @@ void IoHomeController::processKeyExtractFrame()
             mKeyExtractGraceDeadlineMs = 0;
         }
         mKeyExtractCandidateHubNodeId = lSrcNode;
+        // Selection is local to this request: a following open discovery cannot
+        // inherit a type, and no persistent identity or manufacturer is changed.
+        const uint16_t requestedType = ioHomeDiscoveryTargetType(lDstNode);
         mTxLen = buildExtractDiscoverAnswerFrame(mTxBuffer, sizeof(mTxBuffer),
                                                  mKeyExtractThrowawayId, lSrcNode,
-                                                 kExtractDeviceType, kExtractDeviceSubtype,
+                                                 requestedType ? requestedType : kExtractDeviceType,
+                                                 requestedType ? 0 : kExtractDeviceSubtype,
                                                  kExtractManufacturer, mRxFrame);
         if (mTxLen == 0)
             return;
