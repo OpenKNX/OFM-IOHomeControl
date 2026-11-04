@@ -3143,6 +3143,17 @@ bool IoHomecontrol::processFunctionProperty(uint8_t objectIndex, uint8_t propert
         resultData[0]=idle&&mController.requestMpFpRead(mChannels[data[1]],data[2])?0:1;
         resultData[1]=1;resultData[2]=data[1];resultData[3]=data[2];resultLength=4;return true;
     }
+    case 0x3E: // Manual raw FP9-FP16 read: channel, bitmap, expected node BE24
+    {
+        if(length!=6||data[1]>=mNumChannels)break;
+        auto *ch=mChannels[data[1]];
+        const uint32_t node=uint32_t(data[3])<<16|uint32_t(data[4])<<8|data[5];
+        if(!node||ch->getNodeId()!=node)break;
+        updateCommissioningJob();
+        const bool idle=managementRequestsAllowed()&&!mCommissioningJob.active()&&!mRadioDiagnostic.active&&!mMetadataRefreshActive;
+        resultData[0]=idle&&mController.requestStatusFpHighRead(ch,data[2])?0:1;
+        resultLength=1;return true;
+    }
     case 0x3C: // Explicit host policy, volatile; cadence is chosen, not firmware parity
     {
         if(length!=4||data[1]>2)break;updateCommissioningJob();
@@ -4608,6 +4619,13 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if(sscanf(args.c_str(),"assign %u %u %c",&channel,&session,&extra)==2&&channel>=1&&channel<=mNumChannels){
             logInfoP("Atlantic assignment=%s",mController.assignAtlanticHeater(channel-1,session)?"persisted; read recognition into ETS and save project":"blocked; no overwrite or unproven key accepted");return true;}
         logInfoP("Usage: iohc heating read NODE REGISTER | status/refresh CHANNEL | poll CHANNEL SECONDS | scan | cancel | assign CHANNEL SESSION");return true;
+    }
+    if(iCmd.rfind("iohc status-fp-high ",0)==0) {
+        unsigned channel=0;char bitmapText[16]{},extra=0;uint32_t bitmap=0;
+        const bool valid=sscanf(iCmd.c_str(),"iohc status-fp-high %u %15s %c",&channel,bitmapText,&extra)==2&&
+            channel>=1&&channel<=mNumChannels&&parseHex24(bitmapText,bitmap)&&bitmap<=255;
+        logInfoP("status-fp-high: %s (CHANNEL HEX_BITMAP; manual raw read only)",
+            valid&&mController.requestStatusFpHighRead(mChannels[channel-1],uint8_t(bitmap))?"queued":"blocked");return true;
     }
     if(iCmd.rfind("iohc probe ",0)==0) {
         unsigned channel=0;char probe[32]{};char extra=0;

@@ -2955,12 +2955,16 @@ IoHomeLimitationDecision IoHomeController::limitationDecision(uint8_t channel) c
     return ioHomeMergeLimitation(limitationValid(channel),limitationState(channel).snapshot.limitationActive,
         state.errorValid&&uint32_t(now-state.errorMs)<IOHC_LIMITATION_FRESH_MS,state.evidence,now);
 }
-bool IoHomeController::requestStatusMpFpProbe(IoHomecontrolChannel *channel) {
+bool IoHomeController::requestStatusFpHighRead(IoHomecontrolChannel *channel,uint8_t bitmap) {
+    uint8_t data[10]{},length=0;
+    return ioHomeBuildStatusFpHighRead(bitmap,data,length)&&requestStatusMpFpProbe(channel,bitmap);
+}
+bool IoHomeController::requestStatusMpFpProbe(IoHomecontrolChannel *channel,uint8_t highBitmap) {
     if(!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||!channel||
        !channel->isPaired()||channel->is1W()||!channel->productContextRevision()||channelIndexFor(channel)>=16)return false;
     IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
     entry.productContextRevision=channel->productContextRevision();entry.managementRead=true;
-    std::memcpy(entry.managementKey,entry.encKey,16);entry.statusMpFpProbe=true;
+    std::memcpy(entry.managementKey,entry.encKey,16);entry.statusMpFpProbe=true;entry.statusFpHigh=highBitmap;
     entry.command=IoHomeCommand::Private;entry.sourceChannelIndex=channelIndexFor(channel);
     entry.maxAttempts=1;entry.background=true;entry.active=true;return queuePush(entry);
 }
@@ -12126,6 +12130,7 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
         //   03 20 01 00    = tilt status
         if(iEntry.statusMpFpProbe) {
             if(!ioHomeBuildStatusMpFpProbe(mTxFrame,mOwnNodeId,iEntry.destNodeId,resolveLowPower2W(iEntry.destNodeId)))return false;
+            if(iEntry.statusFpHigh&&!ioHomeBuildStatusFpHighRead(iEntry.statusFpHigh,mTxFrame.data,mTxFrame.dataLen))return false;
             logInfoP("status_mp_fp request cmd=03 node=%06X bytes=%s",iEntry.destNodeId,hexDump(mTxFrame.data,mTxFrame.dataLen).c_str());
         }
         else if(iEntry.mpFpRead) {

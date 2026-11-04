@@ -50,6 +50,14 @@ inline bool ioHomeBuildStatusMpFpProbe(IoHomeFrame &frame,uint32_t own,uint32_t 
     constexpr uint8_t payload[]={1,0xFE,1,1,1,1,1,1,1,0};
     std::memcpy(frame.data,payload,sizeof(payload));frame.dataLen=sizeof(payload);return true;
 }
+// KLF-style function 01; distinct from the function 03 combined-mask getter.
+inline bool ioHomeBuildStatusFpHighRead(uint8_t bitmap,uint8_t *data,uint8_t &length) {
+    unsigned count=0;for(uint8_t bits=bitmap;bits;bits>>=1)count+=bits&1;
+    if(!data||!count||count>7)return false;
+    data[0]=1;data[1]=0;data[2]=bitmap;
+    for(unsigned i=0;i<count;++i)data[3+i]=1;
+    length=3+count;return true;
+}
 struct IoHomeRainEvidence {
     IoHomeLastCommand lastCommand{};uint32_t lastCommandMs=0;
     bool hasRainEvidence=false,limitedByRain=false;uint32_t lastRainEvidenceMs=0,statusMs=0;

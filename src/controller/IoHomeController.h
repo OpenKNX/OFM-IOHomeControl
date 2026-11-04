@@ -206,6 +206,7 @@ struct IoHomeQueueEntry
   bool managementRead;                        // key snapshot for correlated management reads
   uint8_t managementKey[16];
   uint32_t sensorSubscriptionBackbone;        // nonzero only for explicit default write
+  uint8_t statusFpHigh=0;
   bool statusMpFpProbe;                       // raw diagnostic; never publish or learn status
   bool mpFpRead;                              // source-backed standard/context GET
   uint16_t mpFpReadSelected;                  // logical FP mask; all requested fields required
@@ -721,7 +722,8 @@ public:
   bool refreshLimitationStatus(IoHomecontrolChannel *channel);
   const LimitationState &limitationState(uint8_t channel) const;
   bool limitationValid(uint8_t channel) const;
-  bool requestStatusMpFpProbe(IoHomecontrolChannel *channel);
+  bool requestStatusMpFpProbe(IoHomecontrolChannel *channel,uint8_t highBitmap=0);
+  bool requestStatusFpHighRead(IoHomecontrolChannel *channel,uint8_t bitmap);
   struct RainState {
     IoHomeRainEvidence evidence{};uint32_t node=0,revision=0;uint8_t key[16]{},systemKey[16]{};
     bool predictionValid=false,errorValid=false;float prediction=0;
