@@ -50,7 +50,7 @@ $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
 $(SX1262_PHY_TARGET): $(SX1262_PHY_SRCS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(SX1262_PHY_SRCS)
 
-run: check-issue156-import check-device-events check-rf-build-modes check-dual-controller-tools check-remaining-time-evidence check-remaining-time-mutations check-discovery-evidence check-captured-motion-mutations check-original-captures check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
+run: check-recovery-traces check-issue156-import check-device-events check-rf-build-modes check-dual-controller-tools check-remaining-time-evidence check-remaining-time-mutations check-discovery-evidence check-captured-motion-mutations check-original-captures check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
 
 check-protocol: $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite protocol
@@ -203,3 +203,9 @@ check-rf-build-modes: $(PROTOCOL_TARGET) $(DEBUG_PROTOCOL_TARGET)
 check-issue156-import:
 	$(PYTHON) test_issue156_import.py
 	$(PYTHON) test_register_capture_import.py
+
+.PHONY: check-recovery-traces
+check-recovery-traces:
+	$(PYTHON) ../tools/import_recovery_traces.py corpus/recovery_trace_captures.json --check
+	$(PYTHON) test_recovery_capture_import.py
+	$(PYTHON) test_position_presentation.py
