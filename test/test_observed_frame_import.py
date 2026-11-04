@@ -15,6 +15,11 @@ class Observations(unittest.TestCase):
   self.assertEqual(d['name'],'private.txt');self.assertTrue(all('hex' not in x for x in d['observations']))
   self.assertEqual(d['observations'][1]['transport'],dict(handle=1,word=1,value_bytes=2))
   self.assertNotIn('AA BB',json.dumps(d));self.assertNotIn('key=private',json.dumps(d))
+ def test_typed_observation_is_not_promoted_to_a_packet_or_key(self):
+  d=json.loads((root/'test/corpus/typed_discovery_observation.json').read_text())
+  self.assertFalse(d['observation']['full_rf_frame_present']);self.assertFalse(d['observation']['authenticated_key_recovery_observed'])
+  self.assertEqual(d['observation']['advertised_type'],1023)
+  self.assertEqual(len(d['menus']),3);self.assertEqual(d['next_rf_stage'],'not_observed')
  def test_printed_header_mismatch_cannot_become_capture(self):
   raw='phase=component stage=probe_rx freq=868950000 ts=1 len=10 cmd=0xFE src=112233 dst=445566 payload=89 00 44 55 66 11 22 33 FE 70'
   self.assertIn('hex',imp.extract(raw.encode(),'x','https://example.invalid')['observations'][0])

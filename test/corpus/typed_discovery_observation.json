@@ -1,0 +1,40 @@
+{
+  "sources": [
+    {
+      "source_url": "https://github.com/laberning/home_io_control/issues/199#issuecomment-6635970776",
+      "source_sha256": "9de92e82dea529cd211dcb2147e4fc09977f16e6845792f8856aa1e162245759",
+      "body_sha256": "06dcee768ad4e20c2bec30c0ae944a366d8fc90900c867be03a6abe411f6d0e8",
+      "published_at": "2026-11-04T16:26:40Z"
+    },
+    {
+      "source_url": "https://github.com/laberning/home_io_control/issues/199#issuecomment-6636254172",
+      "source_sha256": "8954f5ac07920356491353b7332e7427aaa25a29b698a3ee2fd7ade9ac2c9ab1",
+      "body_sha256": "cacf474d453ab9c19b44bd78a9b2ab1c60ba67bab7e8623dd742adfada8ac78d",
+      "published_at": "2026-11-04T16:38:49Z"
+    }
+  ],
+  "observation": {
+    "kind": "application_tx_summary",
+    "timestamp": "17:03:50.459",
+    "peer": 16344856,
+    "temporary_node": 8111893,
+    "advertised_type": 1023,
+    "full_rf_frame_present": false,
+    "authenticated_key_recovery_observed": false
+  },
+  "menus": [
+    {
+      "path": "Connexion / Jumelage",
+      "outcome": "typed_response_log_reported"
+    },
+    {
+      "path": "Connexion / Connexion",
+      "outcome": "no_useful_followup_reported"
+    },
+    {
+      "path": "Expert / Connectivite / Envoyer clef",
+      "outcome": "no_useful_followup_reported"
+    }
+  ],
+  "next_rf_stage": "not_observed"
+}
