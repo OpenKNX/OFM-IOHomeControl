@@ -113,6 +113,15 @@ struct IoHomecontrolChannel {
 '''
 tests=r'''int main(){
  {
+  IoHomecontrolChannel c;c.mCurrentPosition=0;c.mTargetPosition=100;
+  knx.enabled=true;movementKo=false;const unsigned before=movementPublications;
+  c.onStatusUpdate(true); // explicit moving evidence even without a new position callback
+  assert(c.mIsMoving&&movementKo&&movementPublications==before+1);
+  assert(c.publications==0&&c.mCurrentPosition==0&&c.mTargetPosition==100);
+  movementPublications=before;movementKo=false;knx.enabled=false;
+ }
+
+ {
   IoHomecontrolChannel c;const uint8_t key[16]={2};
   c.mLastDeviceEvent.valid=true;c.setNodeId(c.mNodeId);assert(c.mLastDeviceEvent.valid);
   c.setNodeId(0x654321);assert(!c.mLastDeviceEvent.valid);

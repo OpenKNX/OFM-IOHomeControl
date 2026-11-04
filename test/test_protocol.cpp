@@ -24149,3 +24149,5 @@ TEST(protocol_device_event_bounded_raw_storage_zero_time_counter_and_invalid_pre
 #include "corpus/recovery_trace_tests.inc"
 
 #include "corpus/observed_frame_tests.inc"
+
+#include "corpus/garage_interruption_tests.inc"
