@@ -2375,9 +2375,11 @@ bool IoHomeController::startAtlanticRegisterRead(IoHomecontrolChannel *channel,u
     if(!id.valid||id.ioAddress!=channel->getNodeId()||id.manufacturerId!=0x0C||family>1)return false;
     if(family==0 ? (id.profile!=0x33||id.subProfile!=0) : !IoHomeHeating::actuator(id))return false;
     if(model==IoHomeAtlanticRead::Model::AdelisClassic||(model==IoHomeAtlanticRead::Model::Calypso&&family!=0))return false;
-    mRegisterRead=IoHomeAtlanticRead::State();mRegisterRead.active=true;mRegisterRead.channel=c;mRegisterRead.count=count;mRegisterRead.model=model;
-    mRegisterRead.token=++mNextRegisterReadToken;
-    for(uint8_t i=0;i<count;++i)mRegisterRead.samples[i].reg=uint16_t(family)<<8|(first+i);
+    std::unique_ptr<IoHomeAtlanticRead::State> state(new(std::nothrow) IoHomeAtlanticRead::State());
+    if(!state)return false;
+    mRegisterRead=std::move(state);mRegisterRead->active=true;mRegisterRead->channel=c;mRegisterRead->count=count;mRegisterRead->model=model;
+    mRegisterRead->token=++mNextRegisterReadToken;
+    for(uint8_t i=0;i<count;++i)mRegisterRead->samples[i].reg=uint16_t(family)<<8|(first+i);
     mRegisterReadPeer=channel->getNodeId();mRegisterReadRevision=channel->productContextRevision();mRegisterReadGateway=mOwnNodeId;
     std::memcpy(mRegisterReadKey,channel->getEncryptionKey(),16);std::memcpy(mRegisterReadSystemKey,mSystemKey,16);
     mRegisterReadStarted=now;mRegisterReadNext=now;mRegisterReadPending=false;mRegisterReadLastStart=now;mRegisterReadCooldown=true;
@@ -2385,60 +2387,61 @@ bool IoHomeController::startAtlanticRegisterRead(IoHomecontrolChannel *channel,u
 }
 bool IoHomeController::atlanticRegisterContextMatches(const IoHomeQueueEntry &e) const
 {
-    return e.registerReadToken&&mRegisterRead.active&&e.registerReadToken==mRegisterRead.token&&mRegisterReadGateway==mOwnNodeId&&
-        !std::memcmp(mRegisterReadSystemKey,mSystemKey,16)&&e.sourceChannelIndex==mRegisterRead.channel&&mRegisterReadPeer==e.destNodeId&&
-        sampleIdentityMatches(mRegisterRead.channel,mRegisterReadPeer,mRegisterReadKey,mRegisterReadRevision);
+    return e.registerReadToken&&registerReadActive()&&e.registerReadToken==mRegisterRead->token&&mRegisterReadGateway==mOwnNodeId&&
+        !std::memcmp(mRegisterReadSystemKey,mSystemKey,16)&&e.sourceChannelIndex==mRegisterRead->channel&&mRegisterReadPeer==e.destNodeId&&
+        sampleIdentityMatches(mRegisterRead->channel,mRegisterReadPeer,mRegisterReadKey,mRegisterReadRevision);
 }
 bool IoHomeController::cancelAtlanticRegisterRead(uint32_t token)
 {
-    if(!mRegisterRead.active||token!=mRegisterRead.token)return false;
-    mRegisterRead.samples[mRegisterRead.completed].result=IoHomeAtlanticRead::Result::Cancelled;mRegisterRead.active=false;return true;
+    if(!registerReadActive()||token!=mRegisterRead->token)return false;
+    mRegisterRead->samples[mRegisterRead->completed].result=IoHomeAtlanticRead::Result::Cancelled;mRegisterRead->active=false;return true;
 }
 void IoHomeController::serviceAtlanticRegisterRead()
 {
     using R=IoHomeAtlanticRead::Result;
-    if(!mRegisterRead.active)return;
-    auto &sample=mRegisterRead.samples[mRegisterRead.completed];const uint32_t now=millis();
-    if(mRegisterReadGateway!=mOwnNodeId||std::memcmp(mRegisterReadSystemKey,mSystemKey,16)||!sampleIdentityMatches(mRegisterRead.channel,mRegisterReadPeer,mRegisterReadKey,mRegisterReadRevision)) {
-        sample.result=R::IdentityChanged;mRegisterRead.active=false;return;
+    if(!registerReadActive())return;
+    auto &sample=mRegisterRead->samples[mRegisterRead->completed];const uint32_t now=millis();
+    if(mRegisterReadGateway!=mOwnNodeId||std::memcmp(mRegisterReadSystemKey,mSystemKey,16)||!sampleIdentityMatches(mRegisterRead->channel,mRegisterReadPeer,mRegisterReadKey,mRegisterReadRevision)) {
+        sample.result=R::IdentityChanged;mRegisterRead->active=false;return;
     }
-    if(uint32_t(now-mRegisterReadStarted)>=120000){sample.result=R::NoReply;mRegisterRead.active=false;return;}
+    if(uint32_t(now-mRegisterReadStarted)>=120000){sample.result=R::NoReply;mRegisterRead->active=false;return;}
     if(mRegisterReadPending||mState!=ControllerState::Idle||!queueEmpty()||mCurrentCmd.active||
        int32_t(now-mRegisterReadNext)<0||!mModule||!mModule->managementRequestsAllowed()||mPassiveMode||mGatewayMode||
        mOneWayKeyReceiveActive||mKeyExtractArmed||mNetworkScanActive||mObjectRead.active()||mReceiveConfiguration.active())return;
     IoHomeQueueEntry e{};e.destNodeId=mRegisterReadPeer;e.encKey=mRegisterReadKey;e.productContextRevision=mRegisterReadRevision;
-    e.command=IoHomeCommand::WritePrivate;e.sourceChannelIndex=mRegisterRead.channel;e.managementRead=true;e.twoWayTxFreqIdx=frequencyIndexForHz(kNormal2WTxFreqHz);
-    std::memcpy(e.managementKey,mRegisterReadKey,16);e.registerReadToken=mRegisterRead.token;e.heatingLength=4;
+    e.command=IoHomeCommand::WritePrivate;e.sourceChannelIndex=mRegisterRead->channel;e.managementRead=true;e.twoWayTxFreqIdx=frequencyIndexForHz(kNormal2WTxFreqHz);
+    std::memcpy(e.managementKey,mRegisterReadKey,16);e.registerReadToken=mRegisterRead->token;e.heatingLength=4;
     IoHomeAtlanticRead::build(sample.reg>>8,sample.reg,e.heatingData);e.maxAttempts=1;e.active=true;e.background=true;
     if(queuePush(e)){sample.result=R::Queued;mRegisterReadPending=true;}
 }
 void IoHomeController::finishAtlanticRegisterRead(const IoHomeQueueEntry &e,IoHomeCommandExchangeResult result)
 {
     using R=IoHomeAtlanticRead::Result;
-    if(!e.registerReadToken||!mRegisterRead.active||e.registerReadToken!=mRegisterRead.token)return;
-    auto &sample=mRegisterRead.samples[mRegisterRead.completed];
-    if(!atlanticRegisterContextMatches(e)){sample.result=R::IdentityChanged;mRegisterRead.active=false;return;}
+    if(!e.registerReadToken||!registerReadActive()||e.registerReadToken!=mRegisterRead->token)return;
+    auto &sample=mRegisterRead->samples[mRegisterRead->completed];
+    if(!atlanticRegisterContextMatches(e)){sample.result=R::IdentityChanged;mRegisterRead->active=false;return;}
     if(result!=IoHomeCommandExchangeResult::Completed) {
         sample.result=result==IoHomeCommandExchangeResult::ExplicitlyRejected?R::Rejected:
             (mSawChallenge&&mAuthResponseSent)?R::Unconfirmed:R::NoReply;
-        mRegisterRead.active=false;mRegisterReadPending=false;return;
+        mRegisterRead->active=false;mRegisterReadPending=false;return;
     }
     if(!IoHomeAtlanticRead::reply(sample.reg,mRxFrame.data,mRxFrame.dataLen,sample)) {
-        sample.result=R::Failed;mRegisterRead.active=false;return;
+        sample.result=R::Failed;mRegisterRead->active=false;return;
     }
     sample.receivedMs=mLastRxReadMs;
-    ++mRegisterRead.completed;mRegisterReadPending=false;
-    if(mRegisterRead.completed==mRegisterRead.count)mRegisterRead.active=false;
+    ++mRegisterRead->completed;mRegisterReadPending=false;
+    if(mRegisterRead->completed==mRegisterRead->count)mRegisterRead->active=false;
     else mRegisterReadNext=millis()+1000;
 }
 void IoHomeController::printAtlanticRegisterRead() const
 {
-    logInfoP("Atlantic read token=%lu active=%u completed=%u count=%u; read-only session diagnostics",(unsigned long)mRegisterRead.token,mRegisterRead.active,mRegisterRead.completed,mRegisterRead.count);
-    if(mRegisterRead.token&&(mRegisterReadGateway!=mOwnNodeId||std::memcmp(mRegisterReadSystemKey,mSystemKey,16)||!sampleIdentityMatches(mRegisterRead.channel,mRegisterReadPeer,mRegisterReadKey,mRegisterReadRevision))) {
+    if(!mRegisterRead){logInfoP("Atlantic read none");return;}
+    logInfoP("Atlantic read token=%lu active=%u completed=%u count=%u; read-only session diagnostics",(unsigned long)mRegisterRead->token,registerReadActive(),mRegisterRead->completed,mRegisterRead->count);
+    if(mRegisterRead->token&&(mRegisterReadGateway!=mOwnNodeId||std::memcmp(mRegisterReadSystemKey,mSystemKey,16)||!sampleIdentityMatches(mRegisterRead->channel,mRegisterReadPeer,mRegisterReadKey,mRegisterReadRevision))) {
         logInfoP("Atlantic read identity changed; values withheld");return;
     }
-    for(uint8_t i=0;i<mRegisterRead.count;++i) {
-        const auto &sample=mRegisterRead.samples[i];const auto value=IoHomeAtlanticRead::decode(mRegisterRead.model,sample);
+    for(uint8_t i=0;i<mRegisterRead->count;++i) {
+        const auto &sample=mRegisterRead->samples[i];const auto value=IoHomeAtlanticRead::decode(mRegisterRead->model,sample);
         logInfoP("Atlantic read reg=%04X result=%u len=%u received_ms=%lu raw=%s decoded=%u candidate=%u scaled=%lld unit=%s physical_effect=unknown",
             sample.reg,unsigned(sample.result),sample.length,(unsigned long)sample.receivedMs,hexDump(sample.data,sample.length).c_str(),value.known,value.candidate,(long long)value.scaled,value.unit);
     }
@@ -2958,6 +2961,8 @@ bool IoHomeController::configureObjectReadTiming(IoHomecontrolChannel *channel,u
     const uint8_t index=channelIndexFor(channel);
     if(!channel||index>=16||!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||
        !channel->isPaired()||channel->is1W()||!channel->productContextRevision()||gapMs>2000||budgetMs<30000||budgetMs>120000)return false;
+    if(!mObjectReadTiming)mObjectReadTiming.reset(new(std::nothrow) ObjectReadTiming[16]);
+    if(!mObjectReadTiming)return false;
     auto &timing=mObjectReadTiming[index];timing.node=channel->getNodeId();timing.revision=channel->productContextRevision();
     std::memcpy(timing.key,channel->getEncryptionKey(),16);timing.gapMs=gapMs;timing.budgetMs=budgetMs;return true;
 }
@@ -2971,11 +2976,11 @@ bool IoHomeController::requestObjectRead(IoHomecontrolChannel *channel,uint8_t p
     const bool allowed=(provider==0&&(key<=3||key==0x030A||key==0x8001||key==0x8002||key==0x8005||key==0x8100||key==0x8103||key==0x4300||key==0x4302))||(provider==0x0B&&key==0xC000);
     if(!allowed&&!(channel->batteryMonitoring()==2&&ioHomeBatteryObject(provider,key)&&offset==0))return false;
     const uint8_t index=channelIndexFor(channel);if(index>=16)return false;
-    const auto &timing=mObjectReadTiming[index];
-    const bool configured=timing.node==channel->getNodeId()&&timing.revision==channel->productContextRevision()&&
-        !std::memcmp(timing.key,channel->getEncryptionKey(),16);
-    if(!mObjectRead.begin(IoHomeObjectTransfer::Direction::Read,channel->getNodeId(),mObjectReadToken+1,provider,key,offset,span,millis(),configured?timing.budgetMs:30000))return false;
-    mObjectReadGapMs=configured?timing.gapMs:0;mObjectReadReadyMs=millis();
+    const auto *timing=mObjectReadTiming?&mObjectReadTiming[index]:nullptr;
+    const bool configured=timing&&timing->node==channel->getNodeId()&&timing->revision==channel->productContextRevision()&&
+        !std::memcmp(timing->key,channel->getEncryptionKey(),16);
+    if(!mObjectRead.begin(IoHomeObjectTransfer::Direction::Read,channel->getNodeId(),mObjectReadToken+1,provider,key,offset,span,millis(),configured?timing->budgetMs:30000))return false;
+    mObjectReadGapMs=configured?timing->gapMs:0;mObjectReadReadyMs=millis();
     ++mObjectReadToken;mObjectReadPeer=channel->getNodeId();mObjectReadChannel=index;mObjectReadRevision=channel->productContextRevision();std::memcpy(mObjectReadKey,channel->getEncryptionKey(),16);
     if(ioHomeBatteryObject(provider,key)&&channel->batteryMonitoring()==2) {
         auto &d=mBatteryDiagnostics[index];
