@@ -27,8 +27,11 @@ Raw mode is the default. Explicit operator-selected `calypso` interpretation
 adds read-only mode, first-two-byte tank temperature and lifetime Wh, while
 retaining all opaque suffix bytes. Capacity is marked a candidate. Clock,
 component counters, heat-pump bitfields and target temperature remain raw.
-Adelis room/target/mode interpretations are candidates pending direct display
-and identity confirmation. No values are published to KNX, no setpoints or
+The new Adelis sweeps show0103 and0138 both C300, but no independent displayed
+setpoint and BOOST was reported. These values and0137 remain raw; the earlier
+0137 target-temperature candidate is withdrawn. Room temperature and the observed
+mode3 remain candidates; unknown mode/flag values stay raw. Direct display and
+identity confirmation remain required. No values are published to KNX, no setpoints or
 modes are written, and ordinary appliance controls remain gated.
 
 [Calypso sweep and display observations](https://github.com/laberning/home_io_control/issues/198#issuecomment-6617417409)

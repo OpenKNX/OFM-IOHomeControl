@@ -40,9 +40,9 @@ inline Value decode(Model model,const Sample &s) {
     }
     // Adelis physical values/profile still await independent display/identity proof.
     if(model==Model::AdelisClassic) {
-        if((s.reg==0x115||s.reg==0x137)&&s.length==2)
-            return {true,true,int64_t(uint16_t(s.data[1])<<8|s.data[0]),s.reg==0x115?"hundredths_C_candidate":"tenths_C_candidate"};
-        if(s.reg==0x136&&s.length==1)return {true,true,s.data[0],"mode_candidate"};
+        if(s.reg==0x115&&s.length==2)
+            return {true,true,int64_t(uint16_t(s.data[1])<<8|s.data[0]),"hundredths_C_candidate"};
+        if(s.reg==0x136&&s.length==1&&s.data[0]==3)return {true,true,s.data[0],"mode_candidate"};
     }
     return {};
 }

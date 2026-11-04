@@ -24,7 +24,9 @@ TEST(protocol_atlantic_read_golden_values_preserve_unknown_suffix_and_candidates
         if(calypso&&f.reg==0x17){ASSERT_EQ(s.length,6);ASSERT_EQ(v.scaled,expectedTemps[temps++]);ASSERT_EQ(s.data[2],0);}
         if(calypso&&f.reg==4){if(!energies++)firstEnergy=v.scaled;lastEnergy=v.scaled;}
         if(!calypso&&f.reg==0x119)ASSERT_TRUE(isAdelisClassicName(s));
-        if(!calypso&&f.reg==0x115){ASSERT_TRUE(v.candidate);ASSERT_EQ(v.scaled,2025);}
+        if(!calypso&&f.reg==0x115){ASSERT_TRUE(v.candidate);
+            if(s.data[0]==0xE9&&s.data[1]==7)ASSERT_EQ(v.scaled,2025);
+            else {ASSERT_EQ(s.data[0],0x66);ASSERT_EQ(s.data[1],8);ASSERT_EQ(v.scaled,2150);}}
         if(s.result==Result::Empty){++empty;ASSERT_TRUE(!v.known);}
         ASSERT_TRUE(!decode(Model::Raw,s).known);
         uint8_t bad[23]{};memcpy(bad,f.wire+9,f.length-9);bad[3]^=1;
@@ -102,4 +104,21 @@ TEST(controller_rf_build_mode_atlantic_diagnostic_cooldown)
     ASSERT_TRUE(c.startAtlanticRegisterRead(&ch,0,6));
     ASSERT_TRUE(c.cancelAtlanticRegisterRead(c.atlanticRegisterRead().token));
     ASSERT_EQ(c.startAtlanticRegisterRead(&ch,0,7),c.debugRfLimitsBypassed());
+}
+
+TEST(protocol_adelis_new_registers_remain_distinct_from_other_models)
+{
+    using namespace IoHomeAtlanticRead;
+    unsigned setpoint=0,mirror=0,active=0,window=0;
+    for(const auto &row:AtlanticRegisterCaptures::frames)if(row.wire[5]==0xBB) {
+        Sample s;ASSERT_TRUE(reply(row.reg,row.wire+9,row.length-9,s));
+        if(row.reg==0x103&&s.length==2&&s.data[0]==0xC3){++setpoint;ASSERT_TRUE(!decode(Model::AdelisClassic,s).known);}
+        if(row.reg==0x138&&s.length==2&&s.data[0]==0xC3){++mirror;ASSERT_TRUE(!decode(Model::AdelisClassic,s).known);}
+        if(row.reg==0x137){++active;ASSERT_TRUE(!decode(Model::AdelisClassic,s).known);}
+        if(row.reg==0x106){++window;ASSERT_TRUE(!decode(Model::AdelisClassic,s).known);}
+        ASSERT_TRUE(!decode(Model::Calypso,s).known);
+    }
+    ASSERT_TRUE(setpoint&&mirror&&active&&window);
+    Sample unknown;unknown.reg=0x136;unknown.result=Result::Value;unknown.length=1;unknown.data[0]=0xFF;
+    ASSERT_TRUE(!decode(Model::AdelisClassic,unknown).known);
 }
