@@ -206,6 +206,7 @@ check-issue156-import:
 
 .PHONY: check-recovery-traces
 check-recovery-traces:
+	$(PYTHON) test_observed_frame_import.py
 	$(PYTHON) ../tools/import_recovery_traces.py corpus/recovery_trace_captures.json --check
 	$(PYTHON) test_recovery_capture_import.py
 	$(PYTHON) test_position_presentation.py
