@@ -41,7 +41,7 @@ STEFAN_GENERATED = build/stefan_dual_controller.h
 $(STEFAN_GENERATED): corpus/stefan-dual-controller-20261027.json ../tools/generate_stefan_vectors.py
 	$(PYTHON) ../tools/generate_stefan_vectors.py $@
 
-$(PROTOCOL_TARGET): $(STEFAN_GENERATED) $(CORPUS_GENERATED) $(wildcard corpus/*.h ../src/protocol/*.h ../src/controller/*.h) $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h ../src/radio/IoHomeTransmitIntent.h ../src/radio/IoHomeRfAccessPolicy.h ../src/radio/IoHomeDutyBudget.h ../src/protocol/IoHomeBatteryDiagnostics.h ../src/radio/RadioTestStub.h | $(BUILD_DIR)
+$(PROTOCOL_TARGET): $(STEFAN_GENERATED) $(CORPUS_GENERATED) $(wildcard corpus/*.h corpus/*.inc ../src/protocol/*.h ../src/controller/*.h) $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h ../src/radio/IoHomeTransmitIntent.h ../src/radio/IoHomeRfAccessPolicy.h ../src/radio/IoHomeDutyBudget.h ../src/protocol/IoHomeBatteryDiagnostics.h ../src/radio/RadioTestStub.h | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(PROTOCOL_SRCS)
 
 $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
@@ -188,7 +188,7 @@ check-dual-controller-tools:
 
 # Run identical real-controller admission/protocol cases with both build modes.
 DEBUG_PROTOCOL_TARGET = $(BUILD_DIR)/test_suite_debug
-$(DEBUG_PROTOCOL_TARGET): $(STEFAN_GENERATED) $(CORPUS_GENERATED) $(wildcard corpus/*.h ../src/protocol/*.h ../src/controller/*.h ../src/radio/*.h) $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h | $(BUILD_DIR)
+$(DEBUG_PROTOCOL_TARGET): $(STEFAN_GENERATED) $(CORPUS_GENERATED) $(wildcard corpus/*.h corpus/*.inc ../src/protocol/*.h ../src/controller/*.h ../src/radio/*.h) $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -DOPENKNX_DEBUG -o $@ $(PROTOCOL_SRCS)
 
 .PHONY: check-rf-build-modes
