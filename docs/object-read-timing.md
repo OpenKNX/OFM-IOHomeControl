@@ -16,8 +16,8 @@ transfers with24blocks, exact boundary timing, zero-count closure, byte retentio
 deadline expiry and timer wrap. These are transport tests, not captured chunks.
 Physical same-motor A/B success, airtime and KNX latency measurements remain open.
 
-Provider00 object8005 is an explicit read-only choice. Class2/A6xx access remains
-withheld pending the original provider/class cross-check and a key-safe schema;
+Provider00 object8005 is an explicit read-only choice. The original library now confirms the manufacturer-selector byte; Class2/A6xx
+access remains withheld pending a key-safe, model-specific schema;
 A607 cannot be exposed on general readback surfaces. Tests reject class2 with
 8005/A601 and retain explicit status3/zero-length rejection.
 
