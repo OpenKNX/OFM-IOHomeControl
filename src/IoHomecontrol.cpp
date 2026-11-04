@@ -4587,6 +4587,13 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         serviceBatteryDiagnostic();
         return true;
     }
+    if(iCmd.rfind("iohc object-timing ",0)==0) {
+        unsigned channel=0,gap=0,budget=0;char extra=0;
+        const bool valid=sscanf(iCmd.c_str(),"iohc object-timing %u %u %u %c",&channel,&gap,&budget,&extra)==3&&
+            channel>=1&&channel<=mNumChannels&&gap<=2000&&budget>=30000&&budget<=120000;
+        logInfoP("Object timing=%s (CHANNEL GAP_MS BUDGET_MS; volatile identity-bound diagnostic settings)",
+            valid&&mController.configureObjectReadTiming(mChannels[channel-1],gap,budget)?"configured":"blocked");return true;
+    }
     if(iCmd.rfind("iohc registers ",0)==0) {
         const auto args=trimSpaces(iCmd.substr(15));
         if(args=="status"){mController.printAtlanticRegisterRead();return true;}

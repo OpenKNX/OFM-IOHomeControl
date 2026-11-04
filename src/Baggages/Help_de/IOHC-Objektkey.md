@@ -4,7 +4,7 @@ Kennung des zu lesenden Metadatenobjekts, genau vier Hex-Ziffern ohne 0x. „Key
 
 Erlaubte Kombinationen:
 
-- Provider 00: 0000, 0001, 0002, 0003, 030A, 8001, 8002, 8100, 8103, 4300, 4302.
+- Provider 00: 0000, 0001, 0002, 0003, 030A, 8001, 8002, 8005, 8100, 8103, 4300, 4302.
 - Provider 0B: C000.
 
 Diese Kennungen wählen Metadaten- bzw. Datenbankansichten im Gerät. Der genaue Inhalt und die Bedeutung einzelner Bytes sind nicht für jede Produktvariante bestätigt; daher zeigt die Diagnose sie als Rohdaten. Aus 8100 allein lässt sich beispielsweise kein Modellname oder Temperaturwert ableiten.

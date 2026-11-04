@@ -2953,6 +2953,14 @@ bool IoHomeController::enqueueObjectReadPart(bool opening)
     std::memcpy(entry.objectReadData,opening?mObjectRead.openingData():mObjectRead.pendingData(),entry.objectReadLength);
     entry.maxAttempts=1;entry.active=true;return queuePush(entry);
 }
+bool IoHomeController::configureObjectReadTiming(IoHomecontrolChannel *channel,uint16_t gapMs,uint32_t budgetMs)
+{
+    const uint8_t index=channelIndexFor(channel);
+    if(!channel||index>=16||!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||
+       !channel->isPaired()||channel->is1W()||!channel->productContextRevision()||gapMs>2000||budgetMs<30000||budgetMs>120000)return false;
+    auto &timing=mObjectReadTiming[index];timing.node=channel->getNodeId();timing.revision=channel->productContextRevision();
+    std::memcpy(timing.key,channel->getEncryptionKey(),16);timing.gapMs=gapMs;timing.budgetMs=budgetMs;return true;
+}
 bool IoHomeController::requestObjectRead(IoHomecontrolChannel *channel,uint8_t provider,uint16_t key,uint16_t offset,uint16_t span)
 {
     if(!channel||!channel->isPaired()||channel->is1W()||mState!=ControllerState::Idle||!queueEmpty()||
@@ -2960,10 +2968,14 @@ bool IoHomeController::requestObjectRead(IoHomecontrolChannel *channel,uint8_t p
     // Metadata/database views plus explicit opt-in battery objects. A607 can
     // contain keys: its full buffer is blocked from ETS slice readback;
     // battery diagnostics only print non-key fields. No object writes.
-    const bool allowed=(provider==0&&(key<=3||key==0x030A||key==0x8001||key==0x8002||key==0x8100||key==0x8103||key==0x4300||key==0x4302))||(provider==0x0B&&key==0xC000);
+    const bool allowed=(provider==0&&(key<=3||key==0x030A||key==0x8001||key==0x8002||key==0x8005||key==0x8100||key==0x8103||key==0x4300||key==0x4302))||(provider==0x0B&&key==0xC000);
     if(!allowed&&!(channel->batteryMonitoring()==2&&ioHomeBatteryObject(provider,key)&&offset==0))return false;
     const uint8_t index=channelIndexFor(channel);if(index>=16)return false;
-    if(!mObjectRead.begin(IoHomeObjectTransfer::Direction::Read,channel->getNodeId(),mObjectReadToken+1,provider,key,offset,span,millis(),30000))return false;
+    const auto &timing=mObjectReadTiming[index];
+    const bool configured=timing.node==channel->getNodeId()&&timing.revision==channel->productContextRevision()&&
+        !std::memcmp(timing.key,channel->getEncryptionKey(),16);
+    if(!mObjectRead.begin(IoHomeObjectTransfer::Direction::Read,channel->getNodeId(),mObjectReadToken+1,provider,key,offset,span,millis(),configured?timing.budgetMs:30000))return false;
+    mObjectReadGapMs=configured?timing.gapMs:0;mObjectReadReadyMs=millis();
     ++mObjectReadToken;mObjectReadPeer=channel->getNodeId();mObjectReadChannel=index;mObjectReadRevision=channel->productContextRevision();std::memcpy(mObjectReadKey,channel->getEncryptionKey(),16);
     if(ioHomeBatteryObject(provider,key)&&channel->batteryMonitoring()==2) {
         auto &d=mBatteryDiagnostics[index];
@@ -3002,6 +3014,7 @@ void IoHomeController::serviceObjectRead()
         return;
     }
     if(mObjectRead.stage()==IoHomeObjectTransfer::Stage::Ready&&mState==ControllerState::Idle&&queueEmpty()) {
+        if(uint32_t(millis()-mObjectReadReadyMs)<mObjectReadGapMs)return;
         if(!mObjectRead.nextRead()||!enqueueObjectReadPart(false))mObjectRead.fail();
     }
 }
@@ -9229,6 +9242,7 @@ void IoHomeController::processResponse()
         else if(mCurrentCmd.command==IoHomeCommand::Unknown4ARequest&&mRxFrame.commandId==IoHomeCommand::Unknown4AResponse)
             accepted=mObjectRead.acceptReadChunk(mCurrentCmd.destNodeId,mObjectReadToken,mRxFrame.data,mRxFrame.dataLen);
         if(!accepted){mState=ControllerState::WaitResponse;return;}
+        if(mObjectRead.stage()==IoHomeObjectTransfer::Stage::Ready)mObjectReadReadyMs=millis();
     }
     if (auto *counters=activeAttemptCounters()) {
         if (mRxFrame.commandId==IoHomeCommand::ChallengeRequest) ++counters->challengeSeen;

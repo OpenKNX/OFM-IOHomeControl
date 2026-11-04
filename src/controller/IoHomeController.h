@@ -711,6 +711,7 @@ public:
   void printDynamicActuatorStatus(uint8_t channel);
   void setDynamicEventTrace(bool enabled){mDynamicEventTrace=enabled;}
   bool requestObjectRead(IoHomecontrolChannel *channel,uint8_t provider,uint16_t key,uint16_t offset,uint16_t span);
+  bool configureObjectReadTiming(IoHomecontrolChannel *channel,uint16_t gapMs,uint32_t budgetMs);
   bool cancelObjectRead(uint32_t token);
   const IoHomeObjectTransfer &objectRead() const {return mObjectRead;}
   uint32_t objectReadToken() const {return mObjectReadToken;}
@@ -1430,6 +1431,10 @@ private:
   IoHomeObjectTransfer mObjectRead;
   uint32_t mObjectReadToken=0,mObjectReadPeer=0,mObjectReadRevision=0;
   uint8_t mObjectReadChannel=0xFF,mObjectReadKey[16]{};
+  struct ObjectReadTiming {uint32_t node=0,revision=0,budgetMs=30000;uint16_t gapMs=0;uint8_t key[16]{};};
+  ObjectReadTiming mObjectReadTiming[16]{};
+  uint16_t mObjectReadGapMs=0;
+  uint32_t mObjectReadReadyMs=0;
   void serviceObjectRead();
   void serviceAtlanticRegisterRead();
   void finishAtlanticRegisterRead(const IoHomeQueueEntry &,IoHomeCommandExchangeResult);
