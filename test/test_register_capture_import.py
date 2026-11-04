@@ -18,6 +18,16 @@ class CaptureTests(unittest.TestCase):
   for bad in [body.replace('index=0x15','index=0x16'),body.replace('8E 00','8D 00'),body.replace('0C 60','0C 61')]:
    with self.assertRaises(ValueError):imp.extract(raw(bad),'https://example.invalid')
   self.assertEqual(imp.extract(raw('key=private\ncmd=0x3D hex=00 11'),'https://example.invalid')['observations'],[])
+ def test_daylight_objects_and_openings_are_exact_and_private(self):
+  p=root/'test/corpus/rs100_daylight_objects.json';objects=json.loads(p.read_text())
+  self.assertEqual(rs.generate_daylight_header(objects),p.with_suffix('.h').read_text())
+  objects[0]['object_class']=2
+  with self.assertRaises(ValueError):rs.generate_daylight_header(objects)
+  for n in [6,7]:
+   d=json.loads((root/f'test/corpus/issue156-rs100/log-{n}-timeline.json').read_text())
+   self.assertTrue(d['external_reference']['motor_calibrated_lux'] is False)
+   self.assertTrue(any(x['kind']=='reported_transfer_open' for x in d['timeline']))
+   self.assertTrue(all('hex' not in o for o in d['objects'] if o['object_class']==2))
  def test_new_rs100_lengths_and_class_redaction(self):
   for n in [4,5]:
    d=json.loads((root/f'test/corpus/issue156-rs100/log-{n}-timeline.json').read_text())

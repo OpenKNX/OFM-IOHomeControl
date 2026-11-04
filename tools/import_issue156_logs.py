@@ -20,6 +20,7 @@ FIELD = re.compile(r"\b(cmd|src|dst)=((?:0x)?[0-9A-Fa-f]+)\b")
 HEX = re.compile(r"\bpayload=((?:[0-9A-Fa-f]{2}(?:\s+|$))+)" )
 SUMMARY = re.compile(r"read_object ([0-9A-Fa-f]{6}) object 0x([0-9A-Fa-f]{4})(?: class (\d+))?: (\d+) of (\d+) bytes(.*)")
 DUMP = re.compile(r":\s+\+([0-9A-Fa-f]{3,4}):\s+((?:[0-9A-Fa-f]{2}(?:\s+|$))+)")
+OPENING = re.compile(r"\[object 0x([0-9A-Fa-f]{4}) class (\d+) handle 0x([0-9A-Fa-f]{2}) status (\d+) length (\d+)\]")
 ATTEMPT = re.compile(r"Try (\d+) (answered|ended):.*?cmd=[A-Z0-9_]+\(0x([0-9A-Fa-f]{2})\)(.*)")
 CHALLENGE = re.compile(r"Auth challenge try=(\d+).*?req_cmd=0x([0-9A-Fa-f]{2})")
 SENSITIVE_TEXT = re.compile(r"(?i)(?:system.?key|encryption.?key|enc.?key|(?<!\w)key\s*[:=]|hmac\s*[:=]|password\s*[:=]|token\s*[:=])")
@@ -59,6 +60,14 @@ def import_log(raw, filename, url, published_at=None, capture_date=None):
         if SENSITIVE_TEXT.search(line):
             output["privacy"]["credential_label_lines"].append(number)
         common = {"line_start": number, "line_end": number, "clock": timestamp(line)}
+        opening = OPENING.search(line)
+        if opening:
+            key, selector, handle, status, length = opening.groups()
+            row = dict(common, kind="reported_transfer_open", command=0x47,
+                       object_id=int(key,16), object_class=int(selector), handle=int(handle,16),
+                       status=int(status), declared_length=int(length),
+                       confidence="printed_opening_metadata_not_complete_transfer")
+            output["timeline"].append(row)
         capture = CAPTURE.search(line)
         if capture:
             stage, frequency, uptime, reported_length, tail = capture.groups()
@@ -178,6 +187,17 @@ def generate_header(document):
     for obj in document["objects"]:
         rows.append(f"{{0x{obj['object_id']:04X},{obj['declared_length']},{obj['available_length']},{str(obj['complete']).lower()},{obj['symbol']}}},")
     return "\n".join(rows + ["};", "}", ""])
+
+
+def generate_daylight_header(objects):
+    out=['#pragma once','#include <cstdint>','namespace RS100Daylight {',
+         'struct Object {uint8_t capture;uint16_t key,length;uint8_t data[67];};','inline constexpr Object objects[]={']
+    for o in objects:
+        b=bytes.fromhex(o['hex'])
+        if o['object_class']!=0 or o['object_id'] not in (0x8005,0x8103) or not o['complete'] or len(b)!=o['declared_length'] or len(b)>67:
+            raise ValueError('unreviewed or partial daylight object')
+        out.append('{%d,0x%04X,%d,{%s}},'%(o['capture'],o['object_id'],len(b),','.join('0x%02X'%x for x in b)))
+    return '\n'.join(out+['};','}'])+'\n'
 
 
 def main():

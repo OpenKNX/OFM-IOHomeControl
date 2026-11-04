@@ -113,6 +113,19 @@
       "complete": true
     },
     {
+      "line_start": 15,
+      "line_end": 15,
+      "clock": "08:29:38.116",
+      "kind": "reported_transfer_open",
+      "command": 71,
+      "object_id": 32773,
+      "object_class": 0,
+      "handle": 1,
+      "status": 0,
+      "declared_length": 16,
+      "confidence": "printed_opening_metadata_not_complete_transfer"
+    },
+    {
       "line_start": 17,
       "line_end": 17,
       "clock": "08:30:21.324",
@@ -257,6 +270,19 @@
       "declared_length": 67,
       "available_length": 67,
       "complete": true
+    },
+    {
+      "line_start": 31,
+      "line_end": 31,
+      "clock": "08:30:27.739",
+      "kind": "reported_transfer_open",
+      "command": 71,
+      "object_id": 33027,
+      "object_class": 0,
+      "handle": 2,
+      "status": 0,
+      "declared_length": 67,
+      "confidence": "printed_opening_metadata_not_complete_transfer"
     },
     {
       "line_start": 36,
@@ -691,6 +717,19 @@
       "complete": false
     },
     {
+      "line_start": 84,
+      "line_end": 84,
+      "clock": "08:31:32.740",
+      "kind": "reported_transfer_open",
+      "command": 71,
+      "object_id": 42497,
+      "object_class": 2,
+      "handle": 3,
+      "status": 0,
+      "declared_length": 366,
+      "confidence": "printed_opening_metadata_not_complete_transfer"
+    },
+    {
       "line_start": 89,
       "line_end": 89,
       "clock": "08:31:51.677",
@@ -888,6 +927,19 @@
       "declared_length": 431,
       "available_length": 90,
       "complete": false
+    },
+    {
+      "line_start": 108,
+      "line_end": 108,
+      "clock": "08:32:02.334",
+      "kind": "reported_transfer_open",
+      "command": 71,
+      "object_id": 42515,
+      "object_class": 2,
+      "handle": 4,
+      "status": 0,
+      "declared_length": 431,
+      "confidence": "printed_opening_metadata_not_complete_transfer"
     },
     {
       "line_start": 113,
@@ -1258,6 +1310,19 @@
       "complete": true
     },
     {
+      "line_start": 156,
+      "line_end": 156,
+      "clock": "08:32:58.590",
+      "kind": "reported_transfer_open",
+      "command": 71,
+      "object_id": 42517,
+      "object_class": 2,
+      "handle": 5,
+      "status": 0,
+      "declared_length": 341,
+      "confidence": "printed_opening_metadata_not_complete_transfer"
+    },
+    {
       "line_start": 159,
       "line_end": 159,
       "clock": "08:33:21.328",
@@ -1353,6 +1418,19 @@
       "complete": true
     },
     {
+      "line_start": 168,
+      "line_end": 168,
+      "clock": "08:33:24.910",
+      "kind": "reported_transfer_open",
+      "command": 71,
+      "object_id": 42502,
+      "object_class": 2,
+      "handle": 6,
+      "status": 0,
+      "declared_length": 33,
+      "confidence": "printed_opening_metadata_not_complete_transfer"
+    },
+    {
       "line_start": 173,
       "line_end": 173,
       "clock": "08:34:06.353",
@@ -1446,6 +1524,19 @@
       "declared_length": 19,
       "available_length": 19,
       "complete": true
+    },
+    {
+      "line_start": 181,
+      "line_end": 181,
+      "clock": "08:34:09.938",
+      "kind": "reported_transfer_open",
+      "command": 71,
+      "object_id": 24836,
+      "object_class": 2,
+      "handle": 7,
+      "status": 0,
+      "declared_length": 19,
+      "confidence": "printed_opening_metadata_not_complete_transfer"
     },
     {
       "line_start": 185,

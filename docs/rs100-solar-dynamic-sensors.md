@@ -107,3 +107,10 @@ subscription, unsubscribe semantics, sensor-unit mapping or percentage is
 qualified. Provider-00 identity objects 8001/8002 are explicit read-only options.
 See [the implementation ledger](TODO20-IMPLEMENTATION-2026-11-03.md) for tests
 and physical evidence still required.
+
+## Daylight capture follow-up
+
+[Daylight logs and comparison](rs100-daylight-observations.md) retain new logs6/7,
+external meter geometry and complete safe objects. Raw8005 remains unchanged;
+8103 changes at three offsets. Neither observation qualifies sensor units or
+subscription persistence, and no new KNX sensor publication was enabled.
