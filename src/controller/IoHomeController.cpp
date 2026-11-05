@@ -12652,7 +12652,15 @@ void IoHomeController::dispatchRxFrame()
             if (schedule(lDestNode,false)) return;
         } else if ((mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W) && lRemote &&
                    (lDestNode & 0x3FU)==0x3FU && lDestNode<=0xFFFFU) {
-            if(settleRemoteActivity(lSrcNode))return;
+            if(settleRemoteActivity(lSrcNode)){
+                // Explicit groups must not swallow ordinary follow-up for other links.
+                for(uint8_t link=0;link<lRemote->linkCount;++link){bool covered=false;
+                    for(uint8_t group=0;group<4;++group)for(uint8_t member=0;member<16;++member)
+                        if(mRemoteSettling[group].mask&(1U<<member))covered=covered||mRemoteSettling[group].members[member].node==lRemote->linkedDevices[link];
+                    if(!covered)schedule(lRemote->linkedDevices[link],true);
+                }
+                return;
+            }
             bool scheduled=false;
             for (uint8_t i=0;i<lRemote->linkCount;++i)
                 scheduled=schedule(lRemote->linkedDevices[i],true)||scheduled;

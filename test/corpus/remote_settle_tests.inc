@@ -2,15 +2,17 @@
 TEST(controller_remote_settle_catches_unheard_group_member_and_debounces)
 {
     ioHomeTestSetMillis(1000);const uint8_t key[16]={1};
-    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel mamma,pappa;
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel mamma,pappa,other;
     initPaired2WControllerForTest(c,m,mamma,0x111111,0xEFB491,key);
     pappa.setNodeId(0xD4C8ED);pappa.setEncryptionKey(key);pappa.setPaired(true);m.testSetChannel(1,&pappa);
     ASSERT_TRUE(m.remoteMap().addRemote(0xBC40B3,"Mamma"));ASSERT_TRUE(m.remoteMap().linkDevice(0xBC40B3,0xEFB491));
     ASSERT_TRUE(m.remoteMap().addRemote(0x857067,"Pappa"));ASSERT_TRUE(m.remoteMap().linkDevice(0x857067,0xD4C8ED));
     ASSERT_TRUE(!c.configureRemoteSettling(0,1,500));ASSERT_TRUE(!c.configureRemoteSettling(0,3,499));
+    other.setNodeId(0x333333);other.setEncryptionKey(key);other.setPaired(true);m.testSetChannel(2,&other);
+    ASSERT_TRUE(m.remoteMap().linkDevice(0xBC40B3,0x333333));
     ASSERT_TRUE(c.configureRemoteSettling(0,3,1000));
     IoHomeFrame f;buildPassiveExecuteFrame(f,0xBC40B3,0x3F);f.set1WMode();f.dataLen=8;f.hasHmac=true;
-    ASSERT_TRUE(queueControllerPassiveFrame(c,f));ASSERT_EQ(mamma.testScheduledStatusPollCount(),0);ASSERT_EQ(pappa.testScheduledStatusPollCount(),0);
+    ASSERT_TRUE(queueControllerPassiveFrame(c,f));ASSERT_EQ(other.testScheduledStatusPollCount(),1);ASSERT_EQ(mamma.testScheduledStatusPollCount(),0);ASSERT_EQ(pappa.testScheduledStatusPollCount(),0);
     ioHomeTestAdvanceMillis(900);ASSERT_TRUE(queueControllerPassiveFrame(c,f));
     ioHomeTestAdvanceMillis(999);c.loop();ASSERT_EQ(mamma.testScheduledStatusPollCount(),0);
     ioHomeTestAdvanceMillis(1);c.loop();ASSERT_EQ(mamma.testScheduledStatusPollCount(),1);ASSERT_EQ(pappa.testScheduledStatusPollCount(),1);
