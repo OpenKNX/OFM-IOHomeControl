@@ -2672,6 +2672,10 @@ bool IoHomecontrol::commitNetwork(const IoHomeNetworkStore::State &state)
     mCommittedNetwork=state;mNetworkHasCommit=true;return true;
 }
 
+bool IoHomecontrol::twoWayPersistenceReady() const {
+    return mNetworkStoreReady&&!mNetworkStoreFailed&&mNetworkHasCommit&&IoHomeNetworkStore::equal(networkSnapshot(),mCommittedNetwork);
+}
+
 bool IoHomecontrol::prepareTwoWayPersistence(){
     const auto snapshot=networkSnapshot();
     if(mDiagnosticScan||mDiagnosticVerifyNode)return mNetworkStoreReady&&!mNetworkStoreFailed&&mNetworkHasCommit&&IoHomeNetworkStore::equal(snapshot,mCommittedNetwork);
@@ -4554,6 +4558,13 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         else if(!std::strcmp(action,"read"))logInfoP("Dynamic capability reads queued=%u",mController.requestDynamicCapabilities(mChannels[index-1]));
         else logInfoP("Usage: iohc dynamic CHANNEL status|read");
         return true;
+    }
+    if(iCmd.rfind("iohc challenge timing ",0)==0) {
+        if(iDebugKo){logInfoP("Challenge timing requires local console");return true;}
+        if(iCmd=="iohc challenge timing status")mController.printChallengeTiming();
+        else if(iCmd=="iohc challenge timing on"||iCmd=="iohc challenge timing off")
+            logInfoP("Challenge timing configured=%u",mController.enableChallengeTiming(iCmd=="iohc challenge timing on"));
+        else logInfoP("Usage: iohc challenge timing on|off|status");return true;
     }
     if(iCmd.rfind("iohc window main-only ",0)==0) {
         if(iDebugKo){logInfoP("Window main-only requires local console");return true;}

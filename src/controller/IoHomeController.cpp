@@ -4543,7 +4543,7 @@ void IoHomeController::recordResponseTiming(bool iFinalResponse)
         mLastResponseTimingSample.firstResponseUs=lNowUs;
         mLastResponseTimingSample.txEndToFirstResponseUs =
             lNowUs - mExchangeRequestTxEndUs;
-        if (mPairDiagnosticTraceEnabled)
+        if (mPairDiagnosticTraceEnabled&&!mChallengeCritical)
             logInfoP("PairDiag: response timing first ioAddress=0x%06X manufacturerId=0x%02X profile=%u subProfile=%u powerSaveMode=%u responseTimeClass=%u delayUs=%lu",
                      mLastResponseTimingSample.ioAddress,
                      static_cast<unsigned>(mLastResponseTimingSample.manufacturerId),
@@ -4560,7 +4560,7 @@ void IoHomeController::recordResponseTiming(bool iFinalResponse)
         mLastResponseTimingSample.finalResponseUs=lNowUs;
         mLastResponseTimingSample.txEndToFinalResponseUs =
             lNowUs - mExchangeRequestTxEndUs;
-        if (mPairDiagnosticTraceEnabled)
+        if (mPairDiagnosticTraceEnabled&&!mChallengeCritical)
             logInfoP("PairDiag: response timing final ioAddress=0x%06X manufacturerId=0x%02X profile=%u subProfile=%u powerSaveMode=%u responseTimeClass=%u requestTxEndDelayUs=%lu authTxEndDelayUs=%s%lu",
                      mLastResponseTimingSample.ioAddress,
                      static_cast<unsigned>(mLastResponseTimingSample.manufacturerId),
@@ -6796,7 +6796,7 @@ void IoHomeController::recordTwoWayTrace(const char *event,const IoHomeFrame &fr
         const auto evidence=receiveEvidence(wireLength);p.crcChecked=evidence.hardwareCrcChecked;p.crcValid=evidence.hardwareCrcValid;p.rxReadUs=evidence.readTimestampUs;p.rxTimestampValid=evidence.timestampValid;
     }
     const bool critical=frame.commandId==IoHomeCommand::DiscoverSPERequest||frame.commandId==IoHomeCommand::DiscoverSPEResponse||frame.commandId==IoHomeCommand::Discover2ERequest||frame.commandId==IoHomeCommand::Discover2EResponse||frame.commandId==IoHomeCommand::ChallengeRequest||frame.commandId==IoHomeCommand::ChallengeResponse||frame.commandId==IoHomeCommand::PrivateResponse||frame.commandId==IoHomeCommand::StatusUpdate||frame.commandId==IoHomeCommand::StatusUpdateResponse;
-    if(mCriticalStream&&critical&&(!std::strcmp(event,"rx_observed")||!std::strcmp(event,"tx_started"))) {
+    if(!mChallengeCritical&&mCriticalStream&&critical&&(!std::strcmp(event,"rx_observed")||!std::strcmp(event,"tx_started"))) {
         if(uint32_t(millis()-mCriticalWindowMs)>=1000U){mCriticalWindowMs=millis();mCriticalTokens=4;}
         if(mCriticalTokens) {
             --mCriticalTokens;
@@ -6809,7 +6809,7 @@ void IoHomeController::recordTwoWayTrace(const char *event,const IoHomeFrame &fr
     p.attemptOutcome=ioHomeAttemptOutcomeName(timingEvent);
     if(std::strcmp(p.attemptOutcome,"observation")) {
         recordRadioTiming(timingEvent);
-        logInfoP("IOHC_ATTEMPT event=%s outcome=%s transaction=%llu attempt=%u tx_id=%llu request_src=%06X request_dst=%06X request_cmd=%02X request_param=%u preamble=%u frequency=%lu challenge_seen=%u answer_sent=%u state=%u irq=%04X crc_checked=%u crc_valid=%u physical_peer_tx=unknown physical_movement=unknown",
+        if(!mChallengeCritical)logInfoP("IOHC_ATTEMPT event=%s outcome=%s transaction=%llu attempt=%u tx_id=%llu request_src=%06X request_dst=%06X request_cmd=%02X request_param=%u preamble=%u frequency=%lu challenge_seen=%u answer_sent=%u state=%u irq=%04X crc_checked=%u crc_valid=%u physical_peer_tx=unknown physical_movement=unknown",
             event,p.attemptOutcome,(unsigned long long)mTwoWaySessionId,p.attempt,(unsigned long long)mTwoWayTxId,
             mOwnNodeId,mCurrentCmd.destNodeId,unsigned(mCurrentCmd.command),mCurrentCmd.param,p.preambleBytes,
             (unsigned long)p.frequencyHz,mSawChallenge,mAuthResponseSent,p.state,p.irq,p.crcChecked,p.crcValid);
@@ -6899,7 +6899,7 @@ void IoHomeController::printStatusAttribution() const
 
 void IoHomeController::streamDiagnosticTrace()
 {
-    if(!mDiagnosticStream || mDiagnosticStreamCursor>=mTwoWayTraceCount)return;
+    if(mChallengeCritical||!mDiagnosticStream || mDiagnosticStreamCursor>=mTwoWayTraceCount)return;
     const uint64_t first=mTwoWayTraceCount>kTwoWayTraceCapacity?mTwoWayTraceCount-kTwoWayTraceCapacity+1:1;
     if(mDiagnosticStreamCursor+1<first) {
         logInfoP("IOHC_CAPTURE droppedEvents=%llu reason=ring_overwrite",(unsigned long long)(first-mDiagnosticStreamCursor-1));
@@ -7108,7 +7108,7 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
         mLastLbtBypassed=false; mLastLbtAuthResponse=false;
     }
     if(iData&&iLength&&!(iData[0]&IOHC_CTRL0_MODE_1W)&&twoWayIdentityCollision()) {
-        logInfoP("2W TX rejected: identity_collision gateway=%06X",mOwnNodeId);
+        if(!mChallengeCritical)logInfoP("2W TX rejected: identity_collision gateway=%06X",mOwnNodeId);
         { invalidateImmediateReply();mRfAccessPolicy.off(); return RadioError::HardwareError; }
     }
     if(mCurrentCmd.active&&mCurrentCmd.managementRead&&!managementIdentityMatches(mCurrentCmd))
@@ -7116,7 +7116,7 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
     if (iData && iLength && (iData[0] & IOHC_CTRL0_MODE_1W) && mReservationFailed)
         { invalidateImmediateReply();mRfAccessPolicy.off(); return RadioError::HardwareError; }
 #ifndef TEST_NATIVE
-    if(iData&&iLength&&!(iData[0]&IOHC_CTRL0_MODE_1W)&&mModule&&!mModule->prepareTwoWayPersistence())
+    if(iData&&iLength&&!(iData[0]&IOHC_CTRL0_MODE_1W)&&mModule&&!(mChallengeCritical?mModule->twoWayPersistenceReady():mModule->prepareTwoWayPersistence()))
         { invalidateImmediateReply();mRfAccessPolicy.off(); return RadioError::HardwareError; }
 #endif
     if(mCurrentFreqIdx>=IOHC_NUM_FREQUENCIES) {invalidateImmediateReply();mRfAccessPolicy.off();return RadioError::HardwareError;}
@@ -7141,12 +7141,12 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
         if(mCurrentCmd.command==IoHomeCommand::Discover2ERequest&&mCurrentCmd.destNodeId==mVerification.node)mVerification.result=IoHomeVerificationEvidence::Result::DutyDenied;
         if (auto *counters=activeAttemptCounters()) ++counters->dutyRejected;
         if(mCurrentFreqIdx<IOHC_NUM_FREQUENCIES)++mRfBlockedTxCount[IoHomeDutyBudget::band(IOHC_FREQUENCIES[mCurrentFreqIdx])];
-        logInfoP("RF TX denied: duty_budget_exceeded frequency=%lu usedMs=%lu nextMs=%lu limitMs=%lu",
+        if(!mChallengeCritical)logInfoP("RF TX denied: duty_budget_exceeded frequency=%lu usedMs=%lu nextMs=%lu limitMs=%lu",
             (unsigned long)IOHC_FREQUENCIES[mCurrentFreqIdx],
             (unsigned long)mRfDutyBudget.used(IOHC_FREQUENCIES[mCurrentFreqIdx]),
             (unsigned long)airtime,
             (unsigned long)IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(IOHC_FREQUENCIES[mCurrentFreqIdx])));
-        logInfoP("RF access blocked mode=%s retryAfterMs=%lu reservedMs=0",
+        if(!mChallengeCritical)logInfoP("RF access blocked mode=%s retryAfterMs=%lu reservedMs=0",
             IoHomeRfAccessPolicy::name(mRfAccessPolicy.mode(millis())),
             (unsigned long)mRfAccessPolicy.retryAfter(mRfDutyBudget,IOHC_FREQUENCIES[mCurrentFreqIdx],airtime,millis()));
         observeBatteryDiagnostic(mCurrentCmd,IoHomeBatteryDiagnostic::State::DutyBlocked);
@@ -7213,7 +7213,7 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
         mRfDutyBudget.advance(millis()); // charge at acceptance even across a programming-time boundary
         mRfDutyBudget.charge(IOHC_FREQUENCIES[mCurrentFreqIdx], airtime);
         if(mCurrentCmd.active&&mCurrentCmd.command==IoHomeCommand::Discover2ERequest&&mCurrentCmd.destNodeId==mVerification.node)mVerification.usedMs=mRfDutyBudget.used(IOHC_FREQUENCIES[mCurrentFreqIdx]);
-        if(admittedBypass)logInfoP("RF TX benchBypass=%u simulationBypass=%u frequency=%lu preamble=%u frameSize=%u airtimeMs=%lu totalMs=%lu session=%lu",
+        if(admittedBypass&&!mChallengeCritical)logInfoP("RF TX benchBypass=%u simulationBypass=%u frequency=%lu preamble=%u frameSize=%u airtimeMs=%lu totalMs=%lu session=%lu",
             admittedMode==IoHomeRfAccessPolicy::Mode::BenchUnlimited,
             admittedMode==IoHomeRfAccessPolicy::Mode::SimulationUnlimited,
             (unsigned long)IOHC_FREQUENCIES[mCurrentFreqIdx],mCurrentTxPreambleSymbols,iLength,(unsigned long)airtime,
@@ -7237,7 +7237,7 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
             }
             recordTwoWayTrace("tx_started",frame,iLength);
             std::memcpy(mAttemptTxPayload,mTwoWayTrace[(mTwoWayTraceCount-1)%kTwoWayTraceCapacity].payload,sizeof(mAttemptTxPayload));
-            logDebugP("2W accepted localTX=%llu session=%llu attempt=%u preamble=%u belief=%s TXfreq=%lu timeout=%u LBT=%s duty=%lu/%lu ms",
+            if(!mChallengeCritical)logDebugP("2W accepted localTX=%llu session=%llu attempt=%u preamble=%u belief=%s TXfreq=%lu timeout=%u LBT=%s duty=%lu/%lu ms",
                 (unsigned long long)mTwoWayTxId,(unsigned long long)mTwoWaySessionId,
                 mCurrentCmd.retries+1,mCurrentTxPreambleSymbols,
                 twoWayWakeBeliefName(mCurrentCmd.twoWayPreamblePlan.belief),
@@ -7543,6 +7543,7 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
 
 void IoHomeController::loop()
 {
+    if(mState!=ControllerState::ProcessResponse&&mState!=ControllerState::TxInProgress)mChallengeCritical=false;
     if(mReplyGrant && mState!=mReplyState)invalidateImmediateReply();
     if(mInboundActive && (!inboundStatusContextValid() ||
         (mState!=ControllerState::AuthSendChallenge && mState!=ControllerState::AuthWaitResponse &&
@@ -7702,6 +7703,7 @@ void IoHomeController::loop()
     {
         const auto receivedRadioState=mRadio.state();
         uint8_t lLen = mRadio.readPacket(mRxBuffer, sizeof(mRxBuffer));
+        mLastRxReadUs=micros();
         mRxRawLen = lLen;
         invalidateImmediateReply(); // a new RX cannot reuse an earlier reply grant
         if(mInboundActive && mState!=ControllerState::AuthWaitResponse) {
@@ -7709,6 +7711,11 @@ void IoHomeController::loop()
         }
         mLastRxReadMs=millis();
         bool lParsed = (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen));
+        mChallengeCritical=lParsed&&mRxFrame.commandId==IoHomeCommand::ChallengeRequest&&
+            !(mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W)&&mRxFrame.dataLen>=6&&mCurrentCmd.active&&!mAuthResponseSent&&
+            mRxFrame.getSrcNodeId()==mCurrentCmd.destNodeId&&mRxFrame.getDestNodeId()==mOwnNodeId&&mState==ControllerState::WaitResponse;
+        if(mChallengeCritical&&mChallengeTimings){auto &entry=mChallengeTimings[mChallengeTimingCount++%8];entry={};
+            entry.peer=mRxFrame.getSrcNodeId();entry.rxReadUs=mLastRxReadUs;entry.frequency=mCurrentFreqIdx;}
         if(lParsed) recordRadioTiming(IoHomeTimingEvent::PacketParsed);
         if(!lParsed && mInboundActive) {clearInboundStatus("malformed_rx");mState=ControllerState::Idle;startReceive();}
         if (lLen > 0 && !lParsed)
@@ -7738,7 +7745,7 @@ void IoHomeController::loop()
                 observeStatusAttribution(mRxFrame,foreign?IoHomeStatusAttribution::Source::ForeignPassive:IoHomeStatusAttribution::Source::Unknown,known);
             }
             recordTwoWayTrace("rx_observed",mRxFrame,lLen);
-            if(mModule)mModule->onDiagnosticFrame(mRxFrame,mCurrentFreqIdx,mRadio.lastRssi(),millis());
+            if(mModule&&!mChallengeCritical)mModule->onDiagnosticFrame(mRxFrame,mCurrentFreqIdx,mRadio.lastRssi(),millis());
             ++mRxScanMeasurements.captures;
             mRadioDiversity.activity(mCurrentFreqIdx,millis());
             const ControllerState lPairingStateBeforeRx = mState;
@@ -7761,7 +7768,7 @@ void IoHomeController::loop()
 
             observeUnknown86Frame();
 
-            if (mPairDiagnosticTraceEnabled &&
+            if (mPairDiagnosticTraceEnabled && !mChallengeCritical &&
                 mState != ControllerState::DiscoveryListening &&
                 (isPairDiagnosticState(mState) || isPairDiagnosticCommand(mRxFrame.commandId)))
             {
@@ -8665,6 +8672,10 @@ void IoHomeController::processTxInProgress()
     const bool lDone = mRadio.state() != RadioState::Transmitting || lObservedDone;
     if (lDone)
     {
+        if(auto *timing=activeChallengeTiming())if(mQueuedTxFrame.commandId==IoHomeCommand::ChallengeResponse&&lObservedDone){
+            timing->txDoneObservedUs=micros();timing->txDoneObserved=true;timing->cachedIrq=radioHealth().lastIrqStatus;
+        }
+        mChallengeCritical=false;
         recordRadioTiming(IoHomeTimingEvent::ControllerDone);
         if (!mQueuedTxDoneObserved)
         {
@@ -9279,7 +9290,7 @@ void IoHomeController::processResponse()
         mCurrentCmd.active && !mAuthResponseSent &&
         mRxFrame.dataLen >= 6)
     {
-        if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
+        if (!mChallengeCritical&&mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
             logInfoP("KeyImport directed RX: candidate=%06X stage=0x3C_received rxFreqIdx=%u rxFreqHz=%lu",
                      mCurrentCmd.destNodeId,
                      static_cast<unsigned>(mCurrentFreqIdx),
@@ -9292,6 +9303,8 @@ void IoHomeController::processResponse()
         uint8_t lChallenge[6];
         memcpy(lChallenge, mRxFrame.data, sizeof(lChallenge));
 
+        auto *timing=activeChallengeTiming();
+        if(timing)timing->hmacStartUs=micros();
         IoHomeFrame lFrame;
         if (!build2WChallengeResponse(lFrame, mOwnNodeId, mCurrentCmd.destNodeId,
                                       TwoWaySenderRole::Controller,
@@ -9304,6 +9317,7 @@ void IoHomeController::processResponse()
             return;
         }
 
+        if(timing){timing->hmacEndUs=micros();timing->hmacRecorded=true;}
         lFrame.dataLen = IOHC_HMAC_SIZE;
         lFrame.hasHmac = false;
 
@@ -9314,7 +9328,9 @@ void IoHomeController::processResponse()
             const uint32_t lAuthFreqHz = mCurrentCmd.twoWayTxFreqIdx < IOHC_NUM_FREQUENCIES
                                              ? IOHC_FREQUENCIES[mCurrentCmd.twoWayTxFreqIdx]
                                              : kNormal2WTxFreqHz;
+            if(timing)timing->prepareStartUs=micros();
             const RadioError lPrepErr = configureTxRadio(lPreamble, &lAuthFreqHz);
+            if(timing){timing->prepareEndUs=micros();timing->prepareResult=int8_t(lPrepErr);timing->prepareRecorded=true;}
             if (lPrepErr == RadioError::Busy)
                 return;
             if (lPrepErr != RadioError::None)
@@ -9325,11 +9341,13 @@ void IoHomeController::processResponse()
                 mState = ControllerState::Idle;
                 return;
             }
-            tracePairDiagnosticTx2W(lFrame, lPreamble);
+            if(!mChallengeCritical)tracePairDiagnosticTx2W(lFrame, lPreamble);
+            if(timing){timing->txRequestUs=micros();timing->txRequested=true;}
             const RadioError lErr = startControllerTransmit(mTxBuffer, lLen, false, IoHomeReplyRole::OutboundAnswer);
+            if(timing){timing->txResult=int8_t(lErr);if(lErr==RadioError::None){timing->txAcceptedUs=micros();timing->txAccepted=true;}}
             if (lErr == RadioError::None)
             {
-                if (mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
+                if (!mChallengeCritical&&mCurrentCmd.command == IoHomeCommand::Discover2ERequest)
                     logInfoP("KeyImport directed TX: candidate=%06X stage=0x3D_sent txFreqHz=%lu preamble=%u",
                              mCurrentCmd.destNodeId,
                              static_cast<unsigned long>(lAuthFreqHz),
@@ -11804,7 +11822,7 @@ RadioError IoHomeController::configureTxRadio(uint16_t iPreambleSymbols, const u
     {
         const RadioError lFreqErr = mRadio.setFrequency(*iFrequencyHz);
         if (lFreqErr != RadioError::None) {
-            if(lFreqErr!=RadioError::Busy){invalidateImmediateReply();mRfAccessPolicy.off();logInfoP("RF configure rejected: selectedTxHz=%lu frequency_error=%d",(unsigned long)*iFrequencyHz,int(lFreqErr));}
+            if(lFreqErr!=RadioError::Busy){invalidateImmediateReply();mRfAccessPolicy.off();if(!mChallengeCritical)logInfoP("RF configure rejected: selectedTxHz=%lu frequency_error=%d",(unsigned long)*iFrequencyHz,int(lFreqErr));}
             return lFreqErr;
         }
         updateCurrentFrequencyIndex(*iFrequencyHz);
@@ -14492,5 +14510,25 @@ void IoHomeController::serviceRemoteSettling()
         // Reuse the channel's existing epoch/backoff/low-power policy and queue.
         // Include members whose own remote was NOT heard during half-duplex TX.
         for(uint8_t i=0;i<16;++i)if(group.mask&(1U<<i))mModule->getChannel(i)->scheduleStatusPoll(1,true);
+    }
+}
+
+// https://github.com/laberning/home_io_control/issues/163#issuecomment-6662545548
+bool IoHomeController::enableChallengeTiming(bool enabled)
+{
+    if(mState!=ControllerState::Idle||mCurrentCmd.active)return false;
+    if(!enabled){mChallengeTimings.reset();mChallengeTimingCount=0;return true;}
+    if(!mChallengeTimings)mChallengeTimings.reset(new(std::nothrow) ChallengeTiming[8]);
+    if(!mChallengeTimings)return false;mChallengeTimingCount=0;return true;
+}
+void IoHomeController::printChallengeTiming()const
+{
+    if(!mChallengeTimings){logInfoP("Challenge timing disabled");return;}
+    const uint32_t first=mChallengeTimingCount>8?mChallengeTimingCount-8:0;
+    for(uint32_t i=first;i<mChallengeTimingCount;++i){const auto &t=mChallengeTimings[i%8];
+        logInfoP("Challenge timing peer=%06lX freq_idx=%u rx_read_us=%lu hmac_start_us=%lu hmac_end_us=%lu prep_start_us=%lu prep_end_us=%lu prep_result=%d tx_request_us=%lu tx_accepted_us=%lu tx_result=%d tx_done_observed_us=%lu flags=%u/%u/%u/%u/%u cached_irq=%04X first_preamble_symbol=unknown busy_standby_cca_irq_edge_times=unknown",
+            (unsigned long)t.peer,t.frequency,(unsigned long)t.rxReadUs,(unsigned long)t.hmacStartUs,(unsigned long)t.hmacEndUs,
+            (unsigned long)t.prepareStartUs,(unsigned long)t.prepareEndUs,int(t.prepareResult),(unsigned long)t.txRequestUs,
+            (unsigned long)t.txAcceptedUs,int(t.txResult),(unsigned long)t.txDoneObservedUs,t.hmacRecorded,t.prepareRecorded,t.txRequested,t.txAccepted,t.txDoneObserved,t.cachedIrq);
     }
 }

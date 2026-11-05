@@ -69,6 +69,7 @@ public:
     uint32_t node=0,revision=0,startedMs=0,nextMs=0;
   } mPendingBatteryDiagnostic;
   bool prepareTwoWayPersistence();
+  bool twoWayPersistenceReady() const;
   bool persistTwoWayAssignment(uint8_t channel,uint32_t node,const uint8_t *key,const IoHomeProtocolIdentity &identity);
   bool persistTwoWayBinding(uint8_t channel,uint32_t node,const uint8_t *key);
   IoHomecontrolChannel *getChannel(uint8_t iIndex);

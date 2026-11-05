@@ -1304,10 +1304,22 @@ public:
   int16_t lastRssi() const;
 
   bool configureRemoteSettling(uint8_t group,uint16_t channelMask,uint16_t quietMs);
+  struct ChallengeTiming {
+    uint32_t peer=0,rxReadUs=0,hmacStartUs=0,hmacEndUs=0,prepareStartUs=0,prepareEndUs=0,txRequestUs=0,txAcceptedUs=0,txDoneObservedUs=0;
+    uint16_t cachedIrq=0;uint8_t frequency=0xFF;int8_t prepareResult=0,txResult=0;
+    bool hmacRecorded=false,prepareRecorded=false,txRequested=false,txAccepted=false,txDoneObserved=false;
+  };
+  bool enableChallengeTiming(bool enabled);
+  const ChallengeTiming *lastChallengeTiming()const{return mChallengeTimings&&mChallengeTimingCount?&mChallengeTimings[(mChallengeTimingCount-1)%8]:nullptr;}
+  void printChallengeTiming()const;
   Radio &radio();
   const Radio &radio() const;
 
 private:
+  std::unique_ptr<ChallengeTiming[]> mChallengeTimings;
+  uint32_t mChallengeTimingCount=0,mLastRxReadUs=0;
+  bool mChallengeCritical=false;
+  ChallengeTiming *activeChallengeTiming(){return mChallengeCritical&&mChallengeTimings&&mChallengeTimingCount?&mChallengeTimings[(mChallengeTimingCount-1)%8]:nullptr;}
   struct RemoteSettleGroup {
     struct Member {uint32_t node=0,revision=0;uint8_t key[16]{};} members[16];
     uint32_t gateway=0,firstMs=0,lastMs=0,dispatchedMs=0;
