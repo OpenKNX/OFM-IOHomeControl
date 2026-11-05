@@ -41,7 +41,7 @@ STEFAN_GENERATED = build/stefan_dual_controller.h
 $(STEFAN_GENERATED): corpus/stefan-dual-controller-20261027.json ../tools/generate_stefan_vectors.py
 	$(PYTHON) ../tools/generate_stefan_vectors.py $@
 
-$(PROTOCOL_TARGET): $(STEFAN_GENERATED) $(CORPUS_GENERATED) $(wildcard corpus/*.h corpus/*.inc ../src/protocol/*.h ../src/controller/*.h) $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h ../src/radio/IoHomeTransmitIntent.h ../src/radio/IoHomeRfAccessPolicy.h ../src/radio/IoHomeDutyBudget.h ../src/protocol/IoHomeBatteryDiagnostics.h ../src/radio/RadioTestStub.h | $(BUILD_DIR)
+$(PROTOCOL_TARGET): $(STEFAN_GENERATED) $(CORPUS_GENERATED) $(wildcard corpus/*.h corpus/*.inc corpus/light-followup/*.h ../src/protocol/*.h ../src/controller/*.h) $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h ../src/radio/IoHomeTransmitIntent.h ../src/radio/IoHomeRfAccessPolicy.h ../src/radio/IoHomeDutyBudget.h ../src/protocol/IoHomeBatteryDiagnostics.h ../src/radio/RadioTestStub.h | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(PROTOCOL_SRCS)
 
 $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
@@ -50,7 +50,7 @@ $(SX1262_ERROR_TARGET): $(SX1262_ERROR_SRCS) | $(BUILD_DIR)
 $(SX1262_PHY_TARGET): $(SX1262_PHY_SRCS) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -o $@ $(SX1262_PHY_SRCS)
 
-run: check-capture-build-modes check-recovery-traces check-issue156-import check-device-events check-rf-build-modes check-dual-controller-tools check-remaining-time-evidence check-remaining-time-mutations check-discovery-evidence check-captured-motion-mutations check-original-captures check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
+run: check-light-followup check-capture-build-modes check-recovery-traces check-issue156-import check-device-events check-rf-build-modes check-dual-controller-tools check-remaining-time-evidence check-remaining-time-mutations check-discovery-evidence check-captured-motion-mutations check-original-captures check-inbound-replies check-release-evidence check-heating-recovery check-heating-publication check-rf-access-policy check-module-version check-wake-production check-wake-trials check-protocol check-controller check-exchange check-radio check-ui check-battery-publication check-standalone check-battery-diagnostics check-key-import-identity
 
 check-protocol: $(PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --suite protocol
@@ -188,7 +188,7 @@ check-dual-controller-tools:
 
 # Run identical real-controller admission/protocol cases with both build modes.
 DEBUG_PROTOCOL_TARGET = $(BUILD_DIR)/test_suite_debug
-$(DEBUG_PROTOCOL_TARGET): $(STEFAN_GENERATED) $(CORPUS_GENERATED) $(wildcard corpus/*.h corpus/*.inc ../src/protocol/*.h ../src/controller/*.h ../src/radio/*.h) $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h | $(BUILD_DIR)
+$(DEBUG_PROTOCOL_TARGET): $(STEFAN_GENERATED) $(CORPUS_GENERATED) $(wildcard corpus/*.h corpus/*.inc corpus/light-followup/*.h ../src/protocol/*.h ../src/controller/*.h ../src/radio/*.h) $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -DOPENKNX_DEBUG -o $@ $(PROTOCOL_SRCS)
 
 .PHONY: check-rf-build-modes
@@ -213,7 +213,12 @@ check-recovery-traces:
 
 .PHONY: check-capture-build-modes
 check-capture-build-modes: $(PROTOCOL_TARGET) $(DEBUG_PROTOCOL_TARGET)
-	@for filter in recent_observed fp_high high_fp garage_ foreign_transfer typed_discovery daylight adelis_new light_raw device_event status_event empty_object remote_settle window_main_only window_issue challenge_timing pair_discovery_channel; do \
+	@for filter in recent_observed fp_high high_fp garage_ foreign_transfer typed_discovery daylight adelis_new light_raw device_event status_event empty_object remote_settle window_main_only window_issue challenge_timing pair_discovery_channel light_followup; do \
 	  ./$(PROTOCOL_TARGET) --filter $$filter || exit $$?; \
 	  ./$(DEBUG_PROTOCOL_TARGET) --filter $$filter || exit $$?; \
 	done
+
+.PHONY: check-light-followup
+check-light-followup:
+	$(PYTHON) test_light_followup_evidence.py
+	$(PYTHON) ../tools/import_light_followup.py corpus/light-followup/evidence.json --check

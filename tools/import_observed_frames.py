@@ -12,7 +12,7 @@ def safe(w):
     if cmd==0:return len(d)==6
     if cmd==3:return d==b'\x03\x00\x00'
     if cmd==4:return 6<=len(d)<=23
-    if cmd==0x0C:return d==b'\xd8\x09\x00\x00'
+    if cmd==0x0C:return d in (b'\xd8\x09\x00\x00',b'\xd8\x00\x00\x00',b'\xd8\x07\x00\x00')
     if cmd==0x0D:return len(d)==5
     if cmd==0x71:return len(d)>=5 and d[4]+5==len(d) and d[2:4] in (b'\x10\x0a',b'\x20\x05')
     if cmd==0xFE:return len(d)==1

@@ -100,4 +100,4 @@ jobs:
       - name: Validate debug-only RF bypass and unchanged release admission
         run: make -C test check-rf-access-policy check-rf-build-modes
       - name: Validate capture importers and observations in both build modes
-        run: make -C test check-issue156-import check-recovery-traces check-capture-build-modes
+        run: make -C test check-light-followup check-issue156-import check-recovery-traces check-capture-build-modes
