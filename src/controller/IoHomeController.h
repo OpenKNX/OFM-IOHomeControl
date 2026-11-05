@@ -793,6 +793,7 @@ public:
                                    ParameterSemantic iSemantic, uint8_t iPercent);
 
   // Start pairing process for a channel
+  bool startPairingOnDiscoveryChannel(uint8_t channel,uint32_t peer);
   bool startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId = 0);
   bool startPairingExperimental(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing2WMode iMode);
   // Start explicit 1W pairing/add/remove operations.
@@ -1602,6 +1603,9 @@ private:
   uint8_t mOneWayEnrollmentTraceCount = 0;
   int8_t mOneWayEnrollmentActiveTrace = -1;
   uint8_t mPairingChallenge[6];
+  bool mPairDirectedRxChannel=false;
+  uint8_t mPairDirectedRxFrequency=0xFF;
+  uint32_t pairingDirectedTxFrequency()const;
   uint8_t mPairPushFrequency = 0xFF;
   uint32_t mPairKeyOwner = 0;
   uint8_t mPairSessionKey[16]{};

@@ -4559,6 +4559,14 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         else logInfoP("Usage: iohc dynamic CHANNEL status|read");
         return true;
     }
+    if(iCmd.rfind("iohc pair-rx-channel ",0)==0) {
+        if(iDebugKo){logInfoP("Experimental pairing requires local console");return true;}
+        unsigned index=0,node=0;char confirm[8]{};char extra=0;
+        if(sscanf(iCmd.c_str(),"iohc pair-rx-channel %u %x %7s %c",&index,&node,confirm,&extra)!=3||index<1||index>mNumChannels||
+           node>0xFFFFFF||std::strcmp(confirm,"CONFIRM")){logInfoP("Usage: iohc pair-rx-channel CHANNEL NODE CONFIRM (unpaired 2W only)");return true;}
+        if(!commissioningCanStart()){logInfoP("Experimental pairing blocked by active owner");return true;}
+        logInfoP("Experimental pairing started=%u; directed TX follows this peer's accepted discovery RX channel for this session",mController.startPairingOnDiscoveryChannel(index-1,node));return true;
+    }
     if(iCmd.rfind("iohc challenge timing ",0)==0) {
         if(iDebugKo){logInfoP("Challenge timing requires local console");return true;}
         if(iCmd=="iohc challenge timing status")mController.printChallengeTiming();

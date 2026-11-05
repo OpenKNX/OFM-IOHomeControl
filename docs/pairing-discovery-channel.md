@@ -1,0 +1,7 @@
+# Pairing on the accepted discovery channel
+
+Source: [RS100 directed-pairing experiment](https://github.com/laberning/home_io_control/issues/187#issuecomment-6655235183). Actual reported 0x29 RX was on 869.85 MHz, while silent directed 0x2C/0x31 TX used 868.95 MHz. CTRL1=00 and a 48-symbol preamble also failed. Neither LOW_POWER nor preamble length is established as the cause.
+
+`iohc pair-rx-channel CHANNEL NODE CONFIRM` starts one explicit experimental session for a named unpaired 2W channel and peer. Broadcast discovery keeps its default frequency/scan. Only an accepted addressed discovery from that named peer latches the RX frequency; directed confirmation, key exchange and enrichment use that same latched channel. Identity/key/session guards, LBT and retry bounds are unchanged. There is no global frequency/CTRL/preamble change, no hop to follow arbitrary later packets and no key persistence before existing proof succeeds. Cancel or a new session removes the option; normal pairing remains CH2.
+
+The class-A 18-byte discovery and reported nine-byte directed packets are observations, not evidence of successful pairing. Native tests inject the discovery into synthetic sessions and compare default CH2 with opt-in CH3; physical acceptance still requires the same motor's PROG window without reset. Do not use this command to replace a working paired channel or infer a missing 0x2D/0x3C.

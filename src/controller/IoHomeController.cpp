@@ -4155,6 +4155,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mPairingChannel = iChannelIndex;
     mPairingFreqIdx = frequencyIndexForHz(kNormal2WTxFreqHz);
     mPairingStartTime = millis();
+    mPairDirectedRxChannel=false;mPairDirectedRxFrequency=0xFF;
     mPairPushFrequency = 0xFF;
     mPairPullAttempts = 0;
     mPairRecoveryAttempts=0;mPairRecoveryAuthSent=false;
@@ -4404,6 +4405,7 @@ Pairing1WMode IoHomeController::lastPairing1WMode() const
 
 void IoHomeController::cancelPairing()
 {
+    mPairDirectedRxChannel=false;mPairDirectedRxFrequency=0xFF;
     invalidateImmediateReply();
     if(mPairing2WMode==Pairing2WMode::AtlanticPull){mPairingTelemetry.pullResult=PullKeyResult::Cancelled;cancelAtlantic();}
     if (mState >= ControllerState::PairSendDiscovery &&
@@ -6336,7 +6338,7 @@ bool IoHomeController::createAndTraceHmac1W(const uint8_t *iTranscript, uint8_t 
 
 RadioError IoHomeController::configureNormal2WTxRadio(uint16_t iPreambleSymbols)
 {
-    const uint32_t lTxFreq = kNormal2WTxFreqHz;
+    const uint32_t lTxFreq = pairingDirectedTxFrequency();
     return configureTxRadio(iPreambleSymbols, &lTxFreq);
 }
 
@@ -7841,6 +7843,7 @@ void IoHomeController::loop()
                         // discovery request that produced this correlated 0x29.
                         mPairAcceptedDiscoveryPreamble = mPairDiscoveryTxPreamble;
                         mPairingFreqIdx = mLastResponseFreqIdx;
+                        if(mPairDirectedRxChannel)mPairDirectedRxFrequency=mLastResponseFreqIdx;
                         mPairKeyExchangeAttempts = 0;
                         mPairKeyExchangeStartTime = 0;
 
@@ -9561,7 +9564,7 @@ void IoHomeController::processPairSendDiscoveryConfirmation()
         return;
     }
 
-    const uint32_t lConfirmationFreq = kNormal2WTxFreqHz;
+    const uint32_t lConfirmationFreq = pairingDirectedTxFrequency();
     const uint16_t lPreamble = pairingStartPreamble(mTxFrame);
 #if defined(RADIO_SX1262)
     const RadioError lFreqErr = mRadio.setFrequencyBlocking(lConfirmationFreq);
@@ -14531,4 +14534,19 @@ void IoHomeController::printChallengeTiming()const
             (unsigned long)t.prepareStartUs,(unsigned long)t.prepareEndUs,int(t.prepareResult),(unsigned long)t.txRequestUs,
             (unsigned long)t.txAcceptedUs,int(t.txResult),(unsigned long)t.txDoneObservedUs,t.hmacRecorded,t.prepareRecorded,t.txRequested,t.txAccepted,t.txDoneObserved,t.cachedIrq);
     }
+}
+
+// https://github.com/laberning/home_io_control/issues/187#issuecomment-6655235183
+bool IoHomeController::startPairingOnDiscoveryChannel(uint8_t channel,uint32_t peer)
+{
+    auto *ch=mModule?mModule->getChannel(channel):nullptr;
+    if(!ch||ch->is1W()||ch->isPaired()||peer>0xFFFFFF||getAddressClass(peer)!=IoHomeAddressClass::Unicast)return false;
+    if(!startPairing(channel,peer))return false;
+    mPairDirectedRxChannel=true;mPairDirectedRxFrequency=0xFF;return true;
+}
+uint32_t IoHomeController::pairingDirectedTxFrequency()const
+{
+    return mPairDirectedRxChannel&&isPairDiagnosticState(mState)&&mPairingKnownNodeId&&
+        mDiscoveredNodeId==mPairingKnownNodeId&&mPairDirectedRxFrequency<IOHC_NUM_FREQUENCIES?
+        IOHC_FREQUENCIES[mPairDirectedRxFrequency]:kNormal2WTxFreqHz;
 }
