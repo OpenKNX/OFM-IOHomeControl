@@ -15,6 +15,7 @@
 #include "../protocol/IoHomeSequence.h"
 #include "../protocol/IoHomeBattery.h"
 #include "../protocol/IoHomeDeviceEvent.h"
+#include "../protocol/IoHomeLocalSensorEvent.h"
 #include "../protocol/IoHomeProductRuntime.h"
 #include "../protocol/IoHomePhysicalBounds.h"
 #include "../protocol/IoHomeAssignmentReceipt.h"
@@ -487,11 +488,14 @@ public:
   void onBatteryError(uint8_t code,uint8_t command){if(mBatteryMonitoring)mBatteryInfo.observeError(code,command,0);}
   void onBatteryEventRaw(const IoHomeFrame &){}
   IoHomeDeviceEvent mLastDeviceEvent;
+  IoHomeLocalSensorSample mLastLocalSensor;
   bool onAuthenticatedDeviceEvent(const IoHomeFrame &frame,uint8_t frequency,uint32_t received,uint32_t verified) {
-    return mPaired&&!mIs1W&&frame.getSrcNodeId()==mNodeId&&mLastDeviceEvent.record(frame,frequency,received,verified);
+    if(!mPaired||mIs1W||frame.getSrcNodeId()!=mNodeId||!mLastDeviceEvent.record(frame,frequency,received,verified))return false;
+    mLastLocalSensor.record(frame,frequency,received,verified);return true;
   }
   const IoHomeDeviceEvent &lastDeviceEvent()const{return mLastDeviceEvent;}
-  void clearLastDeviceEvent(){mLastDeviceEvent.clear();}
+  const IoHomeLocalSensorSample &lastLocalSensorSample()const{return mLastLocalSensor;}
+  void clearLastDeviceEvent(){mLastDeviceEvent.clear();mLastLocalSensor.clear();}
   void onBatteryPrivate(uint8_t,const IoHomeFrame &,int,uint8_t,uint32_t){++mBatteryPrivateReplies;}
   void onBatteryObject(uint8_t,uint16_t,const uint8_t *,unsigned){++mBatteryObjectReplies;}
   unsigned testBatteryPrivateReplies()const{return mBatteryPrivateReplies;}

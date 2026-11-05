@@ -4382,6 +4382,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc object cancel TOKEN", "Cancel matching object read token");
     openknx.console.printHelpLine("iohc sensor monitor NODE INTERVAL_S DURATION_S", "Bounded raw sensor polling; interval 1..600 s, duration <=3600 s, disabled by default");
     openknx.console.printHelpLine("iohc sensor monitor-stop NODE | monitor-status NODE", "Stop future polls / inspect host session; no subscription or physical units");
+    openknx.console.printHelpLine("iohc sensor light-raw CHANNEL", "Local authenticated raw light sample; unit UNKNOWN; no RF");
     openknx.console.printHelpLine("iohc sensor subscribe-default NODE BACKBONE", "Expert: write recovered default subscription; both addresses hex, peer acceptance unqualified");
     openknx.console.printHelpLine("iohc sensor info NODE", "Read paired sensor information with 8B FF; no subscription write");
     openknx.console.printHelpLine("iohc sensor read NODE", "Read paired sensor status; preserve unknown physical units");
@@ -4550,6 +4551,15 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         if(!std::strcmp(action,"status"))mController.printDynamicActuatorStatus(index-1);
         else if(!std::strcmp(action,"read"))logInfoP("Dynamic capability reads queued=%u",mController.requestDynamicCapabilities(mChannels[index-1]));
         else logInfoP("Usage: iohc dynamic CHANNEL status|read");
+        return true;
+    }
+    if(iCmd.rfind("iohc sensor light-raw",0)==0) {
+        if(iDebugKo){logInfoP("Light raw requires local console");return true;}
+        unsigned index=0;char extra=0;
+        if(sscanf(iCmd.c_str(),"iohc sensor light-raw %u %c",&index,&extra)!=1||index<1||index>mNumChannels){
+            logInfoP("Usage: iohc sensor light-raw CHANNEL");return true;
+        }
+        if(auto *channel=mChannels[index-1])channel->printLocalSensorSample();
         return true;
     }
     if(iCmd.rfind("iohc event ",0)==0) {

@@ -23971,6 +23971,7 @@ TEST(controller_status_event_short_capture_requires_proof_before_recording)
     ASSERT_TRUE(queueControllerResponse(c,frame));
     ASSERT_EQ(c.radio().testTransmitCount(),1U);
     ASSERT_TRUE(!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate()&&!ch.testStatusExpected());
+    ASSERT_TRUE(!ch.lastLocalSensorSample().valid);
     ASSERT_TRUE(!ch.lastDeviceEvent().valid);
     IoHomeFrame challenge,proof,ack;
     ASSERT_TRUE(lastTransmittedFrameForTest(c,challenge));
@@ -23980,6 +23981,8 @@ TEST(controller_status_event_short_capture_requires_proof_before_recording)
     c.loop();ASSERT_TRUE(queueControllerResponse(c,proof));
     const auto &event=ch.lastDeviceEvent();
     ASSERT_TRUE(event.valid);ASSERT_EQ(event.count,1U);ASSERT_EQ(event.eventId,0x2005);
+    ASSERT_TRUE(ch.lastLocalSensorSample().valid);ASSERT_EQ(ch.lastLocalSensorSample().value.raw,0);
+    ASSERT_EQ(ch.lastLocalSensorSample().verifiedAtMs,event.verifiedAtMs);
     ASSERT_EQ(event.source,0x654321U);ASSERT_EQ(event.destination,0x123456U);
     ASSERT_EQ(event.length,sizeof(data));ASSERT_MEM_EQ(event.data,data,sizeof(data));
     ASSERT_EQ(event.verifiedAtMs,ioHomeTestMillis());
@@ -24041,7 +24044,8 @@ TEST(controller_device_event_rejects_unqualified_and_malformed_before_challenge)
         const auto sent=c.radio().testTransmitCount();
         ASSERT_TRUE(queueControllerResponse(c,frame));
         ASSERT_EQ(c.radio().testTransmitCount(),sent);
-        ASSERT_TRUE(!ch.lastDeviceEvent().valid&&!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate());
+        ASSERT_TRUE(!ch.lastLocalSensorSample().valid);
+    ASSERT_TRUE(!ch.lastDeviceEvent().valid&&!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate());
     }
 }
 
@@ -24074,7 +24078,8 @@ TEST(controller_device_event_proof_binds_saved_payload_identity_frequency_and_ag
         if(variant==13){c.setPassiveMode(true);c.setPassiveMode(false);}
         if(variant==14)c.setOwnNodeId(0x112233);
         ASSERT_TRUE(queueControllerResponse(c,proof));
-        ASSERT_TRUE(!ch.lastDeviceEvent().valid&&!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate());
+        ASSERT_TRUE(!ch.lastLocalSensorSample().valid);
+    ASSERT_TRUE(!ch.lastDeviceEvent().valid&&!ch.testHasPositionFeedback()&&!ch.testHasStatusUpdate());
         ASSERT_EQ(c.radio().testTransmitCount(),1U);
     }
 }
@@ -24102,7 +24107,8 @@ TEST(controller_device_event_records_only_authenticated_nonposition_and_clears_i
         case 4:c.setOwnNodeId(0x112233);c.setOwnNodeId(0x123456);break;
         case 5:ch.clearLastDeviceEvent();break;
         }
-        ASSERT_TRUE(!ch.lastDeviceEvent().valid);ASSERT_EQ(ch.lastDeviceEvent().count,0U);
+        ASSERT_TRUE(!ch.lastLocalSensorSample().valid);
+    ASSERT_TRUE(!ch.lastDeviceEvent().valid);ASSERT_EQ(ch.lastDeviceEvent().count,0U);
     }
 }
 
@@ -24155,3 +24161,5 @@ TEST(protocol_device_event_bounded_raw_storage_zero_time_counter_and_invalid_pre
 #include "corpus/daylight_capture_tests.inc"
 
 #include "corpus/foreign_transfer_tests.inc"
+
+#include "corpus/light_raw_tests.inc"

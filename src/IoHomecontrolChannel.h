@@ -6,6 +6,7 @@
 #include "protocol/IoHomeLimitation.h"
 #include "protocol/IoHomeBattery.h"
 #include "protocol/IoHomeDeviceEvent.h"
+#include "protocol/IoHomeLocalSensorEvent.h"
 #include "protocol/IoHomeHeatingRegisters.h"
 #include <vector>
 #include "OpenKNX.h"
@@ -114,11 +115,14 @@ public:
   const IoHomeBatteryInfo &batteryInfo()const{return mBatteryInfo;}
   // Called only by the controller after the saved inbound frame's proof passes.
   bool onAuthenticatedDeviceEvent(const IoHomeFrame &frame,uint8_t frequency,uint32_t received,uint32_t verified) {
-    return mPaired&&!mIs1W&&frame.getSrcNodeId()==mNodeId&&mLastDeviceEvent.record(frame,frequency,received,verified);
+    if(!mPaired||mIs1W||frame.getSrcNodeId()!=mNodeId||!mLastDeviceEvent.record(frame,frequency,received,verified))return false;
+    mLastLocalSensor.record(frame,frequency,received,verified);return true;
   }
   const IoHomeDeviceEvent &lastDeviceEvent()const{return mLastDeviceEvent;}
-  void clearLastDeviceEvent(){mLastDeviceEvent.clear();}
+  const IoHomeLocalSensorSample &lastLocalSensorSample()const{return mLastLocalSensor;}
+  void clearLastDeviceEvent(){mLastDeviceEvent.clear();mLastLocalSensor.clear();}
   void printLastDeviceEvent();
+  void printLocalSensorSample();
 
   void onEstimate(uint16_t iSeconds);
   void onTrustedMotionStatus(bool moving) {mTrustedPollMoving=moving&&mPollTrackingDeadlineMs!=0;}
@@ -289,6 +293,7 @@ private:
   bool mStatusExpected = false; // device will auto-send StatusUpdate while tracking
   IoHomeBatteryInfo mBatteryInfo;
   IoHomeDeviceEvent mLastDeviceEvent;
+  IoHomeLocalSensorSample mLastLocalSensor;
   bool mBatteryAlarmPublished = false; // current context; independent of cached KNX value
   struct BatteryObject {std::vector<uint8_t> data;uint32_t timestampMs=0;};
   BatteryObject mBatteryObjects[5]; // allocation only after explicit diagnostics

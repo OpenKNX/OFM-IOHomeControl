@@ -11,6 +11,8 @@ def block(source,needle):
         depth+=(source[end]=='{')-(source[end]=='}');end+=1
     return source[start:end]
 command=block((root/'src/IoHomecontrol.cpp').read_text(),'if(iCmd.rfind("iohc event ",0)==0)')
+light_command=block((root/'src/IoHomecontrol.cpp').read_text(),'if(iCmd.rfind("iohc sensor light-raw",0)==0)')
+light_formatter=block((root/'src/IoHomecontrolChannel.cpp').read_text(),'void IoHomecontrolChannel::printLocalSensorSample()')
 formatter=block((root/'src/IoHomecontrolChannel.cpp').read_text(),'void IoHomecontrolChannel::printLastDeviceEvent()')
 harness=r'''
 #include <cassert>
@@ -19,6 +21,7 @@ harness=r'''
 #include <cstring>
 #include <string>
 #include "protocol/IoHomeDeviceEvent.h"
+#include "protocol/IoHomeLocalSensorEvent.h"
 uint32_t now=10;uint32_t millis(){return now;}
 std::string messages;
 void logInfoP(const char*format,...){char text[512];va_list args;va_start(args,format);
@@ -26,6 +29,9 @@ vsnprintf(text,sizeof(text),format,args);va_end(args);messages+=text;messages+='
 struct IoHomecontrolChannel {
  unsigned _channelIndex=0;
  IoHomeDeviceEvent event;
+ IoHomeLocalSensorSample sample;
+ const IoHomeLocalSensorSample &lastLocalSensorSample()const{return sample;}
+ void printLocalSensorSample();
  const IoHomeDeviceEvent &lastDeviceEvent()const{return event;}
  void clearLastDeviceEvent(){event.clear();}
  void printLastDeviceEvent();
@@ -44,6 +50,14 @@ int main(){
  frame.setSrcNode(0x654321);frame.setDestNode(0x123456);
  const uint8_t data[]={5,0x60,0x20,5,5,6,0,0,0,0};memcpy(frame.data,data,sizeof(data));frame.dataLen=sizeof(data);
  assert(channel.event.record(frame,2,UINT32_MAX-19,UINT32_MAX-9));
+ channel.sample.record(frame,2,UINT32_MAX-19,UINT32_MAX-9);
+ messages.clear();assert(module.run("iohc sensor light-raw 1"));
+ for(const char*expected:{"raw=0","aux=00","unit=UNKNOWN","src=654321","dst=123456","rx_age_ms=30","proof=inbound_challenge"})assert(messages.find(expected)!=std::string::npos);
+ for(const char*bad:{"iohc sensor light-raw 0","iohc sensor light-raw 17","iohc sensor light-raw 1 extra","iohc sensor light-raw x"}){
+ messages.clear();assert(module.run(bad));assert(messages.find("Usage:")!=std::string::npos);}
+ messages.clear();assert(module.run("iohc sensor light-raw 1",true));assert(messages.find("requires local console")!=std::string::npos);
+ assert(module.run("iohc sensor light-raw 2"));
+
  messages.clear();assert(module.run("iohc event 1 status"));
  for(const char*expected:{"Last Device Event ch=1","event_id=2005","count=1","src=654321","dst=123456",
       "cmd=71","rx_freq_idx=2","rx_age_ms=30","age_ms=20","raw=05 60 20 05 05 06 00 00 00 00 ","proof=inbound_challenge","UNIT UNKNOWN"})
@@ -66,7 +80,7 @@ int main(){
 '''
 with tempfile.TemporaryDirectory() as folder:
     path=Path(folder)
-    (path/'console.cpp').write_text(harness+formatter+'\nbool IoHomecontrol::run(const std::string &iCmd,bool iDebugKo){'+command+'return false;}\n'+tests)
+    (path/'console.cpp').write_text(harness+formatter+light_formatter+'\nbool IoHomecontrol::run(const std::string &iCmd,bool iDebugKo){'+light_command+command+'return false;}\n'+tests)
     subprocess.run([os.environ.get('CXX','clang++'),'-std=c++17','-Wall','-Wextra','-DTEST_NATIVE',
                     '-I'+str(root/'src'),'-I'+str(root/'test'),str(path/'console.cpp'),
                     str(root/'src/protocol/IoHomeFrame.cpp'),str(root/'src/protocol/IoHomeCrypto.cpp'),

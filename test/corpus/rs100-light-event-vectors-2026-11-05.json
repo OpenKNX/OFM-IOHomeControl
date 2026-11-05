@@ -1,0 +1,204 @@
+{
+  "title": "Somfy RS100 Solar Local Sensor event 0x2005 (issue #156, November 2026)",
+  "source_comment_url": "https://github.com/laberning/home_io_control/issues/156#issuecomment-6665992911",
+  "source_attachment_url": "https://github.com/user-attachments/files/34441214/somfy-log.txt",
+  "provenance": "Application-level Last Device Event lines copied from the public issue comment. Not complete serialized RF frames.",
+  "byte_index_in_event_data": {
+    "event_data": "06 00 HH LL B9",
+    "candidate_reading": "HH LL, unsigned big-endian 16-bit",
+    "last_byte": "B9, meaning unknown"
+  },
+  "unit": "UNKNOWN: not proved to be lx or W/m2",
+  "confidence": {
+    "event_id": "high",
+    "raw_16bit_field": "high for this device/capture",
+    "physical_units": "unconfirmed",
+    "calibration": "unconfirmed"
+  },
+  "observations": [
+    {
+      "sequence": 1,
+      "reported_time": "12:00:01",
+      "device": "24635F",
+      "opcode": "0x71",
+      "event_id": "0x2005",
+      "payload_hex": "05 60 20 05 05 06 00 01 18 B9",
+      "sensor_value_raw_be16": 280,
+      "external_lux_near_time": 4083,
+      "note": "external reference sensor, not calibrated to the motor/panel"
+    },
+    {
+      "sequence": 2,
+      "reported_time": "12:20:00",
+      "device": "24635F",
+      "opcode": "0x71",
+      "event_id": "0x2005",
+      "payload_hex": "05 60 20 05 05 06 00 01 55 B9",
+      "sensor_value_raw_be16": 341,
+      "external_lux_near_time": 4361,
+      "note": "external reference sensor, not calibrated to the motor/panel"
+    },
+    {
+      "sequence": 3,
+      "reported_time": "12:40:01",
+      "device": "24635F",
+      "opcode": "0x71",
+      "event_id": "0x2005",
+      "payload_hex": "05 60 20 05 05 06 00 01 A7 B9",
+      "sensor_value_raw_be16": 423,
+      "external_lux_near_time": 4614,
+      "note": "external reference sensor, not calibrated to the motor/panel"
+    },
+    {
+      "sequence": 4,
+      "reported_time": "13:00:00",
+      "device": "24635F",
+      "opcode": "0x71",
+      "event_id": "0x2005",
+      "payload_hex": "05 60 20 05 05 06 00 01 F8 B9",
+      "sensor_value_raw_be16": 504,
+      "external_lux_near_time": 4774,
+      "note": "external reference sensor, not calibrated to the motor/panel"
+    },
+    {
+      "sequence": 5,
+      "reported_time": "13:40:02",
+      "device": "24635F",
+      "opcode": "0x71",
+      "event_id": "0x2005",
+      "payload_hex": "05 60 20 05 05 06 00 02 5E B9",
+      "sensor_value_raw_be16": 606,
+      "external_lux_near_time": 5110,
+      "note": "external reference sensor, not calibrated to the motor/panel"
+    },
+    {
+      "sequence": 6,
+      "reported_time": "14:00:01",
+      "device": "24635F",
+      "opcode": "0x71",
+      "event_id": "0x2005",
+      "payload_hex": "05 60 20 05 05 06 00 02 82 B9",
+      "sensor_value_raw_be16": 642,
+      "external_lux_near_time": 5045,
+      "note": "external reference sensor, not calibrated to the motor/panel"
+    },
+    {
+      "sequence": 7,
+      "reported_time": "14:20:00",
+      "device": "24635F",
+      "opcode": "0x71",
+      "event_id": "0x2005",
+      "payload_hex": "05 60 20 05 05 06 00 02 96 B9",
+      "sensor_value_raw_be16": 662,
+      "external_lux_near_time": 5152,
+      "note": "external reference sensor, not calibrated to the motor/panel"
+    },
+    {
+      "sequence": 8,
+      "reported_time": "15:00:00",
+      "device": "24635F",
+      "opcode": "0x71",
+      "event_id": "0x2005",
+      "payload_hex": "05 60 20 05 05 06 00 02 73 B9",
+      "sensor_value_raw_be16": 627,
+      "external_lux_near_time": null,
+      "note": "external reference sensor, not calibrated to the motor/panel"
+    },
+    {
+      "sequence": 9,
+      "reported_time": "15:20:00",
+      "device": "24635F",
+      "opcode": "0x71",
+      "event_id": "0x2005",
+      "payload_hex": "05 60 20 05 05 06 00 02 4A B9",
+      "sensor_value_raw_be16": 586,
+      "external_lux_near_time": 4532,
+      "note": "external reference sensor, not calibrated to the motor/panel"
+    },
+    {
+      "sequence": 10,
+      "reported_time": "16:00:00",
+      "device": "24635F",
+      "opcode": "0x71",
+      "event_id": "0x2005",
+      "payload_hex": "05 60 20 05 05 06 00 00 19 B9",
+      "sensor_value_raw_be16": 25,
+      "external_lux_near_time": 3125,
+      "note": "external reference sensor, not calibrated to the motor/panel"
+    },
+    {
+      "sequence": 11,
+      "reported_time": "16:20:01",
+      "device": "24635F",
+      "opcode": "0x71",
+      "event_id": "0x2005",
+      "payload_hex": "05 60 20 05 05 06 00 00 0F B9",
+      "sensor_value_raw_be16": 15,
+      "external_lux_near_time": 400,
+      "note": "external reference sensor, not calibrated to the motor/panel"
+    },
+    {
+      "sequence": 12,
+      "reported_time": "16:40:00",
+      "device": "24635F",
+      "opcode": "0x71",
+      "event_id": "0x2005",
+      "payload_hex": "05 60 20 05 05 06 00 00 05 B9",
+      "sensor_value_raw_be16": 5,
+      "external_lux_near_time": 210,
+      "note": "external reference sensor, not calibrated to the motor/panel"
+    },
+    {
+      "sequence": 13,
+      "reported_time": "17:20:01",
+      "device": "24635F",
+      "opcode": "0x71",
+      "event_id": "0x2005",
+      "payload_hex": "05 60 20 05 05 06 00 00 00 B9",
+      "sensor_value_raw_be16": 0,
+      "external_lux_near_time": 10,
+      "note": "external reference sensor, not calibrated to the motor/panel"
+    },
+    {
+      "sequence": 14,
+      "reported_time": "17:40:02",
+      "device": "24635F",
+      "opcode": "0x71",
+      "event_id": "0x2005",
+      "payload_hex": "05 60 20 05 05 06 00 00 00 B9",
+      "sensor_value_raw_be16": 0,
+      "external_lux_near_time": 0,
+      "note": "external reference sensor, not calibrated to the motor/panel"
+    },
+    {
+      "sequence": 15,
+      "reported_time": "18:40:00",
+      "device": "24635F",
+      "opcode": "0x71",
+      "event_id": "0x2005",
+      "payload_hex": "05 60 20 05 05 06 00 00 00 B9",
+      "sensor_value_raw_be16": 0,
+      "external_lux_near_time": 0,
+      "note": "external reference sensor, not calibrated to the motor/panel"
+    }
+  ],
+  "known_missing_or_unconfirmed_times": [
+    "13:20",
+    "14:40",
+    "15:40",
+    "17:00",
+    "18:00",
+    "18:20"
+  ],
+  "prior_reference": [
+    {
+      "time": "11:45",
+      "raw_light": 183
+    },
+    {
+      "time": "13:41",
+      "raw_light": 744,
+      "matched_object_index": 13
+    }
+  ]
+}

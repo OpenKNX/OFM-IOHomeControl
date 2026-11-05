@@ -3059,3 +3059,14 @@ void IoHomecontrolChannel::onHeatingValue(uint16_t reg,const IoHomeHeating::Valu
     }
 #endif
 }
+
+void IoHomecontrolChannel::printLocalSensorSample()
+{
+    const auto &sample=lastLocalSensorSample();
+    if(!sample.valid){logInfoP("Light raw ch=%u none (session-only)",unsigned(_channelIndex+1));return;}
+    logInfoP("Light raw ch=%u raw=%u aux=%02X unit=UNKNOWN src=%06lX dst=%06lX rx_freq_idx=%u received_ms=%lu verified_ms=%lu rx_age_ms=%lu age_ms=%lu proof=inbound_challenge",
+        unsigned(_channelIndex+1),unsigned(sample.value.raw),unsigned(sample.value.auxiliary),
+        (unsigned long)sample.source,(unsigned long)sample.destination,unsigned(sample.frequencyIndex),
+        (unsigned long)sample.receivedAtMs,(unsigned long)sample.verifiedAtMs,
+        (unsigned long)uint32_t(millis()-sample.receivedAtMs),(unsigned long)uint32_t(millis()-sample.verifiedAtMs));
+}
