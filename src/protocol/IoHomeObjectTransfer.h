@@ -8,7 +8,7 @@
 class IoHomeObjectTransfer {
 public:
     enum class Direction:uint8_t { Read,Write };
-    enum class Stage:uint8_t { Idle,Opening,Ready,Waiting,Done,Rejected,Aborted,Cancelled,Timeout,Invalid,TransportFailure,IdentityChanged };
+    enum class Stage:uint8_t { Idle,Opening,Ready,Waiting,Done,Rejected,Aborted,Cancelled,Timeout,Invalid,TransportFailure,IdentityChanged,Empty };
     static constexpr uint16_t Capacity=1024;
     bool begin(Direction direction,uint32_t peer,uint32_t token,uint8_t provider,uint16_t key,
                uint16_t offset,uint16_t span,uint32_t now,uint32_t budget,uint8_t compatibility0=0,uint8_t compatibility2=0) {
@@ -32,6 +32,11 @@ public:
     bool acceptOpening(uint32_t peer,uint32_t token,uint8_t command,const uint8_t *p,uint8_t length) {
         if(mStage!=Stage::Opening||!matches(peer,token)||command!=(mDirection==Direction::Read?0x47:0x49)||!p||length!=4)return false;
         mControl=p[0];mDisposition=p[1];mNegotiated=get16(p+2);
+        // https://github.com/laberning/home_io_control/commit/da10f29ba448a68489eb1e38c131a38fc1283a5d
+        // Empty is terminal READ-only; append its enum value to preserve API numbering.
+        if(mDirection==Direction::Read&&mDisposition==7){
+            mStage=mNegotiated?Stage::Invalid:Stage::Empty;return !mNegotiated;
+        }
         if(mDisposition>1){mStage=Stage::Rejected;return true;}
         if(mNegotiated>mRequested||mNegotiated>Capacity){mStage=Stage::Invalid;return false;}
         mStage=mDisposition==0&&!mNegotiated?Stage::Done:Stage::Ready;return true;
