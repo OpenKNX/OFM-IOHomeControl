@@ -7552,6 +7552,7 @@ void IoHomeController::loop()
         clearInboundStatus("identity_or_state_changed");
         if(owned){mRadio.standby();mState=ControllerState::Idle;startReceive();}
     }
+    serviceRemoteSettling();
     serviceAtlantic();
     if(mCurrentCmd.active&&(mCurrentCmd.atlanticToken||(mCurrentCmd.heatingToken&&mCurrentCmd.heatingData[3]==0x10))&&uint32_t(millis()-mExchangeStartMs)>=15000U){
         notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::SessionExhausted);
@@ -12623,6 +12624,7 @@ void IoHomeController::dispatchRxFrame()
             if (schedule(lDestNode,false)) return;
         } else if ((mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W) && lRemote &&
                    (lDestNode & 0x3FU)==0x3FU && lDestNode<=0xFFFFU) {
+            if(settleRemoteActivity(lSrcNode))return;
             bool scheduled=false;
             for (uint8_t i=0;i<lRemote->linkCount;++i)
                 scheduled=schedule(lRemote->linkedDevices[i],true)||scheduled;
@@ -14429,4 +14431,59 @@ void IoHomeController::printAtlanticStatus() const
     logInfoP("Atlantic stage=%s session=%lu channel=%u pairingNode=%06X heaterNode=%06X proofAttempts=%u rollcallAttempts=%u reason=%s",
         atlanticStageName(status.stage),(unsigned long)status.session,unsigned(status.channel+1),status.pairingNode,status.heaterNode,
         status.proofAttempts,status.rollcallAttempts,status.reason);
+}
+
+// Issue #209: truncated scheduling observations, not complete RF captures.
+// https://github.com/laberning/home_io_control/issues/209
+bool IoHomeController::remoteSettleIdentityValid(const RemoteSettleGroup &g) const
+{
+    if(!g.mask||g.gateway!=mOwnNodeId||std::memcmp(g.systemKey,mSystemKey,16))return false;
+    for(uint8_t i=0;i<16;++i)if(g.mask&(1U<<i))
+        if(!sampleIdentityMatches(i,g.members[i].node,g.members[i].key,g.members[i].revision))return false;
+    return true;
+}
+bool IoHomeController::configureRemoteSettling(uint8_t index,uint16_t mask,uint16_t quietMs)
+{
+    if(index>=4||!mModule)return false;
+    if(!mask){if(mRemoteSettling)mRemoteSettling[index]={};return true;}
+    if((mask&(mask-1))==0||quietMs<500||quietMs>30000)return false;
+    RemoteSettleGroup candidate;candidate.mask=mask;candidate.quietMs=quietMs;candidate.gateway=mOwnNodeId;
+    std::memcpy(candidate.systemKey,mSystemKey,16);
+    for(uint8_t i=0;i<16;++i)if(mask&(1U<<i)){
+        auto *ch=mModule->getChannel(i);if(!ch||!ch->isPaired()||ch->is1W()||!ch->allowsActuatorControls())return false;
+        candidate.members[i].node=ch->getNodeId();candidate.members[i].revision=ch->productContextRevision();
+        std::memcpy(candidate.members[i].key,ch->getEncryptionKey(),16);
+    }
+    if(!mRemoteSettling)mRemoteSettling.reset(new(std::nothrow) RemoteSettleGroup[4]);
+    if(!mRemoteSettling)return false;mRemoteSettling[index]=candidate;return true;
+}
+bool IoHomeController::settleRemoteActivity(uint32_t source)
+{
+    if(!mRemoteSettling||!mModule||mPassiveMode)return false;
+    const auto *remote=mModule->remoteMap().findRemote(source);if(!remote)return false;
+    bool matched=false;const uint32_t now=millis();
+    for(uint8_t g=0;g<4;++g){auto &group=mRemoteSettling[g];
+        if(!group.mask)continue;if(!remoteSettleIdentityValid(group)){group={};continue;}
+        bool linked=false;for(uint8_t i=0;i<16;++i)if(group.mask&(1U<<i))
+            for(uint8_t j=0;j<remote->linkCount;++j)linked=linked||remote->linkedDevices[j]==group.members[i].node;
+        if(!linked)continue;matched=true;
+        if(group.dispatched&&uint32_t(now-group.dispatchedMs)<60000U)continue;
+        if(!group.pending){group.firstMs=now;group.pending=true;}
+        group.lastMs=now;
+    }
+    return matched;
+}
+void IoHomeController::serviceRemoteSettling()
+{
+    if(!mRemoteSettling)return;const uint32_t now=millis();
+    for(uint8_t g=0;g<4;++g){auto &group=mRemoteSettling[g];if(!group.mask)continue;
+        if(!remoteSettleIdentityValid(group)){group={};continue;}
+        if(!group.pending)continue;
+        if(uint32_t(now-group.firstMs)>=600000U){group.pending=false;continue;}
+        if(mPassiveMode||mRadio.isPacketAvailable()||mState!=ControllerState::Idle||!queueEmpty()||uint32_t(now-group.lastMs)<group.quietMs)continue;
+        group.pending=false;group.dispatched=true;group.dispatchedMs=now;
+        // Reuse the channel's existing epoch/backoff/low-power policy and queue.
+        // Include members whose own remote was NOT heard during half-duplex TX.
+        for(uint8_t i=0;i<16;++i)if(group.mask&(1U<<i))mModule->getChannel(i)->scheduleStatusPoll(1,true);
+    }
 }

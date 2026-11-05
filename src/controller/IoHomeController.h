@@ -1303,10 +1303,21 @@ public:
   // Radio RSSI of last received packet
   int16_t lastRssi() const;
 
+  bool configureRemoteSettling(uint8_t group,uint16_t channelMask,uint16_t quietMs);
   Radio &radio();
   const Radio &radio() const;
 
 private:
+  struct RemoteSettleGroup {
+    struct Member {uint32_t node=0,revision=0;uint8_t key[16]{};} members[16];
+    uint32_t gateway=0,firstMs=0,lastMs=0,dispatchedMs=0;
+    uint8_t systemKey[16]{};
+    uint16_t mask=0,quietMs=0;bool pending=false,dispatched=false;
+  };
+  std::unique_ptr<RemoteSettleGroup[]> mRemoteSettling;
+  bool remoteSettleIdentityValid(const RemoteSettleGroup &group) const;
+  bool settleRemoteActivity(uint32_t source);
+  void serviceRemoteSettling();
   ForeignPollCounters mForeignPollCounters;
   struct ForeignPollObservation {uint32_t fingerprint=0, timeMs=0; bool valid=false;};
   ForeignPollObservation mForeignPollObservations[16]{};

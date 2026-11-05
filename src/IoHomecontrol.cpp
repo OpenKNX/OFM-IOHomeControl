@@ -4382,6 +4382,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc object cancel TOKEN", "Cancel matching object read token");
     openknx.console.printHelpLine("iohc sensor monitor NODE INTERVAL_S DURATION_S", "Bounded raw sensor polling; interval 1..600 s, duration <=3600 s, disabled by default");
     openknx.console.printHelpLine("iohc sensor monitor-stop NODE | monitor-status NODE", "Stop future polls / inspect host session; no subscription or physical units");
+    openknx.console.printHelpLine("iohc remote settle GROUP MASK QUIET_MS", "Volatile explicit channel group; mask hex; 0 disables");
     openknx.console.printHelpLine("iohc sensor light-raw CHANNEL", "Local authenticated raw light sample; unit UNKNOWN; no RF");
     openknx.console.printHelpLine("iohc sensor subscribe-default NODE BACKBONE", "Expert: write recovered default subscription; both addresses hex, peer acceptance unqualified");
     openknx.console.printHelpLine("iohc sensor info NODE", "Read paired sensor information with 8B FF; no subscription write");
@@ -4552,6 +4553,13 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         else if(!std::strcmp(action,"read"))logInfoP("Dynamic capability reads queued=%u",mController.requestDynamicCapabilities(mChannels[index-1]));
         else logInfoP("Usage: iohc dynamic CHANNEL status|read");
         return true;
+    }
+    if(iCmd.rfind("iohc remote settle ",0)==0) {
+        if(iDebugKo){logInfoP("Remote settling requires local console");return true;}
+        unsigned group=0,mask=0,quiet=0;char extra=0;
+        if(sscanf(iCmd.c_str(),"iohc remote settle %u %x %u %c",&group,&mask,&quiet,&extra)!=3||group<1||group>4||mask>0xFFFF||quiet>30000){
+            logInfoP("Usage: iohc remote settle GROUP HEX_CHANNEL_MASK QUIET_MS (groups 1..4, mask 0 disables)");return true;}
+        logInfoP("Remote settling configured=%u volatile; no immediate RF",mController.configureRemoteSettling(group-1,mask,quiet));return true;
     }
     if(iCmd.rfind("iohc sensor light-raw",0)==0) {
         if(iDebugKo){logInfoP("Light raw requires local console");return true;}
