@@ -24167,3 +24167,5 @@ TEST(protocol_device_event_bounded_raw_storage_zero_time_counter_and_invalid_pre
 #include "corpus/empty_object_tests.inc"
 
 #include "corpus/remote_settle_tests.inc"
+
+#include "corpus/window_main_only_tests.inc"

@@ -121,16 +121,16 @@ public:
   bool agiliaHomeAwayEnabled()const{return homeAwayQualified;}
   void onHomeAwayCommandStatus(){++homeAwayPublications;}
   uint32_t productContextRevision() const {return mProductContextRevision;}
-  void invalidateProductContext() {mBatteryInfo={};clearLastDeviceEvent();mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
+  void invalidateProductContext() {mWindowMainOnly=false;mBatteryInfo={};clearLastDeviceEvent();mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
   IoHomePhysicalBounds &physicalBounds(){return mPhysicalBounds;}
   IoHomeProductRuntime &productRuntime() {mProductRuntime.bind(mIoAddress,mEncKey);return mProductRuntime;}
   bool is1W() const { return mIs1W; }
-  void setIs1W(bool iIs1W) { if(mIs1W!=iIs1W)clearLastDeviceEvent();mIs1W = iIs1W; }
+  void setIs1W(bool iIs1W) { if(mIs1W!=iIs1W){mWindowMainOnly=false;clearLastDeviceEvent();}mIs1W = iIs1W; }
   bool isPaired() const { return mPaired; }
   bool isOneWayEnrolled() const { return mOneWayEnrolled; }
   void setOneWayEnrolled(bool iEnrolled) { mOneWayEnrolled = iEnrolled; }
   bool isOperational() const { return mIs1W ? mOneWayEnrolled : mPaired; }
-  void setPaired(bool iPaired) { if(!iPaired)clearLastDeviceEvent();mPaired = iPaired; }
+  void setPaired(bool iPaired) { if(!iPaired){mWindowMainOnly=false;clearLastDeviceEvent();}mPaired = iPaired; }
 
   void setConfigured1WTargetNodeId(uint32_t iNodeId) { mConfigured1WTargetNodeId = iNodeId; }
   uint32_t getConfigured1WTargetNodeId() const { return mConfigured1WTargetNodeId; }
@@ -155,7 +155,7 @@ public:
 
   void setNodeId(uint32_t iNodeId)
   {
-    if(mNodeId!=iNodeId)clearLastDeviceEvent();
+    if(mNodeId!=iNodeId){mWindowMainOnly=false;clearLastDeviceEvent();}
     mNodeId = iNodeId;
     mPaired = (iNodeId != 0);
   }
@@ -163,7 +163,7 @@ public:
 
   void setEncryptionKey(const uint8_t *iKey)
   {
-    if(iKey&&memcmp(mEncKey,iKey,sizeof(mEncKey)))clearLastDeviceEvent();
+    if(iKey&&memcmp(mEncKey,iKey,sizeof(mEncKey))){mWindowMainOnly=false;clearLastDeviceEvent();}
     if (iKey)
       memcpy(mEncKey, iKey, sizeof(mEncKey));
   }
@@ -467,6 +467,17 @@ public:
                                          mManualPackedProfile & 0x3F)
                : ioHomeProfileDescriptor(mProtocolIdentity);
   }
+  bool setWindowMainOnly(bool enabled) {
+    if(enabled&&(!mPaired||mIs1W||!mProtocolIdentity.valid||mProtocolIdentity.ioAddress!=mNodeId||
+       mProtocolIdentity.manufacturerId!=uint8_t(IoHomeManufacturer::Velux)||mProtocolIdentity.profile!=4||mProtocolIdentity.subProfile>1))return false;
+    mWindowMainOnly=enabled;return true;
+  }
+  bool windowMainOnly() const {
+    const auto *p=getEffectiveProfileDescriptor();
+    return mWindowMainOnly&&mPaired&&!mIs1W&&mProtocolIdentity.valid&&mProtocolIdentity.ioAddress==mNodeId&&
+       mProtocolIdentity.manufacturerId==uint8_t(IoHomeManufacturer::Velux)&&mProtocolIdentity.profile==4&&mProtocolIdentity.subProfile<=1&&
+       p&&p->profile==4&&p->subProfile==mProtocolIdentity.subProfile;
+  }
   bool garageEndpointsOnly() const { return mGarageEndpointsOnly; }
   void setGarageEndpointsOnly(bool enabled) { mGarageEndpointsOnly=enabled; }
   void setManualProfileOverride(uint16_t iPackedType)
@@ -487,6 +498,7 @@ public:
   void onBatteryStatus(uint8_t status,uint8_t command){if(mBatteryMonitoring)mBatteryInfo.observeStatus(status,command,0);}
   void onBatteryError(uint8_t code,uint8_t command){if(mBatteryMonitoring)mBatteryInfo.observeError(code,command,0);}
   void onBatteryEventRaw(const IoHomeFrame &){}
+  bool mWindowMainOnly=false;
   IoHomeDeviceEvent mLastDeviceEvent;
   IoHomeLocalSensorSample mLastLocalSensor;
   bool onAuthenticatedDeviceEvent(const IoHomeFrame &frame,uint8_t frequency,uint32_t received,uint32_t verified) {

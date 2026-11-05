@@ -12194,6 +12194,13 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                                                 iEntry.twoWayRawLen))
                     return false;
             }
+            // Opt-in KLR200 main-only form; explicit speed FP must never be silently dropped.
+            // Source: https://github.com/laberning/home_io_control/issues/205
+            else if(lTargetCh&&lTargetCh->windowMainOnly()&&!iEntry.twoWayFp) {
+                if(iEntry.twoWayMovementFp)return false;
+                if(!build2WExecuteMainOnlyPayload(iEntry.param<=100?iEntry.param*2U:iEntry.param,
+                                                lTwoWayAcei,mTxFrame.data,mTxFrame.dataLen))return false;
+            }
             else if (lTargetCh && ioHomeGarageMainOnly(lTargetCh->getEffectiveProfileDescriptor()) &&
                      !iEntry.twoWayFp)
             {

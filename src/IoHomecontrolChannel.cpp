@@ -1292,7 +1292,7 @@ bool IoHomecontrolChannel::isOperational() const
 void IoHomecontrolChannel::setNodeId(uint32_t iNodeId)
 {
     if (mNodeId != (iNodeId & 0x00FFFFFF)) mOptimisticPosition={};
-    if(mNodeId!=(iNodeId&0x00FFFFFF)){clearStatusPollTracking();invalidateHeatingFeedback();clearLastDeviceEvent();}
+    if(mNodeId!=(iNodeId&0x00FFFFFF)){mWindowMainOnly=false;clearStatusPollTracking();invalidateHeatingFeedback();clearLastDeviceEvent();}
     mNodeId = iNodeId & 0x00FFFFFF; // 24-bit
     mPaired = (mNodeId != 0);
     mProductRuntime.bind(mNodeId,mEncKey);
@@ -1305,7 +1305,7 @@ uint32_t IoHomecontrolChannel::getNodeId() const
 
 void IoHomecontrolChannel::setEncryptionKey(const uint8_t *iKey)
 {
-    if (memcmp(mEncKey, iKey, 16)) {clearStatusPollTracking();mOptimisticPosition={};invalidateHeatingFeedback();clearLastDeviceEvent();}
+    if (memcmp(mEncKey, iKey, 16)) {mWindowMainOnly=false;clearStatusPollTracking();mOptimisticPosition={};invalidateHeatingFeedback();clearLastDeviceEvent();}
     memcpy(mEncKey, iKey, 16);
     mProductRuntime.bind(mNodeId,mEncKey);
 }
@@ -1460,7 +1460,7 @@ bool IoHomecontrolChannel::hasOneWayControllerIdentity() const
 void IoHomecontrolChannel::setConfigured1WProfileChannel(uint8_t iChannelIndex) { mConfigured1WProfileChannel = iChannelIndex; }
 uint8_t IoHomecontrolChannel::getConfigured1WProfileChannel() const { return mConfigured1WProfileChannel; }
 bool IoHomecontrolChannel::is1W() const { return mIs1W; }
-void IoHomecontrolChannel::setIs1W(bool iIs1W) { if(mIs1W!=iIs1W){clearStatusPollTracking();clearLastDeviceEvent();}mIs1W = iIs1W; }
+void IoHomecontrolChannel::setIs1W(bool iIs1W) { if(mIs1W!=iIs1W){mWindowMainOnly=false;clearStatusPollTracking();clearLastDeviceEvent();}mIs1W = iIs1W; }
 void IoHomecontrolChannel::setConfigured1WTargetNodeId(uint32_t iNodeId) { mConfigured1WTargetNodeId = iNodeId & 0x00FFFFFF; }
 uint32_t IoHomecontrolChannel::getConfigured1WTargetNodeId() const { return mConfigured1WTargetNodeId; }
 void IoHomecontrolChannel::setConfigured1WBroadcastType(uint8_t iBroadcastType) { mConfigured1WBroadcastType = iBroadcastType & 0x3F; }

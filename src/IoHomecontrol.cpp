@@ -4382,6 +4382,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc object cancel TOKEN", "Cancel matching object read token");
     openknx.console.printHelpLine("iohc sensor monitor NODE INTERVAL_S DURATION_S", "Bounded raw sensor polling; interval 1..600 s, duration <=3600 s, disabled by default");
     openknx.console.printHelpLine("iohc sensor monitor-stop NODE | monitor-status NODE", "Stop future polls / inspect host session; no subscription or physical units");
+    openknx.console.printHelpLine("iohc window main-only CHANNEL on|off", "Volatile qualified VELUX Window option; no immediate RF");
     openknx.console.printHelpLine("iohc remote settle GROUP MASK QUIET_MS", "Volatile explicit channel group; mask hex; 0 disables");
     openknx.console.printHelpLine("iohc sensor light-raw CHANNEL", "Local authenticated raw light sample; unit UNKNOWN; no RF");
     openknx.console.printHelpLine("iohc sensor subscribe-default NODE BACKBONE", "Expert: write recovered default subscription; both addresses hex, peer acceptance unqualified");
@@ -4553,6 +4554,13 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         else if(!std::strcmp(action,"read"))logInfoP("Dynamic capability reads queued=%u",mController.requestDynamicCapabilities(mChannels[index-1]));
         else logInfoP("Usage: iohc dynamic CHANNEL status|read");
         return true;
+    }
+    if(iCmd.rfind("iohc window main-only ",0)==0) {
+        if(iDebugKo){logInfoP("Window main-only requires local console");return true;}
+        unsigned index=0;char value[4]{};char extra=0;
+        if(sscanf(iCmd.c_str(),"iohc window main-only %u %3s %c",&index,value,&extra)!=2||index<1||index>mNumChannels||
+           (std::strcmp(value,"on")&&std::strcmp(value,"off"))){logInfoP("Usage: iohc window main-only CHANNEL on|off");return true;}
+        auto *channel=mChannels[index-1];logInfoP("Window main-only configured=%u volatile; no immediate RF",channel&&channel->setWindowMainOnly(!std::strcmp(value,"on")));return true;
     }
     if(iCmd.rfind("iohc remote settle ",0)==0) {
         if(iDebugKo){logInfoP("Remote settling requires local console");return true;}

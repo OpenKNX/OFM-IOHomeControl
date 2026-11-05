@@ -69,7 +69,7 @@ public:
   void onHeatingValue(uint16_t reg,const IoHomeHeating::Value &value);
   void onPositionFeedback(float iPositionPercent);
   uint32_t productContextRevision() const {return mProductContextRevision;}
-  void invalidateProductContext() {clearStatusPollTracking();invalidateHeatingFeedback();mOptimisticPosition={};invalidateBattery();clearLastDeviceEvent();mProfileReceivedMask=0;mRequestedSpeedIndex=0;mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
+  void invalidateProductContext() {mWindowMainOnly=false;clearStatusPollTracking();invalidateHeatingFeedback();mOptimisticPosition={};invalidateBattery();clearLastDeviceEvent();mProfileReceivedMask=0;mRequestedSpeedIndex=0;mProductRuntime.invalidate();mPhysicalBounds.invalidate();mProductContextRevision=mProductContextRevision==0xFFFFFFFF?0:mProductContextRevision?mProductContextRevision+1:0;}
   IoHomePhysicalBounds &physicalBounds(){return mPhysicalBounds;}
   const IoHomePhysicalBounds &physicalBounds()const{return mPhysicalBounds;}
   IoHomeProductRuntime &productRuntime() {return mProductRuntime;}
@@ -97,6 +97,17 @@ public:
   uint32_t getIoAddress() const;
   const IoHomeProtocolIdentity &getProtocolIdentity() const;
   const IoHomeProfileDescriptor *getEffectiveProfileDescriptor() const;
+  bool setWindowMainOnly(bool enabled) {
+    if(enabled&&(!mPaired||mIs1W||!mProtocolIdentity.valid||mProtocolIdentity.ioAddress!=mNodeId||
+       mProtocolIdentity.manufacturerId!=uint8_t(IoHomeManufacturer::Velux)||mProtocolIdentity.profile!=4||mProtocolIdentity.subProfile>1))return false;
+    mWindowMainOnly=enabled;return true;
+  }
+  bool windowMainOnly() const {
+    const auto *p=getEffectiveProfileDescriptor();
+    return mWindowMainOnly&&mPaired&&!mIs1W&&mProtocolIdentity.valid&&mProtocolIdentity.ioAddress==mNodeId&&
+       mProtocolIdentity.manufacturerId==uint8_t(IoHomeManufacturer::Velux)&&mProtocolIdentity.profile==4&&mProtocolIdentity.subProfile<=1&&
+       p&&p->profile==4&&p->subProfile==mProtocolIdentity.subProfile;
+  }
   bool garageEndpointsOnly() const;
   void setManualProfileOverride(uint16_t iPackedType);
   IoHomeGenericCapabilities getProfileCapabilities() const;
@@ -292,6 +303,7 @@ private:
   bool mStopSettlePollPending = false;
   bool mStatusExpected = false; // device will auto-send StatusUpdate while tracking
   IoHomeBatteryInfo mBatteryInfo;
+  bool mWindowMainOnly=false;
   IoHomeDeviceEvent mLastDeviceEvent;
   IoHomeLocalSensorSample mLastLocalSensor;
   bool mBatteryAlarmPublished = false; // current context; independent of cached KNX value
