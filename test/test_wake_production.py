@@ -10,6 +10,7 @@ def method(source,signature):
     return source[start:end]
 channel=(root/'src/IoHomecontrolChannel.cpp').read_text()
 methods='\n'.join(method(channel,signature) for signature in [
+    'bool IoHomecontrolChannel::isStatusPollTrackingActive(',
     'void IoHomecontrolChannel::setNodeId(',
     'void IoHomecontrolChannel::setEncryptionKey(',
     'void IoHomecontrolChannel::setIs1W(',
@@ -28,6 +29,7 @@ methods='\n'.join(method(channel,signature) for signature in [
     'void IoHomecontrolChannel::clearStatusPollTracking(',
     'void IoHomecontrolChannel::stopTravelEstimation(',
     'bool IoHomecontrolChannel::requestStatus(bool'])
+methods+='\nvoid IoHomecontrolChannel::periodicTick(bool pollPaused){const uint32_t lNow=millis();uint16_t lPollSec=pollSec;'+method(channel,'    if (!pollPaused && lPollSec > 0')+'}\n'
 harness=r'''#include <cassert>
 #include <cstdint>
 #include "protocol/IoHomeCommands.h"
@@ -36,6 +38,8 @@ harness=r'''#include <cassert>
 #include "protocol/IoHomeRemainingTime.h"
 #include "protocol/IoHomeDeviceEvent.h"
 unsigned now=1000;unsigned millis(){return now;}
+uint16_t pollSec=0;constexpr unsigned kLowPowerBackgroundPollMinMs=60000;
+bool delayCheck(unsigned started,unsigned interval){return uint32_t(millis()-started)>=interval;}
 #define logInfoP(...) ((void)0)
 #define logDebugP(...) ((void)0)
 #define logInfoP(...) ((void)0)
@@ -83,6 +87,8 @@ struct IoHomecontrolChannel {
  bool mHas2WHeardEvidence=false,mHas2WMovingEvidence=false,mConfirmsExecute=false,mStopSettlePollPending=false;
  uint32_t mLast2WHeardMs=0,mLast2WMovingEvidenceMs=0,m2WMovingEvidenceGeneration=0;
  bool snapshot=true;unsigned restores=0,polls=0;
+ bool mWindowMainOnly=false;
+ void periodicTick(bool);bool isStatusPollTrackingActive(uint32_t)const;
  bool mIs1W=false,mStatusExpected=false,mSingleFollowUpPollPending=false,mPaired=true,lowPower=false;
  bool effectiveLowPower2W(){return lowPower;}
  unsigned _channelIndex=0;uint32_t mRfPollRetryAtMs=0;bool mRfPollWaiting=false;
@@ -266,6 +272,15 @@ tests=r'''int main(){
  auto streak=ch.mStatusPollFailures;ch.mPollTrackingDeadlineMs=now;
  ch.onStatusPollFailed(false);assert(ch.mStatusPollFailures==0&&ch.mMovingPollMisses==0);streak=0;
  ch.mPollTrackingDeadlineMs=0;ch.onStatusPollFailed(true);assert(ch.mPollTrackingDeadlineMs==0);
+ // KLR200 moved the physical window without a heard frame. Poll only, then observed feedback.
+ ch.mPollTrackingDeadlineMs=0;ch.mRfPollWaiting=false;ch.mController.rfWait=0;ch.lowPower=true;ch.mStatusPollTimer=now;
+ ch.mCurrentPosition=0;pollSec=1;auto reads=ch.mController.submissions;
+ now+=59999;ch.periodicTick(false);assert(ch.mController.submissions==reads);
+ ++now;ch.periodicTick(true);assert(ch.mController.submissions==reads);
+ ch.periodicTick(false);assert(ch.mController.submissions==reads+1&&ch.mCurrentPosition==0);
+ ch.onPositionFeedback(75);assert(ch.mCurrentPosition==75); // only a real correlated readback corrects stale position
+ ch.mPollTrackingDeadlineMs=now+600000;now+=60000;ch.periodicTick(false);assert(ch.mController.submissions==reads+1);
+ ch.mPollTrackingDeadlineMs=0;pollSec=0;ch.periodicTick(false);assert(ch.mController.submissions==reads+1);
  ch.mPaired=false;ch.mPollTrackingDeadlineMs=now+600000;ch.onStatusPollFailed(false);
  assert(ch.mStatusPollFailures==streak);
 
