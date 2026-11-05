@@ -7,6 +7,7 @@ TEST(controller_window_main_only_is_opt_in_qualified_and_preserves_acei_target_a
         ASSERT_TRUE(!ch.setWindowMainOnly(true));IoHomeProtocolIdentity identity;identity.valid=true;identity.ioAddress=ch.getNodeId();identity.profile=4;identity.subProfile=sub;identity.manufacturerId=1;identity.nodeClass=IoHomeNodeClass::Actuator;
         ch.onProtocolIdentity(ch.getNodeId(),identity);ch.setConfigured2WAcei(acei);
         ASSERT_TRUE(!ch.windowMainOnly());ASSERT_TRUE(ch.setWindowMainOnly(true));ASSERT_TRUE(ch.windowMainOnly());
+        ASSERT_TRUE(!c.sendProfileMovementCommand(ch.getNodeId(),key,target,1,0xD805));
         ASSERT_TRUE(c.sendCommand(ch.getNodeId(),key,IoHomeCommand::Execute,target));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
         ASSERT_EQ(tx.dataLen,6);const uint8_t expected[]={1,acei,uint8_t(target*2),0,0,0};ASSERT_MEM_EQ(tx.data,expected,6);
         ASSERT_TRUE(!tx.hasHmac);IoHomeFrame challenge,reply;const uint8_t nonce[]={1,2,3,4,5,6};

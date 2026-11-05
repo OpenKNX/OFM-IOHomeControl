@@ -2725,6 +2725,10 @@ void IoHomecontrolChannel::updateProfileParameterValidity()
 
 bool IoHomecontrolChannel::sendTwoWayMovement(uint8_t position)
 {
+    // Explicit main-only selection precedes automatic ETS/MVS speed insertion.
+    // An explicitly requested speed still conflicts and must fail before enqueue.
+    if(windowMainOnly())return !mRequestedSpeedIndex&&
+        mController.sendCommand(mNodeId,mEncKey,IoHomeCommand::Execute,position,0xFF,0xFF);
     const auto *profile=getEffectiveProfileDescriptor();
     uint8_t index=mRequestedSpeedIndex;
     uint16_t speed=mRequestedSpeedRaw;

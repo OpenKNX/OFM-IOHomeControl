@@ -3575,7 +3575,7 @@ bool IoHomeController::cancelGetKeyOfNode()
 bool IoHomeController::sendProfileMovementCommand(uint32_t node,const uint8_t *key,uint8_t position,uint8_t speedIndex,uint16_t raw)
 {
     auto *channel=channelForNode(node);
-    if (!channel || !channel->isPaired() || channel->is1W() || !channel->allowsActuatorControls() ||
+    if (!channel || !channel->isPaired() || channel->is1W() || !channel->allowsActuatorControls() || channel->windowMainOnly() ||
         (position>100 && position!=0xD8)) return false;
     const auto *profile=channel->getEffectiveProfileDescriptor();
     if (!profile || (profile->capabilityFlags&IoHomeCapabilityBinaryOnly) || speedIndex<1 || speedIndex>3 ||

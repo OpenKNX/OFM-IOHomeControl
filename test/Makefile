@@ -127,6 +127,7 @@ check-key-import-identity:
 
 .PHONY: check-device-events
 check-device-events:
+	$(PYTHON) test_window_movement_selection.py
 	$(PYTHON) test_device_event_console.py
 
 .PHONY: check-wake-production check-wake-trials
