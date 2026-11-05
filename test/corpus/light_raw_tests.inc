@@ -31,3 +31,12 @@ TEST(protocol_light_raw_published_payloads_and_schema)
     ASSERT_TRUE(!IoHomeLocalSensorEvent::decode(IoHomeCommand::PrivateResponse,data,10,value));
     ASSERT_TRUE(!IoHomeLocalSensorEvent::decode(IoHomeCommand::StatusUpdate,nullptr,10,value));
 }
+
+#include "protocol/IoHomeEventSubscriptionPlan.h"
+TEST(protocol_light_raw_subscription_plan_does_not_enable_battery_or_unsubscribe)
+{
+    uint8_t data[3]={0xAA,0xAA,0xAA};
+    ASSERT_TRUE(ioHomeBuildLightSubscriptionPlan(0x2005,1,data));ASSERT_MEM_EQ(data,"\x01\x20\x05",3);
+    for(uint16_t event:{0x100A,0x2001,0x2006})ASSERT_TRUE(!ioHomeBuildLightSubscriptionPlan(event,1,data));
+    ASSERT_TRUE(!ioHomeBuildLightSubscriptionPlan(0x2005,0,data));ASSERT_TRUE(!ioHomeBuildLightSubscriptionPlan(0x2005,2,data));
+}
