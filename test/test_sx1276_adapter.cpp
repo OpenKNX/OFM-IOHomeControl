@@ -28,6 +28,9 @@ int main(){
  assert(b.registers[REG_RXBW]==0x0B&&b.registers[REG_AFCBW]==0x12);
  assert(b.registers[REG_FRFMSB]==frf[0]&&b.registers[REG_FRFMID]==frf[1]&&b.registers[REG_FRFLSB]==frf[2]);
  assert(radio.setSupervisionIntervalMs(3000)&&!radio.setSupervisionIntervalMs(4000));assert(radio.setSupervisionIntervalMs(5000));
+ b.registers[REG_IRQFLAGS1]=RF_IRQFLAGS1_PREAMBLEDETECT;assert(radio.isPreambleDetected()&&!radio.isSyncDetected());
+ b.registers[REG_IRQFLAGS1]|=RF_IRQFLAGS1_SYNCADDRESSMATCH;assert(radio.isSyncDetected());
+ b.registers[REG_IRQFLAGS1]=0;
  // Synthetic register model: only a changed frequency in RX restarts the chain.
  b.registers[REG_RXCONFIG]=0x9E;radio.setFrequency(IOHC_FREQ_3);
  assert(b.registers[REG_RXCONFIG]==0xBE);
