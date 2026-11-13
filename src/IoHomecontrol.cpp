@@ -4411,6 +4411,9 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohcNN pair1w stop|status", "Stop or show the 1W key-receive (clone) state");
     openknx.console.printHelpLine("iohcNN bind1w ADDR", "Bind/rebind a 1W broadcast profile to an actuator node");
     openknx.console.printHelpLine("iohcNN remove1w [ADDR]", "Shortcut for: pair1w [ADDR] remove");
+    openknx.console.printHelpLine("iohc keyimport controller-pull CH HUB MEMBER", "Explicit pull to an empty channel; requires a known member's cryptographic proof");
+    openknx.console.printHelpLine("iohc keyimport controller-status|controller-cancel", "Inspect or wipe the temporary import session; never displays keys");
+    openknx.console.printHelpLine("iohc keyimport controller-commit SESSION", "Commit only a verified current session; preserve gateway and assigned devices");
     openknx.console.printHelpLine("iohcNN pair2w-exp MODE [ADDR]", "Diagnostic-only 2W pairing mode: discovery-confirm|launch-key|pull-key|pull-atlantic");
     openknx.console.printHelpLine("iohc pair cancel", "Cancel ongoing pairing");
     openknx.console.printHelpLine("iohc pairdiag on|off|status", "Verbose pairing/discovery diagnostics");

@@ -24558,3 +24558,14 @@ TEST(controller_trusted_pull_silent_giver_requires_member_mac_and_explicit_durab
         ASSERT_EQ(c.controllerKeyPull().stage(),storageFailure?Stage::Failed:Stage::Committed);
     }
 }
+
+TEST(controller_tatou_pull_direction_never_sends_key_giver_commands)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel spare,member;IoHomeFrame launch;
+    ASSERT_TRUE(beginTrustedPullForTest(c,m,spare,member,launch));
+    ASSERT_EQ(launch.commandId,IoHomeCommand::LaunchKeyTransfer);
+    for(const auto &wire:c.radio().testTransmittedPackets()) {
+        ASSERT_TRUE(wire.size()>8);ASSERT_TRUE(wire[8]!=0x31&&wire[8]!=0x32);
+    }
+    ASSERT_TRUE(!spare.isPaired());ASSERT_EQ(c.getOwnNodeId(),0x123456U);
+}
