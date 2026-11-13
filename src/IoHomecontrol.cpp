@@ -5900,6 +5900,8 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                                      static_cast<unsigned>(lMetadata.klfTurnaroundHintMs),
                                      lMetadata.responseTimeUnitConfirmed ? 1U : 0U);
                     }
+                    if(IoHomePilotWire::identity(lMetadata))
+                        logInfoP("       family=Thermor_PASS_Actuator pilot_wire diagnosis_only=1 generic_execute=blocked physical_readback=unqualified");
                     const IoHomeProductIdentityEvidence &lEnrichment =
                         lCh->getProductIdentityEvidence();
                     logInfoP("  retained-source semantic family: %s (no write authorization)",
@@ -6042,6 +6044,8 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                                      static_cast<unsigned>(lMetadata.klfTurnaroundHintMs),
                                      lMetadata.responseTimeUnitConfirmed ? 1U : 0U);
                     }
+                    if(IoHomePilotWire::identity(lMetadata))
+                        logInfoP("       family=Thermor_PASS_Actuator pilot_wire diagnosis_only=1 generic_execute=blocked physical_readback=unqualified");
                     const IoHomeProductIdentityEvidence &lEnrichment =
                         lCh->getProductIdentityEvidence();
                     logInfoP("       Product identification: manufacturerSubType=%u productFamily=%s confidence=%s manufacturerConflict=%u",

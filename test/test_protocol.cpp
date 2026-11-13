@@ -24421,3 +24421,19 @@ TEST(protocol_sml_execution_observation_rejects_wrong_peer_profile_and_shape)
     ASSERT_TRUE(!IoHomeSmlExecution::decode(f,id,0x123456,0x654321,false).valid);
     f.data[2]=0xC9;ASSERT_TRUE(!decode().valid);
 }
+
+TEST(protocol_pilot_wire_exact_observation_is_not_generic_heater_execute)
+{
+    for(uint8_t mode=0;mode<=5;++mode) {
+        uint8_t body[]={1,0xE7,0xFC,mode,0,0x20,0xFF,0xFF};uint8_t observed=99;
+        ASSERT_TRUE(IoHomePilotWire::observedExecuteMode(body,8,observed));ASSERT_EQ(observed,mode);
+        ASSERT_TRUE(!IoHomePilotWire::observedExecuteMode(body,6,observed));
+        body[6]=0;ASSERT_TRUE(!IoHomePilotWire::observedExecuteMode(body,8,observed));
+    }
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    IoHomeProtocolIdentity id{};id.valid=true;id.ioAddress=0x654321;id.manufacturerId=12;id.profile=52;id.subProfile=0;
+    ch.onProtocolIdentity(0x654321,id);ASSERT_TRUE(IoHomePilotWire::identity(ch.getProtocolIdentity()));
+    ASSERT_TRUE(!c.sendCommand(0x654321,key,IoHomeCommand::Execute,50));
+    for(unsigned n=0;n<5;++n)c.loop();ASSERT_EQ(c.radio().testTransmitCount(),0U);
+}

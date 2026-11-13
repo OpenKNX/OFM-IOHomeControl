@@ -4,6 +4,7 @@
 #include "protocol/IoHomePhysicalBounds.h"
 #pragma once
 #include "protocol/IoHomePredictedEnd.h"
+#include "protocol/IoHomePilotWire.h"
 #include "protocol/IoHomeOptimisticPosition.h"
 #include "protocol/IoHomeLimitation.h"
 #include "protocol/IoHomeBattery.h"
