@@ -4219,6 +4219,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mPairDirectedRxChannel=false;mPairDirectedRxFrequency=0xFF;
     mPairPushFrequency = 0xFF;
     mPairPullAttempts = 0;
+    mPairLaunchChallengeValid=false;mPairProofChallengeValid=false;
     mPairRecoveryAttempts=0;mPairRecoveryAuthSent=false;
     mAtlanticPullOffer={};
     mPairKeyOwner = mOwnNodeId;
@@ -9837,6 +9838,7 @@ void IoHomeController::finishPullKeyDiagnostic(PullKeyResult result)
     memset(mPairPullAuthChallenge, 0, sizeof(mPairPullAuthChallenge));
     mPairPulledKeyFrame.init();
     mPairPullFrequency = 0xFF;
+    mPairLaunchChallengeValid=false;mPairProofChallengeValid=false;
     completePairingTelemetry(PairingOutcome::PullDiagnosticComplete);
     resetPairingPreambleState();
     mState = ControllerState::Idle;
@@ -9865,7 +9867,7 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
     mPairLaunchKeyTransferFrame.setSrcNode(mOwnNodeId);
     mPairLaunchKeyTransferFrame.setDestNode(mDiscoveredNodeId);
     mPairLaunchKeyTransferFrame.commandId = IoHomeCommand::LaunchKeyTransfer;
-    IoHomeCrypto::generateChallenge(mPairingChallenge);
+    if(!mPairLaunchChallengeValid){IoHomeCrypto::generateChallenge(mPairingChallenge);mPairLaunchChallengeValid=true;}
     memcpy(mPairLaunchKeyTransferFrame.data, mPairingChallenge, sizeof(mPairingChallenge));
     mPairLaunchKeyTransferFrame.dataLen = sizeof(mPairingChallenge);
     mPairLaunchKeyTransferFrame.hasHmac = false;
@@ -9937,7 +9939,7 @@ void IoHomeController::processPairSendPullKeyChallenge()
     lFrame.setSrcNode(mOwnNodeId);
     lFrame.setDestNode(mDiscoveredNodeId);
     lFrame.commandId = IoHomeCommand::ChallengeRequest;
-    IoHomeCrypto::generateChallenge(mPairPullAuthChallenge);
+    if(!mPairProofChallengeValid){IoHomeCrypto::generateChallenge(mPairPullAuthChallenge);mPairProofChallengeValid=true;}
     memcpy(lFrame.data, mPairPullAuthChallenge, sizeof(mPairPullAuthChallenge));
     lFrame.dataLen = sizeof(mPairPullAuthChallenge);
     lFrame.hasHmac = false;
@@ -9996,7 +9998,7 @@ void IoHomeController::processPairWaitPullKeyChallengeResponse()
     {
         logDebugP("Pairing: pulled key auth timed out for 0x%06X, diagnostic stopped", mDiscoveredNodeId);
         if(mPairing2WMode==Pairing2WMode::AtlanticPull && mPairPullAttempts<3){
-            mState=ControllerState::PairSendPullKeyChallenge; // fresh challenge, original 32 transcript
+            mState=ControllerState::PairSendPullKeyChallenge; // same challenge and original 32 transcript for delayed proof
         }else finishPullKeyDiagnostic(PullKeyResult::Timeout);
     }
 }

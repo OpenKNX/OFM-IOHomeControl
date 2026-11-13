@@ -22004,7 +22004,7 @@ TEST(controller_atlantic_proof_plus_one_and_explicit_atomic_assignment)
     IoHomeAssignmentReceipt::Value receipt;ASSERT_EQ(m.assignmentReceipts.load(0,receipt),IoHomeAssignmentReceipt::Result::Found);
     ASSERT_EQ(receipt.node,0xB6BDFCU);ASSERT_MEM_EQ(receipt.key,candidate,16);ASSERT_EQ(receipt.profile,52);ASSERT_EQ(receipt.subProfile,1);
 }
-TEST(controller_atlantic_missing_proof_retries_fresh_challenges_but_bad_mac_stops)
+TEST(controller_atlantic_missing_proof_retries_stable_challenge_but_bad_mac_stops)
 {
     for(bool forged:{false,true}){
         IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;IoHomeFrame launch,challenge;
@@ -22020,7 +22020,7 @@ TEST(controller_atlantic_missing_proof_retries_fresh_challenges_but_bad_mac_stop
                 ASSERT_EQ(c.atlanticStatus().proofAttempts,attempt);
                 c.loop();ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS+1);c.loop();
                 if(attempt<3){c.loop();IoHomeFrame fresh;ASSERT_TRUE(lastTransmittedFrameForTest(c,fresh));
-                    ASSERT_EQ(fresh.commandId,IoHomeCommand::ChallengeRequest);ASSERT_TRUE(memcmp(fresh.data,challenge.data,6)!=0);challenge=fresh;}
+                    ASSERT_EQ(fresh.commandId,IoHomeCommand::ChallengeRequest);ASSERT_MEM_EQ(fresh.data,challenge.data,6);challenge=fresh;}
             }
             ASSERT_EQ(c.atlanticStatus().stage,IoHomeController::AtlanticStage::Timeout);
         }
@@ -24239,4 +24239,18 @@ TEST(controller_typed_outgoing_remote_controller_discovery_is_opt_in)
     IoHomeFrame frame;ASSERT_TRUE(c.buildTwoWayDiscoveryFrame(frame,0x123456,typed));
     uint8_t wire[64];ASSERT_TRUE(frame.serialize2W(wire,sizeof(wire))>8);
     const uint8_t expected[]={0x00,0xFF,0xFB};ASSERT_MEM_EQ(wire+2,expected,3);
+}
+
+TEST(controller_pull_proof_retries_preserve_original_challenge)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;IoHomeFrame launch,first,retry;
+    const uint8_t key[16]={0x42};uint8_t ciphertext[16];
+    ASSERT_TRUE(beginAtlanticPullForTest(c,m,ch,launch));
+    ASSERT_TRUE(sendAtlanticCandidateForTest(c,launch,key,ciphertext,first));
+    c.loop();ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS+1);c.loop();
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,retry));
+    ASSERT_EQ(retry.commandId,IoHomeCommand::ChallengeRequest);
+    ASSERT_MEM_EQ(first.data,retry.data,6);
+    // A late proof for the first request remains valid on the retry.
+    ASSERT_TRUE(proveAtlanticCandidateForTest(c,ciphertext,first,key));
 }

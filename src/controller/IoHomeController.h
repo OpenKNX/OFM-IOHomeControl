@@ -1710,6 +1710,7 @@ private:
   uint8_t mPairPulledKey[16];
   uint8_t mPairPullFrequency = 0xFF;
   uint8_t mPairPullAttempts = 0;
+  bool mPairLaunchChallengeValid=false,mPairProofChallengeValid=false;
   uint8_t mPairPullAuthChallenge[6];
   uint8_t mPairing1WStage = 0; // 0=announce, 1=add, 2=remove, 3=stop, 4=down
   Pairing1WMode mRequestedPairing1WMode = Pairing1WMode::RemoveAdd;
