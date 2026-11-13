@@ -813,7 +813,7 @@ bool RadioSX1262::isPacketAvailable()
         return true;
     }
 
-    if (mSoftwarePhyMode && (lIrq & SX1262_IRQ_SYNC_WORD_VALID))
+    if (mSoftwarePhyMode && mSyncFlag)
     {
         if (lNeedsClear && !clearIrqStatus(lIrq & ~SX1262_IRQ_RX_DONE, false))
             return false;
@@ -1273,7 +1273,7 @@ bool RadioSX1262::applyPacketParams(bool iBlocking)
 {
     // SetPacketParams for GFSK: 9 bytes
     // [0-1] PreambleLength (2 bytes, in bits: symbols * 8)
-    // [2]   PreambleDetectorLength: 0x04 = 8 bits (1 byte)
+    // [2]   PreambleDetectorLength: 0x05 = 16 bits for io-home PHY
     // [3]   SyncWordLength (in bits)
     // [4]   AddrComp: 0x00 = off
     // [5]   HeaderType: 0x00 = fixed length, 0x01 = variable length
@@ -1286,7 +1286,7 @@ bool RadioSX1262::applyPacketParams(bool iBlocking)
     uint8_t lPayloadLen = mPacketPayloadLen;
     if (lPayloadLen == 0)
         lPayloadLen = mSoftwarePhyMode ? SX1262_IOHOME_RX_FIXED_LEN : IOHC_FRAME_BUFFER_SIZE;
-    lParams[2] = 0x04;                           // preamble detector: 8 bits (1 byte)
+    lParams[2] = mSoftwarePhyMode ? 0x05 : 0x04; // 16-bit io-home detector; hardware fallback unchanged
     lParams[3] = mSyncWordBits;                  // sync word length is encoded in bits on SX126x GFSK packet params
     lParams[4] = 0x00;                           // no address filtering
     lParams[5] = mSoftwarePhyMode ? 0x00 : 0x01; // fixed length for software PHY, variable length otherwise
@@ -1307,15 +1307,15 @@ bool RadioSX1262::tryCompleteSoftwarePhyFromLength()
         const uint32_t lRawBytesWithMargin = static_cast<uint32_t>(iRawBytes + SX1262_IOHOME_EARLY_READ_MARGIN);
         const uint32_t lNeededUs = static_cast<uint32_t>(
             (lRawBytesWithMargin * 8UL * 1000000UL + kIoHomeLineRateBps - 1UL) / kIoHomeLineRateBps);
-        while (static_cast<uint32_t>(micros() - lSyncAtUs) < lNeededUs)
-            delayMicroseconds(100);
+        return static_cast<uint32_t>(micros() - lSyncAtUs) >= lNeededUs;
 #else
         (void)lSyncAtUs;
         (void)iRawBytes;
+        return true;
 #endif
     };
 
-    lWaitForRawBytes(SX1262_IOHOME_EARLY_HEADER_RAW_LEN);
+    if(!lWaitForRawBytes(SX1262_IOHOME_EARLY_HEADER_RAW_LEN))return false;
     uint8_t lHeader[SX1262_IOHOME_EARLY_HEADER_RAW_LEN] = {0};
     if (!readBuffer(kSx1262RxBufferBase, lHeader, sizeof(lHeader), true))
         return false;
@@ -1326,7 +1326,7 @@ bool RadioSX1262::tryCompleteSoftwarePhyFromLength()
         lFrameRawLen + SX1262_IOHOME_EARLY_READ_MARGIN > SX1262_IOHOME_RX_READ_LEN)
         return false;
 
-    lWaitForRawBytes(lFrameRawLen);
+    if(!lWaitForRawBytes(lFrameRawLen))return false;
     uint8_t lRawBuf[SX1262_IOHOME_RX_READ_LEN] = {0};
     const size_t lReadLen = lFrameRawLen + SX1262_IOHOME_EARLY_READ_MARGIN;
     if (!readBuffer(kSx1262RxBufferBase, lRawBuf, static_cast<uint8_t>(lReadLen), true))

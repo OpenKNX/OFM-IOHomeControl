@@ -8919,11 +8919,10 @@ void IoHomeController::processWaitResponse()
     // exchange budget. Otherwise a stuck/noisy preamble can hold this state forever.
     const bool budgetExpired=uint32_t(millis()-mExchangeStartMs)>=mCurrentCmd.sessionPolicy.totalBudgetMs;
     if(budgetExpired)mStateTimer=millis()-mResponseTimeoutMs;
-    if (mRadio.isPreambleDetected()&&!budgetExpired)
-    {
-        mStateTimer = millis();
-        return;
-    }
+    if (!budgetExpired && mRxHold.hold(micros(),mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
+            kIsSX1262Radio ? 30000U : IoHomeRxHold::preambleUs(std::max<uint16_t>(IOHC_PREAMBLE_LONG,mLowPower2WWakePreamble)),
+            kIsSX1262Radio ? 12000U : 20000U))
+        return; // Never renew the caller's original response deadline on sticky IRQs.
 
     if (mSawChallenge && mWaitingFinalResponse && kIsSX1262Radio &&
         millis() - mStateTimer < IOHC_AUTH_DWELL_MS_SX1262)
