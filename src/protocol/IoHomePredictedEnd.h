@@ -6,6 +6,7 @@
 struct IoHomePredictedEnd {
     uint32_t at=0,awakeUntil=0;
     uint16_t last=0;
+    uint8_t nondecreasing=0;
     bool pending=false,positive=false;
     void clear(){*this={};}
     bool awake(uint32_t now)const{return positive&&int32_t(awakeUntil-now)>0;}
@@ -18,6 +19,9 @@ struct IoHomePredictedEnd {
         const auto value=IoHomeRemainingTime::fromRaw(raw);
         if(value.kind!=IoHomeRemainingTime::Kind::Positive&&value.kind!=IoHomeRemainingTime::Kind::Zero){clear();return;}
         if(!raw&&!positive)return;
+        if(raw&&positive&&raw>=last){if(nondecreasing<3)++nondecreasing;}
+        else nondecreasing=0;
+        if(nondecreasing>=3){pending=false;awakeUntil=now;last=raw;return;}
         const uint32_t duration=uint32_t(raw)*1000U;
         if(int32_t(deadline-now)<=0||uint64_t(duration)+1000U>=uint32_t(deadline-now)){
             pending=false;awakeUntil=now;return;

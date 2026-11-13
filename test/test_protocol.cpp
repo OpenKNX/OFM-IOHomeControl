@@ -1,4 +1,5 @@
 #include "protocol/IoHomeAttemptEvidence.h"
+#include "protocol/IoHomePredictedEnd.h"
 // Unit tests for OFM-IO-Homecontrol protocol layer
 // Compile: g++ -std=c++17 -DTEST_NATIVE -I../src -I. test_protocol.cpp
 //          ../src/protocol/IoHomeCrypto.cpp ../src/protocol/IoHomeFrame.cpp
@@ -24340,4 +24341,19 @@ TEST(controller_key_extract_duty_denial_sends_no_reply_and_no_key_push)
     ASSERT_EQ(c.radio().testTransmitCount(),c.debugRfLimitsBypassed()?1U:0U);
     if(replied)ASSERT_EQ(response.commandId,IoHomeCommand::DiscoverResponse);
     ASSERT_TRUE(!c.keyExtractResult().valid);ASSERT_EQ(c.getOwnNodeId(),0x112233U);
+}
+
+TEST(protocol_predicted_end_freeze_unknown_zero_wrap_and_cancel)
+{
+    IoHomePredictedEnd p;const uint32_t now=0xFFFFF000U,deadline=now+600000U;
+    p.observe(now,10,deadline);ASSERT_TRUE(p.pending);ASSERT_EQ(p.at,now+11000U);
+    p.observe(now+1000U,10,deadline);p.observe(now+2000U,10,deadline);
+    p.observe(now+3000U,10,deadline);ASSERT_TRUE(!p.pending&&!p.awake(now+3000U));
+    p.observe(now+4000U,9,deadline);ASSERT_TRUE(p.pending&&p.awake(now+4000U));
+    ASSERT_TRUE(!p.due(now+13999U));ASSERT_TRUE(p.due(now+14000U));
+    p.consume();ASSERT_TRUE(!p.pending);p.clear();p.observe(now,0,deadline);ASSERT_TRUE(!p.pending);
+    p.observe(now,1,deadline);p.observe(now,0,deadline);ASSERT_EQ(p.at,now+1000U);
+    for(uint16_t raw:{uint16_t(0xFFFE),uint16_t(0xFFFF)}){p.observe(now,raw,deadline);ASSERT_TRUE(!p.pending&&!p.positive);}
+    p.observe(now,600,deadline);ASSERT_TRUE(!p.pending);
+    p.observe(now,1,deadline);p.clear();ASSERT_TRUE(!p.pending&&!p.awake(now));
 }
