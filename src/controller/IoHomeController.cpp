@@ -1535,6 +1535,7 @@ void IoHomeController::setOwnNodeId(uint32_t iNodeId)
     if(iNodeId!=mOwnNodeId){clearInboundStatus("local_identity_changed");invalidateImmediateReply();}
     if(mOwnNodeId!=(iNodeId&0x00FFFFFF)) {
         mRfAccessPolicy.off();
+        if(mKeyExtractArmed)stopKeyExtraction();
         if(mModule)for(uint8_t i=0;i<IOHC_ChannelCount;++i)
             if(auto *channel=mModule->getChannel(i))channel->clearLastDeviceEvent();
     }
@@ -1622,7 +1623,7 @@ void IoHomeController::printVerificationEvidence() const
 
 void IoHomeController::setSystemKey(const uint8_t *iKey)
 {
-    if(std::memcmp(mSystemKey,iKey,16))mRfAccessPolicy.off();
+    if(std::memcmp(mSystemKey,iKey,16)){mRfAccessPolicy.off();if(mKeyExtractArmed)stopKeyExtraction();}
     memcpy(mSystemKey, iKey, 16);
 }
 
@@ -5259,6 +5260,7 @@ bool IoHomeController::startKeyExtraction(uint32_t iTimeoutMs)
     mKeyExtractHoldDeadlineMs = 0;
     mKeyExtractReplyLen = 0;
     mKeyExtractReplyPhase = 0;
+    mKeyExtractReplyFrequency=0xFF;mKeyExtractReplyDueMs=mKeyExtractSessionUntilMs=0;
     mKeyExtractStatus = KeyExtractStatus::Armed;
     mKeyExtractArmed = true;
     startReceive();
@@ -7733,7 +7735,7 @@ void IoHomeController::loop()
     if (mKeyExtractArmed && mKeyExtractHoldDeadlineMs != 0 &&
         static_cast<int32_t>(millis() - mKeyExtractHoldDeadlineMs) >= 0)
     {
-        logInfoP("KeyExtract: CH2 hold elapsed state=%s", stateName(mKeyExtractState));
+        logInfoP("KeyExtract: responder listen window elapsed state=%s", stateName(mKeyExtractState));
         mKeyExtractHoldDeadlineMs = 0;
     }
 

@@ -276,9 +276,7 @@ static bool queueGatewayRequestAndLoop(IoHomeController &iController,
                                        const IoHomeFrame &iRequest,
                                        IoHomeFrame &oResponse)
 {
-    // The active extraction responder broadcasts every device-role reply.
-    // Drain a previous CH1/CH3/CH2 sequence before injecting the next hub
-    // request, as a real hub cannot transmit while the responder is on air.
+    // Finish a previous single reply before the next synthetic hub request.
     for (uint8_t i = 0; i < 8; i++)
         iController.loop();
 
@@ -24286,4 +24284,21 @@ TEST(protocol_softphy_hold_sync_just_before_deadline_gets_frame_grace)
     ASSERT_TRUE(h.hold(0,true,false,30000,12000));
     ASSERT_TRUE(!h.hold(30000,true,false,30000,12000));
     ASSERT_TRUE(!h.hold(30001,true,false,30000,12000));
+}
+
+TEST(controller_key_extract_pending_slot_cancel_rearm_and_identity_change)
+{
+    for(unsigned variant=0;variant<3;++variant) {
+        IoHomeController c;IoHomecontrol m;initKeyExtractControllerForTest(c,m,0x112233);
+        ASSERT_TRUE(c.startKeyExtraction());IoHomeFrame search;buildGatewayDiscoverRequest(search,0x445566);
+        uint8_t bytes[64];auto length=serializeFrameForTest(search,bytes,sizeof(bytes));
+        c.radio().testQueueReceivedPacket(bytes,length);c.loop();ASSERT_EQ(c.radio().testTransmitCount(),0U);
+        if(variant==0)c.stopKeyExtraction();
+        if(variant==1)c.setOwnNodeId(0x223344);
+        if(variant==2){const uint8_t key[16]={1};c.setSystemKey(key);}
+        ASSERT_TRUE(!c.isKeyExtractionActive());
+        ioHomeTestAdvanceMillis(11000);for(unsigned n=0;n<5;++n)c.loop();
+        ASSERT_EQ(c.radio().testTransmitCount(),0U);
+        ASSERT_TRUE(c.startKeyExtraction());c.loop();ASSERT_EQ(c.radio().testTransmitCount(),0U);
+    }
 }
