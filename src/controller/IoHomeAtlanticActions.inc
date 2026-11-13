@@ -16,6 +16,17 @@ void IoHomeController::recordHeatingModelName(IoHomecontrolChannel *ch,const uin
     for(auto model:{IoHomeAdelis::HeatingModel::Agilia,IoHomeAdelis::HeatingModel::Adelis})if(IoHomeAdelis::modelName(model,data,length))p->model=model;
 }
 
+bool IoHomeController::startAdelisObservationRead(IoHomecontrolChannel *channel) {
+    if(!channel||channel->selectedHeatingModel()!=IoHomeAdelis::HeatingModel::Adelis||
+       !startAtlanticRegisterRead(channel,1,0x19,1,IoHomeAtlanticRead::Model::Raw))return false;
+    // One explicit job, no new periodic poll. The first authenticated name read
+    // must match before any other register is requested.
+    auto &job=*mRegisterRead;job.model=IoHomeAtlanticRead::Model::AdelisClassic;
+    constexpr uint16_t registers[]={0x119,0x115,0x136,0x126,0x103,0x138,0x13E,0x13A,0x137};
+    job.count=sizeof(registers)/sizeof(registers[0]);
+    for(uint8_t i=0;i<job.count;++i)job.samples[i].reg=registers[i];
+    return true;
+}
 bool IoHomeController::startAdelisAction(IoHomecontrolChannel *ch,uint16_t reg,uint8_t value) {
     uint8_t payload[6];if(!ch||ch->selectedHeatingModel()!=IoHomeAdelis::HeatingModel::Adelis||!IoHomeAdelis::write(reg,value,payload))return false;
     if(!startAtlanticRegisterRead(ch,1,0x19,1,IoHomeAtlanticRead::Model::Raw))return false;

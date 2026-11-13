@@ -657,6 +657,7 @@ public:
   void printSolarSensor(uint8_t channel)const;
   bool configureAtlanticPoll(IoHomecontrolChannel *channel,uint16_t seconds);
   bool startAdelisAction(IoHomecontrolChannel *channel,uint16_t reg,uint8_t value);
+  bool startAdelisObservationRead(IoHomecontrolChannel *channel);
   bool startDhwMode(IoHomecontrolChannel *channel,uint8_t mode);
   bool startDhwTarget(IoHomecontrolChannel *channel,float celsius);
   bool qualifiedHeatingName(IoHomecontrolChannel *channel,IoHomeAdelis::HeatingModel model)const;

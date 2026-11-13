@@ -24633,3 +24633,19 @@ TEST(protocol_hekla_light_registers_are_explicit_read_only_candidates)
     s.data[0]=101;ASSERT_TRUE(!decode(Model::HeaterWithLight,s).known);
     uint8_t write[6];ASSERT_EQ(IoHomeAdelis::write(0x144,1,write),0);ASSERT_EQ(IoHomeAdelis::write(0x142,50,write),0);
 }
+
+TEST(controller_adelis_extended_observation_job_is_opt_in_read_only_and_name_gated)
+{
+    for(bool correctName:{false,true}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initTypedAtlantic(c,m,ch,false);
+        ASSERT_TRUE(c.startAdelisObservationRead(&ch));const auto &job=c.atlanticRegisterRead();
+        ASSERT_EQ(job.count,9);ASSERT_EQ(job.action,IoHomeAtlanticRead::Action::Read);ASSERT_EQ(job.writeIndex,0xFF);
+        const uint16_t expected[]={0x119,0x115,0x136,0x126,0x103,0x138,0x13E,0x13A,0x137};
+        for(unsigned i=0;i<9;++i)ASSERT_EQ(job.samples[i].reg,expected[i]);
+        IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));ASSERT_EQ(request.data[1],0x60);
+        uint8_t reply[18]={0x0C,0x60,1,0x19};std::memcpy(reply+4,correctName?"ADELIS 2 DIGIT":"WRONG MODEL   ",14);
+        ASSERT_TRUE(completeAtlanticStep(c,reply,18));ioHomeTestAdvanceMillis(1001);c.loop();
+        if(correctName){ASSERT_TRUE(transmitQueuedControllerFrame(c,request));ASSERT_EQ(request.data[1],0x60);ASSERT_EQ(request.data[3],0x15);}
+        else ASSERT_TRUE(!c.atlanticRegisterRead().active);
+    }
+}
