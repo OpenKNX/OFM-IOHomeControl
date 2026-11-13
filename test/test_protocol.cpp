@@ -24283,3 +24283,28 @@ TEST(controller_background_yields_before_tx_to_new_foreground_command)
     IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
     ASSERT_EQ(tx.commandId,IoHomeCommand::Execute);ASSERT_EQ(c.radio().testTransmitCount(),1U);
 }
+
+TEST(controller_rx_scan_stale_preamble_expires_and_new_channel_rearms)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    c.setRxScanEnabled(true);ASSERT_TRUE(c.setLowPower2WWakePreamble(1960));c.startReceive();
+    c.radio().testInjectRxDiagnostics(true,false,false,0,0,-80);
+    ioHomeTestAdvanceMicros(10000);c.loop();const auto frequency=c.radio().testCurrentFrequency();
+    ioHomeTestAdvanceMicros(408333);c.loop();ASSERT_EQ(c.radio().testCurrentFrequency(),frequency);
+    ioHomeTestAdvanceMicros(50000);c.loop();ASSERT_NE(c.radio().testCurrentFrequency(),frequency);
+    ASSERT_TRUE(c.rxScanMeasurements().retunes>0);
+}
+TEST(protocol_softphy_hold_sync_just_before_deadline_gets_frame_grace)
+{
+    IoHomeRxHold h;
+    ASSERT_TRUE(h.hold(0,true,false,30000,12000));
+    ASSERT_TRUE(h.hold(29999,true,true,30000,12000));
+    ASSERT_TRUE(h.hold(41000,true,true,30000,12000));
+    ASSERT_TRUE(!h.hold(41999,true,true,30000,12000));
+    ASSERT_TRUE(!h.hold(42000,true,false,30000,12000));
+    h.reset();ASSERT_TRUE(!h.hold(0,false,false,30000,12000));
+    ASSERT_TRUE(h.hold(0,true,false,30000,12000));
+    ASSERT_TRUE(!h.hold(30000,true,false,30000,12000));
+    ASSERT_TRUE(!h.hold(30001,true,false,30000,12000));
+}
