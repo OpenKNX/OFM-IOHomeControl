@@ -24302,3 +24302,28 @@ TEST(controller_key_extract_pending_slot_cancel_rearm_and_identity_change)
         ASSERT_TRUE(c.startKeyExtraction());c.loop();ASSERT_EQ(c.radio().testTransmitCount(),0U);
     }
 }
+
+TEST(controller_key_extract_synthetic_three_channel_session_and_wrong_peer)
+{
+    IoHomeController c;IoHomecontrol m;initKeyExtractControllerForTest(c,m,0x112233);
+    ASSERT_TRUE(c.startKeyExtraction());c.setRxScanEnabled(false);c.testSetRxScanFrequency(IOHC_FREQ_3);
+    IoHomeFrame request,response;buildGatewayDiscoverRequest(request,0x445566);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(c,request,response));
+    const auto temp=response.getSrcNodeId();
+    ASSERT_NE(c.radio().testCurrentFrequency(),IOHC_FREQ_3);ASSERT_EQ(c.radio().testTransmitCount(),1U);
+    // Synthetic arrangement, not an RF capture: CH3 search, CH1 confirm, CH2 key-init.
+    for(unsigned n=0;n<3;++n)c.loop();c.testSetRxScanFrequency(IOHC_FREQ_1);
+    buildKeyExtractConfirmation(request,0x445566,temp);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(c,request,response));
+    ASSERT_EQ(response.commandId,IoHomeCommand::ConfirmationACK);
+    ASSERT_EQ(c.radio().testCurrentFrequency(),IOHC_FREQ_1);
+    ASSERT_EQ(c.keyExtractHubNodeId(),0x445566U);ASSERT_EQ(c.radio().testTransmitCount(),2U);
+    buildKeyExtractKeyInit(request,0x667788,temp);
+    ASSERT_TRUE(!queueGatewayRequestAndLoop(c,request,response));ASSERT_EQ(c.radio().testTransmitCount(),2U);
+    ioHomeTestAdvanceMillis(201);c.testSetRxScanFrequency(IOHC_FREQ_2);
+    buildKeyExtractKeyInit(request,0x445566,temp);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(c,request,response));
+    ASSERT_EQ(response.commandId,IoHomeCommand::ChallengeRequest);
+    ASSERT_EQ(c.radio().testCurrentFrequency(),IOHC_FREQ_2);ASSERT_EQ(c.radio().testTransmitCount(),3U);
+    for(unsigned n=0;n<8;++n)c.loop();ASSERT_EQ(c.radio().testTransmitCount(),3U);
+}
