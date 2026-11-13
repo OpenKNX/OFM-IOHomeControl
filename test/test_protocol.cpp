@@ -24569,3 +24569,27 @@ TEST(controller_tatou_pull_direction_never_sends_key_giver_commands)
     }
     ASSERT_TRUE(!spare.isPaired());ASSERT_EQ(c.getOwnNodeId(),0x123456U);
 }
+
+TEST(controller_trusted_pull_bad_giver_mac_is_terminal_without_member_fallback)
+{
+    IoHomeController c;IoHomecontrol module;IoHomecontrolChannel spare,member;IoHomeFrame launch,challenge,response;
+    ASSERT_TRUE(beginTrustedPullForTest(c,module,spare,member,launch));ASSERT_TRUE(sendTrustedCandidateForTest(c,launch,challenge));
+    response.init();response.commandId=IoHomeCommand::ChallengeResponse;
+    response.setSrcNode(0x445566);response.setDestNode(0x123456);response.dataLen=6;std::memset(response.data,0,6);
+    ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_EQ(c.controllerKeyPull().stage(),IoHomeControllerKeyImport::Stage::Rejected);
+    const auto count=c.radio().testTransmitCount();ioHomeTestAdvanceMillis(5000);for(unsigned i=0;i<8;++i)c.loop();
+    ASSERT_EQ(c.radio().testTransmitCount(),count);ASSERT_TRUE(!c.commitControllerKeyPull(c.controllerKeyPull().token()));
+    const uint8_t oldKey[16]={0x77};ASSERT_MEM_EQ(c.getSystemKey(),oldKey,16);
+}
+TEST(protocol_controller_import_no_proof_cancellation_conflict_and_replay_are_rejected)
+{
+    using Job=IoHomeControllerKeyImport;
+    Job job;const uint8_t key[16]={0x42};uint8_t out[16]{};
+    ASSERT_TRUE(job.begin(1,0x123456,0x445566,0x778899,0));ASSERT_TRUE(job.candidate(key,1));
+    IoHomeNetworkStore::State current,next;current.controller=0x123456;
+    ASSERT_TRUE(!job.prepareCommit(current,next,1,2));job.cancel();
+    ASSERT_TRUE(!job.copyVerifiedKey(out));ASSERT_TRUE(!job.candidate(key,3));
+    ASSERT_TRUE(!job.begin(1,0x123456,0x445566,0x778899,4));
+    ASSERT_TRUE(job.begin(2,0x123456,0x445566,0x778899,4));ASSERT_TRUE(!job.candidate(key,30005));
+    job.timeout();ASSERT_TRUE(!job.prepareCommit(current,next,2,30006));
+}
