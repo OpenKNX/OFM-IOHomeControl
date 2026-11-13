@@ -24496,3 +24496,65 @@ TEST(protocol_controller_import_requires_bound_member_mac_and_hard_rejects_bad_p
         else{ASSERT_MEM_EQ(out,key,16);job.committed();ASSERT_TRUE(!job.copyVerifiedKey(out));}
     }
 }
+
+static bool beginTrustedPullForTest(IoHomeController &c,IoHomecontrol &module,
+        IoHomecontrolChannel &spare,IoHomecontrolChannel &member,IoHomeFrame &launch)
+{
+    const uint8_t oldKey[16]={0x77},candidate[16]={0x42};
+    initPaired2WControllerForTest(c,module,spare,0x123456,0,oldKey);c.setSystemKey(oldKey);
+    member.setNodeId(0x778899);member.setEncryptionKey(candidate);member.setIs1W(false);
+    IoHomeProtocolIdentity id{};id.valid=id.fullMetadata=true;id.ioAddress=0x778899;
+    id.profile=2;id.manufacturerId=1;id.powerSaveMode=IoHomePowerMode::AlwaysAlive;
+    member.onProtocolIdentity(0x778899,id);module.testSetChannel(1,&member);
+    IoHomeNetworkStore::State original;original.controller=0x123456;std::memcpy(original.key,oldKey,16);
+    original.channels[1].managed=true;original.channels[1].node=0x778899;std::memcpy(original.channels[1].key,candidate,16);
+    if(!module.controllerImportStore.commit(original)||!c.startControllerKeyPull(0,0x445566,0x778899))return false;
+    IoHomeFrame discovery,response;if(!transmitQueuedControllerFrame(c,discovery)||discovery.getDestNodeId()!=0x00FFFB)return false;
+    buildDiscoverResponseFrame(response,0x123456,0x445566,false,IOHC_POWER_SAVE_ALWAYS_ALIVE);
+    response.data[0]=0xFF;response.data[1]=0xC0;
+    if(!queueControllerResponse(c,response))return false;
+    return lastTransmittedFrameForTest(c,launch)&&launch.commandId==IoHomeCommand::LaunchKeyTransfer;
+}
+static bool sendTrustedCandidateForTest(IoHomeController &c,const IoHomeFrame &launch,IoHomeFrame &challenge)
+{
+    const uint8_t key[16]={0x42};uint8_t transcript[7]={0x38};std::memcpy(transcript+1,launch.data,6);
+    IoHomeFrame candidate;candidate.init();candidate.commandId=IoHomeCommand::KeyTransfer;
+    candidate.setSrcNode(0x445566);candidate.setDestNode(0x123456);candidate.dataLen=16;
+    if(!IoHomeCrypto::crypt2WKeyXor(transcript,7,launch.data,key,IOHC_TRANSFER_KEY,candidate.data)||!queueControllerResponse(c,candidate))return false;
+    return lastTransmittedFrameForTest(c,challenge)&&challenge.commandId==IoHomeCommand::ChallengeRequest;
+}
+TEST(controller_trusted_pull_silent_giver_requires_member_mac_and_explicit_durable_commit)
+{
+    using Stage=IoHomeControllerKeyImport::Stage;
+    for(bool storageFailure:{false,true}) {
+        IoHomeController c;IoHomecontrol module;IoHomecontrolChannel spare,member;IoHomeFrame launch,challenge;
+        ASSERT_TRUE(beginTrustedPullForTest(c,module,spare,member,launch));
+        ASSERT_TRUE(sendTrustedCandidateForTest(c,launch,challenge));
+        const auto session=c.controllerKeyPull().token();ASSERT_TRUE(!c.commitControllerKeyPull(session));
+        // Synthetic Freebox-style silence: no giver 3D, three bounded proof tries.
+        for(unsigned attempt=0;attempt<3;++attempt){
+            c.loop();ioHomeTestAdvanceMillis(IOHC_RX_TIMEOUT_MS+1);c.loop();
+            if(attempt<2){IoHomeFrame retry;ASSERT_TRUE(transmitQueuedControllerFrame(c,retry));ASSERT_MEM_EQ(retry.data,challenge.data,6);}
+        }
+        IoHomeFrame request,response;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+        ASSERT_EQ(request.commandId,IoHomeCommand::NodeVerifyRequest);ASSERT_EQ(request.getDestNodeId(),0x778899U);
+        response.init();response.commandId=IoHomeCommand::NodeVerifyResponse;
+        response.setSrcNode(0x778899);response.setDestNode(0x123456);response.dataLen=3;
+        const uint8_t identity[]={0x77,0x88,0x99};std::memcpy(response.data,identity,3);
+        ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_TRUE(!c.commitControllerKeyPull(session));
+        ASSERT_TRUE(transmitQueuedControllerFrame(c,challenge));ASSERT_EQ(challenge.commandId,IoHomeCommand::ChallengeRequest);
+        const uint8_t key[16]={0x42},transcript[]={0x37,0x77,0x88,0x99};
+        response.commandId=IoHomeCommand::ChallengeResponse;response.dataLen=6;
+        ASSERT_TRUE(IoHomeCrypto::createHmac2W(transcript,4,challenge.data,key,response.data));
+        ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_EQ(c.controllerKeyPull().stage(),Stage::Verified);
+        const uint8_t oldKey[16]={0x77};ASSERT_MEM_EQ(c.getSystemKey(),oldKey,16);
+        ASSERT_TRUE(!spare.isPaired());ASSERT_EQ(spare.getNodeId(),0U);ASSERT_EQ(c.getOwnNodeId(),0x123456U);
+        ASSERT_TRUE(!c.commitControllerKeyPull(session+1));module.controllerImportStore.failWrites=storageFailure;
+        ASSERT_EQ(c.commitControllerKeyPull(session),!storageFailure);
+        ASSERT_MEM_EQ(c.getSystemKey(),storageFailure?oldKey:key,16);
+        IoHomeNetworkStore::State restored;ASSERT_EQ(module.controllerImportStore.load(restored),IoHomeNetworkStore::Result::Found);
+        ASSERT_EQ(restored.controller,0x123456U);ASSERT_EQ(restored.channels[1].node,0x778899U);
+        ASSERT_MEM_EQ(restored.channels[1].key,key,16);ASSERT_MEM_EQ(restored.key,storageFailure?oldKey:key,16);
+        ASSERT_EQ(c.controllerKeyPull().stage(),storageFailure?Stage::Failed:Stage::Committed);
+    }
+}

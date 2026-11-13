@@ -3841,7 +3841,12 @@ TwoWayDiscoverySettings IoHomeController::pairingDiscoverySettings() const
         if (lChannel && !lChannel->is1W())
             lConfigured = lChannel->getConfigured2WDiscoverySettings();
     }
-    return mergeTwoWayDiscoverySettings(lConfigured, mDiagnosticDiscoverySettings);
+    auto settings=mergeTwoWayDiscoverySettings(lConfigured,mDiagnosticDiscoverySettings);
+    if(mControllerImport.stage()==IoHomeControllerKeyImport::Stage::Pulling){
+        settings.destination=TwoWayDiscoveryDestinationMode::RemoteController;
+        settings.command=TwoWayDiscoveryCommandMode::Discover28;
+    }
+    return settings;
 }
 
 uint16_t IoHomeController::preambleFor2WRequest(const IoHomeFrame &iFrame) const
@@ -7658,6 +7663,7 @@ void IoHomeController::loop()
         clearInboundStatus("identity_or_state_changed");
         if(owned){mRadio.standby();mState=ControllerState::Idle;startReceive();}
     }
+    serviceControllerKeyPull();
     serviceRemoteSettling();
     serviceAtlantic();
     if(mCurrentCmd.active&&(mCurrentCmd.atlanticToken||(mCurrentCmd.heatingToken&&mCurrentCmd.heatingData[3]==0x10))&&uint32_t(millis()-mExchangeStartMs)>=15000U){
@@ -7783,7 +7789,8 @@ void IoHomeController::loop()
     // TX-side paths explicitly select their protocol channel before transmitting.
     if (mState == ControllerState::Idle)
     {
-        if (keyExtractAwaitingReply())
+        if(mControllerImport.active()&&mControllerImport.stage()!=IoHomeControllerKeyImport::Stage::Pulling) { /* directed proof holds its received channel */ }
+        else if (keyExtractAwaitingReply())
             serviceKeyExtractChannelHold();
         else
             serviceBackgroundRxScan();
@@ -7906,6 +7913,7 @@ void IoHomeController::loop()
                 ++mPairingTelemetry.counters.rxUnmatched;
                 logDebugP("Pairing: ignored response outside bound key/session/channel/deadline");
             }
+            else if(mControllerImport.active()&&mControllerImport.stage()!=IoHomeControllerKeyImport::Stage::Pulling){processControllerKeyPullFrame();}
             else if(recovery){processPairKeyRecoveryFrame();}
             else if(mState==ControllerState::AtlanticRollCallWait){processAtlanticRollCallFrame();}
             else if (mState == ControllerState::WaitResponse)
@@ -7939,10 +7947,11 @@ void IoHomeController::loop()
                             completePairingTelemetry(PairingOutcome::AtlanticPullSuggested);
                             mState=ControllerState::PairComplete;return;
                         }
-                        if(discovered.valid && lPairChannel){
+                        const bool controllerPull=mControllerImport.stage()==IoHomeControllerKeyImport::Stage::Pulling;
+                        if(discovered.valid && lPairChannel && !controllerPull){
                             lPairChannel->clearProtocolIdentity();lPairChannel->clearProductIdentityEvidence();
                         }
-                        if(!captureProtocolIdentity(lPairChannel, mRxFrame,
+                        if(!captureProtocolIdentity(controllerPull?nullptr:lPairChannel, mRxFrame,
                                                  "pairing discovery",
                                                  &mPairProtocolIdentity)) return;
                         mDiscoveredNodeId = lSource;
@@ -8522,6 +8531,7 @@ void IoHomeController::loop()
 
 void IoHomeController::processIdle()
 {
+    if(mControllerImport.active())return;
     if (mPassiveMode)
         return; // passive mode: never transmit
 
@@ -9874,6 +9884,13 @@ void IoHomeController::finishPullKeyDiagnostic(PullKeyResult result)
         stopAtlantic(result==PullKeyResult::Refused?AtlanticStage::Refused:
             result==PullKeyResult::Timeout?AtlanticStage::Timeout:AtlanticStage::NotProven,pullKeyResultName(result));
     }
+    if(mControllerImport.stage()==IoHomeControllerKeyImport::Stage::Pulling) {
+        const bool candidateReceived=mPairPulledKeyFrame.commandId==IoHomeCommand::KeyTransfer&&mPairPulledKeyFrame.dataLen==16;
+        if(controllerImportContextMatches()&&candidateReceived&&(proven||result==PullKeyResult::Timeout))
+            mControllerImport.candidate(mPairPulledKey,millis());
+        else if(result==PullKeyResult::Cancelled)mControllerImport.cancel();
+        else mControllerImport.reject(); // bad giver MAC is terminal, never a fallback trigger
+    }
     mPairingTelemetry.pullResult = result;
     logInfoP("Pairing pull: result=%s peer=%06X; no key stored", pullKeyResultName(result), mDiscoveredNodeId);
     // Verification is a diagnostic result only. The candidate is not handed to
@@ -10048,7 +10065,7 @@ void IoHomeController::processPairWaitPullKeyChallengeResponse()
     if (millis() - mStateTimer > IOHC_RX_TIMEOUT_MS)
     {
         logDebugP("Pairing: pulled key auth timed out for 0x%06X, diagnostic stopped", mDiscoveredNodeId);
-        if(mPairing2WMode==Pairing2WMode::AtlanticPull && mPairPullAttempts<3){
+        if((mPairing2WMode==Pairing2WMode::AtlanticPull||mControllerImport.stage()==IoHomeControllerKeyImport::Stage::Pulling) && mPairPullAttempts<3){
             mState=ControllerState::PairSendPullKeyChallenge; // same challenge and original 32 transcript for delayed proof
         }else finishPullKeyDiagnostic(PullKeyResult::Timeout);
     }
@@ -11557,6 +11574,7 @@ void IoHomeController::processDiscovery()
         if(mDiscoveryFamily==IoHomeDiscoveryFamily::SensorInSystem)lRequestedCommand=IoHomeCommand::DiscoverSensorInSystemRequest;
         if(mDiscoveryFamily==IoHomeDiscoveryFamily::PrivateSomfy)lRequestedCommand=IoHomeCommand::WritePrivate;
         auto diagnosticSettings=mDiagnosticDiscoverySettings;
+        if(mControllerImport.stage()==IoHomeControllerKeyImport::Stage::Pulling)diagnosticSettings.destination=TwoWayDiscoveryDestinationMode::RemoteController;
         if(mReadOnlyDiagnosticRf)diagnosticSettings.command=mDiscoverySPE?TwoWayDiscoveryCommandMode::DiscoverSPE:TwoWayDiscoveryCommandMode::Discover28;
         const TwoWayDiscoveryFrameOptions lDiscoveryOptions =
             resolveTwoWayDiscoveryOptions(lRequestedCommand, diagnosticSettings);
@@ -14763,4 +14781,121 @@ bool IoHomeController::configureLinkedRemoteSettling(uint16_t quietMs) {
         }
     if(!mask||(mask&(mask-1))==0||!configureRemoteSettling(0,mask,quietMs))return false;
     mRemoteSettling[0].linkedMap=true;mRemoteSettling[0].mappingHash=linkedRemoteMapHash();return true;
+}
+
+bool IoHomeController::controllerImportContextMatches()const
+{
+    if(!mModule||mOwnNodeId!=mControllerImport.localNode()||twoWayIdentityCollision()||
+       std::memcmp(mSystemKey,mControllerImportSystemKey,16))return false;
+    const auto *channel=channelForNode(mControllerImport.memberNode());
+    const auto *identity=channel?&channel->getProtocolIdentity():protocolIdentityForIoAddress(mControllerImport.memberNode());
+    if(!identity||!identity->valid||ioHomeProductSemanticIdentityChanged(*identity,mControllerImportMemberIdentity))return false;
+    if(mControllerImportMemberChannel<16) {
+        const auto *bound=mModule->getChannel(mControllerImportMemberChannel);
+        if(!bound||bound->getNodeId()!=mControllerImport.memberNode()||bound->productContextRevision()!=mControllerImportRevision)return false;
+    }
+    return true;
+}
+
+bool IoHomeController::startControllerKeyPull(uint8_t spare,uint32_t hub,uint32_t member)
+{
+    if(!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||mControllerImportNext==UINT32_MAX||
+       getAddressClass(hub)!=IoHomeAddressClass::Unicast||getAddressClass(member)!=IoHomeAddressClass::Unicast||
+       !mOwnNodeId||twoWayIdentityCollision()||hub==member||hub==mOwnNodeId||member==mOwnNodeId)return false;
+    auto *channel=channelForNode(member);
+    const auto *identity=channel?&channel->getProtocolIdentity():protocolIdentityForIoAddress(member);
+    if(!identity||!identity->valid||identity->ioAddress!=member||identity->profile==1023)return false;
+    const auto *empty=mModule->getChannel(spare);
+    if(!empty||empty->getNodeId()||empty->isPaired()||empty->is1W())return false;
+    if(!startPairingExperimental(spare,hub,Pairing2WMode::PullKey))return false;
+    mControllerImportMemberIdentity=*identity;mControllerImportMemberChannel=channel?channelIndexFor(channel):0xFF;
+    mControllerImportRevision=channel?channel->productContextRevision():0;
+    std::memcpy(mControllerImportSystemKey,mSystemKey,16);mControllerImportTxPending=false;
+    if(!mControllerImport.begin(++mControllerImportNext,mOwnNodeId,hub,member,millis())){cancelPairing();return false;}
+    logInfoP("Controller key pull session=%lu peer=%06X member=%06X candidate_temporary=1 assignment=none",(unsigned long)mControllerImport.token(),hub,member);
+    return true;
+}
+
+void IoHomeController::cancelControllerKeyPull()
+{
+    const bool active=mControllerImport.active();
+    if(mControllerImport.stage()==IoHomeControllerKeyImport::Stage::Pulling)cancelPairing();
+    mControllerImport.cancel();
+    if(active){mRadio.standby();mControllerImportTxPending=false;startReceive();}
+    std::memset(mControllerImportSystemKey,0,16);
+}
+
+bool IoHomeController::commitControllerKeyPull(uint32_t session)
+{
+    uint8_t key[16]{};
+    if(!controllerImportContextMatches()||mControllerImport.expired(millis())||session!=mControllerImport.token()||
+       !mControllerImport.copyVerifiedKey(key))return false;
+    const bool durable=mModule->persistVerifiedControllerKey(mControllerImport,session);
+    if(durable){mControllerImport.committed();setSystemKey(key);}
+    else mControllerImport.fail();
+    std::memset(key,0,16);std::memset(mControllerImportSystemKey,0,16);
+    return durable;
+}
+
+void IoHomeController::printControllerKeyPull()const
+{
+    logInfoP("Controller key pull session=%lu stage=%u gateway=%06X peer=%06X member=%06X key_display=disabled assignment=none",
+        (unsigned long)mControllerImport.token(),unsigned(mControllerImport.stage()),mOwnNodeId,
+        mControllerImport.peerNode(),mControllerImport.memberNode());
+}
+
+void IoHomeController::serviceControllerKeyPull()
+{
+    using Stage=IoHomeControllerKeyImport::Stage;
+    const auto stage=mControllerImport.stage();
+    if(!mControllerImport.active()&&stage!=Stage::Verified)return;
+    if(!controllerImportContextMatches()||mControllerImport.expired(millis())) {
+        if(stage==Stage::Pulling)cancelPairing();
+        mControllerImport.timeout();mRadio.standby();mControllerImportTxPending=false;startReceive();return;
+    }
+    if(stage==Stage::Pulling)return;
+    // A foreground movement/STOP cancels commissioning before its next RF leg.
+    for(uint8_t i=mQueueTail;i!=mQueueHead;i=(i+1)%IOHC_CMD_QUEUE_SIZE)
+        if(!mCmdQueue[i].background){cancelControllerKeyPull();return;}
+    if(stage==Stage::Verified)return;
+    if(mControllerImportTxPending) {
+        if(mRadio.state()==RadioState::Transmitting&&!mRadio.isTxDone())return;
+        const auto rx=startReceive();if(rx==RadioError::Busy)return;
+        mControllerImportTxPending=false;
+        if(rx!=RadioError::None)mControllerImport.fail();
+        return;
+    }
+    if(uint32_t(millis()-mControllerImport.phaseTime())>1500U){mControllerImport.timeout();return;}
+    if(stage!=Stage::MemberRequest&&stage!=Stage::MemberChallenge)return;
+    IoHomeFrame request;request.init();request.setSrcNode(mOwnNodeId);request.setDestNode(mControllerImport.memberNode());
+    uint8_t frequency=frequencyIndexForHz(IOHC_FREQ_2);uint16_t preamble=normal2WStartPreamble();
+    if(stage==Stage::MemberRequest) {
+        request.setStart2W();request.commandId=IoHomeCommand::NodeVerifyRequest;
+        const bool low=mControllerImportMemberIdentity.powerSaveMode!=IoHomePowerMode::AlwaysAlive;
+        request.setLowPower(low);if(low)preamble=mLowPower2WWakePreamble;
+    } else {
+        request.commandId=IoHomeCommand::ChallengeRequest;request.dataLen=6;
+        const auto *challenge=mControllerImport.challenge();if(!challenge){mControllerImport.fail();return;}
+        std::memcpy(request.data,challenge,6);frequency=mControllerImport.channel();preamble=mRadio.defaultResponsePreamble();
+    }
+    if(frequency>=IOHC_NUM_FREQUENCIES){mControllerImport.fail();return;}
+    const auto prep=configureTxRadio(preamble,&IOHC_FREQUENCIES[frequency]);
+    if(prep==RadioError::Busy)return;
+    if(prep!=RadioError::None){mControllerImport.fail();return;}
+    uint8_t buffer[IOHC_FRAME_BUFFER_SIZE];const auto length=request.serialize2W(buffer,sizeof(buffer));
+    const auto tx=length?startControllerTransmit(buffer,length):RadioError::InvalidParam;
+    if(tx==RadioError::Busy)return;
+    if(tx!=RadioError::None){mControllerImport.fail();return;}
+    mControllerImportTxPending=true;
+    if(stage==Stage::MemberRequest)mControllerImport.requestSent(frequency,millis());else mControllerImport.challengeSent(millis());
+}
+
+void IoHomeController::processControllerKeyPullFrame()
+{
+    using Stage=IoHomeControllerKeyImport::Stage;
+    if(mControllerImport.stage()==Stage::MemberReply)mControllerImport.memberReply(mRxFrame,mLastResponseFreqIdx,millis());
+    else if(mControllerImport.stage()==Stage::MemberMac) {
+        if(mControllerImport.memberProof(mRxFrame,mLastResponseFreqIdx,millis()))
+            logInfoP("Controller key pull session=%lu member_proof=authenticated candidate=verified commit=explicit_only",(unsigned long)mControllerImport.token());
+    }
 }

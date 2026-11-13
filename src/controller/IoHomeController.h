@@ -817,6 +817,11 @@ public:
   bool startPairingOnDiscoveryChannel(uint8_t channel,uint32_t peer);
   bool startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId = 0);
   bool startPairingExperimental(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing2WMode iMode);
+  bool startControllerKeyPull(uint8_t spareChannel,uint32_t hub,uint32_t knownMember);
+  bool commitControllerKeyPull(uint32_t session);
+  void cancelControllerKeyPull();
+  void printControllerKeyPull() const;
+  const IoHomeControllerKeyImport &controllerKeyPull()const{return mControllerImport;}
   // Start explicit 1W pairing/add/remove operations.
   bool startPairing1W(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing1WMode iMode);
   bool startPairing1WAnnounceOnly(uint8_t iChannelIndex, uint32_t iKnownNodeId);
@@ -1268,7 +1273,7 @@ public:
   IoHomeRadioPolicy &hostRadioPolicy(){return mHostRadioPolicy;}
   bool idleForManagedOperation() const {
     return mState==ControllerState::Idle&&queueEmpty()&&!mCurrentCmd.active&&!mPassiveMode&&!mGatewayMode&&
-        !mOneWayKeyReceiveActive&&!mKeyExtractArmed&&!mNetworkScanActive&&!registerReadActive()&&!mObjectRead.active()&&!mReceiveConfiguration.active()&&
+        !mOneWayKeyReceiveActive&&!mKeyExtractArmed&&!mControllerImport.active()&&mControllerImport.stage()!=IoHomeControllerKeyImport::Stage::Verified&&!mNetworkScanActive&&!registerReadActive()&&!mObjectRead.active()&&!mReceiveConfiguration.active()&&
         mGetKeyOfNode.stage!=GetKeyStage::Waiting&&mGetKeyOfNode.authentication!=GetKeyAuthentication::Pending&&mLimitationOwner==0xFF;
   }
   ControllerState state() const;
@@ -1500,6 +1505,14 @@ private:
   bool mDynamicEventTrace=false;
   uint32_t mStatusProbeOwner=0,mStatusProbeGeneration=0;
   uint8_t mStatusProbeSystemKey[16]{};
+  IoHomeControllerKeyImport mControllerImport;
+  uint32_t mControllerImportNext=0,mControllerImportRevision=0;
+  uint8_t mControllerImportSystemKey[16]{},mControllerImportMemberChannel=0xFF;
+  IoHomeProtocolIdentity mControllerImportMemberIdentity{};
+  bool mControllerImportTxPending=false;
+  bool controllerImportContextMatches()const;
+  void serviceControllerKeyPull();
+  void processControllerKeyPullFrame();
   bool mStatusProbeSml=false;
   bool statusProbeContextMatches(const IoHomeQueueEntry &) const;
   IoHomeObjectTransfer mObjectRead;

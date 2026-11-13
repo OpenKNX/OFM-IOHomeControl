@@ -4751,6 +4751,20 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         logInfoP("status-fp-high: %s (CHANNEL HEX_BITMAP; manual raw read only)",
             valid&&mController.requestStatusFpHighRead(mChannels[channel-1],uint8_t(bitmap))?"queued":"blocked");return true;
     }
+    if(iCmd=="iohc keyimport controller-status") {mController.printControllerKeyPull();return true;}
+    if(iCmd=="iohc keyimport controller-cancel") {mController.cancelControllerKeyPull();return true;}
+    if(iCmd.rfind("iohc keyimport controller-commit ",0)==0) {
+        unsigned session=0;char extra=0;
+        const bool valid=sscanf(iCmd.c_str(),"iohc keyimport controller-commit %u %c",&session,&extra)==1;
+        logInfoP("Controller key import: %s",valid&&mController.commitControllerKeyPull(session)?"durably committed; gateway and device bindings preserved":"blocked; verified current member proof and conflict-free durable commit required");return true;
+    }
+    if(iCmd.rfind("iohc keyimport controller-pull ",0)==0) {
+        unsigned channel=0;char hubText[16]{},memberText[16]{},extra=0;uint32_t hub=0,member=0;
+        const bool valid=sscanf(iCmd.c_str(),"iohc keyimport controller-pull %u %15s %15s %c",&channel,hubText,memberText,&extra)==3&&
+            channel>=1&&channel<=mNumChannels&&parseHex24(hubText,hub)&&parseHex24(memberText,member);
+        logInfoP("Controller key pull: %s (empty CHANNEL, HUB, known MEMBER; candidate stays temporary until explicit session commit)",
+            valid&&mController.startControllerKeyPull(channel-1,hub,member)?"started":"blocked");return true;
+    }
     if(iCmd.rfind("iohc probe ",0)==0) {
         unsigned channel=0;char probe[32]{};char extra=0;
         if(sscanf(iCmd.c_str(),"iohc probe %u %31s %c",&channel,probe,&extra)!=2||channel<1||channel>mNumChannels||(std::strcmp(probe,"status_mp_fp")&&std::strcmp(probe,"sml_execution"))) {
