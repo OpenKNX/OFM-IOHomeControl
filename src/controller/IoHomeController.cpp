@@ -2673,6 +2673,21 @@ void IoHomeController::printHeatingStatus(uint8_t c) const
     }
 }
 
+bool IoHomeController::sendGarageStoredPartial(IoHomecontrolChannel *channel)
+{
+    if(!channel||!channel->isPaired()||channel->is1W()||!channel->allowsActuatorControls())return false;
+    const auto &id=channel->getProtocolIdentity();const auto *profile=channel->getEffectiveProfileDescriptor();
+    if(!id.valid||!id.fullMetadata||id.ioAddress!=channel->getNodeId()||id.nodeClass!=IoHomeNodeClass::Actuator||
+       id.profile!=5||(id.subProfile!=0&&id.subProfile!=58)||!profile||profile->profile!=5||profile->subProfile!=id.subProfile)return false;
+    // Stored selector, never a scalar target or a programming command. One attempt:
+    // a repeated special selector may stop/toggle a movement after an ambiguous reply.
+    const uint8_t body[]={1,0x63,0xD8,0x09,0,0};
+    if(!sendRawTwoWayExecute(channel,body,sizeof(body),true))return false;
+    auto &entry=mCmdQueue[(mQueueHead+IOHC_CMD_QUEUE_SIZE-1)%IOHC_CMD_QUEUE_SIZE];
+    entry.twoWayProfileBoundExecute=true;entry.productContextRevision=channel->productContextRevision();
+    std::memcpy(entry.managementKey,channel->getEncryptionKey(),16);return true;
+}
+
 bool IoHomeController::sendWindowTravelCommand(IoHomecontrolChannel *channel,uint8_t position,uint8_t speed)
 {
     if(!channel||!channel->isPaired()||channel->is1W()||!channel->allowsActuatorControls()||speed<1||speed>3||
@@ -2688,7 +2703,7 @@ bool IoHomeController::sendWindowTravelCommand(IoHomecontrolChannel *channel,uin
     if(!sendRawTwoWayExecute(channel,body,length))return false;
     // Keep user-percent correlation for optimistic rollback; raw bytes stay frozen.
     auto &entry=mCmdQueue[(mQueueHead+IOHC_CMD_QUEUE_SIZE-1)%IOHC_CMD_QUEUE_SIZE];entry.param=position;
-    entry.twoWayWindowTravel=true;entry.productContextRevision=channel->productContextRevision();
+    entry.twoWayProfileBoundExecute=true;entry.productContextRevision=channel->productContextRevision();
     std::memcpy(entry.managementKey,channel->getEncryptionKey(),16);
     return true;
 }
@@ -7243,7 +7258,7 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
         if(!mChallengeCritical)logInfoP("2W TX rejected: identity_collision gateway=%06X",mOwnNodeId);
         { invalidateImmediateReply();mRfAccessPolicy.off();mLastTxDutyDenied=false; return RadioError::IdentityCollision; }
     }
-    if(mCurrentCmd.active&&mCurrentCmd.twoWayWindowTravel&&!sampleIdentityMatches(mCurrentCmd.sourceChannelIndex,mCurrentCmd.destNodeId,mCurrentCmd.managementKey,mCurrentCmd.productContextRevision))
+    if(mCurrentCmd.active&&mCurrentCmd.twoWayProfileBoundExecute&&!sampleIdentityMatches(mCurrentCmd.sourceChannelIndex,mCurrentCmd.destNodeId,mCurrentCmd.managementKey,mCurrentCmd.productContextRevision))
         {invalidateImmediateReply();return RadioError::HardwareError;}
     if(mCurrentCmd.active&&mCurrentCmd.managementRead&&!managementIdentityMatches(mCurrentCmd))
         { invalidateImmediateReply();mRfAccessPolicy.off(); return RadioError::HardwareError; }
@@ -8620,7 +8635,7 @@ void IoHomeController::processIdle()
 
 void IoHomeController::processTxPending()
 {
-    if(mCurrentCmd.twoWayWindowTravel&&!sampleIdentityMatches(mCurrentCmd.sourceChannelIndex,mCurrentCmd.destNodeId,mCurrentCmd.managementKey,mCurrentCmd.productContextRevision)) {
+    if(mCurrentCmd.twoWayProfileBoundExecute&&!sampleIdentityMatches(mCurrentCmd.sourceChannelIndex,mCurrentCmd.destNodeId,mCurrentCmd.managementKey,mCurrentCmd.productContextRevision)) {
         notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::FailedBeforeAuthentication);
         mCurrentCmd.active=false;mState=ControllerState::Idle;return;
     }
@@ -9183,7 +9198,7 @@ void IoHomeController::processWaitResponse()
 
 void IoHomeController::processResponse()
 {
-    if(mCurrentCmd.twoWayWindowTravel&&!sampleIdentityMatches(mCurrentCmd.sourceChannelIndex,mCurrentCmd.destNodeId,mCurrentCmd.managementKey,mCurrentCmd.productContextRevision)) {
+    if(mCurrentCmd.twoWayProfileBoundExecute&&!sampleIdentityMatches(mCurrentCmd.sourceChannelIndex,mCurrentCmd.destNodeId,mCurrentCmd.managementKey,mCurrentCmd.productContextRevision)) {
         notifyCommandExchangeResult(mCurrentCmd,IoHomeCommandExchangeResult::FailedBeforeAuthentication);
         mCurrentCmd.active=false;mState=ControllerState::Idle;return;
     }
@@ -12211,7 +12226,7 @@ void IoHomeController::updateCurrentFrequencyIndex(uint32_t iFrequencyHz)
 
 bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
 {
-    if(iEntry.twoWayWindowTravel&&!sampleIdentityMatches(iEntry.sourceChannelIndex,iEntry.destNodeId,iEntry.managementKey,iEntry.productContextRevision))return false;
+    if(iEntry.twoWayProfileBoundExecute&&!sampleIdentityMatches(iEntry.sourceChannelIndex,iEntry.destNodeId,iEntry.managementKey,iEntry.productContextRevision))return false;
     if(!managementIdentityMatches(iEntry)||!heatingContextMatches(iEntry))return false;
     if(iEntry.atlanticToken && (!atlanticContextMatches()||mAtlantic.status.session!=iEntry.atlanticToken||
         mAtlantic.status.stage!=AtlanticStage::Probing))return false;

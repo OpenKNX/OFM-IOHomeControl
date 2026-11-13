@@ -24705,3 +24705,22 @@ TEST(controller_velux_travel_override_freezes_wire_form_target_acei_and_key_cont
     id.manufacturerId=1;ch.onProtocolIdentity(ch.getNodeId(),id);ASSERT_TRUE(c.sendWindowTravelCommand(&ch,50,2));
     const uint8_t changed[16]={2};ch.setEncryptionKey(changed);for(unsigned i=0;i<5;++i)c.loop();ASSERT_EQ(c.radio().testTransmitCount(),0U);
 }
+
+TEST(controller_garage_stored_partial_is_typed_single_attempt_and_identity_bound)
+{
+    const uint8_t key[16]={1};
+    for(uint8_t sub:{0,58}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x111111,0x222222,key);
+        IoHomeProtocolIdentity id{};id.valid=id.fullMetadata=true;id.ioAddress=ch.getNodeId();
+        id.profile=5;id.subProfile=sub;id.nodeClass=IoHomeNodeClass::Actuator;ch.onProtocolIdentity(ch.getNodeId(),id);
+        ASSERT_TRUE(c.sendGarageStoredPartial(&ch));IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+        const uint8_t expected[]={1,0x63,0xD8,9,0,0};ASSERT_EQ(tx.dataLen,6);ASSERT_TRUE(!std::memcmp(tx.data,expected,6));
+        ASSERT_TRUE(!ioHomeRepeatSafeRawExecute(expected,sizeof(expected)));
+    }
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0x111111,0x222222,key);
+    ASSERT_TRUE(!c.sendGarageStoredPartial(&ch));
+    IoHomeProtocolIdentity id{};id.valid=id.fullMetadata=true;id.ioAddress=ch.getNodeId();id.profile=5;id.nodeClass=IoHomeNodeClass::Actuator;
+    ch.onProtocolIdentity(ch.getNodeId(),id);ASSERT_TRUE(c.sendGarageStoredPartial(&ch));
+    const uint8_t changed[16]={2};ch.setEncryptionKey(changed);for(unsigned i=0;i<5;++i)c.loop();ASSERT_EQ(c.radio().testTransmitCount(),0U);
+}

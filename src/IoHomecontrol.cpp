@@ -4395,6 +4395,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc object cancel TOKEN", "Cancel matching object read token");
     openknx.console.printHelpLine("iohc sensor monitor NODE INTERVAL_S DURATION_S", "Bounded raw sensor polling; interval 1..600 s, duration <=3600 s, disabled by default");
     openknx.console.printHelpLine("iohc sensor monitor-stop NODE | monitor-status NODE", "Stop future polls / inspect host session; no subscription or physical units");
+    openknx.console.printHelpLine("iohc garage stored-partial CHANNEL", "Explicit garage stored opening test; physical motion, one attempt");
     openknx.console.printHelpLine("iohc window main-only CHANNEL on|off", "Volatile qualified VELUX Window option; no immediate RF");
     openknx.console.printHelpLine("iohc remote settle GROUP MASK QUIET_MS", "Volatile explicit channel group; mask hex; 0 disables");
     openknx.console.printHelpLine("iohc sensor light-raw CHANNEL", "Local authenticated raw light sample; unit UNKNOWN; no RF");
@@ -4629,6 +4630,14 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         else if(iCmd=="iohc challenge timing on"||iCmd=="iohc challenge timing off")
             logInfoP("Challenge timing configured=%u",mController.enableChallengeTiming(iCmd=="iohc challenge timing on"));
         else logInfoP("Usage: iohc challenge timing on|off|status");return true;
+    }
+    if(iCmd.rfind("iohc garage stored-partial ",0)==0) {
+        if(iDebugKo){logInfoP("Stored partial requires local console");return true;}
+        unsigned index=0;char extra=0;
+        if(sscanf(iCmd.c_str(),"iohc garage stored-partial %u %c",&index,&extra)!=1||index<1||index>mNumChannels){
+            logInfoP("Usage: iohc garage stored-partial CHANNEL (moves to drive-stored opening)");return true;}
+        logInfoP("Drive-stored partial queued=%u; physical travel, not a percentage or programming operation",
+                 mController.sendGarageStoredPartial(mChannels[index-1]));return true;
     }
     if(iCmd.rfind("iohc window main-only ",0)==0) {
         if(iDebugKo){logInfoP("Window main-only requires local console");return true;}
