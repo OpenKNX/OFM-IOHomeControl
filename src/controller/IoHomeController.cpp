@@ -9931,6 +9931,7 @@ void IoHomeController::processPairWaitLaunchKeyTransfer()
 
 void IoHomeController::processPairSendPullKeyChallenge()
 {
+    if(uint32_t(millis()-mPairingStartTime)>IOHC_PAIR_TIMEOUT_MS){finishPullKeyDiagnostic(PullKeyResult::Timeout);return;}
     IoHomeFrame lFrame;
     lFrame.init();
     lFrame.ctrlByte0 = 0;
@@ -9947,7 +9948,7 @@ void IoHomeController::processPairSendPullKeyChallenge()
     uint8_t lLen = lFrame.serialize2W(mTxBuffer, sizeof(mTxBuffer));
     if (lLen > 0)
     {
-        const uint16_t lPreamble = mRadio.defaultResponsePreamble();
+        const uint16_t lPreamble = mPairPullAttempts ? IOHC_PREAMBLE_LONG : mRadio.defaultResponsePreamble();
         const RadioError lPrepErr = configureNormal2WTxRadio(lPreamble);
         if (lPrepErr == RadioError::Busy)
             return;
