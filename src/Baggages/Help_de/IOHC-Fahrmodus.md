@@ -5,3 +5,5 @@ Normal nutzt die Standardgeschwindigkeit des Antriebs. Silent (langsam) fordert 
 Das optionale 1-Byte-Kommunikationsobjekt verwendet **0 = Normal, 1 = Silent, 2 = Fast** (DPT 5.010). Ein Schreiben wählt den Modus für die nächste Fahrt; es startet keine Bewegung. Andere Werte werden ignoriert. Lesen liefert den gewählten Modus, keine gemessene Motorgeschwindigkeit.
 
 Nach einem Neustart oder einer Applikationsprogrammierung gilt wieder der Standard-Fahrmodus. Fahrzeiten für die Positionsschätzung passen sich nicht automatisch an; bei langsamer Fahrt sind empfangene Positionswerte genauer. Im 1W-Modus ist die Auswahl nicht verfügbar.
+
+Für bestätigte VELUX-Fenster (Hersteller VELUX, Profil 4/0 oder 4/1) gibt es eine separate optionale Auswahl. **Unverändert** erhält das bisherige Verhalten. **Antriebsvorgabe** verwendet den Fahrmodus des Motors, **Silent** die leisere Fahrt und **Fast** das schnelle Herstellerprofil. Diese Auswahl startet keine Bewegung und verändert keine ACEI-Einstellung. Unvollständige oder andere Geräteprofile ignorieren sie. Eine ausdrücklich angeforderte Experten-Geschwindigkeit oder die Laufzeitoption „main-only“ hat Vorrang.

@@ -16,7 +16,8 @@ bool mvsEnabled=false;
 #define ParamBASE_ModuleEnabled_MVS mvsEnabled
 #define ParamIOHC_cDeviceType 1
 struct Controller {
- unsigned plain=0,speed=0;uint8_t target=0,selected=0;
+ unsigned plain=0,speed=0;
+ bool sendWindowTravelCommand(void*,uint8_t,uint8_t){return false;}uint8_t target=0,selected=0;
  bool sendCommand(uint32_t,const uint8_t*,IoHomeCommand,uint8_t p,uint8_t,uint8_t mode){++plain;target=p;selected=mode;return true;}
  bool sendProfileMovementCommand(uint32_t,const uint8_t*,uint8_t p,uint8_t,uint16_t){++speed;target=p;return true;}
 };
@@ -24,6 +25,7 @@ struct IoHomecontrolChannel {
  bool enabled=false,mIs1W=false;uint8_t mRequestedSpeedIndex=0,mMovementMode=0;uint16_t mRequestedSpeedRaw=0;
  uint32_t mNodeId=1;uint8_t mEncKey[16]{};Controller mController;uint8_t sub=0;
  bool windowMainOnly()const{return enabled;}
+ uint8_t selectedWindowTravelSpeed()const{return 0;}
  const IoHomeProfileDescriptor *getEffectiveProfileDescriptor()const{return ioHomeProfileDescriptor(4,sub);}
  uint8_t movementExecuteProfile()const;bool sendTwoWayMovement(uint8_t);
 };

@@ -2744,6 +2744,8 @@ bool IoHomecontrolChannel::sendTwoWayMovement(uint8_t position)
     if(windowMainOnly())return !mRequestedSpeedIndex&&
         mController.sendCommand(mNodeId,mEncKey,IoHomeCommand::Execute,position,0xFF,0xFF);
     const auto *profile=getEffectiveProfileDescriptor();
+    if(!mRequestedSpeedIndex&&selectedWindowTravelSpeed())
+        return mController.sendWindowTravelCommand(this,position,selectedWindowTravelSpeed());
     uint8_t index=mRequestedSpeedIndex;
     uint16_t speed=mRequestedSpeedRaw;
 #ifdef MVS_ParamBlockOffset

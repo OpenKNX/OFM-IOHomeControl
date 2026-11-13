@@ -24684,3 +24684,24 @@ TEST(controller_remote_catchup_directed_linked_press_includes_unheard_member_onc
     ASSERT_EQ(a.testScheduledStatusPollCount(),1);ASSERT_EQ(b.testScheduledStatusPollCount(),1);ASSERT_EQ(b.mTestFollowUp.deadline,epoch);
     ASSERT_TRUE(!a.testHasPositionFeedback()&&!b.testHasPositionFeedback());
 }
+
+TEST(controller_velux_travel_override_freezes_wire_form_target_acei_and_key_context)
+{
+    const uint8_t key[16]={1};
+    for(uint8_t subtype:{0,1})for(uint8_t speed:{1,2,3})for(uint8_t acei:{0x43,0x63}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c,m,ch,0x111111,0x222222,key);
+        IoHomeProtocolIdentity id{};id.valid=id.fullMetadata=true;id.ioAddress=ch.getNodeId();
+        id.manufacturerId=1;id.profile=4;id.subProfile=subtype;id.nodeClass=IoHomeNodeClass::Actuator;
+        ch.onProtocolIdentity(ch.getNodeId(),id);ch.setConfigured2WAcei(acei);
+        ASSERT_TRUE(c.sendWindowTravelCommand(&ch,50,speed));IoHomeFrame tx;
+        ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_EQ(tx.dataLen,speed==1?6:8);
+        ASSERT_EQ(tx.data[1],acei);ASSERT_EQ(tx.data[2],0x64);ASSERT_EQ(tx.data[3],0);
+        if(speed>1){ASSERT_EQ(tx.data[4],0x80);ASSERT_EQ(tx.data[5],0xD8);ASSERT_EQ(tx.data[6],speed==2?5:6);}
+    }
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initPaired2WControllerForTest(c,m,ch,0x111111,0x222222,key);
+    IoHomeProtocolIdentity id{};id.valid=id.fullMetadata=true;id.ioAddress=ch.getNodeId();id.profile=4;id.manufacturerId=2;id.nodeClass=IoHomeNodeClass::Actuator;
+    ch.onProtocolIdentity(ch.getNodeId(),id);ASSERT_TRUE(!c.sendWindowTravelCommand(&ch,50,2));
+    id.manufacturerId=1;ch.onProtocolIdentity(ch.getNodeId(),id);ASSERT_TRUE(c.sendWindowTravelCommand(&ch,50,2));
+    const uint8_t changed[16]={2};ch.setEncryptionKey(changed);for(unsigned i=0;i<5;++i)c.loop();ASSERT_EQ(c.radio().testTransmitCount(),0U);
+}

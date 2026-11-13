@@ -120,6 +120,18 @@ public:
        mProtocolIdentity.manufacturerId==uint8_t(IoHomeManufacturer::Velux)&&mProtocolIdentity.profile==4&&mProtocolIdentity.subProfile<=1&&
        p&&p->profile==4&&p->subProfile==mProtocolIdentity.subProfile;
   }
+  uint8_t selectedWindowTravelSpeed()const {
+#ifdef ParamMVS_cWindowTravelSpeed
+    const auto *profile=getEffectiveProfileDescriptor();
+    if(!ParamBASE_ModuleEnabled_MVS||!mPaired||mIs1W||!mProtocolIdentity.valid||!mProtocolIdentity.fullMetadata||
+       mProtocolIdentity.ioAddress!=mNodeId||mProtocolIdentity.manufacturerId!=1||mProtocolIdentity.profile!=4||
+       mProtocolIdentity.subProfile>1||mProtocolIdentity.nodeClass!=IoHomeNodeClass::Actuator||
+       !profile||profile->profile!=4||profile->subProfile!=mProtocolIdentity.subProfile)return 0;
+    return ParamMVS_cWindowTravelSpeed<=3?ParamMVS_cWindowTravelSpeed:0;
+#else
+    return 0;
+#endif
+  }
   bool garageEndpointsOnly() const;
   void setManualProfileOverride(uint16_t iPackedType);
   IoHomeGenericCapabilities getProfileCapabilities() const;

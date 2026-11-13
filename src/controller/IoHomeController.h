@@ -213,6 +213,7 @@ struct IoHomeQueueEntry
   uint8_t productActivation[10];
   uint8_t productActivationLength;
   uint8_t productActivationFamily;
+  bool twoWayWindowTravel=false;                 // frozen qualified VELUX override
   bool twoWayMovementFp;                       // MP movement with the selected speed FP
   bool twoWayFp;                               // profile-selected functional parameter
   bool managementRead;                        // key snapshot for correlated management reads
@@ -676,6 +677,7 @@ public:
   bool configureHeatingPoll(uint8_t channel,uint16_t seconds);
   const IoHomeHeating::State &heatingState(uint8_t channel) const {return channel<16?mHeating[channel]:kInvalidHeatingState;}
   void printHeatingStatus(uint8_t channel) const;
+  bool sendWindowTravelCommand(IoHomecontrolChannel *channel,uint8_t position,uint8_t speed);
   bool sendRawTwoWayExecute(IoHomecontrolChannel *iChannel,
                             const uint8_t *iPayload, uint8_t iPayloadLen,
                             bool iSingleAttempt = false);

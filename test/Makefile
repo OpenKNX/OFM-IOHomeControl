@@ -238,3 +238,8 @@ run: check-nov13-motion
 check-nov13-observations:
 	$(PYTHON) test_nov13_observations.py
 run: check-nov13-observations
+
+.PHONY: check-window-travel
+check-window-travel:
+	$(PYTHON) test_window_travel_schema.py
+run: check-window-travel
