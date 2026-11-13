@@ -124,6 +124,14 @@ struct IoHomecontrolChannel {
 '''
 tests=r'''int main(){
  {
+  now=1000;IoHomecontrolChannel c;c.mPollTrackingDeadlineMs=601000;c.onStatusUpdate(true);c.onEstimate(10);
+  const auto generation=c.m2WMovingEvidenceGeneration;
+  c.onUnanswered2WWake(now,generation);assert(c.mHas2WMovingEvidence);
+  assert(c.twoWayWakeBeliefAt(now)==TwoWayWakeBelief::Awake);
+  now=12000;c.onUnanswered2WWake(1000,generation);assert(!c.mHas2WMovingEvidence);
+ }
+
+ {
   now=1000;IoHomecontrolChannel c;c.mPollTrackingDeadlineMs=now+600000;
   c.onStatusUpdate(true);c.onEstimate(10);assert(c.mPredictedEnd.pending&&c.mPredictedEnd.at==12000);
   c.mNextStatusPollMs=11500;assert(c.mPredictedEnd.suppresses(c.mNextStatusPollMs));

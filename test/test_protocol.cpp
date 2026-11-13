@@ -24357,3 +24357,14 @@ TEST(protocol_predicted_end_freeze_unknown_zero_wrap_and_cancel)
     p.observe(now,600,deadline);ASSERT_TRUE(!p.pending);
     p.observe(now,1,deadline);p.clear();ASSERT_TRUE(!p.pending&&!p.awake(now));
 }
+
+TEST(controller_predicted_end_poll_uses_long_wake_despite_recent_motion)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ch.setConfigured2WPowerClass(TwoWayPowerClass::LowPower);ch.onStatusUpdate(true);
+    ASSERT_TRUE(c.setLowPower2WWakePreamble(1960));
+    ASSERT_TRUE(c.sendStatusPoll(&ch,true,0xFF,0xFF,3,4));
+    IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ASSERT_EQ(c.radio().testLastPreambleLength(),1960);
+}

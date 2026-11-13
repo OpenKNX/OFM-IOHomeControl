@@ -2098,6 +2098,7 @@ void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8
 
 void IoHomecontrolChannel::onUnanswered2WWake(uint32_t iExchangeStartMs, uint32_t iGeneration)
 {
+    if(mPredictedEnd.awake(millis()))return;
     // Do not consume moving evidence received during the unanswered exchange.
     if (mHas2WMovingEvidence && iGeneration == m2WMovingEvidenceGeneration &&
         static_cast<int32_t>(mLast2WMovingEvidenceMs - iExchangeStartMs) <= 0)
@@ -2111,6 +2112,7 @@ bool IoHomecontrolChannel::confirmsExecute() const
 
 TwoWayWakeBelief IoHomecontrolChannel::twoWayWakeBeliefAt(uint32_t iNowMs, bool iStopCommand) const
 {
+    if(mPredictedEnd.awake(iNowMs))return TwoWayWakeBelief::Awake;
     return ::twoWayWakeBelief(mHas2WMovingEvidence, mLast2WMovingEvidenceMs,
                               mHas2WHeardEvidence, mLast2WHeardMs,
                               iNowMs, iStopCommand);

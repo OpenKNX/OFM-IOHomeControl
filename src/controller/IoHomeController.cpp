@@ -3872,6 +3872,10 @@ void IoHomeController::resolveTwoWayPreamblePlan(const IoHomeFrame &iFrame,
         lPlan.fixedPreamble = mDiagnostic2WStartPreamble;
         return;
     }
+    if(ioEntry.ownedStatusPoll&&ioEntry.pollReason==4) {
+        lPlan.use=TwoWayWakeBeliefUse::Disabled;lPlan.fixedPreamble=lPlan.wakePreamble;
+        return;
+    }
     if (!mDiagnostic2WWakeBelief)
     {
         lPlan.use = TwoWayWakeBeliefUse::Disabled;
