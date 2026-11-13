@@ -2138,7 +2138,7 @@ bool IoHomeController::sendCommandInternal(uint32_t iDestNodeId, const uint8_t *
     lEntry.retryReason = TwoWayRetryReason::Initial;
     if (pollOwner) {
         lEntry.pollReason=pollReason==0xFF?(tracked?1:0):pollReason;
-        logInfoP("IOHC_POLL event=queued node=%06X poll_reason=%s epoch=%lu tx_started=0",pollOwner->getNodeId(),lEntry.pollReason==0?"scheduled":lEntry.pollReason==1?"tracking":lEntry.pollReason==2?"remote_followup":"manual",(unsigned long)pollOwner->statusPollEpoch());
+        logInfoP("IOHC_POLL event=queued node=%06X poll_reason=%s epoch=%lu tx_started=0",pollOwner->getNodeId(),lEntry.pollReason==0?"scheduled":lEntry.pollReason==1?"tracking":lEntry.pollReason==2?"remote_followup":lEntry.pollReason==4?"predicted_end":"manual",(unsigned long)pollOwner->statusPollEpoch());
         lEntry.sourceChannelIndex=channelIndexFor(pollOwner);
         lEntry.productContextRevision=pollOwner->productContextRevision();
         lEntry.ownedStatusPoll=true;
@@ -3681,11 +3681,18 @@ bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
 
 bool IoHomeController::queuePop(IoHomeQueueEntry &oEntry)
 {
-    if (mQueueTail == mQueueHead)
-        return false; // queue empty
-    oEntry = mCmdQueue[mQueueTail];
-    mQueueTail = (mQueueTail + 1) % IOHC_CMD_QUEUE_SIZE;
-    return true;
+    if(mQueueTail==mQueueHead)return false;
+    // Foreground FIFO is selected first by processIdle. Among background work,
+    // the one predicted-end settling read precedes ordinary progress polls.
+    uint8_t selected=mQueueTail;
+    for(uint8_t i=mQueueTail;i!=mQueueHead;i=(i+1)%IOHC_CMD_QUEUE_SIZE)
+        if(mCmdQueue[i].ownedStatusPoll&&mCmdQueue[i].pollReason==4){selected=i;break;}
+    oEntry=mCmdQueue[selected];
+    while(selected!=mQueueTail){
+        const uint8_t previous=(selected+IOHC_CMD_QUEUE_SIZE-1)%IOHC_CMD_QUEUE_SIZE;
+        mCmdQueue[selected]=mCmdQueue[previous];selected=previous;
+    }
+    mQueueTail=(mQueueTail+1)%IOHC_CMD_QUEUE_SIZE;return true;
 }
 
 bool IoHomeController::queuePopForeground(IoHomeQueueEntry &oEntry)
@@ -6846,7 +6853,7 @@ void IoHomeController::recordTwoWayTrace(const char *event,const IoHomeFrame &fr
     }
     if(mCurrentCmd.ownedStatusPoll&&!std::strcmp(event,"tx_started"))
         logInfoP("IOHC_POLL event=tx_started node=%06X poll_reason=%s epoch=%lu transaction=%llu frequency=%lu airtime_own_ms=%lu admitted=1 collision_gate=%u",
-            mCurrentCmd.destNodeId,mCurrentCmd.pollReason==0?"scheduled":mCurrentCmd.pollReason==1?"tracking":mCurrentCmd.pollReason==2?"remote_followup":"manual",(unsigned long)mCurrentCmd.statusPollEpoch,(unsigned long long)mTwoWaySessionId,(unsigned long)p.frequencyHz,(unsigned long)estimatedTxAirtimeMs(p.length,p.preambleBytes),twoWayIdentityCollision());
+            mCurrentCmd.destNodeId,mCurrentCmd.pollReason==0?"scheduled":mCurrentCmd.pollReason==1?"tracking":mCurrentCmd.pollReason==2?"remote_followup":mCurrentCmd.pollReason==4?"predicted_end":"manual",(unsigned long)mCurrentCmd.statusPollEpoch,(unsigned long long)mTwoWaySessionId,(unsigned long)p.frequencyHz,(unsigned long)estimatedTxAirtimeMs(p.length,p.preambleBytes),twoWayIdentityCollision());
     // Cached observations only: no SPI/RSSI read or console output between
     // TX done and RX reentry.
     p.parseFailures=mRxParseFailCount;

@@ -24368,3 +24368,17 @@ TEST(controller_predicted_end_poll_uses_long_wake_despite_recent_motion)
     IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
     ASSERT_EQ(c.radio().testLastPreambleLength(),1960);
 }
+
+TEST(controller_predicted_end_background_priority_preserves_stop_priority)
+{
+    for(bool stop:{false,true}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+        initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+        ASSERT_TRUE(c.sendBackgroundCommand(0x998877,key,IoHomeCommand::Private,3));
+        ASSERT_TRUE(c.sendStatusPoll(&ch,true,0xFF,0xFF,3,4));
+        if(stop)ASSERT_TRUE(c.sendCommand(0x654321,key,IoHomeCommand::Execute,0xD2));
+        IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+        ASSERT_EQ(tx.getDestNodeId(),0x654321U);
+        ASSERT_EQ(tx.commandId,stop?IoHomeCommand::Execute:IoHomeCommand::Private);
+    }
+}
