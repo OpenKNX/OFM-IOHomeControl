@@ -24382,3 +24382,27 @@ TEST(controller_predicted_end_background_priority_preserves_stop_priority)
         ASSERT_EQ(tx.commandId,stop?IoHomeCommand::Execute:IoHomeCommand::Private);
     }
 }
+
+#include "corpus/alignment-20261113/sunea_functional.h"
+TEST(protocol_sunea_captured_remaining_time_predicts_one_end_read)
+{
+    IoHomePredictedEnd prediction;unsigned moving=0;uint32_t finalRead=0,lastMoving=0;
+    const uint16_t expected[]={15,12,9,6,3};
+    for(const auto &sample:SuneaNov13::frames) {
+        IoHomeFrame frame;ASSERT_TRUE(frame.deserializeRawWithOptionalCrc(sample.wire,sample.length));
+        if(frame.commandId==IoHomeCommand::Private){finalRead=sample.ms;continue;}
+        if(frame.dataLen!=14)continue; // Execute reply has no remaining-time field.
+        const auto time=IoHomeRemainingTime::decode(frame.data,frame.dataLen);
+        if(!(frame.data[0]&1)) {
+            ASSERT_TRUE(moving<5);ASSERT_EQ(time.raw,expected[moving++]);
+            prediction.observe(sample.ms,time.raw,600000);lastMoving=sample.ms;
+        } else {
+            ASSERT_EQ(time.raw,0);ASSERT_TRUE(prediction.pending&&prediction.due(finalRead));
+            ASSERT_EQ(prediction.at,lastMoving+4000U);
+            ASSERT_TRUE(finalRead-prediction.at<100U);
+            ASSERT_TRUE(prediction.suppresses(prediction.at-1000U));
+            prediction.clear();
+        }
+    }
+    ASSERT_EQ(moving,5U);ASSERT_TRUE(!prediction.pending);
+}

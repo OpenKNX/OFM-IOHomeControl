@@ -228,3 +228,8 @@ check-light-followup:
 .PHONY: check-upstream-alignment
 check-upstream-alignment:
 	$(PYTHON) ../tools/import_upstream_alignment.py corpus/upstream_alignment_frames.json --check
+
+.PHONY: check-nov13-motion
+check-nov13-motion:
+	$(PYTHON) ../tools/import_nov13_motion.py --check
+run: check-nov13-motion

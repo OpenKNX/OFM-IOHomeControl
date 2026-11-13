@@ -1,0 +1,17 @@
+{
+  "source_url": "https://github.com/laberning/home_io_control/blob/33e2721727008e5b1f3b6d9bcfaeee45fe42c18e/tests/corpus/captures/statuspoll/somfy_awning_statuspoll_close_with_remaining_time_predicted_end_read_sx1262.yaml",
+  "upstream_commit": "33e2721727008e5b1f3b6d9bcfaeee45fe42c18e",
+  "git_blob_sha1": "adf1472ea34bdbc775c11780af93175a9e912e9e",
+  "sha256": "b75c991d33b3d823a5ef032baa49f353bb14f54d7896a11e47eb381017fcc712",
+  "capture_date_reported": "2026-11-13",
+  "publication_timestamp": "not supplied by file API",
+  "hardware": "Heltec V3 / Somfy Sunea io",
+  "chip": "SX1262",
+  "frequency_hz": 868950000,
+  "frame_kind": "complete protocol frames without transport CRC",
+  "crc": "absent in published frames; hardware CRC provenance unverified",
+  "capture_gaps": "Only the published bursts; no continuous waveform imported",
+  "key_mode": "public corpus normalization, no private AES key",
+  "physical_claim": "upstream capture; no OFM hardware qualification",
+  "prose_discrepancy": "Description says 23.3s; actual final request t_ms=19575 (19.575s). Replay uses frame timestamps."
+}
