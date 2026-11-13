@@ -25,6 +25,7 @@
 #include "../protocol/IoHomeSmlExecution.h"
 #include "../protocol/IoHomePilotWire.h"
 #include "../protocol/IoHomeRepeatSafety.h"
+#include "../protocol/IoHomeControllerKeyImport.h"
 #include "../protocol/IoHomeVerificationEvidence.h"
 #include "../protocol/IoHomeStatusAttribution.h"
 #include "../protocol/IoHomeSessionPolicy.h"

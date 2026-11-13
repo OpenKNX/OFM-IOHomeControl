@@ -2677,6 +2677,14 @@ bool IoHomecontrol::twoWayPersistenceReady() const {
     return mNetworkStoreReady&&!mNetworkStoreFailed&&mNetworkHasCommit&&IoHomeNetworkStore::equal(networkSnapshot(),mCommittedNetwork);
 }
 
+bool IoHomecontrol::persistVerifiedControllerKey(const IoHomeControllerKeyImport &proof,uint32_t session)
+{
+    if(!twoWayPersistenceReady()||mController.twoWayIdentityCollision())return false;
+    IoHomeNetworkStore::State next;
+    if(!proof.prepareCommit(networkSnapshot(),next,session,millis()))return false;
+    return commitNetwork(next); // RAM key assignment is deliberately after this succeeds.
+}
+
 bool IoHomecontrol::prepareTwoWayPersistence(){
     const auto snapshot=networkSnapshot();
     if(mDiagnosticScan||mDiagnosticVerifyNode)return mNetworkStoreReady&&!mNetworkStoreFailed&&mNetworkHasCommit&&IoHomeNetworkStore::equal(snapshot,mCommittedNetwork);

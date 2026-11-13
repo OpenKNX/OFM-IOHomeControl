@@ -759,6 +759,18 @@ public:
     return (iIndex < IOHC_ChannelCount) ? mChannels[iIndex] : nullptr;
   }
 
+  IoHomeNetworkStore controllerImportStore;
+  IoHomeNetworkStore::State importedNetwork;
+  bool persistVerifiedControllerKey(const IoHomeControllerKeyImport &proof,uint32_t session) {
+    IoHomeNetworkStore::State current;current.controller=proof.localNode();
+    for(uint8_t i=0;i<IOHC_ChannelCount;++i)if(mChannels[i]&&!mChannels[i]->is1W()){
+        auto &binding=current.channels[i];binding.managed=true;binding.node=mChannels[i]->getNodeId();
+        std::memcpy(binding.key,mChannels[i]->getEncryptionKey(),16);
+    }
+    IoHomeNetworkStore::State next;
+    if(failAssignmentPersistence||!proof.prepareCommit(current,next,session,ioHomeTestMillis())||!controllerImportStore.commit(next))return false;
+    importedNetwork=next;return true;
+  }
   bool failAssignmentPersistence=false;
   IoHomeAssignmentReceipt assignmentReceipts;
   bool persistTwoWayAssignment(uint8_t channel,uint32_t node,const uint8_t *key,const IoHomeProtocolIdentity &identity) {
