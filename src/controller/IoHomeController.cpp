@@ -4244,7 +4244,7 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
     mPairingStartTime = millis();
     mPairDirectedRxChannel=false;mPairDirectedRxFrequency=0xFF;
     mPairPushFrequency = 0xFF;
-    mPairPullAttempts = 0;
+    mPairPullAttempts = 0;mPairPullLaunchAttempts=0;
     mPairLaunchChallengeValid=false;mPairProofChallengeValid=false;
     mPairRecoveryAttempts=0;mPairRecoveryAuthSent=false;
     mAtlanticPullOffer={};
@@ -8016,6 +8016,7 @@ void IoHomeController::loop()
                 }
             }
             else if (mState == ControllerState::PairWaitLaunchKeyTransfer ||
+                     (mState == ControllerState::PairSendLaunchKeyTransfer&&mPairPullLaunchAttempts>0) ||
                      mState == ControllerState::PairWaitPullKeyChallengeResponse)
             {
                 const bool peer = mRxFrame.getSrcNodeId() == mDiscoveredNodeId &&
@@ -8023,7 +8024,8 @@ void IoHomeController::loop()
                                   mLastResponseFreqIdx == mPairPullFrequency;
                 if (peer && mRxFrame.commandId == IoHomeCommand::ErrorResponse)
                     finishPullKeyDiagnostic(PullKeyResult::Refused);
-                else if (peer && mState == ControllerState::PairWaitLaunchKeyTransfer &&
+                else if (peer && (mState == ControllerState::PairWaitLaunchKeyTransfer ||
+                         mState == ControllerState::PairSendLaunchKeyTransfer) && mPairLaunchChallengeValid &&
                          mRxFrame.commandId == IoHomeCommand::KeyTransfer && mRxFrame.dataLen == 16)
                 {
                     uint8_t launchData[7] = {static_cast<uint8_t>(IoHomeCommand::LaunchKeyTransfer)};
@@ -9932,6 +9934,7 @@ void IoHomeController::processPairSendLaunchKeyTransfer()
         {
             mStateTimer = millis();
             mPairPullFrequency = mCurrentFreqIdx;
+            ++mPairPullLaunchAttempts;
             mState = ControllerState::PairWaitLaunchKeyTransfer;
         }
         else if (lErr == RadioError::Busy)
@@ -9964,6 +9967,11 @@ void IoHomeController::processPairWaitLaunchKeyTransfer()
 
     if (millis() - mStateTimer > 1000)
     {
+        if(mPairPullLaunchAttempts<3 && uint32_t(millis()-mPairingStartTime)<IOHC_PAIR_TIMEOUT_MS &&
+           (mPairing2WMode==Pairing2WMode::PullKey||mPairing2WMode==Pairing2WMode::AtlanticPull)) {
+            mState=ControllerState::PairSendLaunchKeyTransfer;
+            return; // same six-byte challenge, peer and original transaction
+        }
         logDebugP("Pairing: pulled key transfer timed out for 0x%06X, diagnostic stopped", mDiscoveredNodeId);
         finishPullKeyDiagnostic(PullKeyResult::Timeout);
     }

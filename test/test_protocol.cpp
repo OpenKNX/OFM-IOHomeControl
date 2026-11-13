@@ -21413,7 +21413,10 @@ TEST(controller_pairing_pull_is_verified_diagnostic_without_push_or_key_assignme
         ASSERT_EQ(launch.dataLen,6);
         c.radio().testClearTransmittedPacket();
         if (variant==4) {
-            ioHomeTestAdvanceMillis(1001); c.loop();
+            for(unsigned attempt=0;attempt<3;++attempt){
+                ioHomeTestAdvanceMillis(1001); c.loop();
+                if(attempt<2){IoHomeFrame retry;ASSERT_TRUE(transmitQueuedControllerFrame(c,retry));ASSERT_MEM_EQ(retry.data,launch.data,6);c.loop();}
+            }
             ASSERT_EQ(c.pairingTelemetry().pullResult,Result::Timeout);
         } else if (variant==5) {
             buildErrorResponseFrame(response,0x831F2A,0x7E9E6E); response.data[0]=0x08; response.dataLen=1;
@@ -24455,4 +24458,17 @@ TEST(controller_unknown_raw_selector_does_not_enter_movement_retry_burst)
     IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));c.loop();
     ioHomeTestAdvanceMillis(c.lastResponseTimingSample().selectedTimeoutMs);c.loop();
     ASSERT_EQ(c.state(),ControllerState::Idle);ASSERT_EQ(c.radio().testTransmitCount(),1U);
+}
+
+TEST(controller_pull_launch_retry_keeps_challenge_and_correlates_late_key)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;IoHomeFrame first,retry,proof;
+    ASSERT_TRUE(beginAtlanticPullForTest(c,m,ch,first));c.loop();
+    ioHomeTestAdvanceMillis(1001);c.loop();
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,retry));ASSERT_EQ(retry.commandId,IoHomeCommand::LaunchKeyTransfer);
+    ASSERT_MEM_EQ(first.data,retry.data,6);
+    const uint8_t key[16]={0x42};uint8_t ciphertext[16];
+    ASSERT_TRUE(sendAtlanticCandidateForTest(c,first,key,ciphertext,proof));
+    ASSERT_TRUE(proveAtlanticCandidateForTest(c,ciphertext,proof,key));
+    ASSERT_EQ(c.pairingTelemetry().pullResult,IoHomeController::PullKeyResult::VerifiedOtherKey);
 }
