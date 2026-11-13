@@ -1604,7 +1604,7 @@ void IoHomeController::printCollisionFirst() const
 {
     const auto &p=mCollisionFirst;
     if(!p.valid){logInfoP("IOHC_COLLISION_FIRST available=0 collision=%u",twoWayIdentityCollision());return;}
-    logInfoP("IOHC_COLLISION_FIRST boot=%lu session=%lu ms=%lu own=%06X src=%06X dst=%06X cmd=%02X ctrl=%02X/%02X RF=%lu RSSI=%d crc_checked=%u crc_valid=%u software_phy=%u irq=%04X fifo_overrun=%u truncated=%u len=%u radio_state=%u controller_state=%u recent_own_tx=%u transaction=%llu rx_read_us=%lu is_phy_rx=%u origin=%s immutable=1 action=block_2W_no_autoclear",
+    logInfoP("IOHC_COLLISION_FIRST boot=%lu session=%lu ms=%lu own=%06X src=%06X dst=%06X cmd=%02X ctrl=%02X/%02X RF=%lu RSSI=%d crc_checked=%u crc_valid=%u software_phy=%u irq=%04X fifo_overrun=%u truncated=%u len=%u radio_state=%u controller_state=%u recent_own_tx=%u transaction=%llu rx_read_us=%lu is_phy_rx=%u origin=%s physical_sender=unresolved immutable=1 action=block_2W_no_autoclear",
         (unsigned long)p.boot,(unsigned long)p.session,(unsigned long)p.timeMs,p.own,p.src,p.dst,p.command,p.ctrl0,p.ctrl1,(unsigned long)p.frequency,p.rssi,p.crcChecked,p.crcValid,p.softwarePhy,p.irq,p.fifoOverrun,p.truncated,p.length,p.radioState,p.controllerState,p.recentOwnTx,(unsigned long long)p.localTransaction,(unsigned long)p.rxReadUs,p.phyRx,p.phyRx?"rx_observed":"explicit_known_identity_conflict");
 }
 
@@ -4890,6 +4890,12 @@ void IoHomeController::beginExchangeDiagnosticsWindow()
 void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntry,
                                                    IoHomeCommandExchangeResult iResult)
 {
+    // A collision is terminal even when discovered during an active exchange.
+    const auto *identityChannel=channelForQueueEntry(iEntry);
+    if (twoWayIdentityCollision() && (!identityChannel || !identityChannel->is1W()) &&
+        iResult!=IoHomeCommandExchangeResult::Completed)
+        iResult=IoHomeCommandExchangeResult::IdentityCollision;
+    if(iResult==IoHomeCommandExchangeResult::IdentityCollision)mLastTxDutyDenied=false;
     if(iEntry.sensorSubscriptionToken)finishSolarSensor(iEntry,iResult);
     if(iEntry.command==IoHomeCommand::Discover2ERequest&&iEntry.destNodeId==mVerification.node) {
         auto &v=mVerification;
@@ -4942,7 +4948,8 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
     if(iEntry.objectReadToken==mObjectReadToken&&iEntry.objectReadToken&&iResult!=IoHomeCommandExchangeResult::Completed)
         mObjectRead.fail();
     const IoHomeRadioHealth lOutcomeHealth = radioHealth();
-    const char *lFailure = iResult != IoHomeCommandExchangeResult::Completed && mLastTxDutyDenied ? "duty_budget_exceeded" :
+    const char *lFailure = iResult == IoHomeCommandExchangeResult::IdentityCollision ? "identity_collision" :
+        iResult != IoHomeCommandExchangeResult::Completed && mLastTxDutyDenied ? "duty_budget_exceeded" :
         iResult == IoHomeCommandExchangeResult::MediaAccessFailed ? "media_access_failed" :
         iResult == IoHomeCommandExchangeResult::FailedBeforeAuthentication ? "local_radio_failure" :
         iResult == IoHomeCommandExchangeResult::AuthenticatedUnconfirmed ? "challenge_without_final" :
@@ -7172,7 +7179,7 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
     }
     if(iData&&iLength&&!(iData[0]&IOHC_CTRL0_MODE_1W)&&twoWayIdentityCollision()) {
         if(!mChallengeCritical)logInfoP("2W TX rejected: identity_collision gateway=%06X",mOwnNodeId);
-        { invalidateImmediateReply();mRfAccessPolicy.off(); return RadioError::HardwareError; }
+        { invalidateImmediateReply();mRfAccessPolicy.off();mLastTxDutyDenied=false; return RadioError::IdentityCollision; }
     }
     if(mCurrentCmd.active&&mCurrentCmd.managementRead&&!managementIdentityMatches(mCurrentCmd))
         { invalidateImmediateReply();mRfAccessPolicy.off(); return RadioError::HardwareError; }
@@ -8540,6 +8547,11 @@ void IoHomeController::processIdle()
 
 void IoHomeController::processTxPending()
 {
+    if (!(mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) && twoWayIdentityCollision()) {
+        notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::IdentityCollision);
+        mCurrentCmd.active=false;mRetryAtMs=0;mState=ControllerState::Idle;
+        return;
+    }
     if(mCurrentCmd.ownedStatusPoll&&mCurrentCmd.pollReason!=3&&backgroundPollPauseRemaining()) {
         auto *ch=mModule?mModule->getChannel(mCurrentCmd.sourceChannelIndex):nullptr;
         if(ch&&ch->getNodeId()==mCurrentCmd.destNodeId&&ch->statusPollEpoch()==mCurrentCmd.statusPollEpoch&&

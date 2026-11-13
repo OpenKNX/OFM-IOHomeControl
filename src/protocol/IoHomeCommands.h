@@ -168,6 +168,7 @@ enum class IoHomeCommandExchangeResult : uint8_t
     ExplicitlyRejected = 4,
     SessionExhausted = 5, // no response after operation-specific state budget
     MediaAccessFailed = 6, // RF producer failed before any accepted transmission
+    IdentityCollision = 7, // terminal local denial; never retry or infer peer failure
 };
 
 // Wake belief requires actual moving status. Last reception is diagnostic only;

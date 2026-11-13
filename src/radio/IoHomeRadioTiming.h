@@ -17,7 +17,7 @@ enum class IoHomeTimingEvent : uint8_t {
     ControllerRxBegin, RxSetupBegin, RxRegistersDone, RxModeWritten, RxReturn,
     ControllerRxReturn, PreambleIsr, SyncIsr, PayloadIsr, PacketRead, PacketParsed,
     NoChallenge, PostAuthNoReply, Response04, CrcError, Unmatched, AdmissionDeferred,
-    DriverError, AttemptEnd, CaptureExpired, PeerRejected, NoResponse, CaptureStopped
+    DriverError, AttemptEnd, CaptureExpired, PeerRejected, NoResponse, CaptureStopped, IdentityCollision
 };
 
 // Caller serializes access (ESP32 uses a portMUX in both task and ISR context).
@@ -64,7 +64,7 @@ struct IoHomeRadioTiming {
             event==IoHomeTimingEvent::PayloadIsr || event==IoHomeTimingEvent::PacketRead || event==IoHomeTimingEvent::PacketParsed;
         if (rxEvent && (rxHz!=txHz || startingTx)) return;
         if(event==IoHomeTimingEvent::TxStart)startingTx=false;
-        const bool terminal=event==IoHomeTimingEvent::NoChallenge || event==IoHomeTimingEvent::PostAuthNoReply ||
+        const bool terminal=event==IoHomeTimingEvent::IdentityCollision || event==IoHomeTimingEvent::NoChallenge || event==IoHomeTimingEvent::PostAuthNoReply ||
             event==IoHomeTimingEvent::Response04 || event==IoHomeTimingEvent::DriverError ||
             event==IoHomeTimingEvent::AttemptEnd || event==IoHomeTimingEvent::CaptureExpired || event==IoHomeTimingEvent::PeerRejected ||
             event==IoHomeTimingEvent::NoResponse || event==IoHomeTimingEvent::CaptureStopped || event==IoHomeTimingEvent::AdmissionDeferred;

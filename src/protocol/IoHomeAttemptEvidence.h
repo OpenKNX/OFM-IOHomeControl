@@ -13,6 +13,7 @@ inline const char *ioHomeAttemptOutcomeName(IoHomeTimingEvent event)
     case IoHomeTimingEvent::CrcError:return "rx_crc_error";
     case IoHomeTimingEvent::Unmatched:return "rx_unmatched";
     case IoHomeTimingEvent::AdmissionDeferred:return "rf_admission_deferred";
+    case IoHomeTimingEvent::IdentityCollision:return "identity_collision";
     case IoHomeTimingEvent::DriverError:return "tx_or_rx_reentry_error";
     case IoHomeTimingEvent::NoResponse:return "response_timeout";
     case IoHomeTimingEvent::PeerRejected:return "peer_rejected";
@@ -23,6 +24,7 @@ inline const char *ioHomeAttemptOutcomeName(IoHomeTimingEvent event)
 inline IoHomeTimingEvent ioHomeAttemptEvent(IoHomeCommand request,const char *event,
         bool challenge,bool answer,IoHomeCommand reply,const char *failure="none")
 {
+    if (!std::strcmp(failure,"identity_collision")) return IoHomeTimingEvent::IdentityCollision;
     if (!std::strcmp(event,"tx_timeout")) return IoHomeTimingEvent::DriverError;
     if (!std::strcmp(event,"tx_rejected") || !std::strcmp(failure,"duty_budget_exceeded"))
         return IoHomeTimingEvent::AdmissionDeferred;

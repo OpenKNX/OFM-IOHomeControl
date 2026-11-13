@@ -400,6 +400,7 @@ void IoHomecontrolChannel::setup()
 
 void IoHomecontrolChannel::loop()
 {
+    if (!mIs1W && mController.twoWayIdentityCollision()) clearStatusPollTracking();
     if(!knx.configured())return; // RF callbacks/console remain active; no ETS polling or KOs
 
     updateLimitationStatus();
@@ -1634,6 +1635,7 @@ bool IoHomecontrolChannel::requestStatus()
 
 bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll,bool iManual)
 {
+    if (mController.twoWayIdentityCollision()) {clearStatusPollTracking();return false;}
     // 1W is one-way: the device cannot answer a 2W status request, so never
     // emit one (it would only trigger an endless failed-poll/retry loop).
     if (mIs1W || !allowsActuatorControls())
@@ -2016,6 +2018,7 @@ void IoHomecontrolChannel::restoreStopTravelSnapshot()
 void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8_t iParam,
                                                     IoHomeCommandExchangeResult iResult)
 {
+    if (iResult == IoHomeCommandExchangeResult::IdentityCollision) clearStatusPollTracking();
     if (iCommand == IoHomeCommand::Execute &&
         (iResult == IoHomeCommandExchangeResult::Completed ||
          iResult == IoHomeCommandExchangeResult::ExplicitlyRejected))
@@ -2034,6 +2037,7 @@ void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8
     if (iCommand == IoHomeCommand::Execute && iParam <= 100 &&
         (iResult == IoHomeCommandExchangeResult::ExplicitlyRejected ||
          iResult == IoHomeCommandExchangeResult::FailedBeforeAuthentication ||
+         iResult == IoHomeCommandExchangeResult::IdentityCollision ||
          iResult == IoHomeCommandExchangeResult::MediaAccessFailed))
     {
         float restored=0;
@@ -2047,7 +2051,7 @@ void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8
             // Stop optimistic interpolation, retain actual moving evidence,
             // and resolve the physical state with the existing bounded poll.
             if (mOptimisticPosition.observed) publishPositionFeedback(restored, false);
-            scheduleStatusPoll(defaultTrackedStatusPollDelayMs());
+            if(iResult!=IoHomeCommandExchangeResult::IdentityCollision) scheduleStatusPoll(defaultTrackedStatusPollDelayMs());
         }
     }
 
@@ -2060,6 +2064,7 @@ void IoHomecontrolChannel::onCommandExchangeResult(IoHomeCommand iCommand, uint8
         mStopSettlePollPending = true;
         clearStopTravelSnapshot();
         break;
+    case IoHomeCommandExchangeResult::IdentityCollision:
     case IoHomeCommandExchangeResult::MediaAccessFailed:
     case IoHomeCommandExchangeResult::FailedBeforeAuthentication:
         restoreStopTravelSnapshot();

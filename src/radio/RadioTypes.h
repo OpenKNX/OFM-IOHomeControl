@@ -20,7 +20,8 @@ enum class RadioError : int8_t
   HardwareError = -2,
   Busy = -3,
   InvalidParam = -4,
-  DutyCycleExceeded = -5
+  DutyCycleExceeded = -5,
+  IdentityCollision = -6
 };
 
 // Evidence captured before RX restart. These are radio observations, not
