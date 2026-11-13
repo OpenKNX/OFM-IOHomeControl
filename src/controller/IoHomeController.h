@@ -22,6 +22,7 @@
 #include "../protocol/IoHomeRainLimitation.h"
 #include "../protocol/IoHomeCollisionEvidence.h"
 #include "../protocol/IoHomeAttemptPlan.h"
+#include "../protocol/IoHomeSmlExecution.h"
 #include "../protocol/IoHomeVerificationEvidence.h"
 #include "../protocol/IoHomeStatusAttribution.h"
 #include "../protocol/IoHomeSessionPolicy.h"
@@ -751,7 +752,7 @@ public:
   bool refreshLimitationStatus(IoHomecontrolChannel *channel);
   const LimitationState &limitationState(uint8_t channel) const;
   bool limitationValid(uint8_t channel) const;
-  bool requestStatusMpFpProbe(IoHomecontrolChannel *channel,uint8_t highBitmap=0);
+  bool requestStatusMpFpProbe(IoHomecontrolChannel *channel,uint8_t highBitmap=0,bool smlExecution=false);
   bool requestStatusFpHighRead(IoHomecontrolChannel *channel,uint8_t bitmap);
   struct RainState {
     IoHomeRainEvidence evidence{};uint32_t node=0,revision=0;uint8_t key[16]{},systemKey[16]{};
@@ -1496,6 +1497,7 @@ private:
   bool mDynamicEventTrace=false;
   uint32_t mStatusProbeOwner=0,mStatusProbeGeneration=0;
   uint8_t mStatusProbeSystemKey[16]{};
+  bool mStatusProbeSml=false;
   bool statusProbeContextMatches(const IoHomeQueueEntry &) const;
   IoHomeObjectTransfer mObjectRead;
   uint32_t mObjectReadToken=0,mObjectReadPeer=0,mObjectReadRevision=0;

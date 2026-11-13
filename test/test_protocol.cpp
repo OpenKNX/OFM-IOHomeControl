@@ -24406,3 +24406,18 @@ TEST(protocol_sunea_captured_remaining_time_predicts_one_end_read)
     }
     ASSERT_EQ(moving,5U);ASSERT_TRUE(!prediction.pending);
 }
+
+TEST(protocol_sml_execution_observation_rejects_wrong_peer_profile_and_shape)
+{
+    IoHomeFrame f;f.init();f.setSrcNode(0x123456);f.setDestNode(0x654321);
+    f.commandId=IoHomeCommand::PrivateResponse;f.dataLen=8;f.data[0]=0x2B;f.data[4]=0x80;
+    IoHomeProtocolIdentity id{};id.valid=true;id.ioAddress=0x123456;id.manufacturerId=1;id.profile=2;
+    auto decode=[&](){return IoHomeSmlExecution::decode(f,id,0x123456,0x654321,true);};
+    ASSERT_TRUE(decode().valid);ASSERT_EQ(decode().state,IoHomeSmlExecution::State::Waiting);
+    f.setSrcNode(0x112233);ASSERT_TRUE(!decode().valid);f.setSrcNode(0x123456);
+    id.manufacturerId=2;ASSERT_TRUE(!decode().valid);id.manufacturerId=1;
+    f.dataLen=6;ASSERT_TRUE(!decode().valid);f.dataLen=8;
+    f.data[0]=3;ASSERT_TRUE(!decode().valid);f.data[0]=0x2B;
+    ASSERT_TRUE(!IoHomeSmlExecution::decode(f,id,0x123456,0x654321,false).valid);
+    f.data[2]=0xC9;ASSERT_TRUE(!decode().valid);
+}

@@ -4745,10 +4745,10 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     }
     if(iCmd.rfind("iohc probe ",0)==0) {
         unsigned channel=0;char probe[32]{};char extra=0;
-        if(sscanf(iCmd.c_str(),"iohc probe %u %31s %c",&channel,probe,&extra)!=2||channel<1||channel>mNumChannels||std::strcmp(probe,"status_mp_fp")) {
-            logInfoP("Usage: iohc probe CHANNEL status_mp_fp");return true;
+        if(sscanf(iCmd.c_str(),"iohc probe %u %31s %c",&channel,probe,&extra)!=2||channel<1||channel>mNumChannels||(std::strcmp(probe,"status_mp_fp")&&std::strcmp(probe,"sml_execution"))) {
+            logInfoP("Usage: iohc probe CHANNEL status_mp_fp|sml_execution (manual observation only)");return true;
         }
-        logInfoP("status_mp_fp: %s",mController.requestStatusMpFpProbe(mChannels[channel-1])?"queued":"busy/identity not permitted");return true;
+        logInfoP("status_mp_fp: %s",mController.requestStatusMpFpProbe(mChannels[channel-1],0,!std::strcmp(probe,"sml_execution"))?"queued":"busy/identity not permitted");return true;
     }
     if(iCmd.rfind("iohc limitation ",0)==0) {
         unsigned channel=0;char action[16]{};char extra=0;

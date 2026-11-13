@@ -3120,7 +3120,7 @@ bool IoHomeController::requestStatusFpHighRead(IoHomecontrolChannel *channel,uin
     uint8_t data[10]{},length=0;
     return ioHomeBuildStatusFpHighRead(bitmap,data,length)&&requestStatusMpFpProbe(channel,bitmap);
 }
-bool IoHomeController::requestStatusMpFpProbe(IoHomecontrolChannel *channel,uint8_t highBitmap) {
+bool IoHomeController::requestStatusMpFpProbe(IoHomecontrolChannel *channel,uint8_t highBitmap,bool smlExecution) {
     if(!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||!channel||
        !channel->isPaired()||channel->is1W()||!channel->productContextRevision()||channelIndexFor(channel)>=16)return false;
     IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
@@ -3129,6 +3129,7 @@ bool IoHomeController::requestStatusMpFpProbe(IoHomecontrolChannel *channel,uint
     entry.command=IoHomeCommand::Private;entry.twoWayTxFreqIdx=frequencyIndexForHz(kNormal2WTxFreqHz);entry.sourceChannelIndex=channelIndexFor(channel);
     entry.maxAttempts=1;entry.background=true;entry.active=true;
     if(!queuePush(entry))return false;
+    mStatusProbeSml=smlExecution;
     mStatusProbeOwner=mOwnNodeId;mStatusProbeGeneration=mNextObservationGeneration;
     std::memcpy(mStatusProbeSystemKey,mSystemKey,16);return true;
 }
@@ -12918,6 +12919,12 @@ void IoHomeController::dispatchRxFrame()
                 logInfoP("status_mp_fp reply cmd=%02X raw=%s rssi=%d CH=%u frequency=%lu timestamp=%lu",
                     unsigned(mRxFrame.commandId),hexDump(mRxFrame.data,mRxFrame.dataLen).c_str(),mRadio.lastRssi(),
                     unsigned(mCurrentFreqIdx),static_cast<unsigned long>(IOHC_FREQUENCIES[mCurrentFreqIdx]),static_cast<unsigned long>(millis()));
+                if(mStatusProbeSml) {
+                    const auto observation=IoHomeSmlExecution::decode(mRxFrame,lCh->getProtocolIdentity(),lSrcNode,mOwnNodeId,
+                        mCurrentCmd.statusFpHigh==0&&mLastResponseFreqIdx==mCurrentCmd.twoWayTxFreqIdx);
+                    logInfoP("sml_execution observation=%s layout_valid=%u authenticated=0 position_published=0 movement_published=0",
+                        IoHomeSmlExecution::name(observation.state),observation.valid);
+                }
                 break; // raw only: no position, product cache, originator, rain or KNX changes
             }
             if(mRxFrame.commandId==IoHomeCommand::ErrorResponse&&mCurrentCmd.active&&mCurrentCmd.command==IoHomeCommand::Private&&
