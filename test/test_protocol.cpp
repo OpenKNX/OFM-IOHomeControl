@@ -21304,7 +21304,7 @@ TEST(controller_simulation_unlimited_retains_accounting_and_identity_guards)
     ASSERT_EQ(c.radio().testTransmitCount(),1U);
     ASSERT_TRUE(!c.qualifiedDuty());
     c.testSimulationUnlimited();c.observeForeignController(0x123456);
-    ASSERT_EQ(c.testDirectTransmit(data,len,1024,868950000U),RadioError::HardwareError);
+    ASSERT_EQ(c.testDirectTransmit(data,len,1024,868950000U),RadioError::IdentityCollision);
     ASSERT_EQ(c.radio().testTransmitCount(),1U);
 }
 
