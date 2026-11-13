@@ -6,7 +6,7 @@
 
 // The pure build() codec remains read-only. Typed action stages are admitted only by the bound controller job.
 namespace IoHomeAtlanticRead {
-enum class Model:uint8_t {Raw,Calypso,AdelisClassic};
+enum class Model:uint8_t {Raw,Calypso,AdelisClassic,HeaterWithLight};
 enum class Result:uint8_t {Idle,Queued,Value,Empty,Unconfirmed,NoReply,Rejected,Cancelled,IdentityChanged,Failed};
 struct Sample {uint16_t reg=0;Result result=Result::Idle;uint8_t length=0,data[19]{};uint32_t receivedMs=0;};
 enum class Action:uint8_t {Read,AdelisWrite,DhwMode,DhwTarget};
@@ -39,6 +39,15 @@ inline Value decode(Model model,const Sample &s) {
         }
         if(s.reg==4&&s.length==4)return {true,false,int64_t(uint32_t(s.data[0])<<24|uint32_t(s.data[1])<<16|uint32_t(s.data[2])<<8|s.data[3]),"Wh"};
         if(s.reg==8&&s.length==2)return {true,true,int64_t(uint16_t(s.data[0])<<8|s.data[1]),"litres_candidate"};
+    }
+    // Explicit diagnostic model only; discovery 52/1 never selects this and
+    // these candidate observations grant no heating/light writer or KNX status.
+    if(model==Model::HeaterWithLight) {
+        if(s.reg==0x144&&s.length==1&&s.data[0]<=1)return {true,true,s.data[0],"night_light_on_candidate"};
+        if(s.reg==0x142&&s.length==2) {
+            const uint16_t raw=uint16_t(s.data[1])<<8|s.data[0];
+            if(raw<=100)return {true,true,raw,"brightness_raw_candidate"};
+        }
     }
     if(model==Model::AdelisClassic){const auto value=IoHomeAdelis::decode(s.reg,s.data,s.length);return {value.valid,value.candidate,value.scaled,value.unit};}
 

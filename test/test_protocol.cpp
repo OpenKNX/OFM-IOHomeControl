@@ -24619,3 +24619,17 @@ TEST(protocol_adelis_fc05_fc02_preset_requires_model_session_and_measured_target
     ASSERT_TRUE(!IoHomeAdelis::effectiveProgramTarget(Preset::Eco,190,35,false,target));
     const uint8_t candidate[]={0xC8,0};ASSERT_TRUE(!IoHomeAdelis::decode(0x137,candidate,2).valid);
 }
+
+TEST(protocol_hekla_light_registers_are_explicit_read_only_candidates)
+{
+    using namespace IoHomeAtlanticRead;
+    Sample s;s.result=Result::Value;s.reg=0x144;s.length=1;s.data[0]=1;
+    ASSERT_TRUE(!decode(Model::Raw,s).known);
+    const auto on=decode(Model::HeaterWithLight,s);ASSERT_TRUE(on.known&&on.candidate);ASSERT_EQ(on.scaled,1);
+    s.data[0]=0;ASSERT_EQ(decode(Model::HeaterWithLight,s).scaled,0);
+    s.reg=0x142;s.length=2;s.data[0]=0x64;s.data[1]=0;
+    const auto brightness=decode(Model::HeaterWithLight,s);ASSERT_TRUE(brightness.known&&brightness.candidate);
+    ASSERT_EQ(brightness.scaled,100);ASSERT_TRUE(!std::strcmp(brightness.unit,"brightness_raw_candidate"));
+    s.data[0]=101;ASSERT_TRUE(!decode(Model::HeaterWithLight,s).known);
+    uint8_t write[6];ASSERT_EQ(IoHomeAdelis::write(0x144,1,write),0);ASSERT_EQ(IoHomeAdelis::write(0x142,50,write),0);
+}

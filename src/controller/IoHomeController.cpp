@@ -2383,6 +2383,7 @@ bool IoHomeController::startAtlanticRegisterRead(IoHomecontrolChannel *channel,u
     if(family==0 ? (id.profile!=0x33||id.subProfile!=0) : !IoHomeHeating::actuator(id))return false;
     if(model==IoHomeAtlanticRead::Model::AdelisClassic&&(!qualifiedHeatingName(channel,IoHomeAdelis::HeatingModel::Adelis)||family!=1))return false;
     if(model==IoHomeAtlanticRead::Model::Calypso&&family!=0)return false;
+    if(model==IoHomeAtlanticRead::Model::HeaterWithLight&&family!=1)return false;
     std::unique_ptr<IoHomeAtlanticRead::State> state(new(std::nothrow) IoHomeAtlanticRead::State());
     if(!state)return false;
     if(model==IoHomeAtlanticRead::Model::Calypso&&mRegisterRead&&mRegisterRead->model==model&&mRegisterReadPeer==channel->getNodeId()&&

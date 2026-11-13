@@ -4709,10 +4709,10 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         const int fields=sscanf(args.c_str(),"read %u %15s %15s %u %15s %c",&channel,familyText,indexText,&count,modelText,&extra);
         const bool valid=(fields==4||fields==5)&&channel>=1&&channel<=mNumChannels&&count>=1&&count<=16&&
             parseHex24(familyText,family)&&family<=1&&parseHex24(indexText,index)&&index<=255&&
-            (fields==4||!std::strcmp(modelText,"calypso"));
-        logInfoP("Atlantic register read=%s; CHANNEL HEX_FAMILY HEX_INDEX COUNT [calypso]; no writes",
+            (fields==4||!std::strcmp(modelText,"calypso")||!std::strcmp(modelText,"heater_with_light"));
+        logInfoP("Atlantic register read=%s; CHANNEL HEX_FAMILY HEX_INDEX COUNT [calypso|heater_with_light]; candidate diagnostics only, no writes",
             valid&&mController.startAtlanticRegisterRead(mChannels[channel-1],family,index,count,
-                fields==5?IoHomeAtlanticRead::Model::Calypso:IoHomeAtlanticRead::Model::Raw)?"started":"blocked");return true;
+                fields==5?(!std::strcmp(modelText,"heater_with_light")?IoHomeAtlanticRead::Model::HeaterWithLight:IoHomeAtlanticRead::Model::Calypso):IoHomeAtlanticRead::Model::Raw)?"started":"blocked");return true;
     }
     if(iCmd.rfind("iohc heating ",0)==0){
         const auto args=trimSpaces(iCmd.substr(13));
