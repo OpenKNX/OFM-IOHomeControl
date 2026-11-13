@@ -24204,3 +24204,18 @@ TEST(controller_collision_terminal_repeated_commands_no_rf_retries)
         IoHomeCommand::Execute,"identity_collision"),IoHomeTimingEvent::IdentityCollision);
     ASSERT_EQ(c.getOwnNodeId(),0x123456U);ASSERT_TRUE(ch.isPaired());
 }
+
+TEST(protocol_rx_hold_long_preamble_noise_sync_deadline_and_wrap)
+{
+    IoHomeRxHold h;const auto limit=IoHomeRxHold::preambleUs(1960);
+    ASSERT_TRUE(h.hold(0xFFFFFF00U,true,false,limit));
+    ASSERT_TRUE(h.hold(0xFFFFFF00U+408333U,true,false,limit));
+    ASSERT_TRUE(!h.hold(0xFFFFFF00U+limit,true,false,limit));
+    ASSERT_TRUE(!h.hold(0xFFFFFF00U+limit+1,true,false,limit));
+    // Sync immediately before a preamble deadline receives its own frame grace.
+    ASSERT_TRUE(h.hold(0xFFFFFF00U+limit+2,true,true,limit));
+    ASSERT_TRUE(!h.hold(0xFFFFFF00U+limit+20002,true,true,limit));
+    h.reset();ASSERT_TRUE(!h.hold(0,false,false,limit));
+    ASSERT_TRUE(h.hold(0,true,false,IoHomeRxHold::preambleUs(1024)));
+    ASSERT_TRUE(!h.hold(300000,true,false,IoHomeRxHold::preambleUs(1024)));
+}

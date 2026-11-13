@@ -10,6 +10,7 @@
 #include "../protocol/IoHomeReceiveConfiguration.h"
 #pragma once
 #include "../radio/IoHomeAirtime.h"
+#include "../radio/IoHomeRxHold.h"
 #include "../radio/IoHomeTransmitIntent.h"
 #include "../radio/IoHomeDutyBudget.h"
 #include "../radio/IoHomeRfAccessPolicy.h"
@@ -1673,6 +1674,7 @@ private:
   uint8_t mRcmChannel=0xFF,mRcmKey[16]{},mRcmGlobalKey[16]{};
   GetKeyOfNodeResult mGetKeyOfNode{};
   uint32_t mNextKeyPrimitiveToken=0;
+  IoHomeRxHold mRxHold{};
   RxScanMeasurements mRxScanMeasurements{};
   IoHomeRadioDiversity mRadioDiversity{};
   DiscoverySession mDiscoverySession{};

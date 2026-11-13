@@ -1916,6 +1916,7 @@ RadioError IoHomeController::startReceive(bool iBlocking)
 #endif
     if (lError != RadioError::None && lError != RadioError::Busy)
         mRfAccessPolicy.off();
+    if(lError==RadioError::None)mRxHold.reset();
     return lError;
 }
 
@@ -6424,7 +6425,8 @@ void IoHomeController::serviceBackgroundRxScan()
     // Do not hop channels while a frame is arriving on the current frequency:
     // a detected preamble or matched sync word means a packet is in flight and
     // switching now would truncate it. Stay put until reception completes.
-    if (mRadio.isPreambleDetected() || mRadio.isSyncDetected())
+    if (mRxHold.hold(lNow,mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
+            IoHomeRxHold::preambleUs(std::max<uint16_t>(IOHC_PREAMBLE_LONG,mLowPower2WWakePreamble))))
     {
         if(mRadio.isSyncDetected())++mRxScanMeasurements.syncHolds;else ++mRxScanMeasurements.preambleHolds;
         if (mState == ControllerState::DiscoveryListening)
@@ -6477,7 +6479,8 @@ void IoHomeController::serviceBroadcastResponseScan(uint8_t iRequestFrequencyInd
     // Never retune during demodulation. Recent activity is a short-lived
     // diversity preference, not permanent request-channel exclusion. Normal
     // background scanning keeps all three channels eligible.
-    if (mRadio.isPreambleDetected() || mRadio.isSyncDetected())
+    if (mRxHold.hold(lNow,mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
+            IoHomeRxHold::preambleUs(std::max<uint16_t>(IOHC_PREAMBLE_LONG,mLowPower2WWakePreamble))))
     {
         if(mRadio.isSyncDetected())++mRxScanMeasurements.syncHolds;else ++mRxScanMeasurements.preambleHolds;
         if (mRadio.isSyncDetected())
