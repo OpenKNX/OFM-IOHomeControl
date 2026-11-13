@@ -24649,3 +24649,21 @@ TEST(controller_adelis_extended_observation_job_is_opt_in_read_only_and_name_gat
         else ASSERT_TRUE(!c.atlanticRegisterRead().active);
     }
 }
+
+TEST(controller_dhw_target_reports_actual_readback_when_it_differs_from_request)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initTypedAtlantic(c,m,ch,true);
+    ASSERT_TRUE(c.startDhwTarget(&ch,54));IoHomeFrame tx;
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));const uint8_t volume[]={0x0C,0x60,0,8,0,0xC8};
+    ASSERT_TRUE(completeAtlanticStep(c,volume,6));ioHomeTestAdvanceMillis(1000);
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));const uint8_t mode[]={0x0C,0x60,0,6,1};
+    ASSERT_TRUE(completeAtlanticStep(c,mode,5));ioHomeTestAdvanceMillis(1000);
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));const uint8_t status[]={0x2D,0,0xC8,0,0,0};
+    ASSERT_TRUE(completeAtlanticStep(c,status,6,IoHomeCommand::PrivateResponse));ioHomeTestAdvanceMillis(1000);
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(completeAtlanticStep(c,mode,5));ioHomeTestAdvanceMillis(1000);
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));ASSERT_TRUE(completeAtlanticStep(c,status,6,IoHomeCommand::PrivateResponse));
+    const auto &job=c.atlanticRegisterRead();ASSERT_TRUE(!job.active&&job.targetReadbackDiffers&&!job.readbackVerified);
+    ASSERT_TRUE(job.dhw.visibleTarget());ASSERT_EQ(job.dhw.targetRaw,0xC800);ASSERT_EQ(job.targetRaw,0xA1E8);
+    uint16_t raw=0;ASSERT_TRUE(!IoHomeDhwCodec::encodeConfirmedTarget(54,250,true,raw));
+    ASSERT_TRUE(!ch.testHasPositionFeedback());
+}

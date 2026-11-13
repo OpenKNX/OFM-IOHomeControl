@@ -10,7 +10,7 @@ enum class Model:uint8_t {Raw,Calypso,AdelisClassic,HeaterWithLight};
 enum class Result:uint8_t {Idle,Queued,Value,Empty,Unconfirmed,NoReply,Rejected,Cancelled,IdentityChanged,Failed};
 struct Sample {uint16_t reg=0;Result result=Result::Idle;uint8_t length=0,data[19]{};uint32_t receivedMs=0;};
 enum class Action:uint8_t {Read,AdelisWrite,DhwMode,DhwTarget};
-struct State {Action action=Action::Read;uint8_t writeIndex=0xFF,desired=0,modelSelection=0;uint16_t targetRaw=0;bool readbackVerified=false;IoHomeDhwCodec::State dhw;bool active=false;uint8_t channel=0xFF,count=0,completed=0;Model model=Model::Raw;uint32_t token=0;Sample samples[16]{};};
+struct State {Action action=Action::Read;uint8_t writeIndex=0xFF,desired=0,modelSelection=0;uint16_t targetRaw=0;bool readbackVerified=false,targetReadbackDiffers=false;IoHomeDhwCodec::State dhw;bool active=false;uint8_t channel=0xFF,count=0,completed=0;Model model=Model::Raw;uint32_t token=0;Sample samples[16]{};};
 inline bool build(uint8_t family,uint8_t index,uint8_t data[4]) {
     if(family>1||!data)return false;
     data[0]=0x0C;data[1]=0x60;data[2]=family;data[3]=index;return true;

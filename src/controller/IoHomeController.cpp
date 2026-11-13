@@ -2479,7 +2479,7 @@ void IoHomeController::finishAtlanticRegisterRead(const IoHomeQueueEntry &e,IoHo
     if(sample.reg==0xFFFF&&job.completed!=job.writeIndex){IoHomeFrame frame=mRxFrame;uint16_t target=0;
         if(!IoHomeDhwCodec::statusTarget(frame,target)){sample.result=R::Failed;job.active=false;return;}
         job.dhw.targetRaw=target;job.dhw.targetValid=job.dhw.modeValid&&job.dhw.mode!=0;
-        if(job.action==A::DhwTarget){job.readbackVerified=target==job.targetRaw;if(!job.readbackVerified){sample.result=R::Rejected;job.active=false;return;}}
+        if(job.action==A::DhwTarget){job.readbackVerified=target==job.targetRaw;job.targetReadbackDiffers=!job.readbackVerified;}
     }
     ++mRegisterRead->completed;mRegisterReadPending=false;
     if(mRegisterRead->completed==mRegisterRead->count)mRegisterRead->active=false;
@@ -2493,7 +2493,7 @@ void IoHomeController::printAtlanticRegisterRead() const
         uint8_t(mModule->getChannel(mRegisterRead->channel)->selectedHeatingModel())!=mRegisterRead->modelSelection)) {
         logInfoP("Atlantic read identity changed; values withheld");return;
     }
-    logInfoP("Atlantic action=%u readback_verified=%u dhw_target_valid=%u",unsigned(mRegisterRead->action),mRegisterRead->readbackVerified,mRegisterRead->dhw.visibleTarget());
+    logInfoP("Atlantic action=%u readback_verified=%u dhw_target_valid=%u requested_raw=%u reported_raw=%u reported_target_differs=%u physical_effect=unknown",unsigned(mRegisterRead->action),mRegisterRead->readbackVerified,mRegisterRead->dhw.visibleTarget(),mRegisterRead->targetRaw,mRegisterRead->dhw.targetRaw,mRegisterRead->targetReadbackDiffers);
     for(uint8_t i=0;i<mRegisterRead->count;++i) {
         const auto &sample=mRegisterRead->samples[i];const auto value=IoHomeAtlanticRead::decode(mRegisterRead->model,sample);
         logInfoP("Atlantic read reg=%04X result=%u len=%u received_ms=%lu raw=%s decoded=%u candidate=%u scaled=%lld unit=%s physical_effect=unknown",
