@@ -24667,3 +24667,20 @@ TEST(controller_dhw_target_reports_actual_readback_when_it_differs_from_request)
     uint16_t raw=0;ASSERT_TRUE(!IoHomeDhwCodec::encodeConfirmedTarget(54,250,true,raw));
     ASSERT_TRUE(!ch.testHasPositionFeedback());
 }
+
+TEST(controller_remote_catchup_directed_linked_press_includes_unheard_member_once)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel a,b;
+    initPaired2WControllerForTest(c,m,a,0x111111,0xEFB491,key);
+    b.setNodeId(0xD4C8ED);b.setEncryptionKey(key);m.testSetChannel(1,&b);
+    ASSERT_TRUE(m.remoteMap().addRemote(0xBC40B3,"heard"));ASSERT_TRUE(m.remoteMap().linkDevice(0xBC40B3,a.getNodeId()));
+    ASSERT_TRUE(m.remoteMap().addRemote(0x857067,"unheard"));ASSERT_TRUE(m.remoteMap().linkDevice(0x857067,b.getNodeId()));
+    ASSERT_TRUE(c.configureLinkedRemoteSettling(1000));
+    IoHomeFrame press;buildPassiveExecuteFrame(press,0xBC40B3,a.getNodeId());press.set1WMode();press.hasHmac=true;press.dataLen=8;
+    ASSERT_TRUE(queueControllerPassiveFrame(c,press));ASSERT_EQ(a.testScheduledStatusPollCount(),0);
+    ioHomeTestAdvanceMillis(1001);c.loop();ASSERT_EQ(a.testScheduledStatusPollCount(),1);ASSERT_EQ(b.testScheduledStatusPollCount(),1);
+    const auto epoch=b.mTestFollowUp.deadline;
+    ASSERT_TRUE(queueControllerPassiveFrame(c,press));ioHomeTestAdvanceMillis(1001);c.loop();
+    ASSERT_EQ(a.testScheduledStatusPollCount(),1);ASSERT_EQ(b.testScheduledStatusPollCount(),1);ASSERT_EQ(b.mTestFollowUp.deadline,epoch);
+    ASSERT_TRUE(!a.testHasPositionFeedback()&&!b.testHasPositionFeedback());
+}
