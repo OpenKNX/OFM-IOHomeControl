@@ -1591,7 +1591,7 @@ void IoHomeController::observeReceivedIdentity(const IoHomeFrame &frame,const Ra
         p.command=uint8_t(frame.commandId);p.ctrl0=frame.ctrlByte0;p.ctrl1=frame.ctrlByte1;p.frequency=rx.frequencyHz;p.rssi=rx.rssiDbm;p.length=rx.length;
         p.irq=rx.irq;p.rxReadUs=rx.readTimestampUs;p.crcChecked=rx.hardwareCrcChecked;p.crcValid=rx.hardwareCrcValid;p.fifoOverrun=rx.fifoOverrun;p.truncated=rx.truncated;
         p.radioState=uint8_t(state);p.controllerState=uint8_t(mState);p.localTransaction=mTwoWaySessionId;
-        p.recentOwnTx=mAttemptTxDoneValid&&uint32_t(micros()-mAttemptTxDoneUs)<100000U;
+        p.recentOwnTx=mAttemptTxDoneValid&&uint32_t(rx.readTimestampUs-mAttemptTxDoneUs)<100000U;
         p.boot=mModule?mModule->diagnosticBootId():0;p.session=mModule?mModule->diagnosticSession():0;
 #if defined(RADIO_SX1262) && !defined(TEST_NATIVE)
         p.softwarePhy=mRadio.softwarePhyEnabled();

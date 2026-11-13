@@ -400,7 +400,7 @@ void IoHomecontrolChannel::setup()
 
 void IoHomecontrolChannel::loop()
 {
-    if (!mIs1W && mController.twoWayIdentityCollision()) clearStatusPollTracking();
+    if (!mIs1W && mPollTrackingDeadlineMs && mController.twoWayIdentityCollision()) clearStatusPollTracking();
     if(!knx.configured())return; // RF callbacks/console remain active; no ETS polling or KOs
 
     updateLimitationStatus();
