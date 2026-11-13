@@ -7887,7 +7887,8 @@ void IoHomeController::loop()
             // A late packet is observed but cannot revive an expired phase.
             const bool pushWait = mState == ControllerState::PairWaitDeviceChallenge ||
                                   mState == ControllerState::PairWaitKeyTransferConfirmation;
-            const bool pullWait = mState == ControllerState::PairWaitLaunchKeyTransfer ||
+            const bool pullRetrySend=mState==ControllerState::PairSendLaunchKeyTransfer&&mPairPullLaunchAttempts>0;
+            const bool pullWait = mState == ControllerState::PairWaitLaunchKeyTransfer || pullRetrySend ||
                                   mState == ControllerState::PairWaitPullKeyChallengeResponse;
             const uint32_t pairWindow = pushWait ? 5000U :
                 (mState == ControllerState::PairWaitLaunchKeyTransfer ? 1000U : IOHC_RX_TIMEOUT_MS);
@@ -7898,7 +7899,8 @@ void IoHomeController::loop()
                 ((mRxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) ||
                  mOwnNodeId != mPairKeyOwner || memcmp(mPairSessionKey,mSystemKey,16) ||
                  mLastResponseFreqIdx != (pushWait ? mPairPushFrequency : mPairPullFrequency) ||
-                 static_cast<uint32_t>(millis()-mStateTimer) > pairWindow);
+                 (!pullRetrySend&&static_cast<uint32_t>(millis()-mStateTimer)>pairWindow) ||
+                 (pullWait&&uint32_t(millis()-mPairingStartTime)>IOHC_PAIR_TIMEOUT_MS));
             if (invalidKeyContext)
             {
                 ++mPairingTelemetry.counters.rxUnmatched;
