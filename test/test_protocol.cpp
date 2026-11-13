@@ -1,5 +1,6 @@
 #include "protocol/IoHomeAttemptEvidence.h"
 #include "protocol/IoHomePredictedEnd.h"
+#include "protocol/IoHomeControllerKeyImport.h"
 // Unit tests for OFM-IO-Homecontrol protocol layer
 // Compile: g++ -std=c++17 -DTEST_NATIVE -I../src -I. test_protocol.cpp
 //          ../src/protocol/IoHomeCrypto.cpp ../src/protocol/IoHomeFrame.cpp
@@ -24471,4 +24472,27 @@ TEST(controller_pull_launch_retry_keeps_challenge_and_correlates_late_key)
     ASSERT_TRUE(sendAtlanticCandidateForTest(c,first,key,ciphertext,proof));
     ASSERT_TRUE(proveAtlanticCandidateForTest(c,ciphertext,proof,key));
     ASSERT_EQ(c.pairingTelemetry().pullResult,IoHomeController::PullKeyResult::VerifiedOtherKey);
+}
+
+TEST(protocol_controller_import_requires_bound_member_mac_and_hard_rejects_bad_proof)
+{
+    for(bool bad:{false,true}) {
+        IoHomeControllerKeyImport job;const uint8_t key[16]={0x42};uint8_t out[16]{};
+        ASSERT_TRUE(job.begin(1,0x123456,0x445566,0x778899,100));ASSERT_TRUE(!job.copyVerifiedKey(out));
+        ASSERT_TRUE(job.candidate(key,101));job.requestSent(0,102);
+        IoHomeFrame response;response.init();response.commandId=IoHomeCommand::NodeVerifyResponse;
+        response.setSrcNode(0x778899);response.setDestNode(0x123456);response.dataLen=3;
+        const uint8_t node[]={0x77,0x88,0x99};std::memcpy(response.data,node,3);
+        ASSERT_TRUE(!job.memberReply(response,1,103));ASSERT_TRUE(job.memberReply(response,0,103));
+        const auto *challenge=job.challenge();ASSERT_TRUE(challenge);uint8_t saved[6];std::memcpy(saved,challenge,6);
+        ASSERT_MEM_EQ(saved,job.challenge(),6);job.challengeSent(104);
+        const uint8_t transcript[]={0x37,0x77,0x88,0x99};response.commandId=IoHomeCommand::ChallengeResponse;response.dataLen=6;
+        ASSERT_TRUE(IoHomeCrypto::createHmac2W(transcript,4,saved,key,response.data));
+        ASSERT_TRUE(!job.memberProof(response,1,105));ASSERT_TRUE(!job.copyVerifiedKey(out));
+        if(bad)response.data[0]^=1;
+        ASSERT_EQ(job.memberProof(response,0,105),!bad);
+        ASSERT_EQ(job.copyVerifiedKey(out),!bad);
+        if(bad){ASSERT_EQ(job.stage,IoHomeControllerKeyImport::Stage::Rejected);ASSERT_TRUE(!job.candidate(key,106));}
+        else{ASSERT_MEM_EQ(out,key,16);job.committed();ASSERT_TRUE(!job.copyVerifiedKey(out));}
+    }
 }
