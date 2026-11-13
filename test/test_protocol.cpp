@@ -23498,7 +23498,7 @@ TEST(controller_collision_distinct_AABBCC_and_credible_duplicate_first_evidence)
     c.observeReceivedIdentity(f,e,RadioState::Receiving);ASSERT_TRUE(c.twoWayIdentityCollision());
     const auto first=c.collisionFirst();ASSERT_TRUE(first.valid&&first.phyRx&&first.crcValid);ASSERT_EQ(first.src,0xE4E61DU);ASSERT_EQ(first.dst,0x155D81U);ASSERT_EQ(first.rxReadUs,123U);
     e.readTimestampUs=999;c.observeReceivedIdentity(f,e,RadioState::Transmitting);c.clearTwoWayTrace();ASSERT_EQ(c.collisionFirst().rxReadUs,123U);
-    uint8_t wire[32];f.setStart2W();f.dataLen=1;f.data[0]=3;auto len=f.serialize2W(wire,sizeof(wire));ASSERT_EQ(c.testHelperTransmit(wire,len,32,true),RadioError::HardwareError);
+    uint8_t wire[32];f.setStart2W();f.dataLen=1;f.data[0]=3;auto len=f.serialize2W(wire,sizeof(wire));ASSERT_EQ(c.testHelperTransmit(wire,len,32,true),RadioError::IdentityCollision);
 }
 
 
@@ -24186,3 +24186,21 @@ TEST(protocol_device_event_bounded_raw_storage_zero_time_counter_and_invalid_pre
 #include "corpus/dhw_codec_tests.inc"
 
 #include "corpus/atlantic_action_tests.inc"
+
+TEST(controller_collision_terminal_repeated_commands_no_rf_retries)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    c.observeForeignController(0x123456);
+    for(unsigned n=0;n<8;++n) {
+        ASSERT_TRUE(c.sendCommand(0x654321,key,IoHomeCommand::Execute,50));
+        for(unsigned tick=0;tick<5;++tick)c.loop();
+        ASSERT_TRUE(c.radio().testLastTransmittedPacket().empty());
+        ASSERT_EQ(c.lastTwoWayOutcome().result,IoHomeCommandExchangeResult::IdentityCollision);
+        ASSERT_TRUE(!std::strcmp(c.lastTwoWayOutcome().failureReason,"identity_collision"));
+        ASSERT_TRUE(!c.lastTwoWayOutcome().transportComplete);
+    }
+    ASSERT_EQ(ioHomeAttemptEvent(IoHomeCommand::Execute,"exchange_failed",false,false,
+        IoHomeCommand::Execute,"identity_collision"),IoHomeTimingEvent::IdentityCollision);
+    ASSERT_EQ(c.getOwnNodeId(),0x123456U);ASSERT_TRUE(ch.isPaired());
+}
