@@ -1660,9 +1660,10 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll,bool iManual)
     // Scheduler-owned status polls normally get one in-exchange attempt and
     // spread retries across the channel backoff policy. A STOP-settle check is
     // deliberately allowed the full exchange budget because it resolves an
-    // ambiguous safety-relevant command outcome.
+    // ambiguous safety-relevant command outcome. Explicit manual refresh at
+    // rest uses the same bounded plan; progress reads stay single attempts.
     const uint8_t pollReason=iManual?3:mPredictedEndSettling?4:iTrackedPoll?mPollTrackingReason:0;
-    const bool lStopSettlePoll = iTrackedPoll && (mStopSettlePollPending||mPredictedEndSettling);
+    const bool lStopSettlePoll = (iTrackedPoll && (mStopSettlePollPending||mPredictedEndSettling)) || (iManual&&!mIsMoving);
     const uint8_t lMaxAttempts = lStopSettlePoll ? IOHC_EXCHANGE_MAX_ATTEMPTS : 1U;
     const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor();
     const ParameterSemantic lOrientation = lDescriptor &&

@@ -124,6 +124,12 @@ struct IoHomecontrolChannel {
 '''
 tests=r'''int main(){
  {
+  now=1000;IoHomecontrolChannel c;c.mIsMoving=false;
+  assert(c.requestStatus(false,true)&&c.mController.maxAttempts==IOHC_EXCHANGE_MAX_ATTEMPTS);
+  c.mIsMoving=true;assert(c.requestStatus(false,true)&&c.mController.maxAttempts==1);
+ }
+
+ {
   now=1000;IoHomecontrolChannel c;c.mPollTrackingDeadlineMs=601000;c.onStatusUpdate(true);c.onEstimate(10);
   const auto generation=c.m2WMovingEvidenceGeneration;
   c.onUnanswered2WWake(now,generation);assert(c.mHas2WMovingEvidence);
