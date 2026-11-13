@@ -466,12 +466,19 @@ RadioError RadioSX1276::setFrequency(uint32_t iFreqHz)
     if (!mInitialized)
         return RadioError::NotInitialized;
 
+    if (mState==RadioState::Transmitting) return RadioError::Busy;
+    const bool restart=iFreqHz!=mCurrentFreq && (readRegister(REG_OPMODE)&0x07)==RF_OPMODE_RX;
     // Frf = Fstep * FrfReg, Fstep = FXOSC / 2^19 = 32000000 / 524288 ≈ 61.035 Hz
     uint32_t lFrf = (uint32_t)((double)iFreqHz / 61.03515625);
     writeRegister(REG_FRFMSB, (lFrf >> 16) & 0xFF);
     writeRegister(REG_FRFMID, (lFrf >> 8) & 0xFF);
     writeRegister(REG_FRFLSB, lFrf & 0xFF);
     mCurrentFreq = iFreqHz;
+    if (restart) {
+        // FRF-only RX retunes retain old AFC/AGC and PreambleDetect. Re-arm once.
+        writeRegister(REG_RXCONFIG, readRegister(REG_RXCONFIG) | 0x20);
+        mPreambleEdgeValid=false;mSyncEdgeValid=false;
+    }
 
     return RadioError::None;
 }

@@ -28,6 +28,12 @@ int main(){
  assert(b.registers[REG_RXBW]==0x0B&&b.registers[REG_AFCBW]==0x12);
  assert(b.registers[REG_FRFMSB]==frf[0]&&b.registers[REG_FRFMID]==frf[1]&&b.registers[REG_FRFLSB]==frf[2]);
  assert(radio.setSupervisionIntervalMs(3000)&&!radio.setSupervisionIntervalMs(4000));assert(radio.setSupervisionIntervalMs(5000));
+ // Synthetic register model: only a changed frequency in RX restarts the chain.
+ b.registers[REG_RXCONFIG]=0x9E;radio.setFrequency(IOHC_FREQ_3);
+ assert(b.registers[REG_RXCONFIG]==0xBE);
+ b.registers[REG_RXCONFIG]=0x9E;radio.setFrequency(IOHC_FREQ_3);assert(b.registers[REG_RXCONFIG]==0x9E);
+ radio.standby();radio.setFrequency(IOHC_FREQ_2);assert(b.registers[REG_RXCONFIG]==0x9E);
+ radio.startReceive();
  radio.sleep();assert(!radio.superviseIdleReceive(15000)&&radio.recoveryAttempts()==1);radio.startReceive();
  b.registers[REG_VERSION]=0;assert(!radio.superviseIdleReceive(15000));assert(!radio.superviseIdleReceive(20000)&&radio.recoveryExhausted());assert(!radio.superviseIdleReceive(25000)&&radio.recoveryAttempts()==3);
  Bus edges;edges.registers[REG_VERSION]=0x12;RadioSX1276 captured;captured.setNativeTransport(&edges,Bus::read,Bus::write);captured.init(1,2,3,4,5,true);assert(edges.registers[REG_DIOMAPPING1]==0x3D);captured.startReceive();captured.nativeReceiveEdge(false,0xFFFFFFF0);captured.nativeReceiveEdge(true,10);edges.rx={1};edges.registers[REG_IRQFLAGS2]=RF_IRQFLAGS2_PAYLOADREADY|RF_IRQFLAGS2_CRCOK;assert(captured.readPacket(out,8)==1);assert(captured.lastReceiveEvidence().preambleTimestampValid&&captured.lastReceiveEvidence().syncTimestampValid&&captured.lastReceiveEvidence().preambleTimestampUs==0xFFFFFFF0);
