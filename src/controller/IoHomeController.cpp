@@ -12881,7 +12881,9 @@ void IoHomeController::dispatchRxFrame()
             bool mapped=false;
             if((mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W)&&lRemote)
                 for(uint8_t i=0;i<lRemote->linkCount;++i)mapped=mapped||lRemote->linkedDevices[i]==lDestNode;
-            if(mapped&&channelForNode(lDestNode)&&settleRemoteActivity(lSrcNode))return;
+            auto *destination=channelForNode(lDestNode);
+            if(mapped&&destination&&destination->isPaired()&&!destination->is1W()&&destination->allowsActuatorControls()&&
+               settleRemoteActivity(lSrcNode))return;
             if (schedule(lDestNode,false)) return;
         } else if ((mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W) && lRemote &&
                    (lDestNode & 0x3FU)==0x3FU && lDestNode<=0xFFFFU) {
