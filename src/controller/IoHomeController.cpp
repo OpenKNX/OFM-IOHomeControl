@@ -13950,8 +13950,10 @@ void IoHomeController::serviceKeyExtractReply()
     if(int32_t(millis()-mKeyExtractReplyDueMs)<0)return;
     if(mKeyExtractReplyBuffer[8]==uint8_t(IoHomeCommand::DiscoverResponse)&&
        uint32_t(millis()-mKeyExtractReplyDueMs)>=41U){mKeyExtractReplyLen=0;return;}
-    // A bounded RX hold prevents truncating preamble/sync without pinning noise.
-    if(mRxHold.hold(micros(),mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
+    // Scheduled discovery can overlap another arriving frame. A directed
+    // reply answers the frame just consumed; its old sticky IRQ is not new RX.
+    if(mKeyExtractReplyBuffer[8]==uint8_t(IoHomeCommand::DiscoverResponse)&&
+       mRxHold.hold(micros(),mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
         IoHomeRxHold::preambleUs(std::max<uint16_t>(IOHC_PREAMBLE_LONG,mLowPower2WWakePreamble))))return;
     const auto prep=configureTxRadio(mKeyExtractReplyPreamble,&IOHC_FREQUENCIES[mKeyExtractReplyFrequency]);
     if(prep==RadioError::Busy)return;

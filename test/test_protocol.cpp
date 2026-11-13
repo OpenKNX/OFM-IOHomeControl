@@ -24327,3 +24327,17 @@ TEST(controller_key_extract_synthetic_three_channel_session_and_wrong_peer)
     ASSERT_EQ(c.radio().testCurrentFrequency(),IOHC_FREQ_2);ASSERT_EQ(c.radio().testTransmitCount(),3U);
     for(unsigned n=0;n<8;++n)c.loop();ASSERT_EQ(c.radio().testTransmitCount(),3U);
 }
+
+TEST(controller_key_extract_duty_denial_sends_no_reply_and_no_key_push)
+{
+    IoHomeController c;IoHomecontrol m;initKeyExtractControllerForTest(c,m,0x112233);
+    ASSERT_TRUE(c.startKeyExtraction());c.testDutyOff();
+    for(uint32_t hz:{IOHC_FREQ_1,IOHC_FREQ_2,IOHC_FREQ_3})
+        c.testChargeDuty(hz,IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(hz)));
+    IoHomeFrame request,response;buildGatewayDiscoverRequest(request,0x445566);
+    const bool replied=queueGatewayRequestAndLoop(c,request,response);
+    ASSERT_EQ(replied,c.debugRfLimitsBypassed());
+    ASSERT_EQ(c.radio().testTransmitCount(),c.debugRfLimitsBypassed()?1U:0U);
+    if(replied)ASSERT_EQ(response.commandId,IoHomeCommand::DiscoverResponse);
+    ASSERT_TRUE(!c.keyExtractResult().valid);ASSERT_EQ(c.getOwnNodeId(),0x112233U);
+}
