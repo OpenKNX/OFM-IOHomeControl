@@ -71,6 +71,7 @@ public:
   void init(uint8_t iCsPin, uint8_t iResetPin, uint8_t iDio0Pin, uint8_t iDio4Pin = PIN_NOT_CONNECTED,uint8_t iDio2Pin=PIN_NOT_CONNECTED,bool captureEdges=false);
   RadioError configure();
   RadioError setFrequency(uint32_t iFreqHz);
+  uint32_t rxRetuneRestarts()const{return mRxRetuneRestarts;}
   RadioError setReceiveBandwidths(uint32_t rxHz, uint32_t afcHz);
   RadioError setOutputPower(uint8_t iPower);
   // RegPreambleMsb/Lsb count FSK bytes, not bits or UART-framed software bytes.
@@ -166,6 +167,7 @@ private:
   uint32_t mTxStartCount;
   uint32_t mTxDoneCount;
   uint32_t mRxStartCount;
+  uint32_t mRxRetuneRestarts=0;
   uint32_t mIrqCount;
   uint32_t mRxPayloadReadyPollCount;
   uint32_t mRxFifoOverrunCount;

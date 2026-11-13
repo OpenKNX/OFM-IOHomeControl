@@ -4986,7 +4986,10 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         logInfoP("RXscan cadenceUs=%lu retunes=%lu failures=%lu maxRetuneUs=%lu captures=%lu parseFailures=%lu preambleHolds=%lu syncHolds=%lu",
             static_cast<unsigned long>(mController.diagnosticScanCadenceUs()),static_cast<unsigned long>(s.retunes),
             static_cast<unsigned long>(s.retuneFailures),static_cast<unsigned long>(s.maxRetuneUs),static_cast<unsigned long>(s.captures),
-            static_cast<unsigned long>(s.parseFailures),static_cast<unsigned long>(s.preambleHolds),static_cast<unsigned long>(s.syncHolds));return true;
+            static_cast<unsigned long>(s.parseFailures),static_cast<unsigned long>(s.preambleHolds),static_cast<unsigned long>(s.syncHolds));
+        logInfoP("RXscan hold_disposition=%s preamble_expired=%lu sync_expired=%lu rx_retune_restarts=%lu response_preamble_bytes=%u",
+            mController.receiveHoldDisposition(),(unsigned long)s.preambleExpirations,(unsigned long)s.syncExpirations,
+            (unsigned long)mController.rxRetuneRestarts(),mController.responsePreambleBytes());return true;
     }
 
     if(lSub.rfind("radio diversity",0)==0) {

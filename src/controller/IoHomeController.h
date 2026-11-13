@@ -848,8 +848,11 @@ public:
   struct DiscoverySession {DiscoveryCompletion completion=DiscoveryCompletion::Idle;uint32_t accepted=0,duplicates=0,malformed=0,silentSweeps=0;};
   bool setDiagnosticScanCadenceMs(uint8_t ms);
   uint32_t diagnosticScanCadenceUs() const {return mRxScanIntervalUs;}
-  struct RxScanMeasurements {uint32_t retunes=0,retuneFailures=0,maxRetuneUs=0,captures=0,parseFailures=0,preambleHolds=0,syncHolds=0;};
+  struct RxScanMeasurements {uint32_t retunes=0,retuneFailures=0,maxRetuneUs=0,captures=0,parseFailures=0,preambleHolds=0,syncHolds=0,preambleExpirations=0,syncExpirations=0;};
   const RxScanMeasurements &rxScanMeasurements()const{return mRxScanMeasurements;}
+  const char *receiveHoldDisposition()const{return IoHomeRxHold::name(mLastRxHoldDisposition);}
+  uint16_t responsePreambleBytes()const{return mRadio.defaultResponsePreamble();}
+  uint32_t rxRetuneRestarts()const;
   IoHomeRadioDiversity &radioDiversity() {return mRadioDiversity;}
   const DiscoverySession &discoverySession() const {return mDiscoverySession;}
   bool cancelDiscovery();
@@ -1696,6 +1699,8 @@ private:
   GetKeyOfNodeResult mGetKeyOfNode{};
   uint32_t mNextKeyPrimitiveToken=0;
   IoHomeRxHold mRxHold{};
+  IoHomeRxHold::Disposition mLastRxHoldDisposition=IoHomeRxHold::Disposition::Idle;
+  bool holdReceiveActivity(uint32_t now,bool preamble,bool sync,uint32_t maximum,uint32_t syncGrace=20000);
   RxScanMeasurements mRxScanMeasurements{};
   IoHomeRadioDiversity mRadioDiversity{};
   DiscoverySession mDiscoverySession{};

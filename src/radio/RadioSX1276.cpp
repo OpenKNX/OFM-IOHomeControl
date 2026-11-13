@@ -476,7 +476,7 @@ RadioError RadioSX1276::setFrequency(uint32_t iFreqHz)
     mCurrentFreq = iFreqHz;
     if (restart) {
         // FRF-only RX retunes retain old AFC/AGC and PreambleDetect. Re-arm once.
-        writeRegister(REG_RXCONFIG, readRegister(REG_RXCONFIG) | 0x20);
+        writeRegister(REG_RXCONFIG, readRegister(REG_RXCONFIG) | 0x20);++mRxRetuneRestarts;
         mPreambleEdgeValid=false;mSyncEdgeValid=false;
     }
 

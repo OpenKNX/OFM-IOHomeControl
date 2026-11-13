@@ -6464,7 +6464,7 @@ void IoHomeController::serviceBackgroundRxScan()
     // Do not hop channels while a frame is arriving on the current frequency:
     // a detected preamble or matched sync word means a packet is in flight and
     // switching now would truncate it. Stay put until reception completes.
-    if (mRxHold.hold(lNow,mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
+    if (holdReceiveActivity(lNow,mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
             IoHomeRxHold::preambleUs(std::max<uint16_t>(IOHC_PREAMBLE_LONG,mLowPower2WWakePreamble))))
     {
         if(mRadio.isSyncDetected())++mRxScanMeasurements.syncHolds;else ++mRxScanMeasurements.preambleHolds;
@@ -6518,7 +6518,7 @@ void IoHomeController::serviceBroadcastResponseScan(uint8_t iRequestFrequencyInd
     // Never retune during demodulation. Recent activity is a short-lived
     // diversity preference, not permanent request-channel exclusion. Normal
     // background scanning keeps all three channels eligible.
-    if (mRxHold.hold(lNow,mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
+    if (holdReceiveActivity(lNow,mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
             IoHomeRxHold::preambleUs(std::max<uint16_t>(IOHC_PREAMBLE_LONG,mLowPower2WWakePreamble))))
     {
         if(mRadio.isSyncDetected())++mRxScanMeasurements.syncHolds;else ++mRxScanMeasurements.preambleHolds;
@@ -8976,7 +8976,7 @@ void IoHomeController::processWaitResponse()
     // exchange budget. Otherwise a stuck/noisy preamble can hold this state forever.
     const bool budgetExpired=uint32_t(millis()-mExchangeStartMs)>=mCurrentCmd.sessionPolicy.totalBudgetMs;
     if(budgetExpired)mStateTimer=millis()-mResponseTimeoutMs;
-    if (!budgetExpired && mRxHold.hold(micros(),mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
+    if (!budgetExpired && holdReceiveActivity(micros(),mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
             kIsSX1262Radio ? 30000U : IoHomeRxHold::preambleUs(std::max<uint16_t>(IOHC_PREAMBLE_LONG,mLowPower2WWakePreamble)),
             kIsSX1262Radio ? 12000U : 20000U))
         return; // Never renew the caller's original response deadline on sticky IRQs.
@@ -14018,7 +14018,7 @@ void IoHomeController::serviceKeyExtractReply()
     // Scheduled discovery can overlap another arriving frame. A directed
     // reply answers the frame just consumed; its old sticky IRQ is not new RX.
     if(mKeyExtractReplyBuffer[8]==uint8_t(IoHomeCommand::DiscoverResponse)&&
-       mRxHold.hold(micros(),mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
+       holdReceiveActivity(micros(),mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
         IoHomeRxHold::preambleUs(std::max<uint16_t>(IOHC_PREAMBLE_LONG,mLowPower2WWakePreamble))))return;
     const auto prep=configureTxRadio(mKeyExtractReplyPreamble,&IOHC_FREQUENCIES[mKeyExtractReplyFrequency]);
     if(prep==RadioError::Busy)return;
@@ -14051,7 +14051,7 @@ void IoHomeController::serviceKeyExtractChannelHold()
         serviceBackgroundRxScan();return;
     }
     if(mKeyExtractReplyFrequency>=IOHC_NUM_FREQUENCIES||mCurrentFreqIdx==mKeyExtractReplyFrequency)return;
-    if(mRxHold.hold(micros(),mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
+    if(holdReceiveActivity(micros(),mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
         IoHomeRxHold::preambleUs(std::max<uint16_t>(IOHC_PREAMBLE_LONG,mLowPower2WWakePreamble))))return;
     if(mRadio.setFrequency(IOHC_FREQUENCIES[mKeyExtractReplyFrequency])==RadioError::None){
         mCurrentFreqIdx=mKeyExtractReplyFrequency;startReceive();
@@ -14905,4 +14905,23 @@ void IoHomeController::processControllerKeyPullFrame()
         if(mControllerImport.memberProof(mRxFrame,mLastResponseFreqIdx,millis()))
             logInfoP("Controller key pull session=%lu member_proof=authenticated candidate=verified commit=explicit_only",(unsigned long)mControllerImport.token());
     }
+}
+
+bool IoHomeController::holdReceiveActivity(uint32_t now,bool preamble,bool sync,uint32_t maximum,uint32_t syncGrace)
+{
+    const bool held=mRxHold.hold(now,preamble,sync,maximum,syncGrace);
+    using D=IoHomeRxHold::Disposition;const auto next=mRxHold.disposition;
+    if(next!=mLastRxHoldDisposition){
+        if(next==D::PreambleExpired)++mRxScanMeasurements.preambleExpirations;
+        if(next==D::SyncExpired)++mRxScanMeasurements.syncExpirations;
+    }
+    mLastRxHoldDisposition=next;return held;
+}
+uint32_t IoHomeController::rxRetuneRestarts()const
+{
+#if defined(RADIO_SX1276)&&!defined(TEST_NATIVE)
+    return mRadio.rxRetuneRestarts();
+#else
+    return 0;
+#endif
 }

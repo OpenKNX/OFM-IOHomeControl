@@ -33,7 +33,7 @@ int main(){
  b.registers[REG_IRQFLAGS1]=0;
  // Synthetic register model: only a changed frequency in RX restarts the chain.
  b.registers[REG_RXCONFIG]=0x9E;radio.setFrequency(IOHC_FREQ_3);
- assert(b.registers[REG_RXCONFIG]==0xBE);
+ assert(b.registers[REG_RXCONFIG]==0xBE&&radio.rxRetuneRestarts()>0);
  b.registers[REG_RXCONFIG]=0x9E;radio.setFrequency(IOHC_FREQ_3);assert(b.registers[REG_RXCONFIG]==0x9E);
  radio.standby();radio.setFrequency(IOHC_FREQ_2);assert(b.registers[REG_RXCONFIG]==0x9E);
  radio.startReceive();
