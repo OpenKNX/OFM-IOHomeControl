@@ -53,6 +53,7 @@ struct IoHomeProfileDescriptor{};
 uint8_t ioHomeParameterIndex(const IoHomeProfileDescriptor*,ParameterSemantic){return 3;}
 struct Controller {
  unsigned submissions=0;uint8_t maxAttempts=0;uint32_t rfWait=0,pauseRemaining=0;
+ bool twoWayIdentityCollision(){return false;}
  unsigned backgroundPollPauseRemaining(){return pauseRemaining;}
  unsigned statusPollRetryAfterMs(){return rfWait;}
  bool sendStatusPoll(void*,bool,uint16_t,uint8_t attemptsParam,uint8_t attempts,uint8_t=0xFF) {
