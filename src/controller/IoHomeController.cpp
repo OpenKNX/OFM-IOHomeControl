@@ -3655,6 +3655,12 @@ bool IoHomeController::sendProfileMovementCommand(uint32_t node,const uint8_t *k
     return queuePush(entry);
 }
 
+static bool repeatSafeExecute(const IoHomeQueueEntry &entry)
+{
+    return entry.twoWayRawExecute ? ioHomeRepeatSafeRawExecute(entry.twoWayRawData,entry.twoWayRawLen)
+                                  : ioHomeRepeatSafePercentExecute(entry.param);
+}
+
 bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
 {
     if(const auto *channel=channelForNode(iEntry.destNodeId))
@@ -3677,6 +3683,8 @@ bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
     auto &queued=mCmdQueue[mQueueHead];
     queued.sessionPolicy=ioHomeSessionPolicy(queued.command,queued.param,matchingBeaconNodeCount());
     if (!queued.maxAttempts) queued.maxAttempts=queued.sessionPolicy.stateAttempts;
+    const auto *repeatChannel=channelForNode(queued.destNodeId);
+    if(queued.command==IoHomeCommand::Execute&&(!repeatChannel||!repeatChannel->is1W())&&!repeatSafeExecute(queued))queued.maxAttempts=1;
     if(queued.maxAttempts>IoHomeAttemptPlan::hardCap)queued.maxAttempts=IoHomeAttemptPlan::hardCap;
     queued.sessionPolicy.stateAttempts=queued.maxAttempts; // explicit caller caps stay independent.
     queued.mediaAttempts=0;
@@ -9027,7 +9035,7 @@ void IoHomeController::processWaitResponse()
                     ++mCurrentCmd.authenticatedUnconfirmedTries;
 
                 IoHomecontrolChannel *lChannel = channelForQueueEntry(mCurrentCmd);
-                const bool lRepeatable = mCurrentCmd.param != 0xD8;
+                const bool lRepeatable = repeatSafeExecute(mCurrentCmd);
                 const bool lKnownConfirmer = lChannel && lChannel->confirmsExecute();
                 const bool lRetrySafe = lKnownConfirmer && lRepeatable &&
                                         mCurrentCmd.authenticatedUnconfirmedTries <= 1U &&

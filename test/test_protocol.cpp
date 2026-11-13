@@ -24437,3 +24437,22 @@ TEST(protocol_pilot_wire_exact_observation_is_not_generic_heater_execute)
     ASSERT_TRUE(!c.sendCommand(0x654321,key,IoHomeCommand::Execute,50));
     for(unsigned n=0;n<5;++n)c.loop();ASSERT_EQ(c.radio().testTransmitCount(),0U);
 }
+
+TEST(protocol_repeat_safe_selectors_are_explicit)
+{
+    ASSERT_TRUE(ioHomeRepeatSafePercentExecute(0));ASSERT_TRUE(ioHomeRepeatSafePercentExecute(100));
+    ASSERT_TRUE(ioHomeRepeatSafePercentExecute(0xD2));
+    for(uint8_t p:{uint8_t(0xD8),uint8_t(0xD9),uint8_t(0xFC)})ASSERT_TRUE(!ioHomeRepeatSafePercentExecute(p));
+    uint8_t body[]={1,0x63,0xD8,9,0,0};ASSERT_TRUE(!ioHomeRepeatSafeRawExecute(body,6));
+    body[2]=0x64;body[3]=0;ASSERT_TRUE(ioHomeRepeatSafeRawExecute(body,6));
+    body[2]=0xD2;ASSERT_TRUE(ioHomeRepeatSafeRawExecute(body,6));
+}
+TEST(controller_unknown_raw_selector_does_not_enter_movement_retry_burst)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    const uint8_t body[]={1,0x63,0xD9,0,0,0};ASSERT_TRUE(c.sendRawTwoWayExecute(&ch,body,6));
+    IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));c.loop();
+    ioHomeTestAdvanceMillis(c.lastResponseTimingSample().selectedTimeoutMs);c.loop();
+    ASSERT_EQ(c.state(),ControllerState::Idle);ASSERT_EQ(c.radio().testTransmitCount(),1U);
+}
