@@ -1,0 +1,19 @@
+{
+  "source_url": "https://github.com/laberning/home_io_control/issues/230",
+  "published_at": "2026-11-12T20:35:56Z",
+  "capture_timestamp": "not supplied",
+  "hardware": "two VELUX SML / shared KUX 110 / Heltec V3.2",
+  "chip": "SX1262",
+  "frequency_hz": null,
+  "kind": "application_reply_body",
+  "crc": "not supplied; these are not complete RF frames",
+  "gaps": "selected observations pasted in issue; no continuous RF trace",
+  "secrets": "no controller IDs, key, MAC or challenge included",
+  "qualification": "upstream observations; not OFM hardware-qualified; response may be unauthenticated",
+  "samples": [
+    {"body": "2B 00 00 00 80 00 00 00", "state": "Waiting", "current_raw": 0},
+    {"body": "2B 00 64 00 80 00 00 00", "state": "Waiting", "current_raw": 25600},
+    {"body": "2C 00 96 00 80 C8 00 00", "state": "Executing", "current_raw": 38400},
+    {"body": "2D 00 96 00 80 00 00 00", "state": "Done", "current_raw": 38400}
+  ]
+}

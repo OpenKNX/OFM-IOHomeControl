@@ -233,3 +233,8 @@ check-upstream-alignment:
 check-nov13-motion:
 	$(PYTHON) ../tools/import_nov13_motion.py --check
 run: check-nov13-motion
+
+.PHONY: check-nov13-observations
+check-nov13-observations:
+	$(PYTHON) test_nov13_observations.py
+run: check-nov13-observations
