@@ -24492,7 +24492,7 @@ TEST(protocol_controller_import_requires_bound_member_mac_and_hard_rejects_bad_p
         if(bad)response.data[0]^=1;
         ASSERT_EQ(job.memberProof(response,0,105),!bad);
         ASSERT_EQ(job.copyVerifiedKey(out),!bad);
-        if(bad){ASSERT_EQ(job.stage,IoHomeControllerKeyImport::Stage::Rejected);ASSERT_TRUE(!job.candidate(key,106));}
+        if(bad){ASSERT_EQ(job.stage(),IoHomeControllerKeyImport::Stage::Rejected);ASSERT_TRUE(!job.candidate(key,106));}
         else{ASSERT_MEM_EQ(out,key,16);job.committed();ASSERT_TRUE(!job.copyVerifiedKey(out));}
     }
 }
