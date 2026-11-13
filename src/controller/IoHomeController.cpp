@@ -7740,7 +7740,7 @@ void IoHomeController::loop()
     if (mKeyExtractArmed && mKeyExtractReplyLen != 0)
     {
         serviceKeyExtractReply();
-        if (mKeyExtractReplyLen != 0)
+        if (mKeyExtractReplyLen != 0 && mKeyExtractReplyPhase != 0)
             return;
     }
 
@@ -13612,6 +13612,7 @@ void IoHomeController::processKeyExtractFrame()
     const uint32_t lSrcNode = mRxFrame.getSrcNodeId();
     const uint32_t lDstNode = mRxFrame.getDestNodeId();
 
+    if (!mKeyExtractArmed || (mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W)) return;
     if (mModule)
         mModule->remoteMap().observeAddress(lSrcNode);
 
@@ -13708,6 +13709,8 @@ void IoHomeController::processKeyExtractFrame()
             mKeyExtractNodeVerificationAuthDone = false;
             mKeyExtractGraceDeadlineMs = 0;
         }
+        if(mKeyExtractReplyPhase!=0)return;
+        mKeyExtractReplyLen=0;
         mKeyExtractCandidateHubNodeId = lSrcNode;
         // Selection is local to this request: a following open discovery cannot
         // inherit a type, and no persistent identity or manufacturer is changed.
@@ -13724,7 +13727,7 @@ void IoHomeController::processKeyExtractFrame()
         // the 3 * 1024-symbol low-power wake-up duration.
         if (!queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(true)))
             return;
-        logInfoP("KeyExtract: tx 0x29 temp=0x%06X order=CH1,CH3,CH2 preamble=%u",
+        logInfoP("KeyExtract: tx 0x29 temp=0x%06X single_alternative_channel=1 preamble=%u",
                  mKeyExtractThrowawayId,
                  static_cast<unsigned>(keyExtractReplyPreamble(true)));
         mKeyExtractState = ControllerState::ExtractSentDiscoverResp;
@@ -13742,6 +13745,7 @@ void IoHomeController::processKeyExtractFrame()
             return;
         }
 
+        mKeyExtractHubNodeId=lSrcNode;
         mTxLen = buildExtractConfirmationAckFrame(mTxBuffer, sizeof(mTxBuffer),
                                                    mKeyExtractThrowawayId, lSrcNode, mRxFrame);
         if (mTxLen == 0 || !queueKeyExtractReply(mTxBuffer, mTxLen, keyExtractReplyPreamble(false)))
@@ -13834,7 +13838,7 @@ void IoHomeController::processKeyExtractFrame()
             mKeyExtractState = ControllerState::Extracted;
             extendKeyExtractGrace();
             holdKeyExtractChannel(kKeyExtractPostExtractGraceMs);
-            logInfoP("KeyExtract: post-extraction grace %lums; holding CH2",
+            logInfoP("KeyExtract: post-extraction grace %lums; session channel then scan",
                      static_cast<unsigned long>(kKeyExtractPostExtractGraceMs));
             return;
         }
@@ -13913,60 +13917,48 @@ uint16_t IoHomeController::keyExtractReplyPreamble(bool iColdReply) const
                : mRadio.defaultResponsePreamble();
 }
 
-bool IoHomeController::queueKeyExtractReply(const uint8_t *iBuffer, uint8_t iLen,
-                                            uint16_t iPreambleSymbols)
+bool IoHomeController::queueKeyExtractReply(const uint8_t *buffer,uint8_t length,uint16_t preamble)
 {
-    if (iBuffer == nullptr || iLen == 0 || iLen > sizeof(mKeyExtractReplyBuffer) ||
-        mKeyExtractReplyLen != 0)
-        return false;
-
-    memcpy(mKeyExtractReplyBuffer, iBuffer, iLen);
-    mKeyExtractReplyLen = iLen;
-    mKeyExtractReplyPhase = 0;
-    mKeyExtractReplyPreamble = iPreambleSymbols;
-    serviceKeyExtractReply();
-    return true;
+    if(!mKeyExtractArmed||!buffer||length<9||length>sizeof(mKeyExtractReplyBuffer)||
+       mCurrentFreqIdx>=IOHC_NUM_FREQUENCIES||mKeyExtractReplyPhase!=0)return false;
+    // At most one pending reply. A directed next step supersedes discovery.
+    memcpy(mKeyExtractReplyBuffer,buffer,length);mKeyExtractReplyLen=length;
+    mKeyExtractReplyPreamble=preamble;mKeyExtractReplyFrequency=mCurrentFreqIdx;
+    mKeyExtractReplyDueMs=millis();
+    if(buffer[8]==uint8_t(IoHomeCommand::DiscoverResponse)) {
+        uint8_t random[6];IoHomeCrypto::generateChallenge(random);
+        const uint8_t suffix=uint8_t(mRxFrame.getDestNodeId())&0x3F;
+        const uint16_t slots=suffix==0x3C?64:suffix==0x3D?128:suffix==0x3E?255:32;
+        const uint16_t draw=(uint16_t(random[0])<<8)|random[1];
+        mKeyExtractReplyDueMs+=uint32_t(1+draw%slots)*41U;
+        mKeyExtractReplyFrequency=(mCurrentFreqIdx+1+(random[2]&1))%IOHC_NUM_FREQUENCIES;
+        mKeyExtractSessionUntilMs=0;
+    }
+    serviceKeyExtractReply();return true;
 }
 
 void IoHomeController::serviceKeyExtractReply()
 {
-    static constexpr uint8_t kReplyFrequencyOrder[] = {2, 1, 0}; // CH1, CH3, CH2 last
-
-    if (mKeyExtractReplyLen == 0)
-        return;
-
-    if (mRadio.state() == RadioState::Transmitting)
-    {
-        if (!mRadio.isTxDone())
-            return;
+    if(!mKeyExtractReplyLen)return;
+    if(!mKeyExtractArmed){mKeyExtractReplyLen=0;return;}
+    if(mRadio.state()==RadioState::Transmitting&&!mRadio.isTxDone())return;
+    if(mKeyExtractReplyPhase) {
+        mKeyExtractReplyLen=0;mKeyExtractReplyPhase=0;startReceive();return;
     }
-
-    if (mKeyExtractReplyPhase >= sizeof(kReplyFrequencyOrder))
-    {
-        mKeyExtractReplyLen = 0;
-        mKeyExtractReplyPhase = 0;
-        startReceive();
-        return;
+    if(int32_t(millis()-mKeyExtractReplyDueMs)<0)return;
+    if(mKeyExtractReplyBuffer[8]==uint8_t(IoHomeCommand::DiscoverResponse)&&
+       uint32_t(millis()-mKeyExtractReplyDueMs)>=41U){mKeyExtractReplyLen=0;return;}
+    // A bounded RX hold prevents truncating preamble/sync without pinning noise.
+    if(mRxHold.hold(micros(),mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
+        IoHomeRxHold::preambleUs(std::max<uint16_t>(IOHC_PREAMBLE_LONG,mLowPower2WWakePreamble))))return;
+    const auto prep=configureTxRadio(mKeyExtractReplyPreamble,&IOHC_FREQUENCIES[mKeyExtractReplyFrequency]);
+    if(prep==RadioError::Busy)return;
+    if(prep==RadioError::None) {
+        const auto tx=startControllerTransmit(mKeyExtractReplyBuffer,mKeyExtractReplyLen);
+        if(tx==RadioError::Busy)return;
+        if(tx==RadioError::None){mKeyExtractReplyPhase=1;return;}
     }
-
-    const uint8_t lFrequencyIdx = kReplyFrequencyOrder[mKeyExtractReplyPhase];
-    const RadioError lPrepErr = configureTxRadio(mKeyExtractReplyPreamble,
-                                                  &IOHC_FREQUENCIES[lFrequencyIdx]);
-    if (lPrepErr != RadioError::None)
-    {
-        mKeyExtractReplyLen = 0;
-        startReceive();
-        return;
-    }
-
-    if (startControllerTransmit(mKeyExtractReplyBuffer, mKeyExtractReplyLen) == RadioError::None)
-    {
-        mKeyExtractReplyPhase++;
-        return;
-    }
-
-    mKeyExtractReplyLen = 0;
-    startReceive();
+    mKeyExtractReplyLen=0;startReceive();
 }
 
 void IoHomeController::extendKeyExtractGrace()
@@ -13974,24 +13966,26 @@ void IoHomeController::extendKeyExtractGrace()
     mKeyExtractGraceDeadlineMs = millis() + kKeyExtractPostExtractGraceMs;
 }
 
-void IoHomeController::holdKeyExtractChannel(uint32_t iDurationMs)
+void IoHomeController::holdKeyExtractChannel(uint32_t duration)
 {
-    mKeyExtractHoldDeadlineMs = millis() + iDurationMs;
-    logInfoP("KeyExtract: hold CH2 for %lums state=%s",
-             static_cast<unsigned long>(iDurationMs), stateName(mKeyExtractState));
+    const bool discovery=mKeyExtractReplyBuffer[8]==uint8_t(IoHomeCommand::DiscoverResponse);
+    const uint32_t pending=discovery?uint32_t(mKeyExtractReplyDueMs-millis()):0;
+    mKeyExtractHoldDeadlineMs=millis()+duration+pending;
+    // Conservative host affinity: directed frames hold briefly, then scan all
+    // channels between sessions. Discovery itself does not park the receiver.
+    mKeyExtractSessionUntilMs=discovery?0:millis()+200U;
 }
 
 void IoHomeController::serviceKeyExtractChannelHold()
 {
-    const uint8_t lCh2 = frequencyIndexForHz(IOHC_FREQ_2);
-    if (mCurrentFreqIdx == lCh2 ||
-        mRadio.isPreambleDetected() || mRadio.isSyncDetected())
-        return;
-
-    if (mRadio.setFrequency(IOHC_FREQ_2) == RadioError::None)
-    {
-        mCurrentFreqIdx = lCh2;
-        startReceive();
+    if(!mKeyExtractSessionUntilMs||int32_t(millis()-mKeyExtractSessionUntilMs)>=0) {
+        serviceBackgroundRxScan();return;
+    }
+    if(mKeyExtractReplyFrequency>=IOHC_NUM_FREQUENCIES||mCurrentFreqIdx==mKeyExtractReplyFrequency)return;
+    if(mRxHold.hold(micros(),mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
+        IoHomeRxHold::preambleUs(std::max<uint16_t>(IOHC_PREAMBLE_LONG,mLowPower2WWakePreamble))))return;
+    if(mRadio.setFrequency(IOHC_FREQUENCIES[mKeyExtractReplyFrequency])==RadioError::None){
+        mCurrentFreqIdx=mKeyExtractReplyFrequency;startReceive();
     }
 }
 
@@ -14005,6 +13999,7 @@ void IoHomeController::resetKeyExtractSessionState()
     mKeyExtractHoldDeadlineMs = 0;
     mKeyExtractReplyLen = 0;
     mKeyExtractReplyPhase = 0;
+    mKeyExtractReplyFrequency=0xFF;mKeyExtractReplyDueMs=mKeyExtractSessionUntilMs=0;
     memset(mKeyExtractChallenge, 0, sizeof(mKeyExtractChallenge));
     memset(mKeyExtractKey, 0, sizeof(mKeyExtractKey));
 }

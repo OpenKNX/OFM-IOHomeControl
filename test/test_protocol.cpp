@@ -290,6 +290,11 @@ static bool queueGatewayRequestAndLoop(IoHomeController &iController,
     iController.radio().testClearTransmittedPacket();
     iController.radio().testQueueReceivedPacket(lBuffer, lLen);
     iController.loop();
+    // Synthetic scheduler: advance to a nonzero discovery answer slot.
+    if(iRequest.commandId==IoHomeCommand::DiscoverRequest)
+        for(unsigned slot=0;slot<255 && iController.radio().testLastTransmittedPacket().empty();++slot) {
+            ioHomeTestAdvanceMillis(41);iController.loop();
+        }
 
     const auto &lPacket = iController.radio().testLastTransmittedPacket();
     if (lPacket.empty())
@@ -14882,42 +14887,16 @@ TEST(controller_key_extract_answers_discovery_with_throwaway_id)
     ASSERT_MEM_EQ(lResponse.data, lExpectedPayload, sizeof(lExpectedPayload));
 }
 
-TEST(controller_key_extract_broadcasts_reply_with_ch2_last)
+TEST(controller_key_extract_discovery_answers_once_on_an_alternative_channel)
 {
-    const uint32_t lOwnNodeId = 0x112233;
-    const uint32_t lHubNodeId = 0x445566;
-
-    ioHomeTestSetMillis(1000);
-    ioHomeTestSetMicros(1000000);
-
-    IoHomeController lController;
-    IoHomecontrol lModule;
-    initKeyExtractControllerForTest(lController, lModule, lOwnNodeId);
-    ASSERT_TRUE(lController.startKeyExtraction());
-
-    IoHomeFrame lRequest;
-    buildGatewayDiscoverRequest(lRequest, lHubNodeId);
-    IoHomeFrame lResponse;
-    ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
-    ASSERT_EQ(lController.radio().testTransmitCount(), 1U);
-    ASSERT_EQ(IOHC_KEY_EXTRACT_COLD_REPLY_PREAMBLE, 80);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_KEY_EXTRACT_COLD_REPLY_PREAMBLE);
-    ASSERT_EQ(IOHC_FREQUENCIES[0], IOHC_FREQ_2);
-    ASSERT_EQ(IOHC_FREQUENCIES[1], IOHC_FREQ_3);
-    ASSERT_EQ(IOHC_FREQUENCIES[2], IOHC_FREQ_1);
-    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_1);
-
-    // Finish the exact CH1, CH3, then CH2 reply sequence. The final radio
-    // channel must be CH2 so a hub reacting to it finds us back in receive.
-    lController.loop();
-    ASSERT_EQ(lController.radio().testTransmitCount(), 2U);
-    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_3);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_KEY_EXTRACT_COLD_REPLY_PREAMBLE);
-    lController.loop();
-    ASSERT_EQ(lController.radio().testTransmitCount(), 3U);
-    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_KEY_EXTRACT_COLD_REPLY_PREAMBLE);
-    lController.loop();
+    IoHomeController c;IoHomecontrol m;initKeyExtractControllerForTest(c,m,0x112233);
+    ASSERT_TRUE(c.startKeyExtraction());const auto requestFrequency=c.radio().testCurrentFrequency();
+    IoHomeFrame request,response;buildGatewayDiscoverRequest(request,0x445566);
+    ASSERT_TRUE(queueGatewayRequestAndLoop(c,request,response));
+    ASSERT_EQ(response.commandId,IoHomeCommand::DiscoverResponse);
+    ASSERT_EQ(c.radio().testTransmitCount(),1U);
+    ASSERT_NE(c.radio().testCurrentFrequency(),requestFrequency);
+    for(unsigned i=0;i<8;++i)c.loop();ASSERT_EQ(c.radio().testTransmitCount(),1U);
 }
 
 TEST(controller_key_extract_reuses_stored_challenge_on_key_init_retry)
@@ -14954,7 +14933,7 @@ TEST(controller_key_extract_reuses_stored_challenge_on_key_init_retry)
     ASSERT_MEM_EQ(lChallengeResp1.data, lChallengeResp2.data, 6);
 }
 
-TEST(controller_key_extract_holds_ch2_without_resetting_protocol_state)
+TEST(controller_key_extract_scans_between_sessions_and_holds_directed_channel)
 {
     const uint32_t lOwnNodeId = 0x112233;
     const uint32_t lHubNodeId = 0x445566;
@@ -14977,14 +14956,13 @@ TEST(controller_key_extract_holds_ch2_without_resetting_protocol_state)
     const uint32_t lThrowawayNodeId = lResponse.getSrcNodeId();
     ASSERT_TRUE(lController.keyExtractAwaitingReply());
 
-    // Drain CH1/CH3/CH2 and enable the normal scanner. The extraction hold
-    // must leave the receiver parked on CH2 instead of hopping away.
+    // Discovery does not bind a session channel: keep scanning for confirmation.
     for (uint8_t i = 0; i < 4; i++)
         lController.loop();
     lController.setRxScanEnabled(true);
     ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1U);
     lController.loop();
-    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
+    ASSERT_TRUE(lController.rxScanMeasurements().retunes>0);
 
     buildKeyExtractKeyInit(lRequest, lHubNodeId, lThrowawayNodeId);
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
@@ -14997,17 +14975,18 @@ TEST(controller_key_extract_holds_ch2_without_resetting_protocol_state)
     lController.loop();
     ASSERT_TRUE(!lController.keyExtractAwaitingReply());
 
+    lController.setRxScanEnabled(false);lController.testSetRxScanFrequency(IOHC_FREQ_3);
     buildKeyExtractKeyTransfer(lRequest, lHubNodeId, lThrowawayNodeId,
                                lResponse.data, lSystemKey);
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::KeyTransferConfirmation);
     ASSERT_EQ(lController.keyExtractStatus(), IoHomeController::KeyExtractStatus::Captured);
     ASSERT_TRUE(lController.keyExtractAwaitingReply());
-    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_1);
+    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_3);
 
     for (uint8_t i = 0; i < 4; i++)
         lController.loop();
-    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
+    ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_3);
 }
 
 TEST(controller_key_extract_acknowledges_discovery_confirmation)
@@ -15587,7 +15566,7 @@ TEST(controller_key_extract_accepts_confirmation_from_earlier_candidate)
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
     ASSERT_EQ(lResponse.commandId, IoHomeCommand::ConfirmationACK);
     ASSERT_EQ(lResponse.getDestNodeId(), lFirstHubNodeId);
-    ASSERT_EQ(lController.keyExtractHubNodeId(), 0U);
+    ASSERT_EQ(lController.keyExtractHubNodeId(), lFirstHubNodeId);
 
     buildKeyExtractKeyInit(lRequest, lFirstHubNodeId, lThrowawayNodeId);
     ASSERT_TRUE(queueGatewayRequestAndLoop(lController, lRequest, lResponse));
@@ -19256,9 +19235,9 @@ int main()
     RUN(gateway_controller_key_transfer_uses_configured_gateway_key);
     RUN(gateway_controller_challenge_response_tracks_paired_device);
     RUN(controller_key_extract_answers_discovery_with_throwaway_id);
-    RUN(controller_key_extract_broadcasts_reply_with_ch2_last);
+    RUN(controller_key_extract_discovery_answers_once_on_an_alternative_channel);
     RUN(controller_key_extract_reuses_stored_challenge_on_key_init_retry);
-    RUN(controller_key_extract_holds_ch2_without_resetting_protocol_state);
+    RUN(controller_key_extract_scans_between_sessions_and_holds_directed_channel);
     RUN(controller_key_extract_acknowledges_discovery_confirmation);
     RUN(controller_key_extract_defers_queue_and_rejects_competing_operations);
     RUN(controller_key_extract_recovers_hub_system_key);

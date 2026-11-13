@@ -1775,6 +1775,8 @@ private:
   uint8_t mKeyExtractReplyBuffer[IOHC_FRAME_BUFFER_SIZE] = {};
   uint8_t mKeyExtractReplyLen = 0;
   uint8_t mKeyExtractReplyPhase = 0;
+  uint8_t mKeyExtractReplyFrequency=0xFF;
+  uint32_t mKeyExtractReplyDueMs=0,mKeyExtractSessionUntilMs=0;
   uint16_t mKeyExtractReplyPreamble = IOHC_PREAMBLE_SHORT;
   uint16_t mKeyExtractColdReplyPreambleOverride = 0;
   uint16_t mKeyExtractResponsePreambleOverride = 0;
