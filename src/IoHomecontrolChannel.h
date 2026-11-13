@@ -3,6 +3,7 @@
 #include "protocol/IoHomeProductRuntime.h"
 #include "protocol/IoHomePhysicalBounds.h"
 #pragma once
+#include "protocol/IoHomePredictedEnd.h"
 #include "protocol/IoHomeOptimisticPosition.h"
 #include "protocol/IoHomeLimitation.h"
 #include "protocol/IoHomeBattery.h"
@@ -311,6 +312,9 @@ private:
   uint32_t mLast2WHeardMs = 0;
   uint32_t mLast2WMovingEvidenceMs = 0;
   bool mStopSettlePollPending = false;
+  IoHomePredictedEnd mPredictedEnd;
+  bool mPredictedEndSettling=false;
+  bool servicePredictedEnd(uint32_t now,bool paused);
   bool mStatusExpected = false; // device will auto-send StatusUpdate while tracking
   IoHomeBatteryInfo mBatteryInfo;
   bool mWindowMainOnly=false;

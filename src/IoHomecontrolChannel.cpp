@@ -442,7 +442,8 @@ void IoHomecontrolChannel::loop()
     }
 
     const bool pollPaused=IoHomeStatusPollRetry::paused(mController.backgroundPollPauseRemaining());
-    if (!pollPaused && mNextStatusPollMs != 0 && timeReached(lNow, mNextStatusPollMs))
+    if(servicePredictedEnd(lNow,pollPaused))return;
+    if (!pollPaused && !mPredictedEnd.suppresses(mNextStatusPollMs) && mNextStatusPollMs != 0 && timeReached(lNow, mNextStatusPollMs))
     {
         if (requestStatus(true))
         {
@@ -1150,6 +1151,7 @@ void IoHomecontrolChannel::onEstimate(uint16_t iSeconds)
     // An estimate never creates/renews an epoch or resurrects a stopped report.
     if(!mPaired||mIs1W||!mPollTrackingDeadlineMs||timeReached(now,mPollTrackingDeadlineMs)||!mIsMoving)
         return;
+    mPredictedEnd.observe(now,iSeconds,mPollTrackingDeadlineMs);
     mTrustedPollMoving=true; // only the qualified controller callback reaches here
     uint32_t delay=defaultTrackedStatusPollDelayMs();
     if(remaining.kind==IoHomeRemainingTime::Kind::Positive) {
@@ -1658,8 +1660,8 @@ bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll,bool iManual)
     // spread retries across the channel backoff policy. A STOP-settle check is
     // deliberately allowed the full exchange budget because it resolves an
     // ambiguous safety-relevant command outcome.
-    const uint8_t pollReason=iManual?3:iTrackedPoll?mPollTrackingReason:0;
-    const bool lStopSettlePoll = iTrackedPoll && mStopSettlePollPending;
+    const uint8_t pollReason=iManual?3:mPredictedEndSettling?4:iTrackedPoll?mPollTrackingReason:0;
+    const bool lStopSettlePoll = iTrackedPoll && (mStopSettlePollPending||mPredictedEndSettling);
     const uint8_t lMaxAttempts = lStopSettlePoll ? IOHC_EXCHANGE_MAX_ATTEMPTS : 1U;
     const IoHomeProfileDescriptor *lDescriptor = getEffectiveProfileDescriptor();
     const ParameterSemantic lOrientation = lDescriptor &&
@@ -1698,6 +1700,7 @@ IoHomeFollowUpDecision IoHomecontrolChannel::scheduleStatusPoll(uint32_t iDelayM
 {
     if (foreignActivity) {
         if (!mPaired || mIs1W || !allowsActuatorControls()) return IoHomeFollowUpDecision::Ignored;
+        mPredictedEnd.clear();
         uint32_t delay=iDelayMs ? iDelayMs : defaultTrackedStatusPollDelayMs();
         if (effectiveLowPower2W() && delay < kLowPowerTrackedPollMinMs) delay=kLowPowerTrackedPollMinMs;
         IoHomeFollowUpState state{mPollTrackingDeadlineMs,mNextStatusPollMs,mSingleFollowUpPollPending,
@@ -1750,6 +1753,7 @@ void IoHomecontrolChannel::startStatusPollTracking(uint32_t iDelayMs)
 {
     logDebugP("IOHC_TRACK event=start_local_command owner_node=%06X epoch=%lu deadline=%lu transport_proof=see_controller_status_source",mNodeId,(unsigned long)mPollTrackingDeadlineMs,(unsigned long)mPollTrackingDeadlineMs);
     mPollTrackingReason=1;
+    mPredictedEnd.clear();mPredictedEndSettling=false;
     mObservedPositiveRemaining=false;mTrustedPollMoving=false;mMovingPollMisses=0;
     if (effectiveLowPower2W() && iDelayMs < kLowPowerTrackedPollMinMs)
         iDelayMs = kLowPowerTrackedPollMinMs;
@@ -1771,6 +1775,7 @@ void IoHomecontrolChannel::startStatusPollTracking(uint32_t iDelayMs)
 void IoHomecontrolChannel::clearStatusPollTracking()
 {
     logDebugP("IOHC_TRACK event=clear owner_node=%06X epoch=%lu deadline=%lu transport_proof=see_controller_status_source",mNodeId,(unsigned long)mPollTrackingDeadlineMs,(unsigned long)mPollTrackingDeadlineMs);
+    mPredictedEnd.clear();mPredictedEndSettling=false;
     mObservedPositiveRemaining=false;mTrustedPollMoving=false;mMovingPollMisses=0;
     mStopSettlePollPending = false;
     mNextStatusPollMs = 0;
@@ -3080,4 +3085,16 @@ void IoHomecontrolChannel::printLocalSensorSample()
         (unsigned long)sample.source,(unsigned long)sample.destination,unsigned(sample.frequencyIndex),
         (unsigned long)sample.receivedAtMs,(unsigned long)sample.verifiedAtMs,
         (unsigned long)uint32_t(millis()-sample.receivedAtMs),(unsigned long)uint32_t(millis()-sample.verifiedAtMs));
+}
+
+bool IoHomecontrolChannel::servicePredictedEnd(uint32_t now,bool paused)
+{
+    if(paused||!mPollTrackingDeadlineMs||!mPredictedEnd.due(now))return false;
+    if(timeReached(now,mPollTrackingDeadlineMs)){mPredictedEnd.clear();return false;}
+    mPredictedEndSettling=true;
+    const bool queued=requestStatus(true);
+    mPredictedEndSettling=false;
+    if(!queued){mPredictedEnd.at=mRfPollWaiting?mRfPollRetryAtMs:now+1000U+uint32_t(_channelIndex+1)*250U;return true;}
+    if(mPredictedEnd.suppresses(mNextStatusPollMs))mNextStatusPollMs=0;
+    mPredictedEnd.consume();return true;
 }

@@ -17,6 +17,7 @@ methods='\n'.join(method(channel,signature) for signature in [
     'void IoHomecontrolChannel::startStatusPollTracking(',
     'void IoHomecontrolChannel::onStatusPollDeferred(',
     'void IoHomecontrolChannel::onEstimate(',
+    'bool IoHomecontrolChannel::servicePredictedEnd(',
     'void IoHomecontrolChannel::onPositionFeedback(',
     'void IoHomecontrolChannel::onTargetPositionFeedback(',
     'void IoHomecontrolChannel::observe2WMovingStatus(',
@@ -36,6 +37,7 @@ harness=r'''#include <cassert>
 #include "protocol/IoHomeOptimisticPosition.h"
 #include "protocol/IoHomeStatusPollRetry.h"
 #include "protocol/IoHomeRemainingTime.h"
+#include "protocol/IoHomePredictedEnd.h"
 #include "protocol/IoHomeDeviceEvent.h"
 unsigned now=1000;unsigned millis(){return now;}
 uint16_t pollSec=0;constexpr unsigned kLowPowerBackgroundPollMinMs=60000;
@@ -52,12 +54,12 @@ enum class ParameterSemantic {SlatOrientation,HangerOrientation};
 struct IoHomeProfileDescriptor{};
 uint8_t ioHomeParameterIndex(const IoHomeProfileDescriptor*,ParameterSemantic){return 3;}
 struct Controller {
- unsigned submissions=0;uint8_t maxAttempts=0;uint32_t rfWait=0,pauseRemaining=0;
+ unsigned submissions=0;uint8_t maxAttempts=0,lastReason=0;uint32_t rfWait=0,pauseRemaining=0;
  bool twoWayIdentityCollision(){return false;}
  unsigned backgroundPollPauseRemaining(){return pauseRemaining;}
  unsigned statusPollRetryAfterMs(){return rfWait;}
- bool sendStatusPoll(void*,bool,uint16_t,uint8_t attemptsParam,uint8_t attempts,uint8_t=0xFF) {
-  (void)attemptsParam;++submissions;maxAttempts=attempts;return true;
+ bool sendStatusPoll(void*,bool,uint16_t,uint8_t attemptsParam,uint8_t attempts,uint8_t reason=0xFF) {
+  (void)attemptsParam;++submissions;maxAttempts=attempts;lastReason=reason;return true;
  }
 };
 struct Knx {bool enabled=false;bool configured(){return enabled;}} knx;
@@ -75,6 +77,8 @@ struct IoHomecontrolChannel {
  void stopTravelEstimation(bool);
  float staleEstimate=-1;float estimateCurrentPosition(){return staleEstimate>=0?staleEstimate:mCurrentPosition;}
  void logTrackingEvent(const char*){}
+ IoHomePredictedEnd mPredictedEnd;bool mPredictedEndSettling=false;
+ bool servicePredictedEnd(uint32_t,bool);
  void onEstimate(uint16_t);
  void setNodeId(uint32_t);void setEncryptionKey(const uint8_t*);void setIs1W(bool);void startStatusPollTracking(uint32_t);
  IoHomeDeviceEvent mLastDeviceEvent;
@@ -119,6 +123,17 @@ struct IoHomecontrolChannel {
 };
 '''
 tests=r'''int main(){
+ {
+  now=1000;IoHomecontrolChannel c;c.mPollTrackingDeadlineMs=now+600000;
+  c.onStatusUpdate(true);c.onEstimate(10);assert(c.mPredictedEnd.pending&&c.mPredictedEnd.at==12000);
+  c.mNextStatusPollMs=11500;assert(c.mPredictedEnd.suppresses(c.mNextStatusPollMs));
+  assert(!c.servicePredictedEnd(11999,false));now=12000;
+  assert(c.servicePredictedEnd(now,false));assert(c.mController.submissions==1);
+  assert(c.mController.maxAttempts>1&&c.mController.lastReason==4);
+  assert(!c.mPredictedEnd.pending&&!c.mNextStatusPollMs&&!c.servicePredictedEnd(now,false));
+  c.onStatusUpdate(false);assert(!c.mPredictedEnd.positive);
+ }
+
  {
   IoHomecontrolChannel c;c.mCurrentPosition=0;c.mTargetPosition=100;
   knx.enabled=true;movementKo=false;const unsigned before=movementPublications;
