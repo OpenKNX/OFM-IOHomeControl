@@ -3671,6 +3671,7 @@ bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
     auto &queued=mCmdQueue[mQueueHead];
     queued.sessionPolicy=ioHomeSessionPolicy(queued.command,queued.param,matchingBeaconNodeCount());
     if (!queued.maxAttempts) queued.maxAttempts=queued.sessionPolicy.stateAttempts;
+    if(queued.maxAttempts>IoHomeAttemptPlan::hardCap)queued.maxAttempts=IoHomeAttemptPlan::hardCap;
     queued.sessionPolicy.stateAttempts=queued.maxAttempts; // explicit caller caps stay independent.
     queued.mediaAttempts=0;
     mQueueHead = lNext;
@@ -8514,7 +8515,7 @@ void IoHomeController::processIdle()
     if (!queueEmpty())
     {
         IoHomeQueueEntry lEntry;
-        if ((lPostCaptureHold ? queuePopForeground(lEntry) : queuePop(lEntry)))
+        if (queuePopForeground(lEntry) || (!lPostCaptureHold && queuePop(lEntry)))
         {
             invalidateImmediateReply();
             mCurrentCmd = lEntry;
@@ -8559,6 +8560,20 @@ void IoHomeController::processTxPending()
         notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::IdentityCollision);
         mCurrentCmd.active=false;mRetryAtMs=0;mState=ControllerState::Idle;
         return;
+    }
+    // Yield only before an RF attempt. Never interrupt TX or authentication.
+    if(mCurrentCmd.background && !mCurrentCmd.hadAuthenticatedAccept) {
+        bool foreground=false;
+        for(uint8_t i=mQueueTail;i!=mQueueHead;i=(i+1)%IOHC_CMD_QUEUE_SIZE)
+            foreground=foreground||!mCmdQueue[i].background;
+        if(foreground) {
+            auto *ch=channelForQueueEntry(mCurrentCmd);
+            if(ch&&mCurrentCmd.ownedStatusPoll&&ch->statusPollEpoch()==mCurrentCmd.statusPollEpoch)
+                ch->onStatusPollDeferred(1000,false);
+            invalidateImmediateReply();mCurrentCmd.active=false;mRetryAtMs=0;
+            mState=ControllerState::Idle;
+            return;
+        }
     }
     if(mCurrentCmd.ownedStatusPoll&&mCurrentCmd.pollReason!=3&&backgroundPollPauseRemaining()) {
         auto *ch=mModule?mModule->getChannel(mCurrentCmd.sourceChannelIndex):nullptr;

@@ -24264,3 +24264,22 @@ TEST(protocol_attempt_plan_reserves_both_windows_and_overhead)
     ASSERT_TRUE(!IoHomeAttemptPlan::fits(0,0xFFFFFFFFU,0xFFFFFFFFU,1,1,1));
     ASSERT_TRUE(IoHomeAttemptPlan::fits(160,1000,20,400,10,400));
 }
+
+TEST(controller_foreground_stop_precedes_queued_background_status)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ASSERT_TRUE(c.sendBackgroundCommand(0x654321,key,IoHomeCommand::Private,3));
+    ASSERT_TRUE(c.sendCommand(0x654321,key,IoHomeCommand::Execute,0xD2));
+    IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ASSERT_EQ(tx.commandId,IoHomeCommand::Execute);ASSERT_EQ(c.radioHealth().queueDepth,1);
+}
+TEST(controller_background_yields_before_tx_to_new_foreground_command)
+{
+    IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;const uint8_t key[16]={1};
+    initPaired2WControllerForTest(c,m,ch,0x123456,0x654321,key);
+    ASSERT_TRUE(c.sendBackgroundCommand(0x654321,key,IoHomeCommand::Private,3));c.loop();
+    ASSERT_TRUE(c.sendCommand(0x654321,key,IoHomeCommand::Execute,0xD2));
+    IoHomeFrame tx;ASSERT_TRUE(transmitQueuedControllerFrame(c,tx));
+    ASSERT_EQ(tx.commandId,IoHomeCommand::Execute);ASSERT_EQ(c.radio().testTransmitCount(),1U);
+}
