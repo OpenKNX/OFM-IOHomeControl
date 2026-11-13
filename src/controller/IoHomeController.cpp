@@ -8661,12 +8661,12 @@ void IoHomeController::processTxPending()
         selectDirectedResponseTimeout(mTxFrame.ctrlByte1);
         mRetryAtMs = 0;
     }
-    if (!lIs1WFrame &&
-        static_cast<uint64_t>(uint32_t(millis() - mExchangeStartMs)) +
-            estimatedTxAirtimeMs(mTxLen, lPreamble) + mResponseTimeoutMs >=
-            mCurrentCmd.sessionPolicy.totalBudgetMs)
+    if (!lIs1WFrame && !IoHomeAttemptPlan::fits(
+            uint32_t(millis()-mExchangeStartMs),mCurrentCmd.sessionPolicy.totalBudgetMs,
+            estimatedTxAirtimeMs(mTxLen,lPreamble),mResponseTimeoutMs,
+            estimatedTxAirtimeMs(15,mRadio.defaultResponsePreamble()),mResponseTimeoutMs))
     {
-        logInfoP("2W attempt skipped: airtime plus response exceeds remaining session budget node=%06X preamble=%u",
+        logInfoP("2W attempt skipped: complete authenticated windows exceed remaining session budget node=%06X preamble=%u",
                  mCurrentCmd.destNodeId, lPreamble);
         notifyCommandExchangeResult(mCurrentCmd,
             mCurrentCmd.retries ? IoHomeCommandExchangeResult::SessionExhausted

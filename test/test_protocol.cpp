@@ -20972,7 +20972,8 @@ TEST(controller_wake_setting_override_toggle_and_packet_stability)
             ioHomeTestAdvanceMillis(c.lastResponseTimingSample().selectedTimeoutMs);c.loop();
             if(attempt<2){ioHomeTestAdvanceMillis(IOHC_RETRY_GAP_MS);c.loop();c.loop();c.loop();}
         }
-        ASSERT_EQ(c.radio().testTransmitCount(),3U);
+        // The 2450-byte always-long profile cannot fit a third complete attempt.
+        ASSERT_EQ(c.radio().testTransmitCount(),mode<=1?2U:3U);
     }
 }
 
@@ -24253,4 +24254,13 @@ TEST(controller_pull_proof_retries_preserve_original_challenge)
     ASSERT_MEM_EQ(first.data,retry.data,6);
     // A late proof for the first request remains valid on the retry.
     ASSERT_TRUE(proveAtlanticCandidateForTest(c,ciphertext,first,key));
+}
+
+TEST(protocol_attempt_plan_reserves_both_windows_and_overhead)
+{
+    ASSERT_TRUE(IoHomeAttemptPlan::fits(100,1000,20,400,10,400));
+    ASSERT_TRUE(!IoHomeAttemptPlan::fits(170,1000,20,400,10,400));
+    ASSERT_TRUE(!IoHomeAttemptPlan::fits(1001,1000,0,0,0,0));
+    ASSERT_TRUE(!IoHomeAttemptPlan::fits(0,0xFFFFFFFFU,0xFFFFFFFFU,1,1,1));
+    ASSERT_TRUE(IoHomeAttemptPlan::fits(160,1000,20,400,10,400));
 }

@@ -21,6 +21,7 @@
 #include "../protocol/IoHomeLimitation.h"
 #include "../protocol/IoHomeRainLimitation.h"
 #include "../protocol/IoHomeCollisionEvidence.h"
+#include "../protocol/IoHomeAttemptPlan.h"
 #include "../protocol/IoHomeVerificationEvidence.h"
 #include "../protocol/IoHomeStatusAttribution.h"
 #include "../protocol/IoHomeSessionPolicy.h"
