@@ -1635,7 +1635,7 @@ bool IoHomecontrolChannel::requestStatus()
 
 bool IoHomecontrolChannel::requestStatus(bool iTrackedPoll,bool iManual)
 {
-    if (mController.twoWayIdentityCollision()) {clearStatusPollTracking();return false;}
+    if (mController.twoWayIdentityCollision()) {if(mPollTrackingDeadlineMs)clearStatusPollTracking();return false;}
     // 1W is one-way: the device cannot answer a 2W status request, so never
     // emit one (it would only trigger an endless failed-poll/retry loop).
     if (mIs1W || !allowsActuatorControls())
