@@ -755,7 +755,8 @@ public:
   bool refreshLimitationStatus(IoHomecontrolChannel *channel);
   const LimitationState &limitationState(uint8_t channel) const;
   bool limitationValid(uint8_t channel) const;
-  bool requestStatusMpFpProbe(IoHomecontrolChannel *channel,uint8_t highBitmap=0,bool smlExecution=false);
+  enum class StatusProbeInterpretation:uint8_t {Raw,SmlExecution,AdelisPreset};
+  bool requestStatusMpFpProbe(IoHomecontrolChannel *channel,uint8_t highBitmap=0,StatusProbeInterpretation interpretation=StatusProbeInterpretation::Raw);
   bool requestStatusFpHighRead(IoHomecontrolChannel *channel,uint8_t bitmap);
   struct RainState {
     IoHomeRainEvidence evidence{};uint32_t node=0,revision=0;uint8_t key[16]{},systemKey[16]{};
@@ -1513,7 +1514,7 @@ private:
   bool controllerImportContextMatches()const;
   void serviceControllerKeyPull();
   void processControllerKeyPullFrame();
-  bool mStatusProbeSml=false;
+  StatusProbeInterpretation mStatusProbeInterpretation=StatusProbeInterpretation::Raw;
   bool statusProbeContextMatches(const IoHomeQueueEntry &) const;
   IoHomeObjectTransfer mObjectRead;
   uint32_t mObjectReadToken=0,mObjectReadPeer=0,mObjectReadRevision=0;

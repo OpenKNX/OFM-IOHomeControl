@@ -24605,3 +24605,17 @@ TEST(protocol_controller_import_no_proof_cancellation_conflict_and_replay_are_re
     ASSERT_TRUE(job.begin(2,0x123456,0x445566,0x778899,4));ASSERT_TRUE(!job.candidate(key,30005));
     job.timeout();ASSERT_TRUE(!job.prepareCommit(current,next,2,30006));
 }
+
+TEST(protocol_adelis_fc05_fc02_preset_requires_model_session_and_measured_target_inputs)
+{
+    IoHomeFrame f;f.init();f.commandId=IoHomeCommand::PrivateResponse;f.dataLen=6;
+    const uint8_t body[]={0x2D,0,0xFC,5,0,0};std::memcpy(f.data,body,6);
+    using Preset=IoHomeAdelis::ObservedPreset;
+    ASSERT_EQ(IoHomeAdelis::observedPreset(f,true,true),Preset::Comfort);
+    ASSERT_EQ(IoHomeAdelis::observedPreset(f,false,true),Preset::Unknown);
+    f.data[3]=2;ASSERT_EQ(IoHomeAdelis::observedPreset(f,true,true),Preset::Eco);
+    ASSERT_EQ(IoHomeAdelis::observedPreset(f,true,false),Preset::Unknown);
+    int16_t target=0;ASSERT_TRUE(IoHomeAdelis::effectiveProgramTarget(Preset::Eco,190,35,true,target));ASSERT_EQ(target,155);
+    ASSERT_TRUE(!IoHomeAdelis::effectiveProgramTarget(Preset::Eco,190,35,false,target));
+    const uint8_t candidate[]={0xC8,0};ASSERT_TRUE(!IoHomeAdelis::decode(0x137,candidate,2).valid);
+}

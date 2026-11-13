@@ -3120,16 +3120,17 @@ bool IoHomeController::requestStatusFpHighRead(IoHomecontrolChannel *channel,uin
     uint8_t data[10]{},length=0;
     return ioHomeBuildStatusFpHighRead(bitmap,data,length)&&requestStatusMpFpProbe(channel,bitmap);
 }
-bool IoHomeController::requestStatusMpFpProbe(IoHomecontrolChannel *channel,uint8_t highBitmap,bool smlExecution) {
+bool IoHomeController::requestStatusMpFpProbe(IoHomecontrolChannel *channel,uint8_t highBitmap,StatusProbeInterpretation interpretation) {
     if(!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||!channel||
        !channel->isPaired()||channel->is1W()||!channel->productContextRevision()||channelIndexFor(channel)>=16)return false;
+    if(interpretation==StatusProbeInterpretation::AdelisPreset&&!qualifiedHeatingName(channel,IoHomeAdelis::HeatingModel::Adelis))return false;
     IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
     entry.productContextRevision=channel->productContextRevision();entry.managementRead=true;
     std::memcpy(entry.managementKey,entry.encKey,16);entry.statusMpFpProbe=true;entry.statusFpHigh=highBitmap;
     entry.command=IoHomeCommand::Private;entry.twoWayTxFreqIdx=frequencyIndexForHz(kNormal2WTxFreqHz);entry.sourceChannelIndex=channelIndexFor(channel);
     entry.maxAttempts=1;entry.background=true;entry.active=true;
     if(!queuePush(entry))return false;
-    mStatusProbeSml=smlExecution;
+    mStatusProbeInterpretation=interpretation;
     mStatusProbeOwner=mOwnNodeId;mStatusProbeGeneration=mNextObservationGeneration;
     std::memcpy(mStatusProbeSystemKey,mSystemKey,16);return true;
 }
@@ -12959,11 +12960,16 @@ void IoHomeController::dispatchRxFrame()
                 logInfoP("status_mp_fp reply cmd=%02X raw=%s rssi=%d CH=%u frequency=%lu timestamp=%lu",
                     unsigned(mRxFrame.commandId),hexDump(mRxFrame.data,mRxFrame.dataLen).c_str(),mRadio.lastRssi(),
                     unsigned(mCurrentFreqIdx),static_cast<unsigned long>(IOHC_FREQUENCIES[mCurrentFreqIdx]),static_cast<unsigned long>(millis()));
-                if(mStatusProbeSml) {
+                if(mStatusProbeInterpretation==StatusProbeInterpretation::SmlExecution) {
                     const auto observation=IoHomeSmlExecution::decode(mRxFrame,lCh->getProtocolIdentity(),lSrcNode,mOwnNodeId,
                         mCurrentCmd.statusFpHigh==0&&mLastResponseFreqIdx==mCurrentCmd.twoWayTxFreqIdx);
                     logInfoP("sml_execution observation=%s layout_valid=%u authenticated=0 position_published=0 movement_published=0",
                         IoHomeSmlExecution::name(observation.state),observation.valid);
+                }
+                if(mStatusProbeInterpretation==StatusProbeInterpretation::AdelisPreset) {
+                    const auto preset=IoHomeAdelis::observedPreset(mRxFrame,qualifiedHeatingName(lCh,IoHomeAdelis::HeatingModel::Adelis),
+                        mCurrentCmd.statusFpHigh==0&&mLastResponseFreqIdx==mCurrentCmd.twoWayTxFreqIdx);
+                    logInfoP("adelis_preset_observation=%s program_active=unverified effective_target=unknown knx_publish=0",IoHomeAdelis::presetName(preset));
                 }
                 break; // raw only: no position, product cache, originator, rain or KNX changes
             }

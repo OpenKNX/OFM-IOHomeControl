@@ -1,6 +1,7 @@
 #pragma once
 #include <cstring>
 #include "IoHomeCommands.h"
+#include "IoHomeFrame.h"
 #include <cmath>
 
 // https://github.com/laberning/home_io_control/commit/3923fd5f9a4f54e785186f28f0c43ada7b4dd7c7
@@ -23,6 +24,22 @@ inline Value decode(uint16_t reg,const uint8_t *p,uint8_t len){
     if(reg==0x126&&len==1&&p[0]<=100)return {true,false,p[0],"working_rate_percent"};
     if(reg==0x13A&&len==1&&p[0]<=60)return {true,true,p[0],"remaining_minutes_candidate"};
     return {};
+}
+enum class ObservedPreset:uint8_t {Unknown,Comfort,Eco};
+inline ObservedPreset observedPreset(const IoHomeFrame &f,bool qualifiedModel,bool qualifiedSession) {
+    if(!qualifiedModel||!qualifiedSession||f.commandId!=IoHomeCommand::PrivateResponse||
+       (f.ctrlByte0&IOHC_CTRL0_MODE_1W)||f.dataLen!=6||f.data[0]!=0x2D||f.data[1]!=0||
+       f.data[2]!=0xFC||f.data[4]!=0||f.data[5]!=0)return ObservedPreset::Unknown;
+    return f.data[3]==5?ObservedPreset::Comfort:f.data[3]==2?ObservedPreset::Eco:ObservedPreset::Unknown;
+}
+inline const char *presetName(ObservedPreset p){return p==ObservedPreset::Comfort?"comfort":p==ObservedPreset::Eco?"eco":"unknown";}
+// Qualified input values only; never infer either input from candidate register 0137.
+inline bool effectiveProgramTarget(ObservedPreset preset,int16_t comfortTenths,int16_t ecoOffsetTenths,
+                                  bool matchingMeasuredContext,int16_t &out) {
+    if(!matchingMeasuredContext||preset==ObservedPreset::Unknown||comfortTenths<70||comfortTenths>280||
+       ecoOffsetTenths<0||ecoOffsetTenths>70)return false;
+    const int16_t target=comfortTenths-(preset==ObservedPreset::Eco?ecoOffsetTenths:0);
+    if(target<70||target>280)return false;out=target;return true;
 }
 inline bool readable(uint16_t reg){return reg==0x119||reg==0x115||reg==0x103||reg==0x138||reg==0x136||reg==0x13E||reg==0x126||reg==0x13A||(reg>=0x131&&reg<=0x134);}
 inline uint8_t write(uint16_t reg,uint8_t value,uint8_t (&data)[6]){
