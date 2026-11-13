@@ -81,7 +81,7 @@ public:
   bool syncEvidenceAvailable() const { return true; }
   uint16_t maxPreambleLength() const { return 8191; }
   uint16_t defaultStartPreamble() const { return 48; }
-  uint16_t defaultResponsePreamble() const { return 8; }
+  uint16_t defaultResponsePreamble() const { return 12; }
   RadioError setRxBandwidth(RadioSX1262RxBandwidth iBandwidth);
   RadioSX1262RxBandwidth rxBandwidth() const;
   RadioError startTransmit(const uint8_t *iData, uint8_t iLen);

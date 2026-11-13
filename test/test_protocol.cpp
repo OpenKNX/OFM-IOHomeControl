@@ -24219,3 +24219,11 @@ TEST(protocol_rx_hold_long_preamble_noise_sync_deadline_and_wrap)
     ASSERT_TRUE(h.hold(0,true,false,IoHomeRxHold::preambleUs(1024)));
     ASSERT_TRUE(!h.hold(300000,true,false,IoHomeRxHold::preambleUs(1024)));
 }
+
+TEST(protocol_sx1262_response_preamble_register_units)
+{
+    uint8_t msb=0,lsb=0;ASSERT_TRUE(sx1262EncodePreamble(12,msb,lsb));
+    ASSERT_EQ(msb,0);ASSERT_EQ(lsb,96); // wire bytes -> chip bits
+    ASSERT_TRUE(sx1262EncodePreamble(1960,msb,lsb));
+    ASSERT_EQ((uint16_t(msb)<<8)|lsb,15680);
+}
