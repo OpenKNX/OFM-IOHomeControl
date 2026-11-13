@@ -24227,3 +24227,16 @@ TEST(protocol_sx1262_response_preamble_register_units)
     ASSERT_TRUE(sx1262EncodePreamble(1960,msb,lsb));
     ASSERT_EQ((uint16_t(msb)<<8)|lsb,15680);
 }
+
+TEST(controller_typed_outgoing_remote_controller_discovery_is_opt_in)
+{
+    IoHomeController c;TwoWayDiscoverySettings settings;
+    const auto generic=c.resolveTwoWayDiscoveryOptions(IoHomeCommand::DiscoverRequest,settings);
+    ASSERT_EQ(generic.destination,0x00003BU);
+    settings.destination=TwoWayDiscoveryDestinationMode::RemoteController;
+    const auto typed=c.resolveTwoWayDiscoveryOptions(IoHomeCommand::DiscoverRequest,settings);
+    ASSERT_EQ(typed.destination,0x00FFFBU);ASSERT_EQ(typed.command,IoHomeCommand::DiscoverRequest);
+    IoHomeFrame frame;ASSERT_TRUE(c.buildTwoWayDiscoveryFrame(frame,0x123456,typed));
+    uint8_t wire[64];ASSERT_TRUE(frame.serialize2W(wire,sizeof(wire))>8);
+    const uint8_t expected[]={0x00,0xFF,0xFB};ASSERT_MEM_EQ(wire+2,expected,3);
+}

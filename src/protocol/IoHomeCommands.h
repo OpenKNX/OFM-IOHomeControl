@@ -227,6 +227,7 @@ enum class TwoWayDiscoveryDestinationMode : uint8_t
     DiscoverAlt = 2, // 0x00003F
     LightingDiscoverAll = 3, // 0x0001BB
     LightingDiscoverAlt = 4, // 0x0001BF
+    RemoteController = 5, // explicit diagnostic outgoing 0x28 -> type 1023 / 00FFFB
 };
 
 enum class TwoWayDiscoveryListenChannels : uint8_t

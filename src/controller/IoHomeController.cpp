@@ -1293,6 +1293,10 @@ TwoWayDiscoveryFrameOptions IoHomeController::resolveTwoWayDiscoveryOptions(
     TwoWayDiscoveryFrameOptions lOptions = referenceTwoWayDiscoveryOptions(lCommand);
     switch (iSettings.destination)
     {
+    case TwoWayDiscoveryDestinationMode::RemoteController:
+        lOptions.command=IoHomeCommand::DiscoverRequest;
+        lOptions.destination=0x00FFFB;
+        break;
     case TwoWayDiscoveryDestinationMode::DiscoverAll:
         lOptions.destination = 0x00003B;
         break;

@@ -105,6 +105,7 @@ namespace
     {
         switch (iMode)
         {
+        case TwoWayDiscoveryDestinationMode::RemoteController: return "remote_controller(0x00FFFB)";
         case TwoWayDiscoveryDestinationMode::DiscoverAll: return "0x00003B";
         case TwoWayDiscoveryDestinationMode::DiscoverAlt: return "0x00003F";
         case TwoWayDiscoveryDestinationMode::LightingDiscoverAll: return "0x0001BB";
@@ -5650,6 +5651,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             else if (lField == "destination" || lField == "dest")
             {
                 if (lValue == "auto") lSettings.destination = TwoWayDiscoveryDestinationMode::Automatic;
+                else if (lValue == "remote_controller" || lValue == "fffb" || lValue == "0x00fffb") lSettings.destination = TwoWayDiscoveryDestinationMode::RemoteController;
                 else if (lValue == "3b" || lValue == "0x00003b") lSettings.destination = TwoWayDiscoveryDestinationMode::DiscoverAll;
                 else if (lValue == "3f" || lValue == "0x00003f") lSettings.destination = TwoWayDiscoveryDestinationMode::DiscoverAlt;
                 else if (lValue == "1bb" || lValue == "0x0001bb") lSettings.destination = TwoWayDiscoveryDestinationMode::LightingDiscoverAll;
@@ -5691,7 +5693,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
 
             if (!lValid)
             {
-                logInfoP("Usage: discovery command auto|28|2e|spe; destination auto|3b|3f|1bb|1bf; ack/lowpower auto|off|on; preamble auto|1024|32|8; listen auto|recent|all");
+                logInfoP("Usage: discovery command auto|28|2e|spe; destination auto|3b|3f|1bb|1bf|remote_controller; ack/lowpower auto|off|on; preamble auto|1024|32|8; listen auto|recent|all");
                 return true;
             }
             mController.setDiagnosticDiscoverySettings(lSettings);
