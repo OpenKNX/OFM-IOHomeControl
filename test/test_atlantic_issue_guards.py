@@ -15,6 +15,7 @@ harness=r'''
 #include <cstring>
 #include <initializer_list>
 #include "protocol/IoHomeCommands.h"
+#include "protocol/IoHomePilotWire.h"
 unsigned category=0;
 #define ParamIOHC_cDeviceType category
 struct IoHomecontrolChannel {
