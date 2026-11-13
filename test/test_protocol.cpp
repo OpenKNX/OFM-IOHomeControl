@@ -24493,7 +24493,19 @@ TEST(protocol_controller_import_requires_bound_member_mac_and_hard_rejects_bad_p
         ASSERT_EQ(job.memberProof(response,0,105),!bad);
         ASSERT_EQ(job.copyVerifiedKey(out),!bad);
         if(bad){ASSERT_EQ(job.stage(),IoHomeControllerKeyImport::Stage::Rejected);ASSERT_TRUE(!job.candidate(key,106));}
-        else{ASSERT_MEM_EQ(out,key,16);job.committed();ASSERT_TRUE(!job.copyVerifiedKey(out));}
+        else{
+            ASSERT_MEM_EQ(out,key,16);
+            IoHomeNetworkStore::State current,next;current.controller=0x123456;
+            current.channels[15].managed=true;current.channels[15].node=0x778899;current.channels[15].key[0]=0x99;
+            ASSERT_TRUE(!job.prepareCommit(current,next,1,106));
+            std::memcpy(current.channels[15].key,key,16);
+            ASSERT_TRUE(!job.prepareCommit(current,next,2,106));
+            ASSERT_TRUE(job.prepareCommit(current,next,1,106));
+            auto expected=current;std::memcpy(expected.key,key,16);
+            ASSERT_TRUE(IoHomeNetworkStore::equal(next,expected));
+            current.controller=0x445566;ASSERT_TRUE(!job.prepareCommit(current,next,1,106));
+            job.committed();ASSERT_TRUE(!job.copyVerifiedKey(out));
+        }
     }
 }
 
