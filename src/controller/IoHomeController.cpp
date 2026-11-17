@@ -1328,6 +1328,7 @@ TwoWayDiscoveryFrameOptions IoHomeController::resolveTwoWayDiscoveryOptions(
         lOptions.preamble = IOHC_PREAMBLE_SHORT;
         break;
     default:
+        lOptions.preamble=lOptions.lowPower?mLowPower2WWakePreamble:normal2WStartPreamble();
         break;
     }
     lOptions.listenChannels = iSettings.listenChannels == TwoWayDiscoveryListenChannels::All
@@ -6483,8 +6484,13 @@ RadioError IoHomeController::configureNormal2WTxRadio(uint16_t iPreambleSymbols)
 
 bool IoHomeController::setDiagnosticScanCadenceMs(uint8_t ms)
 {
-    if(ms<3 || ms>20 || !idleForManagedOperation())return false;
-    mRxScanIntervalUs=uint32_t(ms)*1000;mRxScanMeasurements={};return true;
+    return setDiagnosticScanCadenceUs(uint32_t(ms)*1000U);
+}
+
+bool IoHomeController::setDiagnosticScanCadenceUs(uint32_t us)
+{
+    if(us<2700||us>20000||!idleForManagedOperation())return false;
+    mRxScanIntervalUs=us;mRxScanCadenceOverride=true;mRxScanMeasurements={};return true;
 }
 
 void IoHomeController::serviceBackgroundRxScan()
@@ -6493,14 +6499,15 @@ void IoHomeController::serviceBackgroundRxScan()
         return;
 
     const uint32_t lNow = micros();
-    if (lNow - mRxScanLastSwitch < mRxScanIntervalUs)
+    const uint32_t dwell=!mRxScanCadenceOverride&&mState==ControllerState::DiscoveryListening ?
+        (kIsSX1262Radio?IOHC_RX_SCAN_INTERVAL_US_SX1262:IOHC_RX_SCAN_INTERVAL_US_SX1276):mRxScanIntervalUs;
+    if (lNow - mRxScanLastSwitch < dwell)
         return;
 
     // Do not hop channels while a frame is arriving on the current frequency:
     // a detected preamble or matched sync word means a packet is in flight and
     // switching now would truncate it. Stay put until reception completes.
-    if (holdReceiveActivity(lNow,mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
-            IoHomeRxHold::preambleUs(std::max<uint16_t>(IOHC_PREAMBLE_LONG,mLowPower2WWakePreamble))))
+    if (holdIdleReceiveActivity(lNow,mRadio.isPreambleDetected(),mRadio.isSyncDetected()))
     {
         if(mRadio.isSyncDetected())++mRxScanMeasurements.syncHolds;else ++mRxScanMeasurements.preambleHolds;
         if (mState == ControllerState::DiscoveryListening)
@@ -6547,14 +6554,15 @@ void IoHomeController::serviceBroadcastResponseScan(uint8_t iRequestFrequencyInd
     const bool avoidRecent=iListenChannels!=TwoWayDiscoveryListenChannels::All;
     const bool lOnRecentRequestChannel = avoidRecent && mCurrentFreqIdx==iRequestFrequencyIndex &&
         mRadioDiversity.recent(iRequestFrequencyIndex,millis());
-    if (!lOnRecentRequestChannel && lNow - mRxScanLastSwitch < mRxScanIntervalUs)
+    const uint32_t dwell=mRxScanCadenceOverride?mRxScanIntervalUs:
+        (kIsSX1262Radio?IOHC_RX_SCAN_INTERVAL_US_SX1262:IOHC_RX_SCAN_INTERVAL_US_SX1276);
+    if (!lOnRecentRequestChannel && lNow - mRxScanLastSwitch < dwell)
         return;
 
     // Never retune during demodulation. Recent activity is a short-lived
     // diversity preference, not permanent request-channel exclusion. Normal
     // background scanning keeps all three channels eligible.
-    if (holdReceiveActivity(lNow,mRadio.isPreambleDetected(),mRadio.isSyncDetected(),
-            IoHomeRxHold::preambleUs(std::max<uint16_t>(IOHC_PREAMBLE_LONG,mLowPower2WWakePreamble))))
+    if (holdIdleReceiveActivity(lNow,mRadio.isPreambleDetected(),mRadio.isSyncDetected()))
     {
         if(mRadio.isSyncDetected())++mRxScanMeasurements.syncHolds;else ++mRxScanMeasurements.preambleHolds;
         if (mRadio.isSyncDetected())
@@ -14978,4 +14986,20 @@ uint32_t IoHomeController::rxRetuneRestarts()const
 #else
     return 0;
 #endif
+}
+
+bool IoHomeController::holdIdleReceiveActivity(uint32_t now,bool preamble,bool sync)
+{
+    const uint32_t chain=std::max<uint32_t>(300000U,IoHomeRxHold::preambleUs(std::max<uint16_t>(IOHC_PREAMBLE_LONG,mLowPower2WWakePreamble)));
+    const bool held=mRxHold.holdRenewing(now,preamble,sync,chain,kIsSX1262Radio?2000U:4000U,[this]() {
+        const auto saved=mRxHold;
+        const auto result=startReceive();
+        mRxHold=saved; // rearm clears old IRQs, but the bounded renewal chain survives
+        return result==RadioError::None;
+    });
+    if(mRxHold.disposition!=mLastRxHoldDisposition) {
+        if(mRxHold.disposition==IoHomeRxHold::Disposition::PreambleExpired)++mRxScanMeasurements.preambleExpirations;
+        if(mRxHold.disposition==IoHomeRxHold::Disposition::SyncExpired)++mRxScanMeasurements.syncExpirations;
+    }
+    mLastRxHoldDisposition=mRxHold.disposition;return held;
 }

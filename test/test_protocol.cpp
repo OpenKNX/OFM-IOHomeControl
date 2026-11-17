@@ -7752,9 +7752,9 @@ TEST(freq_scan_interval_constant)
     ASSERT_EQ(IOHC_RX_SCAN_INTERVAL_US_SX1276, 5000);
     ASSERT_EQ(IOHC_RX_SCAN_INTERVAL_US_SX1262, 7000);
 #if defined(RADIO_SX1262)
-    ASSERT_EQ(IOHC_RX_SCAN_INTERVAL_US, IOHC_RX_SCAN_INTERVAL_US_SX1262);
+    ASSERT_EQ(IOHC_RX_SCAN_INTERVAL_US, 2700);
 #else
-    ASSERT_EQ(IOHC_RX_SCAN_INTERVAL_US, IOHC_RX_SCAN_INTERVAL_US_SX1276);
+    ASSERT_EQ(IOHC_RX_SCAN_INTERVAL_US, 2700);
 #endif
 }
 
@@ -10485,7 +10485,7 @@ TEST(controller_discovery_sends_standard_28_then_alt_2e_broadcast)
     ASSERT_EQ(lStd.dataLen, 0);
     ASSERT_EQ(lStd.ctrlByte1, 0x00); // generic cold pairing remains ACK-off
     ASSERT_TRUE(!lStd.hasHmac);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), lController.radio().defaultStartPreamble());
 
     // Second transmit: alternative 0x2E Discover2ERequest to 0x00003F.
     lController.radio().testClearTransmittedPacket();
@@ -10789,7 +10789,7 @@ TEST(discovery_confirmation_builder_matches_power_and_ack_policy)
         lFrame, 0xE2D1FF, 0x7E9E6E, false, PairingDiscoverConfirmMode::Skip));
 }
 
-TEST(controller_pairing_discovery_ack_override_keeps_long_preamble)
+TEST(controller_pairing_discovery_ack_override_keeps_normal_preamble)
 {
     const uint32_t lOwnNodeId = 0xE2D1FF;
     const uint8_t lKey[16] = {1};
@@ -10818,7 +10818,7 @@ TEST(controller_pairing_discovery_ack_override_keeps_long_preamble)
     ASSERT_EQ(lDiscovery.commandId, IoHomeCommand::DiscoverRequest);
     ASSERT_EQ(lDiscovery.getDestNodeId(), 0x00003BU);
     ASSERT_EQ(lDiscovery.ctrlByte1, IOHC_CTRL1_ACK);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), lController.radio().defaultStartPreamble());
 }
 
 TEST(controller_command_scan_uses_target_power_class_preamble)
@@ -12921,7 +12921,7 @@ TEST(controller_default_2w_pairing_confirms_discovery_before_key_init)
     ASSERT_EQ(lConfirmFrame.getDestNodeId(), lDeviceNodeId);
     ASSERT_EQ(lConfirmFrame.dataLen, 0);
     ASSERT_TRUE((lConfirmFrame.ctrlByte1 & IOHC_CTRL1_LOW_POWER) != 0);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), lController.radio().defaultStartPreamble());
 
     IoHomeFrame lAck;
     buildDiscoveryConfirmationAckFrame(lAck, lRemoteNodeId, lDeviceNodeId);
@@ -12931,7 +12931,7 @@ TEST(controller_default_2w_pairing_confirms_discovery_before_key_init)
     IoHomeFrame lKeyInitFrame;
     ASSERT_TRUE(transmitQueuedControllerFrame(lController, lKeyInitFrame));
     ASSERT_EQ(lKeyInitFrame.commandId, IoHomeCommand::KeyInitTransfer);
-    ASSERT_EQ(lController.radio().testLastPreambleLength(), IOHC_PREAMBLE_LONG);
+    ASSERT_EQ(lController.radio().testLastPreambleLength(), lController.radio().defaultStartPreamble());
 }
 
 TEST(controller_velux_ssl_pairing_caps_directed_start_preambles_to_discovery)
@@ -13120,22 +13120,22 @@ TEST(pairing_broadcast_scan_prefers_recent_aware_alternates_and_unicast_wait_hol
 
         lController.loop(); // PairSendDiscovery: TX on CH2
         ASSERT_EQ(lController.state(), ControllerState::PairWaitDiscoveryResponse);
-        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US_SX1262 + 1);
         lController.loop(); // enter RX and rotate off the broadcast request channel
         ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_3);
 
-        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US_SX1262 + 1);
         lController.loop();
         ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_1);
 
-        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US_SX1262 + 1);
         lController.loop();
         ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_3);
 
         ioHomeTestAdvanceMillis(251); // expire the default 250 ms recent-TX cooldown
         lController.loop();
         ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_1);
-        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US_SX1262 + 1);
         lController.loop();
         ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
     }
@@ -13157,13 +13157,13 @@ TEST(pairing_broadcast_scan_prefers_recent_aware_alternates_and_unicast_wait_hol
         lController.loop(); // enter RX; All observes the normal dwell on CH2
         ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
 
-        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US_SX1262 + 1);
         lController.loop();
         ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_3);
-        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US_SX1262 + 1);
         lController.loop();
         ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_1);
-        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US + 1);
+        ioHomeTestAdvanceMicros(IOHC_RX_SCAN_INTERVAL_US_SX1262 + 1);
         lController.loop();
         ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQ_2);
     }
@@ -21257,9 +21257,9 @@ TEST(controller_discovery_blocking_paths_account_actual_preamble_and_gate_quota)
         for(unsigned tick=0;tick<8 && !c.radio().testTransmitCount() && c.state()!=ControllerState::Idle;++tick)c.loop();
         ASSERT_EQ(c.radio().testTransmitCount(),blocked?0U:1U);
         if(!blocked) {
-            ASSERT_EQ(c.radio().testLastPreambleLength(),IOHC_PREAMBLE_LONG);
+            ASSERT_EQ(c.radio().testLastPreambleLength(),c.radio().defaultStartPreamble());
             const auto len=c.radio().testLastTransmittedPacket().size();
-            ASSERT_EQ(c.testTxAirtimeAccum(0),IoHomeController::estimatedTxAirtimeMs(len,IOHC_PREAMBLE_LONG));
+            ASSERT_EQ(c.testTxAirtimeAccum(0),IoHomeController::estimatedTxAirtimeMs(len,c.radio().defaultStartPreamble()));
             ASSERT_EQ(c.rfCounters().transmittedPackets,1U);
         } else ASSERT_EQ(c.testTxAirtimeAccum(0),3600U);
     }
@@ -24723,4 +24723,16 @@ TEST(controller_garage_stored_partial_is_typed_single_attempt_and_identity_bound
     IoHomeProtocolIdentity id{};id.valid=id.fullMetadata=true;id.ioAddress=ch.getNodeId();id.profile=5;id.nodeClass=IoHomeNodeClass::Actuator;
     ch.onProtocolIdentity(ch.getNodeId(),id);ASSERT_TRUE(c.sendGarageStoredPartial(&ch));
     const uint8_t changed[16]={2};ch.setEncryptionKey(changed);for(unsigned i=0;i<5;++i)c.loop();ASSERT_EQ(c.radio().testTransmitCount(),0U);
+}
+
+TEST(protocol_idle_preamble_renewal_requires_redetection_and_is_bounded)
+{
+    IoHomeRxHold hold;unsigned restarts=0;auto restart=[&](){++restarts;return true;};
+    ASSERT_TRUE(hold.holdRenewing(0,true,false,300000,4000,restart));
+    ASSERT_TRUE(hold.holdRenewing(30000,true,false,300000,4000,restart));ASSERT_EQ(restarts,1U);
+    ASSERT_TRUE(hold.holdRenewing(31000,false,false,300000,4000,restart));
+    ASSERT_TRUE(!hold.holdRenewing(34000,false,false,300000,4000,restart));
+    hold.reset();
+    for(uint32_t now=0;now<300000;now+=1000)ASSERT_TRUE(hold.holdRenewing(now,true,false,300000,4000,restart));
+    ASSERT_TRUE(!hold.holdRenewing(340000,true,false,300000,4000,restart));
 }

@@ -73,15 +73,10 @@
 #define IOHC_LBT_MAX_RETRIES 5            // normal TX: 5 * 5ms worst-case
 #define IOHC_LBT_AUTH_MAX_RETRIES 1       // auth responses must not be delayed too long
 #define IOHC_LBT_RETRY_DELAY_MS 5
-// Measured per-channel discovery/scan dwell defaults. SX1276 can use its
-// FastHop path; SX1262 needs a longer standby -> retune -> RX allowance.
+// Laberning 2205f336: discovery dwell is chip-specific; idle scanning is 2.7 ms.
 #define IOHC_RX_SCAN_INTERVAL_US_SX1276 5000
 #define IOHC_RX_SCAN_INTERVAL_US_SX1262 7000
-#if defined(RADIO_SX1262)
-#define IOHC_RX_SCAN_INTERVAL_US IOHC_RX_SCAN_INTERVAL_US_SX1262
-#else
-#define IOHC_RX_SCAN_INTERVAL_US IOHC_RX_SCAN_INTERVAL_US_SX1276
-#endif
+#define IOHC_RX_SCAN_INTERVAL_US 2700
 // Passive correlation window after a received UNKNOWN_86 frame. Any frame
 // exchanged between the same two nodes inside this window is logged verbatim so
 // a possible request/response pairing can be established from real captures.
@@ -850,6 +845,7 @@ public:
   enum class DiscoveryCompletion : uint8_t {Idle,Collecting,PostProcessing,Empty,WithReturns,Cancelled};
   struct DiscoverySession {DiscoveryCompletion completion=DiscoveryCompletion::Idle;uint32_t accepted=0,duplicates=0,malformed=0,silentSweeps=0;};
   bool setDiagnosticScanCadenceMs(uint8_t ms);
+  bool setDiagnosticScanCadenceUs(uint32_t us);
   uint32_t diagnosticScanCadenceUs() const {return mRxScanIntervalUs;}
   struct RxScanMeasurements {uint32_t retunes=0,retuneFailures=0,maxRetuneUs=0,captures=0,parseFailures=0,preambleHolds=0,syncHolds=0,preambleExpirations=0,syncExpirations=0;};
   const RxScanMeasurements &rxScanMeasurements()const{return mRxScanMeasurements;}
@@ -1703,6 +1699,7 @@ private:
   uint32_t mNextKeyPrimitiveToken=0;
   IoHomeRxHold mRxHold{};
   IoHomeRxHold::Disposition mLastRxHoldDisposition=IoHomeRxHold::Disposition::Idle;
+  bool holdIdleReceiveActivity(uint32_t now,bool preamble,bool sync);
   bool holdReceiveActivity(uint32_t now,bool preamble,bool sync,uint32_t maximum,uint32_t syncGrace=20000);
   RxScanMeasurements mRxScanMeasurements{};
   IoHomeRadioDiversity mRadioDiversity{};
@@ -1874,6 +1871,7 @@ private:
 
   // Multi-frequency RX scanning
   uint32_t mRxScanLastSwitch;   // timestamp (micros) of last frequency switch
+  bool mRxScanCadenceOverride=false;
   uint32_t mRxScanIntervalUs;   // interval between frequency switches
   bool mRxScanEnabled;          // whether to cycle frequencies during idle RX
   uint8_t mLastResponseFreqIdx; // frequency index where last response was received

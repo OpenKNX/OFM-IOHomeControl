@@ -580,6 +580,9 @@ RadioError RadioSX1276::startReceive()
         return RadioError::NotInitialized;
 
     timingEvent(IoHomeTimingEvent::RxSetupBegin);
+    // A same-channel idle hold renewal needs fresh preamble evidence too.
+    if(mState==RadioState::Receiving)
+        writeRegister(REG_RXCONFIG,readRegister(REG_RXCONFIG)|0x20);
     // Restore the variable-length RX ceiling after TX-specific payload lengths.
     writeRegister(REG_PAYLOADLENGTH, 0xFF);
 

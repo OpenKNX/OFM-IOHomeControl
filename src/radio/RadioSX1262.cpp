@@ -103,7 +103,7 @@ RadioSX1262::RadioSX1262()
       mRfSwitchRxPin(IOHC_RADIO_RX_EN), mRfSwitchTxPin(IOHC_RADIO_TX_EN), mUseDio2RfSwitch(IOHC_RADIO_DIO2_RF_SW != 0),
       mInitialized(false), mInitError(RadioSX1262InitError::None), mInitStatusByte(0), mInitDeviceErrors(0), mLastDeviceErrors(0), mTcxoStartupDelayUs(0), mTcxoStartupAttempts(0), mBusyTimedOut(false), mReceiveRestartPending(false), mState(RadioState::Idle),
       mLastRssi(0), mCurrentFreq(0), mStandbyMode(SX1262_STDBY_RC), mPreambleLength(8),
-      mRxBandwidth(RadioSX1262RxBandwidth::Khz58_6),
+      mRxBandwidth(RadioSX1262RxBandwidth::Khz117_3),
       mSyncWord{}, mSyncWordBits(0), mPacketPayloadLen(SX1262_IOHOME_RX_FIXED_LEN), mSoftwarePhyMode(false), mEms2Mode(false),
       mTxToRxSettlePending(false), mSoftwarePhySyncAtUs(0), mEarlyRxFrame{}, mEarlyRxFrameLen(0),
 #ifdef ESP32

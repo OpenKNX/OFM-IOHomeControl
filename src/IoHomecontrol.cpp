@@ -4987,6 +4987,13 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     }
 #endif
 
+    if(lSub.rfind("radio scan-cadence-us",0)==0) {
+        const auto arg=trimSpaces(lSub.substr(strlen("radio scan-cadence-us")));uint32_t us=0;
+        if(!arg.empty()&&(!parseUnsignedDecimal(arg,us)||!managementRequestsAllowed()||!mController.setDiagnosticScanCadenceUs(us))) {
+            logInfoP("Usage: iohc radio scan-cadence-us [2700..20000] (idle only)");return true;
+        }
+        logInfoP("RXscan cadenceUs=%lu",(unsigned long)mController.diagnosticScanCadenceUs());return true;
+    }
     if(lSub.rfind("radio scan-cadence",0)==0) {
         const auto arg=trimSpaces(lSub.substr(strlen("radio scan-cadence")));uint32_t ms=0;
         if(!arg.empty() && (!parseUnsignedDecimal(arg,ms)||ms>20||!managementRequestsAllowed()||
