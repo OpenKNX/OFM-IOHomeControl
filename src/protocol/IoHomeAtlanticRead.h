@@ -46,7 +46,7 @@ inline Value decode(Model model,const Sample &s) {
         if(s.reg==0x144&&s.length==1&&s.data[0]<=1)return {true,true,s.data[0],"night_light_on_candidate"};
         if(s.reg==0x142&&s.length==2) {
             const uint16_t raw=uint16_t(s.data[1])<<8|s.data[0];
-            if(raw<=100)return {true,true,raw,"brightness_raw_candidate"};
+            if(raw<=10000)return {true,true,raw,"brightness_raw_candidate"};
         }
     }
     if(model==Model::AdelisMixed&&s.reg==0x153&&s.length==1&&s.data[0]<=1)
