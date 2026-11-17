@@ -1145,14 +1145,24 @@ void IoHomecontrolChannel::onBatteryLevel(uint8_t iPercent)
     logDebugP("Battery level: %d%%", iPercent);
 }
 
-void IoHomecontrolChannel::onEstimate(uint16_t iSeconds)
+void IoHomecontrolChannel::onEstimate(uint16_t iSeconds,uint8_t execution)
 {
     const auto remaining=IoHomeRemainingTime::fromRaw(iSeconds);
     const uint32_t now=millis();
     // An estimate never creates/renews an epoch or resurrects a stopped report.
     if(!mPaired||mIs1W||!mPollTrackingDeadlineMs||timeReached(now,mPollTrackingDeadlineMs)||!mIsMoving)
         return;
-    mPredictedEnd.observe(now,iSeconds,mPollTrackingDeadlineMs);
+    const bool beganMoving=IoHomeExecutionState::waiting(mPredictedEnd.execution)&&execution==4;
+    mPredictedEnd.observe(now,iSeconds,mPollTrackingDeadlineMs,execution);
+    if(IoHomeExecutionState::waiting(execution)) {
+        mObservedPositiveRemaining=false;mTravelDurationMs=0;
+        const uint32_t delay=effectiveLowPower2W()?kLowPowerTrackedPollMinMs:3000U;
+        const uint32_t at=now+delay;
+        if(!timeReached(at,mPollTrackingDeadlineMs)&&(!mNextStatusPollMs||int32_t(at-mNextStatusPollMs)<0))mNextStatusPollMs=at;
+        mSingleFollowUpPollPending=true;return;
+    }
+    // Fresh executing state starts a new countdown baseline in the same epoch.
+    if(beganMoving)mObservedPositiveRemaining=false;
     mTrustedPollMoving=true; // only the qualified controller callback reaches here
     uint32_t delay=defaultTrackedStatusPollDelayMs();
     if(remaining.kind==IoHomeRemainingTime::Kind::Positive) {

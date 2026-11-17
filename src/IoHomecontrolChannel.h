@@ -159,7 +159,7 @@ public:
   void printLastDeviceEvent();
   void printLocalSensorSample();
 
-  void onEstimate(uint16_t iSeconds);
+  void onEstimate(uint16_t iSeconds,uint8_t execution=IoHomeExecutionState::Unknown);
   void onTrustedMotionStatus(bool moving) {mTrustedPollMoving=moving&&mPollTrackingDeadlineMs!=0;}
   void onStatusExpected();
   void onStatusPollFailed(bool iAfterChallenge, bool iSingleAttempt=true);

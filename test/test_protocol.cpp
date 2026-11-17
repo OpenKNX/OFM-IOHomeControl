@@ -24730,6 +24730,18 @@ TEST(controller_garage_stored_partial_is_typed_single_attempt_and_identity_bound
     const uint8_t changed[16]={2};ch.setEncryptionKey(changed);for(unsigned i=0;i<5;++i)c.loop();ASSERT_EQ(c.radio().testTransmitCount(),0U);
 }
 
+TEST(protocol_waiting_count_never_trains_executing_freeze_penalty)
+{
+    IoHomePredictedEnd end;
+    for(uint32_t now=1000;now<28000;now+=3000){end.observe(now,5,600000,3);ASSERT_EQ(end.nondecreasing,0);ASSERT_TRUE(!end.pending);}
+    end.observe(28000,7,600000,4);ASSERT_TRUE(end.pending);ASSERT_EQ(end.nondecreasing,0);ASSERT_EQ(end.at,36000U);
+    end.observe(29000,6,600000,4);ASSERT_EQ(end.at,36000U);
+    end.observe(35000,0,600000,5);ASSERT_TRUE(!end.pending);
+    IoHomeProtocolIdentity id{};id.valid=true;id.manufacturerId=1;id.profile=2;id.subProfile=0;
+    ASSERT_TRUE(!IoHomeExecutionState::stopped(3,id));ASSERT_TRUE(!IoHomeExecutionState::stopped(4,id));ASSERT_TRUE(IoHomeExecutionState::stopped(5,id));
+    id.manufacturerId=2;ASSERT_TRUE(IoHomeExecutionState::stopped(3,id));
+}
+
 TEST(protocol_idle_preamble_renewal_requires_redetection_and_is_bounded)
 {
     IoHomeRxHold hold;unsigned restarts=0;auto restart=[&](){++restarts;return true;};

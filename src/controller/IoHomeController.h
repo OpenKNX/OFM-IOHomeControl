@@ -12,6 +12,7 @@
 #include "../radio/IoHomeAirtime.h"
 #include "../radio/IoHomeRxHold.h"
 #include "../protocol/IoHomeOneWayInbox.h"
+#include "../protocol/IoHomeExecutionState.h"
 #include "../radio/IoHomeTransmitIntent.h"
 #include "../radio/IoHomeDutyBudget.h"
 #include "../radio/IoHomeRfAccessPolicy.h"

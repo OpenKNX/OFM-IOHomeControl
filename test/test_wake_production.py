@@ -79,7 +79,7 @@ struct IoHomecontrolChannel {
  void logTrackingEvent(const char*){}
  IoHomePredictedEnd mPredictedEnd;bool mPredictedEndSettling=false;
  bool servicePredictedEnd(uint32_t,bool);
- void onEstimate(uint16_t);
+ void onEstimate(uint16_t,uint8_t execution=IoHomeExecutionState::Unknown);
  void setNodeId(uint32_t);void setEncryptionKey(const uint8_t*);void setIs1W(bool);void startStatusPollTracking(uint32_t);
  IoHomeDeviceEvent mLastDeviceEvent;
  void clearLastDeviceEvent(){mLastDeviceEvent.clear();}
@@ -186,6 +186,14 @@ tests=r'''int main(){
   c.clearStatusPollTracking();c.onStatusUpdate(true);c.onEstimate(1);assert(!c.mPollTrackingDeadlineMs&&!c.mNextStatusPollMs&&!c.mTrustedPollMoving);
  }
 
+ {
+  IoHomecontrolChannel c;c.trackedDelay=2000;c.mIsMoving=true;c.mPollTrackingDeadlineMs=now+600000;
+  const auto deadline=c.mPollTrackingDeadlineMs;
+  for(unsigned i=0;i<10;++i){c.onEstimate(5,3);assert(!c.mPredictedEnd.pending&&!c.mPredictedEnd.nondecreasing&&!c.mTravelDurationMs);now+=3000;}
+  c.mNextStatusPollMs=now+20000;c.onEstimate(7,4);
+  assert(c.mNextStatusPollMs==now+2000&&c.mPredictedEnd.pending&&!c.mPredictedEnd.nondecreasing&&c.mPollTrackingDeadlineMs==deadline);
+  c.onStatusUpdate(false);assert(!c.mIsMoving&&!c.mPredictedEnd.pending);
+ }
  {
   const auto saved=now;now=UINT32_MAX-500;
   IoHomecontrolChannel c;c.trackedDelay=2000;c.mIsMoving=true;c.startStatusPollTracking(2000);

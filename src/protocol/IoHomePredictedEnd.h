@@ -1,12 +1,13 @@
 #pragma once
 #include <cstdint>
 #include "IoHomeRemainingTime.h"
+#include "IoHomeExecutionState.h"
 
 // Owned by a channel's existing bounded tracking epoch; never creates an epoch.
 struct IoHomePredictedEnd {
     uint32_t at=0,awakeUntil=0;
     uint16_t last=0;
-    uint8_t nondecreasing=0;
+    uint8_t nondecreasing=0,execution=IoHomeExecutionState::Unknown;
     bool pending=false,positive=false;
     void clear(){*this={};}
     bool awake(uint32_t now)const{return positive&&int32_t(awakeUntil-now)>0;}
@@ -15,7 +16,11 @@ struct IoHomePredictedEnd {
     bool suppresses(uint32_t progress)const {
         return pending&&progress&&int32_t(at-progress)>=0&&uint32_t(at-progress)<=1000U;
     }
-    void observe(uint32_t now,uint16_t raw,uint32_t deadline) {
+    void observe(uint32_t now,uint16_t raw,uint32_t deadline,uint8_t state=IoHomeExecutionState::Unknown) {
+        if(state!=execution){clear();execution=state;}
+        // A queued motor's frozen count describes its future journey. It is not
+        // an executing countdown and must not train the stuck-count penalty.
+        if(IoHomeExecutionState::waiting(state)){pending=false;positive=false;nondecreasing=0;last=raw;return;}
         const auto value=IoHomeRemainingTime::fromRaw(raw);
         if(value.kind!=IoHomeRemainingTime::Kind::Positive&&value.kind!=IoHomeRemainingTime::Kind::Zero){clear();return;}
         if(!raw&&!positive)return;

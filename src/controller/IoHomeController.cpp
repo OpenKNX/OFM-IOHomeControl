@@ -13265,7 +13265,7 @@ void IoHomeController::dispatchRxFrame()
                 bool lMeasuredStatus=false;
                 if (mTrustRxPosition && mRxFrame.dataLen >= 8)
                 {
-                    const bool lStopped = (mRxFrame.data[0] & 0x01) != 0;
+                    const bool lStopped = IoHomeExecutionState::stopped(mRxFrame.data[0],lCh->getProtocolIdentity());
                     observeRainStatus(lCh);
                     if(mCurrentCmd.active&&mCurrentCmd.command==IoHomeCommand::Private&&mCurrentCmd.param==3&&
                        mCurrentCmd.param2==0xFF&&mCurrentCmd.param3==0xFF&&mCurrentCmd.destNodeId==lSrcNode&&lDestNode==mOwnNodeId&&
@@ -13283,7 +13283,7 @@ void IoHomeController::dispatchRxFrame()
                     lSrcNode,lRemainingPoll?"correlated_0x03_status_poll":"unsupported",lRemaining.kind!=IoHomeRemainingTime::Kind::Unavailable,
                     lRemaining.raw,lRemaining.known(),unsigned(lRemaining.kind));
                 if(lRemainingPoll && lMeasuredStatus && mCurrentCmd.trackedStatusPoll && mRxFrame.dataLen>=8)
-                    lCh->onEstimate(lRemaining.raw);
+                    lCh->onEstimate(lRemaining.raw,IoHomeExecutionState::decode(mRxFrame.data[0],lCh->getProtocolIdentity()));
                 // Execute-status bits 6:5 describe battery class, not RF power
                 // class. Discovery MIB / explicit configuration owns power mode.
                 uint8_t lPrivateFpIndex = 3;

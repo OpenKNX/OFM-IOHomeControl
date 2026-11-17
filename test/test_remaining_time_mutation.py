@@ -5,7 +5,7 @@ root=Path(__file__).resolve().parents[1]
 source=(root/'src/controller/IoHomeController.cpp').read_text()
 with tempfile.TemporaryDirectory(prefix='iohc-remaining-mutation-') as d:
  d=Path(d)
- mutants=[('lost_high_byte',source.replace('lCh->onEstimate(lRemaining.raw);','lCh->onEstimate(mRxFrame.data[7]);',1)),
+ mutants=[('lost_high_byte',source.replace('lCh->onEstimate(lRemaining.raw,','lCh->onEstimate(mRxFrame.data[7],',1)),
           ('unqualified_execute_ack',source.replace('                if (!mTrustRxPosition || !mCorrelatedStatusReply)','                if(mRxFrame.dataLen>=8)lCh->onEstimate((uint16_t(mRxFrame.data[6])<<8)|mRxFrame.data[7]);\n                if (!mTrustRxPosition || !mCorrelatedStatusReply)',1))]
  for name,mutated in mutants:
   assert mutated!=source

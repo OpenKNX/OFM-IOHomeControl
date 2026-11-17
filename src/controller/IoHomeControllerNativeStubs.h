@@ -527,7 +527,7 @@ public:
   }
   bool mTrustedMotionObserved=false,mTrustedMotionMoving=false;
   void onTrustedMotionStatus(bool moving){mTrustedMotionObserved=true;mTrustedMotionMoving=moving;}
-  void onEstimate(uint16_t iSeconds)
+  void onEstimate(uint16_t iSeconds,uint8_t execution=IoHomeExecutionState::Unknown)
   {
     ++mEstimateCalls;
     mHasEstimate = true;
