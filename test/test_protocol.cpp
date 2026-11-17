@@ -11313,7 +11313,12 @@ TEST(controller_send_identify_builds_authenticated_payload)
     lChannel.setEncryptionKey(lKey);
     lChannel.setIs1W(false);
 
-    ASSERT_TRUE(lController.sendIdentify(lDeviceNodeId, lKey));
+    ASSERT_TRUE(!lController.sendIdentify(lDeviceNodeId,lKey));
+    ASSERT_TRUE(!lController.sendIdentify(lDeviceNodeId,lKey,2));
+    const uint8_t identity[9]={1,1,0,0,0,1,0,0,1};
+    lChannel.onProtocolIdentity(lDeviceNodeId,decodeAcceptedDiscoveryIdentity(identity,9));
+    ASSERT_TRUE(!lController.sendIdentify(lDeviceNodeId,lKey,0xFF));
+    ASSERT_TRUE(lController.sendIdentify(lDeviceNodeId,lKey,2));
     lController.radio().testClearTransmittedPacket();
     lController.loop();
     lController.loop();
@@ -11330,7 +11335,7 @@ TEST(controller_send_identify_builds_authenticated_payload)
     ASSERT_EQ(lController.radio().testLastPreambleLength(), 48);
     ASSERT_EQ(lFrame.dataLen, 2);
     ASSERT_EQ(lFrame.data[0], IOHC_ORIGINATOR_USER);
-    ASSERT_EQ(lFrame.data[1], 0xFF);
+    ASSERT_EQ(lFrame.data[1], 2);
     ASSERT_TRUE(!lFrame.hasHmac);
 }
 
@@ -24735,4 +24740,17 @@ TEST(protocol_idle_preamble_renewal_requires_redetection_and_is_bounded)
     hold.reset();
     for(uint32_t now=0;now<300000;now+=1000)ASSERT_TRUE(hold.holdRenewing(now,true,false,300000,4000,restart));
     ASSERT_TRUE(!hold.holdRenewing(340000,true,false,300000,4000,restart));
+}
+
+TEST(controller_identify_single_attempt_and_raw_call_cannot_bypass_duration_gate)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c,m,ch,0x111111,0x222222,key);
+    const uint8_t identity[9]={1,1,0,0,0,1,0,0,1};ch.onProtocolIdentity(0x222222,decodeAcceptedDiscoveryIdentity(identity,9));
+    ASSERT_TRUE(!c.sendCommand(0x222222,key,IoHomeCommand::Identify,0xFF));
+    ASSERT_TRUE(!c.sendCommand(0x222222,key,IoHomeCommand::Identify,0));
+    ASSERT_TRUE(c.sendIdentify(0x222222,key,2));IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    ASSERT_EQ(request.data[1],2);const auto sent=c.radio().testTransmitCount();
+    for(unsigned i=0;i<20;++i){ioHomeTestAdvanceMillis(500);c.loop();}
+    ASSERT_EQ(c.radio().testTransmitCount(),sent);ASSERT_EQ(c.state(),ControllerState::Idle);
 }

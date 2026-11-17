@@ -2881,12 +2881,14 @@ bool IoHomeController::buildControllerChallengeResponse(IoHomeFrame &oFrame,
         TwoWaySenderRole::Controller, iWorkingRequest, iChallenge, iKey);
 }
 
-bool IoHomeController::sendIdentify(uint32_t iDestNodeId, const uint8_t *iEncKey)
+bool IoHomeController::sendIdentify(uint32_t node, const uint8_t *key, uint8_t duration)
 {
-    IoHomecontrolChannel *lCh = channelForNode(iDestNodeId);
-    if (lCh && lCh->is1W())
-        return false;
-    return sendCommand(iDestNodeId, iEncKey, IoHomeCommand::Identify, 0);
+    auto *channel=channelForNode(node);
+    if(!channel||!channel->isPaired()||channel->is1W()||!key||
+       std::memcmp(key,channel->getEncryptionKey(),16)||duration!=2)return false;
+    const auto &id=channel->getProtocolIdentity();
+    if(!id.valid||id.ioAddress!=node||id.manufacturerId!=1||id.profile!=4||id.subProfile!=1)return false;
+    return sendCommand(node,key,IoHomeCommand::Identify,duration);
 }
 
 bool IoHomeController::sendBatteryStatusQuery(uint32_t iDestNodeId, const uint8_t *iEncKey)
@@ -3705,6 +3707,13 @@ bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
         if(IoHomePilotWire::identity(channel->getProtocolIdentity())&&
            (iEntry.command==IoHomeCommand::Execute||iEntry.command==IoHomeCommand::WritePrivate))return false;
 
+    if(iEntry.command==IoHomeCommand::Identify) {
+        const auto *channel=channelForNode(iEntry.destNodeId);
+        if(!channel||!channel->isPaired()||channel->is1W()||iEntry.param!=2||!iEntry.encKey||
+           std::memcmp(iEntry.encKey,channel->getEncryptionKey(),16))return false;
+        const auto &id=channel->getProtocolIdentity();
+        if(!id.valid||id.ioAddress!=iEntry.destNodeId||id.manufacturerId!=1||id.profile!=4||id.subProfile!=1)return false;
+    }
     if(iEntry.command==IoHomeCommand::SubscribeEvent&&!solarEntryMatches(iEntry))return false;
     // No writable object schema has original-peer qualification.
     if(static_cast<uint8_t>(iEntry.command)==0x48)return false;
@@ -3721,8 +3730,14 @@ bool IoHomeController::queuePush(const IoHomeQueueEntry &iEntry)
     auto &queued=mCmdQueue[mQueueHead];
     queued.sessionPolicy=ioHomeSessionPolicy(queued.command,queued.param,matchingBeaconNodeCount());
     if (!queued.maxAttempts) queued.maxAttempts=queued.sessionPolicy.stateAttempts;
-    const auto *repeatChannel=channelForNode(queued.destNodeId);
+    auto *repeatChannel=channelForNode(queued.destNodeId);
     if(queued.command==IoHomeCommand::Execute&&(!repeatChannel||!repeatChannel->is1W())&&!repeatSafeExecute(queued))queued.maxAttempts=1;
+    if(queued.command==IoHomeCommand::Identify) {
+        queued.maxAttempts=1;queued.managementRead=true;
+        queued.sourceChannelIndex=channelIndexFor(repeatChannel);
+        queued.productContextRevision=repeatChannel->productContextRevision();
+        std::memcpy(queued.managementKey,repeatChannel->getEncryptionKey(),16);
+    }
     if(queued.maxAttempts>IoHomeAttemptPlan::hardCap)queued.maxAttempts=IoHomeAttemptPlan::hardCap;
     queued.sessionPolicy.stateAttempts=queued.maxAttempts; // explicit caller caps stay independent.
     queued.mediaAttempts=0;
@@ -9386,6 +9401,11 @@ void IoHomeController::processResponse()
         if(!valid){mState=ControllerState::WaitResponse;return;}
     }
     auto disposition=ioHomeResponseDisposition(mCurrentCmd.command,mRxFrame);
+    if(mCurrentCmd.command==IoHomeCommand::Identify&&mSawChallenge&&mAuthResponseSent&&
+       mRxFrame.commandId==IoHomeCommand::ErrorResponse&&mRxFrame.dataLen==1&&mRxFrame.data[0]==3) {
+        logInfoP("Identify raw_result=FE03 possible_jog_response=1 stopped_confirmation=required");
+        disposition=IoHomeResponseDisposition::Accepted;
+    }
     if(disposition==IoHomeResponseDisposition::Accepted&&mRxFrame.commandId==IoHomeCommand::StatusUpdate) {
         const auto last=ioHomeDecodeLastCommand(mRxFrame);
         if(last.valid&&last.node!=mOwnNodeId)disposition=IoHomeResponseDisposition::Ignore;
@@ -12571,12 +12591,14 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
     case IoHomeCommand::Identify:
     {
         IoHomecontrolChannel *lTargetCh = channelForNode(iEntry.destNodeId);
-        if (lTargetCh && lTargetCh->is1W())
+        if (!lTargetCh || !lTargetCh->isPaired() || lTargetCh->is1W() || iEntry.param!=2)
             return false;
+        const auto &id=lTargetCh->getProtocolIdentity();
+        if(!id.valid||id.ioAddress!=iEntry.destNodeId||id.manufacturerId!=1||id.profile!=4||id.subProfile!=1)return false;
 
-        // Identify (0x1E): authenticated 2W command, challenge-response flow.
+        // Explicit bounded VELUX 4/1 experiment, never an indefinite jog.
         mTxFrame.data[0] = IOHC_ORIGINATOR_USER;
-        mTxFrame.data[1] = 0xFF;
+        mTxFrame.data[1] = iEntry.param;
         mTxFrame.dataLen = 2;
         mTxFrame.hasHmac = false;
         mAuthResponseSent = false;

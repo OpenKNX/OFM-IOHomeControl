@@ -4453,7 +4453,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohc fp raw NODE INDEX RAW16", "Expert single-attempt FP write; only FP1-FP3 transmits");
     openknx.console.printHelpLine("iohc autospe on|off|status", "Runtime post-pair SPE discovery");
     openknx.console.printHelpLine("iohc extract preamble cold|response auto|N", "Runtime-only key-extraction preamble override");
-    openknx.console.printHelpLine("iohcNN identify", "Ask paired 2W device NN to identify itself");
+    openknx.console.printHelpLine("iohcNN identify 2", "Bounded VELUX 4/1 experiment; STOP recovers jog");
     openknx.console.printHelpLine("iohc execute ADDR short HH HH HH HH HH HH", "Send exact 6-byte diagnostic 2W Execute payload");
     openknx.console.printHelpLine("iohc execute ADDR extended HH HH HH HH HH HH HH HH", "Send exact 8-byte diagnostic 2W Execute payload");
     openknx.console.printHelpLine("iohcNN probe TYPE [HH]", "2W probes: private-fn/private-sub/status-ext/status-ext-fn6/status-ext-fn9/info1/info2");
@@ -7305,9 +7305,11 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             lArg = lArg.substr(lPos);
 
         uint8_t lIdx = 0;
-        if (lArg.empty() || !parseChannelIndex(lArg, mNumChannels, lIdx))
+        unsigned duration=0; char channelText[16]={},extra=0;
+        if (sscanf(lArg.c_str(),"%15s %u %c",channelText,&duration,&extra)!=2 || duration!=2 ||
+            !parseChannelIndex(channelText, mNumChannels, lIdx))
         {
-            logInfoP("Usage: iohcNN identify");
+            logInfoP("Usage: iohcNN identify 2 (VELUX 4/1 only; STOP recovers jog)");
             if (iDebugKo)
                 openknx.console.writeDiagnoseKo("Bad channel");
             return true;
@@ -7329,7 +7331,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             return true;
         }
 
-        if (mController.sendIdentify(lCh->getNodeId(), lCh->getEncryptionKey()))
+        if (mController.sendIdentify(lCh->getNodeId(), lCh->getEncryptionKey(),duration))
         {
             logInfoP("Sent Identify to channel %d", lIdx + 1);
             if (iDebugKo)

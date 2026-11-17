@@ -708,7 +708,7 @@ public:
                    const char *iName, uint8_t iNameLen);
 
   // Ask a paired 2W device to identify itself (authenticated 0x1E → 0x3C → 0x3D)
-  bool sendIdentify(uint32_t iDestNodeId, const uint8_t *iEncKey);
+  bool sendIdentify(uint32_t iDestNodeId, const uint8_t *iEncKey, uint8_t duration=0);
 
   bool requestBatteryObjects(IoHomecontrolChannel *channel);
   bool requestBatteryPrivate(IoHomecontrolChannel *channel,uint8_t function);
