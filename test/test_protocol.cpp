@@ -24742,6 +24742,38 @@ TEST(protocol_idle_preamble_renewal_requires_redetection_and_is_bounded)
     ASSERT_TRUE(!hold.holdRenewing(340000,true,false,300000,4000,restart));
 }
 
+TEST(protocol_remote_four_copy_burst_counts_physical_and_logical_separately)
+{
+    IoHomeOneWayInbox inbox;IoHomeFrame frame;frame.init();frame.setSrcNode(0x123456);frame.setDestNode(0x3F);
+    frame.ctrlByte0=IOHC_CTRL0_MODE_1W;frame.commandId=IoHomeCommand::Execute;frame.dataLen=8;frame.hasHmac=true;
+    frame.data[7]=0x42;ASSERT_TRUE(inbox.accepts(frame));
+    for(unsigned i=0;i<4;++i)if(inbox.observe(frame,1000+i*25))inbox.push({frame,1000+i*25,-80,1});
+    ASSERT_EQ(inbox.physical,4U);ASSERT_EQ(inbox.logical,1U);ASSERT_EQ(inbox.duplicates,3U);ASSERT_EQ(inbox.count,1U);
+    IoHomeOneWayInbox::Entry received;ASSERT_TRUE(inbox.pop(received));ASSERT_EQ(received.receivedMs,1000U);ASSERT_EQ(received.rssi,-80);
+    for(unsigned i=0;i<5;++i){frame.data[7]++;if(inbox.observe(frame,2000+i*25))inbox.push({frame,2000+i*25,-81,1});}
+    ASSERT_EQ(inbox.count,4U);ASSERT_EQ(inbox.dropped,1U);
+}
+
+TEST(controller_remote_burst_during_challenge_and_final_wait_is_replayed_once)
+{
+    const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel target;
+    initPaired2WControllerForTest(c,m,target,0x111111,0x222222,key);
+    ASSERT_TRUE(m.remoteMap().addRemote(0x333333,"remote"));ASSERT_TRUE(m.remoteMap().linkDevice(0x333333,0x222222));
+    ASSERT_TRUE(c.sendCommand(0x222222,key,IoHomeCommand::Execute,50));
+    IoHomeFrame request;ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    IoHomeFrame remote;buildPassiveExecuteFrame(remote,0x333333,0x3F);remote.set1WMode();remote.hasHmac=true;remote.dataLen=8;remote.data[7]=0x42;
+    ASSERT_TRUE(queueControllerPassiveFrame(c,remote));ASSERT_EQ(c.state(),ControllerState::WaitResponse);
+    ASSERT_EQ(target.testScheduledStatusPollCount(),0);
+    IoHomeFrame challenge;const uint8_t nonce[6]={1,2,3,4,5,6};buildPairChallengeRequestFrame(challenge,0x111111,0x222222,nonce);
+    ASSERT_TRUE(queueControllerResponse(c,challenge));c.loop();
+    for(unsigned i=1;i<4;++i){ioHomeTestAdvanceMillis(25);ASSERT_TRUE(queueControllerPassiveFrame(c,remote));}
+    ASSERT_EQ(c.state(),ControllerState::WaitResponse);ASSERT_EQ(target.testScheduledStatusPollCount(),0);
+    IoHomeFrame reply;const uint8_t body[8]={5};buildPrivateResponseFrame(reply,0x111111,0x222222,body,8);
+    ASSERT_TRUE(queueControllerResponse(c,reply));c.loop();
+    ASSERT_EQ(target.testScheduledStatusPollCount(),1);ASSERT_EQ(c.oneWayReceiveStats().physical,4U);ASSERT_EQ(c.oneWayReceiveStats().logical,1U);
+    ASSERT_EQ(c.oneWayReceiveStats().duplicates,3U);ASSERT_EQ(c.oneWayReceiveStats().count,0U);
+}
+
 TEST(controller_identify_single_attempt_and_raw_call_cannot_bypass_duration_gate)
 {
     const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;

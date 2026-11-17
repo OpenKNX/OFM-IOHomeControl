@@ -11,6 +11,7 @@
 #pragma once
 #include "../radio/IoHomeAirtime.h"
 #include "../radio/IoHomeRxHold.h"
+#include "../protocol/IoHomeOneWayInbox.h"
 #include "../radio/IoHomeTransmitIntent.h"
 #include "../radio/IoHomeDutyBudget.h"
 #include "../radio/IoHomeRfAccessPolicy.h"
@@ -850,6 +851,7 @@ public:
   struct RxScanMeasurements {uint32_t retunes=0,retuneFailures=0,maxRetuneUs=0,captures=0,parseFailures=0,preambleHolds=0,syncHolds=0,preambleExpirations=0,syncExpirations=0;};
   const RxScanMeasurements &rxScanMeasurements()const{return mRxScanMeasurements;}
   const char *receiveHoldDisposition()const{return IoHomeRxHold::name(mLastRxHoldDisposition);}
+  const IoHomeOneWayInbox &oneWayReceiveStats()const{return mOneWayInbox;}
   uint16_t responsePreambleBytes()const{return mRadio.defaultResponsePreamble();}
   uint32_t rxRetuneRestarts()const;
   IoHomeRadioDiversity &radioDiversity() {return mRadioDiversity;}
@@ -1697,6 +1699,8 @@ private:
   uint8_t mRcmChannel=0xFF,mRcmKey[16]{},mRcmGlobalKey[16]{};
   GetKeyOfNodeResult mGetKeyOfNode{};
   uint32_t mNextKeyPrimitiveToken=0;
+  IoHomeOneWayInbox mOneWayInbox{};
+  void replayOneWayFrame();
   IoHomeRxHold mRxHold{};
   IoHomeRxHold::Disposition mLastRxHoldDisposition=IoHomeRxHold::Disposition::Idle;
   bool holdIdleReceiveActivity(uint32_t now,bool preamble,bool sync);

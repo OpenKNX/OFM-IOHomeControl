@@ -4987,6 +4987,11 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     }
 #endif
 
+    if(lSub=="radio remote-rx") {
+        const auto &s=mController.oneWayReceiveStats();
+        logInfoP("RemoteRX physical=%lu logical=%lu duplicates=%lu queued=%u dropped=%lu motor_reception=unknown",
+            (unsigned long)s.physical,(unsigned long)s.logical,(unsigned long)s.duplicates,s.count,(unsigned long)s.dropped);return true;
+    }
     if(lSub.rfind("radio scan-cadence-us",0)==0) {
         const auto arg=trimSpaces(lSub.substr(strlen("radio scan-cadence-us")));uint32_t us=0;
         if(!arg.empty()&&(!parseUnsignedDecimal(arg,us)||!managementRequestsAllowed()||!mController.setDiagnosticScanCadenceUs(us))) {

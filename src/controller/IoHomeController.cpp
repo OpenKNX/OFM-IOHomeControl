@@ -7881,12 +7881,17 @@ void IoHomeController::loop()
         uint8_t lLen = mRadio.readPacket(mRxBuffer, sizeof(mRxBuffer));
         mLastRxReadUs=micros();
         mRxRawLen = lLen;
-        invalidateImmediateReply(); // a new RX cannot reuse an earlier reply grant
-        if(mInboundActive && mState!=ControllerState::AuthWaitResponse) {
-            clearInboundStatus("new_rx");mState=ControllerState::Idle;
-        }
         mLastRxReadMs=millis();
         bool lParsed = (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen));
+        const bool oneWayActivity=lParsed&&IoHomeOneWayInbox::accepts(mRxFrame);
+        // An unrelated remote copy must not revoke a pending 3D/72 reply grant.
+        if(!oneWayActivity) {
+            invalidateImmediateReply();
+            if(mInboundActive&&mState!=ControllerState::AuthWaitResponse) {
+                clearInboundStatus("new_rx");mState=ControllerState::Idle;
+            }
+        }
+
         mChallengeCritical=lParsed&&mRxFrame.commandId==IoHomeCommand::ChallengeRequest&&
             !(mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W)&&mRxFrame.dataLen>=6&&mCurrentCmd.active&&!mAuthResponseSent&&
             mRxFrame.getSrcNodeId()==mCurrentCmd.destNodeId&&mRxFrame.getDestNodeId()==mOwnNodeId&&mState==ControllerState::WaitResponse;
@@ -7970,7 +7975,15 @@ void IoHomeController::loop()
                  mLastResponseFreqIdx != (pushWait ? mPairPushFrequency : mPairPullFrequency) ||
                  (!pullRetrySend&&static_cast<uint32_t>(millis()-mStateTimer)>pairWindow) ||
                  (pullWait&&uint32_t(millis()-mPairingStartTime)>IOHC_PAIR_TIMEOUT_MS));
-            if (invalidKeyContext)
+            if(oneWayActivity) {
+                if(mOneWayInbox.observe(mRxFrame,mLastRxReadMs)) {
+                    if(mCurrentCmd.active||mInboundActive||mState!=ControllerState::Idle)
+                        mOneWayInbox.push({mRxFrame,mLastRxReadMs,mRadio.lastRssi(),mCurrentFreqIdx});
+                    else dispatchRxFrame();
+                } else settleRemoteActivity(mRxFrame.getSrcNodeId()); // duplicate still extends the quiet period
+                if(mRadio.state()!=RadioState::Transmitting)startReceive();
+            }
+            else if (invalidKeyContext)
             {
                 ++mPairingTelemetry.counters.rxUnmatched;
                 logDebugP("Pairing: ignored response outside bound key/session/channel/deadline");
@@ -8362,6 +8375,7 @@ void IoHomeController::loop()
 
     tracePairDiagnosticStateChange();
 
+    replayOneWayFrame();
     // State machine
     switch (mState)
     {
@@ -12902,7 +12916,8 @@ void IoHomeController::dispatchRxFrame()
         auto &last=mForeignPollObservations[index];
         const uint32_t now=millis();
         const bool duplicate=last.valid && last.fingerprint==fingerprint && uint32_t(now-last.timeMs)<2000U;
-        auto decision=duplicate ? IoHomeFollowUpDecision::Coalesced : channel->scheduleStatusPoll(2000U,true);
+        const uint32_t age=(mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W)?uint32_t(now-mLastRxReadMs):0;
+        auto decision=duplicate ? IoHomeFollowUpDecision::Coalesced : channel->scheduleStatusPoll(age<2000U?2000U-age:1U,true);
         if (!duplicate) last={fingerprint,now,true};
         mForeignPollCounters.decision=decision;
         if (decision==IoHomeFollowUpDecision::Scheduled) {
@@ -14785,7 +14800,7 @@ bool IoHomeController::settleRemoteActivity(uint32_t source)
 {
     if(!mRemoteSettling||!mModule||mPassiveMode)return false;
     const auto *remote=mModule->remoteMap().findRemote(source);if(!remote)return false;
-    bool matched=false;const uint32_t now=millis();
+    bool matched=false;const uint32_t now=(mRxFrame.ctrlByte0&IOHC_CTRL0_MODE_1W)?mLastRxReadMs:uint32_t(millis());
     for(uint8_t g=0;g<4;++g){auto &group=mRemoteSettling[g];
         if(!group.mask)continue;if(!remoteSettleIdentityValid(group)){group={};continue;}
         bool linked=false;for(uint8_t i=0;i<16;++i)if(group.mask&(1U<<i))
@@ -15024,4 +15039,14 @@ bool IoHomeController::holdIdleReceiveActivity(uint32_t now,bool preamble,bool s
         if(mRxHold.disposition==IoHomeRxHold::Disposition::SyncExpired)++mRxScanMeasurements.syncExpirations;
     }
     mLastRxHoldDisposition=mRxHold.disposition;return held;
+}
+
+void IoHomeController::replayOneWayFrame()
+{
+    if(mState!=ControllerState::Idle||mCurrentCmd.active||mInboundActive)return;
+    IoHomeOneWayInbox::Entry entry;
+    if(!mOneWayInbox.pop(entry))return;
+    if(uint32_t(millis()-entry.receivedMs)>=30000U){++mOneWayInbox.dropped;return;}
+    mRxFrame=entry.frame;mLastRxReadMs=entry.receivedMs;mLastResponseFreqIdx=entry.frequency;
+    dispatchRxFrame();
 }
