@@ -2383,6 +2383,8 @@ bool IoHomeController::startAtlanticRegisterRead(IoHomecontrolChannel *channel,u
     if(!id.valid||id.ioAddress!=channel->getNodeId()||id.manufacturerId!=0x0C||family>1)return false;
     if(family==0 ? (id.profile!=0x33||id.subProfile!=0) : !IoHomeHeating::actuator(id))return false;
     if(model==IoHomeAtlanticRead::Model::AdelisClassic&&(!qualifiedHeatingName(channel,IoHomeAdelis::HeatingModel::Adelis)||family!=1))return false;
+    if(model==IoHomeAtlanticRead::Model::AdelisMixed&&
+       (family!=1||first!=0x53||count!=1||!IoHomeAdelis::identity(id,channel->getNodeId())))return false;
     if(model==IoHomeAtlanticRead::Model::Calypso&&family!=0)return false;
     if(model==IoHomeAtlanticRead::Model::HeaterWithLight&&family!=1)return false;
     std::unique_ptr<IoHomeAtlanticRead::State> state(new(std::nothrow) IoHomeAtlanticRead::State());
@@ -2394,6 +2396,9 @@ bool IoHomeController::startAtlanticRegisterRead(IoHomecontrolChannel *channel,u
     mRegisterRead=std::move(state);mRegisterRead->active=true;mRegisterRead->channel=c;mRegisterRead->count=count;mRegisterRead->model=model;
     mRegisterRead->token=++mNextRegisterReadToken;mRegisterRead->modelSelection=uint8_t(channel->selectedHeatingModel());
     for(uint8_t i=0;i<count;++i)mRegisterRead->samples[i].reg=uint16_t(family)<<8|(first+i);
+    if(model==IoHomeAtlanticRead::Model::AdelisMixed) {
+        mRegisterRead->count=2;mRegisterRead->samples[0].reg=0x119;mRegisterRead->samples[1].reg=0x153;
+    }
     mRegisterReadPeer=channel->getNodeId();mRegisterReadRevision=channel->productContextRevision();mRegisterReadGateway=mOwnNodeId;
     std::memcpy(mRegisterReadKey,channel->getEncryptionKey(),16);std::memcpy(mRegisterReadSystemKey,mSystemKey,16);
     mRegisterReadStarted=now;mRegisterReadNext=now;mRegisterReadPending=false;mRegisterReadLastStart=now;mRegisterReadCooldown=true;
@@ -2430,6 +2435,10 @@ void IoHomeController::serviceAtlanticRegisterRead()
     using A=IoHomeAtlanticRead::Action;auto &job=*mRegisterRead;
     if(job.model==IoHomeAtlanticRead::Model::AdelisClassic&&job.completed&&
        !IoHomeAdelis::modelName(IoHomeAdelis::HeatingModel::Adelis,job.samples[0].data,job.samples[0].length)){sample.result=R::Rejected;job.active=false;return;}
+    if(job.model==IoHomeAtlanticRead::Model::AdelisMixed&&job.completed&&
+       (job.action!=A::Read||!IoHomeAdelis::modelName(IoHomeAdelis::HeatingModel::AdelisMixed,job.samples[0].data,job.samples[0].length))) {
+        sample.result=R::Rejected;job.active=false;return;
+    }
     if(job.completed==job.writeIndex){
         if(job.action==A::AdelisWrite){
             const auto &name=job.samples[0];
@@ -2468,6 +2477,8 @@ void IoHomeController::finishAtlanticRegisterRead(const IoHomeQueueEntry &e,IoHo
         sample.result=R::Failed;mRegisterRead->active=false;return;
     }
     sample.receivedMs=mLastRxReadMs;
+    if(mRegisterRead->model==IoHomeAtlanticRead::Model::AdelisMixed&&sample.reg==0x153&&
+       !(sample.length==1&&sample.data[0]<=1)) {sample.result=R::Rejected;mRegisterRead->active=false;return;}
     if(sample.reg==0x119)recordHeatingModelName(channelForQueueEntry(e),sample.data,sample.length,sample.receivedMs);
     using A=IoHomeAtlanticRead::Action;auto &job=*mRegisterRead;
     if(job.model==IoHomeAtlanticRead::Model::Calypso&&sample.reg==6&&sample.length==1)job.dhw.observeMode(sample.data[0]);
@@ -2495,6 +2506,11 @@ void IoHomeController::printAtlanticRegisterRead() const
         logInfoP("Atlantic read identity changed; values withheld");return;
     }
     logInfoP("Atlantic action=%u readback_verified=%u dhw_target_valid=%u requested_raw=%u reported_raw=%u reported_target_differs=%u physical_effect=unknown",unsigned(mRegisterRead->action),mRegisterRead->readbackVerified,mRegisterRead->dhw.visibleTarget(),mRegisterRead->targetRaw,mRegisterRead->dhw.targetRaw,mRegisterRead->targetReadbackDiffers);
+    if(mRegisterRead->model==IoHomeAtlanticRead::Model::AdelisMixed&&
+       (uint32_t(millis()-mRegisterReadStarted)>=120000U||mRegisterRead->completed!=2||
+        !IoHomeAdelis::modelName(IoHomeAdelis::HeatingModel::AdelisMixed,mRegisterRead->samples[0].data,mRegisterRead->samples[0].length))) {
+        logInfoP("Mixed Adelis central_heating_selected=unknown read_only=1");return;
+    }
     for(uint8_t i=0;i<mRegisterRead->count;++i) {
         const auto &sample=mRegisterRead->samples[i];const auto value=IoHomeAtlanticRead::decode(mRegisterRead->model,sample);
         logInfoP("Atlantic read reg=%04X result=%u len=%u received_ms=%lu raw=%s decoded=%u candidate=%u scaled=%lld unit=%s physical_effect=unknown",

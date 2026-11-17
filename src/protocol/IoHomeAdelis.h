@@ -6,10 +6,10 @@
 
 // https://github.com/laberning/home_io_control/commit/3923fd5f9a4f54e785186f28f0c43ada7b4dd7c7
 namespace IoHomeAdelis {
-enum class HeatingModel:uint8_t {Unknown=0,Agilia=1,Adelis=2};
+enum class HeatingModel:uint8_t {Unknown=0,Agilia=1,Adelis=2,AdelisMixed=3};
 inline bool identity(const IoHomeProtocolIdentity &id,uint32_t node){return id.valid&&id.ioAddress==node&&id.manufacturerId==0x0C&&id.profile==52&&id.subProfile==1;}
 inline bool modelName(HeatingModel model,const uint8_t *data,uint8_t length){
-    const char *expected=model==HeatingModel::Adelis?"ADELIS 2 DIGIT":model==HeatingModel::Agilia?"AGILIA IO":nullptr;
+    const char *expected=model==HeatingModel::AdelisMixed?"ADELIS 2 M":model==HeatingModel::Adelis?"ADELIS 2 DIGIT":model==HeatingModel::Agilia?"AGILIA IO":nullptr;
     if(!expected||!data)return false;const auto size=std::strlen(expected);if(length<size||std::memcmp(data,expected,size))return false;
     for(unsigned i=size;i<length;++i)if(data[i])return false;return true;
 }

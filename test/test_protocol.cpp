@@ -24766,6 +24766,21 @@ TEST(protocol_remote_four_copy_burst_counts_physical_and_logical_separately)
     ASSERT_EQ(inbox.count,4U);ASSERT_EQ(inbox.dropped,1U);
 }
 
+TEST(protocol_mixed_adelis_exact_name_read_only_boolean_and_classic_gates)
+{
+    using namespace IoHomeAdelis;
+    const uint8_t name[]={ 'A','D','E','L','I','S',' ','2',' ','M',0,0 };
+    ASSERT_TRUE(modelName(HeatingModel::AdelisMixed,name,sizeof(name)));
+    ASSERT_TRUE(!modelName(HeatingModel::Adelis,name,sizeof(name)));
+    ASSERT_TRUE(!modelName(HeatingModel::AdelisMixed,name,9));
+    uint8_t data[6];ASSERT_EQ(write(0x153,1,data),0);ASSERT_EQ(write(0x11D,150,data),0);
+    ASSERT_TRUE(!readable(0x153)); // classic allowlist stays unchanged
+    IoHomeAtlanticRead::Sample sample;sample.reg=0x153;sample.result=IoHomeAtlanticRead::Result::Value;sample.length=1;
+    for(uint8_t v:{1,0,1,0}){sample.data[0]=v;const auto value=IoHomeAtlanticRead::decode(IoHomeAtlanticRead::Model::AdelisMixed,sample);ASSERT_TRUE(value.known);ASSERT_EQ(value.scaled,v);}
+    sample.data[0]=2;ASSERT_TRUE(!IoHomeAtlanticRead::decode(IoHomeAtlanticRead::Model::AdelisMixed,sample).known);
+    sample.length=2;sample.data[0]=0;ASSERT_TRUE(!IoHomeAtlanticRead::decode(IoHomeAtlanticRead::Model::AdelisMixed,sample).known);
+}
+
 TEST(controller_remote_burst_during_challenge_and_final_wait_is_replayed_once)
 {
     const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel target;
@@ -24797,4 +24812,24 @@ TEST(controller_identify_single_attempt_and_raw_call_cannot_bypass_duration_gate
     ASSERT_EQ(request.data[1],2);const auto sent=c.radio().testTransmitCount();
     for(unsigned i=0;i<20;++i){ioHomeTestAdvanceMillis(500);c.loop();}
     ASSERT_EQ(c.radio().testTransmitCount(),sent);ASSERT_EQ(c.state(),ControllerState::Idle);
+}
+
+TEST(controller_mixed_adelis_name_gates_authenticated_read_only_0153)
+{
+    for(bool correctName:{false,true}) {
+        IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initTypedAtlantic(c,m,ch,false);
+        ASSERT_TRUE(!c.startAtlanticRegisterRead(&ch,1,0x53,2,IoHomeAtlanticRead::Model::AdelisMixed));
+        ASSERT_TRUE(c.startAtlanticRegisterRead(&ch,1,0x53,1,IoHomeAtlanticRead::Model::AdelisMixed));
+        ASSERT_EQ(c.atlanticRegisterRead().count,2);IoHomeFrame request;
+        ASSERT_TRUE(transmitQueuedControllerFrame(c,request));ASSERT_EQ(request.data[1],0x60);ASSERT_EQ(request.data[3],0x19);
+        uint8_t name[18]={0x0C,0x60,1,0x19};std::memcpy(name+4,correctName?"ADELIS 2 M":"ADELIS 2 X",10);
+        ASSERT_TRUE(completeAtlanticStep(c,name,18));ioHomeTestAdvanceMillis(1001);c.loop();
+        if(!correctName){ASSERT_TRUE(!c.atlanticRegisterRead().active);continue;}
+        ASSERT_TRUE(transmitQueuedControllerFrame(c,request));ASSERT_EQ(request.data[1],0x60);ASSERT_EQ(request.data[3],0x53);
+        const uint8_t hydronic[]={0x0C,0x60,1,0x53,1};ASSERT_TRUE(completeAtlanticStep(c,hydronic,5));
+        const auto &job=c.atlanticRegisterRead();ASSERT_TRUE(!job.active);ASSERT_EQ(job.completed,2);
+        ASSERT_EQ(job.action,IoHomeAtlanticRead::Action::Read);ASSERT_EQ(job.writeIndex,0xFF);
+        const auto value=IoHomeAtlanticRead::decode(job.model,job.samples[1]);ASSERT_TRUE(value.known);ASSERT_EQ(value.scaled,1);
+        ASSERT_TRUE(!ch.testHasPositionFeedback());
+    }
 }

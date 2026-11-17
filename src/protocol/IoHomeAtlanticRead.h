@@ -6,7 +6,7 @@
 
 // The pure build() codec remains read-only. Typed action stages are admitted only by the bound controller job.
 namespace IoHomeAtlanticRead {
-enum class Model:uint8_t {Raw,Calypso,AdelisClassic,HeaterWithLight};
+enum class Model:uint8_t {Raw,Calypso,AdelisClassic,HeaterWithLight,AdelisMixed};
 enum class Result:uint8_t {Idle,Queued,Value,Empty,Unconfirmed,NoReply,Rejected,Cancelled,IdentityChanged,Failed};
 struct Sample {uint16_t reg=0;Result result=Result::Idle;uint8_t length=0,data[19]{};uint32_t receivedMs=0;};
 enum class Action:uint8_t {Read,AdelisWrite,DhwMode,DhwTarget};
@@ -49,6 +49,8 @@ inline Value decode(Model model,const Sample &s) {
             if(raw<=100)return {true,true,raw,"brightness_raw_candidate"};
         }
     }
+    if(model==Model::AdelisMixed&&s.reg==0x153&&s.length==1&&s.data[0]<=1)
+        return {true,false,s.data[0],"central_heating_selected"};
     if(model==Model::AdelisClassic){const auto value=IoHomeAdelis::decode(s.reg,s.data,s.length);return {value.valid,value.candidate,value.scaled,value.unit};}
 
     return {};
