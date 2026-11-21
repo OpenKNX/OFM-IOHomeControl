@@ -25173,3 +25173,41 @@ TEST(controller_heating_programme_or_unanswered_mode_cannot_write_comfort_or_ove
         ASSERT_TRUE(!c.heatingState(0).values[IoHomeHeating::index(0x0103)].observed);
     }
 }
+
+
+#include "build/kux110_queue.h"
+template <size_t N>
+static void replayKuxQueue(const KuxQueueCapture::Frame (&frames)[N])
+{
+    const uint8_t key[16] = {1};
+    IoHomeFrame rx, tx;
+    ASSERT_TRUE(rx.deserializeRawWithOptionalCrc(frames[0].wire, frames[0].length));
+    IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c, m, ch, rx.getDestNodeId(), rx.getSrcNodeId(), key);
+    IoHomeProtocolIdentity identity{};
+    identity.valid = true;
+    identity.manufacturerId = 1;
+    identity.profile = 2;
+    identity.ioAddress = ch.getNodeId();
+    ch.onProtocolIdentity(ch.getNodeId(), identity);
+    ch.setConfigured2WPowerClass(TwoWayPowerClass::AlwaysAlive);
+
+    for (const auto &captured : frames) {
+        ioHomeTestSetMillis(1000 + captured.millis);
+        ASSERT_TRUE(rx.deserializeRawWithOptionalCrc(captured.wire, captured.length));
+        ASSERT_TRUE(c.sendStatusPoll(&ch, true, 0xFF, 0xFF, 1));
+        ASSERT_TRUE(transmitQueuedControllerFrame(c, tx));
+        ASSERT_EQ(tx.commandId, IoHomeCommand::Private);
+        ASSERT_TRUE(queueControllerResponse(c, rx));
+        if (rx.dataLen >= 8) {
+            ASSERT_EQ(ch.testStatusMoving(), rx.data[0] != 5);
+            ASSERT_TRUE(ch.testHasEstimate());
+            ASSERT_EQ(ch.testEstimate(), IoHomeRemainingTime::decode(rx.data, rx.dataLen).raw);
+        }
+    }
+}
+TEST(controller_kux_short_and_long_logs_correlate_with_owned_main_info_polls)
+{
+    replayKuxQueue(KuxQueueCapture::short_frames);
+    replayKuxQueue(KuxQueueCapture::long_frames);
+}

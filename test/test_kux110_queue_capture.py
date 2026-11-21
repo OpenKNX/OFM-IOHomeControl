@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 import unittest
 
@@ -25,5 +26,25 @@ class Kux110QueueCapture(unittest.TestCase):
                 self.assertTrue(all(b["log_time_ms"] > a["log_time_ms"] for a, b in zip(rows, rows[1:])))
 
 
+def generate_header(path):
+    captures = json.loads((Path(__file__).parent / "corpus/kux110-queue-issue230.json").read_text())["captures"]
+    lines = ["#pragma once", "#include <cstdint>", "namespace KuxQueueCapture {",
+             "struct Frame { uint32_t millis; uint8_t length; uint8_t wire[32]; };"]
+    for capture in captures:
+        lines.append(f'inline constexpr Frame {capture["name"]}_frames[] = {{')
+        start = capture["frames"][0]["log_time_ms"]
+        for row in capture["frames"]:
+            raw = bytes.fromhex(row["hex"])
+            values = ",".join(f"0x{value:02x}" for value in raw)
+            lines.append(f'    {{{row["log_time_ms"] - start}, {len(raw)}, {{{values}}}}},')
+        lines.append("};")
+    lines.append("}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")
+
+
 if __name__ == "__main__":
-    unittest.main()
+    if len(sys.argv) == 3 and sys.argv[1] == "--generate":
+        generate_header(Path(sys.argv[2]))
+    else:
+        unittest.main()
