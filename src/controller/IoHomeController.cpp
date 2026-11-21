@@ -4418,6 +4418,21 @@ OneWayPowerClass IoHomeController::effectiveOneWayPowerClass(IoHomecontrolChanne
 
 // --- Pairing ---
 
+bool IoHomeController::oneWayEnrollmentNeedsConfirmation(uint8_t channel, Pairing1WMode mode) const
+{
+    const auto *target = mModule ? mModule->getChannel(channel) : nullptr;
+    auto *owner = target ? oneWayProfileForChannel(mModule->getChannel(channel)) : nullptr;
+    if (!owner || owner->getOneWayControllerManufacturer() != uint8_t(IoHomeManufacturer::Somfy) ||
+        mode == Pairing1WMode::AnnounceOnly)
+        return false;
+    for (uint8_t i = 0; i < 16; ++i) {
+        auto *candidate = mModule->getChannel(i);
+        if (candidate && candidate->is1W() && candidate->isPaired() && oneWayProfileForChannel(candidate) == owner)
+            return true;
+    }
+    return false;
+}
+
 bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId)
 {
     mLastPairStartStatus = PairStartStatus::Ok;
@@ -4442,6 +4457,12 @@ bool IoHomeController::startPairing(uint8_t iChannelIndex, uint32_t iKnownNodeId
                              iChannelIndex, iKnownNodeId & 0x00FFFFFF, 0xFF, 0, 0};
         recordPairingDiagnostic(PairingOutcome::StartRejected,
                                 "Wait for the active pairing transaction to finish or cancel it first.");
+        return false;
+    }
+
+    if (!mConfirmExistingOneWayEnrollment && oneWayEnrollmentNeedsConfirmation(iChannelIndex, mRequestedPairing1WMode)) {
+        mLastPairStartStatus = PairStartStatus::Failed;
+        logInfoP("Existing Somfy 1W identity: enrollment can remove it from the receiver. Use pair1w with confirm-existing.");
         return false;
     }
 
@@ -4661,10 +4682,12 @@ bool IoHomeController::startPairingExperimental(uint8_t iChannelIndex, uint32_t 
     return lOk;
 }
 
-bool IoHomeController::startPairing1W(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing1WMode iMode)
+bool IoHomeController::startPairing1W(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing1WMode iMode, bool confirmExisting)
 {
     mRequestedPairing1WMode = iMode;
+    mConfirmExistingOneWayEnrollment = confirmExisting;
     const bool lOk = startPairing(iChannelIndex, iKnownNodeId);
+    mConfirmExistingOneWayEnrollment = false;
     if (!lOk)
         mRequestedPairing1WMode = Pairing1WMode::RemoveAdd;
     return lOk;
@@ -7635,15 +7658,18 @@ IoHomeController::OneWaySequenceDiagnostics IoHomeController::oneWaySequenceDiag
     return d;
 }
 
-uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool iForceFlashSave)
+bool IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool iForceFlashSave, uint16_t &sequence)
 {
-    if (!iProfile)
-        return 0;
+    if (!iProfile || mReservationFailed)
+        return false;
 
     const uint8_t lOwner = channelIndexFor(iProfile);
-    if (lOwner >= 16) { mReservationFailed = true; mOneWayRecovery=OneWayRecovery::OwnerUnavailable; return 0; }
+    if (lOwner >= 16) { mReservationFailed = true; mOneWayRecovery=OneWayRecovery::OwnerUnavailable; return false; }
     const uint32_t lNode = iProfile->getOneWayControllerNodeId();
     const uint8_t *lKey = iProfile->getOneWayControllerKey();
+    const auto manufacturer = iProfile->getOneWayControllerManufacturer();
+    const bool noWrap = manufacturer == uint8_t(IoHomeManufacturer::Somfy) ||
+                        manufacturer == uint8_t(IoHomeManufacturer::Unknown);
     if (!mReservationLoaded[lOwner] || mReservationWatermarks[lOwner] != iProfile->getReservedSequence1W() ||
         mReservationNodes[lOwner] != lNode ||
         std::memcmp(mReservationKeys[lOwner], lKey, 16))
@@ -7656,14 +7682,14 @@ uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool i
         { mReservationFailed=true;
           mOneWayRecovery=lLoad!=IoHomeDurableReservation::Load::Unavailable ?
               OneWayRecovery::JournalCorrupt : OneWayRecovery::StoreUnavailable;
-          return 0; }
+          return false; }
         mReservationDurableKnown[lOwner]=lLoad==IoHomeDurableReservation::Load::Found;
         mReservationDurableWatermarks[lOwner]=mReservationDurableKnown[lOwner]?lWatermark:0;
         if (lLoad==IoHomeDurableReservation::Load::Found) {
             mReservationPossibleDesync[lOwner]=true;
             // A same-key reimport/reset cannot move below the durable floor.
             const uint16_t current=iProfile->getSequence1W();
-            if (static_cast<uint16_t>(current-lWatermark)>=0x8000) {
+            if (noWrap ? current < lWatermark : static_cast<uint16_t>(current-lWatermark)>=0x8000) {
                 const uint16_t skipped=static_cast<uint16_t>(lWatermark-current);
                 mReservationSkipped[lOwner]+=skipped;
                 // Even a smaller gap can exceed an unknown receiver watermark.
@@ -7674,8 +7700,15 @@ uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool i
         mReservationNodes[lOwner]=lNode; std::memcpy(mReservationKeys[lOwner],lKey,16);
         mReservationLoaded[lOwner]=true;
     }
+    if (noWrap && iProfile->getSequence1W() == UINT16_MAX) {
+        mOneWayRecovery = OneWayRecovery::SequenceExhausted;
+        logInfoP("1W sequence_exhausted on owner ch%u. Create and explicitly enroll a new identity.", lOwner + 1);
+        return false;
+    }
+    if (mOneWayRecovery == OneWayRecovery::SequenceExhausted)
+        mOneWayRecovery = OneWayRecovery::Ready;
     bool lFlashSaveRequired = false;
-    const uint16_t lUsedSequence = iProfile->incrementSequence1W(iForceFlashSave, lFlashSaveRequired);
+    const uint16_t lUsedSequence = iProfile->incrementSequence1W(iForceFlashSave, lFlashSaveRequired, noWrap);
     const uint16_t lNextSequence = static_cast<uint16_t>(lUsedSequence + 1U);
     const uint16_t lReservedSequence = iProfile->getReservedSequence1W();
     mReservationWatermarks[lOwner]=lReservedSequence;
@@ -7703,7 +7736,8 @@ uint16_t IoHomeController::nextSequence1W(IoHomecontrolChannel *iProfile, bool i
                  lFlashSaveRequired ? 1U : 0U);
     }
 
-    return lUsedSequence;
+    sequence = lUsedSequence;
+    return !mReservationFailed;
 }
 
 void IoHomeController::logDiscoveryTimingTrace(const char *iReason, unsigned long iListenElapsedMs) const
@@ -10456,7 +10490,11 @@ void IoHomeController::processPairSend1WAnnounce()
     // 1W Pair/announce frame matching rspaargaren reference:
     //   cmd=0x2E, data=0x00, sequence[2], hmac[6]
     // HMAC input is cmd + data (2 bytes), sequence is supplied separately.
-    const uint16_t lSeq = nextSequence1W(lProfile, true);
+    uint16_t lSeq = 0;
+    if (!nextSequence1W(lProfile, true, lSeq)) {
+        failOneWayEnrollment("1W sequence allocation rejected");
+        return;
+    }
     build1WPairAuth(mTxFrame, lSeq);
     uint8_t lHmacInput[2] = {static_cast<uint8_t>(mTxFrame.commandId), 0x00};
     if (!createAndTraceHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
@@ -10576,7 +10614,11 @@ void IoHomeController::processPairSend1WRemove()
     // Explicit 1W Remove frame only:
     //   cmd=0x39, data=0x00, sequence[2], hmac[6]
     // This state is never entered by the normal add/learn flow.
-    const uint16_t lSeq = nextSequence1W(lProfile, true);
+    uint16_t lSeq = 0;
+    if (!nextSequence1W(lProfile, true, lSeq)) {
+        failOneWayEnrollment("1W sequence allocation rejected");
+        return;
+    }
     build1WRemove(mTxFrame, lSeq);
     uint8_t lHmacInput[2] = {static_cast<uint8_t>(mTxFrame.commandId), 0x00};
     if (!createAndTraceHmac1W(lHmacInput, sizeof(lHmacInput), lSeq, lProfile->getOneWayControllerKey(), mTxFrame.hmac))
@@ -10734,8 +10776,10 @@ void IoHomeController::processPairSend1WKeyTransfer()
         logInfoP("1w key: remote=0x%06X device=0x%06X ivAddr=remote encrypted-key=redacted",
                  lRemoteNodeId, mDiscoveredNodeId);
 
-    if (mPairing1WAddDestinationIndex == 0)
-        mPairing1WAddSequence = nextSequence1W(lProfile, true);
+    if (mPairing1WAddDestinationIndex == 0 && !nextSequence1W(lProfile, true, mPairing1WAddSequence)) {
+        failOneWayEnrollment("1W sequence allocation rejected");
+        return;
+    }
     const uint16_t lSeq = mPairing1WAddSequence;
     if (!build1WSendKey(mTxFrame, lEncryptedKey, lProfile->getOneWayControllerManufacturer(), lSeq,
                         lProfile->getOneWayControllerKey(), lProfile->getConfigured1WEnrollmentMac()))
@@ -10893,7 +10937,11 @@ void IoHomeController::processPairSend1WFinalizerStop()
         failOneWayEnrollment("controller profile is unavailable for finalizer STOP");
         return;
     }
-    const uint16_t lSeq = nextSequence1W(lProfile, true);
+    uint16_t lSeq = 0;
+    if (!nextSequence1W(lProfile, true, lSeq)) {
+        failOneWayEnrollment("1W sequence allocation rejected");
+        return;
+    }
     if (!prepareOneWayEnrollmentExecute(IOHC_POSITION_STOP, lSeq,
                                         OneWayEnrollPhase::FinalizeStop))
     {
@@ -10970,7 +11018,11 @@ void IoHomeController::processPairSend1WFinalizerDown()
         failOneWayEnrollment("controller profile is unavailable for finalizer DOWN");
         return;
     }
-    const uint16_t lSeq = nextSequence1W(lProfile, true);
+    uint16_t lSeq = 0;
+    if (!nextSequence1W(lProfile, true, lSeq)) {
+        failOneWayEnrollment("1W sequence allocation rejected");
+        return;
+    }
     if (!prepareOneWayEnrollmentExecute(IOHC_POSITION_MAX, lSeq,
                                         OneWayEnrollPhase::FinalizeDown))
     {
@@ -12604,7 +12656,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                              static_cast<unsigned>(iEntry.oneWayMain));
                 }
 
-                uint16_t lSeq = nextSequence1W(lProfile, false);
+                uint16_t lSeq = 0;
+                if (!nextSequence1W(lProfile, false, lSeq)) return false;
                 OneWayCommandProfile lProfileTemplate = oneWayCommandProfileForType(iEntry.oneWayBroadcastType);
                 lProfileTemplate.acei = iEntry.oneWayAcei ? iEntry.oneWayAcei : lProfileTemplate.acei;
                 if (!build1WExecute(mTxFrame, lProfileTemplate, iEntry.oneWayMain,
@@ -12625,7 +12678,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 // comparison and command discovery, e.g. 0000/00FE/0143....
                 memcpy(mTxFrame.data, iEntry.oneWayRawData, iEntry.oneWayRawLen);
 
-                uint16_t lSeq = nextSequence1W(lProfile, false);
+                uint16_t lSeq = 0;
+                if (!nextSequence1W(lProfile, false, lSeq)) return false;
                 mTxFrame.data[iEntry.oneWayRawLen] = (lSeq >> 8) & 0xFF;
                 mTxFrame.data[iEntry.oneWayRawLen + 1] = lSeq & 0xFF;
                 mTxFrame.dataLen = iEntry.oneWayRawLen + 2;
@@ -12645,7 +12699,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                 //   0x00FE = Button Released, 0x00FF = alternative Stop
                 // Payload before sequence/HMAC:
                 //   origin(1) + acei(1) + buttonCode[2] + fp1(0) + fp2(0)
-                uint16_t lSeq = nextSequence1W(lProfile, false);
+                uint16_t lSeq = 0;
+                if (!nextSequence1W(lProfile, false, lSeq)) return false;
                 OneWayCommandProfile lProfileTemplate = oneWayCommandProfileForType(iEntry.oneWayBroadcastType);
                 lProfileTemplate.acei = iEntry.oneWayAcei ? iEntry.oneWayAcei : lProfileTemplate.acei;
                 if (!build1WExecute(mTxFrame, lProfileTemplate, iEntry.oneWayButtonCode, 0x00, 0x00, lSeq))
@@ -12663,7 +12718,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             {
                 // Extended 16-byte format (_p0x00_16):
                 // origin(1)+acei(1)+main[2]+fp1(1)+fp2(1)+data[2]+seq(2)+hmac(6) = 16B
-                uint16_t lSeq = nextSequence1W(lProfile, false);
+                uint16_t lSeq = 0;
+                if (!nextSequence1W(lProfile, false, lSeq)) return false;
                 OneWayCommandProfile lProfileTemplate = oneWayCommandProfileForType(iEntry.oneWayBroadcastType);
                 lProfileTemplate.acei = iEntry.oneWayAcei ? iEntry.oneWayAcei : lProfileTemplate.acei;
                 if (!build1WExecute16(mTxFrame, lProfileTemplate,
@@ -12700,7 +12756,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
                     lMain = static_cast<uint16_t>(iEntry.param) << 8;
                 }
 
-                uint16_t lSeq = nextSequence1W(lProfile, false);
+                uint16_t lSeq = 0;
+                if (!nextSequence1W(lProfile, false, lSeq)) return false;
                 OneWayCommandProfile lProfileTemplate = oneWayCommandProfileForType(iEntry.oneWayBroadcastType);
                 lProfileTemplate.acei = iEntry.oneWayAcei ? iEntry.oneWayAcei : lProfileTemplate.acei;
                 if (!build1WExecute(mTxFrame, lProfileTemplate, lMain, lFp1, lFp2, lSeq))
@@ -12897,7 +12954,8 @@ bool IoHomeController::buildTxFrame(const IoHomeQueueEntry &iEntry)
             mTxFrame.set1WMode();
             mTxFrame.setFrameOrder(IOHC_CTRL0_ORDER_END);
 
-            uint16_t lSeqAM = nextSequence1W(lProfile, false);
+            uint16_t lSeqAM = 0;
+            if (!nextSequence1W(lProfile, false, lSeqAM)) return false;
             OneWayCommandProfile lProfileTemplate = oneWayCommandProfileForType(iEntry.oneWayBroadcastType);
             lProfileTemplate.acei = iEntry.oneWayAcei ? iEntry.oneWayAcei : lProfileTemplate.acei;
             const uint8_t lActivateFp1 = (iEntry.param2 != 0xFF)

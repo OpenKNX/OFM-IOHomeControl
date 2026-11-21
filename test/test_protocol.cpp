@@ -25246,3 +25246,44 @@ TEST(controller_opt_in_oneway_wake_shape_respects_phy_and_manufacturer)
     ASSERT_TRUE(controller.setOneWayWakeMs(0));
     ASSERT_EQ(controller.oneWayWakePreamble(), 0);
 }
+
+TEST(controller_somfy_sequence_stops_at_ffff_and_same_identity_reset_cannot_reuse_it)
+{
+    IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+    const uint8_t key[16] = {1};
+    initOneWayPairingModeControllerForTest(c, m, ch, 0x123456, 0x654321, key);
+    ch.setNodeId(0x654321);
+    ch.setOneWayControllerManufacturer(uint8_t(IoHomeManufacturer::Somfy));
+    ch.setSequence1W(0xFFFD);
+    const auto send = [&]() {
+        ASSERT_TRUE(c.sendCommand(0x654321, key, IoHomeCommand::Execute, 50));
+        for (unsigned i = 0; i < 60; ++i) { ioHomeTestAdvanceMillis(50); c.loop(); }
+    };
+    send();
+    ASSERT_EQ(ch.getSequence1W(), 0xFFFE);
+    ASSERT_EQ(c.oneWaySequenceDiagnostics(0).durableHighWater, 0xFFFF);
+    send();
+    ASSERT_EQ(ch.getSequence1W(), 0xFFFF);
+    const auto count = c.radio().testTransmitCount();
+    ASSERT_EQ(count, 8U);
+    send();
+    ASSERT_EQ(c.radio().testTransmitCount(), count);
+    ASSERT_EQ(c.oneWayRecovery(), IoHomeController::OneWayRecovery::SequenceExhausted);
+    ch.setSequence1W(0);
+    send();
+    ASSERT_EQ(ch.getSequence1W(), 0xFFFF);
+    ASSERT_EQ(c.radio().testTransmitCount(), count);
+}
+
+TEST(controller_existing_somfy_enrollment_requires_explicit_confirmation)
+{
+    IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+    const uint8_t key[16] = {1};
+    initOneWayPairingModeControllerForTest(c, m, ch, 0x123456, 0x654321, key);
+    ch.setNodeId(0x654321);
+    ch.setPaired(true);
+    ch.setOneWayControllerManufacturer(uint8_t(IoHomeManufacturer::Somfy));
+    ASSERT_TRUE(!c.startPairing(0, 0x654321));
+    ASSERT_TRUE(!c.startPairing1W(0, 0x654321, Pairing1WMode::AddOnly));
+    ASSERT_TRUE(c.startPairing1W(0, 0x654321, Pairing1WMode::AddOnly, true));
+}

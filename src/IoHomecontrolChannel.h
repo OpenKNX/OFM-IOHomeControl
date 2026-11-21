@@ -224,7 +224,7 @@ public:
   void setSequence1W(uint16_t iSeq);
   void setReservedSequence1W(uint16_t iSeq);
   uint16_t incrementSequence1W();
-  uint16_t incrementSequence1W(bool iForceReserve, bool &oFlashSaveRequired);
+  uint16_t incrementSequence1W(bool iForceReserve, bool &oFlashSaveRequired, bool noWrap = false);
   void setOneWayControllerNodeId(uint32_t iNodeId);
   uint32_t getOneWayControllerNodeId() const;
   void setOneWayControllerKey(const uint8_t *iKey);

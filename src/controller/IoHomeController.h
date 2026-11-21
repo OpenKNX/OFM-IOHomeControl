@@ -830,7 +830,8 @@ public:
   void printControllerKeyPull() const;
   const IoHomeControllerKeyImport &controllerKeyPull()const{return mControllerImport;}
   // Start explicit 1W pairing/add/remove operations.
-  bool startPairing1W(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing1WMode iMode);
+  bool startPairing1W(uint8_t iChannelIndex, uint32_t iKnownNodeId, Pairing1WMode iMode, bool confirmExisting = false);
+  bool oneWayEnrollmentNeedsConfirmation(uint8_t channel, Pairing1WMode mode) const;
   bool startPairing1WAnnounceOnly(uint8_t iChannelIndex, uint32_t iKnownNodeId);
   bool startPairing1WAddOnly(uint8_t iChannelIndex, uint32_t iKnownNodeId);
   bool startPairing1WAnnounceAdd(uint8_t iChannelIndex, uint32_t iKnownNodeId);
@@ -1043,7 +1044,7 @@ public:
   void testFailReservationWrites(bool iFail) { mReservationJournal.failWrites=iFail; }
   void testSetTrustRxPosition(bool iTrust) { mTrustRxPosition = iTrust; }
 #endif
-  enum class OneWayRecovery : uint8_t { Ready, OwnerUnavailable, JournalCorrupt, StoreUnavailable, CommitFailed };
+  enum class OneWayRecovery : uint8_t { Ready, OwnerUnavailable, JournalCorrupt, StoreUnavailable, CommitFailed, SequenceExhausted };
   OneWayRecovery oneWayRecovery() const { return mOneWayRecovery; }
   bool oneWayRecoveryRequired() const { return mReservationFailed; }
   struct OneWaySequenceDiagnostics {
@@ -1791,6 +1792,7 @@ private:
   bool mPairLaunchChallengeValid=false,mPairProofChallengeValid=false;
   uint8_t mPairPullAuthChallenge[6];
   uint8_t mPairing1WStage = 0; // 0=announce, 1=add, 2=remove, 3=stop, 4=down
+  bool mConfirmExistingOneWayEnrollment = false;
   Pairing1WMode mRequestedPairing1WMode = Pairing1WMode::RemoveAdd;
   Pairing1WMode mPairing1WMode = Pairing1WMode::RemoveAdd;
   uint8_t mPairing1WBroadcastType = 0;
@@ -1959,7 +1961,7 @@ private:
   bool createAndTraceHmac1W(const uint8_t *iTranscript, uint8_t iTranscriptLen,
                             uint16_t iSequenceNum, const uint8_t iControllerKey[16],
                             uint8_t oHmac[IOHC_HMAC_SIZE]) const;
-  uint16_t nextSequence1W(IoHomecontrolChannel *iProfile, bool iForceFlashSave);
+  bool nextSequence1W(IoHomecontrolChannel *iProfile, bool iForceFlashSave, uint16_t &sequence);
   void tracePairDiagnosticFrame(const char *iPrefix, const IoHomeFrame &iFrame, uint8_t iFreqIdx, int16_t iRssi) const;
   void tracePairDiagnosticDiscoveryInterpretation(const IoHomeFrame &iFrame, uint8_t iFreqIdx) const;
   void processIdle();

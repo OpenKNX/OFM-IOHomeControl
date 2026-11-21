@@ -6715,6 +6715,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         uint32_t lNodeId = 0;
         Pairing1WMode lMode = Pairing1WMode::AnnounceAdd;
         bool lModeSeen = false;
+        bool confirmExisting = false;
         while (!lArgs.empty())
         {
             std::string lToken;
@@ -6729,6 +6730,10 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
                 }
                 lMode = lParsedMode;
                 lModeSeen = true;
+            }
+            else if (lToken == "confirm-existing" && !confirmExisting)
+            {
+                confirmExisting = true;
             }
             else if (lNodeId == 0 && parseHex24(lToken, lNodeId))
             {
@@ -6748,6 +6753,10 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         }
 
         if(!commissioningCanStart()){logInfoP("1W pairing blocked by commissioning/diagnostic/RF owner");return true;}
+        if (!confirmExisting && mController.oneWayEnrollmentNeedsConfirmation(lIdx, lMode)) {
+            logInfoP("Somfy enrollment can remove an existing identity. Repeat with confirm-existing to proceed.");
+            return true;
+        }
         mChannels[lIdx]->setIs1W(true);
         if (lNodeId != 0)
         {
@@ -6755,7 +6764,7 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
             openknx.flash.save(true); // identity change is rare & critical: bypass write throttle
         }
 
-        const bool lOk = mController.startPairing1W(lIdx, lNodeId, lMode);
+        const bool lOk = mController.startPairing1W(lIdx, lNodeId, lMode, confirmExisting);
         if (lOk)
         {
             mCommissioningJob.begin(IoHomeCommissioningJob::Owner::Pairing,lIdx,millis(),120000);

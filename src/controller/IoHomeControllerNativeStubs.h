@@ -225,10 +225,10 @@ public:
     bool lSaveRequired = false;
     return incrementSequence1W(false, lSaveRequired);
   }
-  uint16_t incrementSequence1W(bool iForceReserve, bool &oFlashSaveRequired)
+  uint16_t incrementSequence1W(bool iForceReserve, bool &oFlashSaveRequired, bool noWrap = false)
   {
     return ioHomeAllocateSequence1W(mSequence1W, mReservedSequence1W,
-                                     iForceReserve, oFlashSaveRequired);
+                                     iForceReserve, oFlashSaveRequired, noWrap);
   }
   void setOneWayControllerNodeId(uint32_t iNodeId) { mOneWayControllerNodeId = iNodeId & 0x00FFFFFF; }
   uint32_t getOneWayControllerNodeId() const { return mOneWayControllerNodeId; }
