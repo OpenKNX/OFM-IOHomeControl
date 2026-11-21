@@ -8994,6 +8994,8 @@ void IoHomeController::processTxInProgress()
         }
         recordTwoWayTrace("tx_timeout", mQueuedTxFrame, mQueuedTxWireLength);
         mRadio.standby();
+        if (startReceive() == RadioError::None)
+            mRxScanLastSwitch = micros();
         notifyCommandExchangeResult(mCurrentCmd, IoHomeCommandExchangeResult::FailedBeforeAuthentication);
         mCurrentCmd.active = false;
         mState = ControllerState::Idle;
@@ -10811,6 +10813,8 @@ bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
     if (millis() - mPairingStartTime > IOHC_PAIR_TIMEOUT_MS)
     {
         mRadio.standby();
+        if (startReceive() == RadioError::None)
+            mRxScanLastSwitch = micros();
         mState = ControllerState::PairFailed;
         return true;
     }
@@ -10958,6 +10962,8 @@ bool IoHomeController::processPairWait1WBlind(ControllerState iNextState)
         }
 
         mRadio.standby();
+        if (startReceive() == RadioError::None)
+            mRxScanLastSwitch = micros();
         mState = ControllerState::PairFailed;
         return true;
     }

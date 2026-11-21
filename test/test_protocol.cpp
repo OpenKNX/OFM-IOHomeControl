@@ -20984,6 +20984,35 @@ TEST(controller_foreign_or_spontaneous_status_does_not_complete_private_poll)
     }
 }
 
+TEST(controller_tx_timeout_reopens_receive_without_resending)
+{
+    const uint8_t key[16] = {1};
+    IoHomeController c;
+    IoHomecontrol m;
+    IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c, m, ch, 0x123456, 0x654321, key);
+    ch.setConfigured2WPowerClass(TwoWayPowerClass::LowPower);
+    c.radio().testHardwareTxDoneSemantics(true);
+    c.radio().testRssiRequiresReceiveAfterConfiguration(true);
+    ASSERT_TRUE(c.sendBackgroundCommand(0x654321, key, IoHomeCommand::Private, 3, 0xFF, 0xFF, 1));
+
+    IoHomeFrame packet;
+    ASSERT_TRUE(transmitQueuedControllerFrame(c, packet));
+    c.radio().mTestHoldTxDone = true;
+    const auto rxStarts = c.radio().rxStartCount();
+    ioHomeTestAdvanceMillis(IoHomeController::txTimeoutForAirtime(32, 1024) + 1200);
+    c.loop();
+    ASSERT_EQ(c.state(), ControllerState::Idle);
+    ASSERT_EQ(c.radio().state(), RadioState::Receiving);
+    ASSERT_TRUE(c.radio().rxStartCount() > rxStarts);
+    int16_t rssi = 0;
+    ASSERT_TRUE(c.radio().currentRssi(rssi));
+
+    for (unsigned i = 0; i < 4; ++i)
+        c.loop();
+    ASSERT_EQ(c.radio().testTransmitCount(), 1U);
+}
+
 TEST(controller_rx_reopen_busy_keeps_tx_end_and_airtime_once)
 {
     const uint8_t key[16]={1};IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;
