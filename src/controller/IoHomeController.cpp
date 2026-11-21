@@ -1604,7 +1604,11 @@ void IoHomeController::observeReceivedIdentity(const IoHomeFrame &frame,const Ra
         p.command=uint8_t(frame.commandId);p.ctrl0=frame.ctrlByte0;p.ctrl1=frame.ctrlByte1;p.frequency=rx.frequencyHz;p.rssi=rx.rssiDbm;p.length=rx.length;
         p.irq=rx.irq;p.rxReadUs=rx.readTimestampUs;p.crcChecked=rx.hardwareCrcChecked;p.crcValid=rx.hardwareCrcValid;p.fifoOverrun=rx.fifoOverrun;p.truncated=rx.truncated;
         p.radioState=uint8_t(state);p.controllerState=uint8_t(mState);p.localTransaction=mTwoWaySessionId;
-        p.recentOwnTx=mAttemptTxDoneValid&&uint32_t(rx.readTimestampUs-mAttemptTxDoneUs)<100000U;
+        if (mAttemptTxDoneValid) {
+            p.localTxIdLow = uint32_t(mTwoWayTxId);
+            p.txEndToReadUs = uint32_t(rx.readTimestampUs - mAttemptTxDoneUs);
+            p.recentOwnTx = p.txEndToReadUs < 100000U;
+        }
         p.boot=mModule?mModule->diagnosticBootId():0;p.session=mModule?mModule->diagnosticSession():0;
 #if defined(RADIO_SX1262) && !defined(TEST_NATIVE)
         p.softwarePhy=mRadio.softwarePhyEnabled();
@@ -1617,8 +1621,8 @@ void IoHomeController::printCollisionFirst() const
 {
     const auto &p=mCollisionFirst;
     if(!p.valid){logInfoP("IOHC_COLLISION_FIRST available=0 collision=%u",twoWayIdentityCollision());return;}
-    logInfoP("IOHC_COLLISION_FIRST boot=%lu session=%lu ms=%lu own=%06X src=%06X dst=%06X cmd=%02X ctrl=%02X/%02X RF=%lu RSSI=%d crc_checked=%u crc_valid=%u software_phy=%u irq=%04X fifo_overrun=%u truncated=%u len=%u radio_state=%u controller_state=%u recent_own_tx=%u transaction=%llu rx_read_us=%lu is_phy_rx=%u origin=%s physical_sender=unresolved immutable=1 action=block_2W_no_autoclear",
-        (unsigned long)p.boot,(unsigned long)p.session,(unsigned long)p.timeMs,p.own,p.src,p.dst,p.command,p.ctrl0,p.ctrl1,(unsigned long)p.frequency,p.rssi,p.crcChecked,p.crcValid,p.softwarePhy,p.irq,p.fifoOverrun,p.truncated,p.length,p.radioState,p.controllerState,p.recentOwnTx,(unsigned long long)p.localTransaction,(unsigned long)p.rxReadUs,p.phyRx,p.phyRx?"rx_observed":"explicit_known_identity_conflict");
+    logInfoP("IOHC_COLLISION_FIRST boot=%lu session=%lu ms=%lu own=%06X src=%06X dst=%06X cmd=%02X ctrl=%02X/%02X RF=%lu RSSI=%d crc_checked=%u crc_valid=%u software_phy=%u irq=%04X fifo_overrun=%u truncated=%u len=%u radio_state=%u controller_state=%u recent_own_tx=%u transaction=%llu tx_id_low32=%lu tx_end_to_read_us=%lu rx_read_us=%lu is_phy_rx=%u origin=%s physical_sender=unresolved immutable=1 action=block_2W_no_autoclear",
+        (unsigned long)p.boot,(unsigned long)p.session,(unsigned long)p.timeMs,p.own,p.src,p.dst,p.command,p.ctrl0,p.ctrl1,(unsigned long)p.frequency,p.rssi,p.crcChecked,p.crcValid,p.softwarePhy,p.irq,p.fifoOverrun,p.truncated,p.length,p.radioState,p.controllerState,p.recentOwnTx,(unsigned long long)p.localTransaction,(unsigned long)p.localTxIdLow,(unsigned long)p.txEndToReadUs,(unsigned long)p.rxReadUs,p.phyRx,p.phyRx?"rx_observed":"explicit_known_identity_conflict");
 }
 
 void IoHomeController::printVerificationEvidence() const

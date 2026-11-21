@@ -23669,6 +23669,8 @@ TEST(controller_collision_local_TX_snapshot_cannot_latch_without_credible_RX)
     // proximity to our TX is evidence, not permission to suppress a real duplicate.
     c.radio().testRxCrcChecked=true;c.radio().testRxCrcValid=true;ASSERT_TRUE(queueControllerResponse(c,sent));
     ASSERT_TRUE(c.twoWayIdentityCollision());ASSERT_TRUE(c.collisionFirst().recentOwnTx);
+    ASSERT_EQ(c.collisionFirst().localTxIdLow,1U);
+    ASSERT_TRUE(c.collisionFirst().txEndToReadUs<100000U);
 }
 TEST(controller_capture_filters_replace_without_changing_receive_policy)
 {
