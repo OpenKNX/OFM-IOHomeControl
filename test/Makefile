@@ -243,3 +243,8 @@ run: check-nov13-observations
 check-window-travel:
 	$(PYTHON) test_window_travel_schema.py
 run: check-window-travel
+
+.PHONY: check-kux110-queue-capture
+check-kux110-queue-capture:
+	$(PYTHON) test_kux110_queue_capture.py
+run: check-kux110-queue-capture
