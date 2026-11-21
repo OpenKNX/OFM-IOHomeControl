@@ -24978,3 +24978,52 @@ TEST(controller_tahual_raw_counter_is_model_gated_and_keeps_decreases)
         ASSERT_EQ(decode(Model::Tahual, c.atlanticRegisterRead().samples[1]).scaled, 3253);
     }
 }
+
+TEST(controller_guelma_selected_reads_require_fresh_exact_model)
+{
+    using namespace IoHomeAtlanticRead;
+    const char *id = "sauter_guelma_exchange_register_read";
+    Sample name{};
+    IoHomeFrame frame;
+    for (const auto &f : LaberningOriginal::frames)
+    {
+        if (std::strcmp(f.capture, id) || !originalCaptureDecode(id, f.index, frame) || frame.dataLen < 4)
+            continue;
+        Sample s;
+        const uint16_t reg = uint16_t(frame.data[2]) << 8 | frame.data[3];
+        ASSERT_TRUE(IoHomeAtlanticRead::reply(reg, frame.data, frame.dataLen, s));
+        if (reg == 0x0040) name = s;
+        if (reg == 0x0004) ASSERT_EQ(decode(Model::Guelma, s).scaled, 15373428);
+        if (reg == 0x0006) ASSERT_EQ(decode(Model::Guelma, s).scaled, s.data[0] == 2);
+    }
+    ASSERT_TRUE(exactModelName(name, 0x0040, "GUELMA"));
+    for (bool match : {false, true})
+    {
+        IoHomeController c;
+        IoHomecontrol m;
+        IoHomecontrolChannel ch;
+        initTypedAtlantic(c, m, ch, true);
+        ASSERT_TRUE(!c.startAtlanticRegisterRead(&ch, 0, 0x40, 1, Model::Guelma));
+        ASSERT_TRUE(c.startAtlanticRegisterRead(&ch, 0, 0x32, 1, Model::Guelma));
+        IoHomeFrame request;
+        ASSERT_TRUE(transmitQueuedControllerFrame(c, request));
+        ASSERT_MEM_EQ(request.data, "\x0C\x60\x00\x40", 4);
+        uint8_t model[] = {0x0C, 0x60, 0, 0x40, 'G', 'U', 'E', 'L', 'M', 'A', ' ', ' '};
+        if (!match) model[9] = 'X';
+        ASSERT_TRUE(completeAtlanticStep(c, model, sizeof(model)));
+        ioHomeTestAdvanceMillis(1001);
+        c.loop();
+        if (!match)
+        {
+            ASSERT_TRUE(!c.atlanticRegisterRead().active);
+            ASSERT_EQ(c.atlanticRegisterRead().samples[1].result, Result::Rejected);
+            continue;
+        }
+        ASSERT_TRUE(transmitQueuedControllerFrame(c, request));
+        ASSERT_MEM_EQ(request.data, "\x0C\x60\x00\x32", 4);
+        const uint8_t energy[] = {0x0C, 0x60, 0, 0x32, 0x05, 0xDC};
+        ASSERT_TRUE(completeAtlanticStep(c, energy, sizeof(energy)));
+        ASSERT_EQ(decode(Model::Guelma, c.atlanticRegisterRead().samples[1]).scaled, 1500);
+        ASSERT_EQ(c.atlanticRegisterRead().writeIndex, 0xFF);
+    }
+}

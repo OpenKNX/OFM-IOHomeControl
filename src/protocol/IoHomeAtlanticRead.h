@@ -6,7 +6,7 @@
 
 // The pure build() codec remains read-only. Typed action stages are admitted only by the bound controller job.
 namespace IoHomeAtlanticRead {
-enum class Model:uint8_t {Raw,Calypso,AdelisClassic,HeaterWithLight,AdelisMixed,Tahual};
+enum class Model:uint8_t {Raw,Calypso,AdelisClassic,HeaterWithLight,AdelisMixed,Tahual,Guelma};
 enum class Result:uint8_t {Idle,Queued,Value,Empty,Unconfirmed,NoReply,Rejected,Cancelled,IdentityChanged,Failed};
 struct Sample {uint16_t reg=0;Result result=Result::Idle;uint8_t length=0,data[19]{};uint32_t receivedMs=0;};
 enum class Action:uint8_t {Read,AdelisWrite,DhwMode,DhwTarget};
@@ -38,6 +38,15 @@ inline bool exactModelName(const Sample &s, uint16_t reg, const char *expected) 
         if (s.data[i] != 0 && s.data[i] != ' ') return false;
     return true;
 }
+inline bool guelmaReadable(uint16_t reg) {
+    switch (reg) {
+    case 0x0004: case 0x0006: case 0x0032: case 0x0046: case 0x0048:
+    case 0x0049: case 0x004A: case 0x0052: case 0x0053:
+        return true;
+    default:
+        return false;
+    }
+}
 struct Value {bool known=false,candidate=false;int64_t scaled=0;const char *unit="raw";};
 inline Value decode(Model model,const Sample &s) {
     if(s.result!=Result::Value)return {};
@@ -56,6 +65,24 @@ inline Value decode(Model model,const Sample &s) {
         if(s.reg==0x142&&s.length==2) {
             const uint16_t raw=uint16_t(s.data[1])<<8|s.data[0];
             if(raw<=10000)return {true,true,raw,"brightness_raw_candidate"};
+        }
+    }
+    if (model == Model::Guelma) {
+        const uint16_t raw = uint16_t(s.data[0]) << 8 | s.data[1];
+        uint32_t wh = 0;
+        if (s.reg == 0x0004 && IoHomeDhwCodec::energyWh(s.data, s.length, wh))
+            return {true, false, wh, "Wh"};
+        if (s.reg == 0x0032 && s.length == 2)
+            return {true, false, raw, "W"};
+        if (s.reg == 0x0049 && s.length == 2 && raw >= 70 && raw <= 700)
+            return {true, false, raw, "tenths_C"};
+        if (s.length == 1) {
+            if (s.reg == 0x0006 && (s.data[0] == 0 || s.data[0] == 2)) return {true, false, s.data[0] == 2, "manual"};
+            if (s.reg == 0x0052 && s.data[0] <= 1) return {true, false, s.data[0], "boost"};
+            if (s.reg == 0x0053 && s.data[0] <= 1) return {true, false, s.data[0], "absence"};
+            if (s.reg == 0x0046 && s.data[0] <= 4) return {true, false, s.data[0], "showers_available"};
+            if (s.reg == 0x0048 && s.data[0] >= 2 && s.data[0] <= 4) return {true, false, s.data[0], "manual_showers"};
+            if (s.reg == 0x004A && s.data[0] <= 4) return {true, false, s.data[0], "showers_target"};
         }
     }
     if (model == Model::Tahual && s.reg == 0x0116 && s.length == 2)

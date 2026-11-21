@@ -2387,6 +2387,9 @@ bool IoHomeController::startAtlanticRegisterRead(IoHomecontrolChannel *channel,u
        (family!=1||first!=0x53||count!=1||!IoHomeAdelis::identity(id,channel->getNodeId())))return false;
     if (model == IoHomeAtlanticRead::Model::Tahual && (family != 1 || first != 0x16 || count != 1))
         return false;
+    if (model == IoHomeAtlanticRead::Model::Guelma &&
+        (family != 0 || count != 1 || !IoHomeAtlanticRead::guelmaReadable(first)))
+        return false;
     if(model==IoHomeAtlanticRead::Model::Calypso&&family!=0)return false;
     if(model==IoHomeAtlanticRead::Model::HeaterWithLight&&family!=1)return false;
     std::unique_ptr<IoHomeAtlanticRead::State> state(new(std::nothrow) IoHomeAtlanticRead::State());
@@ -2404,6 +2407,10 @@ bool IoHomeController::startAtlanticRegisterRead(IoHomecontrolChannel *channel,u
         mRegisterRead->count = 2;
         mRegisterRead->samples[0].reg = 0x0119;
         mRegisterRead->samples[1].reg = 0x0116;
+    } else if (model == IoHomeAtlanticRead::Model::Guelma) {
+        mRegisterRead->count = 2;
+        mRegisterRead->samples[0].reg = 0x0040;
+        mRegisterRead->samples[1].reg = first;
     }
     mRegisterReadPeer=channel->getNodeId();mRegisterReadRevision=channel->productContextRevision();mRegisterReadGateway=mOwnNodeId;
     std::memcpy(mRegisterReadKey,channel->getEncryptionKey(),16);std::memcpy(mRegisterReadSystemKey,mSystemKey,16);
@@ -2447,6 +2454,13 @@ void IoHomeController::serviceAtlanticRegisterRead()
     }
     if (job.model == IoHomeAtlanticRead::Model::Tahual && job.completed &&
         !IoHomeAtlanticRead::exactModelName(job.samples[0], 0x0119, "TAHUAL"))
+    {
+        sample.result = R::Rejected;
+        job.active = false;
+        return;
+    }
+    if (job.model == IoHomeAtlanticRead::Model::Guelma && job.completed &&
+        !IoHomeAtlanticRead::exactModelName(job.samples[0], 0x0040, "GUELMA"))
     {
         sample.result = R::Rejected;
         job.active = false;
