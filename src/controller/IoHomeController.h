@@ -1204,7 +1204,9 @@ public:
   static_assert(IOHC_TWO_WAY_TRACE_CAPACITY>=8 && IOHC_TWO_WAY_TRACE_CAPACITY<=64,
                 "2W trace capacity must be between 8 and 64");
   static constexpr uint8_t kTwoWayTraceCapacity=IOHC_TWO_WAY_TRACE_CAPACITY;
-  const TwoWayTracePoint &twoWayTracePoint(uint64_t id) const { return mTwoWayTrace[(id-1)%kTwoWayTraceCapacity]; }
+  const TwoWayTracePoint &twoWayTracePoint(uint64_t id) const {
+    return twoWayTraceStorage()[(id - 1) % twoWayTraceCapacity()];
+  }
   uint64_t twoWayTraceCount() const { return mTwoWayTraceCount; }
   void printTwoWayTrace() const;
   void configureDiagnosticStream(bool enabled,uint32_t node,uint8_t command);
@@ -1471,7 +1473,34 @@ private:
   uint32_t mIdentityCollisionNode=0;
   IoHomeCollisionEvidence mCollisionFirst{};
   IoHomeVerificationEvidence mVerification{};
+#if IOHC_TWO_WAY_TRACE_HEAP
+  std::unique_ptr<TwoWayTracePoint[]> mTwoWayTraceHeap;
+  TwoWayTracePoint mTwoWayTrace[1]{};
+#else
   TwoWayTracePoint mTwoWayTrace[kTwoWayTraceCapacity]{};
+#endif
+  uint8_t twoWayTraceCapacity() const {
+#if IOHC_TWO_WAY_TRACE_HEAP
+    if (!mTwoWayTraceHeap) return 1;
+#endif
+    return kTwoWayTraceCapacity;
+  }
+  uint64_t firstRetainedTwoWayTraceId() const {
+    const auto capacity = twoWayTraceCapacity();
+    return mTwoWayTraceCount > capacity ? mTwoWayTraceCount - capacity + 1 : 1;
+  }
+  TwoWayTracePoint *twoWayTraceStorage() {
+    return const_cast<TwoWayTracePoint *>(static_cast<const IoHomeController &>(*this).twoWayTraceStorage());
+  }
+  const TwoWayTracePoint *twoWayTraceStorage() const {
+#if IOHC_TWO_WAY_TRACE_HEAP
+    if (mTwoWayTraceHeap) return mTwoWayTraceHeap.get();
+#endif
+    return mTwoWayTrace;
+  }
+  TwoWayTracePoint &editTwoWayTracePoint(uint64_t id) {
+    return twoWayTraceStorage()[(id - 1) % twoWayTraceCapacity()];
+  }
   TwoWayOutcome mLastTwoWayOutcome;
   uint64_t mTwoWayTraceCount=0,mTwoWayTraceFirst=1;
   uint64_t mDiagnosticStreamCursor=0;

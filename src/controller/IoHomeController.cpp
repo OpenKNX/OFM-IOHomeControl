@@ -1487,6 +1487,13 @@ const std::string IoHomeController::logPrefix() const
 
 void IoHomeController::init()
 {
+#if IOHC_TWO_WAY_TRACE_HEAP
+    if (!mTwoWayTraceHeap && !mTwoWayTraceCount) {
+        mTwoWayTraceHeap.reset(new (std::nothrow) TwoWayTracePoint[kTwoWayTraceCapacity]);
+        if (!mTwoWayTraceHeap)
+            logInfoP("2W trace allocation failed; retaining the latest event only");
+    }
+#endif
 #if defined(RADIO_SX1262)
     logInfoP("SX1262 GPIOs: SCK=%d MISO=%d MOSI=%d NSS=%d RST=%d DIO1=%d BUSY=%d RF_SW=%d",
              IOHC_SPI_SCK, IOHC_SPI_MISO, IOHC_SPI_MOSI,
@@ -5144,7 +5151,7 @@ void IoHomeController::notifyCommandExchangeResult(const IoHomeQueueEntry &iEntr
                       mExchangeRequestWireLength && mExchangeRequestSessionId == mTwoWaySessionId ? mExchangeRequestFrame : mTxFrame,
                       mExchangeRequestWireLength && mExchangeRequestSessionId == mTwoWaySessionId ? mExchangeRequestWireLength : mTxLen);
     if (!(mTxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W) && mTwoWayTraceCount)
-        mTwoWayTrace[(mTwoWayTraceCount - 1) % kTwoWayTraceCapacity].failureReason = lFailure;
+        editTwoWayTracePoint(mTwoWayTraceCount).failureReason = lFailure;
     IoHomecontrolChannel *lChannel = channelForQueueEntry(iEntry);
     if (lChannel && iEntry.twoWayPreamblePlan.use == TwoWayWakeBeliefUse::Applied &&
         iEntry.twoWayPreamblePlan.belief == TwoWayWakeBelief::Awake &&
@@ -6938,8 +6945,8 @@ void IoHomeController::recordTwoWayTrace(const char *event,const IoHomeFrame &fr
        !std::strcmp(event,"rx_correlated")||!std::strcmp(event,"exchange_completed")||!std::strcmp(event,"exchange_failed")||!std::strcmp(event,"response_timeout")){
         mLastManagedRfMs=millis();mManagedRfObserved=true;
     }
-    auto &p=mTwoWayTrace[mTwoWayTraceCount%kTwoWayTraceCapacity];p={};
-    p.id=++mTwoWayTraceCount;p.event=event;
+    auto &p=editTwoWayTracePoint(++mTwoWayTraceCount);p={};
+    p.id=mTwoWayTraceCount;p.event=event;
     p.trustedStatus=!std::strcmp(event,"status_local_correlated")||!std::strcmp(event,"status_inbound_authenticated");
     p.authenticatedStatus=p.trustedStatus&&(mInboundVerified||(mSawChallenge&&mAuthResponseSent));
     p.statusLayoutKnown=mStatusAttribution.valid&&mStatusAttribution.timeMs==millis()&&mStatusAttribution.transportSrc==frame.getSrcNodeId()&&mStatusAttribution.transportDst==frame.getDestNodeId()&&mStatusAttribution.layoutKnown;
@@ -7142,7 +7149,7 @@ void IoHomeController::printStatusAttribution() const
 void IoHomeController::streamDiagnosticTrace()
 {
     if(mChallengeCritical||!mDiagnosticStream || mDiagnosticStreamCursor>=mTwoWayTraceCount)return;
-    const uint64_t first=mTwoWayTraceCount>kTwoWayTraceCapacity?mTwoWayTraceCount-kTwoWayTraceCapacity+1:1;
+    const uint64_t first=firstRetainedTwoWayTraceId();
     if(mDiagnosticStreamCursor+1<first) {
         logInfoP("IOHC_CAPTURE droppedEvents=%llu reason=ring_overwrite",(unsigned long long)(first-mDiagnosticStreamCursor-1));
         mDiagnosticDropped+=uint32_t(first-mDiagnosticStreamCursor-1);
@@ -7181,7 +7188,7 @@ void IoHomeController::printTwoWayTrace() const
     logInfoP("2W lastOutcome valid=%u cmd=%02X peer=%06X gateway=%06X result=%u transport_complete=%u authenticated_exchange=%u device_accepted=%s actuation_started=unknown target_reached=unknown",
         outcome.valid,unsigned(outcome.command),outcome.peer,outcome.gateway,unsigned(outcome.result),outcome.transportComplete,
         outcome.authenticatedExchange,outcome.deviceAccepted==Evidence::No?"no":"unknown");
-    const uint64_t retainedFirst=mTwoWayTraceCount>kTwoWayTraceCapacity?mTwoWayTraceCount-kTwoWayTraceCapacity+1:1;
+    const uint64_t retainedFirst=firstRetainedTwoWayTraceId();
     const uint64_t first=retainedFirst>mTwoWayTraceFirst?retainedFirst:mTwoWayTraceFirst;
     for(uint64_t id=first;id<=mTwoWayTraceCount;++id) {
         [[maybe_unused]] const auto &p=twoWayTracePoint(id);
@@ -7224,7 +7231,7 @@ void IoHomeController::clearTwoWayTrace()
 void IoHomeController::printTwoWayAttemptCsv() const
 {
     logInfoP("2WAttemptCSV session_id,tx_id,try_index,device_node,ctrl0,ctrl1,command,preamble_bytes,frequency_hz,tx_start_us,tx_done_us,rx_ready_us,response_correlated,timeout,poll_completed,exchange_completed,challenge_seen,association_ambiguous,tx_done_valid,rx_ready_valid,failure_reason");
-    const uint64_t first=mTwoWayTraceCount>kTwoWayTraceCapacity?mTwoWayTraceCount-kTwoWayTraceCapacity+1:1;
+    const uint64_t first=firstRetainedTwoWayTraceId();
     for(uint64_t id=first;id<=mTwoWayTraceCount;++id) {
         const auto &start=twoWayTracePoint(id);
         if(id<mTwoWayTraceFirst || std::strcmp(start.event,"tx_started"))continue;
@@ -7480,13 +7487,13 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
                 selectDirectedResponseTimeout(frame.ctrlByte1);
             }
             recordTwoWayTrace("tx_started",frame,iLength);
-            std::memcpy(mAttemptTxPayload,mTwoWayTrace[(mTwoWayTraceCount-1)%kTwoWayTraceCapacity].payload,sizeof(mAttemptTxPayload));
+            std::memcpy(mAttemptTxPayload,twoWayTracePoint(mTwoWayTraceCount).payload,sizeof(mAttemptTxPayload));
             if(!mChallengeCritical)logDebugP("2W accepted localTX=%llu session=%llu attempt=%u preamble=%u belief=%s TXfreq=%lu timeout=%u LBT=%s duty=%lu/%lu ms",
                 (unsigned long long)mTwoWayTxId,(unsigned long long)mTwoWaySessionId,
                 mCurrentCmd.retries+1,mCurrentTxPreambleSymbols,
                 twoWayWakeBeliefName(mCurrentCmd.twoWayPreamblePlan.belief),
                 (unsigned long)IOHC_FREQUENCIES[mCurrentFreqIdx],mResponseTimeoutMs,
-                mTwoWayTrace[(mTwoWayTraceCount-1)%kTwoWayTraceCapacity].lbtResult,
+                twoWayTracePoint(mTwoWayTraceCount).lbtResult,
                 (unsigned long)mRfDutyBudget.used(IOHC_FREQUENCIES[mCurrentFreqIdx]),
                 (unsigned long)IoHomeDutyBudget::allowance(IoHomeDutyBudget::band(IOHC_FREQUENCIES[mCurrentFreqIdx])));
         }
@@ -9151,7 +9158,7 @@ void IoHomeController::processWaitResponse()
             mResponseTimeoutRecorded = true;
             ++mRfCounters.timeoutAttempts;
             recordTwoWayTrace("response_timeout", mQueuedTxFrame, mQueuedTxWireLength);
-            mTwoWayTrace[(mTwoWayTraceCount-1)%kTwoWayTraceCapacity].failureReason="response_timeout";
+            editTwoWayTracePoint(mTwoWayTraceCount).failureReason="response_timeout";
         }
         const auto failExchange = [this]() {
             const IoHomeQueueEntry lFailedCmd = mCurrentCmd;
