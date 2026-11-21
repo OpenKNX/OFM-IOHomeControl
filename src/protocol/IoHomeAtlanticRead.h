@@ -61,6 +61,11 @@ inline Value decode(Model model,const Sample &s) {
     // Explicit diagnostic model only; discovery 52/1 never selects this and
     // these candidate observations grant no heating/light writer or KNX status.
     if(model==Model::HeaterWithLight) {
+        // The detection switch and the raw occupancy are independent readings.
+        if (s.length == 1 && s.data[0] <= 1) {
+            if (s.reg == 0x0101) return {true, false, s.data[0], "occupancy_detection_enabled"};
+            if (s.reg == 0x0110) return {true, false, s.data[0], "occupancy_detected"};
+        }
         if(s.reg==0x144&&s.length==1&&s.data[0]<=1)return {true,true,s.data[0],"night_light_on_candidate"};
         if(s.reg==0x142&&s.length==2) {
             const uint16_t raw=uint16_t(s.data[1])<<8|s.data[0];

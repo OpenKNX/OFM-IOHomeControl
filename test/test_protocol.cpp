@@ -24738,6 +24738,31 @@ TEST(protocol_hekla_light_registers_are_explicit_read_only_candidates)
     uint8_t write[6];ASSERT_EQ(IoHomeAdelis::write(0x144,1,write),0);ASSERT_EQ(IoHomeAdelis::write(0x142,50,write),0);
 }
 
+TEST(protocol_hekla_occupancy_decode_is_opt_in_and_independent)
+{
+    using namespace IoHomeAtlanticRead;
+    for (const uint16_t reg : {0x0101, 0x0110})
+    {
+        Sample sample;
+        sample.reg = reg;
+        sample.result = Result::Value;
+        sample.length = 1;
+        for (uint8_t value : {0, 1})
+        {
+            sample.data[0] = value;
+            const auto observation = decode(Model::HeaterWithLight, sample);
+            ASSERT_TRUE(observation.known);
+            ASSERT_EQ(observation.scaled, value);
+            ASSERT_TRUE(!decode(Model::Raw, sample).known);
+            ASSERT_TRUE(!decode(Model::AdelisClassic, sample).known);
+        }
+        sample.data[0] = 2;
+        ASSERT_TRUE(!decode(Model::HeaterWithLight, sample).known);
+        sample.length = 0;
+        ASSERT_TRUE(!decode(Model::HeaterWithLight, sample).known);
+    }
+}
+
 TEST(controller_adelis_extended_observation_job_is_opt_in_read_only_and_name_gated)
 {
     for(bool correctName:{false,true}) {
