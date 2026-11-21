@@ -3,7 +3,7 @@
   "repository": "https://github.com/laberning/home_io_control",
   "commit": "c82d38f47901b71c1c63413e638241dbe1aa2d06",
   "upstream_capture_root": "tests/corpus/captures",
-  "inventory_sha256": "8ce297f9906e23f13f929ffa96e98e54a5608bdb636310289cefdb6c43deedf7",
+  "inventory_sha256": "02ec06b2a4f3613e1faafac6d6e8ef452f8d088350719067045798fa39217cc5",
   "helper_sources": [
     {
       "upstream_path": "scripts/corpus/build.py",
@@ -457,6 +457,34 @@
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
+        "physical_motion": "unknown"
+      }
+    },
+    {
+      "id": "velux_window_discovery_keyed_rollcall_flipper_cc1101",
+      "upstream_path": "tests/corpus/captures/discovery/velux_window_discovery_keyed_rollcall_flipper_cc1101.yaml",
+      "git_blob_sha1": "3f43c9009e7a1d9be7354dcbec6206f8cdcebff2",
+      "sha256": "d1199d21f9cfa616dd9f1c7c8e980787a7a3878551534b52fa4e7bbfa6995acb",
+      "local_path": "test/corpus/laberning-c2ccd5d/discovery/velux_window_discovery_keyed_rollcall_flipper_cc1101.yaml",
+      "source_url": "https://github.com/laberning/home_io_control/blob/c2ccd5da68b84a94e6e6bf9efe50346635a8fad3/tests/corpus/captures/discovery/velux_window_discovery_keyed_rollcall_flipper_cc1101.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "other",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "present"
+      ],
+      "frame_count": 5,
+      "phy_support": "no_new_hardware_qualification",
+      "physical_motion_evidence": "unknown",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
         "physical_motion": "unknown"
       }
     },
@@ -1815,8 +1843,8 @@
     {
       "id": "synthetic_exchange_heating_midnight_sync",
       "upstream_path": "tests/corpus/captures/exchange/synthetic_exchange_heating_midnight_sync.yaml",
-      "git_blob_sha1": "0a7affd9f6fffad56edd4efcc149af7030463ead",
-      "sha256": "2b2f28844aac21fbdc7cff49c98a140355472fd69508e8b74011be49c8dbf023",
+      "git_blob_sha1": "49eec3496677e78ab9a77957846b9c876a23df57",
+      "sha256": "881b9885f172f783715dee5b5b259b8926261fc877d115dfdcbfff52b2c7116d",
       "local_path": "test/corpus/laberning-c82d38f/exchange/synthetic_exchange_heating_midnight_sync.yaml",
       "classification": "synthetic_reference",
       "artifact_status": "original_imported",
@@ -1834,17 +1862,17 @@
         "source_integrity": "all_original_bytes",
         "host_schema_crc_key_safety": "all_frames",
         "native_parser": "all_frames",
-        "public_crypto": "checked_when_public_vectors_present",
+        "public_crypto": "public_corpus_key_only",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/c2ccd5da68b84a94e6e6bf9efe50346635a8fad3/tests/corpus/captures/exchange/synthetic_exchange_heating_midnight_sync.yaml"
     },
     {
       "id": "synthetic_exchange_heating_set_temp",
       "upstream_path": "tests/corpus/captures/exchange/synthetic_exchange_heating_set_temp.yaml",
-      "git_blob_sha1": "44501b8ae9426bc68d87112398ed84fda8dfa35c",
-      "sha256": "4fb9ab7060c63d716ae04b67a0784eb1abc00e91ff2ad6610dd6d41ba4eda589",
+      "git_blob_sha1": "1eed252fa64425a03f52388ec6f2e1861f7535b8",
+      "sha256": "f4e28dabbd9143388916781e83664061be673fe1663c78d5829270c886bdf89e",
       "local_path": "test/corpus/laberning-c82d38f/exchange/synthetic_exchange_heating_set_temp.yaml",
       "classification": "synthetic_reference",
       "artifact_status": "original_imported",
@@ -1862,11 +1890,11 @@
         "source_integrity": "all_original_bytes",
         "host_schema_crc_key_safety": "all_frames",
         "native_parser": "all_frames",
-        "public_crypto": "checked_when_public_vectors_present",
+        "public_crypto": "public_corpus_key_only",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/c2ccd5da68b84a94e6e6bf9efe50346635a8fad3/tests/corpus/captures/exchange/synthetic_exchange_heating_set_temp.yaml"
     },
     {
       "id": "tilt_cover_exchange_ack_echoes_precommand_tilt",
@@ -2197,8 +2225,8 @@
     {
       "id": "synthetic_identify",
       "upstream_path": "tests/corpus/captures/identify/synthetic_identify.yaml",
-      "git_blob_sha1": "9af69331396d4c8bfb41453bbbc4a61f25d12e2c",
-      "sha256": "da3a732bc1c5bbe88350288cc8b74fe98b71e88e90d2b84e9c03f4197aec68fb",
+      "git_blob_sha1": "74ff09f7bb9d9d981a951d148d41771d1c0219c9",
+      "sha256": "637b7394a9c0946a5dd91ab6c35c5b4ede1f6beabc9cfad272f40eb735fc7319",
       "local_path": "test/corpus/laberning-c82d38f/identify/synthetic_identify.yaml",
       "classification": "synthetic_reference",
       "artifact_status": "original_imported",
@@ -2216,11 +2244,11 @@
         "source_integrity": "all_original_bytes",
         "host_schema_crc_key_safety": "all_frames",
         "native_parser": "all_frames",
-        "public_crypto": "checked_when_public_vectors_present",
+        "public_crypto": "public_corpus_key_only",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/c2ccd5da68b84a94e6e6bf9efe50346635a8fad3/tests/corpus/captures/identify/synthetic_identify.yaml"
     },
     {
       "id": "multi_somfy_oneway_write_private_first_sighting",
@@ -3549,6 +3577,62 @@
       }
     },
     {
+      "id": "atlantic_alfea_probe_outdoor_temperature_sx1276",
+      "upstream_path": "tests/corpus/captures/probe/atlantic_alfea_probe_outdoor_temperature_sx1276.yaml",
+      "git_blob_sha1": "01a79235ce720016e0efb3aa86db1c38009cf16c",
+      "sha256": "65877b00c737f1f6bbec9e98adacb1c218c2c141ed0dd9f7983ee8452707bc6f",
+      "local_path": "test/corpus/laberning-c2ccd5d/probe/atlantic_alfea_probe_outdoor_temperature_sx1276.yaml",
+      "source_url": "https://github.com/laberning/home_io_control/blob/c2ccd5da68b84a94e6e6bf9efe50346635a8fad3/tests/corpus/captures/probe/atlantic_alfea_probe_outdoor_temperature_sx1276.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1276",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 8,
+      "phy_support": "no_new_hardware_qualification",
+      "physical_motion_evidence": "unknown",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      }
+    },
+    {
+      "id": "atlantic_alfea_probe_read_object_heating_energy_sx1276",
+      "upstream_path": "tests/corpus/captures/probe/atlantic_alfea_probe_read_object_heating_energy_sx1276.yaml",
+      "git_blob_sha1": "9d3ca58b5790964fff512136000e2a898f62b734",
+      "sha256": "3e4f9e89c5cbf96ceac2cd6ad9bcfc182ad8f9cf0c92f630933f3b15a5b623ab",
+      "local_path": "test/corpus/laberning-c2ccd5d/probe/atlantic_alfea_probe_read_object_heating_energy_sx1276.yaml",
+      "source_url": "https://github.com/laberning/home_io_control/blob/c2ccd5da68b84a94e6e6bf9efe50346635a8fad3/tests/corpus/captures/probe/atlantic_alfea_probe_read_object_heating_energy_sx1276.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1276",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 8,
+      "phy_support": "no_new_hardware_qualification",
+      "physical_motion_evidence": "unknown",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      }
+    },
+    {
       "id": "multi_somfy_probe_extended_private_both_selectors",
       "upstream_path": "tests/corpus/captures/probe/multi_somfy_probe_extended_private_both_selectors.yaml",
       "git_blob_sha1": "ab9bc6b6ce1286d20bd5048f677ca625a6b7310c",
@@ -3657,6 +3741,34 @@
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
+        "physical_motion": "unknown"
+      }
+    },
+    {
+      "id": "sauter_tahual_probe_energy_register",
+      "upstream_path": "tests/corpus/captures/probe/sauter_tahual_probe_energy_register.yaml",
+      "git_blob_sha1": "1782b601808b0000e1a87b4480bb590e7123eded",
+      "sha256": "1cbd3e915be9d62331692ed9ee19fd869766e96db3b57ca69847e14532f265fa",
+      "local_path": "test/corpus/laberning-c2ccd5d/probe/sauter_tahual_probe_energy_register.yaml",
+      "source_url": "https://github.com/laberning/home_io_control/blob/c2ccd5da68b84a94e6e6bf9efe50346635a8fad3/tests/corpus/captures/probe/sauter_tahual_probe_energy_register.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "phy_support": "no_new_hardware_qualification",
+      "physical_motion_evidence": "unknown",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
         "physical_motion": "unknown"
       }
     },

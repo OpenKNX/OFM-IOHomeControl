@@ -18,9 +18,23 @@ class OriginalCorpusTests(unittest.TestCase):
         cls.by_id = {doc["id"]:(entry,doc) for entry,doc in cls.loaded}
 
     def test_pinned_original_inventory_and_existing_copies(self):
-        self.assertEqual(len(self.loaded),177)
+        self.assertEqual(len(self.loaded),181)
         self.assertEqual(sum(e["reused_existing"] for e,d in self.loaded),17)
-        self.assertEqual(sum(len(d["frames"]) for e,d in self.loaded),1104)
+        self.assertEqual(sum(len(d["frames"]) for e,d in self.loaded),1127)
+
+    def test_velux_keyed_rollcall_is_five_crc_preserved_receive_only_replies(self):
+        _, doc = self.by_id["velux_window_discovery_keyed_rollcall_flipper_cc1101"]
+        frames = doc["frames"]
+        self.assertEqual(len(frames), 5)
+        self.assertEqual({frame["freq"] for frame in frames}, {868250000, 868950000})
+        self.assertEqual(len({bytes.fromhex(frame["hex"])[5:8] for frame in frames}), 5)
+        for frame in frames:
+            self.assertEqual((frame["dir"], frame["crc"]), ("rx", "present"))
+            raw = bytes.fromhex(frame["hex"])
+            self.assertEqual(raw[2:5], bytes.fromhex("C0 EE 11"))
+            self.assertEqual(raw[8:11], bytes.fromhex("2B 01 01"))
+            self.assertEqual(raw[11:14], raw[5:8])
+            self.assertEqual(raw[14], 1)
 
     def test_missing_inventory_entry_is_not_silent(self):
         manifest = copy.deepcopy(self.manifest)

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "corpus_commit": "c82d38f47901b71c1c63413e638241dbe1aa2d06",
-  "original_yaml_count": 177,
+  "original_yaml_count": 181,
   "description": "Structural request-context audit; offsets alone do not establish RF layout or live authentication. Omitted requests remain omitted.",
   "context_counts": {
     "unknown_request_context": 53,

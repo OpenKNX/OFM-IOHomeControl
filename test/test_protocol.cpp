@@ -23069,7 +23069,7 @@ static bool originalCaptureDecode(const char *id,unsigned index,IoHomeFrame &fra
 
 TEST(golden_rf_corpus_original_laberning_headers_crc_and_flags)
 {
-    ASSERT_EQ(sizeof(LaberningOriginal::captures)/sizeof(LaberningOriginal::captures[0]),177U);
+    ASSERT_EQ(sizeof(LaberningOriginal::captures)/sizeof(LaberningOriginal::captures[0]),181U);
     for(const auto &f:LaberningOriginal::frames) {
         IoHomeFrame frame;
         if(!frame.deserializeRawWithOptionalCrc(f.bytes,f.length)) {
