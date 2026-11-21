@@ -467,7 +467,10 @@ RadioError RadioSX1276::setFrequency(uint32_t iFreqHz)
         return RadioError::NotInitialized;
 
     if (mState==RadioState::Transmitting) return RadioError::Busy;
-    const bool restart=iFreqHz!=mCurrentFreq && (readRegister(REG_OPMODE)&0x07)==RF_OPMODE_RX;
+    const bool changed = iFreqHz != mCurrentFreq;
+    const bool restart = changed && (readRegister(REG_OPMODE) & 0x07) == RF_OPMODE_RX;
+    if (changed)
+        mSyncRssiValid = false;
     // Frf = Fstep * FrfReg, Fstep = FXOSC / 2^19 = 32000000 / 524288 ≈ 61.035 Hz
     uint32_t lFrf = (uint32_t)((double)iFreqHz / 61.03515625);
     writeRegister(REG_FRFMSB, (lFrf >> 16) & 0xFF);
@@ -637,6 +640,20 @@ bool RadioSX1276::isPacketAvailable()
     const bool lDio0Fired = mDio0Fired;
     const bool lPayloadReady = (lIrqStatus & RF_IRQFLAGS2_PAYLOADREADY) != 0;
 
+    // RegRssiValue is live. Capture it only while the synchronized frame is
+    // still on air, and discard any latch from a reception the chip dropped.
+    if (!lPayloadReady && !lDio0Fired)
+    {
+        const bool sync = lIrqStatus & (uint16_t(RF_IRQFLAGS1_SYNCADDRESSMATCH) << 8);
+        if (!sync || (lIrqStatus & RF_IRQFLAGS2_FIFOOVERRUN))
+            mSyncRssiValid = false;
+        else if (!mSyncRssiValid)
+        {
+            mSyncRssiRaw = readRegister(REG_RSSIVALUE);
+            mSyncRssiValid = true;
+        }
+    }
+
     // The working reference polls PayloadReady in addition to DIO state.
     // This keeps RX reliable if the ESP32 ISR is missed, DIO0 was already
     // high before polling, or DIO0 wiring/mapping is marginal.
@@ -707,8 +724,9 @@ uint8_t RadioSX1276::readPacket(uint8_t *oBuffer, uint8_t iMaxLen)
     e.afcRaw = static_cast<int16_t>((readRegister(REG_AFCMSB) << 8) | readRegister(REG_AFCLSB));
     e.feiRaw = static_cast<int16_t>((readRegister(REG_FEIMSB) << 8) | readRegister(REG_FEILSB));
     e.frequencyErrorRegistersPresent = true; // register snapshot, not a calibrated measurement
-    // Record RSSI at packet-read time for diagnostics.
-    mLastRssi = -(readRegister(REG_RSSIVALUE) / 2);
+    // A fast packet can finish before the first sync poll.
+    const uint8_t rssiRaw = mSyncRssiValid ? mSyncRssiRaw : readRegister(REG_RSSIVALUE);
+    mLastRssi = -(rssiRaw / 2);
 
     if ((lIrqStatus & RF_IRQFLAGS2_PAYLOADREADY) != 0 &&
         (lIrqStatus & RF_IRQFLAGS2_CRCOK) == 0)
@@ -1091,6 +1109,7 @@ uint16_t RadioSX1276::synthesizeDeviceErrors(uint16_t iIrqStatus) const
 
 void RadioSX1276::setMode(uint8_t iMode)
 {
+    mSyncRssiValid = false;
     uint8_t lOpMode = readRegister(REG_OPMODE);
     mLastOpStatusBefore = lOpMode;
 

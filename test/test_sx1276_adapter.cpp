@@ -41,6 +41,29 @@ int main(){
  b.registers[REG_VERSION]=0;assert(!radio.superviseIdleReceive(15000));assert(!radio.superviseIdleReceive(20000)&&radio.recoveryExhausted());assert(!radio.superviseIdleReceive(25000)&&radio.recoveryAttempts()==3);
  Bus edges;edges.registers[REG_VERSION]=0x12;RadioSX1276 captured;captured.setNativeTransport(&edges,Bus::read,Bus::write);captured.init(1,2,3,4,5,true);assert(edges.registers[REG_DIOMAPPING1]==0x3D);captured.startReceive();captured.nativeReceiveEdge(false,0xFFFFFFF0);captured.nativeReceiveEdge(true,10);edges.rx={1};edges.registers[REG_IRQFLAGS2]=RF_IRQFLAGS2_PAYLOADREADY|RF_IRQFLAGS2_CRCOK;assert(captured.readPacket(out,8)==1);assert(captured.lastReceiveEvidence().preambleTimestampValid&&captured.lastReceiveEvidence().syncTimestampValid&&captured.lastReceiveEvidence().preambleTimestampUs==0xFFFFFFF0);
  edges.rx={2};assert(captured.readPacket(out,8)==1&&!captured.lastReceiveEvidence().syncTimestampValid);
+ // Sync-level and live RSSI are independent. A retune, dropped sync,
+ // or RX restart must discard the old level before a fast next packet.
+ auto sampleSync = [&] {
+  edges.registers[REG_IRQFLAGS1]=RF_IRQFLAGS1_SYNCADDRESSMATCH;
+  edges.registers[REG_IRQFLAGS2]=0;
+  edges.registers[REG_RSSIVALUE]=84;
+  assert(!captured.isPacketAvailable());
+ };
+ auto finishPacket = [&](int expected) {
+  edges.registers[REG_RSSIVALUE]=168;
+  edges.registers[REG_IRQFLAGS2]=RF_IRQFLAGS2_PAYLOADREADY|RF_IRQFLAGS2_CRCOK;
+  edges.rx={1};
+  int16_t live=0;
+  assert(captured.currentRssi(live)&&live==-84);
+  assert(captured.isPacketAvailable()&&captured.readPacket(out,8)==1);
+  assert(captured.lastReceiveEvidence().rssiDbm==expected);
+ };
+ sampleSync();finishPacket(-42);
+ finishPacket(-84);
+ sampleSync();assert(captured.setFrequency(IOHC_FREQ_1)==RadioError::None);finishPacket(-84);
+ sampleSync();captured.startReceive();finishPacket(-84);
+ sampleSync();edges.registers[REG_IRQFLAGS1]=0;
+ assert(!captured.isPacketAvailable());finishPacket(-84);
  Bus missing;RadioSX1276 absent;absent.setNativeTransport(&missing,Bus::read,Bus::write);absent.init(1,2,3);assert(!absent.isInitialized());
  // Synthetic adapter envelope for the Nina public protocol bytes. SX1276
  // hardware CRCOK is simulated here; actual RF CRC is tested by SX1262 PHY.
