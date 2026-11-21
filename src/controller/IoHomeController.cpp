@@ -8131,9 +8131,10 @@ void IoHomeController::loop()
         mRxRawLen = lLen;
         mLastRxReadMs=millis();
         bool lParsed = (lLen > 0 && mRxFrame.deserialize(mRxBuffer, lLen));
-        const bool oneWayActivity=lParsed&&IoHomeOneWayInbox::accepts(mRxFrame);
+        const bool oneWayFrame = lParsed && (mRxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W);
+        const bool oneWayActivity = oneWayFrame && IoHomeOneWayInbox::accepts(mRxFrame);
         // An unrelated remote copy must not revoke a pending 3D/72 reply grant.
-        if(!oneWayActivity) {
+        if(!oneWayFrame) {
             invalidateImmediateReply();
             if(mInboundActive&&mState!=ControllerState::AuthWaitResponse) {
                 clearInboundStatus("new_rx");mState=ControllerState::Idle;
@@ -8227,13 +8228,17 @@ void IoHomeController::loop()
                  mLastResponseFreqIdx != (pushWait ? mPairPushFrequency : mPairPullFrequency) ||
                  (!pullRetrySend&&static_cast<uint32_t>(millis()-mStateTimer)>pairWindow) ||
                  (pullWait&&uint32_t(millis()-mPairingStartTime)>IOHC_PAIR_TIMEOUT_MS));
+            const bool newRemoteSequence = oneWayFrame && mOneWayInbox.observe(mRxFrame, mLastRxReadMs);
             if(oneWayActivity) {
-                if(mOneWayInbox.observe(mRxFrame,mLastRxReadMs)) {
+                if(newRemoteSequence) {
                     if(mCurrentCmd.active||mInboundActive||mState!=ControllerState::Idle)
                         mOneWayInbox.push({mRxFrame,mLastRxReadMs,mRadio.lastRssi(),mCurrentFreqIdx});
                     else dispatchRxFrame();
                 } else settleRemoteActivity(mRxFrame.getSrcNodeId()); // duplicate still extends the quiet period
                 if(mRadio.state()!=RadioState::Transmitting)startReceive();
+            }
+            else if (oneWayFrame && (mCurrentCmd.active || mInboundActive)) {
+                // Unrelated one-way protocol traffic must not advance a 2W exchange.
             }
             else if (invalidKeyContext)
             {

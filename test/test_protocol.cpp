@@ -25288,3 +25288,50 @@ TEST(controller_existing_somfy_enrollment_requires_explicit_confirmation)
     ASSERT_TRUE(!c.startPairing1W(0, 0x654321, Pairing1WMode::AddOnly));
     ASSERT_TRUE(c.startPairing1W(0, 0x654321, Pairing1WMode::AddOnly, true));
 }
+
+TEST(protocol_original_smoove_sdr_keeps_distinct_commands)
+{
+    struct Trace { const char *id; unsigned packets, commands, executeSequences; };
+    const Trace traces[] = {
+        {"somfy_smoove_oneway_short_press_on_air", 10, 5, 2},
+        {"somfy_smoove_oneway_held_press_on_air", 30, 14, 2},
+        {"somfy_smoove_enrollment_prog_press_on_air", 9, 4, 0}
+    };
+    for (const auto &trace : traces) {
+        IoHomeOneWayInbox inbox;
+        for (unsigned i = 0; i < trace.packets; ++i) {
+            const auto *entry = originalCaptureFrame(trace.id, i);
+            ASSERT_TRUE(entry && entry->frequency == 868950000 && !entry->tx);
+            IoHomeFrame frame;
+            ASSERT_TRUE(originalCaptureDecode(trace.id, i, frame));
+            inbox.observe(frame, entry->timeMs + UINT32_MAX - 50);
+        }
+        ASSERT_EQ(inbox.physical, trace.packets);
+        ASSERT_EQ(inbox.commands, trace.commands);
+        ASSERT_EQ(inbox.logical, trace.executeSequences);
+        ASSERT_EQ(inbox.duplicates, inbox.physical - inbox.commands);
+    }
+}
+
+TEST(protocol_remote_inbox_bounds_malformed_frames_and_expires_old_sequences)
+{
+    IoHomeOneWayInbox inbox;
+    IoHomeFrame frame;
+    frame.init(); frame.set1WMode(); frame.hasHmac = true;
+    frame.commandId = IoHomeCommand::Execute;
+    frame.setSrcNode(0x123456); frame.setDestNode(0x3F);
+    for (const uint8_t size : {0, 1, 7, 24, 255}) {
+        frame.dataLen = size;
+        ASSERT_TRUE(!inbox.observe(frame, 1));
+    }
+    ASSERT_EQ(inbox.physical, 0U);
+    frame.dataLen = 8;
+    ASSERT_TRUE(inbox.observe(frame, UINT32_MAX - 10));
+    frame.setDestNode(0x13F);
+    ASSERT_TRUE(!inbox.observe(frame, 1));
+    ASSERT_EQ(inbox.commands, 2U);
+    frame.setSrcNode(0x123457);
+    ASSERT_TRUE(inbox.observe(frame, 26));
+    ASSERT_TRUE(inbox.observe(frame, 2200));
+    ASSERT_EQ(inbox.logical, 3U);
+}
