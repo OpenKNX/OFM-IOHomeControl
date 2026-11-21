@@ -24932,3 +24932,49 @@ TEST(controller_mixed_adelis_name_gates_authenticated_read_only_0153)
         ASSERT_TRUE(!ch.testHasPositionFeedback());
     }
 }
+
+
+TEST(controller_tahual_raw_counter_is_model_gated_and_keeps_decreases)
+{
+    using namespace IoHomeAtlanticRead;
+    IoHomeFrame reply;
+    ASSERT_TRUE(originalCaptureDecode("sauter_tahual_probe_energy_register", 1, reply));
+    Sample sample;
+    ASSERT_TRUE(IoHomeAtlanticRead::reply(0x0116, reply.data, reply.dataLen, sample));
+    ASSERT_EQ(decode(Model::Tahual, sample).scaled, 3422);
+    ASSERT_TRUE(!decode(Model::Raw, sample).known);
+    const uint8_t preRestart[] = {0x0C, 0x60, 0x01, 0x16, 0x0C, 0xBE};
+    const uint8_t postRestart[] = {0x0C, 0x60, 0x01, 0x16, 0x0C, 0xB5};
+    ASSERT_TRUE(IoHomeAtlanticRead::reply(0x0116, preRestart, sizeof(preRestart), sample));
+    ASSERT_EQ(decode(Model::Tahual, sample).scaled, 3262);
+    ASSERT_TRUE(IoHomeAtlanticRead::reply(0x0116, postRestart, sizeof(postRestart), sample));
+    ASSERT_EQ(decode(Model::Tahual, sample).scaled, 3253);
+
+    for (bool match : {false, true})
+    {
+        IoHomeController c;
+        IoHomecontrol m;
+        IoHomecontrolChannel ch;
+        initTypedAtlantic(c, m, ch, false);
+        ASSERT_TRUE(!c.startAtlanticRegisterRead(&ch, 1, 0x15, 1, Model::Tahual));
+        ASSERT_TRUE(c.startAtlanticRegisterRead(&ch, 1, 0x16, 1, Model::Tahual));
+        IoHomeFrame request;
+        ASSERT_TRUE(transmitQueuedControllerFrame(c, request));
+        ASSERT_MEM_EQ(request.data, "\x0C\x60\x01\x19", 4);
+        uint8_t name[] = {0x0C, 0x60, 1, 0x19, 'T', 'A', 'H', 'U', 'A', 'L', ' '};
+        if (!match) name[9] = 'X';
+        ASSERT_TRUE(completeAtlanticStep(c, name, sizeof(name)));
+        ioHomeTestAdvanceMillis(1001);
+        c.loop();
+        if (!match)
+        {
+            ASSERT_TRUE(!c.atlanticRegisterRead().active);
+            ASSERT_EQ(c.atlanticRegisterRead().samples[1].result, Result::Rejected);
+            continue;
+        }
+        ASSERT_TRUE(transmitQueuedControllerFrame(c, request));
+        ASSERT_MEM_EQ(request.data, "\x0C\x60\x01\x16", 4);
+        ASSERT_TRUE(completeAtlanticStep(c, postRestart, sizeof(postRestart)));
+        ASSERT_EQ(decode(Model::Tahual, c.atlanticRegisterRead().samples[1]).scaled, 3253);
+    }
+}

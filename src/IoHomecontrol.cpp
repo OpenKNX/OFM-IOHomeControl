@@ -4721,10 +4721,17 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         const int fields=sscanf(args.c_str(),"read %u %15s %15s %u %15s %c",&channel,familyText,indexText,&count,modelText,&extra);
         const bool valid=(fields==4||fields==5)&&channel>=1&&channel<=mNumChannels&&count>=1&&count<=16&&
             parseHex24(familyText,family)&&family<=1&&parseHex24(indexText,index)&&index<=255&&
-            (fields==4||!std::strcmp(modelText,"calypso")||!std::strcmp(modelText,"heater_with_light")||!std::strcmp(modelText,"adelis_mixed"));
-        logInfoP("Atlantic register read=%s; CHANNEL HEX_FAMILY HEX_INDEX COUNT [calypso|heater_with_light|adelis_mixed]; candidate diagnostics only, no writes",
-            valid&&mController.startAtlanticRegisterRead(mChannels[channel-1],family,index,count,
-                fields==5?(!std::strcmp(modelText,"adelis_mixed")?IoHomeAtlanticRead::Model::AdelisMixed:!std::strcmp(modelText,"heater_with_light")?IoHomeAtlanticRead::Model::HeaterWithLight:IoHomeAtlanticRead::Model::Calypso):IoHomeAtlanticRead::Model::Raw)?"started":"blocked");return true;
+            (fields==4||!std::strcmp(modelText,"calypso")||!std::strcmp(modelText,"heater_with_light")||!std::strcmp(modelText,"adelis_mixed")||!std::strcmp(modelText,"tahual"));
+        using Model = IoHomeAtlanticRead::Model;
+        Model model = Model::Raw;
+        if (fields == 5) {
+            if (!std::strcmp(modelText, "adelis_mixed")) model = Model::AdelisMixed;
+            else if (!std::strcmp(modelText, "heater_with_light")) model = Model::HeaterWithLight;
+            else if (!std::strcmp(modelText, "tahual")) model = Model::Tahual;
+            else if (!std::strcmp(modelText, "calypso")) model = Model::Calypso;
+        }
+        logInfoP("Atlantic register read=%s; CHANNEL HEX_FAMILY HEX_INDEX COUNT [calypso|heater_with_light|adelis_mixed|tahual]; candidate diagnostics only, no writes",
+            valid&&mController.startAtlanticRegisterRead(mChannels[channel-1],family,index,count,model)?"started":"blocked");return true;
     }
     if(iCmd.rfind("iohc heating ",0)==0){
         const auto args=trimSpaces(iCmd.substr(13));

@@ -2385,6 +2385,8 @@ bool IoHomeController::startAtlanticRegisterRead(IoHomecontrolChannel *channel,u
     if(model==IoHomeAtlanticRead::Model::AdelisClassic&&(!qualifiedHeatingName(channel,IoHomeAdelis::HeatingModel::Adelis)||family!=1))return false;
     if(model==IoHomeAtlanticRead::Model::AdelisMixed&&
        (family!=1||first!=0x53||count!=1||!IoHomeAdelis::identity(id,channel->getNodeId())))return false;
+    if (model == IoHomeAtlanticRead::Model::Tahual && (family != 1 || first != 0x16 || count != 1))
+        return false;
     if(model==IoHomeAtlanticRead::Model::Calypso&&family!=0)return false;
     if(model==IoHomeAtlanticRead::Model::HeaterWithLight&&family!=1)return false;
     std::unique_ptr<IoHomeAtlanticRead::State> state(new(std::nothrow) IoHomeAtlanticRead::State());
@@ -2398,6 +2400,10 @@ bool IoHomeController::startAtlanticRegisterRead(IoHomecontrolChannel *channel,u
     for(uint8_t i=0;i<count;++i)mRegisterRead->samples[i].reg=uint16_t(family)<<8|(first+i);
     if(model==IoHomeAtlanticRead::Model::AdelisMixed) {
         mRegisterRead->count=2;mRegisterRead->samples[0].reg=0x119;mRegisterRead->samples[1].reg=0x153;
+    } else if (model == IoHomeAtlanticRead::Model::Tahual) {
+        mRegisterRead->count = 2;
+        mRegisterRead->samples[0].reg = 0x0119;
+        mRegisterRead->samples[1].reg = 0x0116;
     }
     mRegisterReadPeer=channel->getNodeId();mRegisterReadRevision=channel->productContextRevision();mRegisterReadGateway=mOwnNodeId;
     std::memcpy(mRegisterReadKey,channel->getEncryptionKey(),16);std::memcpy(mRegisterReadSystemKey,mSystemKey,16);
@@ -2438,6 +2444,13 @@ void IoHomeController::serviceAtlanticRegisterRead()
     if(job.model==IoHomeAtlanticRead::Model::AdelisMixed&&job.completed&&
        (job.action!=A::Read||!IoHomeAdelis::modelName(IoHomeAdelis::HeatingModel::AdelisMixed,job.samples[0].data,job.samples[0].length))) {
         sample.result=R::Rejected;job.active=false;return;
+    }
+    if (job.model == IoHomeAtlanticRead::Model::Tahual && job.completed &&
+        !IoHomeAtlanticRead::exactModelName(job.samples[0], 0x0119, "TAHUAL"))
+    {
+        sample.result = R::Rejected;
+        job.active = false;
+        return;
     }
     if(job.completed==job.writeIndex){
         if(job.action==A::AdelisWrite){

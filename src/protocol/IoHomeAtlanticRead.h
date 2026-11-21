@@ -6,7 +6,7 @@
 
 // The pure build() codec remains read-only. Typed action stages are admitted only by the bound controller job.
 namespace IoHomeAtlanticRead {
-enum class Model:uint8_t {Raw,Calypso,AdelisClassic,HeaterWithLight,AdelisMixed};
+enum class Model:uint8_t {Raw,Calypso,AdelisClassic,HeaterWithLight,AdelisMixed,Tahual};
 enum class Result:uint8_t {Idle,Queued,Value,Empty,Unconfirmed,NoReply,Rejected,Cancelled,IdentityChanged,Failed};
 struct Sample {uint16_t reg=0;Result result=Result::Idle;uint8_t length=0,data[19]{};uint32_t receivedMs=0;};
 enum class Action:uint8_t {Read,AdelisWrite,DhwMode,DhwTarget};
@@ -29,6 +29,15 @@ inline bool isAdelisClassicName(const Sample &s) {
     for(unsigned i=sizeof(model)-1;i<s.length;++i)if(s.data[i])return false;
     return true;
 }
+inline bool exactModelName(const Sample &s, uint16_t reg, const char *expected) {
+    const size_t length = std::strlen(expected);
+    if (s.reg != reg || s.result != Result::Value || s.length < length ||
+        std::memcmp(s.data, expected, length) != 0)
+        return false;
+    for (size_t i = length; i < s.length; ++i)
+        if (s.data[i] != 0 && s.data[i] != ' ') return false;
+    return true;
+}
 struct Value {bool known=false,candidate=false;int64_t scaled=0;const char *unit="raw";};
 inline Value decode(Model model,const Sample &s) {
     if(s.result!=Result::Value)return {};
@@ -49,6 +58,8 @@ inline Value decode(Model model,const Sample &s) {
             if(raw<=10000)return {true,true,raw,"brightness_raw_candidate"};
         }
     }
+    if (model == Model::Tahual && s.reg == 0x0116 && s.length == 2)
+        return {true, false, uint16_t(s.data[0]) * 256 + s.data[1], "kWh_raw_counter"};
     if(model==Model::AdelisMixed&&s.reg==0x153&&s.length==1&&s.data[0]<=1)
         return {true,false,s.data[0],"central_heating_selected"};
     if(model==Model::AdelisClassic){const auto value=IoHomeAdelis::decode(s.reg,s.data,s.length);return {value.valid,value.candidate,value.scaled,value.unit};}
