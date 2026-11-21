@@ -25524,3 +25524,30 @@ TEST(controller_opt_in_somfy_burst_keeps_sequence_body_frequency_and_duty)
     ASSERT_EQ(ch.getSequence1W(), 1);
     ASSERT_EQ(c.testTxAirtimeAccum(0), total);
 }
+
+TEST(controller_one_way_rx_during_busy_auth_preparation_keeps_original_challenge)
+{
+    const uint8_t key[16] = {1}, nonce[6] = {1, 2, 3, 4, 5, 6};
+    IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c, m, ch, 0x123456, 0x654321, key);
+    ASSERT_TRUE(c.sendBackgroundCommand(0x654321, key, IoHomeCommand::Private, 3));
+    IoHomeFrame request, challenge, answer;
+    ASSERT_TRUE(transmitQueuedControllerFrame(c, request));
+    buildPairChallengeRequestFrame(challenge, 0x123456, 0x654321, nonce);
+    c.radio().testSetNextPreambleError(RadioError::Busy);
+    ASSERT_TRUE(queueControllerResponse(c, challenge));
+    ASSERT_EQ(c.state(), ControllerState::ProcessResponse);
+    ASSERT_EQ(c.radio().testTransmitCount(), 1U);
+    IoHomeFrame remote;
+    buildPassiveExecuteFrame(remote, 0x333333, 0x3F);
+    remote.set1WMode(); remote.hasHmac = true; remote.dataLen = 8;
+    ASSERT_TRUE(queueControllerPassiveFrame(c, remote));
+    ASSERT_TRUE(lastTransmittedFrameForTest(c, answer));
+    const uint8_t transcript[] = {uint8_t(request.commandId), request.data[0], request.data[1], request.data[2]};
+    uint8_t expected[6]{};
+    ASSERT_TRUE(IoHomeCrypto::createHmac2W(transcript, sizeof(transcript), nonce, key, expected));
+    ASSERT_EQ(answer.commandId, IoHomeCommand::ChallengeResponse);
+    ASSERT_MEM_EQ(answer.data, expected, sizeof(expected));
+    ASSERT_EQ(c.radio().testTransmitCount(), 2U);
+    ASSERT_EQ(c.oneWayReceiveStats().physical, 1U);
+}

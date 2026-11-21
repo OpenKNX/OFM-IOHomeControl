@@ -8133,6 +8133,21 @@ void IoHomeController::loop()
     {
         const auto receivedRadioState=mRadio.state();
         uint8_t lLen = mRadio.readPacket(mRxBuffer, sizeof(mRxBuffer));
+        if (lLen && (mRxBuffer[0] & IOHC_CTRL0_MODE_1W) &&
+            mState == ControllerState::ProcessResponse && mReplyRole == IoHomeReplyRole::OutboundAnswer) {
+            // Retry preparation with the original challenge, its timestamps
+            // and grant. A remote copy cannot replace that pending response.
+            IoHomeFrame remote;
+            if (remote.deserialize(mRxBuffer, lLen)) {
+                const auto received = static_cast<uint32_t>(millis());
+                if (mOneWayInbox.observe(remote, received))
+                    mOneWayInbox.push({remote, received, mRadio.lastRssi(), mCurrentFreqIdx});
+                else if (IoHomeOneWayInbox::accepts(remote))
+                    settleRemoteActivity(remote.getSrcNodeId());
+                processResponse();
+                return;
+            }
+        }
         mLastRxReadUs=micros();
         mRxRawLen = lLen;
         mLastRxReadMs=millis();
