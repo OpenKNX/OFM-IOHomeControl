@@ -2837,6 +2837,41 @@ uint8_t IoHomecontrolChannel::batteryDiagnosticMode()const {
     if(!knx.configured())return ioHomeStandaloneChannel(_channelIndex)?2:0;
     return ParamBAT_cMode<=2?ParamBAT_cMode:0;
 }
+void IoHomecontrolChannel::publishDiagnosticStatus(IoHomeDiagnosticStatus::Model model,
+                                                  IoHomeDiagnosticStatus::Signal signal, int32_t value)
+{
+#ifdef ParamSNS_cModel
+    if (!knx.configured() || !mPaired || mIs1W || !ParamIOHC_cActive || ParamIOHC_cSuspend ||
+        ParamSNS_cModel != uint8_t(model))
+        return;
+    using Signal = IoHomeDiagnosticStatus::Signal;
+    switch (signal) {
+    case Signal::EnergyWh:
+        knx.getGroupObject(SNS_KoCalcNumber(SNS_KocEnergyWh)).value(value, Dpt(13, 10)); break;
+    case Signal::HotWaterWh:
+        knx.getGroupObject(SNS_KoCalcNumber(SNS_KocHotWaterWh)).value(value, Dpt(13, 10)); break;
+    case Signal::OutdoorTenths:
+        knx.getGroupObject(SNS_KoCalcNumber(SNS_KocOutdoor)).value(value / 10.f, Dpt(9, 1)); break;
+    case Signal::PowerW:
+        knx.getGroupObject(SNS_KoCalcNumber(SNS_KocPower)).value(value, Dpt(14, 56)); break;
+    case Signal::Occupancy:
+        knx.getGroupObject(SNS_KoCalcNumber(SNS_KocOccupancy)).value(bool(value), Dpt(1, 18)); break;
+    case Signal::OccupancyDetection:
+        knx.getGroupObject(SNS_KoCalcNumber(SNS_KocDetection)).value(bool(value), Dpt(1, 3)); break;
+    case Signal::Boost:
+        knx.getGroupObject(SNS_KoCalcNumber(SNS_KocBoost)).value(bool(value), Dpt(1, 1)); break;
+    case Signal::Absence:
+        knx.getGroupObject(SNS_KoCalcNumber(SNS_KocAbsence)).value(bool(value), Dpt(1, 1)); break;
+    case Signal::TargetTenths:
+        knx.getGroupObject(SNS_KoCalcNumber(SNS_KocTarget)).value(value / 10.f, Dpt(9, 1)); break;
+    case Signal::CentralHeating:
+        knx.getGroupObject(SNS_KoCalcNumber(SNS_KocCentralHeating)).value(bool(value), Dpt(1, 1)); break;
+    }
+#else
+    (void)model; (void)signal; (void)value;
+#endif
+}
+
 uint8_t IoHomecontrolChannel::batteryMonitoring()const {
     if(!mPaired||mIs1W)return 0;
     if(!knx.configured())return batteryDiagnosticMode();

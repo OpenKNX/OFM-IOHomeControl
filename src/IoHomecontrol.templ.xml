@@ -17,6 +17,7 @@
             <op:param name="IOHC_TT" value="%TT%"/>
           </op:part>
           <op:part name="IOHCHeating" href="IoHomeHeating.dynamic.part.xml" instances="1"><op:param name="PRODUCT_CC" value="%CC%"/></op:part>
+          <op:part name="IOHCSensors" href="IoHomeSensors.dynamic.part.xml" instances="1"><op:param name="PRODUCT_CC" value="%CC%"/></op:part>
           <op:part name="IOHCBattery" href="IoHomeBattery.dynamic.part.xml" instances="1"><op:param name="PRODUCT_CC" value="%CC%"/></op:part>
           <op:part name="IOHCLimitation" href="IoHomeLimitation.dynamic.part.xml" instances="1"><op:param name="PRODUCT_CC" value="%CC%"/><op:param name="IOHC_TT" value="%TT%"/></op:part>
           <op:part name="IOHCMovement" href="IoHomeMovement.dynamic.part.xml" instances="1"><op:param name="PRODUCT_CC" value="%CC%"/></op:part>
@@ -475,6 +476,7 @@
                         <choose ParamRefId="%AID%_UP-%TT%%CC%009_R-%TT%%CC%00901"><when test="0">
                           <op:usePart name="IOHCProfileObjects" xpath="//Dynamic/*"/>
                           <op:usePart name="IOHCLimitation" xpath="//Dynamic/*"/>
+                          <op:usePart name="IOHCSensors" xpath="//Dynamic/*"/>
                           <op:usePart name="IOHCBattery" xpath="//Dynamic/*"/>
                           <op:usePart name="IOHCHeating" xpath="//Dynamic/*"/>
                         </when></choose>

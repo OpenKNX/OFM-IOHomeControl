@@ -8,6 +8,7 @@
 #include "protocol/IoHomeOptimisticPosition.h"
 #include "protocol/IoHomeLimitation.h"
 #include "protocol/IoHomeBattery.h"
+#include "protocol/IoHomeDiagnosticStatus.h"
 #include "protocol/IoHomeDeviceEvent.h"
 #include "protocol/IoHomeLocalSensorEvent.h"
 #include "protocol/IoHomeHeatingRegisters.h"
@@ -137,6 +138,8 @@ public:
   IoHomeGenericCapabilities getProfileCapabilities() const;
   bool allowsActuatorControls() const;
   void onBatteryLevel(uint8_t iPercent);
+  void publishDiagnosticStatus(IoHomeDiagnosticStatus::Model model,
+                               IoHomeDiagnosticStatus::Signal signal, int32_t value);
   uint8_t batteryMonitoring() const;
   uint8_t batteryDiagnosticMode() const;
   void invalidateBattery();

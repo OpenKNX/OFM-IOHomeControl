@@ -2517,6 +2517,41 @@ void IoHomeController::finishAtlanticRegisterRead(const IoHomeQueueEntry &e,IoHo
     sample.receivedMs=mLastRxReadMs;
     if(mRegisterRead->model==IoHomeAtlanticRead::Model::AdelisMixed&&sample.reg==0x153&&
        !(sample.length==1&&sample.data[0]<=1)) {sample.result=R::Rejected;mRegisterRead->active=false;return;}
+#ifndef TEST_NATIVE
+    auto *channel = channelForQueueEntry(e);
+    const auto reading = IoHomeAtlanticRead::decode(mRegisterRead->model, sample);
+    if (channel && reading.known && mRegisterRead->action == IoHomeAtlanticRead::Action::Read) {
+        using Model = IoHomeDiagnosticStatus::Model;
+        using Signal = IoHomeDiagnosticStatus::Signal;
+        switch (mRegisterRead->model) {
+        case IoHomeAtlanticRead::Model::Tahual:
+            channel->publishDiagnosticStatus(Model::Tahual, Signal::EnergyWh, reading.scaled * 1000);
+            break;
+        case IoHomeAtlanticRead::Model::Guelma:
+            switch (sample.reg) {
+            case 0x0004:
+                if (reading.scaled <= INT32_MAX)
+                    channel->publishDiagnosticStatus(Model::Guelma, Signal::EnergyWh, reading.scaled);
+                break;
+            case 0x0032: channel->publishDiagnosticStatus(Model::Guelma, Signal::PowerW, reading.scaled); break;
+            case 0x0049: channel->publishDiagnosticStatus(Model::Guelma, Signal::TargetTenths, reading.scaled); break;
+            case 0x0052: channel->publishDiagnosticStatus(Model::Guelma, Signal::Boost, reading.scaled); break;
+            case 0x0053: channel->publishDiagnosticStatus(Model::Guelma, Signal::Absence, reading.scaled); break;
+            }
+            break;
+        case IoHomeAtlanticRead::Model::HeaterWithLight:
+            if (sample.reg == 0x0101)
+                channel->publishDiagnosticStatus(Model::Hekla, Signal::OccupancyDetection, reading.scaled);
+            if (sample.reg == 0x0110)
+                channel->publishDiagnosticStatus(Model::Hekla, Signal::Occupancy, reading.scaled);
+            break;
+        case IoHomeAtlanticRead::Model::AdelisMixed:
+            channel->publishDiagnosticStatus(Model::AdelisMixed, Signal::CentralHeating, reading.scaled);
+            break;
+        default: break;
+        }
+    }
+#endif
     if(sample.reg==0x119)recordHeatingModelName(channelForQueueEntry(e),sample.data,sample.length,sample.receivedMs);
     using A=IoHomeAtlanticRead::Action;auto &job=*mRegisterRead;
     if(job.model==IoHomeAtlanticRead::Model::Calypso&&sample.reg==6&&sample.length==1)job.dhw.observeMode(sample.data[0]);
@@ -9703,6 +9738,19 @@ void IoHomeController::processResponse()
             }
         }
         if(mObjectRead.stage()==IoHomeObjectTransfer::Stage::Ready)mObjectReadReadyMs=millis();
+#ifndef TEST_NATIVE
+        if (alfea && mCurrentCmd.command == IoHomeCommand::Unknown4ARequest) {
+            IoHomeAlfeaRead::Reading reading{};
+            auto *channel = channelForQueueEntry(mCurrentCmd);
+            if (channel && alfeaReading(reading)) {
+                using Signal = IoHomeDiagnosticStatus::Signal;
+                const auto signal = mAlfeaOffset == IoHomeAlfeaRead::HeatingEnergy ? Signal::EnergyWh :
+                    mAlfeaOffset == IoHomeAlfeaRead::HotWaterEnergy ? Signal::HotWaterWh : Signal::OutdoorTenths;
+                channel->publishDiagnosticStatus(IoHomeDiagnosticStatus::Model::Alfea, signal,
+                    reading.unit == IoHomeAlfeaRead::Unit::KWh ? reading.value * 1000 : reading.value);
+            }
+        }
+#endif
     }
     if (auto *counters=activeAttemptCounters()) {
         if (mRxFrame.commandId==IoHomeCommand::ChallengeRequest) ++counters->challengeSeen;
@@ -13255,6 +13303,14 @@ void IoHomeController::dispatchRxFrame()
                 }
                 if (mStatusProbeInterpretation == StatusProbeInterpretation::ExplorerV4) {
                     const auto status = IoHomeDhwCodec::explorerStatus(mRxFrame);
+#ifndef TEST_NATIVE
+                    using Model = IoHomeDiagnosticStatus::Model;
+                    using Signal = IoHomeDiagnosticStatus::Signal;
+                    if (status.targetKnown)
+                        lCh->publishDiagnosticStatus(Model::ExplorerV4, Signal::TargetTenths, status.targetTenths);
+                    if (status.boostKnown)
+                        lCh->publishDiagnosticStatus(Model::ExplorerV4, Signal::Boost, status.boost);
+#endif
                     logInfoP("explorer_v4 layout_valid=%u target_known=%u target_tenths_C=%u boost_known=%u boost=%u",
                              status.valid, status.targetKnown, status.targetTenths, status.boostKnown, status.boost);
                 }

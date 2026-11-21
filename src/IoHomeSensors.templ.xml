@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns="http://knx.org/xml/project/20" xmlns:op="http://github.com/OpenKNX/OpenKNXproducer">
+<ManufacturerData><Manufacturer RefId="M-00FA"><ApplicationPrograms>
+<ApplicationProgram Id="%AID%" ProgramType="ApplicationProgram" MaskVersion="MV-07B0" Name="IOHCSensors" LoadProcedureStyle="MergedProcedure" PeiType="0" DefaultLanguage="de" DynamicTableManagement="false" Linkable="true" MinEtsVersion="4.0" ApplicationNumber="0" ApplicationVersion="0">
+<Static><ParameterTypes>
+<ParameterType Id="%AID%_PT-SNSModel" Name="SNSModel"><TypeRestriction Base="Value" SizeInBit="8">
+<Enumeration Text="Aus" Value="0" Id="%ENID%"/>
+<Enumeration Text="Atlantic Alfea" Value="1" Id="%ENID%"/>
+<Enumeration Text="Sauter Tahual" Value="2" Id="%ENID%"/>
+<Enumeration Text="Sauter Guelma" Value="3" Id="%ENID%"/>
+<Enumeration Text="Sauter Hekla" Value="4" Id="%ENID%"/>
+<Enumeration Text="Atlantic Explorer V4" Value="5" Id="%ENID%"/>
+<Enumeration Text="Atlantic Adelis 2 M" Value="6" Id="%ENID%"/>
+</TypeRestriction></ParameterType>
+</ParameterTypes><Parameters><Union SizeInBit="8"><Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="0"/>
+<Parameter Id="%AID%_UP-%TT%%CC%001" Name="c%C%Model" ParameterType="%AID%_PT-SNSModel" Offset="0" BitOffset="0" Text="Bestätigtes Modell für Diagnosewerte" Value="0"/>
+</Union></Parameters><ParameterRefs><ParameterRef Id="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101" RefId="%AID%_UP-%TT%%CC%001"/></ParameterRefs>
+<ComObjectTable>
+<ComObject Id="%AID%_O-%TT%%CC%000" Name="c%C%EnergyWh" Text="Kanal %C% Energiezähler (Rohwert in Wh)" FunctionText="Energiezähler (Rohwert in Wh)" ObjectSize="4 Bytes" ReadFlag="Disabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-13-10" Number="%K0%"/>
+<ComObject Id="%AID%_O-%TT%%CC%001" Name="c%C%HotWaterWh" Text="Kanal %C% Warmwasserenergie (Wh)" FunctionText="Warmwasserenergie (Wh)" ObjectSize="4 Bytes" ReadFlag="Disabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-13-10" Number="%K1%"/>
+<ComObject Id="%AID%_O-%TT%%CC%002" Name="c%C%Outdoor" Text="Kanal %C% Außentemperatur" FunctionText="Außentemperatur" ObjectSize="2 Bytes" ReadFlag="Disabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-1" Number="%K2%"/>
+<ComObject Id="%AID%_O-%TT%%CC%003" Name="c%C%Power" Text="Kanal %C% Leistung (W)" FunctionText="Leistung (W)" ObjectSize="4 Bytes" ReadFlag="Disabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-14-56" Number="%K3%"/>
+<ComObject Id="%AID%_O-%TT%%CC%004" Name="c%C%Occupancy" Text="Kanal %C% Anwesenheit erkannt" FunctionText="Anwesenheit erkannt" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-18" Number="%K4%"/>
+<ComObject Id="%AID%_O-%TT%%CC%005" Name="c%C%Detection" Text="Kanal %C% Anwesenheitserkennung aktiv" FunctionText="Anwesenheitserkennung aktiv" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-3" Number="%K5%"/>
+<ComObject Id="%AID%_O-%TT%%CC%006" Name="c%C%Boost" Text="Kanal %C% Boost aktiv" FunctionText="Boost aktiv" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K6%"/>
+<ComObject Id="%AID%_O-%TT%%CC%007" Name="c%C%Absence" Text="Kanal %C% Abwesenheit aktiv" FunctionText="Abwesenheit aktiv" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K7%"/>
+<ComObject Id="%AID%_O-%TT%%CC%008" Name="c%C%Target" Text="Kanal %C% Warmwasser-Solltemperatur" FunctionText="Warmwasser-Solltemperatur" ObjectSize="2 Bytes" ReadFlag="Disabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-9-1" Number="%K8%"/>
+<ComObject Id="%AID%_O-%TT%%CC%009" Name="c%C%CentralHeating" Text="Kanal %C% Zentralheizungsbetrieb gewählt" FunctionText="Zentralheizungsbetrieb gewählt" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" Number="%K9%"/>
+</ComObjectTable><ComObjectRefs>
+<ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" RefId="%AID%_O-%TT%%CC%000"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" RefId="%AID%_O-%TT%%CC%001"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%002_R-%TT%%CC%00201" RefId="%AID%_O-%TT%%CC%002"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%003_R-%TT%%CC%00301" RefId="%AID%_O-%TT%%CC%003"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%004_R-%TT%%CC%00401" RefId="%AID%_O-%TT%%CC%004"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%005_R-%TT%%CC%00501" RefId="%AID%_O-%TT%%CC%005"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%006_R-%TT%%CC%00601" RefId="%AID%_O-%TT%%CC%006"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%007_R-%TT%%CC%00701" RefId="%AID%_O-%TT%%CC%007"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%008_R-%TT%%CC%00801" RefId="%AID%_O-%TT%%CC%008"/>
+<ComObjectRef Id="%AID%_O-%TT%%CC%009_R-%TT%%CC%00901" RefId="%AID%_O-%TT%%CC%009"/>
+</ComObjectRefs></Static><Dynamic/></ApplicationProgram></ApplicationPrograms></Manufacturer></ManufacturerData></KNX>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns="http://knx.org/xml/project/20"><Dynamic>
+<ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"/>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"><when test="1 2 3"><ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%000_R-%TT%%PRODUCT_CC%00001"/></when></choose>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"/></when></choose>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"><when test="1"><ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%002_R-%TT%%PRODUCT_CC%00201"/></when></choose>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"><when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00301"/></when></choose>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"><when test="4"><ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%004_R-%TT%%PRODUCT_CC%00401"/></when></choose>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"><when test="4"><ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%005_R-%TT%%PRODUCT_CC%00501"/></when></choose>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"><when test="3 5"><ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%006_R-%TT%%PRODUCT_CC%00601"/></when></choose>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"><when test="3"><ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%007_R-%TT%%PRODUCT_CC%00701"/></when></choose>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"><when test="3 5"><ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%008_R-%TT%%PRODUCT_CC%00801"/></when></choose>
+<choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"><when test="6"><ComObjectRefRef RefId="%AID%_O-%TT%%PRODUCT_CC%009_R-%TT%%PRODUCT_CC%00901"/></when></choose>
+</Dynamic></KNX>
