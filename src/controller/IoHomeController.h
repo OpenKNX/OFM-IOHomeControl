@@ -1529,6 +1529,9 @@ private:
   std::unique_ptr<ObjectReadTiming[]> mObjectReadTiming;
   uint16_t mObjectReadGapMs=0;
   uint32_t mObjectReadReadyMs=0;
+  struct ForeignObjectReadActivity { uint32_t node=0, heardMs=0; };
+  ForeignObjectReadActivity mForeignObjectRead[16]{};
+  void observeForeignObjectTransfer(const IoHomeFrame &frame, const RadioReceiveEvidence &evidence);
   void serviceObjectRead();
   void serviceAtlanticRegisterRead();
   bool decodeAtlanticJobReply(const IoHomeQueueEntry &,IoHomeAtlanticRead::Sample &)const;

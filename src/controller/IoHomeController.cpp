@@ -3081,6 +3081,27 @@ bool IoHomeController::configureObjectReadTiming(IoHomecontrolChannel *channel,u
     auto &timing=mObjectReadTiming[index];timing.node=channel->getNodeId();timing.revision=channel->productContextRevision();
     std::memcpy(timing.key,channel->getEncryptionKey(),16);timing.gapMs=gapMs;timing.budgetMs=budgetMs;return true;
 }
+void IoHomeController::observeForeignObjectTransfer(const IoHomeFrame &frame, const RadioReceiveEvidence &evidence)
+{
+    const uint8_t command = uint8_t(frame.commandId);
+    const uint32_t source = frame.getSrcNodeId(), destination = frame.getDestNodeId();
+    if (command < 0x46 || command > 0x4B || !mModule ||
+        source == mOwnNodeId || destination == mOwnNodeId ||
+        getAddressClass(source) != IoHomeAddressClass::Unicast ||
+        getAddressClass(destination) != IoHomeAddressClass::Unicast ||
+        !evidence.admissible() || !evidence.hardwareCrcChecked || !evidence.hardwareCrcValid)
+        return;
+
+    const uint32_t now = millis();
+    for (const auto node : {source, destination})
+    {
+        auto *channel = channelForNode(node);
+        const uint8_t index = channelIndexFor(channel);
+        if (index < 16 && channel && channel->isPaired() && !channel->is1W())
+            mForeignObjectRead[index] = {node, now};
+    }
+}
+
 bool IoHomeController::requestObjectRead(IoHomecontrolChannel *channel,uint8_t provider,uint16_t key,uint16_t offset,uint16_t span)
 {
     if(!channel||!channel->isPaired()||channel->is1W()||mState!=ControllerState::Idle||!queueEmpty()||
@@ -3091,6 +3112,9 @@ bool IoHomeController::requestObjectRead(IoHomecontrolChannel *channel,uint8_t p
     const bool allowed=(provider==0&&(key<=3||key==0x030A||key==0x8001||key==0x8002||key==0x8005||key==0x8100||key==0x8103||key==0x4300||key==0x4302))||(provider==0x0B&&key==0xC000);
     if(!allowed&&!(channel->batteryMonitoring()==2&&ioHomeBatteryObject(provider,key)&&offset==0))return false;
     const uint8_t index=channelIndexFor(channel);if(index>=16)return false;
+    const auto &foreign = mForeignObjectRead[index];
+    if (foreign.node == channel->getNodeId() && uint32_t(millis() - foreign.heardMs) < 15000U)
+        return false;
     const auto *timing=mObjectReadTiming?&mObjectReadTiming[index]:nullptr;
     const bool configured=timing&&timing->node==channel->getNodeId()&&timing->revision==channel->productContextRevision()&&
         !std::memcmp(timing->key,channel->getEncryptionKey(),16);
@@ -7924,7 +7948,11 @@ void IoHomeController::loop()
         if (lParsed)
         {
             if (!(mRxFrame.ctrlByte0 & IOHC_CTRL0_MODE_1W))
-                observeReceivedIdentity(mRxFrame,receiveEvidence(lLen),receivedRadioState);
+            {
+                const auto evidence = receiveEvidence(lLen);
+                observeReceivedIdentity(mRxFrame, evidence, receivedRadioState);
+                observeForeignObjectTransfer(mRxFrame, evidence);
+            }
             if(mDynamicEventTrace) {
                 const auto atlantic21=ioHomeObserveAtlantic21(mRxFrame.commandId,mRxFrame.data,mRxFrame.dataLen);
                 if(atlantic21.valid)

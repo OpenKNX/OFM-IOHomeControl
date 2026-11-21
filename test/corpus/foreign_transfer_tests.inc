@@ -43,3 +43,32 @@ TEST(protocol_foreign_transfer_headers_do_not_imply_a_complete_exchange)
     // not a claim that the observed single frames form this synthetic session.
     ASSERT_TRUE(state.acceptReadChunk(0xD7C990,1,data,5));ASSERT_EQ(state.transferred(),2);
 }
+
+
+TEST(controller_foreign_object_transfer_defers_only_a_crc_qualified_peer)
+{
+    const uint8_t key[16] = {1};
+    for (bool crcValid : {false, true})
+    {
+        IoHomeController c;
+        IoHomecontrol m;
+        IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c, m, ch, 0x123456, 0x654321, key);
+        ioHomeTestSetMillis(UINT32_MAX - 20);
+        const uint8_t data[] = {8, 0x0C, 0, 0x10, 2, 0, 0x23, 0, 0};
+        IoHomeFrame frame;
+        buildSimpleResponseFrame(frame, 0x654321, 0xAABBCC, IoHomeCommand::Unknown46Request, data, sizeof(data));
+        c.radio().testRxCrcChecked = true;
+        c.radio().testRxCrcValid = crcValid;
+        ASSERT_TRUE(queueControllerResponse(c, frame));
+        ASSERT_EQ(c.requestObjectRead(&ch, 0, 0x8005, 0, 2), !crcValid);
+        if (crcValid)
+        {
+            ASSERT_EQ(c.radio().testTransmitCount(), 0U);
+            ioHomeTestAdvanceMillis(14999);
+            ASSERT_TRUE(!c.requestObjectRead(&ch, 0, 0x8005, 0, 2));
+            ioHomeTestAdvanceMillis(1);
+            ASSERT_TRUE(c.requestObjectRead(&ch, 0, 0x8005, 0, 2));
+        }
+    }
+}
