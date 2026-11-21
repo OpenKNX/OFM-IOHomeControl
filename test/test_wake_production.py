@@ -27,6 +27,7 @@ methods='\n'.join(method(channel,signature) for signature in [
     'bool IoHomecontrolChannel::twoWayLastHeardAgeAt(',
     'void IoHomecontrolChannel::onStatusPollFailed(',
     'void IoHomecontrolChannel::onStatusUpdate(',
+    'void IoHomecontrolChannel::publishDiagnosticStatus(',
     'void IoHomecontrolChannel::clearStatusPollTracking(',
     'void IoHomecontrolChannel::stopTravelEstimation(',
     'bool IoHomecontrolChannel::requestStatus(bool'])
@@ -41,6 +42,7 @@ harness=r'''#include <cassert>
 #include "protocol/IoHomeRemainingTime.h"
 #include "protocol/IoHomePredictedEnd.h"
 #include "protocol/IoHomeDeviceEvent.h"
+#include "protocol/IoHomeDiagnosticStatus.h"
 unsigned now=1000;unsigned millis(){return now;}
 uint16_t pollSec=0;constexpr unsigned kLowPowerBackgroundPollMinMs=60000;
 bool delayCheck(unsigned started,unsigned interval){return uint32_t(millis()-started)>=interval;}
@@ -64,9 +66,26 @@ struct Controller {
   (void)attemptsParam;++submissions;maxAttempts=attempts;lastReason=reason;return true;
  }
 };
-struct Knx {bool enabled=false;bool configured(){return enabled;}} knx;
+struct Dpt {int main, sub; Dpt(int main,int sub):main(main),sub(sub){}};
+struct SensorKo {
+ unsigned publications=0; double last=0; int main=0, sub=0;
+ template<class T> void value(T v,Dpt d){++publications;last=v;main=d.main;sub=d.sub;}
+};
+struct Knx {
+ bool enabled=false;
+ bool configured(){return enabled;}
+ SensorKo sensors[10];
+ SensorKo &getGroupObject(int id){return sensors[id];}
+} knx;
 bool movementKo=false;unsigned movementPublications=0;
-struct Dpt {Dpt(int,int){}};
+bool active=true,suspended=false;
+uint8_t sensorModel=0;
+#define ParamSNS_cModel sensorModel
+#define ParamIOHC_cActive active
+#define ParamIOHC_cSuspend suspended
+#define SNS_KoCalcNumber(n) (n)
+enum { SNS_KocEnergyWh, SNS_KocHotWaterWh, SNS_KocOutdoor, SNS_KocPower, SNS_KocOccupancy,
+       SNS_KocDetection, SNS_KocBoost, SNS_KocAbsence, SNS_KocTarget, SNS_KocCentralHeating };
 constexpr int IOHC_KoCHMovementStatus=0;
 struct Ko {void value(bool value,Dpt){movementKo=value;++movementPublications;}};
 struct IoHomecontrolChannel {
@@ -75,6 +94,7 @@ struct IoHomecontrolChannel {
  bool isBinaryDeviceType(){return false;}
  Ko getKo(int){return {};}
  void onStatusUpdate(bool);
+ void publishDiagnosticStatus(IoHomeDiagnosticStatus::Model, IoHomeDiagnosticStatus::Signal, int32_t);
  void clearStatusPollTracking();
  void stopTravelEstimation(bool);
  float staleEstimate=-1;float estimateCurrentPosition(){return staleEstimate>=0?staleEstimate:mCurrentPosition;}
@@ -125,6 +145,26 @@ struct IoHomecontrolChannel {
 };
 '''
 tests=r'''int main(){
+ {
+  using namespace IoHomeDiagnosticStatus;
+  IoHomecontrolChannel c;
+  auto &out=knx.sensors[SNS_KocOutdoor];
+  const auto publish=[&]{c.publishDiagnosticStatus(Model::Alfea, Signal::OutdoorTenths,-119);};
+  publish(); assert(!out.publications);
+  knx.enabled=true; sensorModel=uint8_t(Model::Alfea);
+  c.mPaired=false; publish(); assert(!out.publications);
+  c.mPaired=true; c.mIs1W=true; publish(); assert(!out.publications);
+  c.mIs1W=false; active=false; publish(); assert(!out.publications);
+  active=true; suspended=true; publish(); assert(!out.publications);
+  suspended=false; sensorModel=uint8_t(Model::Guelma); publish(); assert(!out.publications);
+  sensorModel=uint8_t(Model::Alfea); publish();
+  assert(out.publications==1 && out.last>-11.901 && out.last<-11.899 && out.main==9 && out.sub==1);
+  c.publishDiagnosticStatus(Model::Alfea,Signal::EnergyWh,11463000);
+  auto &energy=knx.sensors[SNS_KocEnergyWh];
+  assert(energy.publications==1 && energy.last==11463000 && energy.main==13 && energy.sub==10);
+  sensorModel=0; publish(); assert(out.publications==1);
+  knx.enabled=false;
+ }
  {
   now=1000;IoHomecontrolChannel c;c.mIsMoving=false;
   assert(c.requestStatus(false,true)&&c.mController.maxAttempts==IOHC_EXCHANGE_MAX_ATTEMPTS);

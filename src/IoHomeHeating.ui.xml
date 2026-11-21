@@ -4,7 +4,7 @@
 <ParameterSeparator Id="%AID%_PS-nnn" Text="Private Heizregister: Atlantic 52/1"/>
 <ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101" HelpContext="IOHC-Geraetetyp"/>
 <choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%001_R-%TT%%PRODUCT_CC%00101"><when test="1">
-<ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%006_R-%TT%%PRODUCT_CC%00601"/>
+<ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%006_R-%TT%%PRODUCT_CC%00601" HelpContext="IOHC-Geraetetyp"/>
 <choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%006_R-%TT%%PRODUCT_CC%00601"><when test="2"><ParameterSeparator Id="%AID%_PS-nnn" Text="Adelis: lokale modellgebundene Diagnose. Keine AGILIA- oder Fenster-KOs freigegeben." UIHint="Information"/></when></choose>
 <choose ParamRefId="%AID%_UP-%TT%%PRODUCT_CC%006_R-%TT%%PRODUCT_CC%00601"><when test="1">
 <ParameterRefRef RefId="%AID%_UP-%TT%%PRODUCT_CC%003_R-%TT%%PRODUCT_CC%00301" HelpContext="IOHC-Geraetetyp"/>
