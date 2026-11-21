@@ -3206,6 +3206,7 @@ bool IoHomeController::requestAlfeaReading(IoHomecontrolChannel *channel, uint16
 bool IoHomeController::alfeaReading(IoHomeAlfeaRead::Reading &reading) const
 {
     return mAlfeaOffset && !mAlfeaDataOpenPending && objectReadIdentityValid() &&
+        uint32_t(millis() - mAlfeaCompletedMs) < 1800000U &&
         mObjectRead.stage() == IoHomeObjectTransfer::Stage::Done &&
         IoHomeAlfeaRead::decode(mAlfeaOffset, mObjectRead.data(), mObjectRead.transferred(), reading);
 }
@@ -3238,6 +3239,7 @@ bool IoHomeController::beginObjectRead(IoHomecontrolChannel *channel, uint8_t pr
     }
     mAlfeaOffset = alfea ? offset : 0;
     mAlfeaDataOpenPending = false;
+    mAlfeaCompletedMs = 0;
     mObjectReadGapMs = alfea ? 650 : configured ? timing->gapMs : 0;
     mObjectReadReadyMs = now;
     ++mObjectReadToken;mObjectReadPeer=channel->getNodeId();mObjectReadChannel=index;mObjectReadRevision=channel->productContextRevision();std::memcpy(mObjectReadKey,channel->getEncryptionKey(),16);
@@ -3279,6 +3281,9 @@ void IoHomeController::serviceObjectRead()
     }
     if (mAlfeaDataOpenPending && mState == ControllerState::Idle && queueEmpty() &&
         uint32_t(millis() - mObjectReadReadyMs) >= mObjectReadGapMs) {
+        const auto &foreign = mForeignObjectRead[mObjectReadChannel];
+        if (foreign.node == mObjectReadPeer && uint32_t(millis() - foreign.heardMs) < 15000U)
+            return;
         mAlfeaDataOpenPending = false;
         if (!enqueueObjectReadPart(true)) mObjectRead.fail();
     }
@@ -9806,6 +9811,9 @@ void IoHomeController::processResponse()
             }
         }
         if(mObjectRead.stage()==IoHomeObjectTransfer::Stage::Ready)mObjectReadReadyMs=millis();
+        if (alfea && mCurrentCmd.command == IoHomeCommand::Unknown4ARequest &&
+            mObjectRead.stage() == IoHomeObjectTransfer::Stage::Done)
+            mAlfeaCompletedMs = millis();
 #ifndef TEST_NATIVE
         if (alfea && mCurrentCmd.command == IoHomeCommand::Unknown4ARequest) {
             IoHomeAlfeaRead::Reading reading{};

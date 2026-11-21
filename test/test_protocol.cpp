@@ -25142,6 +25142,8 @@ TEST(controller_alfea_replays_captured_prepare_open_chunk_and_close)
         ASSERT_TRUE(c.alfeaReading(result));
         ASSERT_EQ(result.value, offset == HeatingEnergy ? 11463 : 119);
         ASSERT_EQ(c.radio().testTransmitCount(),4U);
+        ioHomeTestAdvanceMillis(1800000);
+        ASSERT_TRUE(!c.alfeaReading(result));
         ch.setNodeId(0xD1E2F4);
         ASSERT_TRUE(!c.alfeaReading(result));
     }
@@ -25334,4 +25336,54 @@ TEST(protocol_remote_inbox_bounds_malformed_frames_and_expires_old_sequences)
     ASSERT_TRUE(inbox.observe(frame, 26));
     ASSERT_TRUE(inbox.observe(frame, 2200));
     ASSERT_EQ(inbox.logical, 3U);
+}
+
+TEST(controller_alfea_bad_replies_cancel_and_timeout_cannot_create_a_reading)
+{
+    using namespace IoHomeAlfeaRead;
+    const uint8_t key[16] = {1};
+    for (bool cancel : {false, true}) {
+        IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c, m, ch, 0xA1B2C3, 0xD1E2F3, key);
+        IoHomeProtocolIdentity id{};
+        id.valid = true; id.ioAddress = ch.getNodeId(); id.manufacturerId = 0x0C;
+        id.profile = 0x16; id.subProfile = 1;
+        ch.onProtocolIdentity(ch.getNodeId(), id);
+        ASSERT_TRUE(c.requestAlfeaReading(&ch, HeatingEnergy));
+        ASSERT_TRUE(!c.requestAlfeaReading(&ch, OutdoorTemperature));
+        IoHomeFrame tx, rx;
+        ASSERT_TRUE(transmitQueuedControllerFrame(c, tx));
+        ASSERT_TRUE(originalCaptureDecode("atlantic_alfea_probe_read_object_heating_energy_sx1276", 1, rx));
+        c.radio().testRxCrcChecked = true; c.radio().testRxCrcValid = true;
+        rx.setSrcNode(0xD1E2F4);
+        ASSERT_TRUE(queueControllerResponse(c, rx));
+        ASSERT_EQ(c.state(), ControllerState::WaitResponse);
+        if (cancel) ASSERT_TRUE(c.cancelObjectRead(c.objectReadToken()));
+        ioHomeTestAdvanceMillis(31000); c.loop(); c.loop();
+        Reading reading{};
+        ASSERT_TRUE(!c.alfeaReading(reading));
+        ASSERT_EQ(c.radio().testTransmitCount(), 1U);
+    }
+}
+
+TEST(protocol_guelma_pr254_codecs_are_exactly_model_and_length_scoped)
+{
+    using namespace IoHomeAtlanticRead;
+    struct Vector { uint8_t reg; uint8_t size; uint8_t bytes[4]; int64_t expected; };
+    const Vector vectors[] = {
+        {0x06,1,{2},1}, {0x32,2,{0x07,0xD0},2000}, {0x46,1,{3},3},
+        {0x48,1,{2},2}, {0x49,2,{0x02,0x58},600}, {0x4A,1,{4},4},
+        {0x04,4,{0,1,0,0},65536}, {0x52,1,{1},1}, {0x53,1,{0},0}
+    };
+    for (const auto &test : vectors) {
+        uint8_t replyData[8] = {0x0C, 0x60, 0, test.reg};
+        std::memcpy(replyData + 4, test.bytes, test.size);
+        Sample sample;
+        ASSERT_TRUE(reply(test.reg, replyData, 4 + test.size, sample));
+        const auto value = decode(Model::Guelma, sample);
+        ASSERT_TRUE(value.known); ASSERT_EQ(value.scaled, test.expected);
+        ASSERT_TRUE(!decode(Model::Raw, sample).known);
+        ++sample.length;
+        ASSERT_TRUE(!decode(Model::Guelma, sample).known);
+    }
 }

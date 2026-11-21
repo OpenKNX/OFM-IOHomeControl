@@ -1570,6 +1570,7 @@ private:
   std::unique_ptr<ObjectReadTiming[]> mObjectReadTiming;
   uint16_t mObjectReadGapMs=0;
   uint32_t mObjectReadReadyMs=0;
+  uint32_t mAlfeaCompletedMs=0;
   uint16_t mAlfeaOffset=0;
   bool mAlfeaDataOpenPending=false;
   bool beginObjectRead(IoHomecontrolChannel *, uint8_t provider, uint16_t key, uint16_t offset,
