@@ -18,6 +18,7 @@
 #include "../radio/IoHomeRfAccessPolicy.h"
 #include "../protocol/IoHomeBatteryDiagnostics.h"
 #include "../protocol/IoHomeRadioPolicy.h"
+#include "../radio/IoHomeAdaptiveCca.h"
 #include "../protocol/IoHomeRadioDiversity.h"
 #include "../protocol/IoHomeTransactionTiming.h"
 #include "../protocol/IoHomeLimitation.h"
@@ -1279,6 +1280,9 @@ public:
   void setModule(IoHomecontrol *iModule);
 
   // Get current state
+  bool configureCarrierSense(bool adaptive, int16_t fixed);
+  bool adaptiveCarrierSense() const { return bool(mAdaptiveCca); }
+  int16_t carrierSenseThreshold() const;
   IoHomeRadioPolicy &hostRadioPolicy(){return mHostRadioPolicy;}
   bool idleForManagedOperation() const {
     return mState==ControllerState::Idle&&queueEmpty()&&!mCurrentCmd.active&&!mPassiveMode&&!mGatewayMode&&
@@ -1896,6 +1900,8 @@ private:
   bool mLbtPrepared = false;
   bool mLastTxDutyDenied = false;
   IoHomeRadioPolicy mHostRadioPolicy;
+  std::unique_ptr<IoHomeAdaptiveCca> mAdaptiveCca;
+  int16_t mFixedCcaThreshold = IOHC_LBT_RSSI_THRESHOLD_DBM;
   uint32_t mLbtBusyCount;
   uint32_t mLbtBypassCount;
   uint32_t mLbtClearCount;

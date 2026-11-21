@@ -4920,6 +4920,21 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     }
 
 #if defined(RADIO_SX1276)
+    if (lSub == "radio cca" || lSub.rfind("radio cca ", 0) == 0)
+    {
+        const auto mode = trimSpaces(lSub.substr(9));
+        int fixed = IOHC_LBT_RSSI_THRESHOLD_DBM;
+        char extra = 0;
+        if (mode == "adaptive")
+            logInfoP("Adaptive CCA enabled=%u", mController.configureCarrierSense(true, fixed));
+        else if (sscanf(mode.c_str(), "fixed %d %c", &fixed, &extra) == 1 && fixed >= -110 && fixed <= -75)
+            logInfoP("Fixed CCA configured=%u", mController.configureCarrierSense(false, int16_t(fixed)));
+        else if (!mode.empty() && mode != "status")
+            logInfoP("Usage: iohc radio cca adaptive|fixed DBM|status");
+        logInfoP("CCA mode=%s threshold_dbm=%d", mController.adaptiveCarrierSense() ? "adaptive" : "fixed",
+                 mController.carrierSenseThreshold());
+        return true;
+    }
     if (lSub=="radio evidence") {
         const auto &e=mController.radio().lastReceiveEvidence();
         logInfoP("RX evidence: read_us=%lu timestamp_valid=%u freq=%lu len=%u RSSI=%d IRQ=%04X CRC_enabled=%u checked=%u valid=%u overrun=%u truncated=%u AFC_raw=%d FEI_raw=%d register_snapshot=%u",

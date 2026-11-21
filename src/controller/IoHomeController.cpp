@@ -7427,7 +7427,8 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
         delay(1); // bounded RX carrier-sense settling; physical qualification remains separate
         int16_t rssi=0;mLastLbtAttempts=1;mLastLbtBypassed=false;
         mLastLbtRssiValid=mRadio.currentRssi(rssi);mLastLbtRssi=rssi;
-        if(!mLastLbtRssiValid||rssi>IOHC_LBT_RSSI_THRESHOLD_DBM){
+        if (!mLastLbtRssiValid || rssi > carrierSenseThreshold() ||
+            (mAdaptiveCca && (mRadio.isPreambleDetected() || mRadio.isSyncDetected()))) {
             ++mLbtBusyCount;mCcaWaiting=true;mCcaRetryMs=millis()+5U;
             logDebugP("RF admission cca_required=1 cca_busy=1 cca_rssi_valid=%u rf_deferral_ms=5",mLastLbtRssiValid);
             // Bound direct/pairing callers too, which may have no queued
@@ -7790,6 +7791,24 @@ IoHomeController::IoHomeRadioHealth IoHomeController::radioHealth() const
     return lHealth;
 }
 
+bool IoHomeController::configureCarrierSense(bool adaptive, int16_t fixed)
+{
+    if (!idleForManagedOperation() || fixed < -110 || fixed > -75)
+        return false;
+    if (adaptive && !mAdaptiveCca) {
+        mAdaptiveCca.reset(new (std::nothrow) IoHomeAdaptiveCca);
+        if (!mAdaptiveCca) return false;
+    }
+    if (!adaptive) mAdaptiveCca.reset();
+    mFixedCcaThreshold = fixed;
+    return true;
+}
+
+int16_t IoHomeController::carrierSenseThreshold() const
+{
+    return mAdaptiveCca ? mAdaptiveCca->threshold(millis(), mFixedCcaThreshold) : mFixedCcaThreshold;
+}
+
 // --- Main loop ---
 
 void IoHomeController::loop()
@@ -7831,6 +7850,13 @@ void IoHomeController::loop()
         mRxScanLastSwitch=micros();
     }
 #endif
+    if (mAdaptiveCca && mAdaptiveCca->due(mCurrentFreqIdx, millis()) &&
+        idleForManagedOperation() && mRadio.state() == RadioState::Receiving &&
+        uint32_t(micros() - mRxScanLastSwitch) >= 1000U &&
+        !mRadio.isPreambleDetected() && !mRadio.isSyncDetected()) {
+        int16_t rssi = 0;
+        if (mRadio.currentRssi(rssi)) mAdaptiveCca->sample(mCurrentFreqIdx, millis(), rssi);
+    }
     if(idleForManagedOperation()&&mRadio.state()==RadioState::Receiving&&mHostRadioPolicy.due(millis())){int16_t rssi=0;bool valid=mRadio.currentRssi(rssi);mHostRadioPolicy.sample(mCurrentFreqIdx,rssi,valid);}
     if(mReceiveConfiguration.active()) {
         const auto *channel=mModule?mModule->getChannel(mRcmChannel):nullptr;
@@ -12223,7 +12249,7 @@ bool IoHomeController::waitForLbtClear(LbtContext iContext)
         mLastLbtRssi = lRssi;
         mLastLbtRssiValid = true;
 
-        if (lRssi <= IOHC_LBT_RSSI_THRESHOLD_DBM)
+        if (lRssi <= carrierSenseThreshold())
         {
             mLbtClearCount++;
             return true;

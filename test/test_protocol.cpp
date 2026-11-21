@@ -25052,3 +25052,22 @@ TEST(controller_guelma_selected_reads_require_fresh_exact_model)
         ASSERT_EQ(c.atlanticRegisterRead().writeIndex, 0xFF);
     }
 }
+
+TEST(protocol_adaptive_cca_rejects_frozen_rssi_and_expires_quiet_samples)
+{
+    IoHomeAdaptiveCca cca;
+    ASSERT_EQ(cca.threshold(0, -90), -85);
+    const uint32_t start = UINT32_MAX - 1000;
+    for (unsigned i=0; i<9; ++i) {
+        for (uint8_t ch=0; ch<3; ++ch)
+            cca.sample(ch, start + i*250, -79);
+    }
+    ASSERT_EQ(cca.threshold(start+2000, -90), -90);
+    for (unsigned i=0; i<9; ++i) {
+        cca.sample(0, start+2250+i*250, i < 2 ? -61 : -105);
+        cca.sample(1, start+2250+i*250, -99);
+        cca.sample(2, start+2250+i*250, -88);
+    }
+    ASSERT_EQ(cca.threshold(start+4250, -90), -86);
+    ASSERT_EQ(cca.threshold(start+14250, -90), -85);
+}
