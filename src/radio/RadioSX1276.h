@@ -149,6 +149,7 @@ private:
   uint16_t mSupervisionIntervalMs=5000;
   RecoveryReason mRecoveryReason=RecoveryReason::None;
   uint32_t mRequestedRxHz=41667,mRequestedAfcHz=41667;uint8_t mRequestedPower=14;
+  bool restoreStandardConfiguration();
   bool mSyncRssiValid=false;
   uint8_t mSyncRssiRaw=0;
   uint8_t mDio2Pin=PIN_NOT_CONNECTED;bool mCaptureEdges=false;

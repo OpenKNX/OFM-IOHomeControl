@@ -474,6 +474,7 @@ RadioError RadioSX1262::setOutputPowerInternal(uint8_t iPower, bool iBlocking)
     if (!sendCommand(SX1262_CMD_SET_TX_PARAMS, lTxParams, 2, iBlocking))
         return RadioError::Busy;
 
+    mOutputPower = iPower;
     return RadioError::None;
 }
 
@@ -950,6 +951,25 @@ void RadioSX1262::sleep()
 
 void RadioSX1262::standby()
 {
+    // On the standard PHY, TX falls back to XOSC. STDBY_RC after an
+    // interrupted TX therefore means the configuration was lost.
+    uint8_t status = 0;
+    if (mInitialized && mState == RadioState::Transmitting && !mEms2Mode &&
+        mStandbyMode == SX1262_STDBY_XOSC &&
+        readCommand(SX1262_CMD_GET_STATUS, &status, 1) && ((status >> 4) & 7U) == 2U)
+    {
+        const uint32_t frequency = mCurrentFreq;
+        const uint8_t power = mOutputPower;
+        mState = RadioState::Idle; // configure() enters standby; do the restore once
+        mStandbyMode = SX1262_STDBY_RC;
+        mTxCompletionPhase = TxCompletionPhase::WaitingForIrq;
+        setRfSwitchRx();
+        mInitialized = configure() == RadioError::None &&
+                       setFrequencyInternal(frequency, true) == RadioError::None &&
+                       setOutputPowerInternal(power, true) == RadioError::None;
+        return;
+    }
+
     uint8_t lStdbyCfg = mStandbyMode;
     if (!sendCommand(SX1262_CMD_SET_STANDBY, &lStdbyCfg, 1))
         return;

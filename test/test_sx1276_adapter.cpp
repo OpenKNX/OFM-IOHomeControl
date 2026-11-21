@@ -64,6 +64,28 @@ int main(){
  sampleSync();captured.startReceive();finishPacket(-84);
  sampleSync();edges.registers[REG_IRQFLAGS1]=0;
  assert(!captured.isPacketAvailable());finishPacket(-84);
+ // Register model of a power-on reset mid-TX. Restore the configured
+ // channel/bandwidth/power and packet engine, then receive without another TX.
+ const auto txCount=captured.txStartCount();
+ assert(captured.setReceiveBandwidths(50000,83333)==RadioError::None);
+ assert(captured.setOutputPower(17)==RadioError::None);
+ assert(captured.setFrequency(IOHC_FREQ_3)==RadioError::None);
+ const uint8_t tuned[]={edges.registers[REG_FRFMSB],edges.registers[REG_FRFMID],edges.registers[REG_FRFLSB]};
+ assert(captured.startTransmit(frame,sizeof(frame))==RadioError::None);
+ edges.registers[REG_OPMODE]=0x09;
+ edges.registers[REG_RXBW]=edges.registers[REG_AFCBW]=0;
+ edges.registers[REG_PACKETCONFIG2]=0;
+ edges.registers[REG_IRQFLAGS1]=0;
+ edges.registers[REG_IRQFLAGS2]=0;
+ assert(!captured.isTxDone());
+ captured.standby();
+ assert(captured.startReceive()==RadioError::None);
+ assert(edges.registers[REG_OPMODE]==5&&edges.registers[REG_PREAMBLELSB]==captured.defaultResponsePreamble());
+ assert(edges.registers[REG_PACKETCONFIG2]&RF_PACKETCONFIG2_IOHOME_ON);
+ assert(edges.registers[REG_RXBW]==0x0B&&edges.registers[REG_AFCBW]==0x12&&edges.registers[REG_PACONFIG]==0x8F);
+ assert(edges.registers[REG_FRFMSB]==tuned[0]&&edges.registers[REG_FRFMID]==tuned[1]&&edges.registers[REG_FRFLSB]==tuned[2]);
+ assert(captured.txStartCount()==txCount+1&&captured.txDoneCount()==0);
+ finishPacket(-84);
  Bus missing;RadioSX1276 absent;absent.setNativeTransport(&missing,Bus::read,Bus::write);absent.init(1,2,3);assert(!absent.isInitialized());
  // Synthetic adapter envelope for the Nina public protocol bytes. SX1276
  // hardware CRCOK is simulated here; actual RF CRC is tested by SX1262 PHY.

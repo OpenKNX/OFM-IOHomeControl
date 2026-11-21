@@ -189,6 +189,7 @@ private:
   int16_t mLastRssi;
   uint32_t mCurrentFreq;
   uint8_t mStandbyMode;
+  uint8_t mOutputPower = 14;
   uint16_t mPreambleLength; // cached for SetPacketParams (SX1262 sets all params at once)
   RadioSX1262RxBandwidth mRxBandwidth;
   uint8_t mSyncWord[8];

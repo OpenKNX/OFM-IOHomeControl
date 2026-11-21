@@ -593,6 +593,11 @@ RadioError RadioSX1276::startReceive()
     mDio0Fired = false; // clear stale interrupt before RX
     timingEvent(IoHomeTimingEvent::RxRegistersDone);
     setMode(RF_OPMODE_RX);
+    if ((mLastOpStatusAfter & 0x8F) != RF_OPMODE_RX)
+    {
+        mState = RadioState::Idle;
+        return RadioError::HardwareError;
+    }
     timingEvent(IoHomeTimingEvent::RxModeWritten);
     mState = RadioState::Receiving;
     mRxStartCount++;
@@ -786,8 +791,20 @@ void RadioSX1276::sleep()
 
 void RadioSX1276::standby()
 {
+    const bool interrupted = mInitialized && mState == RadioState::Transmitting && !mEms2Mode;
+    // The radio is always configured for HF on these channels. POR returns
+    // RegOpMode to LF standby. Inspect it before standby overwrites the flag.
+    const bool reset = interrupted &&
+                       (readRegister(REG_OPMODE) & 0x8F) == (RF_OPMODE_LOWFREQUENCYMODE_ON | RF_OPMODE_STANDBY);
     setMode(RF_OPMODE_STANDBY);
     mState = RadioState::Idle;
+    if (reset)
+        restoreStandardConfiguration();
+    if (interrupted)
+    {
+        writeRegister(REG_IRQFLAGS2, RF_IRQFLAGS2_FIFOOVERRUN);
+        setPreambleLength(defaultResponsePreamble());
+    }
 }
 
 RadioState RadioSX1276::state() const
@@ -797,6 +814,22 @@ RadioState RadioSX1276::state() const
 
 bool RadioSX1276::isInitialized() const
 {
+    return mInitialized;
+}
+
+bool RadioSX1276::restoreStandardConfiguration()
+{
+    const uint32_t frequency = mCurrentFreq ? mCurrentFreq : IOHC_FREQ_2;
+    const uint32_t rxHz = mRequestedRxHz, afcHz = mRequestedAfcHz;
+    const uint8_t power = mRequestedPower;
+    mInitialized = readRegister(REG_VERSION) == 0x12;
+    if (!mInitialized)
+        return false;
+    calibrate();
+    mInitialized = configure() == RadioError::None &&
+                   setFrequency(frequency) == RadioError::None &&
+                   setReceiveBandwidths(rxHz, afcHz) == RadioError::None &&
+                   setOutputPower(power) == RadioError::None;
     return mInitialized;
 }
 
@@ -814,13 +847,10 @@ bool RadioSX1276::superviseIdleReceive(uint32_t nowMs)
     if(mWatchdogTriggers!=0xFFFFFFFF)++mWatchdogTriggers;
     if(mRecoveryAttempts>=3)return false;
     ++mRecoveryAttempts;
-    const uint32_t frequency=mCurrentFreq?mCurrentFreq:IOHC_FREQ_2;
-    const uint32_t rxHz=mRequestedRxHz,afcHz=mRequestedAfcHz;const uint8_t power=mRequestedPower;
     // Driver-only reset. Protocol identity, keys and counters are not touched.
-    resetChip();mInitialized=readRegister(REG_VERSION)==0x12;
-    if(!mInitialized)return false;
-    calibrate();
-    if(configure()!=RadioError::None||setFrequency(frequency)!=RadioError::None||setReceiveBandwidths(rxHz,afcHz)!=RadioError::None||setOutputPower(power)!=RadioError::None)return false;
+    resetChip();
+    mState = RadioState::Idle;
+    if(!restoreStandardConfiguration())return false;
     if(startReceive()!=RadioError::None)return false;
     ++mRecoverySuccesses;return true;
 }
