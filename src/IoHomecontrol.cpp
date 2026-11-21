@@ -5382,6 +5382,32 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         IoHomecontrolChannel *channel=nullptr;for(uint8_t c=0;c<mNumChannels;c++)if(mChannels[c]&&mChannels[c]->getNodeId()==node)channel=mChannels[c];
         logInfoP("Individual product GET queued=%u; observations via API28, no KNX publication",mController.requestMpFpRead(channel,index));return true;
     }
+    if (lSub.rfind("alfea read ", 0) == 0) {
+        unsigned channel = 0;
+        char field[16]{}, extra = 0;
+        if (sscanf(lSub.c_str(), "alfea read %u %15s %c", &channel, field, &extra) != 2 ||
+            channel < 1 || channel > mNumChannels) {
+            logInfoP("Usage: iohc alfea read CHANNEL heating|hot-water|outdoor");
+            return true;
+        }
+        const uint16_t offset = !strcmp(field, "heating") ? IoHomeAlfeaRead::HeatingEnergy :
+            !strcmp(field, "hot-water") ? IoHomeAlfeaRead::HotWaterEnergy :
+            !strcmp(field, "outdoor") ? IoHomeAlfeaRead::OutdoorTemperature : 0;
+        updateCommissioningJob();
+        const bool queued = offset && !mCommissioningJob.active() && !mRadioDiagnostic.active &&
+            !mMetadataRefreshActive && mController.requestAlfeaReading(mChannels[channel-1], offset);
+        logInfoP("Alfea read queued=%u token=%lu", queued, (unsigned long)mController.objectReadToken());
+        return true;
+    }
+    if (lSub == "alfea status") {
+        IoHomeAlfeaRead::Reading reading{};
+        if (mController.alfeaReading(reading))
+            logInfoP("Alfea offset=%04X value=%ld unit=%s", mController.alfeaReadingOffset(),
+                (long)reading.value, reading.unit == IoHomeAlfeaRead::Unit::KWh ? "kWh" : "tenths_C");
+        else
+            logInfoP("Alfea value unavailable stage=%u", unsigned(mController.objectRead().stage()));
+        return true;
+    }
     if(lSub.rfind("object read ",0)==0) {
         unsigned node=0,provider=0,key=0,offset=0,span=0;char extra=0;
         if(sscanf(lSub.c_str(),"object read %x %x %x %u %u %c",&node,&provider,&key,&offset,&span,&extra)!=5||!node||node>0xFFFFFF||provider>255||key>65535||offset>65535||!span||span>1024) {

@@ -25073,3 +25073,56 @@ TEST(protocol_adaptive_cca_rejects_frozen_rssi_and_expires_quiet_samples)
     ASSERT_EQ(cca.threshold(start+4250, -90), -86);
     ASSERT_EQ(cca.threshold(start+14250, -90), -85);
 }
+
+TEST(controller_alfea_replays_captured_prepare_open_chunk_and_close)
+{
+    using namespace IoHomeAlfeaRead;
+    const uint8_t key[16] = {1};
+    for (const auto offset : {HeatingEnergy, OutdoorTemperature})
+    {
+        IoHomeController c;
+        IoHomecontrol m;
+        IoHomecontrolChannel ch;
+        initPaired2WControllerForTest(c, m, ch, 0xA1B2C3, 0xD1E2F3, key);
+        ASSERT_TRUE(!c.requestAlfeaReading(&ch, offset));
+        IoHomeProtocolIdentity id{};
+        id.valid = true;
+        id.ioAddress = ch.getNodeId();
+        id.manufacturerId = 0x0C;
+        id.profile = 0x16;
+        id.subProfile = 1;
+        ch.onProtocolIdentity(ch.getNodeId(), id);
+        ASSERT_TRUE(!c.requestObjectRead(&ch, 0x0C, 0x1002, offset, 3));
+        ASSERT_TRUE(c.requestAlfeaReading(&ch, offset));
+        c.radio().testRxCrcChecked = true;
+
+        const char *capture = offset == HeatingEnergy
+            ? "atlantic_alfea_probe_read_object_heating_energy_sx1276"
+            : "atlantic_alfea_probe_outdoor_temperature_sx1276";
+        Reading result{};
+        for (unsigned i=0; i<8; i+=2)
+        {
+            IoHomeFrame capturedTx, rx, actualTx;
+            ASSERT_TRUE(originalCaptureDecode(capture, i, capturedTx));
+            ASSERT_TRUE(originalCaptureDecode(capture, i+1, rx));
+            if (i) ioHomeTestAdvanceMillis(650);
+            ASSERT_TRUE(transmitQueuedControllerFrame(c, actualTx));
+            ASSERT_EQ(capturedTx.commandId, actualTx.commandId);
+            ASSERT_EQ(capturedTx.dataLen, actualTx.dataLen);
+            ASSERT_MEM_EQ(capturedTx.data, actualTx.data, actualTx.dataLen);
+            if (!i) {
+                c.radio().testRxCrcValid = false;
+                ASSERT_TRUE(queueControllerResponse(c, rx));
+                ASSERT_EQ(c.state(), ControllerState::WaitResponse);
+            }
+            c.radio().testRxCrcValid = true;
+            ASSERT_TRUE(queueControllerResponse(c, rx));
+            if (i < 6) ASSERT_TRUE(!c.alfeaReading(result));
+        }
+        ASSERT_TRUE(c.alfeaReading(result));
+        ASSERT_EQ(result.value, offset == HeatingEnergy ? 11463 : 119);
+        ASSERT_EQ(c.radio().testTransmitCount(),4U);
+        ch.setNodeId(0xD1E2F4);
+        ASSERT_TRUE(!c.alfeaReading(result));
+    }
+}

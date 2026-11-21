@@ -24,6 +24,7 @@
 #include "../protocol/IoHomeLimitation.h"
 #include "../protocol/IoHomeRainLimitation.h"
 #include "../protocol/IoHomeCollisionEvidence.h"
+#include "../protocol/IoHomeAlfeaRead.h"
 #include "../protocol/IoHomeAttemptPlan.h"
 #include "../protocol/IoHomeSmlExecution.h"
 #include "../protocol/IoHomePilotWire.h"
@@ -738,6 +739,9 @@ public:
   const DynamicActuatorState &dynamicActuatorState(uint8_t channel)const;
   void printDynamicActuatorStatus(uint8_t channel);
   void setDynamicEventTrace(bool enabled){mDynamicEventTrace=enabled;}
+  bool requestAlfeaReading(IoHomecontrolChannel *channel, uint16_t offset);
+  bool alfeaReading(IoHomeAlfeaRead::Reading &reading) const;
+  uint16_t alfeaReadingOffset() const { return mAlfeaOffset; }
   bool requestObjectRead(IoHomecontrolChannel *channel,uint8_t provider,uint16_t key,uint16_t offset,uint16_t span);
   bool configureObjectReadTiming(IoHomecontrolChannel *channel,uint16_t gapMs,uint32_t budgetMs);
   bool cancelObjectRead(uint32_t token);
@@ -1562,6 +1566,10 @@ private:
   std::unique_ptr<ObjectReadTiming[]> mObjectReadTiming;
   uint16_t mObjectReadGapMs=0;
   uint32_t mObjectReadReadyMs=0;
+  uint16_t mAlfeaOffset=0;
+  bool mAlfeaDataOpenPending=false;
+  bool beginObjectRead(IoHomecontrolChannel *, uint8_t provider, uint16_t key, uint16_t offset,
+                       uint16_t span, bool alfea);
   struct ForeignObjectReadActivity { uint32_t node=0, heardMs=0; };
   ForeignObjectReadActivity mForeignObjectRead[16]{};
   void observeForeignObjectTransfer(const IoHomeFrame &frame, const RadioReceiveEvidence &evidence);

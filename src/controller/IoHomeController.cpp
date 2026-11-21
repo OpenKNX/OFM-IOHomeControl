@@ -3105,6 +3105,7 @@ bool IoHomeController::enqueueObjectReadPart(bool opening)
     entry.objectReadToken=mObjectReadToken;entry.sourceChannelIndex=mObjectReadChannel;entry.productContextRevision=mObjectReadRevision;
     entry.batteryDiagnostic=mObjectReadChannel<16&&mBatteryDiagnostics[mObjectReadChannel].token==mObjectReadToken;
     entry.command=opening?IoHomeCommand::Unknown46Request:IoHomeCommand::Unknown4ARequest;
+    if (mAlfeaOffset) entry.twoWayTxFreqIdx = frequencyIndexForHz(kNormal2WTxFreqHz);
     entry.objectReadLength=opening?9:mObjectRead.pendingSize();
     std::memcpy(entry.objectReadData,opening?mObjectRead.openingData():mObjectRead.pendingData(),entry.objectReadLength);
     entry.maxAttempts=1;entry.active=true;return queuePush(entry);
@@ -3142,13 +3143,37 @@ void IoHomeController::observeForeignObjectTransfer(const IoHomeFrame &frame, co
 
 bool IoHomeController::requestObjectRead(IoHomecontrolChannel *channel,uint8_t provider,uint16_t key,uint16_t offset,uint16_t span)
 {
+    return beginObjectRead(channel, provider, key, offset, span, false);
+}
+
+bool IoHomeController::requestAlfeaReading(IoHomecontrolChannel *channel, uint16_t offset)
+{
+    if (!channel || !mModule || !mModule->managementRequestsAllowed() || !idleForManagedOperation())
+        return false;
+    const auto &id = channel->getProtocolIdentity();
+    if (!id.valid || id.ioAddress != channel->getNodeId() || id.manufacturerId != 0x0C ||
+        id.profile != 0x16 || id.subProfile != 1 || twoWayIdentityCollision())
+        return false;
+    return beginObjectRead(channel, 0x0C, 0x1001, offset, 3, true);
+}
+
+bool IoHomeController::alfeaReading(IoHomeAlfeaRead::Reading &reading) const
+{
+    return mAlfeaOffset && !mAlfeaDataOpenPending && objectReadIdentityValid() &&
+        mObjectRead.stage() == IoHomeObjectTransfer::Stage::Done &&
+        IoHomeAlfeaRead::decode(mAlfeaOffset, mObjectRead.data(), mObjectRead.transferred(), reading);
+}
+
+bool IoHomeController::beginObjectRead(IoHomecontrolChannel *channel, uint8_t provider, uint16_t key,
+                                      uint16_t offset, uint16_t span, bool alfea)
+{
     if(!channel||!channel->isPaired()||channel->is1W()||mState!=ControllerState::Idle||!queueEmpty()||
         mPassiveMode||mGatewayMode||mOneWayKeyReceiveActive||mKeyExtractArmed||mNetworkScanActive||mObjectRead.active()||mObjectReadToken==0xFFFFFFFF||!span)return false;
     // Metadata/database views plus explicit opt-in battery objects. A607 can
     // contain keys: its full buffer is blocked from ETS slice readback;
     // battery diagnostics only print non-key fields. No object writes.
     const bool allowed=(provider==0&&(key<=3||key==0x030A||key==0x8001||key==0x8002||key==0x8005||key==0x8100||key==0x8103||key==0x4300||key==0x4302))||(provider==0x0B&&key==0xC000);
-    if(!allowed&&!(channel->batteryMonitoring()==2&&ioHomeBatteryObject(provider,key)&&offset==0))return false;
+    if(!alfea&&!allowed&&!(channel->batteryMonitoring()==2&&ioHomeBatteryObject(provider,key)&&offset==0))return false;
     const uint8_t index=channelIndexFor(channel);if(index>=16)return false;
     const auto &foreign = mForeignObjectRead[index];
     if (foreign.node == channel->getNodeId() && uint32_t(millis() - foreign.heardMs) < 15000U)
@@ -3156,8 +3181,19 @@ bool IoHomeController::requestObjectRead(IoHomecontrolChannel *channel,uint8_t p
     const auto *timing=mObjectReadTiming?&mObjectReadTiming[index]:nullptr;
     const bool configured=timing&&timing->node==channel->getNodeId()&&timing->revision==channel->productContextRevision()&&
         !std::memcmp(timing->key,channel->getEncryptionKey(),16);
-    if(!mObjectRead.begin(IoHomeObjectTransfer::Direction::Read,channel->getNodeId(),mObjectReadToken+1,provider,key,offset,span,millis(),configured?timing->budgetMs:30000))return false;
-    mObjectReadGapMs=configured?timing->gapMs:0;mObjectReadReadyMs=millis();
+    const auto now = millis();
+    const auto token = mObjectReadToken + 1;
+    if (alfea) {
+        if (!IoHomeAlfeaRead::open(mObjectRead, channel->getNodeId(), token, offset, true, now, 30000))
+            return false;
+    } else if (!mObjectRead.begin(IoHomeObjectTransfer::Direction::Read, channel->getNodeId(), token,
+                                  provider, key, offset, span, now, configured ? timing->budgetMs : 30000)) {
+        return false;
+    }
+    mAlfeaOffset = alfea ? offset : 0;
+    mAlfeaDataOpenPending = false;
+    mObjectReadGapMs = alfea ? 650 : configured ? timing->gapMs : 0;
+    mObjectReadReadyMs = now;
     ++mObjectReadToken;mObjectReadPeer=channel->getNodeId();mObjectReadChannel=index;mObjectReadRevision=channel->productContextRevision();std::memcpy(mObjectReadKey,channel->getEncryptionKey(),16);
     if(ioHomeBatteryObject(provider,key)&&channel->batteryMonitoring()==2) {
         auto &d=mBatteryDiagnostics[index];
@@ -3194,6 +3230,11 @@ void IoHomeController::serviceObjectRead()
         }
         mQueueHead=write;
         return;
+    }
+    if (mAlfeaDataOpenPending && mState == ControllerState::Idle && queueEmpty() &&
+        uint32_t(millis() - mObjectReadReadyMs) >= mObjectReadGapMs) {
+        mAlfeaDataOpenPending = false;
+        if (!enqueueObjectReadPart(true)) mObjectRead.fail();
     }
     if(mObjectRead.stage()==IoHomeObjectTransfer::Stage::Ready&&mState==ControllerState::Idle&&queueEmpty()) {
         if(uint32_t(millis()-mObjectReadReadyMs)<mObjectReadGapMs)return;
@@ -9629,16 +9670,38 @@ void IoHomeController::processResponse()
         if(mCurrentCmd.objectReadToken!=mObjectReadToken||!mObjectRead.active()||!managementIdentityMatches(mCurrentCmd)) {
             mObjectRead.fail(true);mCurrentCmd.active=false;mState=ControllerState::Idle;return;
         }
+        const bool alfea = mAlfeaOffset != 0;
+        if (alfea) {
+            const auto evidence = receiveEvidence(mRxRawLen);
+            if (mLastResponseFreqIdx != mCurrentCmd.twoWayTxFreqIdx ||
+                (mRxFrame.ctrlByte0 & (IOHC_CTRL0_MODE_1W | IOHC_CTRL0_START)) ||
+                !(mRxFrame.ctrlByte0 & IOHC_CTRL0_END) ||
+                !evidence.admissible() || !evidence.hardwareCrcChecked || !evidence.hardwareCrcValid) {
+                mState = ControllerState::WaitResponse;
+                return;
+            }
+        }
         bool accepted=false;
         if(mRxFrame.commandId==IoHomeCommand::ChallengeRequest) {
             if(mCurrentCmd.command!=IoHomeCommand::Unknown46Request||mRxFrame.dataLen<6){mState=ControllerState::WaitResponse;return;}
             accepted=true;
         } else if(mRxFrame.commandId==IoHomeCommand::ErrorResponse) accepted=mObjectRead.peerError(mCurrentCmd.destNodeId,mObjectReadToken,mRxFrame.data,mRxFrame.dataLen);
-        else if(mCurrentCmd.command==IoHomeCommand::Unknown46Request&&mRxFrame.commandId==IoHomeCommand::Unknown46Response&&mSawChallenge&&mAuthResponseSent)
+        else if(mCurrentCmd.command==IoHomeCommand::Unknown46Request&&mRxFrame.commandId==IoHomeCommand::Unknown46Response&&
+                ((mSawChallenge&&mAuthResponseSent)||(alfea&&!mSawChallenge)))
             accepted=mObjectRead.acceptOpening(mCurrentCmd.destNodeId,mObjectReadToken,0x47,mRxFrame.data,mRxFrame.dataLen);
         else if(mCurrentCmd.command==IoHomeCommand::Unknown4ARequest&&mRxFrame.commandId==IoHomeCommand::Unknown4AResponse)
             accepted=mObjectRead.acceptReadChunk(mCurrentCmd.destNodeId,mObjectReadToken,mRxFrame.data,mRxFrame.dataLen);
         if(!accepted){mState=ControllerState::WaitResponse;return;}
+        if (alfea && mObjectRead.stage() == IoHomeObjectTransfer::Stage::Done &&
+            mCurrentCmd.command == IoHomeCommand::Unknown46Request) {
+            const auto now = millis();
+            const uint32_t elapsed = now - mObjectReadReadyMs; // preparation began at this timestamp
+            if (elapsed < 30000 && IoHomeAlfeaRead::open(mObjectRead, mObjectReadPeer, mObjectReadToken,
+                                                        mAlfeaOffset, false, now, 30000 - elapsed)) {
+                mAlfeaDataOpenPending = true;
+                mObjectReadReadyMs = now;
+            }
+        }
         if(mObjectRead.stage()==IoHomeObjectTransfer::Stage::Ready)mObjectReadReadyMs=millis();
     }
     if (auto *counters=activeAttemptCounters()) {
