@@ -125,7 +125,7 @@ def inventory_report(manifest):
             {
                 **change,
                 **{field: entries[change["upstream_path"]][field]
-                   for field in ("id", "origin", "classification", "local_path", "sha256", "git_blob_sha1")},
+                   for field in ("id", "origin", "classification", "local_path", "sha256", "git_blob_sha1", "evidence")},
                 "behavior_tests": entries[change["upstream_path"]]["coverage"]["behavior_tests"],
             }
             for change in manifest["inventory_delta"]

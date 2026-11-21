@@ -70,7 +70,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_awning_discovery_lab_response",
@@ -99,7 +102,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "somfy_awning_discovery_spe_paired_rollcall",
@@ -128,7 +134,9 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/discovery/somfy_awning_discovery_spe_paired_rollcall.yaml",
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -158,7 +166,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_discovery_alt_no_response",
@@ -187,7 +198,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_discovery_spe_paired_rollcall",
@@ -216,7 +230,9 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/discovery/somfy_izymo_dimmer_discovery_spe_paired_rollcall.yaml",
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -246,7 +262,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_rs100_discovery_attempt_1w_traffic",
@@ -275,7 +294,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "velux_kig300_discovery_alt_burst",
@@ -304,7 +326,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "velux_kli310_discovery_alt_sweep",
@@ -333,7 +358,12 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only",
+        "source_fragment_check_notes",
+        "reconstruction_check_notes"
+      ]
     },
     {
       "id": "velux_kli313_discovery_alt_sweep",
@@ -362,7 +392,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "velux_klr300_discovery_rollcall_node_verification",
@@ -394,7 +427,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only",
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "velux_kux100_discovery_alt_addressed_challenge_response",
@@ -423,7 +460,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "synthetic_or_reference"
+      ]
     },
     {
       "id": "velux_kux100_discovery_alt_broadcast_no_response",
@@ -452,7 +492,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "synthetic_or_reference",
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "velux_ssl_discovery_tahoma_pairing",
@@ -481,7 +525,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "velux_window_discovery_keyed_rollcall_flipper_cc1101",
@@ -510,7 +557,10 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "reference_1w_enrollment_add_controller_kat",
@@ -541,7 +591,9 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/enrollment/reference_1w_enrollment_add_controller_kat.yaml",
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -571,7 +623,9 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/enrollment/somfy_izymo_dimmer_enrollment_add_controller_with_mac_sx1276.yaml",
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -600,7 +654,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -630,7 +686,10 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/enrollment/somfy_smoove_enrollment_add_and_remove_controller_sx1276.yaml",
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector",
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -660,7 +719,10 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/enrollment/somfy_smoove_enrollment_monitor_sx1276.yaml",
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector",
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -691,7 +753,11 @@
         ],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -721,7 +787,10 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/enrollment/synthetic_enrollment_velux_kli_prog_sweep.yaml",
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -751,7 +820,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "atlantic_agilia_exchange_presence_write",
@@ -780,7 +852,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "atlantic_agilia_exchange_setpoint_and_off_read_back",
@@ -809,7 +884,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "atlantic_agilia_exchange_status_read",
@@ -838,7 +916,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "atlantic_calypso_exchange_register_read",
@@ -866,7 +947,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -898,7 +981,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": false
+      "in_upstream_snapshot": false,
+      "evidence": [
+        "synthetic_or_reference",
+        "reconstruction_check_notes"
+      ]
     },
     {
       "id": "multi_somfy_exchange_overheard_challenge_and_status",
@@ -927,7 +1014,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "sauter_guelma_exchange_register_read",
@@ -956,7 +1046,10 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "sauter_guelma_exchange_register_write",
@@ -985,7 +1078,10 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "sauter_hekla_exchange_night_light_brightness_levels_sx1262",
@@ -1013,7 +1109,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -1043,7 +1141,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "somfy_awning_exchange_ack_reports_stale_target_close",
@@ -1074,7 +1175,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_exchange_ack_reports_stale_target_open",
@@ -1105,7 +1209,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_exchange_close_short_sx1262",
@@ -1133,7 +1240,11 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -1163,7 +1274,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_exchange_close_sx1276",
@@ -1192,7 +1306,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_exchange_favorite_sx1262",
@@ -1221,7 +1338,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_exchange_favorite_sx1276",
@@ -1250,7 +1370,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_exchange_force_open_sx1276",
@@ -1279,7 +1402,9 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_awning_exchange_force_open_sx1276.yaml",
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -1309,7 +1434,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_exchange_open_device_off_sx1276",
@@ -1338,7 +1466,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_exchange_open_lbt_contention_sx1276",
@@ -1367,7 +1498,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_exchange_open_short_sx1262",
@@ -1395,7 +1529,11 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -1425,7 +1563,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_exchange_open_sx1276",
@@ -1454,7 +1595,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_exchange_priority_level_sx1276",
@@ -1483,7 +1627,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "somfy_awning_exchange_set_name_sx1276",
@@ -1512,7 +1659,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_exchange_set_position_25_short_sx1262",
@@ -1540,7 +1690,11 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -1570,7 +1724,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_exchange_set_position_25_sx1276",
@@ -1599,7 +1756,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_exchange_stop_short_sx1262",
@@ -1627,7 +1787,11 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -1657,7 +1821,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_exchange_stop_sx1276",
@@ -1686,7 +1853,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_exchange_off_lr1121",
@@ -1715,7 +1885,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_exchange_off_short_lr1121",
@@ -1743,7 +1916,11 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -1772,7 +1949,11 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -1801,7 +1982,11 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -1831,7 +2016,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_exchange_off_sx1276",
@@ -1860,7 +2048,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_exchange_on_lr1121",
@@ -1889,7 +2080,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_exchange_on_short_lr1121",
@@ -1917,7 +2111,11 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -1946,7 +2144,11 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -1975,7 +2177,11 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -2005,7 +2211,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_exchange_on_sx1276",
@@ -2034,7 +2243,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_exchange_set_brightness_50_lr1121",
@@ -2063,7 +2275,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_exchange_set_brightness_50_short_lr1121",
@@ -2091,7 +2306,11 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -2120,7 +2339,11 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -2149,7 +2372,11 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -2179,7 +2406,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_exchange_set_brightness_50_sx1276",
@@ -2208,7 +2438,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_exchange_set_brightness_75_lr1121",
@@ -2237,7 +2470,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_exchange_set_brightness_75_short_lr1121",
@@ -2265,7 +2501,11 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -2294,7 +2534,11 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -2323,7 +2567,11 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -2353,7 +2601,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_exchange_set_brightness_75_sx1276",
@@ -2382,7 +2633,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_pergola_louver_exchange_execute_acks_sx1262",
@@ -2411,7 +2665,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "somfy_pergola_louver_exchange_open_close_position_stop_sx1262",
@@ -2440,7 +2697,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "somfy_rs100_exchange_failure_near_sx1262",
@@ -2469,7 +2729,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "somfy_rs100_exchange_far_sx1262",
@@ -2498,7 +2761,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "somfy_rs100_exchange_near_sx1262",
@@ -2527,7 +2793,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "synthetic_exchange_auth",
@@ -2556,7 +2825,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "synthetic_or_reference",
+        "public_key_vector"
+      ]
     },
     {
       "id": "synthetic_exchange_heating_midnight_sync",
@@ -2585,7 +2858,11 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/c2ccd5da68b84a94e6e6bf9efe50346635a8fad3/tests/corpus/captures/exchange/synthetic_exchange_heating_midnight_sync.yaml",
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "synthetic_or_reference",
+        "public_key_vector"
+      ]
     },
     {
       "id": "synthetic_exchange_heating_set_temp",
@@ -2614,7 +2891,11 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/c2ccd5da68b84a94e6e6bf9efe50346635a8fad3/tests/corpus/captures/exchange/synthetic_exchange_heating_set_temp.yaml",
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "synthetic_or_reference",
+        "public_key_vector"
+      ]
     },
     {
       "id": "thermor_pilot_wire_interface_exchange_heating_level_execute",
@@ -2642,7 +2923,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "source_frame_sequence",
+      "evidence": [
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -2674,7 +2957,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "tilt_cover_exchange_ack_tilt_block",
@@ -2705,7 +2991,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "tilt_cover_exchange_ack_tilt_block_second_device",
@@ -2736,7 +3025,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "tilt_cover_exchange_close_ack_six_byte_no_hint",
@@ -2765,7 +3057,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "tilt_cover_exchange_priority_locked_error",
@@ -2794,7 +3089,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "velux_sml_exchange_execute_ack_waiting_for_power_sx1262",
@@ -2824,7 +3122,9 @@
         ],
         "physical_motion": "unknown"
       },
-      "evidence": "source_frame_sequence",
+      "evidence": [
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -2856,7 +3156,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "velux_ssl_exchange_stop_mid_motion_short_preamble",
@@ -2888,7 +3191,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "velux_ssl_exchange_stop_mid_motion_unanswered",
@@ -2920,7 +3226,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "wisniowski_moto1000_exchange_execute_parameter_unknown",
@@ -2951,7 +3260,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "wisniowski_moto1000_exchange_execute_partial_position_refused",
@@ -2982,7 +3294,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "wisniowski_moto1000_exchange_session_interrupted_after_unconfirmed_stop",
@@ -3010,7 +3325,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "source_frame_sequence",
+      "evidence": [
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3040,7 +3357,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "synthetic_identify",
@@ -3069,7 +3389,11 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/c2ccd5da68b84a94e6e6bf9efe50346635a8fad3/tests/corpus/captures/identify/synthetic_identify.yaml",
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "synthetic_or_reference",
+        "public_key_vector"
+      ]
     },
     {
       "id": "multi_somfy_oneway_write_private_first_sighting",
@@ -3098,7 +3422,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "reference_1w_oneway_execute_iv_vector",
@@ -3127,7 +3454,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "synthetic_or_reference",
+        "receive_only"
+      ]
     },
     {
       "id": "somfy_smoove_oneway_close_sx1276",
@@ -3156,7 +3487,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "somfy_smoove_oneway_dim_close_extended_fp",
@@ -3185,7 +3519,9 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/somfy_smoove_oneway_dim_close_extended_fp.yaml",
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3215,7 +3551,9 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/somfy_smoove_oneway_dim_stop_extended_fp.yaml",
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3245,7 +3583,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": false
+      "in_upstream_snapshot": false,
+      "evidence": [
+        "synthetic_or_reference",
+        "receive_only"
+      ]
     },
     {
       "id": "somfy_smoove_oneway_favorite_sx1276",
@@ -3274,7 +3616,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "somfy_smoove_oneway_held_press_on_air",
@@ -3304,7 +3649,11 @@
         ],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3334,7 +3683,9 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/somfy_smoove_oneway_hold_to_dim_sx1276.yaml",
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3364,7 +3715,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "somfy_smoove_oneway_short_press_on_air",
@@ -3394,7 +3748,11 @@
         ],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector",
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3424,7 +3782,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "somfy_smoove_oneway_write_private_a",
@@ -3453,7 +3814,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": false
+      "in_upstream_snapshot": false,
+      "evidence": [
+        "synthetic_or_reference",
+        "receive_only"
+      ]
     },
     {
       "id": "somfy_smoove_oneway_write_private_favorite",
@@ -3482,7 +3847,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": false
+      "in_upstream_snapshot": false,
+      "evidence": [
+        "synthetic_or_reference",
+        "receive_only"
+      ]
     },
     {
       "id": "synthetic_oneway_close",
@@ -3511,7 +3880,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "synthetic_or_reference",
+        "receive_only"
+      ]
     },
     {
       "id": "unenrolled_window_opener_oneway_stop_low_power_burst_lr1121",
@@ -3541,7 +3914,10 @@
         ],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3572,7 +3948,10 @@
         ],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3603,7 +3982,10 @@
         ],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3634,7 +4016,10 @@
         ],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3665,7 +4050,10 @@
         ],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3696,7 +4084,10 @@
         ],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3728,7 +4119,10 @@
         "physical_motion": "unknown"
       },
       "policy_era": "historical_pre_ADR0119",
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3760,7 +4154,10 @@
         "physical_motion": "unknown"
       },
       "policy_era": "historical_pre_ADR0119",
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3792,7 +4189,10 @@
         "physical_motion": "unknown"
       },
       "policy_era": "historical_pre_ADR0119",
-      "evidence": "public_key_vector",
+      "evidence": [
+        "sdr_on_air",
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3822,7 +4222,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": false
+      "in_upstream_snapshot": false,
+      "evidence": [
+        "synthetic_or_reference",
+        "receive_only"
+      ]
     },
     {
       "id": "unidentified_1w_remote_oneway_execute_open_and_stop_acei_61_sx1276",
@@ -3850,7 +4254,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3880,7 +4286,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": false
+      "in_upstream_snapshot": false,
+      "evidence": [
+        "synthetic_or_reference",
+        "receive_only"
+      ]
     },
     {
       "id": "unidentified_1w_remote_oneway_write_private_b",
@@ -3909,7 +4319,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": false
+      "in_upstream_snapshot": false,
+      "evidence": [
+        "synthetic_or_reference",
+        "receive_only"
+      ]
     },
     {
       "id": "unidentified_1w_remote_oneway_write_private_sx1262",
@@ -3937,7 +4351,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -3967,7 +4383,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "wind_sensor_oneway_execute_sx1276",
@@ -3996,7 +4415,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "wind_sensor_oneway_favorite_rain_originator_sx1276",
@@ -4027,7 +4449,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "wind_sensor_oneway_favorite_wind_originator_sx1276",
@@ -4058,7 +4483,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "wind_sensor_oneway_horizontal_awning_sx1276",
@@ -4087,7 +4515,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "wind_sensor_oneway_unnamed_target_sx1276",
@@ -4116,7 +4547,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "atlantic_agilia_pairing_key_pull_heater_direct_read",
@@ -4145,7 +4579,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "atlantic_agilia_pairing_key_pull_heater_not_next_address",
@@ -4174,7 +4611,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "atlantic_agilia_pairing_key_pull_heater_rollcall",
@@ -4203,7 +4643,9 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/pairing/atlantic_agilia_pairing_key_pull_heater_rollcall.yaml",
-      "evidence": "source_frame_sequence",
+      "evidence": [
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -4233,7 +4675,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "atlantic_agilia_pairing_key_transfer_command_unknown",
@@ -4262,7 +4707,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "selfpair_pairing_sx1262_device_sx1276_hub",
@@ -4291,7 +4739,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "selfpair_pairing_sx1276_device_sx1262_hub",
@@ -4320,7 +4771,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_connectivity_kit_pairing_key_extraction_stall",
@@ -4349,7 +4803,9 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/pairing/somfy_connectivity_kit_pairing_key_extraction_stall.yaml",
-      "evidence": "source_frame_sequence",
+      "evidence": [
+        "source_frame_sequence"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -4379,7 +4835,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_pairing_full_discover_confirm_sx1262",
@@ -4408,7 +4867,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_pairing_full_discover_confirm_sx1276",
@@ -4437,7 +4900,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_pairing_full_lr1121",
@@ -4466,7 +4932,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_pairing_full_sx1262",
@@ -4495,7 +4964,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_pairing_full_sx1276",
@@ -4524,7 +4996,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_rs100_pairing_key_exchange_retry_success",
@@ -4555,7 +5030,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector",
+        "reconstruction_check_notes"
+      ]
     },
     {
       "id": "somfy_rs100_pairing_key_transfer_timeout",
@@ -4586,7 +5065,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_sunilus_pairing_key_transfer_rejected_error",
@@ -4615,7 +5097,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "somfy_tahoma_pairing_key_extraction_success_sx1276",
@@ -4644,7 +5129,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only",
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "velux_kig300_pairing_key_extraction_stall",
@@ -4673,7 +5162,9 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/pairing/velux_kig300_pairing_key_extraction_stall.yaml",
-      "evidence": "source_frame_sequence",
+      "evidence": [
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -4703,7 +5194,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "velux_klr200_pairing_key_extraction_success",
@@ -4732,7 +5226,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "velux_klr300_pairing_key_extraction_success",
@@ -4761,7 +5258,12 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only",
+        "source_fragment_check_notes",
+        "reconstruction_check_notes"
+      ]
     },
     {
       "id": "velux_kux100_pairing_full",
@@ -4790,7 +5292,11 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/pairing/velux_kux100_pairing_full.yaml",
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector",
+        "source_fragment_check_notes",
+        "reconstruction_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -4820,7 +5326,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "velux_ssl_pairing_key_exchange_setconfig_unanswered",
@@ -4851,7 +5360,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "atlantic_adelis_probe_boost_remaining",
@@ -4879,7 +5391,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -4908,7 +5422,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -4937,7 +5453,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -4966,7 +5484,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -4995,7 +5515,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -5024,7 +5546,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -5053,7 +5577,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -5083,7 +5609,10 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "atlantic_alfea_probe_read_object_heating_energy_sx1276",
@@ -5112,7 +5641,10 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "atlantic_calypso_probe_status_fp_high",
@@ -5140,7 +5672,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -5169,7 +5703,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -5199,7 +5735,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "multi_somfy_probe_private2_long_form",
@@ -5228,7 +5767,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "multi_somfy_probe_private2_short_form",
@@ -5257,7 +5799,9 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/multi_somfy_probe_private2_short_form.yaml",
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -5287,7 +5831,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "sauter_guelma_probe_status_fp_high",
@@ -5316,7 +5863,10 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "sauter_tahual_probe_energy_register",
@@ -5345,7 +5895,10 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_awning_probe_extended_fn_sx1262",
@@ -5374,7 +5927,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_probe_general_info3_lr1121",
@@ -5403,7 +5959,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_probe_get_info2_sx1262",
@@ -5432,7 +5991,10 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_awning_probe_get_info2_sx1262.yaml",
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -5462,7 +6024,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector",
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "somfy_awning_probe_private2_favorite_after_reprogram_lr1121",
@@ -5491,7 +6057,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_probe_private2_favorite_lr1121",
@@ -5520,7 +6089,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_probe_private2_modifier_sweep_lr1121",
@@ -5549,7 +6121,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_probe_private2_short_favorite_after_reprogram_sx1262",
@@ -5577,7 +6152,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -5606,7 +6183,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -5635,7 +6214,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -5664,7 +6245,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -5693,7 +6276,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -5723,7 +6308,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_probe_private_fn_lr1121",
@@ -5752,7 +6340,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_probe_status_ext_lr1121",
@@ -5781,7 +6372,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_probe_extended_fn_sx1262",
@@ -5810,7 +6404,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_probe_general_info3_lr1121",
@@ -5839,7 +6436,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_probe_get_info2_sx1262",
@@ -5868,7 +6468,9 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_izymo_dimmer_probe_get_info2_sx1262.yaml",
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -5898,7 +6500,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_probe_private2_short_favorite_sx1262",
@@ -5926,7 +6531,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -5956,7 +6563,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_probe_private_fn_lr1121",
@@ -5985,7 +6595,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_pergola_louver_probe_get_info2_sx1262",
@@ -6014,7 +6627,9 @@
         "physical_motion": "unknown"
       },
       "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_pergola_louver_probe_get_info2_sx1262.yaml",
-      "evidence": "source_frame_sequence",
+      "evidence": [
+        "source_frame_sequence"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -6043,7 +6658,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -6072,7 +6689,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -6101,7 +6720,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -6130,7 +6751,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -6159,7 +6782,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -6189,7 +6814,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only",
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "velux_sml_probe_execution_state_waiting_then_executing_sx1262",
@@ -6219,7 +6848,9 @@
         ],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -6250,7 +6881,9 @@
         ],
         "physical_motion": "unknown"
       },
-      "evidence": "receive_only",
+      "evidence": [
+        "receive_only"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -6280,7 +6913,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "velux_window_probe_metadata_replies",
@@ -6309,7 +6945,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "velux_window_probe_private_fn_rain_state_at_rest_sx1262",
@@ -6338,7 +6977,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only",
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "velux_window_probe_private_fn_replies",
@@ -6367,7 +7010,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "velux_window_probe_status_ext_replies",
@@ -6396,7 +7042,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "wisniowski_moto1000_probe_private2_partial_position",
@@ -6424,7 +7073,9 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "evidence": "source_frame_sequence",
+      "evidence": [
+        "source_frame_sequence"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -6455,7 +7106,9 @@
         ],
         "physical_motion": "unknown"
       },
-      "evidence": "public_key_vector",
+      "evidence": [
+        "public_key_vector"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -6485,7 +7138,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_statuspoll_success_sx1262",
@@ -6514,7 +7170,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_awning_statuspoll_success_sx1276",
@@ -6543,7 +7202,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "public_key_vector"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_brightness_50_lr1121",
@@ -6572,7 +7234,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_brightness_50_sx1262",
@@ -6601,7 +7266,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_brightness_50_sx1276",
@@ -6630,7 +7298,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_brightness_75_lr1121",
@@ -6659,7 +7330,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_brightness_75_sx1262",
@@ -6688,7 +7362,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_brightness_75_sx1276",
@@ -6717,7 +7394,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_light_off_lr1121",
@@ -6746,7 +7426,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_light_off_sx1262",
@@ -6775,7 +7458,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_light_off_sx1276",
@@ -6804,7 +7490,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_light_on_lr1121",
@@ -6833,7 +7522,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_light_on_sx1262",
@@ -6862,7 +7554,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_light_on_sx1276",
@@ -6891,7 +7586,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "somfy_oximo40_statuspoll_sx1262",
@@ -6920,7 +7618,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "somfy_pergola_louver_statuspoll_replies_sx1262",
@@ -6949,7 +7650,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "somfy_rs100_statuspoll_kig300_sx1276",
@@ -6978,7 +7682,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "tilt_cover_statuspoll_linked_remote_triggers",
@@ -7007,7 +7714,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "tilt_cover_statuspoll_reports_settled_tilt_after",
@@ -7038,7 +7748,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "tilt_cover_statuspoll_reports_settled_tilt_before",
@@ -7067,7 +7780,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "velux_klf200_statuspoll_roundrobin_868_sx1262",
@@ -7099,7 +7815,11 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only",
+        "source_fragment_check_notes"
+      ]
     },
     {
       "id": "velux_sml_statuspoll_queued_by_hub_sx1262",
@@ -7129,7 +7849,9 @@
         ],
         "physical_motion": "unknown"
       },
-      "evidence": "source_frame_sequence",
+      "evidence": [
+        "source_fragment_check_notes"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -7160,7 +7882,9 @@
         ],
         "physical_motion": "unknown"
       },
-      "evidence": "source_frame_sequence",
+      "evidence": [
+        "source_frame_sequence"
+      ],
       "in_upstream_snapshot": true
     },
     {
@@ -7190,7 +7914,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "velux_ssl_statuspoll_stop_settle_preamble_escalation",
@@ -7222,7 +7949,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "source_frame_sequence"
+      ]
     },
     {
       "id": "velux_ssl_statuspoll_stopped_off_target",
@@ -7255,7 +7985,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     },
     {
       "id": "multi_somfy_unsolicited_status_burst",
@@ -7286,7 +8019,10 @@
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
       },
-      "in_upstream_snapshot": true
+      "in_upstream_snapshot": true,
+      "evidence": [
+        "receive_only"
+      ]
     }
   ],
   "derived_excerpts": [

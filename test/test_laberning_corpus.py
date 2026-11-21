@@ -77,6 +77,14 @@ class OriginalCorpusTests(unittest.TestCase):
                 if burst == "somfy_default":
                     self.assertEqual(entry["policy_era"], "historical_pre_ADR0119")
 
+    def test_evidence_report_does_not_treat_fragment_or_rekeying_as_live_proof(self):
+        report = {row["id"]: row for row in corpus.inventory_report(self.manifest)["changes"]}
+        self.assertIn("source_fragment_check_notes",
+                      report["wisniowski_moto1000_exchange_session_interrupted_after_unconfirmed_stop"]["evidence"])
+        self.assertIn("reconstruction_check_notes", report["velux_kux100_pairing_full"]["evidence"])
+        self.assertEqual(report["somfy_smoove_oneway_short_press_on_air"]["evidence"],
+                         ["sdr_on_air", "public_key_vector", "receive_only"])
+
     def test_original_sml_correspondence_keeps_ack_separate_from_queued_polls(self):
         ack = self.by_id["velux_sml_exchange_execute_ack_waiting_for_power_sx1262"][1]
         self.assertTrue(any(bytes.fromhex(f["hex"])[8:10] == bytes([4, 3]) for f in ack["frames"]))
