@@ -7621,6 +7621,7 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
             if (mCurrentCmd.active && !mAuthResponseSent && frame.commandId!=IoHomeCommand::ChallengeResponse) {
                 mExchangeRequestFrame=frame; mExchangeRequestWireLength=iLength;
                 mExchangeRequestSessionId=mTwoWaySessionId;
+                mExchangeRequestFrequency=mCurrentFreqIdx;
                 beginResponseTimingAttempt();
                 selectDirectedResponseTimeout(frame.ctrlByte1);
             }
@@ -9539,6 +9540,14 @@ void IoHomeController::processResponse()
         dispatchRxFrame();
         if (mState == ControllerState::ProcessResponse)
             mState = ControllerState::WaitResponse;
+        return;
+    }
+
+    if (mExchangeRequestSessionId != mTwoWaySessionId ||
+        mLastResponseFreqIdx != mExchangeRequestFrequency ||
+        uint32_t(mLastRxReadMs - mStateTimer) >= mResponseTimeoutMs) {
+        recordTwoWayTrace("rx_outside_exchange", mRxFrame, mRxRawLen);
+        mState = ControllerState::WaitResponse;
         return;
     }
 

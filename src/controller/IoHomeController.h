@@ -1533,6 +1533,7 @@ private:
   IoHomeFrame mExchangeRequestFrame;
   uint8_t mExchangeRequestWireLength=0;
   uint64_t mExchangeRequestSessionId=0;
+  uint8_t mExchangeRequestFrequency=0xFF;
   void recordTwoWayTrace(const char *event,const IoHomeFrame &frame,uint8_t wireLength=0);
   uint8_t mSystemKey[16];
 

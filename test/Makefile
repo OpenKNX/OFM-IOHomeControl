@@ -205,6 +205,8 @@ check-rf-build-modes: $(PROTOCOL_TARGET) $(DEBUG_PROTOCOL_TARGET)
 	./$(DEBUG_PROTOCOL_TARGET) --filter controller_verify_direct_2f_is_not_authenticated_success
 	./$(DEBUG_PROTOCOL_TARGET) --filter controller_inbound_status_proof_binds_mac_identity_frequency_state_and_age
 	./$(DEBUG_PROTOCOL_TARGET) --filter controller_inbound_reply_preparation_busy_keeps_original_25ms_deadline
+	./$(PROTOCOL_TARGET) --filter controller_sunea_missing_final_interleaving
+	./$(DEBUG_PROTOCOL_TARGET) --filter controller_sunea_missing_final_interleaving
 
 .PHONY: check-issue156-import
 check-issue156-import:

@@ -25387,3 +25387,58 @@ TEST(protocol_guelma_pr254_codecs_are_exactly_model_and_length_scoped)
         ASSERT_TRUE(!decode(Model::Guelma, sample).known);
     }
 }
+
+TEST(controller_sunea_missing_final_interleaving_never_becomes_success)
+{
+    const uint8_t key[16] = {1};
+    const uint8_t nonce[6] = {1, 2, 3, 4, 5, 6};
+    IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c, m, ch, 0xE4E61D, 0xD121E7, key);
+    c.setRxScanEnabled(false);
+    ASSERT_TRUE(c.sendBackgroundCommand(0xD121E7, key, IoHomeCommand::Private, 3, 0xFF, 0xFF, 1));
+    IoHomeFrame tx, rx;
+    ASSERT_TRUE(transmitQueuedControllerFrame(c, tx));
+    const auto frequency = c.radio().testTransmitFrequencies().back();
+    c.radio().testSetReceiveBusyCount(2);
+    c.loop();
+    ASSERT_EQ(c.state(), ControllerState::TxInProgress);
+    ioHomeTestAdvanceMillis(10);
+    c.loop(); c.loop();
+    ASSERT_EQ(c.state(), ControllerState::WaitResponse);
+
+    buildPairChallengeRequestFrame(rx, 0xE4E61D, 0xAAAAAA, nonce);
+    ASSERT_TRUE(queueControllerResponse(c, rx));
+    ASSERT_EQ(c.radio().testTransmitCount(), 1U);
+    buildPairChallengeRequestFrame(rx, 0xE4E61D, 0xD121E7, nonce);
+    c.testSetRxScanFrequency(frequency == IOHC_FREQ_1 ? IOHC_FREQ_2 : IOHC_FREQ_1);
+    ASSERT_TRUE(queueControllerResponse(c, rx));
+    ASSERT_EQ(c.radio().testTransmitCount(), 1U);
+    c.testSetRxScanFrequency(frequency);
+    ASSERT_TRUE(queueControllerResponse(c, rx));
+    c.loop();
+    ASSERT_EQ(c.radio().testTransmitCount(), 2U);
+    ASSERT_TRUE(lastTransmittedFrameForTest(c, tx));
+    ASSERT_EQ(tx.commandId, IoHomeCommand::ChallengeResponse);
+
+    IoHomeFrame activity; buildPassiveExecuteFrame(activity, 0x333333, 0x003F);
+    activity.set1WMode(); activity.hasHmac = true; activity.dataLen = 7;
+    activity.commandId = IoHomeCommand::WritePrivate;
+    ASSERT_TRUE(queueControllerPassiveFrame(c, activity));
+    ASSERT_EQ(c.state(), ControllerState::WaitResponse);
+    for (auto wrong : {IoHomeCommand::ChallengeResponse, IoHomeCommand::StatusUpdateResponse}) {
+        rx.commandId = wrong;
+        rx.setDestNode(0xFFFF01);
+        ASSERT_TRUE(queueControllerResponse(c, rx));
+        ASSERT_EQ(c.state(), ControllerState::WaitResponse);
+    }
+
+    // Source issue #245 records silence after 3D. There is no fixture frame for it.
+    ioHomeTestAdvanceMillis(6000);
+    c.loop(); c.loop();
+    ASSERT_TRUE(c.lastTwoWayOutcome().valid);
+    ASSERT_TRUE(!c.lastTwoWayOutcome().transportComplete);
+    ASSERT_EQ(c.lastTwoWayOutcome().deviceAccepted, IoHomeController::Evidence::Unknown);
+    ASSERT_EQ(c.lastTwoWayOutcome().result, IoHomeCommandExchangeResult::AuthenticatedUnconfirmed);
+    ASSERT_EQ(c.radio().testTransmitCount(), 2U);
+    ASSERT_TRUE(!ch.testHasStatusUpdate());
+}
