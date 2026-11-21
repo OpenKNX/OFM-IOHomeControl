@@ -9,6 +9,16 @@ constexpr IoHomeTxPhy kIoHomeTxPhy = IoHomeTxPhy::Sx1262SoftwareUart;
 #else
 constexpr IoHomeTxPhy kIoHomeTxPhy = IoHomeTxPhy::Sx1276IoHome;
 #endif
+constexpr uint32_t ioHomePreambleBitsPerByte(IoHomeTxPhy phy) {
+    return phy == IoHomeTxPhy::Sx1276IoHome ? 10U : 8U;
+}
+
+// Nominal 38.4 kbps conversion; RF budget accounting keeps its conservative rate.
+inline uint64_t ioHomePreambleBytesForMs(uint32_t milliseconds, IoHomeTxPhy phy = kIoHomeTxPhy) {
+    const uint32_t divisor = 1000U * ioHomePreambleBitsPerByte(phy);
+    return (uint64_t(milliseconds) * 38400U + divisor / 2U) / divisor;
+}
+
 struct IoHomeAirtime {
     uint32_t preambleBits, syncBits, bodyBits, preambleUs, packetUs, budgetMs;
 };
@@ -20,7 +30,7 @@ inline IoHomeAirtime ioHomeAirtime(uint8_t frameBytes, uint16_t preambleBytes,
     // The length byte is ALREADY in frameBytes; never add it a second time.
     // SX1262 SetPacketParams takes preamble bits, sync=24; UART(frame+CRC)
     // is packed into complete octets by sx1262EncodeIoHomeFrame (pad bits radiate).
-    const uint32_t pre = uint32_t(preambleBytes) * (sx1276 ? 10U : 8U);
+    const uint32_t pre = uint32_t(preambleBytes) * ioHomePreambleBitsPerByte(phy);
     const uint32_t sync = sx1276 ? 30U : 24U;
     const uint32_t cells = (uint32_t(frameBytes) + 2U) * 10U;
     const uint32_t body = sx1276 ? cells : ((cells + 7U) / 8U) * 8U;

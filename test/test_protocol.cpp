@@ -6974,7 +6974,7 @@ TEST(controller_wake_length_and_tx_timeout_limits)
     c.radio().testSetMaxPreambleLength(65535); // SX1276 byte register
     ASSERT_TRUE(c.setLowPower2WWakePreamble(65535));
     ASSERT_TRUE(c.setDiagnostic2WStartPreamble(65535));
-    for (uint16_t bytes : {8, 1024, 1536, 2048, 2450, 8191, 65535})
+    for (uint16_t bytes : {8, 1024, 1536, 1960, 2048, 2304, 2450, 2880, 8191, 65535})
     {
         const auto airtime=IoHomeController::estimatedTxAirtimeMs(32, bytes);
         const auto timeout=IoHomeController::txTimeoutForAirtime(32, bytes);
@@ -21066,12 +21066,21 @@ TEST(controller_continuation_trace_and_airtime_use_actual_transmitted_frame)
 }
 
 
+TEST(airtime_duration_conversion_uses_the_matching_phy)
+{
+    ASSERT_EQ(ioHomePreambleBytesForMs(0, IoHomeTxPhy::Sx1276IoHome), 0U);
+    ASSERT_EQ(ioHomePreambleBytesForMs(1, IoHomeTxPhy::Sx1276IoHome), 4U);
+    ASSERT_EQ(ioHomePreambleBytesForMs(1, IoHomeTxPhy::Sx1262SoftwareUart), 5U);
+    ASSERT_EQ(ioHomePreambleBytesForMs(600, IoHomeTxPhy::Sx1276IoHome), 2304U);
+    ASSERT_EQ(ioHomePreambleBytesForMs(600, IoHomeTxPhy::Sx1262SoftwareUart), 2880U);
+    ASSERT_TRUE(ioHomePreambleBytesForMs(UINT32_MAX, IoHomeTxPhy::Sx1262SoftwareUart) > UINT32_MAX);
+}
 TEST(airtime_per_phy_exact_values_padding_and_overflow_bounds)
 {
-    const uint16_t preambles[]={1024,1536,2048,2450};
-    const uint32_t sx1276Ms[]={279,414,548,654};
-    const uint32_t sx1262Ms[]={225,333,440,525};
-    for (unsigned i=0;i<4;++i) {
+    const uint16_t preambles[]={1024,1536,1960,2048,2304,2450,2880};
+    const uint32_t sx1276Ms[]={279,414,525,548,616,654,767};
+    const uint32_t sx1262Ms[]={225,333,422,440,494,525,616};
+    for (unsigned i=0;i<sizeof(preambles)/sizeof(preambles[0]);++i) {
         ASSERT_EQ(ioHomeAirtime(10,preambles[i],IoHomeTxPhy::Sx1276IoHome).budgetMs,sx1276Ms[i]);
         ASSERT_EQ(ioHomeAirtime(10,preambles[i],IoHomeTxPhy::Sx1262SoftwareUart).budgetMs,sx1262Ms[i]);
     }
