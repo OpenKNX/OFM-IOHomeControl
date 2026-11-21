@@ -1,0 +1,232 @@
+{
+  "sunea": {
+    "source": "https://github.com/laberning/home_io_control/issues/245",
+    "body_sha256": "1c75c172f04fbcbb24e990ccc2eb021b839c3006d409880a45c7892ec3696c25",
+    "crc": "not_logged",
+    "capture_kind": "application_log",
+    "frames": [
+      {
+        "line": 61,
+        "timestamp": "09:31:57.016",
+        "direction": "TX",
+        "frequency_hz": 868950000,
+        "length": 12,
+        "hex": "4B 00 D1 21 E7 23 1F C4 03 03 00 00"
+      },
+      {
+        "line": 62,
+        "timestamp": "09:31:57.069",
+        "direction": "RX",
+        "frequency_hz": 868950000,
+        "length": 15,
+        "header_hex": "0E 00 23 1F C4 D1 21 E7 3C",
+        "masked_bytes": 6
+      },
+      {
+        "line": 63,
+        "timestamp": "09:31:57.070",
+        "direction": "TX",
+        "frequency_hz": 868950000,
+        "length": 15,
+        "header_hex": "0E 20 D1 21 E7 23 1F C4 3D",
+        "masked_bytes": 6
+      },
+      {
+        "line": 67,
+        "timestamp": "09:31:58.087",
+        "direction": "TX",
+        "frequency_hz": 868950000,
+        "length": 12,
+        "hex": "4B 00 D1 21 E7 23 1F C4 03 03 00 00"
+      },
+      {
+        "line": 69,
+        "timestamp": "09:31:58.320",
+        "direction": "TX",
+        "frequency_hz": 868250000,
+        "length": 12,
+        "hex": "4B 00 D1 21 E7 23 1F C4 03 03 00 00"
+      },
+      {
+        "line": 70,
+        "timestamp": "09:31:58.372",
+        "direction": "RX",
+        "frequency_hz": 868250000,
+        "length": 15,
+        "header_hex": "0E 00 23 1F C4 D1 21 E7 3C",
+        "masked_bytes": 6
+      },
+      {
+        "line": 71,
+        "timestamp": "09:31:58.373",
+        "direction": "TX",
+        "frequency_hz": 868250000,
+        "length": 15,
+        "header_hex": "0E 20 D1 21 E7 23 1F C4 3D",
+        "masked_bytes": 6
+      },
+      {
+        "line": 83,
+        "timestamp": "09:32:59.427",
+        "direction": "TX",
+        "frequency_hz": 868250000,
+        "length": 12,
+        "hex": "4B 00 D1 21 E7 23 1F C4 03 03 00 00"
+      },
+      {
+        "line": 84,
+        "timestamp": "09:32:59.481",
+        "direction": "RX",
+        "frequency_hz": 868250000,
+        "length": 15,
+        "header_hex": "0E 00 23 1F C4 D1 21 E7 3C",
+        "masked_bytes": 6
+      },
+      {
+        "line": 85,
+        "timestamp": "09:32:59.482",
+        "direction": "TX",
+        "frequency_hz": 868250000,
+        "length": 15,
+        "header_hex": "0E 20 D1 21 E7 23 1F C4 3D",
+        "masked_bytes": 6
+      },
+      {
+        "line": 87,
+        "timestamp": "09:32:59.500",
+        "direction": "RX",
+        "frequency_hz": 868250000,
+        "length": 23,
+        "hex": "96 00 23 1F C4 D1 21 E7 04 05 00 D1 00 00 00 00 00 E1 F2 A1 09 00 00"
+      }
+    ],
+    "no_matching_final_response_lines": [
+      65,
+      73
+    ],
+    "final_response_line": 87
+  },
+  "hekla": {
+    "source": "https://github.com/laberning/home_io_control/issues/222#issuecomment-6892845397",
+    "body_sha256": "0eac4558cdf5b713c244f369d7fb30b7c47abf849b33d72c328725bfa267bb4b",
+    "crc": "not_logged",
+    "capture_kind": "application_log",
+    "frames": [
+      {
+        "line": 5,
+        "frequency_hz": 869850000,
+        "uptime_ms": 219303070,
+        "hex": "8D 00 A3 4A 4F F2 3F AA 21 0C 61 01 01 01"
+      },
+      {
+        "line": 13,
+        "frequency_hz": 868250000,
+        "uptime_ms": 219316124,
+        "hex": "8D 00 A3 4A 4F F2 3F AA 21 0C 61 01 01 00"
+      },
+      {
+        "line": 23,
+        "frequency_hz": 868950000,
+        "uptime_ms": 2201494,
+        "hex": "4E 00 A3 4A 4F F2 3F A9 20 0C 61 01 42 64 00"
+      },
+      {
+        "line": 28,
+        "frequency_hz": 869850000,
+        "uptime_ms": 1614013,
+        "hex": "4E 00 A3 4A 4F F2 3F A9 20 0C 61 01 42 E8 03"
+      },
+      {
+        "line": 33,
+        "frequency_hz": 868250000,
+        "uptime_ms": 1622296,
+        "hex": "4E 00 A3 4A 4F F2 3F A9 20 0C 61 01 42 D0 07"
+      },
+      {
+        "line": 38,
+        "frequency_hz": 868250000,
+        "uptime_ms": 2394967,
+        "hex": "4E 00 A3 4A 4F F2 3F A9 20 0C 61 01 42 10 27"
+      }
+    ],
+    "occupancy_with_detection_off_source": "https://github.com/laberning/home_io_control/issues/222#issuecomment-7013337108"
+  },
+  "linked_remote": {
+    "source": "https://github.com/laberning/home_io_control/issues/209#issuecomment-6908367083",
+    "capture_kind": "reported_overlap_trials",
+    "overlap_trials": 3,
+    "missed_motor_presses": 2
+  },
+  "sx1276_timeout": {
+    "source": "https://github.com/laberning/home_io_control/issues/228#issuecomment-7031784503",
+    "capture_kind": "driver_log_excerpt",
+    "timeout_ms": 855,
+    "op_mode": 3,
+    "irq_flags2": 32,
+    "post_timeout_rssi_dbm": [
+      -79,
+      -79,
+      -79
+    ],
+    "frequencies_hz": [
+      868250000,
+      868950000,
+      869850000
+    ]
+  },
+  "radiator_restart": {
+    "source": "https://github.com/laberning/home_io_control/issues/228#issuecomment-7057967284",
+    "capture_kind": "reported_register_values",
+    "register": "0116",
+    "values_hex": [
+      "0C BE",
+      "0C B5"
+    ],
+    "reported_uptime_bytes_hex": "A5 9B 02 00"
+  },
+  "mixed_adelis": {
+    "source": "https://github.com/laberning/home_io_control/issues/243",
+    "capture_kind": "reported_register_values",
+    "model": "ADELIS 2 M",
+    "register": "0153",
+    "values_hex": [
+      "01",
+      "00",
+      "01",
+      "00"
+    ]
+  },
+  "identify": {
+    "source": "https://github.com/laberning/home_io_control/issues/241#issuecomment-6954500596",
+    "capture_kind": "reported_payloads",
+    "request_hex": [
+      "1E 01 FE",
+      "1E 01 FF",
+      "1E 01 00"
+    ],
+    "reply_payload_hex": [
+      "FE 03",
+      "FE 03",
+      "FE 04"
+    ]
+  },
+  "klr100": {
+    "source": "https://github.com/laberning/home_io_control/issues/242#issuecomment-7052044227",
+    "capture_kind": "reported_discovery_observations",
+    "responds_during_copy_system": true,
+    "window_nodes": 5,
+    "paired_end_to_end": null
+  },
+  "ssl_wake": {
+    "source": "https://github.com/laberning/home_io_control/pull/240",
+    "capture_kind": "reported_wake_trials",
+    "configured_bytes": 2880,
+    "first_try_successes": 8,
+    "trials": 8
+  },
+  "identity_collision": {
+    "source": "test/corpus/stefan-dual-controller-20261027.json",
+    "capture_kind": "existing_local_evidence",
+    "gateway": "E4E61D"
+  }
+}

@@ -248,3 +248,8 @@ run: check-window-travel
 check-kux110-queue-capture:
 	$(PYTHON) test_kux110_queue_capture.py
 run: check-kux110-queue-capture
+
+.PHONY: check-laberning-field-observations
+check-laberning-field-observations:
+	$(PYTHON) test_laberning_field_observations.py
+run: check-laberning-field-observations
