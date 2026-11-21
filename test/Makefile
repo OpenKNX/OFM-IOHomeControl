@@ -69,6 +69,7 @@ check-radio: $(SX1262_ERROR_TARGET) $(SX1262_PHY_TARGET) $(BUILD_DIR)/test_sx127
 	./$(BUILD_DIR)/test_sx1276_timing_disabled
 	$(PYTHON) test_radio_timing_analysis.py
 	$(PYTHON) test_sx1262_wait_busy.py
+	$(PYTHON) test_sx1262_reset_recovery.py
 
 check-ui:
 	$(PYTHON) ../tools/generate_channel_selections.py --check
