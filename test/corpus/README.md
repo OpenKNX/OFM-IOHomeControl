@@ -224,20 +224,17 @@ SHA-256:
 - `atlantic_agilia_pairing_key_pull_heater_direct_read.yaml`: `59a4a12c503d0475c592008990d69fecea2cae3a93254240ab5d53c3fb4be88f`
 - `atlantic_agilia_pairing_key_pull_heater_not_next_address.yaml`: `30134bd66cf742de5bb1950ac7a958ed5e72f85bd6595e4b516a2e3cd08f7e4f`
 
-## Original laberning source inventory (27 October 2026)
+## Original laberning source inventory
 
-Source: [laberning/home_io_control c82d38f](https://github.com/laberning/home_io_control/tree/c82d38f47901b71c1c63413e638241dbe1aa2d06/tests/corpus/captures),
-including #183 STOPPED-off-target and #182 MOTO1000 percentage refusal. MIT
-copyright/permission are retained in `LABERNING-LICENSE`; four original host
-helpers and their license are retained unchanged in `laberning_tools/`.
+The pinned [upstream snapshot ecc08c9](https://github.com/laberning/home_io_control/tree/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures) contains 239 captures and 1,606 frames. The manifest also retains seven captures removed upstream, for 246 active source files and 1,616 frames. The previously pinned versions are reproducible at the OFM commit before this update. The MIT notice and exact upstream host tools are pinned alongside the corpus. The updated validator covers the public re-keying of private 1W frames.
 
-All 177 pinned YAMLs are accounted for in `laberning-manifest.json`: 17 existing
-byte-identical copies are reused and 160 missing originals live under
-`laberning-c82d38f/`. Every artifact has its upstream path, Git blob SHA-1,
-SHA-256, key mode, origin, original radio attribution, CRC mode and explicit
-coverage. The three existing derived audit excerpts are separate from these
-originals. Synthetic/bootstrap/reference sources stay labeled as such; LR1121
-labels provide protocol coverage only and do not add an OFM radio driver.
+The inventory includes each file's original location, Git blob, SHA-256, key status, origin, radio and replay coverage. Use `python3 tools/laberning_corpus.py --inventory-report report.json` for the reviewed delta. The standard CI report uses the pinned local metadata and files. `--compare-upstream /path/to/home_io_control` can compare it with another local checkout.
+
+The November 20 SDR recordings of four long default Somfy copies carry `historical_pre_ADR0119`. Copies, distinct protocol commands and actionable Execute sequences are separate reception counts. Several Execute sequences can occur inside a held press. The unenrolled hub bursts establish the transmitted shape, and the observer captures do not establish motor actuation.
+
+The separate opt-in console setting `iohc 1w wake 515` selects the upstream wake-first timing for automatic Somfy and unknown profiles. `iohc 1w wake 0` restores the legacy shape. The `300..1000` ms setting is converted at 38.4 kbit/s using 10 bits per preamble byte on SX1276 and 8 on SX1262. VELUX Automatic and explicit AlwaysAlive retain their short bursts. Explicit LowPower uses the configured duration when set. This setting is independent of the directed 2W wake preamble.
+
+A Somfy or unknown one-way identity stops at sequence `0xFFFF`. An exhausted identity requires explicit enrollment of a new identity. Repeating Somfy enrollment can remove an existing controller from a receiver, so the console requires `confirm-existing` for a locally known enrolled identity.
 
 Install host dependencies once (Python 3.10+):
 
