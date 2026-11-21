@@ -23186,7 +23186,7 @@ TEST(protocol_alfea_markers_and_signed_temperature)
 
 TEST(golden_rf_corpus_original_laberning_headers_crc_and_flags)
 {
-    ASSERT_EQ(sizeof(LaberningOriginal::captures)/sizeof(LaberningOriginal::captures[0]),184U);
+    ASSERT_EQ(sizeof(LaberningOriginal::captures)/sizeof(LaberningOriginal::captures[0]),246U);
     for(const auto &f:LaberningOriginal::frames) {
         IoHomeFrame frame;
         if(!frame.deserializeRawWithOptionalCrc(f.bytes,f.length)) {
@@ -23195,8 +23195,9 @@ TEST(golden_rf_corpus_original_laberning_headers_crc_and_flags)
         }
         if(f.expectedCommand>=0)ASSERT_EQ(unsigned(frame.commandId),unsigned(f.expectedCommand));
         ASSERT_EQ(frame.ctrlByte0&f.flagMask,f.flags);
-        ASSERT_EQ(frame.getDestNodeId(),(uint32_t(f.bytes[2])<<16)|(uint32_t(f.bytes[3])<<8)|f.bytes[4]);
-        ASSERT_EQ(frame.getSrcNodeId(),(uint32_t(f.bytes[5])<<16)|(uint32_t(f.bytes[6])<<8)|f.bytes[7]);
+        const auto offset = (f.bytes[1] & 3U) == 3U ? 2U : 0U;
+        ASSERT_EQ(frame.getDestNodeId(),(uint32_t(f.bytes[offset+2])<<16)|(uint32_t(f.bytes[offset+3])<<8)|f.bytes[offset+4]);
+        ASSERT_EQ(frame.getSrcNodeId(),(uint32_t(f.bytes[offset+5])<<16)|(uint32_t(f.bytes[offset+6])<<8)|f.bytes[offset+7]);
         if(f.crc) {
             const auto crc=IoHomeCrypto::crc16Kermit(f.bytes,f.length-2);
             ASSERT_EQ(crc,uint16_t(f.bytes[f.length-2])|(uint16_t(f.bytes[f.length-1])<<8));

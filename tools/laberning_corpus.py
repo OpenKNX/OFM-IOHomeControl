@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Offline, host-only verification and bounded native vectors from original YAML.
-Source inventory: laberning/home_io_control c82d38f47901b71c1c63413e638241dbe1aa2d06.
+Source inventory: laberning/home_io_control ecc08c9b620fff1e01c5c660dec8c4acd6eb6774.
 Upstream classification/outcome values describe upstream transport tests, not actuation.
 """
 from pathlib import Path
@@ -18,7 +18,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "test/corpus/laberning-manifest.json"
 VENDOR = ROOT / "test/corpus/laberning_tools"
-COMMIT = "c82d38f47901b71c1c63413e638241dbe1aa2d06"
+COMMIT = "ecc08c9b620fff1e01c5c660dec8c4acd6eb6774"
 MAX_NATIVE_FRAMES = 32
 ALLOWED_STATES = {"original_imported", "derived_equivalent", "pending", "not_applicable", "synthetic_reference"}
 
@@ -34,16 +34,23 @@ def local_path(root, value):
         raise ValueError("fixture path escapes repository")
     return path
 
+def inventory_digest(rows):
+    identity = "\n".join(row["upstream_path"] + " " + row["git_blob_sha1"] for row in rows)
+    return digest(identity.encode())
+
+
 def check_inventory(manifest):
     rows = manifest["entries"]
     paths = [row["upstream_path"] for row in rows]
     ids = [row["id"] for row in rows]
     if paths != sorted(paths) or len(set(ids)) != len(ids) or len(set(paths)) != len(paths):
         raise ValueError("duplicate or unordered inventory")
-    identity = "\n".join(row["upstream_path"] + " " + row["git_blob_sha1"] for row in rows).encode()
-    if digest(identity) != manifest["inventory_sha256"]:
+    if inventory_digest(rows) != manifest["inventory_sha256"]:
         raise ValueError("pinned inventory regressed; review intentional inventory changes")
-    if manifest["schema"] != 1 or manifest["commit"] != COMMIT:
+    upstream = [row for row in rows if row["in_upstream_snapshot"]]
+    if inventory_digest(upstream) != manifest["upstream_inventory_sha256"]:
+        raise ValueError("current upstream inventory regressed")
+    if manifest["schema"] != 2 or manifest["commit"] != COMMIT:
         raise ValueError("unexpected manifest schema or source revision")
 
 def validate_document(document, path):
@@ -74,7 +81,8 @@ def load_captures(root=ROOT, manifest=None):
     check_inventory(manifest)
     # Verify executable upstream helpers before importing them.
     for helper in manifest["helper_sources"]:
-        if digest(local_path(root, helper["local_path"]).read_bytes()) != helper["sha256"]:
+        data = local_path(root, helper["local_path"]).read_bytes()
+        if digest(data) != helper["sha256"] or git_blob(data) != helper["git_blob_sha1"]:
             raise ValueError("vendored upstream helper changed")
     sys.path.insert(0, str(root / "test/corpus/laberning_tools"))
     return manifest, [(entry, read_capture(root, entry)) for entry in manifest["entries"]]
@@ -104,8 +112,26 @@ def preamble_from_note(note):
 def compare_upstream(manifest, repository):
     result = subprocess.check_output(["git", "-C", str(repository), "ls-tree", "-r", "HEAD", "--", manifest["upstream_capture_root"]], text=True)
     observed = {line.split("\t", 1)[1] for line in result.splitlines() if line.endswith(".yaml")}
-    expected = {row["upstream_path"] for row in manifest["entries"]}
+    expected = {row["upstream_path"] for row in manifest["entries"] if row["in_upstream_snapshot"]}
     return {"new_upstream_files": sorted(observed-expected), "upstream_removed_files": sorted(expected-observed)}
+
+def inventory_report(manifest):
+    entries = {entry["upstream_path"]: entry for entry in manifest["entries"]}
+    return {
+        "previous_commit": manifest["previous_commit"],
+        "commit": manifest["commit"],
+        "upstream_inventory_sha256": manifest["upstream_inventory_sha256"],
+        "changes": [
+            {
+                **change,
+                **{field: entries[change["upstream_path"]][field]
+                   for field in ("id", "origin", "classification", "local_path", "sha256", "git_blob_sha1")},
+                "behavior_tests": entries[change["upstream_path"]]["coverage"]["behavior_tests"],
+            }
+            for change in manifest["inventory_delta"]
+        ],
+    }
+
 
 def array(data):
     return "{" + ",".join("0x%02X" % value for value in data) + "}"
@@ -153,9 +179,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--generate", type=Path)
     parser.add_argument("--compare-upstream", type=Path)
+    parser.add_argument("--inventory-report", type=Path)
     args = parser.parse_args()
     manifest, captures = load_captures()
     print("Pinned laberning corpus: %u original YAMLs, %u frames; hashes/schema/CRC/public-key safety passed" % (len(captures),sum(len(d["frames"]) for _,d in captures)))
+    if args.inventory_report:
+        args.inventory_report.parent.mkdir(parents=True, exist_ok=True)
+        args.inventory_report.write_text(json.dumps(inventory_report(manifest), indent=2) + "\n")
     if args.compare_upstream:
         print(json.dumps(compare_upstream(manifest,args.compare_upstream),sort_keys=True))
     if args.generate:

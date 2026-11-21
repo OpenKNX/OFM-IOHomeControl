@@ -1,39 +1,45 @@
 {
-  "schema": 1,
+  "schema": 2,
   "repository": "https://github.com/laberning/home_io_control",
-  "commit": "c82d38f47901b71c1c63413e638241dbe1aa2d06",
+  "commit": "ecc08c9b620fff1e01c5c660dec8c4acd6eb6774",
   "upstream_capture_root": "tests/corpus/captures",
-  "inventory_sha256": "d0f0c764caa2c6690856d8d9b6462c7e5cac71a92abc0eec0fe3c4d9480edba2",
+  "inventory_sha256": "d191fd3b04a2332884af5ffba19b26699ae78c6774a71bd97baa4b800750cc61",
   "helper_sources": [
     {
       "upstream_path": "scripts/corpus/build.py",
       "local_path": "test/corpus/laberning_tools/build.py",
-      "sha256": "72b3ebe4d3c0aec266bd51f800d07cd5d559808474c89031b94e72d9bc0cabaf"
+      "sha256": "bc4701f2df949388d8978821654188357ffdc8ac3b7cb8a88677f776907c9974",
+      "git_blob_sha1": "ed5e08e27a6e021479f3ce8421b140f48c3866f9"
     },
     {
       "upstream_path": "scripts/corpus/validate.py",
       "local_path": "test/corpus/laberning_tools/validate.py",
-      "sha256": "e15c93c53a0c96faca43c58506fc7439a57e5dc9f6e5ab353483c617a7d73b0f"
+      "sha256": "e566b075ac2888db22c9476b58d3a28d9acf4cf5c86e996f862e87052932ccd4",
+      "git_blob_sha1": "2312942436973e18de57e59afd3a4b5b5f7c4ce2"
     },
     {
       "upstream_path": "scripts/corpus/protolib.py",
       "local_path": "test/corpus/laberning_tools/protolib.py",
-      "sha256": "f6b69a61bd77f900297b80581e98e62c0b586d3233108e1e1af5fa050c4e2005"
+      "sha256": "d0db8a5dc637730c524c21b52902d900c57a1e2e6d43feb088a75662491d04bd",
+      "git_blob_sha1": "38d4863cade9dad854a711cd6c8979e1eba4f807"
     },
     {
       "upstream_path": "scripts/corpus/naming.py",
       "local_path": "test/corpus/laberning_tools/naming.py",
-      "sha256": "4a55702a683d6ce2ff826e4fe6dcebda778af2d42cf161eca6b67994ab6b6217"
+      "sha256": "9711f1f8f22606e87861867c90e892313ea79aa6c1a9b12085f8a110f40547d1",
+      "git_blob_sha1": "e2de03dd9c292908f4b6957c045b152ffbdba9ef"
     },
     {
       "upstream_path": "LICENSE",
       "local_path": "test/corpus/LABERNING-LICENSE",
-      "sha256": "e917b629421bc19b9d40ee49f38e7a7d23bfd1dc095005aa39cde07823f2fde6"
+      "sha256": "e917b629421bc19b9d40ee49f38e7a7d23bfd1dc095005aa39cde07823f2fde6",
+      "git_blob_sha1": "63f7e656e61a8e40bd0b8ec0ea4dbf7109651a89"
     },
     {
       "upstream_path": "LICENSE",
       "local_path": "test/corpus/laberning_tools/LICENSE",
-      "sha256": "e917b629421bc19b9d40ee49f38e7a7d23bfd1dc095005aa39cde07823f2fde6"
+      "sha256": "e917b629421bc19b9d40ee49f38e7a7d23bfd1dc095005aa39cde07823f2fde6",
+      "git_blob_sha1": "63f7e656e61a8e40bd0b8ec0ea4dbf7109651a89"
     }
   ],
   "entries": [
@@ -63,7 +69,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_discovery_lab_response",
@@ -91,14 +98,15 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_discovery_spe_paired_rollcall",
       "upstream_path": "tests/corpus/captures/discovery/somfy_awning_discovery_spe_paired_rollcall.yaml",
-      "git_blob_sha1": "519388ed1616a033f0d006c45288bedf59f2c23f",
-      "sha256": "8f00650f5278fd96bd03325fc5a315ff9bca7fffc0809175a25ac6b0ddeca38f",
-      "local_path": "test/corpus/laberning-c82d38f/discovery/somfy_awning_discovery_spe_paired_rollcall.yaml",
+      "git_blob_sha1": "d5e6077bed1c6331282c6dbfdb6d6854a983ade3",
+      "sha256": "89daa6f9cd41dd1f764dec8227e64c410cbbebd5f23ff051adf6dc842fa8a821",
+      "local_path": "test/corpus/laberning-ecc08c9/discovery/somfy_awning_discovery_spe_paired_rollcall.yaml",
       "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
@@ -115,11 +123,13 @@
         "source_integrity": "all_original_bytes",
         "host_schema_crc_key_safety": "all_frames",
         "native_parser": "all_frames",
-        "public_crypto": "checked_when_public_vectors_present",
+        "public_crypto": "public_vectors_only",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/discovery/somfy_awning_discovery_spe_paired_rollcall.yaml",
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_discovery_with_overheard_smoove_1w",
@@ -147,7 +157,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_discovery_alt_no_response",
@@ -175,14 +186,15 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_discovery_spe_paired_rollcall",
       "upstream_path": "tests/corpus/captures/discovery/somfy_izymo_dimmer_discovery_spe_paired_rollcall.yaml",
-      "git_blob_sha1": "683686e6953ad8ad1e95677f885f0900b3f1a08a",
-      "sha256": "92cbc0f54214a806c105b03313a6b6504c2bdeb4933347431233607fce70f105",
-      "local_path": "test/corpus/laberning-c82d38f/discovery/somfy_izymo_dimmer_discovery_spe_paired_rollcall.yaml",
+      "git_blob_sha1": "d74670fa9b80e4b6ad839fbbe86687093f31d58b",
+      "sha256": "b4635808225156844db20bc71842db2b7d43e1b7bc047365ff3e732a5ccb7517",
+      "local_path": "test/corpus/laberning-ecc08c9/discovery/somfy_izymo_dimmer_discovery_spe_paired_rollcall.yaml",
       "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
@@ -199,11 +211,13 @@
         "source_integrity": "all_original_bytes",
         "host_schema_crc_key_safety": "all_frames",
         "native_parser": "all_frames",
-        "public_crypto": "checked_when_public_vectors_present",
+        "public_crypto": "public_vectors_only",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/discovery/somfy_izymo_dimmer_discovery_spe_paired_rollcall.yaml",
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_j406_discovery_1w_overheard",
@@ -231,7 +245,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_rs100_discovery_attempt_1w_traffic",
@@ -259,7 +274,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_kig300_discovery_alt_burst",
@@ -287,7 +303,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_kli310_discovery_alt_sweep",
@@ -315,7 +332,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_kli313_discovery_alt_sweep",
@@ -343,7 +361,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_klr300_discovery_rollcall_node_verification",
@@ -374,7 +393,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_kux100_discovery_alt_addressed_challenge_response",
@@ -402,7 +422,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_kux100_discovery_alt_broadcast_no_response",
@@ -430,7 +451,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_ssl_discovery_tahoma_pairing",
@@ -458,7 +480,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_window_discovery_keyed_rollcall_flipper_cc1101",
@@ -486,15 +509,16 @@
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "reference_1w_enrollment_add_controller_kat",
       "upstream_path": "tests/corpus/captures/enrollment/reference_1w_enrollment_add_controller_kat.yaml",
-      "git_blob_sha1": "15349704a810fb71fd48d2ef7906342f61625b3a",
-      "sha256": "2461410e137bae355197238d2100b3f134a2e17fdc9aade288fe8064ff0b7290",
-      "local_path": "test/corpus/laberning-c82d38f/enrollment/reference_1w_enrollment_add_controller_kat.yaml",
-      "classification": "synthetic_reference",
+      "git_blob_sha1": "8aab3b601c31e086b382e288675b2f6940c96977",
+      "sha256": "89103b639601e495f8704cf8556f8535c4c681b53aacabc64adb559bcfd37f1e",
+      "local_path": "test/corpus/laberning-ecc08c9/enrollment/reference_1w_enrollment_add_controller_kat.yaml",
+      "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
       "origin": "reference-material",
@@ -514,16 +538,18 @@
         "behavior_tests": [
           "golden_rf_corpus_original_enrollment_public_kat_keeps_trailer_and_recovers_only_documented_key"
         ],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/enrollment/reference_1w_enrollment_add_controller_kat.yaml",
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_enrollment_add_controller_with_mac_sx1276",
       "upstream_path": "tests/corpus/captures/enrollment/somfy_izymo_dimmer_enrollment_add_controller_with_mac_sx1276.yaml",
-      "git_blob_sha1": "4ab54401ea1621f11b9874a3a5a0c79880d6d599",
-      "sha256": "d7c4fe094442ffdee3ae2f1773cd6c681df15055a2bf2bf1c4519896392ad82c",
-      "local_path": "test/corpus/laberning-c82d38f/enrollment/somfy_izymo_dimmer_enrollment_add_controller_with_mac_sx1276.yaml",
+      "git_blob_sha1": "758039f1d8b6ba4d26dae1cace599c25431ca671",
+      "sha256": "b299f405edd52116cd8839c7d0379cd72f96043b872f66d3ad3783a64f2ce33b",
+      "local_path": "test/corpus/laberning-ecc08c9/enrollment/somfy_izymo_dimmer_enrollment_add_controller_with_mac_sx1276.yaml",
       "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
@@ -540,18 +566,49 @@
         "source_integrity": "all_original_bytes",
         "host_schema_crc_key_safety": "all_frames",
         "native_parser": "all_frames",
-        "public_crypto": "checked_when_public_vectors_present",
+        "public_crypto": "public_vectors_only",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/enrollment/somfy_izymo_dimmer_enrollment_add_controller_with_mac_sx1276.yaml",
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_izymo_dimmer_enrollment_remove_controller_in_prog_window_sx1276",
+      "upstream_path": "tests/corpus/captures/enrollment/somfy_izymo_dimmer_enrollment_remove_controller_in_prog_window_sx1276.yaml",
+      "git_blob_sha1": "98b15ced4116343e49e7d5a0d2b627e0ad32a831",
+      "sha256": "cb393c8e40a12ea11a1de5adcbef1b07de9115b7bde44bcde8fecef6579a1496",
+      "local_path": "test/corpus/laberning-ecc08c9/enrollment/somfy_izymo_dimmer_enrollment_remove_controller_in_prog_window_sx1276.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1276",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 8,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/enrollment/somfy_izymo_dimmer_enrollment_remove_controller_in_prog_window_sx1276.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_smoove_enrollment_add_and_remove_controller_sx1276",
       "upstream_path": "tests/corpus/captures/enrollment/somfy_smoove_enrollment_add_and_remove_controller_sx1276.yaml",
-      "git_blob_sha1": "b0e0c7533da0f4ed80b3d4883e876f86680b8a38",
-      "sha256": "176ce5c556619954ec773822672ee12971bf1ae54e3c9205859119349da4fa62",
-      "local_path": "test/corpus/laberning-c82d38f/enrollment/somfy_smoove_enrollment_add_and_remove_controller_sx1276.yaml",
+      "git_blob_sha1": "9933be6ea90ab60086c23ccf2e568291fe07ecad",
+      "sha256": "6b9b05b523ee2b9a94335bbfe344cc1156ec06d8d6e02d704af695e4b3b84ce2",
+      "local_path": "test/corpus/laberning-ecc08c9/enrollment/somfy_smoove_enrollment_add_and_remove_controller_sx1276.yaml",
       "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
@@ -568,18 +625,20 @@
         "source_integrity": "all_original_bytes",
         "host_schema_crc_key_safety": "all_frames",
         "native_parser": "all_frames",
-        "public_crypto": "checked_when_public_vectors_present",
+        "public_crypto": "public_vectors_only",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/enrollment/somfy_smoove_enrollment_add_and_remove_controller_sx1276.yaml",
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_smoove_enrollment_monitor_sx1276",
       "upstream_path": "tests/corpus/captures/enrollment/somfy_smoove_enrollment_monitor_sx1276.yaml",
-      "git_blob_sha1": "fbc78f550d473e028a632c989efbca86d97d6ab8",
-      "sha256": "648d1c4c941e5cc767159dd90c034434ad5746b9996742db50981a8f2f5dec37",
-      "local_path": "test/corpus/laberning-c82d38f/enrollment/somfy_smoove_enrollment_monitor_sx1276.yaml",
+      "git_blob_sha1": "1e4eb388eea362deb6400f656230cab1131333e7",
+      "sha256": "6d495d01c25a0ec50f11465a6787b706fe50fa706d1534cfea36ed550822b358",
+      "local_path": "test/corpus/laberning-ecc08c9/enrollment/somfy_smoove_enrollment_monitor_sx1276.yaml",
       "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
@@ -596,19 +655,52 @@
         "source_integrity": "all_original_bytes",
         "host_schema_crc_key_safety": "all_frames",
         "native_parser": "all_frames",
-        "public_crypto": "checked_when_public_vectors_present",
+        "public_crypto": "public_vectors_only",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/enrollment/somfy_smoove_enrollment_monitor_sx1276.yaml",
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_smoove_enrollment_prog_press_on_air",
+      "upstream_path": "tests/corpus/captures/enrollment/somfy_smoove_enrollment_prog_press_on_air.yaml",
+      "git_blob_sha1": "e9b4a7c8e55ed11ee554a6f4b605913c2554ef98",
+      "sha256": "782a725fd260a501cfb8b0233d5b8e91ed987ea7d4ad6e0ab5045ccf728cc922",
+      "local_path": "test/corpus/laberning-ecc08c9/enrollment/somfy_smoove_enrollment_prog_press_on_air.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "other",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 9,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/enrollment/somfy_smoove_enrollment_prog_press_on_air.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [
+          "test/test_protocol.cpp::protocol_original_smoove_sdr_keeps_distinct_commands"
+        ],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "synthetic_enrollment_velux_kli_prog_sweep",
       "upstream_path": "tests/corpus/captures/enrollment/synthetic_enrollment_velux_kli_prog_sweep.yaml",
-      "git_blob_sha1": "402f2ea8311bd90cad36ec5f1935e6e5b70588ff",
-      "sha256": "d80911e31da07ee721ae13ebc89b8d4b6e6db3c6dcb12d935baf8f5112d9472c",
-      "local_path": "test/corpus/laberning-c82d38f/enrollment/synthetic_enrollment_velux_kli_prog_sweep.yaml",
-      "classification": "synthetic_reference",
+      "git_blob_sha1": "b5249d9268ca414cd8d09acd29de70dc1f85e10d",
+      "sha256": "c70ed12cd87b7bdc44a3c3a68814c1700df11b28f35129246fd42bb0e18bb2cf",
+      "local_path": "test/corpus/laberning-ecc08c9/enrollment/synthetic_enrollment_velux_kli_prog_sweep.yaml",
+      "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
       "origin": "synthetic-bootstrap",
@@ -624,11 +716,13 @@
         "source_integrity": "all_original_bytes",
         "host_schema_crc_key_safety": "all_frames",
         "native_parser": "all_frames",
-        "public_crypto": "checked_when_public_vectors_present",
+        "public_crypto": "public_vectors_only",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/enrollment/synthetic_enrollment_velux_kli_prog_sweep.yaml",
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "atlantic_agilia_exchange_mode_read_back",
@@ -656,7 +750,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "atlantic_agilia_exchange_presence_write",
@@ -684,7 +779,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "atlantic_agilia_exchange_setpoint_and_off_read_back",
@@ -712,7 +808,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "atlantic_agilia_exchange_status_read",
@@ -740,7 +837,37 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "atlantic_calypso_exchange_register_read",
+      "upstream_path": "tests/corpus/captures/exchange/atlantic_calypso_exchange_register_read.yaml",
+      "git_blob_sha1": "c9389e0cca5d86b26fddcc5a719ccf12ca3bb4f0",
+      "sha256": "16f321b9d7b3a3f8b07fd85d9948a7056d8d8c249518f495950d16d9576bca3d",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/atlantic_calypso_exchange_register_read.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1276",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 17,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/atlantic_calypso_exchange_register_read.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
     },
     {
       "id": "atlantic_thermor_exchange_write_private_param",
@@ -770,7 +897,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": false
     },
     {
       "id": "multi_somfy_exchange_overheard_challenge_and_status",
@@ -798,7 +926,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "sauter_guelma_exchange_register_read",
@@ -826,7 +955,8 @@
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "sauter_guelma_exchange_register_write",
@@ -854,7 +984,37 @@
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "sauter_hekla_exchange_night_light_brightness_levels_sx1262",
+      "upstream_path": "tests/corpus/captures/exchange/sauter_hekla_exchange_night_light_brightness_levels_sx1262.yaml",
+      "git_blob_sha1": "c201380a4dc0ffa618a5bfb9089ac0b0ccecbba6",
+      "sha256": "10e03aaf50bcb4078ddab006519a6500b079a855af68e54591340745ffe55e1a",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/sauter_hekla_exchange_night_light_brightness_levels_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/sauter_hekla_exchange_night_light_brightness_levels_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
     },
     {
       "id": "selfpair_exchange_lab_loopback_challenge_reply",
@@ -882,7 +1042,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_ack_reports_stale_target_close",
@@ -912,7 +1073,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_ack_reports_stale_target_open",
@@ -942,7 +1104,37 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_awning_exchange_close_short_sx1262",
+      "upstream_path": "tests/corpus/captures/exchange/somfy_awning_exchange_close_short_sx1262.yaml",
+      "git_blob_sha1": "9ffc54dd155b1e8bfa88aaa952e8ac037a897f57",
+      "sha256": "dd8eea38d95997d3b0f35a64d8055372ca040ba5f050e8ff2c716af887ea0bdf",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_awning_exchange_close_short_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_awning_exchange_close_short_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_close_sx1262",
@@ -970,7 +1162,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_close_sx1276",
@@ -998,7 +1191,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_favorite_sx1262",
@@ -1026,7 +1220,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_favorite_sx1276",
@@ -1054,14 +1249,15 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_force_open_sx1276",
       "upstream_path": "tests/corpus/captures/exchange/somfy_awning_exchange_force_open_sx1276.yaml",
-      "git_blob_sha1": "dfe10cccaa860e52d37577a420f178175428eb76",
-      "sha256": "cfa91d3f115d864a1e24ed8d8546190271fe022b11ac3f1da64890cc4469e469",
-      "local_path": "test/corpus/laberning-c82d38f/exchange/somfy_awning_exchange_force_open_sx1276.yaml",
+      "git_blob_sha1": "bdc62908047e9a78f969544aa4a0128417a1d87c",
+      "sha256": "c5948c92fc41fb43950041d64334cf9a639a69fadf9a6fdade430ce49eb979f6",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_awning_exchange_force_open_sx1276.yaml",
       "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
@@ -1078,11 +1274,13 @@
         "source_integrity": "all_original_bytes",
         "host_schema_crc_key_safety": "all_frames",
         "native_parser": "all_frames",
-        "public_crypto": "checked_when_public_vectors_present",
+        "public_crypto": "public_vectors_only",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_awning_exchange_force_open_sx1276.yaml",
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_get_name_sx1276",
@@ -1110,7 +1308,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_open_device_off_sx1276",
@@ -1138,7 +1337,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_open_lbt_contention_sx1276",
@@ -1166,7 +1366,37 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_awning_exchange_open_short_sx1262",
+      "upstream_path": "tests/corpus/captures/exchange/somfy_awning_exchange_open_short_sx1262.yaml",
+      "git_blob_sha1": "ab1fb6e93aeb73eda9e40fd3b1c7dba821f278bc",
+      "sha256": "a01ded474c7dbfaef0771dc1ed5e809c343101e05590bea48b6fcae5a44dfb0c",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_awning_exchange_open_short_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_awning_exchange_open_short_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_open_sx1262",
@@ -1194,7 +1424,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_open_sx1276",
@@ -1222,7 +1453,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_priority_level_sx1276",
@@ -1250,7 +1482,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_set_name_sx1276",
@@ -1278,7 +1511,37 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_awning_exchange_set_position_25_short_sx1262",
+      "upstream_path": "tests/corpus/captures/exchange/somfy_awning_exchange_set_position_25_short_sx1262.yaml",
+      "git_blob_sha1": "76e27f893c4776ead44f0767ec9d2a394fbed67d",
+      "sha256": "b1c1e92c38974a6331129e72793867763dfd9899be5042bf96b8bbbe95d1d825",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_awning_exchange_set_position_25_short_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_awning_exchange_set_position_25_short_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_set_position_25_sx1262",
@@ -1306,7 +1569,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_set_position_25_sx1276",
@@ -1334,7 +1598,37 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_awning_exchange_stop_short_sx1262",
+      "upstream_path": "tests/corpus/captures/exchange/somfy_awning_exchange_stop_short_sx1262.yaml",
+      "git_blob_sha1": "c84f43c4104f279f7210b3fd532d2544e8b5f52d",
+      "sha256": "1875654c1b4dd7a4012bda6dc4c1ebeab7662114ede069c9e97eab0d1c2a4778",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_awning_exchange_stop_short_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_awning_exchange_stop_short_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_stop_sx1262",
@@ -1362,7 +1656,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_exchange_stop_sx1276",
@@ -1390,7 +1685,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_exchange_off_lr1121",
@@ -1418,7 +1714,95 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_izymo_dimmer_exchange_off_short_lr1121",
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_off_short_lr1121.yaml",
+      "git_blob_sha1": "3647a0d3c9c98ac373f2bf7a50ac226186d7a0f9",
+      "sha256": "2582ab0d4efcd0b152d3d1597f25efb724cfb11f7d36940d923939897cac2f68",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_izymo_dimmer_exchange_off_short_lr1121.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "lr1121",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_off_short_lr1121.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_izymo_dimmer_exchange_off_short_sx1262",
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_off_short_sx1262.yaml",
+      "git_blob_sha1": "6b9ad28d4ad9b08cd62ec376d12574927a8f8d87",
+      "sha256": "237638c39bab719f35060162b27c542a644f468c5fb773848da296faed92821d",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_izymo_dimmer_exchange_off_short_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_off_short_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_izymo_dimmer_exchange_off_short_sx1276",
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_off_short_sx1276.yaml",
+      "git_blob_sha1": "b63b4a671803b2d5d0c5388ce66fb63259910e4a",
+      "sha256": "5c302d003200889253fbaefbc26f9a4c78c665ba82450c46339950c98b7ea3d1",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_izymo_dimmer_exchange_off_short_sx1276.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1276",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_off_short_sx1276.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_exchange_off_sx1262",
@@ -1446,7 +1830,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_exchange_off_sx1276",
@@ -1474,7 +1859,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_exchange_on_lr1121",
@@ -1502,7 +1888,95 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_izymo_dimmer_exchange_on_short_lr1121",
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_on_short_lr1121.yaml",
+      "git_blob_sha1": "0642fa4fb647a7ca89e3a76a9e157e71a12ba097",
+      "sha256": "22cdac01f70537045f94c40769f3626a13aef7d956c2dc566d701ba17d83c995",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_izymo_dimmer_exchange_on_short_lr1121.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "lr1121",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_on_short_lr1121.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_izymo_dimmer_exchange_on_short_sx1262",
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_on_short_sx1262.yaml",
+      "git_blob_sha1": "857d29dcb9c802b4fa60d048eba77b4a859f4a95",
+      "sha256": "8718e7de338174ecbb6e414a8ce3f6a9dbe2d11c2483113eccace3cd4ed8e8ec",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_izymo_dimmer_exchange_on_short_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_on_short_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_izymo_dimmer_exchange_on_short_sx1276",
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_on_short_sx1276.yaml",
+      "git_blob_sha1": "33217b21bb8d249e7d057dd2c95acdb413c8c999",
+      "sha256": "41dd903c499a5126a0a072f7b721c0b0573445e9416d91cd6279f1c4c3d1fc7c",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_izymo_dimmer_exchange_on_short_sx1276.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1276",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_on_short_sx1276.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_exchange_on_sx1262",
@@ -1530,7 +2004,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_exchange_on_sx1276",
@@ -1558,7 +2033,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_exchange_set_brightness_50_lr1121",
@@ -1586,7 +2062,95 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_izymo_dimmer_exchange_set_brightness_50_short_lr1121",
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_50_short_lr1121.yaml",
+      "git_blob_sha1": "e331b4e338df653e25c2b63208b0c79ee7fcbf57",
+      "sha256": "98784a1c3a1d8e1c05c9c7bb02053f7ad834cb1c36fd6bdeede9d341ccee2571",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_izymo_dimmer_exchange_set_brightness_50_short_lr1121.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "lr1121",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_50_short_lr1121.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_izymo_dimmer_exchange_set_brightness_50_short_sx1262",
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_50_short_sx1262.yaml",
+      "git_blob_sha1": "ab6169a3699d21f283af26ede4f0198d3a8a9609",
+      "sha256": "5bd7a0455581bc8d93af67f1ef21edebf59c3973998ceeedd67acf2592f48a65",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_izymo_dimmer_exchange_set_brightness_50_short_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_50_short_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_izymo_dimmer_exchange_set_brightness_50_short_sx1276",
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_50_short_sx1276.yaml",
+      "git_blob_sha1": "6a54b5f4066ed99ddc238d4d25762014a7da5b33",
+      "sha256": "396de4a8ff15b4eca3be786e21bc7c0044282aaded54f685888ebba3d3916225",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_izymo_dimmer_exchange_set_brightness_50_short_sx1276.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1276",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_50_short_sx1276.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_exchange_set_brightness_50_sx1262",
@@ -1614,7 +2178,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_exchange_set_brightness_50_sx1276",
@@ -1642,7 +2207,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_exchange_set_brightness_75_lr1121",
@@ -1670,7 +2236,95 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_izymo_dimmer_exchange_set_brightness_75_short_lr1121",
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_75_short_lr1121.yaml",
+      "git_blob_sha1": "0c292a216b09713e7460c6755984db82729ce0d9",
+      "sha256": "7fe93d753b9d4433f8191d5e4e21018fe1c4c81e638668e45dc21be0dce47e3f",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_izymo_dimmer_exchange_set_brightness_75_short_lr1121.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "lr1121",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_75_short_lr1121.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_izymo_dimmer_exchange_set_brightness_75_short_sx1262",
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_75_short_sx1262.yaml",
+      "git_blob_sha1": "525c3e96989039568202fa02f91b3cb5cd96f1c4",
+      "sha256": "e41286489dc229e73c812a0f8c1214f34ee929c5d4209b3e54b6da97503e8e12",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_izymo_dimmer_exchange_set_brightness_75_short_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_75_short_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_izymo_dimmer_exchange_set_brightness_75_short_sx1276",
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_75_short_sx1276.yaml",
+      "git_blob_sha1": "2f45af5dfe063ad144de03c12ba63e215886c931",
+      "sha256": "82d9b188ae51032fe41d5f86875709397b5c1037fb529650fac06bc65133413c",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/somfy_izymo_dimmer_exchange_set_brightness_75_short_sx1276.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1276",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_75_short_sx1276.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_exchange_set_brightness_75_sx1262",
@@ -1698,7 +2352,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_exchange_set_brightness_75_sx1276",
@@ -1726,7 +2381,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_pergola_louver_exchange_execute_acks_sx1262",
@@ -1754,7 +2410,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_pergola_louver_exchange_open_close_position_stop_sx1262",
@@ -1782,7 +2439,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_rs100_exchange_failure_near_sx1262",
@@ -1810,7 +2468,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_rs100_exchange_far_sx1262",
@@ -1838,7 +2497,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_rs100_exchange_near_sx1262",
@@ -1866,7 +2526,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "synthetic_exchange_auth",
@@ -1894,7 +2555,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "synthetic_exchange_heating_midnight_sync",
@@ -1922,7 +2584,8 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "source_url": "https://github.com/laberning/home_io_control/blob/c2ccd5da68b84a94e6e6bf9efe50346635a8fad3/tests/corpus/captures/exchange/synthetic_exchange_heating_midnight_sync.yaml"
+      "source_url": "https://github.com/laberning/home_io_control/blob/c2ccd5da68b84a94e6e6bf9efe50346635a8fad3/tests/corpus/captures/exchange/synthetic_exchange_heating_midnight_sync.yaml",
+      "in_upstream_snapshot": true
     },
     {
       "id": "synthetic_exchange_heating_set_temp",
@@ -1950,7 +2613,37 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "source_url": "https://github.com/laberning/home_io_control/blob/c2ccd5da68b84a94e6e6bf9efe50346635a8fad3/tests/corpus/captures/exchange/synthetic_exchange_heating_set_temp.yaml"
+      "source_url": "https://github.com/laberning/home_io_control/blob/c2ccd5da68b84a94e6e6bf9efe50346635a8fad3/tests/corpus/captures/exchange/synthetic_exchange_heating_set_temp.yaml",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "thermor_pilot_wire_interface_exchange_heating_level_execute",
+      "upstream_path": "tests/corpus/captures/exchange/thermor_pilot_wire_interface_exchange_heating_level_execute.yaml",
+      "git_blob_sha1": "97e2d7c567ef83feb44c402ea3ded80a3830012f",
+      "sha256": "d56115f7e8ed068d1e6b6fdd1ff957a2954d53d4e436c94b38a6af9d384b8aa7",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/thermor_pilot_wire_interface_exchange_heating_level_execute.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1276",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/thermor_pilot_wire_interface_exchange_heating_level_execute.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "source_frame_sequence",
+      "in_upstream_snapshot": true
     },
     {
       "id": "tilt_cover_exchange_ack_echoes_precommand_tilt",
@@ -1980,7 +2673,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "tilt_cover_exchange_ack_tilt_block",
@@ -2010,7 +2704,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "tilt_cover_exchange_ack_tilt_block_second_device",
@@ -2040,7 +2735,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "tilt_cover_exchange_close_ack_six_byte_no_hint",
@@ -2068,7 +2764,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "tilt_cover_exchange_priority_locked_error",
@@ -2096,7 +2793,39 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "velux_sml_exchange_execute_ack_waiting_for_power_sx1262",
+      "upstream_path": "tests/corpus/captures/exchange/velux_sml_exchange_execute_ack_waiting_for_power_sx1262.yaml",
+      "git_blob_sha1": "11556d16d0f4bb484001ffd993a3ea3a2036cd55",
+      "sha256": "91dd955d491839ff8b75c86e1d454b78d55e9b8025fd7e058749990bc29c61de",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/velux_sml_exchange_execute_ack_waiting_for_power_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 14,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/velux_sml_exchange_execute_ack_waiting_for_power_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [
+          "test/test_laberning_corpus.py::test_original_sml_correspondence_keeps_ack_separate_from_queued_polls"
+        ],
+        "physical_motion": "unknown"
+      },
+      "evidence": "source_frame_sequence",
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_ssl_exchange_set_position_ack_stale_target",
@@ -2126,7 +2855,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_ssl_exchange_stop_mid_motion_short_preamble",
@@ -2157,7 +2887,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_ssl_exchange_stop_mid_motion_unanswered",
@@ -2188,7 +2919,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "wisniowski_moto1000_exchange_execute_parameter_unknown",
@@ -2218,7 +2950,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "wisniowski_moto1000_exchange_execute_partial_position_refused",
@@ -2248,7 +2981,37 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "wisniowski_moto1000_exchange_session_interrupted_after_unconfirmed_stop",
+      "upstream_path": "tests/corpus/captures/exchange/wisniowski_moto1000_exchange_session_interrupted_after_unconfirmed_stop.yaml",
+      "git_blob_sha1": "48ab800659fa58bd6307184fc274e617c587c9db",
+      "sha256": "8a053079a05ff4c507e5c009cd4c78a170448871bfa46c2391379b1b73aad1a3",
+      "local_path": "test/corpus/laberning-ecc08c9/exchange/wisniowski_moto1000_exchange_session_interrupted_after_unconfirmed_stop.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 5,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/exchange/wisniowski_moto1000_exchange_session_interrupted_after_unconfirmed_stop.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "source_frame_sequence",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_identify_wrong_systemkey_sx1276",
@@ -2276,7 +3039,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "synthetic_identify",
@@ -2304,7 +3068,8 @@
         "behavior_tests": [],
         "physical_motion": "unknown"
       },
-      "source_url": "https://github.com/laberning/home_io_control/blob/c2ccd5da68b84a94e6e6bf9efe50346635a8fad3/tests/corpus/captures/identify/synthetic_identify.yaml"
+      "source_url": "https://github.com/laberning/home_io_control/blob/c2ccd5da68b84a94e6e6bf9efe50346635a8fad3/tests/corpus/captures/identify/synthetic_identify.yaml",
+      "in_upstream_snapshot": true
     },
     {
       "id": "multi_somfy_oneway_write_private_first_sighting",
@@ -2332,7 +3097,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "reference_1w_oneway_execute_iv_vector",
@@ -2360,7 +3126,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_smoove_oneway_close_sx1276",
@@ -2388,14 +3155,15 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_smoove_oneway_dim_close_extended_fp",
       "upstream_path": "tests/corpus/captures/oneway/somfy_smoove_oneway_dim_close_extended_fp.yaml",
-      "git_blob_sha1": "36ce09030c8993e38d1b9faa73b01e3cd421059a",
-      "sha256": "cdb83aceb59c1826e15f5594c0997a27e2e366f1658450a46370a09e7fcaf9e5",
-      "local_path": "test/corpus/laberning-c82d38f/oneway/somfy_smoove_oneway_dim_close_extended_fp.yaml",
+      "git_blob_sha1": "0631dec8d9a14a4580d59a3130d0c36f80328a50",
+      "sha256": "f11c17937aef6e2187b9fcd00334658d5b3960e1ee48472ba4ad9ad590bb70de",
+      "local_path": "test/corpus/laberning-ecc08c9/oneway/somfy_smoove_oneway_dim_close_extended_fp.yaml",
       "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
@@ -2414,16 +3182,18 @@
         "native_parser": "all_frames",
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/somfy_smoove_oneway_dim_close_extended_fp.yaml",
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_smoove_oneway_dim_stop_extended_fp",
       "upstream_path": "tests/corpus/captures/oneway/somfy_smoove_oneway_dim_stop_extended_fp.yaml",
-      "git_blob_sha1": "11988dc8ba421e18c898264df20f609b708b80e7",
-      "sha256": "9f0f9d19cff92264b24ff032c8e9cde24e2606c88ab234554040b1ee2338a1b1",
-      "local_path": "test/corpus/laberning-c82d38f/oneway/somfy_smoove_oneway_dim_stop_extended_fp.yaml",
+      "git_blob_sha1": "0d1e7e62331a58014df79f8d3802703308a8d7cc",
+      "sha256": "9b9fac994db39fb8c034c2d022ab382aa4dfef09e33ee4566a64e6f5d66588e9",
+      "local_path": "test/corpus/laberning-ecc08c9/oneway/somfy_smoove_oneway_dim_stop_extended_fp.yaml",
       "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
@@ -2442,9 +3212,11 @@
         "native_parser": "all_frames",
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/somfy_smoove_oneway_dim_stop_extended_fp.yaml",
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_smoove_oneway_execute_current",
@@ -2472,7 +3244,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": false
     },
     {
       "id": "somfy_smoove_oneway_favorite_sx1276",
@@ -2500,14 +3273,46 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_smoove_oneway_held_press_on_air",
+      "upstream_path": "tests/corpus/captures/oneway/somfy_smoove_oneway_held_press_on_air.yaml",
+      "git_blob_sha1": "897cb6526995b578ae73c2df15774754235a93e7",
+      "sha256": "0fcd8a14c2961b3aa31cbaae85f046dda9602d1a797b64564075767074e22216",
+      "local_path": "test/corpus/laberning-ecc08c9/oneway/somfy_smoove_oneway_held_press_on_air.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "other",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 30,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/somfy_smoove_oneway_held_press_on_air.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [
+          "test/test_protocol.cpp::protocol_original_smoove_sdr_keeps_distinct_commands"
+        ],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_smoove_oneway_hold_to_dim_sx1276",
       "upstream_path": "tests/corpus/captures/oneway/somfy_smoove_oneway_hold_to_dim_sx1276.yaml",
-      "git_blob_sha1": "e34c5a2226e80d33f8d361b98aece9697227e258",
-      "sha256": "0c7c54ffc2b72474f034a72b4bbbb86a4176d88cf782ce1be0c9643baecc1c74",
-      "local_path": "test/corpus/laberning-c82d38f/oneway/somfy_smoove_oneway_hold_to_dim_sx1276.yaml",
+      "git_blob_sha1": "2afd0a4b8a022b8a8b60c11c78d419a649766f31",
+      "sha256": "456b347952c0c77029ed40d9fe5274d1b84bff3a1be99082802b367d803700b0",
+      "local_path": "test/corpus/laberning-ecc08c9/oneway/somfy_smoove_oneway_hold_to_dim_sx1276.yaml",
       "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
@@ -2526,9 +3331,11 @@
         "native_parser": "all_frames",
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/somfy_smoove_oneway_hold_to_dim_sx1276.yaml",
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_smoove_oneway_open_sx1276",
@@ -2556,7 +3363,39 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_smoove_oneway_short_press_on_air",
+      "upstream_path": "tests/corpus/captures/oneway/somfy_smoove_oneway_short_press_on_air.yaml",
+      "git_blob_sha1": "af4f2c669d14262e505dd7092bc5685955644719",
+      "sha256": "e678b74d332cfafcdda4fe068ad50904f85884af2ae2786996cd06405e3108b3",
+      "local_path": "test/corpus/laberning-ecc08c9/oneway/somfy_smoove_oneway_short_press_on_air.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "other",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 10,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/somfy_smoove_oneway_short_press_on_air.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [
+          "test/test_protocol.cpp::protocol_original_smoove_sdr_keeps_distinct_commands"
+        ],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_smoove_oneway_stop_sx1276",
@@ -2584,7 +3423,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_smoove_oneway_write_private_a",
@@ -2612,7 +3452,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": false
     },
     {
       "id": "somfy_smoove_oneway_write_private_favorite",
@@ -2640,7 +3481,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": false
     },
     {
       "id": "synthetic_oneway_close",
@@ -2668,7 +3510,290 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "unenrolled_window_opener_oneway_stop_low_power_burst_lr1121",
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_low_power_burst_lr1121.yaml",
+      "git_blob_sha1": "521f1f04a2974a47877c5def7528dee0ee549522",
+      "sha256": "a089ec965ea51c196852661cacc7c1a7a2ff44929cf8c9db8b1628e5010a9dbf",
+      "local_path": "test/corpus/laberning-ecc08c9/oneway/unenrolled_window_opener_oneway_stop_low_power_burst_lr1121.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "lr1121",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_low_power_burst_lr1121.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [
+          "test/test_laberning_corpus.py::test_unenrolled_bursts_are_phy_evidence"
+        ],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "unenrolled_window_opener_oneway_stop_low_power_burst_sx1262",
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_low_power_burst_sx1262.yaml",
+      "git_blob_sha1": "252bf830d71bc9f438db3d74e7f5ab80d31031fa",
+      "sha256": "b652d2afb874d2b61e76c9baf332978c0f47ccb4aa1ed05080f630f0d9644cd7",
+      "local_path": "test/corpus/laberning-ecc08c9/oneway/unenrolled_window_opener_oneway_stop_low_power_burst_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_low_power_burst_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [
+          "test/test_laberning_corpus.py::test_unenrolled_bursts_are_phy_evidence"
+        ],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "unenrolled_window_opener_oneway_stop_low_power_burst_sx1276",
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_low_power_burst_sx1276.yaml",
+      "git_blob_sha1": "75b7c5ff512e279a8ba4414655a951d0e245c226",
+      "sha256": "64e996cf689677e037ddd394d4d0ec0c107daca1d029123315d21523e2210097",
+      "local_path": "test/corpus/laberning-ecc08c9/oneway/unenrolled_window_opener_oneway_stop_low_power_burst_sx1276.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1276",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_low_power_burst_sx1276.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [
+          "test/test_laberning_corpus.py::test_unenrolled_bursts_are_phy_evidence"
+        ],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "unenrolled_window_opener_oneway_stop_short_burst_lr1121",
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_short_burst_lr1121.yaml",
+      "git_blob_sha1": "47aab5cc48352c3f94831814f39fef997d69489b",
+      "sha256": "7396217a9418f658337a0ba10f336f7788143aaba2ad41d0ef120ed3f6c869b4",
+      "local_path": "test/corpus/laberning-ecc08c9/oneway/unenrolled_window_opener_oneway_stop_short_burst_lr1121.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "lr1121",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_short_burst_lr1121.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [
+          "test/test_laberning_corpus.py::test_unenrolled_bursts_are_phy_evidence"
+        ],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "unenrolled_window_opener_oneway_stop_short_burst_sx1262",
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_short_burst_sx1262.yaml",
+      "git_blob_sha1": "2034b4e6ead12ce5c3d09a616b0036655a0386ac",
+      "sha256": "f9ebae4bd28a105b43d8be466dbf1b0a26fdd13337bb8c7049315a35992a46cf",
+      "local_path": "test/corpus/laberning-ecc08c9/oneway/unenrolled_window_opener_oneway_stop_short_burst_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_short_burst_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [
+          "test/test_laberning_corpus.py::test_unenrolled_bursts_are_phy_evidence"
+        ],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "unenrolled_window_opener_oneway_stop_short_burst_sx1276",
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_short_burst_sx1276.yaml",
+      "git_blob_sha1": "90c6d4633d33b8b7387992d1dfec96b71354f60a",
+      "sha256": "87fd80b078819aeea5522c8b6eaa584bf15cc4dd2d837fe00cbb8c4a14473b5b",
+      "local_path": "test/corpus/laberning-ecc08c9/oneway/unenrolled_window_opener_oneway_stop_short_burst_sx1276.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1276",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_short_burst_sx1276.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [
+          "test/test_laberning_corpus.py::test_unenrolled_bursts_are_phy_evidence"
+        ],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "unenrolled_window_opener_oneway_stop_somfy_default_burst_lr1121",
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_somfy_default_burst_lr1121.yaml",
+      "git_blob_sha1": "87d4e1c4466769520f5d193990b12b0b9e0d672f",
+      "sha256": "51b9c6c2a1115719096f04b48d6dec0230bbab96dd29ed03c038a12d5483e982",
+      "local_path": "test/corpus/laberning-ecc08c9/oneway/unenrolled_window_opener_oneway_stop_somfy_default_burst_lr1121.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "lr1121",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_somfy_default_burst_lr1121.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [
+          "test/test_laberning_corpus.py::test_unenrolled_bursts_are_phy_evidence"
+        ],
+        "physical_motion": "unknown"
+      },
+      "policy_era": "historical_pre_ADR0119",
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "unenrolled_window_opener_oneway_stop_somfy_default_burst_sx1262",
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_somfy_default_burst_sx1262.yaml",
+      "git_blob_sha1": "96c4a2e8cc7bdacf10a777ad13a86d794c5b913f",
+      "sha256": "cc37b15c6608b4c0e4c868d81f2b4d2b21db7f2c8e5ab94029b9d4cae5942971",
+      "local_path": "test/corpus/laberning-ecc08c9/oneway/unenrolled_window_opener_oneway_stop_somfy_default_burst_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_somfy_default_burst_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [
+          "test/test_laberning_corpus.py::test_unenrolled_bursts_are_phy_evidence"
+        ],
+        "physical_motion": "unknown"
+      },
+      "policy_era": "historical_pre_ADR0119",
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "unenrolled_window_opener_oneway_stop_somfy_default_burst_sx1276",
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_somfy_default_burst_sx1276.yaml",
+      "git_blob_sha1": "8b284c17b3616581bc517b11b830207426e6e5e4",
+      "sha256": "a0f50093a48fe90a23ce62edf07b1380657eff22abaf85cbff3e3b1c3f9d796a",
+      "local_path": "test/corpus/laberning-ecc08c9/oneway/unenrolled_window_opener_oneway_stop_somfy_default_burst_sx1276.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1276",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_somfy_default_burst_sx1276.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [
+          "test/test_laberning_corpus.py::test_unenrolled_bursts_are_phy_evidence"
+        ],
+        "physical_motion": "unknown"
+      },
+      "policy_era": "historical_pre_ADR0119",
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "unidentified_1w_remote_oneway_execute",
@@ -2696,7 +3821,37 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": false
+    },
+    {
+      "id": "unidentified_1w_remote_oneway_execute_open_and_stop_acei_61_sx1276",
+      "upstream_path": "tests/corpus/captures/oneway/unidentified_1w_remote_oneway_execute_open_and_stop_acei_61_sx1276.yaml",
+      "git_blob_sha1": "922904ff544a5d34b2c8055f19ef7da89d57d332",
+      "sha256": "6d0ea8cabcc60d0a8b6b88b42426f50d97bda8adb1cb54683497a570557f8cde",
+      "local_path": "test/corpus/laberning-ecc08c9/oneway/unidentified_1w_remote_oneway_execute_open_and_stop_acei_61_sx1276.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1276",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 3,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/unidentified_1w_remote_oneway_execute_open_and_stop_acei_61_sx1276.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
     },
     {
       "id": "unidentified_1w_remote_oneway_write_private_a",
@@ -2724,7 +3879,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": false
     },
     {
       "id": "unidentified_1w_remote_oneway_write_private_b",
@@ -2752,7 +3908,37 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": false
+    },
+    {
+      "id": "unidentified_1w_remote_oneway_write_private_sx1262",
+      "upstream_path": "tests/corpus/captures/oneway/unidentified_1w_remote_oneway_write_private_sx1262.yaml",
+      "git_blob_sha1": "1491fe6975cd1996ae1a05ba825e6930b470de14",
+      "sha256": "77d0e01a7d3df5efc5ebc4934d06e1a7d0fcfb90e4e6dc06aea88a7cf8556a1e",
+      "local_path": "test/corpus/laberning-ecc08c9/oneway/unidentified_1w_remote_oneway_write_private_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/oneway/unidentified_1w_remote_oneway_write_private_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_kli313_oneway_stop",
@@ -2780,7 +3966,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "wind_sensor_oneway_execute_sx1276",
@@ -2808,7 +3995,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "wind_sensor_oneway_favorite_rain_originator_sx1276",
@@ -2838,7 +4026,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "wind_sensor_oneway_favorite_wind_originator_sx1276",
@@ -2868,7 +4057,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "wind_sensor_oneway_horizontal_awning_sx1276",
@@ -2896,7 +4086,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "wind_sensor_oneway_unnamed_target_sx1276",
@@ -2924,7 +4115,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "atlantic_agilia_pairing_key_pull_heater_direct_read",
@@ -2952,7 +4144,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "atlantic_agilia_pairing_key_pull_heater_not_next_address",
@@ -2980,17 +4173,18 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "atlantic_agilia_pairing_key_pull_heater_rollcall",
       "upstream_path": "tests/corpus/captures/pairing/atlantic_agilia_pairing_key_pull_heater_rollcall.yaml",
-      "git_blob_sha1": "d89137ac100c4c32479441e021247bb06c5e309f",
-      "sha256": "d95e02323f4094e7a0f1c22ee548844eba270612ce2c1df3c21c4152eaec3e9e",
-      "local_path": "test/corpus/atlantic-20261020/atlantic_agilia_pairing_key_pull_heater_rollcall.yaml",
+      "git_blob_sha1": "afe6faba2f9483924f31784a049ac73b1917d552",
+      "sha256": "0375d4fa05f190cee5431809de056fefdd7a8fd47b445e9165905734970647e9",
+      "local_path": "test/corpus/laberning-ecc08c9/pairing/atlantic_agilia_pairing_key_pull_heater_rollcall.yaml",
       "classification": "original_imported",
       "artifact_status": "original_imported",
-      "reused_existing": true,
+      "reused_existing": false,
       "origin": "github-issue",
       "radio": "sx1262",
       "key_mode": "unknown",
@@ -3006,9 +4200,11 @@
         "native_parser": "all_frames",
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/pairing/atlantic_agilia_pairing_key_pull_heater_rollcall.yaml",
+      "evidence": "source_frame_sequence",
+      "in_upstream_snapshot": true
     },
     {
       "id": "atlantic_agilia_pairing_key_pull_own_key_heater_silent",
@@ -3036,7 +4232,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "atlantic_agilia_pairing_key_transfer_command_unknown",
@@ -3064,7 +4261,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "selfpair_pairing_sx1262_device_sx1276_hub",
@@ -3092,7 +4290,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "selfpair_pairing_sx1276_device_sx1262_hub",
@@ -3120,14 +4319,15 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_connectivity_kit_pairing_key_extraction_stall",
       "upstream_path": "tests/corpus/captures/pairing/somfy_connectivity_kit_pairing_key_extraction_stall.yaml",
-      "git_blob_sha1": "00db82f28df0bffe39f970dde9ebdc44058ef82f",
-      "sha256": "9e930f09d2745a3f4030ca8ed1648b8174eb427f1a0837c08f811dda8f389b17",
-      "local_path": "test/corpus/laberning-c82d38f/pairing/somfy_connectivity_kit_pairing_key_extraction_stall.yaml",
+      "git_blob_sha1": "5e81e4b80ba8798a7aa6742fae254bec5b349459",
+      "sha256": "74a48d4300279ab5ae611a9dc7175b83554ea7f047b1a53fdec8062270af6e45",
+      "local_path": "test/corpus/laberning-ecc08c9/pairing/somfy_connectivity_kit_pairing_key_extraction_stall.yaml",
       "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
@@ -3146,9 +4346,11 @@
         "native_parser": "all_frames",
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/pairing/somfy_connectivity_kit_pairing_key_extraction_stall.yaml",
+      "evidence": "source_frame_sequence",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_pairing_discover_confirm_ack_unanswered_sx1262",
@@ -3176,7 +4378,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_pairing_full_discover_confirm_sx1262",
@@ -3204,7 +4407,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_pairing_full_discover_confirm_sx1276",
@@ -3232,7 +4436,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_pairing_full_lr1121",
@@ -3260,7 +4465,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_pairing_full_sx1262",
@@ -3288,7 +4494,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_pairing_full_sx1276",
@@ -3316,7 +4523,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_rs100_pairing_key_exchange_retry_success",
@@ -3346,7 +4554,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_rs100_pairing_key_transfer_timeout",
@@ -3376,7 +4585,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_sunilus_pairing_key_transfer_rejected_error",
@@ -3404,7 +4614,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_tahoma_pairing_key_extraction_success_sx1276",
@@ -3432,14 +4643,15 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_kig300_pairing_key_extraction_stall",
       "upstream_path": "tests/corpus/captures/pairing/velux_kig300_pairing_key_extraction_stall.yaml",
-      "git_blob_sha1": "5f54fa6b9bf3ff55280b4172877803fcb7c66f02",
-      "sha256": "f1c7b75cff6d9c756d79c04e7b95d61147d66f070aa2a998972902a169331613",
-      "local_path": "test/corpus/laberning-c82d38f/pairing/velux_kig300_pairing_key_extraction_stall.yaml",
+      "git_blob_sha1": "4ce6e382971d21dc4fa803b481cc709d35157fba",
+      "sha256": "4c1cc182efb04b0e6c15d63804d5cafc2c5c9b90b1494ce61c8b148446e75ca5",
+      "local_path": "test/corpus/laberning-ecc08c9/pairing/velux_kig300_pairing_key_extraction_stall.yaml",
       "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
@@ -3458,9 +4670,11 @@
         "native_parser": "all_frames",
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/pairing/velux_kig300_pairing_key_extraction_stall.yaml",
+      "evidence": "source_frame_sequence",
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_kig300_pairing_key_extraction_success",
@@ -3488,7 +4702,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_klr200_pairing_key_extraction_success",
@@ -3516,7 +4731,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_klr300_pairing_key_extraction_success",
@@ -3544,15 +4760,16 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_kux100_pairing_full",
       "upstream_path": "tests/corpus/captures/pairing/velux_kux100_pairing_full.yaml",
-      "git_blob_sha1": "23b3e38329beeda93365c0143b572007989d7d3a",
-      "sha256": "b602da161aa5b3d456807dc9120fe34188ed4fe65c76ed28e7cfd5335ab50f5b",
-      "local_path": "test/corpus/laberning-c82d38f/pairing/velux_kux100_pairing_full.yaml",
-      "classification": "synthetic_reference",
+      "git_blob_sha1": "9f9e50605960594338f332cfcdf2a070d9b8bde4",
+      "sha256": "0e63663266b8a2e447980b961d32b3c2a6b8fd4e659a4631a565e8528c42fe7d",
+      "local_path": "test/corpus/laberning-ecc08c9/pairing/velux_kux100_pairing_full.yaml",
+      "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
       "origin": "reference-material",
@@ -3568,11 +4785,13 @@
         "source_integrity": "all_original_bytes",
         "host_schema_crc_key_safety": "all_frames",
         "native_parser": "all_frames",
-        "public_crypto": "checked_when_public_vectors_present",
+        "public_crypto": "public_vectors_only",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/pairing/velux_kux100_pairing_full.yaml",
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_ssl_pairing_directed_long_preamble_ignored",
@@ -3600,7 +4819,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_ssl_pairing_key_exchange_setconfig_unanswered",
@@ -3630,7 +4850,211 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "atlantic_adelis_probe_boost_remaining",
+      "upstream_path": "tests/corpus/captures/probe/atlantic_adelis_probe_boost_remaining.yaml",
+      "git_blob_sha1": "04e68f4a1cbdd604e143e4be5cc277516008e907",
+      "sha256": "39a184da96baaef577a5062a87bf0edecdcf27464442efcb1cc0bda7164355a8",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/atlantic_adelis_probe_boost_remaining.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1276",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/atlantic_adelis_probe_boost_remaining.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "atlantic_adelis_probe_mode_reads",
+      "upstream_path": "tests/corpus/captures/probe/atlantic_adelis_probe_mode_reads.yaml",
+      "git_blob_sha1": "9d12ff6eb7edd50bce0864388e704937d368dea4",
+      "sha256": "968c83063d4c017252d691b4ab747cd5e3298a9c049d1c9c90296e44e927b305",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/atlantic_adelis_probe_mode_reads.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1276",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 8,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/atlantic_adelis_probe_mode_reads.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "atlantic_adelis_probe_register_01_sweep",
+      "upstream_path": "tests/corpus/captures/probe/atlantic_adelis_probe_register_01_sweep.yaml",
+      "git_blob_sha1": "68a9f7aef1225f83208260a23351b11c3d8c2163",
+      "sha256": "ad187314e8d995bb843502d740b890044f67073beb906cb15c41d8abc727eb56",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/atlantic_adelis_probe_register_01_sweep.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1276",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 80,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/atlantic_adelis_probe_register_01_sweep.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "sampled",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "atlantic_adelis_probe_register_01_sweep_drying",
+      "upstream_path": "tests/corpus/captures/probe/atlantic_adelis_probe_register_01_sweep_drying.yaml",
+      "git_blob_sha1": "4647d8b6d5f202d6b2bf8ef870114973cb04d744",
+      "sha256": "996902d83b06e7f44929dc19f2b09f722dc3dede56078869aeb3651ed3d7c3bf",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/atlantic_adelis_probe_register_01_sweep_drying.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1276",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 64,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/atlantic_adelis_probe_register_01_sweep_drying.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "sampled",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "atlantic_adelis_probe_status_mp_fp",
+      "upstream_path": "tests/corpus/captures/probe/atlantic_adelis_probe_status_mp_fp.yaml",
+      "git_blob_sha1": "33b28faebe7c9a333d189adeded70674256679cd",
+      "sha256": "c64ca89c2a3e39d46c67bcf3d5850a02480fd8c5ac512177348845ce99510424",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/atlantic_adelis_probe_status_mp_fp.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1276",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/atlantic_adelis_probe_status_mp_fp.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "atlantic_adelis_probe_status_mp_fp_programme",
+      "upstream_path": "tests/corpus/captures/probe/atlantic_adelis_probe_status_mp_fp_programme.yaml",
+      "git_blob_sha1": "e363e6a38673538384551cebdfc66903f71f8afc",
+      "sha256": "c60907721edb1824b07efdc60e6fedc8e39a703b626199c187e845a3cfc95d3b",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/atlantic_adelis_probe_status_mp_fp_programme.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1276",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 3,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/atlantic_adelis_probe_status_mp_fp_programme.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "atlantic_adelis_probe_temperature_in_force",
+      "upstream_path": "tests/corpus/captures/probe/atlantic_adelis_probe_temperature_in_force.yaml",
+      "git_blob_sha1": "39a7c053326e25654ff62a19ad6912bdc1b4a2f2",
+      "sha256": "fcedfae4865614494b5e2bbabb16ff0785248f02c3eceff92bb1839a5b2afa3f",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/atlantic_adelis_probe_temperature_in_force.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1276",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/atlantic_adelis_probe_temperature_in_force.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
     },
     {
       "id": "atlantic_alfea_probe_outdoor_temperature_sx1276",
@@ -3658,7 +5082,8 @@
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "atlantic_alfea_probe_read_object_heating_energy_sx1276",
@@ -3686,7 +5111,66 @@
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "atlantic_calypso_probe_status_fp_high",
+      "upstream_path": "tests/corpus/captures/probe/atlantic_calypso_probe_status_fp_high.yaml",
+      "git_blob_sha1": "c66a4af9774a80daebce230795da88a2685f08e2",
+      "sha256": "17f10bea0c882183007f46c0700b1406dccb4ba0ef0c9ba4e68a01a8fd9eeea0",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/atlantic_calypso_probe_status_fp_high.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1276",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 3,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/atlantic_calypso_probe_status_fp_high.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "atlantic_calypso_probe_status_mp_fp",
+      "upstream_path": "tests/corpus/captures/probe/atlantic_calypso_probe_status_mp_fp.yaml",
+      "git_blob_sha1": "5e11b498395ef02a5ce5423c7d58a03a61fae071",
+      "sha256": "82c65c3b9639d5b0667ff28053059d520f3287826ebc76dbabb1d3a837e379c2",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/atlantic_calypso_probe_status_mp_fp.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1276",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 4,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/atlantic_calypso_probe_status_mp_fp.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
     },
     {
       "id": "multi_somfy_probe_extended_private_both_selectors",
@@ -3714,7 +5198,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "multi_somfy_probe_private2_long_form",
@@ -3742,14 +5227,15 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "multi_somfy_probe_private2_short_form",
       "upstream_path": "tests/corpus/captures/probe/multi_somfy_probe_private2_short_form.yaml",
-      "git_blob_sha1": "7a50e560e88289187da18526803c83aa8e0a7797",
-      "sha256": "d93fdd38129b74d5f9433c3c37b88c5a0524dab2c82cf5b9f4c942497fab42b4",
-      "local_path": "test/corpus/laberning-c82d38f/probe/multi_somfy_probe_private2_short_form.yaml",
+      "git_blob_sha1": "7436949c2187d89bf037741fa2ebbcc38d8413fd",
+      "sha256": "7fc8fe0dda8e8aa915c8c3625c73e665fb35055e1dbc207a7fd8851e5a16e4a9",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/multi_somfy_probe_private2_short_form.yaml",
       "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
@@ -3768,9 +5254,11 @@
         "native_parser": "all_frames",
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/multi_somfy_probe_private2_short_form.yaml",
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
     },
     {
       "id": "multi_somfy_probe_private_function_id_replies",
@@ -3798,7 +5286,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "sauter_guelma_probe_status_fp_high",
@@ -3826,7 +5315,8 @@
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "sauter_tahual_probe_energy_register",
@@ -3854,7 +5344,8 @@
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_probe_extended_fn_sx1262",
@@ -3882,7 +5373,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_probe_general_info3_lr1121",
@@ -3910,14 +5402,15 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_probe_get_info2_sx1262",
       "upstream_path": "tests/corpus/captures/probe/somfy_awning_probe_get_info2_sx1262.yaml",
-      "git_blob_sha1": "2f66b143ef28260056f2ccc25d87f3459a7ae3be",
-      "sha256": "04b063be12838606cd96396a1a559f36108805a7bc182d470696adfca0a32bef",
-      "local_path": "test/corpus/laberning-c82d38f/probe/somfy_awning_probe_get_info2_sx1262.yaml",
+      "git_blob_sha1": "fef3a331a7edcafa44de844621b33be5f5f64f42",
+      "sha256": "26a4e640c92188827edad52f62b6fdb9a81f6acc50a7d34d5ce47593956e4535",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/somfy_awning_probe_get_info2_sx1262.yaml",
       "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
@@ -3934,11 +5427,13 @@
         "source_integrity": "all_original_bytes",
         "host_schema_crc_key_safety": "all_frames",
         "native_parser": "all_frames",
-        "public_crypto": "checked_when_public_vectors_present",
+        "public_crypto": "public_vectors_only",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_awning_probe_get_info2_sx1262.yaml",
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_probe_limitation_sx1262",
@@ -3966,7 +5461,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_probe_private2_favorite_after_reprogram_lr1121",
@@ -3994,7 +5490,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_probe_private2_favorite_lr1121",
@@ -4022,7 +5519,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_probe_private2_modifier_sweep_lr1121",
@@ -4050,7 +5548,153 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_awning_probe_private2_short_favorite_after_reprogram_sx1262",
+      "upstream_path": "tests/corpus/captures/probe/somfy_awning_probe_private2_short_favorite_after_reprogram_sx1262.yaml",
+      "git_blob_sha1": "344fe5b4ded9cc16fbdf0fb1ceb0c2a899b82a46",
+      "sha256": "7f2c8ede3dd15680b3b7f92d8042768ddc20ae5a1dc21d6814103600b7233c32",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/somfy_awning_probe_private2_short_favorite_after_reprogram_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_awning_probe_private2_short_favorite_after_reprogram_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_awning_probe_private2_short_favorite_restored_sx1262",
+      "upstream_path": "tests/corpus/captures/probe/somfy_awning_probe_private2_short_favorite_restored_sx1262.yaml",
+      "git_blob_sha1": "413f3ed4625da727e647c228728375a75cc5a4c7",
+      "sha256": "3d7cbd97657e195608b10dbf5a8473243ec870776cd630cb966ed8a6247fc414",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/somfy_awning_probe_private2_short_favorite_restored_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_awning_probe_private2_short_favorite_restored_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_awning_probe_private2_short_favorite_sx1262",
+      "upstream_path": "tests/corpus/captures/probe/somfy_awning_probe_private2_short_favorite_sx1262.yaml",
+      "git_blob_sha1": "7c16aaf1a916426d3ce942e032c727e396611e1d",
+      "sha256": "fb06d67f680e2fa934efd359b988385df9a7b2638ea1caac9a0d2030f8926fde",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/somfy_awning_probe_private2_short_favorite_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_awning_probe_private2_short_favorite_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_awning_probe_private2_short_index7_sx1262",
+      "upstream_path": "tests/corpus/captures/probe/somfy_awning_probe_private2_short_index7_sx1262.yaml",
+      "git_blob_sha1": "64b40c975cd71460c878700c78e4688d275adbdd",
+      "sha256": "34ed564ba3ae710dc40adce351fdcea57ec6f31fe7b20626740bf4ebdfe1e998",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/somfy_awning_probe_private2_short_index7_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_awning_probe_private2_short_index7_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_awning_probe_private2_short_index9_sx1262",
+      "upstream_path": "tests/corpus/captures/probe/somfy_awning_probe_private2_short_index9_sx1262.yaml",
+      "git_blob_sha1": "d2b1ec6957aea008f7df7477db935fd9d044d767",
+      "sha256": "fbb24f4ad7707eeb90e85056078159b6cb792fe071f0c6524dae8add3c1eeabc",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/somfy_awning_probe_private2_short_index9_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_awning_probe_private2_short_index9_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_probe_private2_vent_lr1121",
@@ -4078,7 +5722,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_probe_private_fn_lr1121",
@@ -4106,7 +5751,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_probe_status_ext_lr1121",
@@ -4134,7 +5780,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_probe_extended_fn_sx1262",
@@ -4162,7 +5809,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_probe_general_info3_lr1121",
@@ -4190,14 +5838,15 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_probe_get_info2_sx1262",
       "upstream_path": "tests/corpus/captures/probe/somfy_izymo_dimmer_probe_get_info2_sx1262.yaml",
-      "git_blob_sha1": "17c38c35391e03359f46a1d5b33ff1385bab50f9",
-      "sha256": "939008afecae977765b80575632b8b8c7480a4841133f60c1db0b654882c6079",
-      "local_path": "test/corpus/laberning-c82d38f/probe/somfy_izymo_dimmer_probe_get_info2_sx1262.yaml",
+      "git_blob_sha1": "74d68fa5fd88eb303b3a0f3c7b38146050331074",
+      "sha256": "f24ef1cc8f99ecfe53a8ba1064ab17c3af46b6dc5273c6be771eeac03eb1ed4b",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/somfy_izymo_dimmer_probe_get_info2_sx1262.yaml",
       "classification": "original_imported",
       "artifact_status": "original_imported",
       "reused_existing": false,
@@ -4214,11 +5863,13 @@
         "source_integrity": "all_original_bytes",
         "host_schema_crc_key_safety": "all_frames",
         "native_parser": "all_frames",
-        "public_crypto": "checked_when_public_vectors_present",
+        "public_crypto": "public_vectors_only",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_izymo_dimmer_probe_get_info2_sx1262.yaml",
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_probe_private2_favorite_lr1121",
@@ -4246,7 +5897,37 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_izymo_dimmer_probe_private2_short_favorite_sx1262",
+      "upstream_path": "tests/corpus/captures/probe/somfy_izymo_dimmer_probe_private2_short_favorite_sx1262.yaml",
+      "git_blob_sha1": "f8e663ec5d6a72926a80ea8206ebe150985de457",
+      "sha256": "8944d4cea800529a20600e960f4b8935cd341c1c873e2ed3c163ea0d2d37c4a6",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/somfy_izymo_dimmer_probe_private2_short_favorite_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_izymo_dimmer_probe_private2_short_favorite_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_probe_private2_vent_lr1121",
@@ -4274,7 +5955,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_probe_private_fn_lr1121",
@@ -4302,17 +5984,18 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_pergola_louver_probe_get_info2_sx1262",
       "upstream_path": "tests/corpus/captures/probe/somfy_pergola_louver_probe_get_info2_sx1262.yaml",
-      "git_blob_sha1": "b7ed66ce9939191905f514cfbd477e9989fc9a35",
-      "sha256": "ec9a75ca7b04faf89b9decc7c935769b7fbfb6a86bccb0bd562f2ba3a1bb525e",
-      "local_path": "test/corpus/captures/probe/somfy_pergola_louver_probe_get_info2_sx1262.yaml",
+      "git_blob_sha1": "29bac3254a347fa5417698f60645134929e4c05a",
+      "sha256": "41397f8a70acf0a8b0e1d124ccf1ea56683d00f37e98f76cae618b64d9568c29",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/somfy_pergola_louver_probe_get_info2_sx1262.yaml",
       "classification": "original_imported",
       "artifact_status": "original_imported",
-      "reused_existing": true,
+      "reused_existing": false,
       "origin": "github-issue",
       "radio": "sx1262",
       "key_mode": "unknown",
@@ -4328,9 +6011,156 @@
         "native_parser": "all_frames",
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
-        "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_pergola_louver_probe_get_info2_sx1262.yaml",
+      "evidence": "source_frame_sequence",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_rs100_probe_get_info1_sx1262",
+      "upstream_path": "tests/corpus/captures/probe/somfy_rs100_probe_get_info1_sx1262.yaml",
+      "git_blob_sha1": "3ffecb552a376d753db70a809c57efaf712bf9ba",
+      "sha256": "1c0d72642bcef96319f2ee3e16cf69fbbfc6c16ec0cbe86466e26219f09e54c5",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/somfy_rs100_probe_get_info1_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 1,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_rs100_probe_get_info1_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_rs100_probe_read_object_a601_sx1262",
+      "upstream_path": "tests/corpus/captures/probe/somfy_rs100_probe_read_object_a601_sx1262.yaml",
+      "git_blob_sha1": "bdbb4ddae8c22e081612bc0e87fa22b3c3b458cc",
+      "sha256": "1a6b6853f4c74a62f0e3a493999e34f493dd8c8dd009d9c7f4245370cbe64b05",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/somfy_rs100_probe_read_object_a601_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 1,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_rs100_probe_read_object_a601_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_rs100_probe_subscribe_event_battery_sx1262",
+      "upstream_path": "tests/corpus/captures/probe/somfy_rs100_probe_subscribe_event_battery_sx1262.yaml",
+      "git_blob_sha1": "d612843a75cdd1fe259488ba7aa497fdc96f7b55",
+      "sha256": "c974b00bba179e44540547a4cd379fe55682dab48b54fcf55058867b8e146184",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/somfy_rs100_probe_subscribe_event_battery_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 1,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_rs100_probe_subscribe_event_battery_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_rs100_probe_subscribe_event_daylight_sx1262",
+      "upstream_path": "tests/corpus/captures/probe/somfy_rs100_probe_subscribe_event_daylight_sx1262.yaml",
+      "git_blob_sha1": "f2f45b9eb87744e574c4611e58c7ab84383e13e3",
+      "sha256": "d6bad69e0e6fb846214fd1858a0a04de5fefecebfc137f7774030ca6dc34b2b5",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/somfy_rs100_probe_subscribe_event_daylight_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_rs100_probe_subscribe_event_daylight_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_rs100_probe_subscribe_event_sx1262",
+      "upstream_path": "tests/corpus/captures/probe/somfy_rs100_probe_subscribe_event_sx1262.yaml",
+      "git_blob_sha1": "08c32a50f5022da04a51202ae455ae6f8a3f4e99",
+      "sha256": "239ca194bca2a17bc9e9c7aa0c16ac00d56000ace5bcd0d74d4407fd22095406",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/somfy_rs100_probe_subscribe_event_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 1,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/somfy_rs100_probe_subscribe_event_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_kig300_probe_capability_burst",
@@ -4358,7 +6188,70 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "velux_sml_probe_execution_state_waiting_then_executing_sx1262",
+      "upstream_path": "tests/corpus/captures/probe/velux_sml_probe_execution_state_waiting_then_executing_sx1262.yaml",
+      "git_blob_sha1": "ebdf0797a878ce58649c9e7a3b9f4c49924661bd",
+      "sha256": "e21a2d07138359d7db3d0d31a39ed98933fa8ef0f678de39d92a01d9c99fdf0e",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/velux_sml_probe_execution_state_waiting_then_executing_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/velux_sml_probe_execution_state_waiting_then_executing_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [
+          "test/test_laberning_corpus.py::test_original_sml_correspondence_keeps_ack_separate_from_queued_polls"
+        ],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "velux_sml_probe_status_mp_fp_waiting_for_power",
+      "upstream_path": "tests/corpus/captures/probe/velux_sml_probe_status_mp_fp_waiting_for_power.yaml",
+      "git_blob_sha1": "3c04e8c1afbc93b67529c4564c68d5755d363b50",
+      "sha256": "2f7c4115d49f9339c863c6f526d0c24fbc44ff7df10b7247dc7a22021d864bbd",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/velux_sml_probe_status_mp_fp_waiting_for_power.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/velux_sml_probe_status_mp_fp_waiting_for_power.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [
+          "test/test_laberning_corpus.py::test_original_sml_correspondence_keeps_ack_separate_from_queued_polls"
+        ],
+        "physical_motion": "unknown"
+      },
+      "evidence": "receive_only",
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_window_probe_limitation_rain_sx1262",
@@ -4386,7 +6279,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_window_probe_metadata_replies",
@@ -4414,7 +6308,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_window_probe_private_fn_rain_state_at_rest_sx1262",
@@ -4442,7 +6337,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_window_probe_private_fn_replies",
@@ -4470,7 +6366,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_window_probe_status_ext_replies",
@@ -4498,7 +6395,68 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "wisniowski_moto1000_probe_private2_partial_position",
+      "upstream_path": "tests/corpus/captures/probe/wisniowski_moto1000_probe_private2_partial_position.yaml",
+      "git_blob_sha1": "554db1b865e081b5de9a1be11b54b2aa57537970",
+      "sha256": "5501143643996a5e913fb1020ee99c92a4ed1b0969af008576262bd05a7fafd5",
+      "local_path": "test/corpus/laberning-ecc08c9/probe/wisniowski_moto1000_probe_private2_partial_position.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/probe/wisniowski_moto1000_probe_private2_partial_position.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      },
+      "evidence": "source_frame_sequence",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "somfy_awning_statuspoll_close_with_remaining_time_predicted_end_read_sx1262",
+      "upstream_path": "tests/corpus/captures/statuspoll/somfy_awning_statuspoll_close_with_remaining_time_predicted_end_read_sx1262.yaml",
+      "git_blob_sha1": "adf1472ea34bdbc775c11780af93175a9e912e9e",
+      "sha256": "b75c991d33b3d823a5ef032baa49f353bb14f54d7896a11e47eb381017fcc712",
+      "local_path": "test/corpus/alignment-20261113/somfy_awning_statuspoll_close_with_remaining_time_predicted_end_read_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": true,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "corpus",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 28,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/statuspoll/somfy_awning_statuspoll_close_with_remaining_time_predicted_end_read_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "public_vectors_only",
+        "behavior_tests": [
+          "test/test_remaining_time_mutation.py"
+        ],
+        "physical_motion": "unknown"
+      },
+      "evidence": "public_key_vector",
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_statuspoll_device_off_sx1276",
@@ -4526,7 +6484,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_statuspoll_success_sx1262",
@@ -4554,7 +6513,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_awning_statuspoll_success_sx1276",
@@ -4582,7 +6542,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_brightness_50_lr1121",
@@ -4610,7 +6571,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_brightness_50_sx1262",
@@ -4638,7 +6600,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_brightness_50_sx1276",
@@ -4666,7 +6629,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_brightness_75_lr1121",
@@ -4694,7 +6658,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_brightness_75_sx1262",
@@ -4722,7 +6687,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_brightness_75_sx1276",
@@ -4750,7 +6716,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_light_off_lr1121",
@@ -4778,7 +6745,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_light_off_sx1262",
@@ -4806,7 +6774,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_light_off_sx1276",
@@ -4834,7 +6803,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_light_on_lr1121",
@@ -4862,7 +6832,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_light_on_sx1262",
@@ -4890,7 +6861,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_izymo_dimmer_statuspoll_light_on_sx1276",
@@ -4918,7 +6890,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_oximo40_statuspoll_sx1262",
@@ -4946,7 +6919,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_pergola_louver_statuspoll_replies_sx1262",
@@ -4974,7 +6948,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "somfy_rs100_statuspoll_kig300_sx1276",
@@ -5002,7 +6977,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "tilt_cover_statuspoll_linked_remote_triggers",
@@ -5030,7 +7006,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "tilt_cover_statuspoll_reports_settled_tilt_after",
@@ -5060,7 +7037,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "tilt_cover_statuspoll_reports_settled_tilt_before",
@@ -5088,7 +7066,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_klf200_statuspoll_roundrobin_868_sx1262",
@@ -5119,7 +7098,70 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "velux_sml_statuspoll_queued_by_hub_sx1262",
+      "upstream_path": "tests/corpus/captures/statuspoll/velux_sml_statuspoll_queued_by_hub_sx1262.yaml",
+      "git_blob_sha1": "8e71d026b3656a4f764e1d222593f781c741f9e2",
+      "sha256": "451e734f288863b499c1f85a431a979b90d3bb17745a2ee8115fbb7f42b8d58e",
+      "local_path": "test/corpus/laberning-ecc08c9/statuspoll/velux_sml_statuspoll_queued_by_hub_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 14,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/statuspoll/velux_sml_statuspoll_queued_by_hub_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [
+          "test/test_laberning_corpus.py::test_original_sml_correspondence_keeps_ack_separate_from_queued_polls"
+        ],
+        "physical_motion": "unknown"
+      },
+      "evidence": "source_frame_sequence",
+      "in_upstream_snapshot": true
+    },
+    {
+      "id": "velux_sml_statuspoll_queued_by_remote_sx1262",
+      "upstream_path": "tests/corpus/captures/statuspoll/velux_sml_statuspoll_queued_by_remote_sx1262.yaml",
+      "git_blob_sha1": "dc05b88b1ac02537553234d124745a128d177c8a",
+      "sha256": "b4bfdf044bbe57d98ff3ba098b80d20b4669a4eec1c4b3fa21baed025754016f",
+      "local_path": "test/corpus/laberning-ecc08c9/statuspoll/velux_sml_statuspoll_queued_by_remote_sx1262.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "github-issue",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 11,
+      "physical_motion_evidence": "unknown",
+      "source_url": "https://github.com/laberning/home_io_control/blob/ecc08c9b620fff1e01c5c660dec8c4acd6eb6774/tests/corpus/captures/statuspoll/velux_sml_statuspoll_queued_by_remote_sx1262.yaml",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [
+          "test/test_laberning_corpus.py::test_original_sml_correspondence_keeps_ack_separate_from_queued_polls"
+        ],
+        "physical_motion": "unknown"
+      },
+      "evidence": "source_frame_sequence",
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_ssl_statuspoll_silent_while_moving",
@@ -5147,7 +7189,8 @@
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_ssl_statuspoll_stop_settle_preamble_escalation",
@@ -5178,7 +7221,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "velux_ssl_statuspoll_stopped_off_target",
@@ -5210,7 +7254,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     },
     {
       "id": "multi_somfy_unsolicited_status_burst",
@@ -5240,7 +7285,8 @@
         ],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
         "physical_motion": "unknown"
-      }
+      },
+      "in_upstream_snapshot": true
     }
   ],
   "derived_excerpts": [
@@ -5258,6 +7304,414 @@
       "local_path": "test/corpus/audit-20261018/nina_directed_2e_20261018.yaml",
       "classification": "derived_equivalent",
       "scope": "existing partial excerpts; originals now retained independently"
+    }
+  ],
+  "previous_commit": "c82d38f47901b71c1c63413e638241dbe1aa2d06",
+  "upstream_inventory_sha256": "f80bfd286257bb6a5e5a2dd02864303ab91ca6872731ddc14046570af6dff132",
+  "inventory_delta": [
+    {
+      "upstream_path": "tests/corpus/captures/discovery/somfy_awning_discovery_spe_paired_rollcall.yaml",
+      "status": "changed",
+      "previous_sha256": "8f00650f5278fd96bd03325fc5a315ff9bca7fffc0809175a25ac6b0ddeca38f",
+      "previous_path": "test/corpus/laberning-c82d38f/discovery/somfy_awning_discovery_spe_paired_rollcall.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/discovery/somfy_izymo_dimmer_discovery_spe_paired_rollcall.yaml",
+      "status": "changed",
+      "previous_sha256": "92cbc0f54214a806c105b03313a6b6504c2bdeb4933347431233607fce70f105",
+      "previous_path": "test/corpus/laberning-c82d38f/discovery/somfy_izymo_dimmer_discovery_spe_paired_rollcall.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/enrollment/reference_1w_enrollment_add_controller_kat.yaml",
+      "status": "changed",
+      "previous_sha256": "2461410e137bae355197238d2100b3f134a2e17fdc9aade288fe8064ff0b7290",
+      "previous_path": "test/corpus/laberning-c82d38f/enrollment/reference_1w_enrollment_add_controller_kat.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/enrollment/somfy_izymo_dimmer_enrollment_add_controller_with_mac_sx1276.yaml",
+      "status": "changed",
+      "previous_sha256": "d7c4fe094442ffdee3ae2f1773cd6c681df15055a2bf2bf1c4519896392ad82c",
+      "previous_path": "test/corpus/laberning-c82d38f/enrollment/somfy_izymo_dimmer_enrollment_add_controller_with_mac_sx1276.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/enrollment/somfy_izymo_dimmer_enrollment_remove_controller_in_prog_window_sx1276.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/enrollment/somfy_smoove_enrollment_add_and_remove_controller_sx1276.yaml",
+      "status": "changed",
+      "previous_sha256": "176ce5c556619954ec773822672ee12971bf1ae54e3c9205859119349da4fa62",
+      "previous_path": "test/corpus/laberning-c82d38f/enrollment/somfy_smoove_enrollment_add_and_remove_controller_sx1276.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/enrollment/somfy_smoove_enrollment_monitor_sx1276.yaml",
+      "status": "changed",
+      "previous_sha256": "648d1c4c941e5cc767159dd90c034434ad5746b9996742db50981a8f2f5dec37",
+      "previous_path": "test/corpus/laberning-c82d38f/enrollment/somfy_smoove_enrollment_monitor_sx1276.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/enrollment/somfy_smoove_enrollment_prog_press_on_air.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/enrollment/synthetic_enrollment_velux_kli_prog_sweep.yaml",
+      "status": "changed",
+      "previous_sha256": "d80911e31da07ee721ae13ebc89b8d4b6e6db3c6dcb12d935baf8f5112d9472c",
+      "previous_path": "test/corpus/laberning-c82d38f/enrollment/synthetic_enrollment_velux_kli_prog_sweep.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/atlantic_calypso_exchange_register_read.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/atlantic_thermor_exchange_write_private_param.yaml",
+      "status": "removed_upstream",
+      "previous_sha256": "fe3dc97f2e87f41dd4c01ecf97c34417cd5abfe59890aed927f10d38b3ccdc29",
+      "previous_path": "test/corpus/laberning-c82d38f/exchange/atlantic_thermor_exchange_write_private_param.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/sauter_hekla_exchange_night_light_brightness_levels_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_awning_exchange_close_short_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_awning_exchange_force_open_sx1276.yaml",
+      "status": "changed",
+      "previous_sha256": "cfa91d3f115d864a1e24ed8d8546190271fe022b11ac3f1da64890cc4469e469",
+      "previous_path": "test/corpus/laberning-c82d38f/exchange/somfy_awning_exchange_force_open_sx1276.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_awning_exchange_open_short_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_awning_exchange_set_position_25_short_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_awning_exchange_stop_short_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_off_short_lr1121.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_off_short_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_off_short_sx1276.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_on_short_lr1121.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_on_short_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_on_short_sx1276.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_50_short_lr1121.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_50_short_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_50_short_sx1276.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_75_short_lr1121.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_75_short_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/somfy_izymo_dimmer_exchange_set_brightness_75_short_sx1276.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/thermor_pilot_wire_interface_exchange_heating_level_execute.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/velux_sml_exchange_execute_ack_waiting_for_power_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/exchange/wisniowski_moto1000_exchange_session_interrupted_after_unconfirmed_stop.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/somfy_smoove_oneway_dim_close_extended_fp.yaml",
+      "status": "changed",
+      "previous_sha256": "cdb83aceb59c1826e15f5594c0997a27e2e366f1658450a46370a09e7fcaf9e5",
+      "previous_path": "test/corpus/laberning-c82d38f/oneway/somfy_smoove_oneway_dim_close_extended_fp.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/somfy_smoove_oneway_dim_stop_extended_fp.yaml",
+      "status": "changed",
+      "previous_sha256": "9f0f9d19cff92264b24ff032c8e9cde24e2606c88ab234554040b1ee2338a1b1",
+      "previous_path": "test/corpus/laberning-c82d38f/oneway/somfy_smoove_oneway_dim_stop_extended_fp.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/somfy_smoove_oneway_execute_current.yaml",
+      "status": "removed_upstream",
+      "previous_sha256": "86a4d06500b9f802322a53bba6d7fb269d27c30fcd62e0a5ee6c6b9a998e7ebd",
+      "previous_path": "test/corpus/laberning-c82d38f/oneway/somfy_smoove_oneway_execute_current.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/somfy_smoove_oneway_held_press_on_air.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/somfy_smoove_oneway_hold_to_dim_sx1276.yaml",
+      "status": "changed",
+      "previous_sha256": "0c7c54ffc2b72474f034a72b4bbbb86a4176d88cf782ce1be0c9643baecc1c74",
+      "previous_path": "test/corpus/laberning-c82d38f/oneway/somfy_smoove_oneway_hold_to_dim_sx1276.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/somfy_smoove_oneway_short_press_on_air.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/somfy_smoove_oneway_write_private_a.yaml",
+      "status": "removed_upstream",
+      "previous_sha256": "323fe08afe6d9872085d787c7d72d229848a0a6c8526e3051cdf59e2448df72b",
+      "previous_path": "test/corpus/laberning-c82d38f/oneway/somfy_smoove_oneway_write_private_a.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/somfy_smoove_oneway_write_private_favorite.yaml",
+      "status": "removed_upstream",
+      "previous_sha256": "ef61a1954325c767dd8fcac85ba87257fb3e8fe5b14e5b64af9cb20eb1bc9e82",
+      "previous_path": "test/corpus/laberning-c82d38f/oneway/somfy_smoove_oneway_write_private_favorite.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_low_power_burst_lr1121.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_low_power_burst_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_low_power_burst_sx1276.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_short_burst_lr1121.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_short_burst_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_short_burst_sx1276.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_somfy_default_burst_lr1121.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_somfy_default_burst_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/unenrolled_window_opener_oneway_stop_somfy_default_burst_sx1276.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/unidentified_1w_remote_oneway_execute.yaml",
+      "status": "removed_upstream",
+      "previous_sha256": "5cad7fc1c9d72627362c0b9361a8b7b06b7c634fac8fa73a06ab046ad92f89db",
+      "previous_path": "test/corpus/laberning-c82d38f/oneway/unidentified_1w_remote_oneway_execute.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/unidentified_1w_remote_oneway_execute_open_and_stop_acei_61_sx1276.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/unidentified_1w_remote_oneway_write_private_a.yaml",
+      "status": "removed_upstream",
+      "previous_sha256": "bad17381864e07c6a8868b59bd894b1017b7a0ebf6fd508edfcbf6e6130b4130",
+      "previous_path": "test/corpus/laberning-c82d38f/oneway/unidentified_1w_remote_oneway_write_private_a.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/unidentified_1w_remote_oneway_write_private_b.yaml",
+      "status": "removed_upstream",
+      "previous_sha256": "2d82eaa7e84688a78c75a8e7f173f51b97a407d293a24994d9b5ac681edfb156",
+      "previous_path": "test/corpus/laberning-c82d38f/oneway/unidentified_1w_remote_oneway_write_private_b.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/oneway/unidentified_1w_remote_oneway_write_private_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/pairing/atlantic_agilia_pairing_key_pull_heater_rollcall.yaml",
+      "status": "changed",
+      "previous_sha256": "d95e02323f4094e7a0f1c22ee548844eba270612ce2c1df3c21c4152eaec3e9e",
+      "previous_path": "test/corpus/atlantic-20261020/atlantic_agilia_pairing_key_pull_heater_rollcall.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/pairing/somfy_connectivity_kit_pairing_key_extraction_stall.yaml",
+      "status": "changed",
+      "previous_sha256": "9e930f09d2745a3f4030ca8ed1648b8174eb427f1a0837c08f811dda8f389b17",
+      "previous_path": "test/corpus/laberning-c82d38f/pairing/somfy_connectivity_kit_pairing_key_extraction_stall.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/pairing/velux_kig300_pairing_key_extraction_stall.yaml",
+      "status": "changed",
+      "previous_sha256": "f1c7b75cff6d9c756d79c04e7b95d61147d66f070aa2a998972902a169331613",
+      "previous_path": "test/corpus/laberning-c82d38f/pairing/velux_kig300_pairing_key_extraction_stall.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/pairing/velux_kux100_pairing_full.yaml",
+      "status": "changed",
+      "previous_sha256": "b602da161aa5b3d456807dc9120fe34188ed4fe65c76ed28e7cfd5335ab50f5b",
+      "previous_path": "test/corpus/laberning-c82d38f/pairing/velux_kux100_pairing_full.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/atlantic_adelis_probe_boost_remaining.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/atlantic_adelis_probe_mode_reads.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/atlantic_adelis_probe_register_01_sweep.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/atlantic_adelis_probe_register_01_sweep_drying.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/atlantic_adelis_probe_status_mp_fp.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/atlantic_adelis_probe_status_mp_fp_programme.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/atlantic_adelis_probe_temperature_in_force.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/atlantic_calypso_probe_status_fp_high.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/atlantic_calypso_probe_status_mp_fp.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/multi_somfy_probe_private2_short_form.yaml",
+      "status": "changed",
+      "previous_sha256": "d93fdd38129b74d5f9433c3c37b88c5a0524dab2c82cf5b9f4c942497fab42b4",
+      "previous_path": "test/corpus/laberning-c82d38f/probe/multi_somfy_probe_private2_short_form.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/somfy_awning_probe_get_info2_sx1262.yaml",
+      "status": "changed",
+      "previous_sha256": "04b063be12838606cd96396a1a559f36108805a7bc182d470696adfca0a32bef",
+      "previous_path": "test/corpus/laberning-c82d38f/probe/somfy_awning_probe_get_info2_sx1262.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/somfy_awning_probe_private2_short_favorite_after_reprogram_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/somfy_awning_probe_private2_short_favorite_restored_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/somfy_awning_probe_private2_short_favorite_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/somfy_awning_probe_private2_short_index7_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/somfy_awning_probe_private2_short_index9_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/somfy_izymo_dimmer_probe_get_info2_sx1262.yaml",
+      "status": "changed",
+      "previous_sha256": "939008afecae977765b80575632b8b8c7480a4841133f60c1db0b654882c6079",
+      "previous_path": "test/corpus/laberning-c82d38f/probe/somfy_izymo_dimmer_probe_get_info2_sx1262.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/somfy_izymo_dimmer_probe_private2_short_favorite_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/somfy_pergola_louver_probe_get_info2_sx1262.yaml",
+      "status": "changed",
+      "previous_sha256": "ec9a75ca7b04faf89b9decc7c935769b7fbfb6a86bccb0bd562f2ba3a1bb525e",
+      "previous_path": "test/corpus/captures/probe/somfy_pergola_louver_probe_get_info2_sx1262.yaml"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/somfy_rs100_probe_get_info1_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/somfy_rs100_probe_read_object_a601_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/somfy_rs100_probe_subscribe_event_battery_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/somfy_rs100_probe_subscribe_event_daylight_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/somfy_rs100_probe_subscribe_event_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/velux_sml_probe_execution_state_waiting_then_executing_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/velux_sml_probe_status_mp_fp_waiting_for_power.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/probe/wisniowski_moto1000_probe_private2_partial_position.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/statuspoll/somfy_awning_statuspoll_close_with_remaining_time_predicted_end_read_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/statuspoll/velux_sml_statuspoll_queued_by_hub_sx1262.yaml",
+      "status": "added"
+    },
+    {
+      "upstream_path": "tests/corpus/captures/statuspoll/velux_sml_statuspoll_queued_by_remote_sx1262.yaml",
+      "status": "added"
     }
   ]
 }
