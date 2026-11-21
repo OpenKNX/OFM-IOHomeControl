@@ -1165,6 +1165,7 @@ void IoHomecontrolChannel::onEstimate(uint16_t iSeconds,uint8_t execution)
     if(beganMoving)mObservedPositiveRemaining=false;
     mTrustedPollMoving=true; // only the qualified controller callback reaches here
     uint32_t delay=defaultTrackedStatusPollDelayMs();
+    if (beganMoving && delay > 3000U) delay = 3000U;
     if(remaining.kind==IoHomeRemainingTime::Kind::Positive) {
         mObservedPositiveRemaining=true;
         const uint32_t duration=uint32_t(iSeconds)*1000UL;

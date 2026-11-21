@@ -1,6 +1,6 @@
 """Exercise production channel evidence and SX1262 setters with recording adapters."""
 from pathlib import Path
-import os, subprocess, tempfile
+import json, os, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
 exchange_limit=next(line for line in (root/'src/controller/IoHomeController.h').read_text().splitlines() if line.startswith('#define IOHC_EXCHANGE_MAX_ATTEMPTS '))
 def method(source,signature):
@@ -31,6 +31,8 @@ methods='\n'.join(method(channel,signature) for signature in [
     'void IoHomecontrolChannel::stopTravelEstimation(',
     'bool IoHomecontrolChannel::requestStatus(bool'])
 methods+='\nvoid IoHomecontrolChannel::periodicTick(bool pollPaused){const uint32_t lNow=millis();uint16_t lPollSec=pollSec;'+method(channel,'    if (!pollPaused && lPollSec > 0')+'}\n'
+methods+='\nvoid IoHomecontrolChannel::trackedTick(){const uint32_t lNow=millis();const bool pollPaused=false;'+method(channel,'    if (!pollPaused && !mPredictedEnd.suppresses')+'}\n'
+
 harness=r'''#include <cassert>
 #include <cstdint>
 #include "protocol/IoHomeCommands.h"
@@ -93,7 +95,7 @@ struct IoHomecontrolChannel {
  uint32_t mLast2WHeardMs=0,mLast2WMovingEvidenceMs=0,m2WMovingEvidenceGeneration=0;
  bool snapshot=true;unsigned restores=0,polls=0;
  bool mWindowMainOnly=false;
- void periodicTick(bool);bool isStatusPollTrackingActive(uint32_t)const;
+ void trackedTick();void periodicTick(bool);bool isStatusPollTrackingActive(uint32_t)const;
  bool mIs1W=false,mStatusExpected=false,mSingleFollowUpPollPending=false,mPaired=true,lowPower=false;
  bool effectiveLowPower2W(){return lowPower;}
  unsigned _channelIndex=0;uint32_t mRfPollRetryAtMs=0;bool mRfPollWaiting=false;
@@ -340,6 +342,45 @@ for stopped,current,target in rows:
     if stopped:
         checks+=" assert(!ch.mIsMoving&&ch.mTravelDurationMs==0&&ch.mPollTrackingDeadlineMs==0&&ch.mNextStatusPollMs==0&&!ch.mSingleFollowUpPollPending);ch.onStatusPollFailed(true);assert(ch.mPollTrackingDeadlineMs==0&&!ch.mSingleFollowUpPollPending);\n"
 checks+=' assert(movementPublications==6);\n'
+kux = json.loads((root / 'test/corpus/kux110-queue-issue230.json').read_text())
+for capture in kux['captures']:
+    frames = capture['frames']
+    start = frames[0]['log_time_ms']
+    checks += """
+ {
+  IoHomecontrolChannel c; c.trackedDelay=20000; now=1000;
+  c.startStatusPollTracking(3000); const auto deadline=c.mPollTrackingDeadlineMs;
+  IoHomeProtocolIdentity identity{}; identity.valid=true; identity.manufacturerId=1; identity.profile=2;
+  bool waiting=false;
+"""
+    for row in frames:
+        raw = bytes.fromhex(row['hex'])
+        payload = ','.join(str(byte) for byte in raw[9:])
+        checks += f"""
+  {{
+   now={1000 + row['log_time_ms'] - start};
+   const uint8_t payload[]={{{payload}}};
+   const auto state=IoHomeExecutionState::decode(payload[0],identity);
+   c.onStatusUpdate(!IoHomeExecutionState::stopped(payload[0],identity));
+   const auto remaining=IoHomeRemainingTime::decode(payload,sizeof(payload));
+   if(remaining.known()) c.onEstimate(remaining.raw,state);
+   if(state==3) {{
+    waiting=true; assert(movementKo && !c.mPredictedEnd.pending && !c.mObservedPositiveRemaining);
+    assert(c.mPollTrackingDeadlineMs==deadline);
+   }} else if(state==4 && waiting) {{
+    waiting=false; assert(movementKo && c.mPredictedEnd.pending && !c.mPredictedEnd.nondecreasing);
+    assert(c.mPollTrackingDeadlineMs==deadline && c.mNextStatusPollMs<=now+3000U);
+    const auto submitted=c.mController.submissions;
+    const auto readAt=c.mNextStatusPollMs;
+    now=readAt-1; c.trackedTick(); assert(c.mController.submissions==submitted);
+    now=readAt; c.trackedTick(); assert(c.mController.submissions==submitted+1);
+   }} else if(state==5) {{
+    assert(!movementKo && !c.mPredictedEnd.pending && !c.mNextStatusPollMs && !c.mPollTrackingDeadlineMs);
+   }}
+  }}
+"""
+    checks += " }\n"
+
 last=tests.rfind('}')
 tests=tests[:last]+checks+tests[last:]
 radio=(root/'src/radio/RadioSX1262.cpp').read_text()
