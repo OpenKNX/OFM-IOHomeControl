@@ -25496,3 +25496,31 @@ TEST(controller_trace_storage_redacts_challenge_and_answer_on_ring_wrap)
     }
     ASSERT_TRUE(auth >= 2);
 }
+
+TEST(controller_opt_in_somfy_burst_keeps_sequence_body_frequency_and_duty)
+{
+    IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+    const uint8_t key[16] = {1};
+    initOneWayPairingModeControllerForTest(c, m, ch, 0x123456, 0x654321, key);
+    ch.setNodeId(0x654321);
+    ch.setOneWayControllerManufacturer(uint8_t(IoHomeManufacturer::Somfy));
+    ASSERT_TRUE(c.setOneWayWakeMs(515));
+    ASSERT_TRUE(c.sendCommand(0x654321, key, IoHomeCommand::Execute, 50));
+    for (unsigned i = 0; i < 80; ++i) { ioHomeTestAdvanceMillis(50); c.loop(); }
+
+    const auto &packets = c.radio().testTransmittedPackets();
+    ASSERT_EQ(packets.size(), 4U);
+    uint32_t total = 0;
+    for (unsigned i = 0; i < packets.size(); ++i) {
+        const auto &wire = packets[i];
+        const auto preamble = c.radio().testTransmitPreambles()[i];
+        ASSERT_EQ(c.radio().testTransmitFrequencies()[i], IOHC_FREQ_2);
+        ASSERT_EQ(preamble, i ? IOHC_PREAMBLE_NORMAL_START : 2472U);
+        ASSERT_EQ(bool(wire[1] & IOHC_CTRL1_LOW_POWER), i == 0);
+        ASSERT_EQ(wire.size(), packets[0].size());
+        ASSERT_MEM_EQ(wire.data() + 2, packets[0].data() + 2, wire.size() - 2);
+        total += ioHomeAirtime(wire.size(), preamble).budgetMs;
+    }
+    ASSERT_EQ(ch.getSequence1W(), 1);
+    ASSERT_EQ(c.testTxAirtimeAccum(0), total);
+}
