@@ -756,7 +756,7 @@ public:
   bool refreshLimitationStatus(IoHomecontrolChannel *channel);
   const LimitationState &limitationState(uint8_t channel) const;
   bool limitationValid(uint8_t channel) const;
-  enum class StatusProbeInterpretation:uint8_t {Raw,SmlExecution,AdelisPreset};
+  enum class StatusProbeInterpretation:uint8_t {Raw,SmlExecution,AdelisPreset,ExplorerV4};
   bool requestStatusMpFpProbe(IoHomecontrolChannel *channel,uint8_t highBitmap=0,StatusProbeInterpretation interpretation=StatusProbeInterpretation::Raw);
   bool requestStatusFpHighRead(IoHomecontrolChannel *channel,uint8_t bitmap);
   struct RainState {

@@ -4790,10 +4790,15 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
     }
     if(iCmd.rfind("iohc probe ",0)==0) {
         unsigned channel=0;char probe[32]{};char extra=0;
-        if(sscanf(iCmd.c_str(),"iohc probe %u %31s %c",&channel,probe,&extra)!=2||channel<1||channel>mNumChannels||(std::strcmp(probe,"status_mp_fp")&&std::strcmp(probe,"sml_execution")&&std::strcmp(probe,"adelis_preset"))) {
-            logInfoP("Usage: iohc probe CHANNEL status_mp_fp|sml_execution|adelis_preset (manual observation only)");return true;
+        if(sscanf(iCmd.c_str(),"iohc probe %u %31s %c",&channel,probe,&extra)!=2||channel<1||channel>mNumChannels||(std::strcmp(probe,"status_mp_fp")&&std::strcmp(probe,"sml_execution")&&std::strcmp(probe,"adelis_preset")&&std::strcmp(probe,"explorer_v4"))) {
+            logInfoP("Usage: iohc probe CHANNEL status_mp_fp|sml_execution|adelis_preset|explorer_v4 (manual observation only)");return true;
         }
-        logInfoP("status_mp_fp: %s",mController.requestStatusMpFpProbe(mChannels[channel-1],0,!std::strcmp(probe,"sml_execution")?IoHomeController::StatusProbeInterpretation::SmlExecution:!std::strcmp(probe,"adelis_preset")?IoHomeController::StatusProbeInterpretation::AdelisPreset:IoHomeController::StatusProbeInterpretation::Raw)?"queued":"busy/identity not permitted");return true;
+        using Interpretation = IoHomeController::StatusProbeInterpretation;
+        Interpretation selection = Interpretation::Raw;
+        if (!std::strcmp(probe, "sml_execution")) selection = Interpretation::SmlExecution;
+        else if (!std::strcmp(probe, "adelis_preset")) selection = Interpretation::AdelisPreset;
+        else if (!std::strcmp(probe, "explorer_v4")) selection = Interpretation::ExplorerV4;
+        logInfoP("status_mp_fp: %s",mController.requestStatusMpFpProbe(mChannels[channel-1],0,selection)?"queued":"busy/identity not permitted");return true;
     }
     if(iCmd.rfind("iohc limitation ",0)==0) {
         unsigned channel=0;char action[16]{};char extra=0;

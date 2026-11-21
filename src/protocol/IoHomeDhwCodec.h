@@ -1,5 +1,6 @@
 #pragma once
 #include "IoHomeFrame.h"
+#include "IoHomeMpFpRead.h"
 #include <cmath>
 #include <cstdint>
 
@@ -25,6 +26,24 @@ inline bool statusTarget(const IoHomeFrame &frame,uint16_t &out){
     const uint16_t raw=uint16_t(frame.data[2])<<8|frame.data[3];if(raw>0xC800)return false;out=raw;return true;
 }
 inline bool decodeTarget(uint16_t raw,float &celsius){if(raw>0xC800)return false;celsius=std::round((20.f+raw*42.f/51200.f)*10.f)/10.f;return true;}
+struct ExplorerStatus {
+    bool valid=false, targetKnown=false, boostKnown=false, boost=false;
+    uint16_t targetTenths=0;
+};
+inline constexpr uint8_t ExplorerBitmap = 0x43; // FP10, FP15 and FP16
+inline ExplorerStatus explorerStatus(const IoHomeFrame &frame) {
+    if (frame.commandId != IoHomeCommand::PrivateResponse || (frame.ctrlByte0 & IOHC_CTRL0_MODE_1W) ||
+        !ioHomeHighFpReplyMatches(ExplorerBitmap, frame.data, frame.dataLen))
+        return {};
+    const uint16_t main = uint16_t(frame.data[2]) << 8 | frame.data[3];
+    const uint16_t fp16 = uint16_t(frame.data[10]) << 8 | frame.data[11];
+    // 0000 also encodes the minimum temperature; keep it ambiguous.
+    const bool targetKnown = main != 0 && main <= 0xC800;
+    const uint16_t target = targetKnown ? uint16_t(200U + (uint32_t(main) * 10U + 512U) / 1024U) : 0;
+    const uint16_t boostWord = fp16 & 0x0300;
+    const bool boostKnown = fp16 != 0xFFFF && (boostWord == 0x0100 || boostWord == 0x0200);
+    return {true, targetKnown, boostKnown, boostKnown && boostWord == 0x0200, target};
+}
 inline bool encodeConfirmedTarget(float celsius,uint16_t volumeLitres,bool manual,uint16_t &raw){
     // Only these steps on the captured 200-l device have display confirmation.
     if(!manual||volumeLitres!=200||!std::isfinite(celsius)||(celsius!=50.f&&celsius!=54.f&&celsius!=62.f))return false;

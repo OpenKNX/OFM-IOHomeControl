@@ -3230,6 +3230,11 @@ bool IoHomeController::requestStatusMpFpProbe(IoHomecontrolChannel *channel,uint
     if(!mModule||!mModule->managementRequestsAllowed()||!idleForManagedOperation()||!channel||
        !channel->isPaired()||channel->is1W()||!channel->productContextRevision()||channelIndexFor(channel)>=16)return false;
     if(interpretation==StatusProbeInterpretation::AdelisPreset&&!qualifiedHeatingName(channel,IoHomeAdelis::HeatingModel::Adelis))return false;
+    if (interpretation == StatusProbeInterpretation::ExplorerV4) {
+        if (!IoHomeDhwCodec::identity(channel->getProtocolIdentity(), channel->getNodeId()))
+            return false;
+        highBitmap = IoHomeDhwCodec::ExplorerBitmap;
+    }
     IoHomeQueueEntry entry{};entry.destNodeId=channel->getNodeId();entry.encKey=channel->getEncryptionKey();
     entry.productContextRevision=channel->productContextRevision();entry.managementRead=true;
     std::memcpy(entry.managementKey,entry.encKey,16);entry.statusMpFpProbe=true;entry.statusFpHigh=highBitmap;
@@ -13147,6 +13152,11 @@ void IoHomeController::dispatchRxFrame()
                     const auto preset=IoHomeAdelis::observedPreset(mRxFrame,qualifiedHeatingName(lCh,IoHomeAdelis::HeatingModel::Adelis),
                         mCurrentCmd.statusFpHigh==0&&mLastResponseFreqIdx==mCurrentCmd.twoWayTxFreqIdx);
                     logInfoP("adelis_preset_observation=%s program_active=unverified effective_target=unknown knx_publish=0",IoHomeAdelis::presetName(preset));
+                }
+                if (mStatusProbeInterpretation == StatusProbeInterpretation::ExplorerV4) {
+                    const auto status = IoHomeDhwCodec::explorerStatus(mRxFrame);
+                    logInfoP("explorer_v4 layout_valid=%u target_known=%u target_tenths_C=%u boost_known=%u boost=%u",
+                             status.valid, status.targetKnown, status.targetTenths, status.boostKnown, status.boost);
                 }
                 break; // raw only: no position, product cache, originator, rain or KNX changes
             }
