@@ -23105,6 +23105,66 @@ static bool originalCaptureDecode(const char *id,unsigned index,IoHomeFrame &fra
     return f && frame.deserializeRawWithOptionalCrc(f->bytes,f->length);
 }
 
+#include "protocol/IoHomeAlfeaRead.h"
+
+TEST(protocol_alfea_captured_read_opens_reads_and_closes_same_handle)
+{
+    using namespace IoHomeAlfeaRead;
+    for (const auto offset : {HeatingEnergy, OutdoorTemperature})
+    {
+        const char *id = offset == HeatingEnergy
+            ? "atlantic_alfea_probe_read_object_heating_energy_sx1276"
+            : "atlantic_alfea_probe_outdoor_temperature_sx1276";
+        IoHomeFrame request, reply;
+        IoHomeObjectTransfer transfer;
+        for (unsigned i = 0; i < 8; i += 2)
+        {
+            ASSERT_TRUE(originalCaptureDecode(id, i, request));
+            ASSERT_TRUE(originalCaptureDecode(id, i + 1, reply));
+            const auto peer = request.getDestNodeId();
+            ASSERT_EQ(reply.getSrcNodeId(), peer);
+            ASSERT_EQ(reply.getDestNodeId(), request.getSrcNodeId());
+            if (i < 4)
+            {
+                ASSERT_TRUE(open(transfer, peer, 1, offset, i == 0, 0, 30000));
+                ASSERT_MEM_EQ(request.data, transfer.openingData(), 9);
+                ASSERT_TRUE(transfer.acceptOpening(peer, 1, uint8_t(reply.commandId), reply.data, reply.dataLen));
+            }
+            else
+            {
+                ASSERT_TRUE(transfer.nextRead());
+                ASSERT_MEM_EQ(request.data, transfer.pendingData(), 3);
+                if (i == 6)
+                {
+                    auto wrongHandle = reply;
+                    wrongHandle.data[0] ^= 0x80;
+                    ASSERT_TRUE(!transfer.acceptReadChunk(peer, 1, wrongHandle.data, wrongHandle.dataLen));
+                }
+                ASSERT_TRUE(transfer.acceptReadChunk(peer, 1, reply.data, reply.dataLen));
+            }
+        }
+        ASSERT_EQ(transfer.stage(), IoHomeObjectTransfer::Stage::Done);
+        Reading reading{};
+        ASSERT_TRUE(decode(offset, transfer.data(), transfer.transferred(), reading));
+        ASSERT_EQ(reading.unit, offset == HeatingEnergy ? Unit::KWh : Unit::TenthsCelsius);
+        ASSERT_EQ(reading.value, offset == HeatingEnergy ? 11463 : 119);
+    }
+}
+
+TEST(protocol_alfea_markers_and_signed_temperature)
+{
+    using namespace IoHomeAlfeaRead;
+    Reading reading{};
+    const uint8_t hotWater[] = {0x80, 0x24, 0xC0}, negative[] = {0x80, 0xFF, 0x89}, absent[] = {0x81, 0, 0};
+    ASSERT_TRUE(decode(HotWaterEnergy, hotWater, sizeof(hotWater), reading));
+    ASSERT_EQ(reading.value, 9408);
+    ASSERT_TRUE(decode(OutdoorTemperature, negative, sizeof(negative), reading));
+    ASSERT_EQ(reading.value, -119); // synthetic two's-complement example
+    ASSERT_TRUE(!decode(OutdoorTemperature, absent, sizeof(absent), reading));
+    ASSERT_TRUE(!decode(OutdoorTemperature, negative, 2, reading));
+    ASSERT_TRUE(!decode(0, negative, sizeof(negative), reading));
+}
+
 TEST(golden_rf_corpus_original_laberning_headers_crc_and_flags)
 {
     ASSERT_EQ(sizeof(LaberningOriginal::captures)/sizeof(LaberningOriginal::captures[0]),184U);
