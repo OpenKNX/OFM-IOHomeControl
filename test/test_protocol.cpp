@@ -25442,3 +25442,25 @@ TEST(controller_sunea_missing_final_interleaving_never_becomes_success)
     ASSERT_EQ(c.radio().testTransmitCount(), 2U);
     ASSERT_TRUE(!ch.testHasStatusUpdate());
 }
+
+TEST(protocol_adaptive_cca_rolling_samples_cover_busy_drift_missing_channel_and_wrap)
+{
+    IoHomeAdaptiveCca cca;
+    constexpr uint32_t start = UINT32_MAX - 500U;
+    for (uint8_t i = 0; i < 9; ++i) {
+        const uint32_t now = start + i * 250U;
+        cca.sample(0, now, i == 3 ? -45 : -105 + i);
+        cca.sample(1, now, -58);
+    }
+    ASSERT_EQ(cca.threshold(start + 2000U, -91), -85);
+    ASSERT_TRUE(!cca.due(0, start + 2001U));
+    ASSERT_TRUE(cca.due(2, start + 2001U));
+    for (uint8_t i = 0; i < 9; ++i) {
+        const uint32_t now = start + 2250U + i * 250U;
+        cca.sample(0, now, -110);
+        cca.sample(1, now, -55);
+        cca.sample(2, now, -90);
+    }
+    ASSERT_EQ(cca.threshold(start + 4250U, -91), -90);
+    ASSERT_EQ(cca.threshold(start + 14250U, -91), -85);
+}

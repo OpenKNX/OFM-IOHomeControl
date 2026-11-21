@@ -207,6 +207,8 @@ check-rf-build-modes: $(PROTOCOL_TARGET) $(DEBUG_PROTOCOL_TARGET)
 	./$(DEBUG_PROTOCOL_TARGET) --filter controller_inbound_reply_preparation_busy_keeps_original_25ms_deadline
 	./$(PROTOCOL_TARGET) --filter controller_sunea_missing_final_interleaving
 	./$(DEBUG_PROTOCOL_TARGET) --filter controller_sunea_missing_final_interleaving
+	./$(PROTOCOL_TARGET) --filter protocol_adaptive_cca_
+	./$(DEBUG_PROTOCOL_TARGET) --filter protocol_adaptive_cca_
 
 .PHONY: check-issue156-import
 check-issue156-import:
