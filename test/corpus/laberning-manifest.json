@@ -3,7 +3,7 @@
   "repository": "https://github.com/laberning/home_io_control",
   "commit": "c82d38f47901b71c1c63413e638241dbe1aa2d06",
   "upstream_capture_root": "tests/corpus/captures",
-  "inventory_sha256": "02ec06b2a4f3613e1faafac6d6e8ef452f8d088350719067045798fa39217cc5",
+  "inventory_sha256": "d0f0c764caa2c6690856d8d9b6462c7e5cac71a92abc0eec0fe3c4d9480edba2",
   "helper_sources": [
     {
       "upstream_path": "scripts/corpus/build.py",
@@ -797,6 +797,62 @@
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
+        "physical_motion": "unknown"
+      }
+    },
+    {
+      "id": "sauter_guelma_exchange_register_read",
+      "upstream_path": "tests/corpus/captures/exchange/sauter_guelma_exchange_register_read.yaml",
+      "git_blob_sha1": "2e1f9910ce9bb033e5c47bf00e4760e91bf90f00",
+      "sha256": "99ca1fd651909dccacd1e6e9ffb9e54b66a609efb18550f0535f9d266f97ea43",
+      "local_path": "test/corpus/laberning-pr248-ca3ffd6/exchange/sauter_guelma_exchange_register_read.yaml",
+      "source_url": "https://github.com/rambobinator/home_io_control/blob/ca3ffd62ee1408cc15fde6fed3e1a3488dd31c21/tests/corpus/captures/exchange/sauter_guelma_exchange_register_read.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 32,
+      "phy_support": "no_new_hardware_qualification",
+      "physical_motion_evidence": "unknown",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
+        "physical_motion": "unknown"
+      }
+    },
+    {
+      "id": "sauter_guelma_exchange_register_write",
+      "upstream_path": "tests/corpus/captures/exchange/sauter_guelma_exchange_register_write.yaml",
+      "git_blob_sha1": "8ff4e570deab7c7b76bc017b07c03d3493dba6d1",
+      "sha256": "5f0f0689635ae16c092e13952a4d3a18d25ca0bf16235f4f40b5fcaf23b8b4b9",
+      "local_path": "test/corpus/laberning-pr248-ca3ffd6/exchange/sauter_guelma_exchange_register_write.yaml",
+      "source_url": "https://github.com/rambobinator/home_io_control/blob/ca3ffd62ee1408cc15fde6fed3e1a3488dd31c21/tests/corpus/captures/exchange/sauter_guelma_exchange_register_write.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 6,
+      "phy_support": "no_new_hardware_qualification",
+      "physical_motion_evidence": "unknown",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
         "physical_motion": "unknown"
       }
     },
@@ -3741,6 +3797,34 @@
         "public_crypto": "not_verified_key_unknown",
         "behavior_tests": [],
         "correlation_radio_publication": "selected tests only; other fixtures parser/crypto only",
+        "physical_motion": "unknown"
+      }
+    },
+    {
+      "id": "sauter_guelma_probe_status_fp_high",
+      "upstream_path": "tests/corpus/captures/probe/sauter_guelma_probe_status_fp_high.yaml",
+      "git_blob_sha1": "0987c26d4395536124d8fd404ca48caf66a5eb58",
+      "sha256": "be9cd90ee61263637bd64f49d8ec0ca24f8cec766dc93dd7eaeb45aeee7903e5",
+      "local_path": "test/corpus/laberning-pr248-ca3ffd6/probe/sauter_guelma_probe_status_fp_high.yaml",
+      "source_url": "https://github.com/rambobinator/home_io_control/blob/ca3ffd62ee1408cc15fde6fed3e1a3488dd31c21/tests/corpus/captures/probe/sauter_guelma_probe_status_fp_high.yaml",
+      "classification": "original_imported",
+      "artifact_status": "original_imported",
+      "reused_existing": false,
+      "origin": "own-hardware",
+      "radio": "sx1262",
+      "key_mode": "unknown",
+      "crc_modes": [
+        "absent"
+      ],
+      "frame_count": 2,
+      "phy_support": "no_new_hardware_qualification",
+      "physical_motion_evidence": "unknown",
+      "coverage": {
+        "source_integrity": "all_original_bytes",
+        "host_schema_crc_key_safety": "all_frames",
+        "native_parser": "all_frames",
+        "public_crypto": "not_verified_key_unknown",
+        "behavior_tests": [],
         "physical_motion": "unknown"
       }
     },

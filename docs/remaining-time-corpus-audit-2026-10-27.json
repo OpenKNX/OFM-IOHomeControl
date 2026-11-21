@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "corpus_commit": "c82d38f47901b71c1c63413e638241dbe1aa2d06",
-  "original_yaml_count": 181,
+  "original_yaml_count": 184,
   "description": "Structural request-context audit; offsets alone do not establish RF layout or live authentication. Omitted requests remain omitted.",
   "context_counts": {
-    "unknown_request_context": 53,
+    "unknown_request_context": 55,
     "execute_ack_excluded": 34,
     "captured_main_info_request": 22,
     "other_private_variant_excluded": 73,
@@ -526,6 +526,30 @@
       "payload_bytes": 8,
       "layout_available": true,
       "raw_candidate_6_7": 0,
+      "synthetic_or_reference": false,
+      "authentication": "unknown"
+    },
+    {
+      "capture": "sauter_guelma_probe_status_fp_high",
+      "frame_index": 0,
+      "source_path": "test/corpus/laberning-pr248-ca3ffd6/probe/sauter_guelma_probe_status_fp_high.yaml",
+      "request_context": "unknown_request_context",
+      "captured_request_index": null,
+      "payload_bytes": 12,
+      "layout_available": true,
+      "raw_candidate_6_7": 0,
+      "synthetic_or_reference": false,
+      "authentication": "unknown"
+    },
+    {
+      "capture": "sauter_guelma_probe_status_fp_high",
+      "frame_index": 1,
+      "source_path": "test/corpus/laberning-pr248-ca3ffd6/probe/sauter_guelma_probe_status_fp_high.yaml",
+      "request_context": "unknown_request_context",
+      "captured_request_index": null,
+      "payload_bytes": 6,
+      "layout_available": false,
+      "raw_candidate_6_7": null,
       "synthetic_or_reference": false,
       "authentication": "unknown"
     },

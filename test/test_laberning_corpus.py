@@ -18,9 +18,9 @@ class OriginalCorpusTests(unittest.TestCase):
         cls.by_id = {doc["id"]:(entry,doc) for entry,doc in cls.loaded}
 
     def test_pinned_original_inventory_and_existing_copies(self):
-        self.assertEqual(len(self.loaded),181)
+        self.assertEqual(len(self.loaded),184)
         self.assertEqual(sum(e["reused_existing"] for e,d in self.loaded),17)
-        self.assertEqual(sum(len(d["frames"]) for e,d in self.loaded),1127)
+        self.assertEqual(sum(len(d["frames"]) for e,d in self.loaded),1167)
 
     def test_velux_keyed_rollcall_is_five_crc_preserved_receive_only_replies(self):
         _, doc = self.by_id["velux_window_discovery_keyed_rollcall_flipper_cc1101"]
@@ -35,6 +35,21 @@ class OriginalCorpusTests(unittest.TestCase):
             self.assertEqual(raw[8:11], bytes.fromhex("2B 01 01"))
             self.assertEqual(raw[11:14], raw[5:8])
             self.assertEqual(raw[14], 1)
+
+    def test_guelma_evidence_has_no_requests_or_calypso_target(self):
+        for identity in (
+            "sauter_guelma_exchange_register_read",
+            "sauter_guelma_exchange_register_write",
+            "sauter_guelma_probe_status_fp_high",
+        ):
+            entry, doc = self.by_id[identity]
+            self.assertIn("ca3ffd62ee1408cc15fde6fed3e1a3488dd31c21", entry["source_url"])
+            self.assertEqual(doc["key"], "unknown")
+            self.assertTrue(all((f["dir"], f["crc"]) == ("rx", "absent") for f in doc["frames"]))
+        frames = self.by_id["sauter_guelma_probe_status_fp_high"][1]["frames"]
+        high, ordinary = (bytes.fromhex(frame["hex"])[9:] for frame in frames)
+        self.assertEqual(high[-4:], b"\xff" * 4)
+        self.assertEqual(ordinary[2:4], b"\0" * 2)
 
     def test_missing_inventory_entry_is_not_silent(self):
         manifest = copy.deepcopy(self.manifest)

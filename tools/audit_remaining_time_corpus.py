@@ -41,5 +41,5 @@ if __name__=='__main__':
  parser=argparse.ArgumentParser();parser.add_argument('--check',type=Path);args=parser.parse_args();result=audit()
  if args.check:
   if json.loads(args.check.read_text())!=result:raise SystemExit('Remaining-time corpus audit differs')
-  print('181 original YAML hashes and remaining-time evidence audit match; no positive high-byte capture established')
+  print('184 original YAML hashes and remaining-time evidence audit match; no positive high-byte capture established')
  else:print(json.dumps(result,indent=2))
