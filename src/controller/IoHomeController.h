@@ -998,6 +998,9 @@ public:
   TwoWayPowerClass diagnostic2WPowerClass() const;
   bool setDiagnostic2WStartPreamble(uint16_t iPreambleSymbols);
   bool setLowPower2WWakePreamble(uint16_t iPreambleBytes);
+  bool setOneWayWakeMs(uint16_t milliseconds);
+  uint16_t oneWayWakeMs() const { return mOneWayWakeMs; }
+  uint16_t oneWayWakePreamble() const { return mOneWayWakePreamble; }
   uint16_t lowPower2WWakePreamble() const { return mLowPower2WWakePreamble; }
   uint16_t max2WPreamble() const { return mRadio.maxPreambleLength(); }
   static uint32_t txTimeoutForAirtime(uint8_t iFrameLen, uint16_t iPreambleBytes);
@@ -1269,7 +1272,7 @@ public:
   static uint16_t oneWayRepeatPreambleForManufacturer(uint8_t iManufacturer);
   static OneWayCopyShape oneWayCopyShape(OneWayPowerClass iPowerClass,
                                          uint8_t iManufacturer,
-                                         uint8_t iCopyIndex);
+                                         uint8_t iCopyIndex, uint16_t wakePreamble = 0);
   static const char *oneWayPowerClassName(OneWayPowerClass iPowerClass);
   static OneWayEnrollmentFinalizer resolveOneWayEnrollmentFinalizer(
       OneWayEnrollmentFinalizer iConfigured, uint8_t iManufacturer);
@@ -1928,6 +1931,8 @@ private:
   uint8_t mLastResponseFreqIdx; // frequency index where last response was received
   uint8_t mDiagnostic2WFrameVersion = 0; // queued 2W bench override only; never persisted
   TwoWayPowerClass mDiagnostic2WPowerClass = TwoWayPowerClass::Automatic;
+  uint16_t mOneWayWakeMs = 0;
+  uint16_t mOneWayWakePreamble = 0;
   uint16_t mLowPower2WWakePreamble = IOHC_PREAMBLE_LONG;
   bool mQueuedTxDoneObserved = false;
   IoHomeFrame mQueuedTxFrame;

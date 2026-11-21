@@ -209,8 +209,8 @@ namespace
         const OneWayEnrollmentFinalizer lFinalizer = IoHomeController::resolveOneWayEnrollmentFinalizer(
             iChannel->getConfigured1WEnrollmentFinalizer(), lManufacturer);
         const OneWayPowerClass lPowerClass = iController.effectiveOneWayPowerClass(iChannel);
-        const OneWayCopyShape lFirstShape = IoHomeController::oneWayCopyShape(lPowerClass, lManufacturer, 0);
-        const OneWayCopyShape lRepeatShape = IoHomeController::oneWayCopyShape(lPowerClass, lManufacturer, 1);
+        const OneWayCopyShape lFirstShape = IoHomeController::oneWayCopyShape(lPowerClass, lManufacturer, 0, iController.oneWayWakePreamble());
+        const OneWayCopyShape lRepeatShape = IoHomeController::oneWayCopyShape(lPowerClass, lManufacturer, 1, iController.oneWayWakePreamble());
         openknx.logger.logMacroWrapper(
             0, "IoHomecontrol",
             "  1W wire profile: manufacturer=%s(0x%02X) executeAcei=0x%02X source=%s executePolicy=%s broadcastType=%u executeDst=%06X pairingProfile=%s enrollPolicy=%s removeDst=%06X addDst=%06X addCount=%u enrollClasses=%s%s finalizer=%s power=%s first=%u/lp%u repeat=%u/lp%u",
@@ -4412,6 +4412,7 @@ void IoHomecontrol::showHelp()
     openknx.console.printHelpLine("iohcNN pair1w stop|status", "Stop or show the 1W key-receive (clone) state");
     openknx.console.printHelpLine("iohcNN bind1w ADDR", "Bind/rebind a 1W broadcast profile to an actuator node");
     openknx.console.printHelpLine("iohcNN remove1w [ADDR]", "Shortcut for: pair1w [ADDR] remove");
+    openknx.console.printHelpLine("iohc 1w wake [0|300..1000]", "Opt-in Somfy/unknown wake-first burst (515 ms upstream profile, 0 legacy)");
     openknx.console.printHelpLine("iohc keyimport controller-pull CH HUB MEMBER", "Explicit pull to an empty channel; requires a known member's cryptographic proof");
     openknx.console.printHelpLine("iohc keyimport controller-status|controller-cancel", "Inspect or wipe the temporary import session; never displays keys");
     openknx.console.printHelpLine("iohc keyimport controller-commit SESSION", "Commit only a verified current session; preserve gateway and assigned devices");
@@ -4780,6 +4781,18 @@ bool IoHomecontrol::processCommand(const std::string iCmd, bool iDebugKo)
         unsigned session=0;char extra=0;
         const bool valid=sscanf(iCmd.c_str(),"iohc keyimport controller-commit %u %c",&session,&extra)==1;
         logInfoP("Controller key import: %s",valid&&mController.commitControllerKeyPull(session)?"durably committed; gateway and device bindings preserved":"blocked; verified current member proof and conflict-free durable commit required");return true;
+    }
+    if (iCmd == "iohc 1w wake" || iCmd.rfind("iohc 1w wake ", 0) == 0)
+    {
+        unsigned ms = 0;
+        char extra = 0;
+        if (iCmd != "iohc 1w wake" &&
+            (sscanf(iCmd.c_str(), "iohc 1w wake %u %c", &ms, &extra) != 1 ||
+             ms > 1000 || !mController.setOneWayWakeMs(static_cast<uint16_t>(ms))))
+            logInfoP("1W wake setting rejected (use 0 or 300..1000 ms while idle)");
+        logInfoP("1W wake=%u ms preamble=%u bytes (0 means legacy)",
+                 mController.oneWayWakeMs(), mController.oneWayWakePreamble());
+        return true;
     }
     if(iCmd.rfind("iohc keyimport controller-pull ",0)==0) {
         unsigned channel=0;char hubText[16]{},memberText[16]{},extra=0;uint32_t hub=0,member=0;

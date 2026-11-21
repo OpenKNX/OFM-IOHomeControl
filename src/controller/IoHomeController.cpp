@@ -1865,15 +1865,19 @@ uint16_t IoHomeController::oneWayRepeatPreambleForManufacturer(uint8_t iManufact
 
 OneWayCopyShape IoHomeController::oneWayCopyShape(OneWayPowerClass iPowerClass,
                                                    uint8_t iManufacturer,
-                                                   uint8_t iCopyIndex)
+                                                   uint8_t iCopyIndex, uint16_t wakePreamble)
 {
+    const bool somfyLike = iManufacturer == uint8_t(IoHomeManufacturer::Somfy) ||
+                           iManufacturer == uint8_t(IoHomeManufacturer::Unknown);
+    if (wakePreamble && iPowerClass == OneWayPowerClass::Automatic && somfyLike)
+        iPowerClass = OneWayPowerClass::LowPower;
     switch (iPowerClass)
     {
     case OneWayPowerClass::AlwaysAlive:
         return {IOHC_PREAMBLE_NORMAL_START, false};
     case OneWayPowerClass::LowPower:
         return iCopyIndex == 0
-                   ? OneWayCopyShape{IOHC_PREAMBLE_LONG, true}
+                   ? OneWayCopyShape{static_cast<uint16_t>(wakePreamble ? wakePreamble : IOHC_PREAMBLE_LONG), true}
                    : OneWayCopyShape{IOHC_PREAMBLE_NORMAL_START, false};
     case OneWayPowerClass::Automatic:
     default:
@@ -5871,6 +5875,18 @@ bool IoHomeController::setDiagnostic2WStartPreamble(uint16_t iPreambleSymbols)
     return true;
 }
 
+bool IoHomeController::setOneWayWakeMs(uint16_t milliseconds)
+{
+    if (!idleForManagedOperation() || (milliseconds && (milliseconds < 300 || milliseconds > 1000)))
+        return false;
+    const auto preamble = ioHomePreambleBytesForMs(milliseconds);
+    if (preamble > mRadio.maxPreambleLength())
+        return false;
+    mOneWayWakePreamble = static_cast<uint16_t>(preamble);
+    mOneWayWakeMs = milliseconds;
+    return true;
+}
+
 bool IoHomeController::setLowPower2WWakePreamble(uint16_t iPreambleBytes)
 {
     if (iPreambleBytes == 0 || iPreambleBytes > max2WPreamble())
@@ -6618,8 +6634,8 @@ void IoHomeController::trace1WRepeatPlan(const char *iContext,
     if (!mPairDiagnosticTraceEnabled)
         return;
 
-    const OneWayCopyShape lFirst = oneWayCopyShape(iPowerClass, iManufacturer, 0);
-    const OneWayCopyShape lRepeat = oneWayCopyShape(iPowerClass, iManufacturer, 1);
+    const OneWayCopyShape lFirst = oneWayCopyShape(iPowerClass, iManufacturer, 0, mOneWayWakePreamble);
+    const OneWayCopyShape lRepeat = oneWayCopyShape(iPowerClass, iManufacturer, 1, mOneWayWakePreamble);
     logInfoP("1w repeat: ctx=%s power=%s total=%u gap=%ums firstPre=%u firstLp=%u repeatPre=%u repeatLp=%u",
              iContext ? iContext : "1w",
              oneWayPowerClassName(iPowerClass),
@@ -8954,7 +8970,7 @@ void IoHomeController::processTxPending()
         lOneWayPowerClass = effectiveOneWayPowerClass(lChannel);
         if (lProfile)
             lOneWayManufacturer = lProfile->getOneWayControllerManufacturer();
-        lOneWayFirstShape = oneWayCopyShape(lOneWayPowerClass, lOneWayManufacturer, 0);
+        lOneWayFirstShape = oneWayCopyShape(lOneWayPowerClass, lOneWayManufacturer, 0, mOneWayWakePreamble);
         mTxFrame.setLowPower(lOneWayFirstShape.lowPower);
     }
 
@@ -12433,7 +12449,7 @@ OneWayCopyShape IoHomeController::queuedOneWayCopyShape(uint8_t iCopyIndex) cons
     const uint8_t lManufacturer = lProfile
                                       ? lProfile->getOneWayControllerManufacturer()
                                       : static_cast<uint8_t>(IoHomeManufacturer::Unknown);
-    return oneWayCopyShape(effectiveOneWayPowerClass(lChannel), lManufacturer, iCopyIndex);
+    return oneWayCopyShape(effectiveOneWayPowerClass(lChannel), lManufacturer, iCopyIndex, mOneWayWakePreamble);
 }
 
 uint8_t IoHomeController::pairingOneWayManufacturer() const
@@ -12452,7 +12468,7 @@ OneWayPowerClass IoHomeController::pairingOneWayPowerClass() const
 
 OneWayCopyShape IoHomeController::pairingOneWayCopyShape(uint8_t iCopyIndex) const
 {
-    return oneWayCopyShape(pairingOneWayPowerClass(), pairingOneWayManufacturer(), iCopyIndex);
+    return oneWayCopyShape(pairingOneWayPowerClass(), pairingOneWayManufacturer(), iCopyIndex, mOneWayWakePreamble);
 }
 
 uint16_t IoHomeController::authResponsePreamble() const

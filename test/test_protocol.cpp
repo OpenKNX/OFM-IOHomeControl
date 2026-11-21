@@ -25211,3 +25211,38 @@ TEST(controller_kux_short_and_long_logs_correlate_with_owned_main_info_polls)
     replayKuxQueue(KuxQueueCapture::short_frames);
     replayKuxQueue(KuxQueueCapture::long_frames);
 }
+
+TEST(controller_opt_in_oneway_wake_shape_respects_phy_and_manufacturer)
+{
+    IoHomeController controller;
+    ASSERT_TRUE(controller.setOneWayWakeMs(515));
+    ASSERT_EQ(controller.oneWayWakePreamble(), 2472);
+    ASSERT_EQ(ioHomePreambleBytesForMs(515, IoHomeTxPhy::Sx1276IoHome), 1978U);
+    for (auto manufacturer : {IoHomeManufacturer::Somfy, IoHomeManufacturer::Unknown, IoHomeManufacturer::Velux}) {
+        for (uint8_t copy = 0; copy < 4; ++copy) {
+            const bool wake = copy == 0 && manufacturer != IoHomeManufacturer::Velux;
+            const auto shape = IoHomeController::oneWayCopyShape(OneWayPowerClass::Automatic,
+                uint8_t(manufacturer), copy, controller.oneWayWakePreamble());
+            ASSERT_EQ(shape.preamble, wake ? 2472U : IOHC_PREAMBLE_NORMAL_START);
+            ASSERT_EQ(shape.lowPower, wake);
+            for (auto power : {OneWayPowerClass::AlwaysAlive, OneWayPowerClass::LowPower}) {
+                const bool explicitWake = copy == 0 && power == OneWayPowerClass::LowPower;
+                const auto explicitShape = IoHomeController::oneWayCopyShape(power,
+                    uint8_t(manufacturer), copy, controller.oneWayWakePreamble());
+                ASSERT_EQ(explicitShape.preamble, explicitWake ? 2472U : IOHC_PREAMBLE_NORMAL_START);
+                ASSERT_EQ(explicitShape.lowPower, explicitWake);
+            }
+        }
+    }
+    ASSERT_TRUE(!controller.setOneWayWakeMs(299));
+    ASSERT_TRUE(controller.setOneWayWakeMs(300));
+    ASSERT_EQ(controller.oneWayWakePreamble(), 1440);
+    ASSERT_TRUE(controller.setOneWayWakeMs(1000));
+    ASSERT_EQ(controller.oneWayWakePreamble(), 4800);
+    ASSERT_TRUE(!controller.setOneWayWakeMs(1001));
+    controller.radio().testSetMaxPreambleLength(2000);
+    ASSERT_TRUE(!controller.setOneWayWakeMs(515));
+    ASSERT_EQ(controller.oneWayWakeMs(), 1000);
+    ASSERT_TRUE(controller.setOneWayWakeMs(0));
+    ASSERT_EQ(controller.oneWayWakePreamble(), 0);
+}
