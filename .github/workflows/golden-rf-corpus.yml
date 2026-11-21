@@ -104,6 +104,6 @@ jobs:
       - name: Validate two-controller trace analysis and sanitized configuration tools
         run: make -C test check-dual-controller-tools
       - name: Validate debug-only RF bypass and unchanged release admission
-        run: make -C test check-rf-access-policy check-rf-build-modes
+        run: make -C test check-rf-access-policy check-rf-build-modes check-trace-heap
       - name: Validate capture importers and observations in both build modes
         run: make -C test check-upstream-alignment check-light-followup check-issue156-import check-recovery-traces check-capture-build-modes

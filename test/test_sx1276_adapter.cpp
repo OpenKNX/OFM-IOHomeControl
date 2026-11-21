@@ -85,6 +85,9 @@ int main(){
  assert(edges.registers[REG_RXBW]==0x0B&&edges.registers[REG_AFCBW]==0x12&&edges.registers[REG_PACONFIG]==0x8F);
  assert(edges.registers[REG_FRFMSB]==tuned[0]&&edges.registers[REG_FRFMID]==tuned[1]&&edges.registers[REG_FRFLSB]==tuned[2]);
  assert(captured.txStartCount()==txCount+1&&captured.txDoneCount()==0);
+ // A late PACKETSENT edge after timeout/recovery is not a completion in RX.
+ edges.registers[REG_IRQFLAGS2]=RF_IRQFLAGS2_PACKETSENT;
+ assert(!captured.isTxDone()&&captured.txDoneCount()==0&&captured.state()==RadioState::Receiving);
  finishPacket(-84);
  Bus missing;RadioSX1276 absent;absent.setNativeTransport(&missing,Bus::read,Bus::write);absent.init(1,2,3);assert(!absent.isInitialized());
  // Synthetic adapter envelope for the Nina public protocol bytes. SX1276

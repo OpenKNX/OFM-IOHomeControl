@@ -198,6 +198,15 @@ DEBUG_PROTOCOL_TARGET = $(BUILD_DIR)/test_suite_debug
 $(DEBUG_PROTOCOL_TARGET): $(STEFAN_GENERATED) $(CORPUS_GENERATED) $(KUX_GENERATED) $(wildcard corpus/*.h corpus/*.inc corpus/light-followup/*.h corpus/alignment-20261113/*.h ../src/protocol/*.h ../src/controller/*.h ../src/radio/*.h) $(PROTOCOL_SRCS) mbedtls/aes.h test_registry.h | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -DOPENKNX_DEBUG -o $@ $(PROTOCOL_SRCS)
 
+HEAP_PROTOCOL_TARGET = $(BUILD_DIR)/test_suite_heap
+$(HEAP_PROTOCOL_TARGET): $(PROTOCOL_TARGET)
+	$(CXX) $(CXXFLAGS) -DIOHC_TWO_WAY_TRACE_HEAP=1 -o $@ $(PROTOCOL_SRCS)
+
+.PHONY: check-trace-heap
+check-trace-heap: $(PROTOCOL_TARGET) $(HEAP_PROTOCOL_TARGET)
+	./$(PROTOCOL_TARGET) --filter controller_trace_storage_redacts
+	./$(HEAP_PROTOCOL_TARGET) --filter controller_trace_storage_redacts
+
 .PHONY: check-rf-build-modes
 check-rf-build-modes: $(PROTOCOL_TARGET) $(DEBUG_PROTOCOL_TARGET)
 	./$(PROTOCOL_TARGET) --filter controller_rf_build_mode_

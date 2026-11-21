@@ -25464,3 +25464,35 @@ TEST(protocol_adaptive_cca_rolling_samples_cover_busy_drift_missing_channel_and_
     ASSERT_EQ(cca.threshold(start + 4250U, -91), -90);
     ASSERT_EQ(cca.threshold(start + 14250U, -91), -85);
 }
+
+
+TEST(controller_trace_storage_redacts_challenge_and_answer_on_ring_wrap)
+{
+    const uint8_t key[16] = {1};
+    IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+    initPaired2WControllerForTest(c, m, ch, 0x123456, 0x654321, key);
+    for (unsigned exchange = 0; exchange < 8; ++exchange) {
+        ASSERT_TRUE(c.sendBackgroundCommand(0x654321, key, IoHomeCommand::Private, 3, 0xFF, 0xFF, 1));
+        IoHomeFrame request, reply;
+        ASSERT_TRUE(transmitQueuedControllerFrame(c, request));
+        ASSERT_TRUE(authenticateHeatingRequest(c));
+        buildSimpleResponseFrame(reply, 0x123456, 0x654321, IoHomeCommand::PrivateResponse, nullptr, 0);
+        reply.dataLen = 8;
+        reply.data[0] = 5;
+        ASSERT_TRUE(queueControllerResponse(c, reply));
+        ASSERT_EQ(c.state(), ControllerState::Idle);
+    }
+    const auto end = c.twoWayTraceCount();
+    ASSERT_TRUE(end > IoHomeController::kTwoWayTraceCapacity);
+    unsigned auth = 0;
+    for (uint64_t id = end - IoHomeController::kTwoWayTraceCapacity + 1; id <= end; ++id) {
+        const auto &trace = c.twoWayTracePoint(id);
+        ASSERT_EQ(trace.id, id);
+        if (trace.command == uint8_t(IoHomeCommand::ChallengeRequest) ||
+            trace.command == uint8_t(IoHomeCommand::ChallengeResponse)) {
+            ++auth;
+            ASSERT_TRUE(!std::strcmp(trace.payload, "[redacted]"));
+        }
+    }
+    ASSERT_TRUE(auth >= 2);
+}

@@ -20,6 +20,7 @@ struct RadioSX1262 {
     TxCompletionPhase mTxCompletionPhase=TxCompletionPhase::Cleanup;
     RadioState mState=RadioState::Transmitting;
     bool mInitialized=true, mEms2Mode=false, readable=true, writable=true, failConfigure=false;
+    bool failFrequency=false, failPower=false;
     uint8_t status=0x20, mStandbyMode=SX1262_STDBY_XOSC, mOutputPower=17;
     uint32_t mCurrentFreq=869850000;
     unsigned configurations=0, reads=0, writes=0, tuning=0, powerWrites=0, rxSwitches=0;
@@ -39,10 +40,10 @@ struct RadioSX1262 {
         return failConfigure ? RadioError::HardwareError : RadioError::None;
     }
     RadioError setFrequencyInternal(uint32_t hz,bool blocking) {
-        assert(blocking); ++tuning; mCurrentFreq=hz; return RadioError::None;
+        assert(blocking); ++tuning; mCurrentFreq=hz; return failFrequency ? RadioError::HardwareError : RadioError::None;
     }
     RadioError setOutputPowerInternal(uint8_t power,bool blocking) {
-        assert(blocking); ++powerWrites; mOutputPower=power; return RadioError::None;
+        assert(blocking); ++powerWrites; mOutputPower=power; return failPower ? RadioError::HardwareError : RadioError::None;
     }
     void standby();
 };
@@ -73,6 +74,16 @@ int main() {
     assert(!failed.mInitialized && failed.configurations==1);
     assert(failed.tuning==0 && failed.powerWrites==0);
 
+    RadioSX1262 missingFrequency;
+    missingFrequency.failFrequency=true; missingFrequency.standby();
+    assert(!missingFrequency.mInitialized && missingFrequency.mState==RadioState::Idle);
+    assert(missingFrequency.tuning==1 && missingFrequency.powerWrites==0);
+
+    RadioSX1262 missingPower;
+    missingPower.failPower=true; missingPower.standby();
+    assert(!missingPower.mInitialized && missingPower.mState==RadioState::Idle);
+    assert(missingPower.tuning==1 && missingPower.powerWrites==1);
+
     RadioSX1262 ems2;
     ems2.mEms2Mode=true; ems2.standby();
     assert(ems2.reads==0 && ems2.configurations==0);
@@ -82,7 +93,8 @@ with tempfile.TemporaryDirectory() as folder:
     path = Path(folder)
     (path / "recovery.cpp").write_text(harness + method + tests)
     compiler = shlex.split(os.environ.get("CXX", "c++"))
-    subprocess.run(compiler + ["-std=c++17", "-Wall", "-Wextra",
-                   str(path / "recovery.cpp"), "-o", str(path / "recovery")], check=True)
-    subprocess.run([str(path / "recovery")], check=True)
+    for flags in ([], ["-DOPENKNX_DEBUG"]):
+        subprocess.run(compiler + ["-std=c++17", "-Wall", "-Wextra", *flags,
+                       str(path / "recovery.cpp"), "-o", str(path / "recovery")], check=True)
+        subprocess.run([str(path / "recovery")], check=True)
 print("SX1262 reset recovery dispatch and failure paths passed")
