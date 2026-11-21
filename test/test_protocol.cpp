@@ -11701,6 +11701,9 @@ TEST(controller_key_import_directed_verification_uses_observed_frequency)
     ASSERT_EQ(lController.radio().testCurrentFrequency(), IOHC_FREQUENCIES[2]);
 }
 
+static void buildSimpleResponseFrame(IoHomeFrame &, uint32_t, uint32_t, IoHomeCommand,
+                                     const uint8_t *, uint8_t);
+
 TEST(controller_cozy_temperature_preserves_le16_queue_value)
 {
     const uint32_t lRemoteNodeId = 0x831F2A;
@@ -11731,11 +11734,18 @@ TEST(controller_cozy_temperature_preserves_le16_queue_value)
                                       lRemoteNodeId, lDeviceNodeId, lKey);
         IoHomeProtocolIdentity heating;heating.valid=true;heating.manufacturerId=12;heating.profile=52;heating.subProfile=1;
         lChannel.onProtocolIdentity(lDeviceNodeId,heating);lChannel.setHeatingModelForTest(IoHomeAdelis::HeatingModel::Agilia);lController.testSeedAgiliaName(&lChannel);
+        IoHomeFrame lFrame;
+        ASSERT_TRUE(lController.requestHeatingRegister(&lChannel, 0x0100));
+        ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
+        const uint8_t challenge[]={1,3,5,7,9,11};
+        buildSimpleResponseFrame(lFrame,lRemoteNodeId,lDeviceNodeId,IoHomeCommand::ChallengeRequest,challenge,6);
+        ASSERT_TRUE(queueControllerResponse(lController,lFrame));
+        const uint8_t mode[]={0x0C,0x60,1,0,1};
+        buildSimpleResponseFrame(lFrame,lRemoteNodeId,lDeviceNodeId,IoHomeCommand::WritePrivateResponse,mode,5);
+        ASSERT_TRUE(queueControllerResponse(lController,lFrame));
         ASSERT_TRUE(lController.sendCommand(lDeviceNodeId, lKey,
                                             IoHomeCommand::WritePrivate, 0x03,
                                             lCase.tenths));
-
-        IoHomeFrame lFrame;
         ASSERT_TRUE(transmitQueuedControllerFrame(lController, lFrame));
         ASSERT_EQ(lFrame.commandId, IoHomeCommand::WritePrivate);
         ASSERT_EQ(lFrame.dataLen, 6);
@@ -21929,7 +21939,16 @@ TEST(controller_heating_reads_require_authenticated_exact_echo)
 TEST(controller_heating_write_ack_requires_separate_actual_readback)
 {
     IoHomeController c;IoHomecontrol m;IoHomecontrolChannel ch;initHeatingController(c,m,ch);
-    ASSERT_TRUE(c.requestHeatingRegister(&ch,0x0103,true,17.5f));IoHomeFrame request,response;
+    IoHomeFrame request,response;
+    ASSERT_TRUE(!c.requestHeatingRegister(&ch,0x0103,true,17.5f));
+    ASSERT_TRUE(transmitQueuedControllerFrame(c,request));
+    ASSERT_MEM_EQ(request.data,"\x0C\x60\x01\x00",4);
+    ASSERT_TRUE(authenticateHeatingRequest(c));
+    const uint8_t basic[]={0x0C,0x60,1,0,1};
+    buildSimpleResponseFrame(response,0x60F823,0xB6BDFC,IoHomeCommand::WritePrivateResponse,basic,5);
+    ASSERT_TRUE(queueControllerResponse(c,response));
+    ch.heatingPublications=0;
+    ASSERT_TRUE(c.requestHeatingRegister(&ch,0x0103,true,17.5f));
     ASSERT_TRUE(transmitQueuedControllerFrame(c,request));ASSERT_TRUE(authenticateHeatingRequest(c));
     buildSimpleResponseFrame(response,0x60F823,0xB6BDFC,IoHomeCommand::WritePrivateResponse,request.data,request.dataLen);
     ASSERT_TRUE(queueControllerResponse(c,response));ASSERT_EQ(ch.heatingPublications,0U);
@@ -25124,5 +25143,33 @@ TEST(controller_alfea_replays_captured_prepare_open_chunk_and_close)
         ASSERT_EQ(c.radio().testTransmitCount(),4U);
         ch.setNodeId(0xD1E2F4);
         ASSERT_TRUE(!c.alfeaReading(result));
+    }
+}
+
+
+TEST(controller_heating_programme_or_unanswered_mode_cannot_write_comfort_or_override)
+{
+    for (int mode : {-1, 0, 2}) {
+        IoHomeController c; IoHomecontrol m; IoHomecontrolChannel ch;
+        initHeatingController(c, m, ch);
+        ASSERT_TRUE(!c.requestHeatingRegister(&ch, 0x011D, true, 16.5f));
+        ASSERT_TRUE(!c.requestHeatingRegister(&ch, 0x0103, true, 16.5f));
+        IoHomeFrame tx, reply;
+        ASSERT_TRUE(transmitQueuedControllerFrame(c, tx));
+        ASSERT_MEM_EQ(tx.data, "\x0C\x60\x01\x00", 4);
+        if (mode < 0) {
+            ioHomeTestAdvanceMillis(6000);
+            c.loop();
+        } else {
+            ASSERT_TRUE(authenticateHeatingRequest(c));
+            const uint8_t observed[] = {0x0C, 0x60, 1, 0, static_cast<uint8_t>(mode)};
+            buildSimpleResponseFrame(reply, 0x60F823, 0xB6BDFC, IoHomeCommand::WritePrivateResponse,
+                                     observed, sizeof(observed));
+            ASSERT_TRUE(queueControllerResponse(c, reply));
+            ASSERT_TRUE(!c.requestHeatingRegister(&ch, 0x0103, true, 16.5f));
+        }
+        ASSERT_TRUE(lastTransmittedFrameForTest(c, tx));
+        ASSERT_TRUE(tx.commandId == IoHomeCommand::ChallengeResponse || tx.data[1] == 0x60);
+        ASSERT_TRUE(!c.heatingState(0).values[IoHomeHeating::index(0x0103)].observed);
     }
 }

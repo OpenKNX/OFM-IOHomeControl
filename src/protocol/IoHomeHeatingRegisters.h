@@ -83,6 +83,12 @@ inline bool decodeReply(const uint8_t *request,uint8_t requestLength,const uint8
  return decodeValue(*d,data+4,length-4,value);
 }
 struct Observation {Value decoded;uint32_t timestampMs=0,token=0;bool observed=false;};
+enum class ManualSetpoint : uint8_t { Unknown, Blocked, Allowed };
+inline ManualSetpoint manualSetpoint(const Observation &mode, uint32_t now) {
+    if (!mode.observed || !mode.decoded.valid || now - mode.timestampMs >= 5000U)
+        return ManualSetpoint::Unknown;
+    return mode.decoded.raw == 1 ? ManualSetpoint::Allowed : ManualSetpoint::Blocked;
+}
 // An acknowledged Home/Away command is not an occupancy sensor or thermal effect.
 enum class PresenceResult:uint8_t {Unknown,Queued,RfSent,AcknowledgedEffectUnknown,Rejected,Timeout,QuotaBlocked,IdentityChanged,ReadbackVerifiedEffectUnknown,Invalid,Cancelled,QualificationBlocked,ReadbackDifferent,BusyBlocked,QueueBlocked};
 inline const char *presenceResultName(PresenceResult r){

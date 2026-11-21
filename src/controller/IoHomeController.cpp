@@ -2606,6 +2606,13 @@ bool IoHomeController::requestHeatingRegister(IoHomecontrolChannel *channel,uint
     if(state.node && (state.node!=channel->getNodeId() || state.revision!=channel->productContextRevision() ||
         state.gateway!=mOwnNodeId || std::memcmp(state.key,channel->getEncryptionKey(),16)))state.invalidate();
     if(state.busy){if(reg==0x0110&&write){state.presenceResult=IoHomeHeating::PresenceResult::BusyBlocked;channel->onHomeAwayCommandStatus();}return false;}
+    if (reg == 0x0103 && write) {
+        const auto permission = IoHomeHeating::manualSetpoint(state.values[IoHomeHeating::index(0x0100)], millis());
+        if (permission == IoHomeHeating::ManualSetpoint::Unknown)
+            requestHeatingRegister(channel, 0x0100);
+        if (permission != IoHomeHeating::ManualSetpoint::Allowed)
+            return false;
+    }
     // Estimate both local transmissions before admission. Only the debug bench
     // mode bypasses this quota; every accepted TX remains centrally accounted.
     const uint16_t requestPreamble=channel->getProtocolIdentity().powerSaveMode==IoHomePowerMode::AlwaysAlive?48:
@@ -7444,6 +7451,12 @@ RadioError IoHomeController::startControllerTransmit(const uint8_t *iData, uint8
         {invalidateImmediateReply();return RadioError::HardwareError;}
     if(mCurrentCmd.active&&mCurrentCmd.managementRead&&!managementIdentityMatches(mCurrentCmd))
         { invalidateImmediateReply();mRfAccessPolicy.off(); return RadioError::HardwareError; }
+    if (parsed && frame.commandId == IoHomeCommand::WritePrivate &&
+        mCurrentCmd.active && mCurrentCmd.heatingToken && mCurrentCmd.heatingData[1] == 0x61 &&
+        mCurrentCmd.heatingData[3] == 0x03 &&
+        IoHomeHeating::manualSetpoint(mHeating[mCurrentCmd.sourceChannelIndex].values[IoHomeHeating::index(0x0100)],
+                                      millis()) != IoHomeHeating::ManualSetpoint::Allowed)
+        return RadioError::InvalidParam;
     if (iData && iLength && (iData[0] & IOHC_CTRL0_MODE_1W) && mReservationFailed)
         { invalidateImmediateReply();mRfAccessPolicy.off(); return RadioError::HardwareError; }
 #ifndef TEST_NATIVE
