@@ -11,6 +11,15 @@ class CaptureTests(unittest.TestCase):
   self.assertGreater(len(frames),200)
   self.assertTrue(any(x['kind']=='exchange_summary' and x['outcome']=='unconfirmed' for d in docs for x in d['observations']))
   self.assertTrue(any(not x['value_hex'] for x in frames))
+ def test_hekla_capture_preserves_different_detection_and_occupancy_readings(self):
+  p=root/'test/corpus/atlantic_register_captures.json'
+  capture=next(d for d in json.loads(p.read_text()) if d['source_url'].endswith('6957973795'))
+  self.assertEqual(len(capture['observations']),80)
+  values=lambda reg:[r['value_hex'] for r in capture['observations'] if r['register']==reg]
+  self.assertEqual(values(0x0101),['00','01','01'])
+  self.assertEqual(values(0x0110),['00','00','01'])
+  self.assertEqual(values(0x0142),['64 00','D0 07'])
+  self.assertTrue(all(r['crc']=='not_logged' for r in capture['observations']))
  def test_register_echo_and_length_fail_closed(self):
   body='index=0x15: cmd=0x21 hex=8E 00 C0 FF EE BB 0B 50 21 0C 60 01 15 E9 07  [value: E9 07]'
   raw=lambda b:json.dumps(dict(body=b,created_at='2026-11-04T00:00:00Z')).encode()
